@@ -14,6 +14,7 @@ use crate::entity::supplier_settlement::{
 };
 use crate::ports::SettlementResolvedScope;
 use crate::repository::SupplierSettlementExt;
+use crate::repository::prelude::*;
 use crate::repository::supplier_settlement::SupplierSettlementStatementRow;
 
 /// 结算单列表筛选条件类型（经 `SupplierSettlementExt` 关联类型跨 crate 可达）。

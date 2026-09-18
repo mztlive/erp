@@ -13,6 +13,7 @@ use bpm::model::{
     ParticipantId, Timestamp,
 };
 use erp_audit::AuditExt;
+use erp_audit::repository::prelude::*;
 use erp_core::common::time::Instant;
 use erp_identity::SharedRbacService;
 use erp_inventory::{CancelStockAdjustmentApprovalRequest, InventoryExt, StockAdjustmentView};
@@ -21,6 +22,7 @@ use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::work_item::{AssignmentSource, WorkItem, WorkItemType};
 use erp_workflow::ports::WorkflowAuthorizationPort;
+use erp_workflow::repository::prelude::*;
 use erp_workflow::service::approval::execution::authorization::{
     converge_eligibility, requires_blocked_cancel,
 };

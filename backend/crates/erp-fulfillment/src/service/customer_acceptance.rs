@@ -13,6 +13,7 @@ use crate::entity::fulfillment::{
     AcceptanceFulfillmentAllocation, CustomerAcceptance, CustomerAcceptanceLine,
 };
 use crate::repository::FulfillmentExt;
+use crate::repository::prelude::*;
 
 /// 客户验收单列表筛选条件类型。
 type CustomerAcceptanceFilter = <mongodb::Database as FulfillmentExt>::CustomerAcceptanceFilter;
@@ -50,10 +51,8 @@ impl FulfillmentService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: super::sort_ascending(query.paging.sort_dir),
         };
-        let page =
-            self.db.customer_acceptances().search_customer_acceptances(&filter, &mut NoTransaction).await?;
         super::map_search_page(
-            async { Ok(page) },
+            self.db.customer_acceptances().search_customer_acceptances(&filter, &mut NoTransaction),
             |row| CustomerAcceptanceView {
                 id: row.id,
                 acceptance_no: row.acceptance_no,

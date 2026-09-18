@@ -14,6 +14,7 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use crate::entity::inventory::zero_quantity;
+use crate::repository::prelude::*;
 use crate::{
     Error, InventoryExt, MovementDirection, MovementType, ReservationEntryType, ReservationStatus, Result,
     StockBalance, StockBalanceData, StockMovement, StockMovementData, StockReservation, StockReservationData,

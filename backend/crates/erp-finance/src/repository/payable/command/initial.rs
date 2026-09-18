@@ -6,6 +6,7 @@ use persistence_core::{Executor, Result, mongo_ops};
 use crate::entity::payable::{PayableAccount, PayableEntry};
 use crate::repository::PayableExt;
 #[async_trait]
+#[allow(async_fn_in_trait)]
 trait Store: Send {
     async fn account(&mut self, account: &PayableAccount, ex: &mut dyn Executor) -> Result<()>;
     async fn entry(&mut self, entry: &PayableEntry, ex: &mut dyn Executor) -> Result<()>;

@@ -4,6 +4,7 @@ use std::str::FromStr;
 use async_trait::async_trait;
 use erp_core::ids::{SalesOrderId, SalesOrderLineId, StockReservationEntryId, StockReservationId};
 use erp_core::money::Quantity;
+use erp_inventory::repository::prelude::*;
 use erp_inventory::{
     InventoryExt, ReservationEntryType, ReservationStatus, StockReservation, StockReservationData,
     StockReservationEntry, StockReservationEntryData, StockReservationSourceType,

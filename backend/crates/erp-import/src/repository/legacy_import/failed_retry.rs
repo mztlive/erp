@@ -10,9 +10,10 @@ use mongodb::bson::doc;
 use persistence_core::{Executor, Result};
 
 use crate::entity::legacy_import::{ImportStatus, LegacyImportRow};
-use crate::repository::owned::LegacyImportRowRepository;
 
-impl<'a> LegacyImportRowRepository<'a> {
+/// 导入行集合仓储扩展：失败重试范围读取与批量写回。
+#[allow(async_fn_in_trait)]
+pub trait LegacyImportRowFailedRetryExt {
     /// 按批次读取失败导入行（INT-R31 批量读取）。
     ///
     /// 取代执行命令事务中先全量加载再内存过滤的旧路径；已导入、已跳过与
@@ -31,22 +32,11 @@ impl<'a> LegacyImportRowRepository<'a> {
     /// # 约束
     /// 不返回 services DTO、HTTP View 或授权结论；不改变软删除、批次约束
     /// 与稳定排序语义；不自行开启或提交事务。
-    pub async fn list_failed_by_batch(
+    async fn list_failed_by_batch(
         &self,
         batch_id: &LegacyImportBatchId,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<LegacyImportRow>> {
-        self.find_many_sorted(
-            doc! {
-                "batch_id": batch_id.to_string(),
-                "import_status": ImportStatus::Failed.as_str(),
-                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-            },
-            doc! { "created_at": 1, "id": 1 },
-            executor,
-        )
-        .await
-    }
+    ) -> Result<Vec<LegacyImportRow>>;
 
     /// 在调用方事务内批量重置已就地 `prepare_failed_retry` 的行（INT-R31 批量写）。
     ///
@@ -68,7 +58,32 @@ impl<'a> LegacyImportRowRepository<'a> {
     ///
     /// # 约束
     /// 不自行开启或提交事务；不做业务状态裁决，只持久化已 mutation 行。
-    pub async fn persist_failed_retry_rows(
+    async fn persist_failed_retry_rows(
+        &self,
+        rows: &mut [LegacyImportRow],
+        executor: &mut dyn Executor,
+    ) -> Result<()>;
+}
+
+impl LegacyImportRowFailedRetryExt for persistence_core::Repository<'_, LegacyImportRow> {
+    async fn list_failed_by_batch(
+        &self,
+        batch_id: &LegacyImportBatchId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<LegacyImportRow>> {
+        self.find_many_sorted(
+            doc! {
+                "batch_id": batch_id.to_string(),
+                "import_status": ImportStatus::Failed.as_str(),
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            doc! { "created_at": 1, "id": 1 },
+            executor,
+        )
+        .await
+    }
+
+    async fn persist_failed_retry_rows(
         &self,
         rows: &mut [LegacyImportRow],
         executor: &mut dyn Executor,

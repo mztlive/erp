@@ -8,6 +8,7 @@ use erp_integration::entity::integration_ops::IntegrationCommandIdentity;
 use erp_integration::service::task_decision::DirectFact;
 use erp_integration::service::task_decision::direct::execute_direct_decision;
 use erp_workflow::WorkItemExt;
+use erp_workflow::repository::prelude::*;
 use mongodb::Database;
 use persistence_core::Executor;
 use serde::{Deserialize, Serialize};

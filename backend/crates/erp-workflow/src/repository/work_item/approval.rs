@@ -4,13 +4,12 @@ use futures_util::TryStreamExt;
 use mongodb::bson::{Document, doc, serialize_to_document};
 use mongodb::options::FindOptions;
 use mongodb::{Collection, Database};
-use persistence_core::{Error, Executor, Result, mongo_ops};
+use persistence_core::{Error, Executor, Repository, Result, mongo_ops};
 use serde::Deserialize;
 
 use super::super::bpm::{CasWriteOutcome, approval_task_cas_filter, classify_cas_miss};
 use super::super::extensions::{ApprovalIntegrationExt, BpmExt};
 use crate::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
-use crate::repository::owned::WorkItemRepository;
 
 const APPROVAL_NODE_EXECUTIONS: &str = <Database as BpmExt>::APPROVAL_NODE_EXECUTIONS;
 const APPROVAL_PROCESS_INSTANCES: &str = <Database as BpmExt>::APPROVAL_PROCESS_INSTANCES;
@@ -88,7 +87,9 @@ struct DocumentApprovalDuplicateInstance {
     open_execution_count: i64,
 }
 
-impl<'a> WorkItemRepository<'a> {
+/// 工作项审批任务集合仓储扩展。
+#[allow(async_fn_in_trait)]
+pub trait WorkItemRepositoryApprovalExt {
     /// 按主键读取单据审批任务。
     ///
     /// # 参数
@@ -103,22 +104,11 @@ impl<'a> WorkItemRepository<'a> {
     ///
     /// # 关键业务约束
     /// 本查询固定限制 `DOCUMENT_APPROVAL`，禁止运行时命令误消费其它任务类型。
-    pub async fn find_document_approval_by_id(
+    async fn find_document_approval_by_id(
         &self,
         id: &str,
         executor: &mut dyn Executor,
-    ) -> Result<Option<WorkItem>> {
-        mongo_ops::find_one(
-            &self.collection(),
-            doc! {
-                "id": id,
-                "work_item_type": WorkItemType::DocumentApproval.as_str(),
-                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-            },
-            executor,
-        )
-        .await
-    }
+    ) -> Result<Option<WorkItem>>;
 
     /// 统计指定节点执行当前开放的单据审批任务。
     ///
@@ -134,23 +124,11 @@ impl<'a> WorkItemRepository<'a> {
     ///
     /// # 关键业务约束
     /// 统计固定限制任务类型、开放状态与未删除标记，供 BPM 开放任务不变量校验。
-    pub async fn count_open_document_approval_by_execution(
+    async fn count_open_document_approval_by_execution(
         &self,
         execution_id: &ApprovalNodeExecutionId,
         executor: &mut dyn Executor,
-    ) -> Result<u64> {
-        mongo_ops::count_documents(
-            &self.collection(),
-            doc! {
-                "approval_node_execution_id": execution_id.as_ref(),
-                "work_item_type": WorkItemType::DocumentApproval.as_str(),
-                "status": WorkItemStatus::Open.as_str(),
-                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-            },
-            executor,
-        )
-        .await
-    }
+    ) -> Result<u64>;
 
     /// 分页查询指定账号当前开放的单据审批任务。
     ///
@@ -174,7 +152,204 @@ impl<'a> WorkItemRepository<'a> {
     /// 基础范围固定为当前 owner 的 `OPEN + DOCUMENT_APPROVAL + 未删除`。检索在
     /// MongoDB 分页前执行；快照单号仅允许通过 execution、instance 与不可变
     /// subject 三元组完全一致的快照命中。Repository 不解释 RBAC 或业务授权。
-    pub async fn page_open_document_approval_owned_by(
+    async fn page_open_document_approval_owned_by(
+        &self,
+        owner_user_id: &str,
+        business_object_type: Option<&str>,
+        query: Option<&str>,
+        cursor: Option<(i64, &str)>,
+        limit: u32,
+        executor: &mut dyn Executor,
+    ) -> Result<DocumentApprovalWorkItemPage>;
+
+    /// 查询指定账号当前开放的单据审批任务。
+    ///
+    /// # 参数
+    /// * `owner_user_id` - 当前责任人账号 ID
+    /// * `business_object_type` - 可选业务对象类型稳定码
+    /// * `limit` - 最大返回条数；为零时直接返回空集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回按创建时间升序排列的开放单据审批任务。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 查询固定限制当前责任人、`DOCUMENT_APPROVAL` 与 `OPEN`，不得返回历史任务。
+    async fn list_open_document_approval_owned_by(
+        &self,
+        owner_user_id: &str,
+        business_object_type: Option<&str>,
+        limit: u32,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItem>>;
+
+    /// 批量查询多个业务对象当前开放的审批任务。
+    ///
+    /// 查询使用业务对象类型与 ID 的精确组合，避免不同单据类型之间形成交叉命中；
+    /// 只返回 `DOCUMENT_APPROVAL + OPEN` 任务。
+    ///
+    /// # 参数
+    /// * `business_objects` - `(业务对象类型, 业务对象 ID)` 集合
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回按创建时间升序排列的开放审批任务；输入为空时返回空集合。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    async fn list_active_approval_by_objects(
+        &self,
+        business_objects: &[(String, String)],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItem>>;
+
+    /// 读取指定节点执行当前关联的开放审批任务。
+    ///
+    /// 查询同时约束 `DOCUMENT_APPROVAL + OPEN + approval_node_execution_id`，并按
+    /// 创建时间升序返回全部命中，用于调用方识别零任务或重复任务的不一致事实。
+    ///
+    /// # 参数
+    /// * `execution_id` - 当前审批节点执行
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回指定执行关联的全部开放审批任务。
+    ///
+    /// # 错误
+    /// MongoDB 查询、游标读取或反序列化失败时返回错误。
+    async fn open_approval_tasks_for_execution(
+        &self,
+        execution_id: &ApprovalNodeExecutionId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItem>>;
+
+    /// 读取指定节点执行关联的全部审批任务。
+    ///
+    /// 本查询不限制任务状态，供人员恢复命令核对旧任务已经关闭且版本未漂移；
+    /// 调用方不得用本接口重新打开或修改历史任务。
+    ///
+    /// # 参数
+    /// * `execution_id` - 原受阻节点执行
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回按创建时间升序排列的全部单据审批任务。
+    ///
+    /// # 错误
+    /// MongoDB 查询、游标读取或反序列化失败时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 人员恢复必须创建绑定新执行的新任务，不得把本查询返回的旧任务改回开放状态。
+    async fn approval_tasks_for_execution(
+        &self,
+        execution_id: &ApprovalNodeExecutionId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItem>>;
+
+    /// 持久化已由实体规则形成的审批取消关闭任务。
+    ///
+    /// 每条任务继续使用加载时版本和节点执行引用执行 `OPEN` CAS；调用方必须传入
+    /// 同一事务执行器，保证任务关闭与 BPM 运行事实、业务单据写回原子提交。
+    ///
+    /// # 参数
+    /// * `items` - 已由 `WorkItem::close_all_for_approval_cancellation` 关闭的任务快照
+    /// * `executor` - 调用方事务执行器
+    ///
+    /// # 返回
+    /// 全部任务 CAS 写入成功时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 任务缺少节点执行引用、版本溢出、CAS 未命中或 MongoDB 写入失败时返回错误。
+    async fn persist_cancelled_approval_tasks(
+        &self,
+        items: &[WorkItem],
+        executor: &mut dyn Executor,
+    ) -> Result<()>;
+
+    /// 持久化已由实体规则批量终结的审批任务。
+    ///
+    /// 每条任务使用自身加载版本及节点执行引用执行 `OPEN` CAS。调用方必须传入
+    /// 与 BPM 运行事实、命令收据、outbox 和审计相同的事务执行器。
+    ///
+    /// # 参数
+    /// * `items` - 已由 WorkItem 批量规则形成的终态任务快照
+    /// * `executor` - 调用方事务执行器
+    ///
+    /// # 返回
+    /// 全部任务 CAS 写入成功时返回 `Ok(())`；空集合不执行写入。
+    ///
+    /// # 错误
+    /// 任务缺少节点执行引用、CAS 未命中或 MongoDB 写入失败时返回错误。
+    async fn persist_ended_approval_tasks(
+        &self,
+        items: &[WorkItem],
+        executor: &mut dyn Executor,
+    ) -> Result<()>;
+
+    /// 以 `id + OPEN + expected_task_version + approval_node_execution_id` 关闭审批任务。
+    ///
+    /// 原审批人恢复不得更新旧 `CLOSED` 任务，只能为新执行插入新任务。
+    ///
+    /// # 参数
+    /// * `item` - 已完成实体状态变更的审批任务
+    /// * `expected_task_version` - 加载时任务版本
+    /// * `approval_node_execution_id` - 任务绑定的节点执行
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回应用、缺失、版本冲突或状态变化的 CAS 分类。
+    ///
+    /// # 错误
+    /// 元数据越界或 MongoDB 更新失败时返回错误。
+    async fn close_approval_task(
+        &self,
+        item: &WorkItem,
+        expected_task_version: u64,
+        approval_node_execution_id: &ApprovalNodeExecutionId,
+        executor: &mut dyn Executor,
+    ) -> Result<CasWriteOutcome<WorkItem>>;
+}
+
+impl WorkItemRepositoryApprovalExt for Repository<'_, WorkItem> {
+    async fn find_document_approval_by_id(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<WorkItem>> {
+        mongo_ops::find_one(
+            &self.collection(),
+            doc! {
+                "id": id,
+                "work_item_type": WorkItemType::DocumentApproval.as_str(),
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            executor,
+        )
+        .await
+    }
+
+    async fn count_open_document_approval_by_execution(
+        &self,
+        execution_id: &ApprovalNodeExecutionId,
+        executor: &mut dyn Executor,
+    ) -> Result<u64> {
+        mongo_ops::count_documents(
+            &self.collection(),
+            doc! {
+                "approval_node_execution_id": execution_id.as_ref(),
+                "work_item_type": WorkItemType::DocumentApproval.as_str(),
+                "status": WorkItemStatus::Open.as_str(),
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            executor,
+        )
+        .await
+    }
+
+    async fn page_open_document_approval_owned_by(
         &self,
         owner_user_id: &str,
         business_object_type: Option<&str>,
@@ -196,23 +371,7 @@ impl<'a> WorkItemRepository<'a> {
         document_approval_page(rows.into_iter().next(), limit)
     }
 
-    /// 查询指定账号当前开放的单据审批任务。
-    ///
-    /// # 参数
-    /// * `owner_user_id` - 当前责任人账号 ID
-    /// * `business_object_type` - 可选业务对象类型稳定码
-    /// * `limit` - 最大返回条数；为零时直接返回空集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回按创建时间升序排列的开放单据审批任务。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 查询固定限制当前责任人、`DOCUMENT_APPROVAL` 与 `OPEN`，不得返回历史任务。
-    pub async fn list_open_document_approval_owned_by(
+    async fn list_open_document_approval_owned_by(
         &self,
         owner_user_id: &str,
         business_object_type: Option<&str>,
@@ -236,21 +395,7 @@ impl<'a> WorkItemRepository<'a> {
         mongo_ops::find_many(&self.collection(), filter, options, executor).await
     }
 
-    /// 批量查询多个业务对象当前开放的审批任务。
-    ///
-    /// 查询使用业务对象类型与 ID 的精确组合，避免不同单据类型之间形成交叉命中；
-    /// 只返回 `DOCUMENT_APPROVAL + OPEN` 任务。
-    ///
-    /// # 参数
-    /// * `business_objects` - `(业务对象类型, 业务对象 ID)` 集合
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回按创建时间升序排列的开放审批任务；输入为空时返回空集合。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn list_active_approval_by_objects(
+    async fn list_active_approval_by_objects(
         &self,
         business_objects: &[(String, String)],
         executor: &mut dyn Executor,
@@ -279,21 +424,7 @@ impl<'a> WorkItemRepository<'a> {
         .await
     }
 
-    /// 读取指定节点执行当前关联的开放审批任务。
-    ///
-    /// 查询同时约束 `DOCUMENT_APPROVAL + OPEN + approval_node_execution_id`，并按
-    /// 创建时间升序返回全部命中，用于调用方识别零任务或重复任务的不一致事实。
-    ///
-    /// # 参数
-    /// * `execution_id` - 当前审批节点执行
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回指定执行关联的全部开放审批任务。
-    ///
-    /// # 错误
-    /// MongoDB 查询、游标读取或反序列化失败时返回错误。
-    pub async fn open_approval_tasks_for_execution(
+    async fn open_approval_tasks_for_execution(
         &self,
         execution_id: &ApprovalNodeExecutionId,
         executor: &mut dyn Executor,
@@ -306,24 +437,7 @@ impl<'a> WorkItemRepository<'a> {
         .await
     }
 
-    /// 读取指定节点执行关联的全部审批任务。
-    ///
-    /// 本查询不限制任务状态，供人员恢复命令核对旧任务已经关闭且版本未漂移；
-    /// 调用方不得用本接口重新打开或修改历史任务。
-    ///
-    /// # 参数
-    /// * `execution_id` - 原受阻节点执行
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回按创建时间升序排列的全部单据审批任务。
-    ///
-    /// # 错误
-    /// MongoDB 查询、游标读取或反序列化失败时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 人员恢复必须创建绑定新执行的新任务，不得把本查询返回的旧任务改回开放状态。
-    pub async fn approval_tasks_for_execution(
+    async fn approval_tasks_for_execution(
         &self,
         execution_id: &ApprovalNodeExecutionId,
         executor: &mut dyn Executor,
@@ -339,21 +453,7 @@ impl<'a> WorkItemRepository<'a> {
         .await
     }
 
-    /// 持久化已由实体规则形成的审批取消关闭任务。
-    ///
-    /// 每条任务继续使用加载时版本和节点执行引用执行 `OPEN` CAS；调用方必须传入
-    /// 同一事务执行器，保证任务关闭与 BPM 运行事实、业务单据写回原子提交。
-    ///
-    /// # 参数
-    /// * `items` - 已由 `WorkItem::close_all_for_approval_cancellation` 关闭的任务快照
-    /// * `executor` - 调用方事务执行器
-    ///
-    /// # 返回
-    /// 全部任务 CAS 写入成功时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 任务缺少节点执行引用、版本溢出、CAS 未命中或 MongoDB 写入失败时返回错误。
-    pub async fn persist_cancelled_approval_tasks(
+    async fn persist_cancelled_approval_tasks(
         &self,
         items: &[WorkItem],
         executor: &mut dyn Executor,
@@ -361,21 +461,7 @@ impl<'a> WorkItemRepository<'a> {
         self.persist_ended_approval_tasks(items, executor).await
     }
 
-    /// 持久化已由实体规则批量终结的审批任务。
-    ///
-    /// 每条任务使用自身加载版本及节点执行引用执行 `OPEN` CAS。调用方必须传入
-    /// 与 BPM 运行事实、命令收据、outbox 和审计相同的事务执行器。
-    ///
-    /// # 参数
-    /// * `items` - 已由 WorkItem 批量规则形成的终态任务快照
-    /// * `executor` - 调用方事务执行器
-    ///
-    /// # 返回
-    /// 全部任务 CAS 写入成功时返回 `Ok(())`；空集合不执行写入。
-    ///
-    /// # 错误
-    /// 任务缺少节点执行引用、CAS 未命中或 MongoDB 写入失败时返回错误。
-    pub async fn persist_ended_approval_tasks(
+    async fn persist_ended_approval_tasks(
         &self,
         items: &[WorkItem],
         executor: &mut dyn Executor,
@@ -393,62 +479,47 @@ impl<'a> WorkItemRepository<'a> {
         Ok(())
     }
 
-    /// 以 `id + OPEN + expected_task_version + approval_node_execution_id` 关闭审批任务。
-    ///
-    /// 原审批人恢复不得更新旧 `CLOSED` 任务，只能为新执行插入新任务。
-    ///
-    /// # 参数
-    /// * `item` - 已完成实体状态变更的审批任务
-    /// * `expected_task_version` - 加载时任务版本
-    /// * `approval_node_execution_id` - 任务绑定的节点执行
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回应用、缺失、版本冲突或状态变化的 CAS 分类。
-    ///
-    /// # 错误
-    /// 元数据越界或 MongoDB 更新失败时返回错误。
-    pub async fn close_approval_task(
+    async fn close_approval_task(
         &self,
         item: &WorkItem,
         expected_task_version: u64,
         approval_node_execution_id: &ApprovalNodeExecutionId,
         executor: &mut dyn Executor,
     ) -> Result<CasWriteOutcome<WorkItem>> {
-        self.persist_open_approval_task(item, expected_task_version, approval_node_execution_id, executor)
+        persist_open_approval_task(self, item, expected_task_version, approval_node_execution_id, executor)
             .await
     }
+}
 
-    async fn persist_open_approval_task(
-        &self,
-        item: &WorkItem,
-        expected_task_version: u64,
-        approval_node_execution_id: &ApprovalNodeExecutionId,
-        executor: &mut dyn Executor,
-    ) -> Result<CasWriteOutcome<WorkItem>> {
-        let next_version = next_task_version(expected_task_version)?;
-        let mut set_doc = serialize_to_document(item)?;
-        set_doc.insert("version", next_version);
-        let matched = mongo_ops::update_one(
-            &self.collection(),
-            approval_task_cas_filter(&item.base.id, expected_task_version, approval_node_execution_id)?,
-            doc! { "$set": set_doc },
-            false,
-            executor,
-        )
-        .await?
-        .matched_count;
-        if matched > 0 {
-            let mut applied = item.clone();
-            applied.base_mut().version = expected_task_version.saturating_add(1);
-            return Ok(CasWriteOutcome::Applied(applied));
-        }
-        let current = self.find_by_id(&item.base.id, executor).await?;
-        let expected_execution = approval_node_execution_id.clone();
-        Ok(classify_cas_miss(current, expected_task_version, move |row| {
-            approval_task_still_open(row, &expected_execution)
-        }))
+async fn persist_open_approval_task(
+    repo: &Repository<'_, WorkItem>,
+    item: &WorkItem,
+    expected_task_version: u64,
+    approval_node_execution_id: &ApprovalNodeExecutionId,
+    executor: &mut dyn Executor,
+) -> Result<CasWriteOutcome<WorkItem>> {
+    let next_version = next_task_version(expected_task_version)?;
+    let mut set_doc = serialize_to_document(item)?;
+    set_doc.insert("version", next_version);
+    let matched = mongo_ops::update_one(
+        &repo.collection(),
+        approval_task_cas_filter(&item.base.id, expected_task_version, approval_node_execution_id)?,
+        doc! { "$set": set_doc },
+        false,
+        executor,
+    )
+    .await?
+    .matched_count;
+    if matched > 0 {
+        let mut applied = item.clone();
+        applied.base_mut().version = expected_task_version.saturating_add(1);
+        return Ok(CasWriteOutcome::Applied(applied));
     }
+    let current = repo.find_by_id(&item.base.id, executor).await?;
+    let expected_execution = approval_node_execution_id.clone();
+    Ok(classify_cas_miss(current, expected_task_version, move |row| {
+        approval_task_still_open(row, &expected_execution)
+    }))
 }
 
 /// 执行本人审批任务聚合并保持调用方会话语义。

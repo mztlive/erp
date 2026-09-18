@@ -9,9 +9,10 @@ use persistence_core::{Executor, Result};
 
 use super::common::in_filter;
 use crate::entity::purchase_order::PurchaseLineSalesAllocation;
-use crate::repository::owned::PurchaseLineSalesAllocationRepository;
 
-impl<'a> PurchaseLineSalesAllocationRepository<'a> {
+/// 采购行销售分配集合的域查询。
+#[allow(async_fn_in_trait)]
+pub trait PurchaseLineSalesAllocationRepositoryExt {
     /// 按采购版本行批量取回分配（`$in`，禁止 N+1）。
     ///
     /// 正向查询：给定采购明细，取回其全部销售分配（入库预占沿本关系回到原
@@ -26,7 +27,17 @@ impl<'a> PurchaseLineSalesAllocationRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_by_purchase_revision_line_ids(
+    async fn find_by_purchase_revision_line_ids(
+        &self,
+        revision_line_ids: &[PurchaseOrderRevisionLineId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PurchaseLineSalesAllocation>>;
+}
+
+impl PurchaseLineSalesAllocationRepositoryExt
+    for persistence_core::Repository<'_, PurchaseLineSalesAllocation>
+{
+    async fn find_by_purchase_revision_line_ids(
         &self,
         revision_line_ids: &[PurchaseOrderRevisionLineId],
         executor: &mut dyn Executor,

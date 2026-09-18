@@ -6,6 +6,7 @@ use erp_core::common::time::Instant;
 use erp_core::ids::{CustomerReceiptId, SalesOrderId};
 use erp_finance::entity::receivable::{CustomerReceipt, CustomerReceiptData, CustomerReceiptStatus};
 use erp_finance::repository::ReceivableExt;
+use erp_finance::repository::prelude::*;
 use erp_finance::service::receivable::customer_receipt_commit::PreparedCustomerReceiptCommit;
 use erp_finance::service::receivable::mapping::ensure_expected_version;
 use erp_identity::SharedRbacService;

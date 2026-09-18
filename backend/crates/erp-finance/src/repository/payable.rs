@@ -23,9 +23,15 @@ mod command;
 mod entry;
 mod payment;
 
-pub use account::{PayableAccountFilter, PayableAccountRow};
-pub use allocation::PurchaseInvoiceAllocationFilter;
-pub use payment::{SupplierPaymentFilter, SupplierPaymentRow};
+pub use account::{
+    PayableAccountFilter, PayableAccountInvoicingExt, PayableAccountRepositoryExt, PayableAccountRow,
+    PayableAccountSettlementExt,
+};
+pub use allocation::{
+    PaymentAllocationRepositoryExt, PurchaseInvoiceAllocationFilter, PurchaseInvoiceAllocationRepositoryExt,
+};
+pub use entry::{PayableEntryOffsetRepositoryExt, PayableEntryRepositoryExt};
+pub use payment::{SupplierPaymentFilter, SupplierPaymentRepositoryExt, SupplierPaymentRow};
 
 /// `payable_entry` 集合名（单一来源：`PayableExt` 关联常量）。
 const PAYABLE_ENTRIES: &str = <mongodb::Database as PayableExt>::PAYABLE_ENTRIES;

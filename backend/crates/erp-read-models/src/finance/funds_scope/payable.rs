@@ -4,6 +4,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::hash::{Hash, Hasher};
 
 use application_core::AuditActor;
+use erp_finance::repository::prelude::*;
 use erp_finance::repository::{PayableAccountFilter, PayableAccountRow, PayableExt};
 use erp_procurement::PurchaseAccess;
 use persistence_core::{Executor, Transactional};

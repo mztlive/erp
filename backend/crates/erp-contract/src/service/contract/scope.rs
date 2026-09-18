@@ -11,6 +11,7 @@ use crate::dto::contract::{
 use crate::error::{Error, Result};
 use crate::ports::{ContractDataScopePort, ContractResolvedScope};
 use crate::repository::list_search::ContractSearch;
+use crate::repository::prelude::*;
 use crate::repository::scope::ContractReadScope;
 use crate::repository::{ContractExt, ContractFilter};
 

@@ -8,7 +8,7 @@
 use mongodb::Database;
 
 use super::super::customer::{CustomerAccountFilter, CustomerAssignmentFilter};
-use crate::repository::owned::{
+use super::super::owned::{
     CustomerAccountRepository, CustomerAssignmentRepository, CustomerProfileCommandRepository,
 };
 

@@ -14,6 +14,7 @@ use super::shared::{
 use crate::dto::{CommitCustomerRefundRequest, CreateCustomerRefundRequest};
 use crate::entity::returns::{CustomerRefund, CustomerRefundData, CustomerRefundStatus};
 use crate::repository::ReturnsExt;
+use crate::repository::prelude::*;
 use crate::{Error, Result};
 /// 客户退款消费的原回款最小事实；读取时点由流程控制。
 pub struct CustomerRefundSourceFact {

@@ -8,11 +8,13 @@ use erp_integration::ports::evidence::{
     EvidenceFuture, EvidenceSubject, IntegrationEvidenceAuthority, OriginalResultFact, VerifiedEvidence,
 };
 use erp_integration::repository::IntegrationOpsExt;
+use erp_integration::repository::prelude::*;
 use erp_integration::service::evidence::evidence_reference_grammar;
 use erp_integration::{Error, Result};
 use erp_returns::entity::returns::{CustomerRefundStatus, SupplierRefundStatus};
 use erp_returns::repository::ReturnsExt;
 use erp_supply::repository::SupplierFulfillmentExt;
+use erp_supply::repository::prelude::*;
 use mongodb::Database;
 use persistence_core::Executor;
 /// 跨域权威证据适配器；由组合根创建一份并注入命令及详情。

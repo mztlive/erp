@@ -40,6 +40,7 @@ use crate::ports::{
     AttachmentFingerprintPort, HandlerDuty, HandlerIdentityFact, IdentityFactPort, WarehouseAuditPort,
 };
 use crate::repository::WarehouseExt;
+use crate::repository::prelude::*;
 
 /// 仓库列表筛选条件类型（经 `WarehouseExt` 关联类型跨 crate 可达）。
 type WarehouseFilter = <mongodb::Database as WarehouseExt>::WarehouseFilter;

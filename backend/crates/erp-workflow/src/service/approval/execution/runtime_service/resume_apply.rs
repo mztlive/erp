@@ -38,6 +38,7 @@ use crate::entity::work_item::WorkItemStatus;
 use crate::error::{Error, ErrorCode, Result};
 use crate::ports::PreparedWorkflowAudit;
 use crate::repository::bpm::ApprovalInstanceListProjection;
+use crate::repository::prelude::*;
 use crate::repository::{ApprovalIntegrationExt, BpmExt, WorkItemExt};
 use crate::service::approval::business_adapter::{
     BindingRevalidationContext, adapter_object_read_decision_with, adapter_spec_of,

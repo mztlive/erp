@@ -1,12 +1,13 @@
 use mongodb::bson::doc;
-use persistence_core::{Executor, Result};
+use persistence_core::{Executor, Repository, Result};
 
 use crate::entity::work_item::{
     FinanceResponsibilityOperation, FinanceResponsibilityRule, WorkItem, WorkItemStatus, WorkItemType,
 };
-use crate::repository::owned::{FinanceResponsibilityRuleRepository, WorkItemRepository};
 
-impl<'a> WorkItemRepository<'a> {
+/// 工作项财务任务集合仓储扩展。
+#[allow(async_fn_in_trait)]
+pub trait WorkItemRepositoryFinanceExt {
     /// 查询应付子账全部付款执行任务并把最新任务排在前面。
     ///
     /// # 参数
@@ -18,22 +19,11 @@ impl<'a> WorkItemRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn list_payment_execution_by_payable_newest_first(
+    async fn list_payment_execution_by_payable_newest_first(
         &self,
         payable_account_id: &str,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<WorkItem>> {
-        self.find_many_sorted(
-            doc! {
-                "business_object_type": "payable_account",
-                "business_object_id": payable_account_id,
-                "work_item_type": WorkItemType::SupplierPaymentExecution.as_str(),
-            },
-            doc! { "updated_at": -1, "created_at": -1 },
-            executor,
-        )
-        .await
-    }
+    ) -> Result<Vec<WorkItem>>;
 
     /// 按应付子账集合与责任人读取开放付款执行任务。
     ///
@@ -50,7 +40,50 @@ impl<'a> WorkItemRepository<'a> {
     ///
     /// # 约束
     /// 只返回数据事实，不判断供应商是否相同或任务是否可合并。
-    pub async fn list_open_payment_execution_by_payables_and_owner(
+    async fn list_open_payment_execution_by_payables_and_owner(
+        &self,
+        payable_account_ids: &[String],
+        owner_user_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItem>>;
+
+    /// 查询应收子账全部销项开票执行任务并把最新任务排在前面。
+    ///
+    /// # 参数
+    /// * `receivable_account_id` - 应收子账稳定身份
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回按更新时间、创建时间倒序排列的全部生命周期任务。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    async fn list_sales_invoice_execution_by_receivable_newest_first(
+        &self,
+        receivable_account_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItem>>;
+}
+
+impl WorkItemRepositoryFinanceExt for Repository<'_, WorkItem> {
+    async fn list_payment_execution_by_payable_newest_first(
+        &self,
+        payable_account_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItem>> {
+        self.find_many_sorted(
+            doc! {
+                "business_object_type": "payable_account",
+                "business_object_id": payable_account_id,
+                "work_item_type": WorkItemType::SupplierPaymentExecution.as_str(),
+            },
+            doc! { "updated_at": -1, "created_at": -1 },
+            executor,
+        )
+        .await
+    }
+
+    async fn list_open_payment_execution_by_payables_and_owner(
         &self,
         payable_account_ids: &[String],
         owner_user_id: &str,
@@ -72,18 +105,7 @@ impl<'a> WorkItemRepository<'a> {
         .await
     }
 
-    /// 查询应收子账全部销项开票执行任务并把最新任务排在前面。
-    ///
-    /// # 参数
-    /// * `receivable_account_id` - 应收子账稳定身份
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回按更新时间、创建时间倒序排列的全部生命周期任务。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn list_sales_invoice_execution_by_receivable_newest_first(
+    async fn list_sales_invoice_execution_by_receivable_newest_first(
         &self,
         receivable_account_id: &str,
         executor: &mut dyn Executor,
@@ -101,7 +123,9 @@ impl<'a> WorkItemRepository<'a> {
     }
 }
 
-impl<'a> FinanceResponsibilityRuleRepository<'a> {
+/// 财务责任规则集合仓储扩展。
+#[allow(async_fn_in_trait)]
+pub trait FinanceResponsibilityRuleRepositoryExt {
     /// 查询全部未删除财务责任规则。
     ///
     /// # 返回
@@ -109,17 +133,10 @@ impl<'a> FinanceResponsibilityRuleRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn list_finance_responsibility_rules(
+    async fn list_finance_responsibility_rules(
         &self,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<FinanceResponsibilityRule>> {
-        self.find_many_sorted(
-            doc! {},
-            doc! { "operation": 1, "scope": 1, "created_at": 1, "id": 1 },
-            executor,
-        )
-        .await
-    }
+    ) -> Result<Vec<FinanceResponsibilityRule>>;
 
     /// 查询指定业务全部启用财务责任规则。
     ///
@@ -132,7 +149,27 @@ impl<'a> FinanceResponsibilityRuleRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn list_active_finance_responsibility_rules(
+    async fn list_active_finance_responsibility_rules(
+        &self,
+        operation: FinanceResponsibilityOperation,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<FinanceResponsibilityRule>>;
+}
+
+impl FinanceResponsibilityRuleRepositoryExt for Repository<'_, FinanceResponsibilityRule> {
+    async fn list_finance_responsibility_rules(
+        &self,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<FinanceResponsibilityRule>> {
+        self.find_many_sorted(
+            doc! {},
+            doc! { "operation": 1, "scope": 1, "created_at": 1, "id": 1 },
+            executor,
+        )
+        .await
+    }
+
+    async fn list_active_finance_responsibility_rules(
         &self,
         operation: FinanceResponsibilityOperation,
         executor: &mut dyn Executor,

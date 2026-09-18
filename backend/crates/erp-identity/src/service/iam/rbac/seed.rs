@@ -8,6 +8,7 @@ use super::RbacService;
 use crate::entity::access_control::{DataScope, DataScopeData, DataScopeId, DataScopeSubjectType};
 use crate::entity::{Permission, PermissionSet, RoleData};
 use crate::error::{Error, Result};
+use crate::repository::prelude::*;
 use crate::service::access_control::consumers::validate_binding;
 use crate::{AccessControlExt, MongoCasbinAdapter};
 

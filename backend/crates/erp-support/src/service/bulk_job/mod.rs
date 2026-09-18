@@ -40,6 +40,7 @@ use crate::entity::bulk_job::{
 };
 use crate::error::{Error, Result};
 use crate::ports::{BusinessDocumentPort, SupportAuditPort, is_business_document_type};
+use crate::repository::prelude::*;
 use crate::repository::{BackgroundJobRegistration, BulkJobExt};
 
 /// 选择快照列表筛选条件类型（经 `BulkJobExt` 关联类型跨 crate 可达）。

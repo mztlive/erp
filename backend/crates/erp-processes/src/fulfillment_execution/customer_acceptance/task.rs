@@ -5,6 +5,7 @@
 //! 形成新的开放任务，历史终态保持不变。
 
 use erp_core::ids::SalesOrderId;
+use erp_identity::repository::prelude::*;
 use erp_identity::{AccessControlExt, Permission, PermissionSet, SharedRbacService};
 use erp_sales::entity::sales_order::{BusinessType, SalesOrder};
 use erp_sales::repository::SalesOrderExt;
@@ -12,6 +13,7 @@ use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{
     AssignmentSource, AvailableWorkItemAccount, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
 };
+use erp_workflow::repository::prelude::*;
 use id_generator::next_id;
 use persistence_core::Executor;
 

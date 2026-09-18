@@ -14,6 +14,7 @@ use crate::dto::{OrgPersonView, OrgRoleView, OrganizationStateView};
 use crate::entity::organization_change::*;
 use crate::ports::OrganizationBusinessPort;
 use crate::repository::OrganizationRepository;
+use crate::repository::prelude::*;
 use crate::service::access_control::resolve::{AuthorizedDataScope, DataScopeService};
 use crate::{AccessControlExt, Error, Result, SharedRbacService};
 

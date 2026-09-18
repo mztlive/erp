@@ -24,10 +24,6 @@ use crate::entity::bulk_job::{
     BulkSelectionSnapshotId, ItemStatus, JobStatus, JobType, SelectionItemStatus, SelectionStatus,
     SelectionType,
 };
-use crate::repository::owned::{
-    BackgroundJobItemRepository, BackgroundJobRepository, BulkSelectionItemRepository,
-    BulkSelectionSnapshotRepository,
-};
 
 /// 唯一请求身份仲裁后的后台任务登记结果。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -136,7 +132,9 @@ impl Pagination for BulkSelectionSnapshotFilter {
     }
 }
 
-impl<'a> BulkSelectionSnapshotRepository<'a> {
+/// 选择快照集合仓储的域查询。
+#[allow(async_fn_in_trait)]
+pub trait BulkSelectionSnapshotRepositoryExt {
     /// 分页检索选择快照列表（投影查询）。
     ///
     /// 只返回 [`BulkSelectionSnapshotRow`] 所需的列表字段，不加载整文档；
@@ -151,7 +149,15 @@ impl<'a> BulkSelectionSnapshotRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_snapshots(
+    async fn search_snapshots(
+        &self,
+        filter: &BulkSelectionSnapshotFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<BulkSelectionSnapshotRow>>;
+}
+
+impl BulkSelectionSnapshotRepositoryExt for persistence_core::Repository<'_, BulkSelectionSnapshot> {
+    async fn search_snapshots(
         &self,
         filter: &BulkSelectionSnapshotFilter,
         executor: &mut dyn Executor,
@@ -188,7 +194,9 @@ pub struct BulkSelectionItemRow {
     pub result_code: Option<String>,
 }
 
-impl<'a> BulkSelectionItemRepository<'a> {
+/// 选择项集合仓储的域查询。
+#[allow(async_fn_in_trait)]
+pub trait BulkSelectionItemRepositoryExt {
     /// 分页检索快照逐项结果（投影查询）。
     ///
     /// 只返回 [`BulkSelectionItemRow`] 所需的逐项字段，不加载整文档；
@@ -206,7 +214,18 @@ impl<'a> BulkSelectionItemRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_items(
+    async fn search_items(
+        &self,
+        snapshot_id: &BulkSelectionSnapshotId,
+        result_status: Option<SelectionItemStatus>,
+        page: u64,
+        page_size: u32,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<BulkSelectionItemRow>>;
+}
+
+impl BulkSelectionItemRepositoryExt for persistence_core::Repository<'_, BulkSelectionItem> {
+    async fn search_items(
         &self,
         snapshot_id: &BulkSelectionSnapshotId,
         result_status: Option<SelectionItemStatus>,
@@ -366,7 +385,9 @@ impl Pagination for BackgroundJobFilter {
     }
 }
 
-impl<'a> BackgroundJobRepository<'a> {
+/// 后台任务集合仓储的域查询。
+#[allow(async_fn_in_trait)]
+pub trait BackgroundJobRepositoryExt {
     /// 分页检索后台任务列表（投影查询，任务中心）。
     ///
     /// 只返回 [`BackgroundJobRow`] 所需的进度字段，不加载整文档；
@@ -382,20 +403,11 @@ impl<'a> BackgroundJobRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_background_jobs(
+    async fn search_background_jobs(
         &self,
         filter: &BackgroundJobFilter,
         executor: &mut dyn Executor,
-    ) -> Result<PageResult<BackgroundJobRow>> {
-        let options = FindOptions::builder()
-            .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
-            .skip(filter.skip())
-            .limit(filter.limit())
-            .projection(background_job_projection())
-            .build();
-        let collection = self.collection().clone_with_type::<BackgroundJobRow>();
-        search_projected_page(&self.collection(), &collection, filter, options, executor).await
-    }
+    ) -> Result<PageResult<BackgroundJobRow>>;
 
     /// 按任务编号查找后台任务。
     ///
@@ -410,13 +422,11 @@ impl<'a> BackgroundJobRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_job_no(
+    async fn find_by_job_no(
         &self,
         job_no: &str,
         executor: &mut dyn Executor,
-    ) -> Result<Option<BackgroundJob>> {
-        self.find_one_by_field("job_no", job_no, executor).await
-    }
+    ) -> Result<Option<BackgroundJob>>;
 
     /// 按请求幂等身份查找后台任务。
     ///
@@ -432,7 +442,38 @@ impl<'a> BackgroundJobRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_request_id(
+    async fn find_by_request_id(
+        &self,
+        request_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<BackgroundJob>>;
+}
+
+impl BackgroundJobRepositoryExt for persistence_core::Repository<'_, BackgroundJob> {
+    async fn search_background_jobs(
+        &self,
+        filter: &BackgroundJobFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<BackgroundJobRow>> {
+        let options = FindOptions::builder()
+            .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
+            .skip(filter.skip())
+            .limit(filter.limit())
+            .projection(background_job_projection())
+            .build();
+        let collection = self.collection().clone_with_type::<BackgroundJobRow>();
+        search_projected_page(&self.collection(), &collection, filter, options, executor).await
+    }
+
+    async fn find_by_job_no(
+        &self,
+        job_no: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<BackgroundJob>> {
+        self.find_one_by_field("job_no", job_no, executor).await
+    }
+
+    async fn find_by_request_id(
         &self,
         request_id: &str,
         executor: &mut dyn Executor,
@@ -470,7 +511,9 @@ pub struct BackgroundJobItemRow {
     pub result_object_id: Option<String>,
 }
 
-impl<'a> BackgroundJobItemRepository<'a> {
+/// 后台任务逐项集合仓储的域查询。
+#[allow(async_fn_in_trait)]
+pub trait BackgroundJobItemRepositoryExt {
     /// 分页检索任务逐项结果（投影查询）。
     ///
     /// 只返回 [`BackgroundJobItemRow`] 所需的逐项字段，不加载整文档；
@@ -488,7 +531,18 @@ impl<'a> BackgroundJobItemRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_job_items(
+    async fn search_job_items(
+        &self,
+        job_id: &BackgroundJobId,
+        status: Option<ItemStatus>,
+        page: u64,
+        page_size: u32,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<BackgroundJobItemRow>>;
+}
+
+impl BackgroundJobItemRepositoryExt for persistence_core::Repository<'_, BackgroundJobItem> {
+    async fn search_job_items(
         &self,
         job_id: &BackgroundJobId,
         status: Option<ItemStatus>,

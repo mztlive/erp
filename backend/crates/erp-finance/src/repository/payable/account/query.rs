@@ -6,9 +6,9 @@ use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mo
 use super::super::sort_doc;
 use super::{PayableAccountFilter, PayableAccountRow};
 use crate::entity::payable::{PayableAccount, PayableAccountStatus, PayableSourceType};
-use crate::repository::owned::PayableAccountRepository;
 
-impl<'a> PayableAccountRepository<'a> {
+#[allow(async_fn_in_trait)]
+pub trait PayableAccountRepositoryExt {
     /// 分页检索应付往来子账列表（投影查询）。
     ///
     /// 只返回 [`PayableAccountRow`] 所需的列表字段，不加载整文档；
@@ -23,7 +23,72 @@ impl<'a> PayableAccountRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_payable_accounts(
+    async fn search_payable_accounts(
+        &self,
+        filter: &PayableAccountFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<PayableAccountRow>>;
+
+    /// 按主键集合批量取回应付子账（`$in` 一次取回，禁止 N+1）。
+    ///
+    /// # 参数
+    /// * `account_ids` - 应付往来子账 ID 集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配子账；空集合直接返回空列表。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn find_accounts_by_ids(
+        &self,
+        account_ids: &[PayableAccountId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PayableAccount>>;
+
+    /// 按采购单查询其来源的应付往来子账。
+    ///
+    /// # 参数
+    /// * `purchase_order_id` - 采购单稳定身份
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回来源单据为该采购单的应付子账；尚未形成时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    ///
+    /// # 约束
+    /// 未删除过滤由基类 `find_one` 统一追加；来源类型固定为采购单。
+    async fn find_by_purchase_order(
+        &self,
+        purchase_order_id: &PurchaseOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<PayableAccount>>;
+
+    /// 读取指定供应商尚未结清的采购应付子账。
+    ///
+    /// # 参数
+    /// * `supplier_id` - 往来供应商
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回 `open` 或 `partially_settled` 且来源为采购单的子账；没有匹配时返回空列表。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// # 约束
+    /// 只返回存储事实，不判断这些子账是否存在开放付款任务。
+    async fn find_unsettled_purchase_accounts_by_supplier(
+        &self,
+        supplier_id: &SupplierAccountId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PayableAccount>>;
+}
+
+impl PayableAccountRepositoryExt for persistence_core::Repository<'_, PayableAccount> {
+    async fn search_payable_accounts(
         &self,
         filter: &PayableAccountFilter,
         executor: &mut dyn Executor,
@@ -45,18 +110,7 @@ impl<'a> PayableAccountRepository<'a> {
         Ok(PageResult { items, total: total as i64 })
     }
 
-    /// 按主键集合批量取回应付子账（`$in` 一次取回，禁止 N+1）。
-    ///
-    /// # 参数
-    /// * `account_ids` - 应付往来子账 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回全部匹配子账；空集合直接返回空列表。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_accounts_by_ids(
+    async fn find_accounts_by_ids(
         &self,
         account_ids: &[PayableAccountId],
         executor: &mut dyn Executor,
@@ -68,21 +122,7 @@ impl<'a> PayableAccountRepository<'a> {
         self.find_many(doc! { "id": { "$in": ids } }, executor).await
     }
 
-    /// 按采购单查询其来源的应付往来子账。
-    ///
-    /// # 参数
-    /// * `purchase_order_id` - 采购单稳定身份
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回来源单据为该采购单的应付子账；尚未形成时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    ///
-    /// # 约束
-    /// 未删除过滤由基类 `find_one` 统一追加；来源类型固定为采购单。
-    pub async fn find_by_purchase_order(
+    async fn find_by_purchase_order(
         &self,
         purchase_order_id: &PurchaseOrderId,
         executor: &mut dyn Executor,
@@ -97,21 +137,7 @@ impl<'a> PayableAccountRepository<'a> {
         .await
     }
 
-    /// 读取指定供应商尚未结清的采购应付子账。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 往来供应商
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回 `open` 或 `partially_settled` 且来源为采购单的子账；没有匹配时返回空列表。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或反序列化失败时返回错误。
-    ///
-    /// # 约束
-    /// 只返回存储事实，不判断这些子账是否存在开放付款任务。
-    pub async fn find_unsettled_purchase_accounts_by_supplier(
+    async fn find_unsettled_purchase_accounts_by_supplier(
         &self,
         supplier_id: &SupplierAccountId,
         executor: &mut dyn Executor,

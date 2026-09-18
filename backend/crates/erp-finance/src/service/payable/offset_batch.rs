@@ -10,6 +10,7 @@ use persistence_core::Executor;
 
 use crate::entity::payable::{PayableAccount, PayableEntry};
 use crate::repository::PayableExt;
+use crate::repository::prelude::*;
 pub use crate::service::offset_index::OffsetFacts;
 use crate::service::offset_index::{
     index_required_by_id, unique_account_ids_for_entries, unique_ids_in_first_seen_order,

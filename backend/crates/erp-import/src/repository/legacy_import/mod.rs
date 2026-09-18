@@ -15,23 +15,26 @@
 //!
 //! - `apply_scope`：按请求行 ID 且受批次约束的应用范围读取（INT-R29）。
 
-use crate::repository::owned::{
-    LegacyImportBatchRepository, LegacyImportConfirmationRepository, LegacyImportRowRepository,
-};
 mod apply_scope;
 mod failed_retry;
+mod projected;
 mod supersede_batch;
 
-pub use apply_scope::LegacyImportApplyScope;
+pub use apply_scope::{LegacyImportApplyScope, LegacyImportRowApplyScopeExt};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::BusinessDate;
+pub use failed_retry::LegacyImportRowFailedRetryExt;
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
-use mongodb::options::FindOptions;
 use persistence_core::{
     Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
 };
+use projected::{
+    legacy_import_batch_projection, legacy_import_confirmation_projection, legacy_import_row_projection,
+    search_projected_page, sort_doc,
+};
 use serde::{Deserialize, Serialize};
+pub use supersede_batch::LegacyImportConfirmationSupersedeBatchExt;
 
 use super::extensions::LegacyImportExt;
 use crate::entity::legacy_import::{
@@ -164,7 +167,9 @@ impl Pagination for LegacyImportBatchFilter {
     }
 }
 
-impl<'a> LegacyImportBatchRepository<'a> {
+/// 导入批次集合仓储扩展：投影列表与按批次号定位。
+#[allow(async_fn_in_trait)]
+pub trait LegacyImportBatchRepositoryExt {
     /// 分页检索导入批次列表（投影查询）。
     ///
     /// 只返回 [`LegacyImportBatchRow`] 所需的列表字段，不加载整文档
@@ -180,7 +185,35 @@ impl<'a> LegacyImportBatchRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_legacy_import_batches(
+    async fn search_legacy_import_batches(
+        &self,
+        filter: &LegacyImportBatchFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<LegacyImportBatchRow>>;
+
+    /// 按批次号精确查找导入批次。
+    ///
+    /// 唯一性由 `uk_legacy_import_batches_batch_no` 唯一索引保证
+    /// （§6.12：`batch_no` 唯一），本方法用于重跑定位与幂等判定。
+    ///
+    /// # 参数
+    /// * `batch_no` - 导入批次号
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配的未删除批次；无匹配时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    async fn find_by_batch_no(
+        &self,
+        batch_no: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<LegacyImportBatch>>;
+}
+
+impl LegacyImportBatchRepositoryExt for persistence_core::Repository<'_, LegacyImportBatch> {
+    async fn search_legacy_import_batches(
         &self,
         filter: &LegacyImportBatchFilter,
         executor: &mut dyn Executor,
@@ -197,21 +230,7 @@ impl<'a> LegacyImportBatchRepository<'a> {
         .await
     }
 
-    /// 按批次号精确查找导入批次。
-    ///
-    /// 唯一性由 `uk_legacy_import_batches_batch_no` 唯一索引保证
-    /// （§6.12：`batch_no` 唯一），本方法用于重跑定位与幂等判定。
-    ///
-    /// # 参数
-    /// * `batch_no` - 导入批次号
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的未删除批次；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_batch_no(
+    async fn find_by_batch_no(
         &self,
         batch_no: &str,
         executor: &mut dyn Executor,
@@ -312,7 +331,9 @@ impl Pagination for LegacyImportRowFilter {
     }
 }
 
-impl<'a> LegacyImportRowRepository<'a> {
+/// 导入行集合仓储扩展：投影列表与按批次批量读取。
+#[allow(async_fn_in_trait)]
+pub trait LegacyImportRowRepositoryExt {
     /// 分页检索导入行列表（投影查询）。
     ///
     /// 只返回 [`LegacyImportRowRow`] 所需的列表字段；规范化载荷
@@ -327,7 +348,32 @@ impl<'a> LegacyImportRowRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_legacy_import_rows(
+    async fn search_legacy_import_rows(
+        &self,
+        filter: &LegacyImportRowFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<LegacyImportRowRow>>;
+
+    /// 按批次 ID 批量取回导入行（`$in` 一次取回，避免 N+1）。
+    ///
+    /// # 参数
+    /// * `batch_ids` - 目标批次 ID 列表
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配的未删除导入行。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn find_rows_by_batch_ids(
+        &self,
+        batch_ids: &[LegacyImportBatchId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<LegacyImportRow>>;
+}
+
+impl LegacyImportRowRepositoryExt for persistence_core::Repository<'_, LegacyImportRow> {
+    async fn search_legacy_import_rows(
         &self,
         filter: &LegacyImportRowFilter,
         executor: &mut dyn Executor,
@@ -344,18 +390,7 @@ impl<'a> LegacyImportRowRepository<'a> {
         .await
     }
 
-    /// 按批次 ID 批量取回导入行（`$in` 一次取回，避免 N+1）。
-    ///
-    /// # 参数
-    /// * `batch_ids` - 目标批次 ID 列表
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回全部匹配的未删除导入行。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_rows_by_batch_ids(
+    async fn find_rows_by_batch_ids(
         &self,
         batch_ids: &[LegacyImportBatchId],
         executor: &mut dyn Executor,
@@ -454,7 +489,9 @@ impl Pagination for LegacyImportConfirmationFilter {
     }
 }
 
-impl<'a> LegacyImportConfirmationRepository<'a> {
+/// 导入确认集合仓储扩展：投影列表与确认事实定位。
+#[allow(async_fn_in_trait)]
+pub trait LegacyImportConfirmationRepositoryExt {
     /// 分页检索导入确认事实列表（投影查询）。
     ///
     /// 只返回 [`LegacyImportConfirmationRow`] 所需的列表字段；确认事实
@@ -470,22 +507,11 @@ impl<'a> LegacyImportConfirmationRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_legacy_import_confirmations(
+    async fn search_legacy_import_confirmations(
         &self,
         filter: &LegacyImportConfirmationFilter,
         executor: &mut dyn Executor,
-    ) -> Result<PageResult<LegacyImportConfirmationRow>> {
-        search_projected_page(
-            &self.collection(),
-            filter.to_doc(),
-            sort_doc(filter.sort_by.as_deref(), filter.sort_ascending),
-            filter.skip(),
-            filter.limit(),
-            legacy_import_confirmation_projection(),
-            executor,
-        )
-        .await
-    }
+    ) -> Result<PageResult<LegacyImportConfirmationRow>>;
 
     /// 按正式任务查找确认事实。
     ///
@@ -501,19 +527,11 @@ impl<'a> LegacyImportConfirmationRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_work_item(
+    async fn find_by_work_item(
         &self,
         work_item_id: &erp_core::ids::WorkItemId,
         executor: &mut dyn Executor,
-    ) -> Result<Option<LegacyImportConfirmation>> {
-        self.find_one(
-            doc! {
-                "work_item_id": work_item_id.to_string(),
-            },
-            executor,
-        )
-        .await
-    }
+    ) -> Result<Option<LegacyImportConfirmation>>;
 
     /// 按「批次 + 责任范围 + 试算版本」精确查找确认事实。
     ///
@@ -533,7 +551,65 @@ impl<'a> LegacyImportConfirmationRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_batch_scope_trial(
+    async fn find_by_batch_scope_trial(
+        &self,
+        batch_id: &LegacyImportBatchId,
+        confirmation_scope: &str,
+        trial_version: u32,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<LegacyImportConfirmation>>;
+
+    /// 按批次读取全部确认事实，按创建顺序稳定返回。
+    ///
+    /// # 参数
+    /// * `batch_id` - 所属导入批次
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回该批次全部未删除确认事实。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn list_by_batch(
+        &self,
+        batch_id: &LegacyImportBatchId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<LegacyImportConfirmation>>;
+}
+
+impl LegacyImportConfirmationRepositoryExt for persistence_core::Repository<'_, LegacyImportConfirmation> {
+    async fn search_legacy_import_confirmations(
+        &self,
+        filter: &LegacyImportConfirmationFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<LegacyImportConfirmationRow>> {
+        search_projected_page(
+            &self.collection(),
+            filter.to_doc(),
+            sort_doc(filter.sort_by.as_deref(), filter.sort_ascending),
+            filter.skip(),
+            filter.limit(),
+            legacy_import_confirmation_projection(),
+            executor,
+        )
+        .await
+    }
+
+    async fn find_by_work_item(
+        &self,
+        work_item_id: &erp_core::ids::WorkItemId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<LegacyImportConfirmation>> {
+        self.find_one(
+            doc! {
+                "work_item_id": work_item_id.to_string(),
+            },
+            executor,
+        )
+        .await
+    }
+
+    async fn find_by_batch_scope_trial(
         &self,
         batch_id: &LegacyImportBatchId,
         confirmation_scope: &str,
@@ -551,18 +627,7 @@ impl<'a> LegacyImportConfirmationRepository<'a> {
         .await
     }
 
-    /// 按批次读取全部确认事实，按创建顺序稳定返回。
-    ///
-    /// # 参数
-    /// * `batch_id` - 所属导入批次
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回该批次全部未删除确认事实。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_by_batch(
+    async fn list_by_batch(
         &self,
         batch_id: &LegacyImportBatchId,
         executor: &mut dyn Executor,
@@ -629,139 +694,6 @@ impl<'a> LegacyImportRepository<'a> {
         )
         .await?;
         Ok(())
-    }
-}
-
-/// 执行通用筛选分页投影查询（三类列表共用；查询语义与返回形状不变）。
-///
-/// # 参数
-/// * `base` - 基集合句柄（用于计数）
-/// * `filter` - 查询条件文档
-/// * `sort` - 排序文档
-/// * `skip` - 跳过行数
-/// * `limit` - 单页条数
-/// * `projection` - 投影文档
-/// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-///
-/// # 返回
-/// 返回当前页投影行与满足筛选条件的总数。
-///
-/// # 错误
-/// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-async fn search_projected_page<Entity, Row>(
-    base: &mongodb::Collection<Entity>,
-    filter: Document,
-    sort: Document,
-    skip: u64,
-    limit: i64,
-    projection: Document,
-    executor: &mut dyn Executor,
-) -> Result<PageResult<Row>>
-where
-    Entity: Send + Sync,
-    Row: for<'de> Deserialize<'de> + Serialize + Send + Sync,
-{
-    let options = FindOptions::builder().sort(sort).skip(skip).limit(limit).projection(projection).build();
-    let collection = base.clone_with_type::<Row>();
-    let items = mongo_ops::find_many(&collection, filter.clone(), options, executor).await?;
-    let total = mongo_ops::count_documents(base, filter, executor).await?;
-    Ok(PageResult { items, total: total as i64 })
-}
-
-/// 构建排序文档（排序字段白名单映射，非法字段回退 `created_at`）。
-///
-/// 非法字段回退保留：DTO 层已做白名单校验，仓储层回退只为直接调用提供
-/// 确定性排序；`debug_assert` 在测试中暴露误传。
-///
-/// # 参数
-/// * `sort_by` - 排序字段；`None` 或不在白名单时默认 `created_at`
-/// * `sort_ascending` - 升序为 `true`，降序为 `false`
-///
-/// # 返回
-/// 返回排序条件文档。
-fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
-    debug_assert!(
-        sort_by.is_none_or(|field| matches!(
-            field,
-            "batch_no" | "baseline_date" | "trial_version" | "source_row_key" | "created_at"
-        )),
-        "非法排序字段已回退 created_at：{sort_by:?}"
-    );
-    let direction = if sort_ascending { 1 } else { -1 };
-    let field = match sort_by {
-        Some("batch_no") => "batch_no",
-        Some("baseline_date") => "baseline_date",
-        Some("trial_version") => "trial_version",
-        Some("source_row_key") => "source_row_key",
-        _ => "created_at",
-    };
-    doc! { field: direction }
-}
-
-/// 导入批次列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
-fn legacy_import_batch_projection() -> Document {
-    doc! {
-        "id": 1,
-        "batch_no": 1,
-        "source_system_id": 1,
-        "source_object_set": 1,
-        "baseline_date": 1,
-        "import_rule_version": 1,
-        "status": 1,
-        "total_rows": 1,
-        "success_rows": 1,
-        "failed_rows": 1,
-        "failure_code_summary": 1,
-        "confirmation_status_summary": 1,
-        "version": 1,
-        "created_at": 1,
-    }
-}
-
-/// 导入行列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
-fn legacy_import_row_projection() -> Document {
-    doc! {
-        "id": 1,
-        "batch_id": 1,
-        "source_object_type": 1,
-        "source_row_key": 1,
-        "parse_status": 1,
-        "mapping_status": 1,
-        "import_status": 1,
-        "external_identity_map_id": 1,
-        "error_code": 1,
-        "target_document_id": 1,
-        "version": 1,
-        "created_at": 1,
-    }
-}
-
-/// 导入确认列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
-fn legacy_import_confirmation_projection() -> Document {
-    doc! {
-        "id": 1,
-        "batch_id": 1,
-        "confirmation_scope": 1,
-        "owner_role": 1,
-        "batch_version": 1,
-        "trial_version": 1,
-        "status": 1,
-        "decision": 1,
-        "reason_code": 1,
-        "work_item_id": 1,
-        "decided_by": 1,
-        "decided_at": 1,
-        "version": 1,
-        "created_at": 1,
     }
 }
 

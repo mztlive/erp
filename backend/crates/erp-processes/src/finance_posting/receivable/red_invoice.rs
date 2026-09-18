@@ -6,6 +6,7 @@ use erp_core::ids::{InvoiceId, ReceivableAccountId};
 use erp_finance::entity::receivable::{
     AllocationAction, Invoice, InvoiceData, InvoiceDirection, InvoiceKind,
 };
+use erp_finance::repository::prelude::*;
 use erp_finance::repository::{PayableExt, ReceivableExt};
 use erp_finance::service::receivable::red_invoice_plan::{
     purchase_red_invoice_allocation_plan, sales_red_invoice_allocation_plan,

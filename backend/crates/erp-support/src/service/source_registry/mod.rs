@@ -30,6 +30,7 @@ use crate::entity::source_registry::{
 use crate::error::{Error, Result};
 use crate::ports::SupportAuditPort;
 use crate::repository::SourceRegistryExt;
+use crate::repository::prelude::*;
 
 /// 来源系统列表筛选条件类型（经 `SourceRegistryExt` 关联类型跨 crate 可达）。
 type SourceSystemFilter = <mongodb::Database as SourceRegistryExt>::SourceSystemFilter;

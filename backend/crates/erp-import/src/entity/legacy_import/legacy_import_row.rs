@@ -350,9 +350,11 @@ impl LegacyImportRow {
     /// 行未通过解析、映射维度已离开待映射状态或错误码为空时返回错误。
     pub fn mark_conflict(&mut self, error_code: String, error_detail: Option<String>) -> Result<()> {
         Self::ensure_parseable(self)?;
-        self.record_diagnostic(
-            |row| ensure_transition(row.mapping_status, MappingStatus::Conflict),
-            |row| row.mapping_status = MappingStatus::Conflict,
+        Self::write_diagnostic(
+            &mut self.mapping_status,
+            MappingStatus::Conflict,
+            &mut self.error_code,
+            &mut self.error_detail,
             error_code,
             error_detail,
         )
@@ -410,9 +412,11 @@ impl LegacyImportRow {
     pub fn mark_import_failed(&mut self, error_code: String, error_detail: Option<String>) -> Result<()> {
         Self::ensure_parseable(self)?;
         Self::ensure_mapped(self)?;
-        self.record_diagnostic(
-            |row| ensure_transition(row.import_status, ImportStatus::Failed),
-            |row| row.import_status = ImportStatus::Failed,
+        Self::write_diagnostic(
+            &mut self.import_status,
+            ImportStatus::Failed,
+            &mut self.error_code,
+            &mut self.error_detail,
             error_code,
             error_detail,
         )
@@ -434,9 +438,11 @@ impl LegacyImportRow {
     pub fn mark_skipped(&mut self, error_code: String, error_detail: Option<String>) -> Result<()> {
         Self::ensure_parseable(self)?;
         Self::ensure_mapped(self)?;
-        self.record_diagnostic(
-            |row| ensure_transition(row.import_status, ImportStatus::Skipped),
-            |row| row.import_status = ImportStatus::Skipped,
+        Self::write_diagnostic(
+            &mut self.import_status,
+            ImportStatus::Skipped,
+            &mut self.error_code,
+            &mut self.error_detail,
             error_code,
             error_detail,
         )
@@ -544,12 +550,14 @@ impl LegacyImportRow {
 
     /// 统一登记行级诊断（冲突/导入失败/跳过三分支共用；状态机与校验语义不变）。
     ///
-    /// 调用方先完成本分支特有的前置校验（`ensure_parseable`/`ensure_mapped`），
-    /// 本方法只做状态迁移校验、目标状态写入与错误字段写入。
+    /// 调用方先完成本分支特有的前置校验（`ensure_parseable`/`ensure_mapped`）。
+    /// 顺序固定为：状态迁移校验 → 错误码 → 错误明细 → 写状态 → 写错误字段。
     ///
     /// # 参数
-    /// * `check_transition` - 本分支的状态迁移校验
-    /// * `apply_status` - 本分支的目标状态写入
+    /// * `status` - 本分支当前状态
+    /// * `next` - 本分支目标状态
+    /// * `error_code_slot` - 错误码字段
+    /// * `error_detail_slot` - 错误明细字段
     /// * `error_code` - 失败原因错误码
     /// * `error_detail` - 失败原因明细（可为空）
     ///
@@ -558,19 +566,20 @@ impl LegacyImportRow {
     ///
     /// # 错误
     /// 状态迁移非法或错误码/明细非法时返回错误。
-    fn record_diagnostic(
-        &mut self,
-        check_transition: impl FnOnce(&Self) -> Result<()>,
-        apply_status: impl FnOnce(&mut Self),
+    fn write_diagnostic<S: DocumentState + 'static>(
+        status: &mut S,
+        next: S,
+        error_code_slot: &mut Option<String>,
+        error_detail_slot: &mut Option<String>,
         error_code: String,
         error_detail: Option<String>,
     ) -> Result<()> {
-        check_transition(self)?;
+        ensure_transition(*status, next)?;
         let error_code = Self::required_error_code(Some(error_code))?;
         let error_detail = Self::normalized_error_detail(error_detail)?;
-        apply_status(self);
-        self.error_code = Some(error_code);
-        self.error_detail = error_detail;
+        *status = next;
+        *error_code_slot = Some(error_code);
+        *error_detail_slot = error_detail;
         Ok(())
     }
 

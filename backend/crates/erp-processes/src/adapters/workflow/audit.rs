@@ -2,6 +2,7 @@
 
 use application_core::CommandReceiptFact;
 use async_trait::async_trait;
+use erp_audit::repository::prelude::*;
 use erp_audit::{AuditExt, AuditLog, AuditLogData};
 use erp_core::AccountKind;
 use erp_workflow::ports::{PreparedWorkflowAudit, WorkflowAuditFact, WorkflowAuditPort};

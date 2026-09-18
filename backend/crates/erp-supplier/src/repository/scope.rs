@@ -2,10 +2,9 @@
 
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, QueryFilter, Result, mongo_ops};
+use persistence_core::{Executor, QueryFilter, Repository, Result, mongo_ops};
 use serde::Deserialize;
 
-use super::owned::SupplierAccountRepository;
 use super::supplier::SupplierAccountFilter;
 use crate::entity::supplier::SupplierAccount;
 
@@ -160,7 +159,9 @@ pub struct SupplierVersion {
     pub version: u64,
 }
 
-impl SupplierAccountRepository<'_> {
+/// 供应商账号集合上的授权范围查询。
+#[allow(async_fn_in_trait)]
+pub trait SupplierAccountRepositoryScopeExt {
     /// 按明确授权条件读取单个供应商。
     ///
     /// # 参数
@@ -176,14 +177,12 @@ impl SupplierAccountRepository<'_> {
     ///
     /// # 关键业务约束
     /// ID 条件不能替换范围交集；空授权不得返回文档。
-    pub async fn find_authorized(
+    async fn find_authorized(
         &self,
         id: &str,
         scope: &SupplierReadScope,
         executor: &mut dyn Executor,
-    ) -> Result<Option<SupplierAccount>> {
-        self.find_one(doc! { "$and": [{ "id": id }, scope.document()] }, executor).await
-    }
+    ) -> Result<Option<SupplierAccount>>;
 
     /// 装载查询的有界身份与版本集合，用于跨页及导出一致性校验。
     ///
@@ -196,7 +195,24 @@ impl SupplierAccountRepository<'_> {
     ///
     /// # 错误
     /// 数据库读取失败时返回仓储错误。
-    pub async fn query_versions(
+    async fn query_versions(
+        &self,
+        filter: &SupplierAccountFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierVersion>>;
+}
+
+impl SupplierAccountRepositoryScopeExt for Repository<'_, SupplierAccount> {
+    async fn find_authorized(
+        &self,
+        id: &str,
+        scope: &SupplierReadScope,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierAccount>> {
+        self.find_one(doc! { "$and": [{ "id": id }, scope.document()] }, executor).await
+    }
+
+    async fn query_versions(
         &self,
         filter: &SupplierAccountFilter,
         executor: &mut dyn Executor,

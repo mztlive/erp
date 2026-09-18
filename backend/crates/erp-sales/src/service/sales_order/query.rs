@@ -10,6 +10,7 @@ use crate::Result;
 use crate::dto::sales_order::{RevisionView, WorkingCopyView};
 use crate::entity::sales_order::{SalesOrderRevision, SalesOrderRevisionLine, SalesOrderWorkingCopy};
 use crate::repository::SalesOrderExt;
+use crate::repository::prelude::*;
 /// Group already loaded frozen rows once and retain line-number order within every revision.
 fn group_revision_lines(lines: Vec<SalesOrderRevisionLine>) -> HashMap<String, Vec<SalesOrderRevisionLine>> {
     let mut grouped: HashMap<String, Vec<SalesOrderRevisionLine>> = HashMap::new();

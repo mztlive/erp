@@ -8,10 +8,12 @@ use erp_supply::dto::supplier_fulfillment::{
 };
 use erp_supply::entity::supplier_api::SupplierApiCapabilityCode;
 use erp_supply::entity::supplier_fulfillment::{SupplierFulfillmentOrder, SupplierOrderAction};
+use erp_supply::repository::prelude::*;
 use erp_supply::repository::{SupplierApiExt, SupplierFulfillmentExt};
 use erp_supply::service::supplier_fulfillment::place::ensure_capability;
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
+use erp_workflow::repository::prelude::*;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;

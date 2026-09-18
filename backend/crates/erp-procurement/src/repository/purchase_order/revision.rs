@@ -12,7 +12,6 @@ use persistence_core::{Executor, Result, mongo_ops};
 use super::common::in_filter;
 use super::{PURCHASE_ORDER_REVISION_LINES, PURCHASE_ORDER_REVISIONS, PurchaseOrderDomainRepository};
 use crate::entity::purchase_order::{PurchaseOrderRevision, PurchaseOrderRevisionLine};
-use crate::repository::owned::PurchaseOrderRevisionLineRepository;
 
 impl<'a> PurchaseOrderDomainRepository<'a> {
     /// 按采购单读取全部生效版本，并按版本号升序返回。
@@ -120,7 +119,9 @@ fn revision_lines_filter(revision_id: &PurchaseOrderRevisionId) -> Document {
     }
 }
 
-impl<'a> PurchaseOrderRevisionLineRepository<'a> {
+/// 采购生效版本行集合的域查询。
+#[allow(async_fn_in_trait)]
+pub trait PurchaseOrderRevisionLineRepositoryExt {
     /// 批量取回多个版本的全部明细（`$in`，禁止 N+1）。
     ///
     /// 用于版本详情页一次取回行集合；空集合直接返回空结果。
@@ -134,7 +135,15 @@ impl<'a> PurchaseOrderRevisionLineRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_lines_by_revision_ids(
+    async fn find_lines_by_revision_ids(
+        &self,
+        revision_ids: &[PurchaseOrderRevisionId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PurchaseOrderRevisionLine>>;
+}
+
+impl PurchaseOrderRevisionLineRepositoryExt for persistence_core::Repository<'_, PurchaseOrderRevisionLine> {
+    async fn find_lines_by_revision_ids(
         &self,
         revision_ids: &[PurchaseOrderRevisionId],
         executor: &mut dyn Executor,

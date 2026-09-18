@@ -2,11 +2,10 @@
 use erp_core::common::time::Instant;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, Result, mongo_ops};
+use persistence_core::{Executor, Repository, Result, mongo_ops};
 use serde::Deserialize;
 
-use crate::entity::sales_order::{CommercialStatus, FulfillmentProgress, SalesAttribution};
-use crate::repository::owned::SalesOrderRepository;
+use crate::entity::sales_order::{CommercialStatus, FulfillmentProgress, SalesAttribution, SalesOrder};
 
 /// 报表单次最多读取的销售单数；额外读取一条用于拒绝截断统计。
 pub const PROFIT_LOSS_ORDER_LIMIT: usize = 10_000;
@@ -50,9 +49,19 @@ impl ProfitLossOrderFilter {
         filter
     }
 }
-impl SalesOrderRepository<'_> {
+/// 实际盈亏读取的有界销售单事实查询。
+#[allow(async_fn_in_trait)]
+pub trait SalesOrderRepositoryProfitLossExt {
     /// 有界读取正式非卡券销售单；调用方必须对超限结果整体拒绝。
-    pub async fn profit_loss_orders(
+    async fn profit_loss_orders(
+        &self,
+        filter: &ProfitLossOrderFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ProfitLossOrder>>;
+}
+
+impl SalesOrderRepositoryProfitLossExt for Repository<'_, SalesOrder> {
+    async fn profit_loss_orders(
         &self,
         filter: &ProfitLossOrderFilter,
         executor: &mut dyn Executor,

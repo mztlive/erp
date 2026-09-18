@@ -6,6 +6,7 @@ use std::hash::{Hash, Hasher};
 use application_core::AuditActor;
 use erp_core::money::Amount;
 use erp_finance::ports::funds_scope::FundsResolvedScope;
+use erp_finance::repository::prelude::*;
 use erp_finance::repository::{PayableExt, SupplierPaymentFilter, SupplierPaymentRow};
 use erp_procurement::PurchaseAccess;
 use persistence_core::{Executor, Transactional};

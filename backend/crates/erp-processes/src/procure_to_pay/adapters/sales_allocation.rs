@@ -5,6 +5,7 @@ use erp_procurement::entity::purchase_order::CurrentSalesAllocationLine;
 use erp_procurement::ports::purchase_order::SalesAllocationPort;
 use erp_procurement::{Error, Result};
 use erp_sales::repository::SalesOrderExt;
+use erp_sales::repository::prelude::*;
 use mongodb::Database;
 use persistence_core::Executor;
 pub(crate) struct SalesAllocationAdapter(pub Database);

@@ -26,6 +26,7 @@ use crate::entity::supplier_offering::{
 };
 use crate::ports::offering_qualification::QualificationPort;
 use crate::ports::{FailClosedOfferingDataScopePort, OfferingDataScopePort};
+use crate::repository::prelude::*;
 use crate::repository::{SupplierApiExt, SupplierOfferingExt};
 use crate::{Error, Result};
 mod access;

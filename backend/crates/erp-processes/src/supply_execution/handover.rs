@@ -3,13 +3,13 @@
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
-use erp_identity::entity::organization::OrgTree;
-use erp_identity::repository::OrganizationRepository;
+use erp_identity::repository::prelude::*;
 use erp_identity::{AccessControlExt, Permission, SharedRbacService};
 use erp_supply::dto::{
     FulfillmentHandoverCandidateView, HandoverFulfillmentOrderRequest, HandoverFulfillmentOrderView,
 };
 use erp_supply::service::supplier_fulfillment::W26_BUSINESS_OBJECT_TYPE;
+use erp_workflow::repository::prelude::*;
 use erp_workflow::{WorkItem, WorkItemExt, WorkItemType};
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
@@ -245,17 +245,10 @@ async fn ensure_org_enabled(
     target_org: Option<&str>,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<()> {
-    let Some(org) = target_org.map(str::trim).filter(|value| !value.is_empty()) else {
-        return Ok(());
-    };
-    reject_company_org(org)?;
-    let state = OrganizationRepository::new(db).state(executor).await?;
-    let tree = OrgTree::new(&state.units)?;
-    let path = tree.path(org)?;
-    if path.iter().any(|node| !node.enabled) {
-        return Err(Error::BusinessLogicError("目标业务组织已停用".into()));
+    if let Some(org) = target_org.map(str::trim).filter(|value| !value.is_empty()) {
+        reject_company_org(org)?;
     }
-    Ok(())
+    crate::handover_common::ensure_org_enabled(db, target_org, executor).await
 }
 
 async fn account_can_follow(rbac: &SharedRbacService, user_id: &str) -> Result<bool> {

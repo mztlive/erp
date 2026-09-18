@@ -130,7 +130,7 @@ pub struct LegacyImportBatchData {
 /// 旧数据导入批次实体（数据模型 §6.12）。
 ///
 /// 本表是唯一持久兼容层，不为旧五张表各建一套 ERP 影子业务表（§6.12）；
-/// 成功白名单包与失败诊断包必须生成独立 `file_asset`，由 P3 在形成资产时写入。
+/// 成功白名单包与失败诊断包必须生成独立 `file_asset`，由形成资产的组合层写入。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Entity)]
 pub struct LegacyImportBatch {
     #[serde(flatten)]

@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 use application_core::AuditActor;
 use erp_catalog::entity::catalog::{EnableStatus, Product, Sku, SkuRevision, parse_specification_signature};
+use erp_catalog::repository::prelude::*;
 use erp_catalog::{CatalogExt, ProductMediaInput, ProductSkuInput, SpecEntryInput, UpdateProductRequest};
 use erp_core::ids::{FileAssetId, ProductId, SkuId, SkuRevisionId};
 use persistence_core::NoTransaction;

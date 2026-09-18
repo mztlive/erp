@@ -10,6 +10,7 @@ use crate::AccessControlExt;
 use crate::dto::{DataScopeListMeta, DataScopeListParams, DataScopeListView, DataScopeView, PageView};
 use crate::error::{Error, Result};
 use crate::repository::OrganizationRepository;
+use crate::repository::prelude::*;
 
 impl AccessControlService {
     /// 分页查询数据范围列表，并返回与组织查询同口径的信封。

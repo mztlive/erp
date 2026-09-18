@@ -7,6 +7,7 @@ use application_core::{
 };
 use erp_sales::dto::sales_review::{SalesChangeOrderListParams, SalesChangeOrderView};
 use erp_sales::entity::sales_review::SalesChangeOrder;
+use erp_sales::repository::prelude::*;
 use erp_sales::repository::{SalesOrderExt, SalesReviewExt};
 use erp_workflow::BpmExt;
 use erp_workflow::service::document_registry::find_approval_binding;
@@ -66,11 +67,11 @@ impl SalesChangeReadService {
         params.validate()?;
         let snapshot = self.change_list_snapshot(params, actor).await?;
         if expected.is_some_and(|value| value != snapshot.scope_version) {
-            return Err(Error::ConflictError("DATA_SCOPE_CHANGED：数据范围已变化，请从第一页刷新".into()));
+            return Err(crate::support::data_scope_changed("数据范围已变化，请从第一页刷新"));
         }
         let current = self.change_list_snapshot(params, actor).await?;
         if current.scope_version != snapshot.scope_version {
-            return Err(Error::ConflictError("DATA_SCOPE_CHANGED：数据范围或业务单据已变化，请刷新".into()));
+            return Err(crate::support::data_scope_changed("数据范围或业务单据已变化，请刷新"));
         }
         Ok(snapshot)
     }
@@ -97,9 +98,7 @@ impl SalesChangeReadService {
         let first = load_authorized_change(&self.db, self.require_rbac()?, actor, id).await?;
         let current = load_authorized_change(&self.db, self.require_rbac()?, actor, id).await?;
         if first.1 != current.1 {
-            return Err(Error::ConflictError(
-                "DATA_SCOPE_CHANGED：数据范围或销售变更单已变化，请刷新".into(),
-            ));
+            return Err(crate::support::data_scope_changed("数据范围或销售变更单已变化，请刷新"));
         }
         Ok(first.0)
     }

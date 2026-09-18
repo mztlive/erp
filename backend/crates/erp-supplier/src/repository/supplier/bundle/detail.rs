@@ -1,6 +1,7 @@
 use erp_core::ids::SupplierAccountId;
 use persistence_core::{Executor, Result};
 
+use super::super::qualification::SupplierQualificationCapabilityRepositoryExt;
 use super::super::{SUPPLIER_QUALIFICATION_CAPABILITIES, SupplierRepository};
 use super::SupplierDetailBundle;
 use crate::entity::supplier::supplier_commercial_profile_revision::commercial_party_ids;

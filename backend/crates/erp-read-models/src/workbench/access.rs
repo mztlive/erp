@@ -6,6 +6,7 @@ use application_core::AuditActor;
 use erp_identity::{Permission, PermissionSet};
 use erp_workflow::DocumentRegistryExt;
 use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
+use erp_workflow::repository::prelude::*;
 use persistence_core::Executor;
 
 use super::facts::{WorkbenchObjectFact, WorkbenchObjectFactMap, apply_object_display, object_policy};

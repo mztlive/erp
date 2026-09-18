@@ -1,6 +1,5 @@
 //! SupplierRefund 详情与分页视图装配。
 use erp_returns::repository::ReturnsExt;
-use erp_workflow::service::document_registry::find_approval_binding;
 use persistence_core::NoTransaction;
 
 use super::ReturnsReadService;
@@ -48,14 +47,7 @@ impl ReturnsReadService {
             .find_by_id(&id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("供应商退款单不存在".to_string()))?;
-        let binding = match find_approval_binding(&self.db, &id, &mut NoTransaction)
-            .await
-            .map_err(crate::Error::from)
-        {
-            Ok(binding) => binding,
-            Err(Error::NotFound(_)) => None,
-            Err(error) => return Err(error),
-        };
+        let binding = super::approval::optional_approval_binding(&self.db, &id).await?;
         Ok(SupplierRefundView {
             id: refund.base.id.clone(),
             refund_no: refund.refund_no,

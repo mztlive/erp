@@ -1,3 +1,4 @@
+use erp_catalog::repository::prelude::*;
 use erp_catalog::{CatalogExt, ProductCategory};
 use erp_core::ids::{ProductCategoryId, ProductRevisionId, SkuId};
 use erp_procurement::entity::procurement_responsibility::ProcurementCatalogBundle;

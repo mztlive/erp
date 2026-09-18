@@ -5,6 +5,7 @@ use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshot;
 use erp_workflow::entity::approval_integration::display_snapshot::ApprovalDisplaySnapshot;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::work_item::WorkItemType;
+use erp_workflow::repository::prelude::*;
 use erp_workflow::{ApprovalIntegrationExt, WorkflowAuthorizationPort};
 use persistence_core::Executor;
 

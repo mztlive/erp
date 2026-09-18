@@ -10,6 +10,7 @@ use erp_core::common::time::Instant;
 use erp_returns::entity::returns::{CustomerRefund, PaymentReversal, ReceiptReversal, SupplierRefund};
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::work_item::WorkItem;
+use erp_workflow::repository::prelude::*;
 use erp_workflow::service::approval::execution::authorization::converge_eligibility;
 use erp_workflow::service::approval::execution::{
     CancelExecutionInput, ExecutionCommandInput, PreparedExecution, normalize_document_cancel_reason,

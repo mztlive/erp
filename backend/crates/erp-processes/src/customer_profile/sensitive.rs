@@ -5,6 +5,7 @@ use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
 use erp_core::ids::PartyId;
 use erp_customer::{CustomerSensitiveFieldView, CustomerSensitiveRevealView, RevealCustomerSensitiveRequest};
+use erp_party::repository::prelude::*;
 use erp_party::{PartyAddress, PartyBankAccount, PartyContact, PartyExt, PartyOwned, SensitiveFieldKind};
 use persistence_core::NoTransaction;
 use validator::Validate;

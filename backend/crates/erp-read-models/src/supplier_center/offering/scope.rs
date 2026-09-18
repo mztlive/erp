@@ -5,6 +5,8 @@ use std::sync::Arc;
 
 use application_core::{AuditActor, FilterOption, FilteredPage};
 use erp_identity::AccessControlExt;
+use erp_identity::repository::prelude::*;
+use erp_supply::repository::prelude::*;
 use erp_supply::{OfferingAccess, OfferingDataScopePort, OfferingReadScope, SupplierOfferingExt};
 use persistence_core::Transactional;
 
@@ -29,9 +31,7 @@ impl SupplierOfferingReadService {
         params: &SupplierOfferingListParams,
         actor: &AuditActor,
     ) -> Result<SupplierOfferingListView> {
-        if params.page.unwrap_or(1) > 1 && params.scope_version.as_deref().is_none_or(str::is_empty) {
-            return Err(crate::support::data_scope_changed("请从第一页刷新后继续查询"));
-        }
+        crate::support::ensure_deep_page(params.page.unwrap_or(1), params.scope_version.as_deref())?;
         let snapshot = self.list_snapshot(params, actor).await?;
         if params.scope_version.as_deref().is_some_and(|value| value != snapshot.scope_version) {
             return Err(crate::support::data_scope_changed("数据范围已变化，请从第一页刷新"));

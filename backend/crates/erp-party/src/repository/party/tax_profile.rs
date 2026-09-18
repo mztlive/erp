@@ -2,14 +2,13 @@ use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::PartyId;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Repository, Result, mongo_ops};
 use serde::{Deserialize, Serialize};
 
 use super::shared::{
     active_fact_filter, active_fact_window_filter, default_first_sort, party_default_marks_filter, sort_doc,
 };
 use crate::entity::party::{EffectiveRecordStatus, PartyTaxProfile};
-use crate::repository::owned::PartyTaxProfileRepository;
 
 /// 税务资料列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -83,7 +82,9 @@ impl Pagination for PartyTaxProfileFilter {
     }
 }
 
-impl<'a> PartyTaxProfileRepository<'a> {
+/// 税务资料集合仓储的域查询扩展。
+#[allow(async_fn_in_trait)]
+pub trait PartyTaxProfileRepositoryExt {
     /// 分页检索税务资料列表（投影查询）。
     ///
     /// 排序字段经仓储白名单校验（`created_at`/`tax_no`/`valid_from`），
@@ -98,7 +99,110 @@ impl<'a> PartyTaxProfileRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_party_tax_profiles(
+    async fn search_party_tax_profiles(
+        &self,
+        filter: &PartyTaxProfileFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<PartyTaxProfileRow>>;
+
+    /// 读取指定日期生效的主体税务资料。
+    ///
+    /// # 参数
+    /// * `party_id` - 所属 Party ID
+    /// * `as_of` - 业务日期
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回该日期处于启用有效期的税务资料。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn list_active_on(
+        &self,
+        party_id: &PartyId,
+        as_of: erp_core::common::time::BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyTaxProfile>>;
+
+    /// 按默认标记与创建时间读取指定日期生效的主体税务资料。
+    ///
+    /// # 参数
+    /// * `party_id` - 所属 Party ID
+    /// * `as_of` - 业务日期
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回默认税务资料优先、同组内最新创建优先的当前事实。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn list_current_on(
+        &self,
+        party_id: &PartyId,
+        as_of: erp_core::common::time::BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyTaxProfile>>;
+
+    /// 批量读取多个主体在指定日期生效的税务资料。
+    ///
+    /// # 参数
+    /// * `party_ids` - 往来主体 ID 集合
+    /// * `as_of` - 业务日期
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回按主体、默认标记和创建时间稳定排序的启用税务资料。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    async fn list_current_for_parties_on(
+        &self,
+        party_ids: &[PartyId],
+        as_of: erp_core::common::time::BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyTaxProfile>>;
+
+    /// 清除同一 Party 其他税务资料的默认标记。
+    ///
+    /// 必须与主写入位于同一事务执行器中，避免并发或中途失败留下多个默认行。
+    ///
+    /// # 参数
+    /// * `party_id` - 所属 Party ID
+    /// * `exclude_id` - 保留默认标记的税务资料 ID
+    /// * `executor` - 数据访问执行器，必须位于调用方事务中
+    ///
+    /// # 返回
+    /// 全部冲突默认标记清除后返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询、游标读取或 CAS 更新失败时返回错误。
+    async fn clear_other_default_marks(
+        &self,
+        party_id: &PartyId,
+        exclude_id: Option<&str>,
+        executor: &mut dyn Executor,
+    ) -> Result<()>;
+
+    /// 按默认标记和创建时间读取主体税务资料。
+    ///
+    /// # 参数
+    /// * `party_id` - 所属主体 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回默认税务资料优先、同组内最新创建优先的完整实体。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    async fn list_by_party(
+        &self,
+        party_id: &PartyId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyTaxProfile>>;
+}
+
+impl PartyTaxProfileRepositoryExt for Repository<'_, PartyTaxProfile> {
+    async fn search_party_tax_profiles(
         &self,
         filter: &PartyTaxProfileFilter,
         executor: &mut dyn Executor,
@@ -120,19 +224,7 @@ impl<'a> PartyTaxProfileRepository<'a> {
         Ok(PageResult { items, total: total as i64 })
     }
 
-    /// 读取指定日期生效的主体税务资料。
-    ///
-    /// # 参数
-    /// * `party_id` - 所属 Party ID
-    /// * `as_of` - 业务日期
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回该日期处于启用有效期的税务资料。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_active_on(
+    async fn list_active_on(
         &self,
         party_id: &PartyId,
         as_of: erp_core::common::time::BusinessDate,
@@ -141,19 +233,7 @@ impl<'a> PartyTaxProfileRepository<'a> {
         self.find_many(active_fact_filter(party_id, as_of), executor).await
     }
 
-    /// 按默认标记与创建时间读取指定日期生效的主体税务资料。
-    ///
-    /// # 参数
-    /// * `party_id` - 所属 Party ID
-    /// * `as_of` - 业务日期
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回默认税务资料优先、同组内最新创建优先的当前事实。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_current_on(
+    async fn list_current_on(
         &self,
         party_id: &PartyId,
         as_of: erp_core::common::time::BusinessDate,
@@ -162,19 +242,7 @@ impl<'a> PartyTaxProfileRepository<'a> {
         self.find_many_sorted(active_fact_filter(party_id, as_of), default_first_sort(), executor).await
     }
 
-    /// 批量读取多个主体在指定日期生效的税务资料。
-    ///
-    /// # 参数
-    /// * `party_ids` - 往来主体 ID 集合
-    /// * `as_of` - 业务日期
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回按主体、默认标记和创建时间稳定排序的启用税务资料。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn list_current_for_parties_on(
+    async fn list_current_for_parties_on(
         &self,
         party_ids: &[PartyId],
         as_of: erp_core::common::time::BusinessDate,
@@ -196,21 +264,7 @@ impl<'a> PartyTaxProfileRepository<'a> {
         .await
     }
 
-    /// 清除同一 Party 其他税务资料的默认标记。
-    ///
-    /// 必须与主写入位于同一事务执行器中，避免并发或中途失败留下多个默认行。
-    ///
-    /// # 参数
-    /// * `party_id` - 所属 Party ID
-    /// * `exclude_id` - 保留默认标记的税务资料 ID
-    /// * `executor` - 数据访问执行器，必须位于调用方事务中
-    ///
-    /// # 返回
-    /// 全部冲突默认标记清除后返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或 CAS 更新失败时返回错误。
-    pub async fn clear_other_default_marks(
+    async fn clear_other_default_marks(
         &self,
         party_id: &PartyId,
         exclude_id: Option<&str>,
@@ -227,18 +281,7 @@ impl<'a> PartyTaxProfileRepository<'a> {
         Ok(())
     }
 
-    /// 按默认标记和创建时间读取主体税务资料。
-    ///
-    /// # 参数
-    /// * `party_id` - 所属主体 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回默认税务资料优先、同组内最新创建优先的完整实体。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或反序列化失败时返回错误。
-    pub async fn list_by_party(
+    async fn list_by_party(
         &self,
         party_id: &PartyId,
         executor: &mut dyn Executor,

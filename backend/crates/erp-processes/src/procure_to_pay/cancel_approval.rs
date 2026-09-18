@@ -11,6 +11,7 @@ use erp_procurement::dto::purchase_order::CancelPurchaseOrderApprovalRequest;
 use erp_procurement::entity::purchase_order::PurchaseOrder;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::work_item::WorkItem;
+use erp_workflow::repository::prelude::*;
 use erp_workflow::service::approval::execution::authorization::converge_eligibility;
 use erp_workflow::service::approval::execution::start::map_engine_error;
 use erp_workflow::service::approval::execution::{

@@ -7,6 +7,7 @@ use erp_core::ids::{CustomerAccountId, CustomerReceiptId, CustomerRefundId};
 use erp_core::money::Amount;
 use erp_returns::entity::returns::{CustomerRefund, CustomerRefundData, CustomerRefundStatus};
 use erp_returns::repository::ReturnsExt;
+use erp_returns::repository::prelude::*;
 use erp_returns::repository::returns::{CustomerRefundFilter, CustomerRefundRow};
 use persistence_core::NoTransaction;
 

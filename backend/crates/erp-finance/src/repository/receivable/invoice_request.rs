@@ -4,7 +4,6 @@ use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result};
 
 use crate::dto::receivable::invoice_request::InvoiceRequestQuery;
 use crate::entity::receivable::SalesInvoiceRequest;
-use crate::repository::owned::SalesInvoiceRequestRepository;
 
 /// 经过分页上限约束的申请查询。
 struct RequestFilter<'a>(&'a InvoiceRequestQuery);
@@ -41,11 +40,39 @@ impl Pagination for RequestFilter<'_> {
         (self.0.page.unwrap_or(1).max(1), self.0.page_size.unwrap_or(20).clamp(1, 100).into())
     }
 }
-impl SalesInvoiceRequestRepository<'_> {
+
+#[allow(async_fn_in_trait)]
+pub trait SalesInvoiceRequestRepositoryExt {
     /// 查找与财务任务一一关联的申请；缺失表示任务没有申请授权。
     /// # 错误
     /// 仓储读取或反序列化失败时返回错误。
-    pub async fn find_for_task(
+    async fn find_for_task(
+        &self,
+        task_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SalesInvoiceRequest>>;
+
+    /// 按相同过滤条件读取列表和总数；固定时间及主键排序。
+    /// # 错误
+    /// 仓储或分页读取失败时返回错误。
+    async fn page(
+        &self,
+        query: &InvoiceRequestQuery,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<SalesInvoiceRequest>>;
+
+    /// 查询占用当前应收额度的申请，供同一应收写锁内计算可用额度。
+    /// # 错误
+    /// 仓储读取失败时返回错误。
+    async fn reserved_for_account(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesInvoiceRequest>>;
+}
+
+impl SalesInvoiceRequestRepositoryExt for persistence_core::Repository<'_, SalesInvoiceRequest> {
+    async fn find_for_task(
         &self,
         task_id: &str,
         executor: &mut dyn Executor,
@@ -53,10 +80,7 @@ impl SalesInvoiceRequestRepository<'_> {
         self.find_one_by_field("work_item_id", task_id, executor).await
     }
 
-    /// 按相同过滤条件读取列表和总数；固定时间及主键排序。
-    /// # 错误
-    /// 仓储或分页读取失败时返回错误。
-    pub async fn page(
+    async fn page(
         &self,
         query: &InvoiceRequestQuery,
         executor: &mut dyn Executor,
@@ -75,10 +99,8 @@ impl SalesInvoiceRequestRepository<'_> {
                 .await?;
         Ok(PageResult { items, total: total as i64 })
     }
-    /// 查询占用当前应收额度的申请，供同一应收写锁内计算可用额度。
-    /// # 错误
-    /// 仓储读取失败时返回错误。
-    pub async fn reserved_for_account(
+
+    async fn reserved_for_account(
         &self,
         id: &str,
         executor: &mut dyn Executor,

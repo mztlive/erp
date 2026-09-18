@@ -4,6 +4,7 @@ use erp_procurement::entity::purchase_order::{
     PurchaseChangeOrder, PurchaseChangeSubmission, PurchaseOrder, PurchaseOrderRevision,
 };
 use erp_sales::repository::SalesOrderExt;
+use erp_sales::repository::prelude::*;
 use persistence_core::NoTransaction;
 
 use super::super::PurchaseOrderProcess;

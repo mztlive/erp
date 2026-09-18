@@ -2,12 +2,11 @@ use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::PartyId;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Repository, Result, mongo_ops};
 use serde::{Deserialize, Serialize};
 
 use super::shared::{active_fact_filter, default_first_sort, party_default_marks_filter, sort_doc};
 use crate::entity::party::{AddressType, EffectiveRecordStatus, PartyAddress};
-use crate::repository::owned::PartyAddressRepository;
 
 /// 地址列表投影行。
 ///
@@ -91,7 +90,9 @@ impl Pagination for PartyAddressFilter {
     }
 }
 
-impl<'a> PartyAddressRepository<'a> {
+/// 地址集合仓储的域查询扩展。
+#[allow(async_fn_in_trait)]
+pub trait PartyAddressRepositoryExt {
     /// 分页检索地址列表（投影查询，敏感字段不进投影）。
     ///
     /// 排序字段经仓储白名单校验（`created_at`/`address_type`/`valid_from`），
@@ -106,7 +107,104 @@ impl<'a> PartyAddressRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_party_addresses(
+    async fn search_party_addresses(
+        &self,
+        filter: &PartyAddressFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<PartyAddressRow>>;
+
+    /// 按地址 ID 查找未删除地址事实。
+    ///
+    /// # 参数
+    /// * `id` - 地址事实 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配地址；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    async fn find_address(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<PartyAddress>>;
+
+    /// 读取指定日期生效的主体地址。
+    ///
+    /// # 参数
+    /// * `party_id` - 所属 Party ID
+    /// * `as_of` - 业务日期
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回该日期处于启用有效期的地址。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn list_active_on(
+        &self,
+        party_id: &PartyId,
+        as_of: erp_core::common::time::BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyAddress>>;
+
+    /// 按默认标记与创建时间读取指定日期生效的主体地址。
+    ///
+    /// # 参数
+    /// * `party_id` - 所属 Party ID
+    /// * `as_of` - 业务日期
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回默认地址优先、同组内最新创建优先的当前事实。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn list_current_on(
+        &self,
+        party_id: &PartyId,
+        as_of: erp_core::common::time::BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyAddress>>;
+
+    /// 清除同一 Party 其他地址的默认标记。
+    ///
+    /// 必须与主写入位于同一事务执行器中，避免并发或中途失败留下多个默认行。
+    ///
+    /// # 参数
+    /// * `party_id` - 所属 Party ID
+    /// * `exclude_id` - 保留默认标记的地址 ID
+    /// * `executor` - 数据访问执行器，必须位于调用方事务中
+    ///
+    /// # 返回
+    /// 全部冲突默认标记清除后返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询、游标读取或 CAS 更新失败时返回错误。
+    async fn clear_other_default_marks(
+        &self,
+        party_id: &PartyId,
+        exclude_id: Option<&str>,
+        executor: &mut dyn Executor,
+    ) -> Result<()>;
+
+    /// 按默认标记和创建时间读取主体地址。
+    ///
+    /// # 参数
+    /// * `party_id` - 所属主体 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回默认地址优先、同组内最新创建优先的完整实体。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    async fn list_by_party(
+        &self,
+        party_id: &PartyId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyAddress>>;
+}
+
+impl PartyAddressRepositoryExt for Repository<'_, PartyAddress> {
+    async fn search_party_addresses(
         &self,
         filter: &PartyAddressFilter,
         executor: &mut dyn Executor,
@@ -128,34 +226,11 @@ impl<'a> PartyAddressRepository<'a> {
         Ok(PageResult { items, total: total as i64 })
     }
 
-    /// 按地址 ID 查找未删除地址事实。
-    ///
-    /// # 参数
-    /// * `id` - 地址事实 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配地址；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_address(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<PartyAddress>> {
+    async fn find_address(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<PartyAddress>> {
         self.find_by_id(id, executor).await
     }
 
-    /// 读取指定日期生效的主体地址。
-    ///
-    /// # 参数
-    /// * `party_id` - 所属 Party ID
-    /// * `as_of` - 业务日期
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回该日期处于启用有效期的地址。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_active_on(
+    async fn list_active_on(
         &self,
         party_id: &PartyId,
         as_of: erp_core::common::time::BusinessDate,
@@ -164,19 +239,7 @@ impl<'a> PartyAddressRepository<'a> {
         self.find_many(active_fact_filter(party_id, as_of), executor).await
     }
 
-    /// 按默认标记与创建时间读取指定日期生效的主体地址。
-    ///
-    /// # 参数
-    /// * `party_id` - 所属 Party ID
-    /// * `as_of` - 业务日期
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回默认地址优先、同组内最新创建优先的当前事实。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_current_on(
+    async fn list_current_on(
         &self,
         party_id: &PartyId,
         as_of: erp_core::common::time::BusinessDate,
@@ -185,21 +248,7 @@ impl<'a> PartyAddressRepository<'a> {
         self.find_many_sorted(active_fact_filter(party_id, as_of), default_first_sort(), executor).await
     }
 
-    /// 清除同一 Party 其他地址的默认标记。
-    ///
-    /// 必须与主写入位于同一事务执行器中，避免并发或中途失败留下多个默认行。
-    ///
-    /// # 参数
-    /// * `party_id` - 所属 Party ID
-    /// * `exclude_id` - 保留默认标记的地址 ID
-    /// * `executor` - 数据访问执行器，必须位于调用方事务中
-    ///
-    /// # 返回
-    /// 全部冲突默认标记清除后返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或 CAS 更新失败时返回错误。
-    pub async fn clear_other_default_marks(
+    async fn clear_other_default_marks(
         &self,
         party_id: &PartyId,
         exclude_id: Option<&str>,
@@ -216,18 +265,7 @@ impl<'a> PartyAddressRepository<'a> {
         Ok(())
     }
 
-    /// 按默认标记和创建时间读取主体地址。
-    ///
-    /// # 参数
-    /// * `party_id` - 所属主体 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回默认地址优先、同组内最新创建优先的完整实体。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或反序列化失败时返回错误。
-    pub async fn list_by_party(
+    async fn list_by_party(
         &self,
         party_id: &PartyId,
         executor: &mut dyn Executor,

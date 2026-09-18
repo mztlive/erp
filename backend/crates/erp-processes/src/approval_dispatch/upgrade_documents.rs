@@ -9,6 +9,7 @@ use erp_finance::repository::{PayableExt, ReceivableExt};
 use erp_inventory::InventoryExt;
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_returns::repository::ReturnsExt;
+use erp_sales::repository::prelude::*;
 use erp_sales::repository::{SalesOrderExt, SalesReviewExt};
 use erp_supplier::SupplierExt;
 use erp_workflow::entity::document_registry::DocumentType;

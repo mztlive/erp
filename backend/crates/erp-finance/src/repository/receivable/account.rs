@@ -11,7 +11,6 @@ use serde::{Deserialize, Serialize};
 
 use super::sort_doc;
 use crate::entity::receivable::{ReceivableAccount, ReceivableAccountStatus};
-use crate::repository::owned::ReceivableAccountRepository;
 // 金额形态与进度管道复用仓储共用实现；`snapshot` 经本模块转发，保持原引用路径。
 pub(super) use crate::repository::progress::{amount_bson, progress_pipeline};
 
@@ -185,7 +184,8 @@ impl Pagination for ReceivableAccountFilter {
     }
 }
 
-impl<'a> ReceivableAccountRepository<'a> {
+#[allow(async_fn_in_trait)]
+pub trait ReceivableAccountRepositoryExt {
     /// 分页检索应收往来子账列表（投影查询）。
     ///
     /// 只返回 [`ReceivableAccountRow`] 所需的列表字段，不加载整文档；
@@ -200,7 +200,280 @@ impl<'a> ReceivableAccountRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_receivable_accounts(
+    async fn search_receivable_accounts(
+        &self,
+        filter: &ReceivableAccountFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<ReceivableAccountRow>>;
+
+    /// 条件核销：增加已核销进度（不超额核销）。
+    ///
+    /// 原子写入口（P2 计划 §5）：以写条件而非读后判断保证
+    /// `settled_total + 本次核销 <= gross_total`，不满足时**整个更新不生效**
+    /// （matched 为 0），返回 `false` 且金额与状态均不变。核销进度同时重算
+    /// `open_total` 与派生状态，全部在同一条件更新内完成，不会产生负开放余额。
+    /// 单文档更新本身原子，可在 Service 的过账事务内参与回滚。
+    ///
+    /// # 参数
+    /// * `id` - 应收往来子账 ID
+    /// * `amount` - 本次核销含税金额（正数）
+    /// * `updated_by` - 本次更新执行人
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 核销在额度内并已生效时返回 `true`；超过剩余开放余额被拒绝时返回 `false`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 更新失败时返回错误。
+    async fn apply_settlement(
+        &self,
+        id: &str,
+        amount: &Amount,
+        updated_by: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<bool>;
+
+    /// 条件核销冲减：减少已核销进度（不产生负已核销）。
+    ///
+    /// 反向核销（`REVERSE` 分配）的原子写入口：以写条件保证
+    /// `本次冲减 <= settled_total`，不满足时整个更新不生效，返回 `false`。
+    /// 用于冲正/退款时追加反向核销，防止冲减超过已核销金额。
+    ///
+    /// # 参数
+    /// * `id` - 应收往来子账 ID
+    /// * `amount` - 本次冲减含税金额（正数）
+    /// * `updated_by` - 本次更新执行人
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 冲减在已核销额度内并已生效时返回 `true`；超过已核销金额被拒绝时返回 `false`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 更新失败时返回错误。
+    async fn revert_settlement(
+        &self,
+        id: &str,
+        amount: &Amount,
+        updated_by: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<bool>;
+
+    /// 条件开票：增加净已开票进度（不超过可开票额度）。
+    ///
+    /// 销项蓝票 `APPLY` 的原子写入口：以写条件保证
+    /// `invoiced_total + 本次开票 <= invoiceable_total`，不满足时整个更新不生效，
+    /// 返回 `false`。同时重算 `open_invoiceable_total`，不会产生负可开票余额。
+    ///
+    /// # 参数
+    /// * `id` - 应收往来子账 ID
+    /// * `amount` - 本次开票含税金额（正数）
+    /// * `updated_by` - 本次更新执行人
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 开票在额度内并已生效时返回 `true`；超过剩余可开票额度被拒绝时返回 `false`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 更新失败时返回错误。
+    async fn apply_invoicing(
+        &self,
+        id: &str,
+        amount: &Amount,
+        updated_by: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<bool>;
+
+    /// 批量条件开票：按子账聚合增量原子更新开票进度（FIN-R10）。
+    ///
+    /// 对已去重并按账户聚合的 `deltas` 逐账户执行条件更新（`invoicing_guard`
+    /// 保证 `invoiced_total + delta <= invoiceable_total`），并按输入顺序
+    /// 报告每个账户的命中情况；调用方（Service）负责将 `rejected` 转译为
+    /// 业务错误，失败时整个事务回滚，不产生部分写入。
+    ///
+    /// # 参数
+    /// * `deltas` - 按子账聚合的开票增量（已去重、首次出现顺序，同一账户只出现一次）
+    /// * `updated_by` - 本次更新执行人
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回按账户报告命中情况的 [`InvoicingBatchResult`]。
+    ///
+    /// # 错误
+    /// 当 MongoDB 更新失败时返回错误。
+    ///
+    /// # 约束
+    /// 聚合口径（同一账户增量求和、同一账户只更新一次）由 Service 经领域
+    /// 计划保证；本方法不自行开启事务、不决定跨账户业务结论。
+    async fn apply_invoicings_many(
+        &self,
+        deltas: &[(ReceivableAccountId, Amount)],
+        updated_by: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<InvoicingBatchResult>;
+
+    /// 条件开票冲减：减少净已开票进度（不产生负已开票）。
+    ///
+    /// 销项红票 `REVERSE` 的原子写入口：以写条件保证 `本次红冲 <= invoiced_total`，
+    /// 不满足时整个更新不生效，返回 `false`。累计红冲由 P3 登记事务结合
+    /// `reverses_allocation_id` 校验，本方法防止已开票进度被冲成负数。
+    ///
+    /// # 参数
+    /// * `id` - 应收往来子账 ID
+    /// * `amount` - 本次红冲含税金额（正数）
+    /// * `updated_by` - 本次更新执行人
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 红冲在已开票额度内并已生效时返回 `true`；超过已开票金额被拒绝时返回 `false`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 更新失败时返回错误。
+    async fn revert_invoicing(
+        &self,
+        id: &str,
+        amount: &Amount,
+        updated_by: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<bool>;
+
+    /// 批量条件开票冲减：按子账聚合增量原子回退开票进度（FIN-R11）。
+    ///
+    /// 对已去重并按账户聚合的 `deltas` 逐账户执行条件更新（写条件保证
+    /// `本次红冲 <= invoiced_total`），并按输入顺序报告每个账户的命中情况；
+    /// 调用方（Service）负责将 `rejected` 转译为业务错误，失败时整个事务回滚，
+    /// 不产生部分写入。本方法只执行计划，不判断红票业务资格。
+    ///
+    /// # 参数
+    /// * `deltas` - 按子账聚合的红冲增量（已去重、首次出现顺序，同一账户只出现一次）
+    /// * `updated_by` - 本次更新执行人
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回按账户报告命中情况的 [`InvoicingBatchResult`]（`applied` 为命中，
+    /// `rejected` 为超过已开票进度被拒绝）。
+    ///
+    /// # 错误
+    /// 当 MongoDB 更新失败时返回错误。
+    ///
+    /// # 约束
+    /// 聚合口径（同一账户增量求和、同一账户只更新一次）由 Service 经领域
+    /// 计划保证；本方法不自行开启事务、不决定跨账户业务结论。
+    async fn revert_invoicings_many(
+        &self,
+        deltas: &[(ReceivableAccountId, Amount)],
+        updated_by: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<InvoicingBatchResult>;
+
+    /// 按销售单读取全部活跃应收子账，供服务端关联列表投影使用。
+    async fn find_accounts_by_sales_order_id(
+        &self,
+        sales_order_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ReceivableAccount>>;
+
+    /// 批量按应收子账 ID 读取活跃账户。
+    ///
+    /// # 参数
+    /// * `account_ids` - 应收子账 ID 字符串集合；空集合直接返回空结果
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配且未删除的应收子账；返回顺序不承诺与输入一致。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn find_accounts_by_ids(
+        &self,
+        account_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ReceivableAccount>>;
+
+    /// 列出销售单的全部应收子账。
+    ///
+    /// # 参数
+    /// * `sales_order_id` - 来源销售单
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回按子账序号升序排列的应收子账。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    ///
+    /// # 约束
+    /// 仅查询本仓储拥有的 `receivable_accounts` 集合，不访问销售单集合。
+    async fn list_by_sales_order(
+        &self,
+        sales_order_id: &SalesOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ReceivableAccount>>;
+
+    /// 查找销售单的首个应收子账。
+    ///
+    /// # 参数
+    /// * `sales_order_id` - 来源销售单
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回 `account_seq = 1` 的应收子账；尚未形成时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    ///
+    /// # 约束
+    /// 仅查询本仓储拥有的 `receivable_accounts` 集合，不访问销售单集合。
+    async fn find_primary_by_sales_order(
+        &self,
+        sales_order_id: &SalesOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ReceivableAccount>>;
+
+    /// 按稳定 ID 读取销项开票任务使用的应收子账。
+    ///
+    /// 工作项入口的历史名称；纯主键读取，直接委托基类单条查询。
+    ///
+    /// # 参数
+    /// * `id` - 应收子账 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回未删除应收子账；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// # 约束
+    /// 仅查询本仓储拥有的 `receivable_accounts` 集合，不访问销售单集合。
+    async fn find_work_item_receivable_account(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ReceivableAccount>>;
+
+    /// 按来源销售版本查找应收结果。
+    ///
+    /// # 参数
+    /// * `revision_id` - 来源销售单修订 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回引用该销售版本的应收账户；无匹配时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    ///
+    /// # 约束
+    /// 仅查询本仓储拥有的 `receivable_accounts` 集合，按来源版本引用过滤，不访问销售单集合。
+    async fn find_by_source_sales_order_revision(
+        &self,
+        revision_id: &SalesOrderRevisionId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ReceivableAccount>>;
+}
+
+impl ReceivableAccountRepositoryExt for persistence_core::Repository<'_, ReceivableAccount> {
+    async fn search_receivable_accounts(
         &self,
         filter: &ReceivableAccountFilter,
         executor: &mut dyn Executor,
@@ -229,26 +502,7 @@ impl<'a> ReceivableAccountRepository<'a> {
         Ok(PageResult { items, total: total as i64 })
     }
 
-    /// 条件核销：增加已核销进度（不超额核销）。
-    ///
-    /// 原子写入口（P2 计划 §5）：以写条件而非读后判断保证
-    /// `settled_total + 本次核销 <= gross_total`，不满足时**整个更新不生效**
-    /// （matched 为 0），返回 `false` 且金额与状态均不变。核销进度同时重算
-    /// `open_total` 与派生状态，全部在同一条件更新内完成，不会产生负开放余额。
-    /// 单文档更新本身原子，可在 Service 的过账事务内参与回滚。
-    ///
-    /// # 参数
-    /// * `id` - 应收往来子账 ID
-    /// * `amount` - 本次核销含税金额（正数）
-    /// * `updated_by` - 本次更新执行人
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 核销在额度内并已生效时返回 `true`；超过剩余开放余额被拒绝时返回 `false`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 更新失败时返回错误。
-    pub async fn apply_settlement(
+    async fn apply_settlement(
         &self,
         id: &str,
         amount: &Amount,
@@ -274,24 +528,7 @@ impl<'a> ReceivableAccountRepository<'a> {
         .await
     }
 
-    /// 条件核销冲减：减少已核销进度（不产生负已核销）。
-    ///
-    /// 反向核销（`REVERSE` 分配）的原子写入口：以写条件保证
-    /// `本次冲减 <= settled_total`，不满足时整个更新不生效，返回 `false`。
-    /// 用于冲正/退款时追加反向核销，防止冲减超过已核销金额。
-    ///
-    /// # 参数
-    /// * `id` - 应收往来子账 ID
-    /// * `amount` - 本次冲减含税金额（正数）
-    /// * `updated_by` - 本次更新执行人
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 冲减在已核销额度内并已生效时返回 `true`；超过已核销金额被拒绝时返回 `false`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 更新失败时返回错误。
-    pub async fn revert_settlement(
+    async fn revert_settlement(
         &self,
         id: &str,
         amount: &Amount,
@@ -314,24 +551,7 @@ impl<'a> ReceivableAccountRepository<'a> {
         .await
     }
 
-    /// 条件开票：增加净已开票进度（不超过可开票额度）。
-    ///
-    /// 销项蓝票 `APPLY` 的原子写入口：以写条件保证
-    /// `invoiced_total + 本次开票 <= invoiceable_total`，不满足时整个更新不生效，
-    /// 返回 `false`。同时重算 `open_invoiceable_total`，不会产生负可开票余额。
-    ///
-    /// # 参数
-    /// * `id` - 应收往来子账 ID
-    /// * `amount` - 本次开票含税金额（正数）
-    /// * `updated_by` - 本次更新执行人
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 开票在额度内并已生效时返回 `true`；超过剩余可开票额度被拒绝时返回 `false`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 更新失败时返回错误。
-    pub async fn apply_invoicing(
+    async fn apply_invoicing(
         &self,
         id: &str,
         amount: &Amount,
@@ -357,28 +577,7 @@ impl<'a> ReceivableAccountRepository<'a> {
         .await
     }
 
-    /// 批量条件开票：按子账聚合增量原子更新开票进度（FIN-R10）。
-    ///
-    /// 对已去重并按账户聚合的 `deltas` 逐账户执行条件更新（`invoicing_guard`
-    /// 保证 `invoiced_total + delta <= invoiceable_total`），并按输入顺序
-    /// 报告每个账户的命中情况；调用方（Service）负责将 `rejected` 转译为
-    /// 业务错误，失败时整个事务回滚，不产生部分写入。
-    ///
-    /// # 参数
-    /// * `deltas` - 按子账聚合的开票增量（已去重、首次出现顺序，同一账户只出现一次）
-    /// * `updated_by` - 本次更新执行人
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回按账户报告命中情况的 [`InvoicingBatchResult`]。
-    ///
-    /// # 错误
-    /// 当 MongoDB 更新失败时返回错误。
-    ///
-    /// # 约束
-    /// 聚合口径（同一账户增量求和、同一账户只更新一次）由 Service 经领域
-    /// 计划保证；本方法不自行开启事务、不决定跨账户业务结论。
-    pub async fn apply_invoicings_many(
+    async fn apply_invoicings_many(
         &self,
         deltas: &[(ReceivableAccountId, Amount)],
         updated_by: &str,
@@ -405,24 +604,7 @@ impl<'a> ReceivableAccountRepository<'a> {
         Ok(InvoicingBatchResult { applied, rejected })
     }
 
-    /// 条件开票冲减：减少净已开票进度（不产生负已开票）。
-    ///
-    /// 销项红票 `REVERSE` 的原子写入口：以写条件保证 `本次红冲 <= invoiced_total`，
-    /// 不满足时整个更新不生效，返回 `false`。累计红冲由 P3 登记事务结合
-    /// `reverses_allocation_id` 校验，本方法防止已开票进度被冲成负数。
-    ///
-    /// # 参数
-    /// * `id` - 应收往来子账 ID
-    /// * `amount` - 本次红冲含税金额（正数）
-    /// * `updated_by` - 本次更新执行人
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 红冲在已开票额度内并已生效时返回 `true`；超过已开票金额被拒绝时返回 `false`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 更新失败时返回错误。
-    pub async fn revert_invoicing(
+    async fn revert_invoicing(
         &self,
         id: &str,
         amount: &Amount,
@@ -445,29 +627,7 @@ impl<'a> ReceivableAccountRepository<'a> {
         .await
     }
 
-    /// 批量条件开票冲减：按子账聚合增量原子回退开票进度（FIN-R11）。
-    ///
-    /// 对已去重并按账户聚合的 `deltas` 逐账户执行条件更新（写条件保证
-    /// `本次红冲 <= invoiced_total`），并按输入顺序报告每个账户的命中情况；
-    /// 调用方（Service）负责将 `rejected` 转译为业务错误，失败时整个事务回滚，
-    /// 不产生部分写入。本方法只执行计划，不判断红票业务资格。
-    ///
-    /// # 参数
-    /// * `deltas` - 按子账聚合的红冲增量（已去重、首次出现顺序，同一账户只出现一次）
-    /// * `updated_by` - 本次更新执行人
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回按账户报告命中情况的 [`InvoicingBatchResult`]（`applied` 为命中，
-    /// `rejected` 为超过已开票进度被拒绝）。
-    ///
-    /// # 错误
-    /// 当 MongoDB 更新失败时返回错误。
-    ///
-    /// # 约束
-    /// 聚合口径（同一账户增量求和、同一账户只更新一次）由 Service 经领域
-    /// 计划保证；本方法不自行开启事务、不决定跨账户业务结论。
-    pub async fn revert_invoicings_many(
+    async fn revert_invoicings_many(
         &self,
         deltas: &[(ReceivableAccountId, Amount)],
         updated_by: &str,
@@ -500,6 +660,73 @@ impl<'a> ReceivableAccountRepository<'a> {
         Ok(InvoicingBatchResult { applied, rejected })
     }
 
+    async fn find_accounts_by_sales_order_id(
+        &self,
+        sales_order_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ReceivableAccount>> {
+        self.find_many(doc! { "sales_order_id": sales_order_id }, executor).await
+    }
+
+    async fn find_accounts_by_ids(
+        &self,
+        account_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ReceivableAccount>> {
+        if account_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        self.find_many(doc! { "id": { "$in": account_ids } }, executor).await
+    }
+
+    async fn list_by_sales_order(
+        &self,
+        sales_order_id: &SalesOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ReceivableAccount>> {
+        self.find_many_sorted(
+            doc! { "sales_order_id": sales_order_id.to_string() },
+            doc! { "account_seq": 1 },
+            executor,
+        )
+        .await
+    }
+
+    async fn find_primary_by_sales_order(
+        &self,
+        sales_order_id: &SalesOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ReceivableAccount>> {
+        self.find_one(
+            doc! {
+                "sales_order_id": sales_order_id.to_string(),
+                "account_seq": 1,
+            },
+            executor,
+        )
+        .await
+    }
+
+    async fn find_work_item_receivable_account(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ReceivableAccount>> {
+        self.find_by_id(id, executor).await
+    }
+
+    async fn find_by_source_sales_order_revision(
+        &self,
+        revision_id: &SalesOrderRevisionId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ReceivableAccount>> {
+        self.find_one(doc! { "source_sales_order_revision_id": revision_id.to_string() }, executor).await
+    }
+}
+
+#[allow(async_fn_in_trait)]
+pub(crate) trait ReceivableAccountWriteExt {
     /// 执行单文档条件更新（管道形态）。
     ///
     /// 直接按执行器会话语义执行：带会话时加入调用方事务，否则自动提交；
@@ -515,7 +742,16 @@ impl<'a> ReceivableAccountRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 更新失败时返回错误。
-    pub async fn conditional_update(
+    async fn conditional_update(
+        &self,
+        filter: Document,
+        pipeline: Vec<Document>,
+        executor: &mut dyn Executor,
+    ) -> Result<bool>;
+}
+
+impl ReceivableAccountWriteExt for persistence_core::Repository<'_, ReceivableAccount> {
+    async fn conditional_update(
         &self,
         filter: Document,
         pipeline: Vec<Document>,
@@ -526,142 +762,6 @@ impl<'a> ReceivableAccountRepository<'a> {
             None => self.collection().update_one(filter, pipeline).await?,
         };
         Ok(result.matched_count == 1)
-    }
-}
-
-impl<'a> ReceivableAccountRepository<'a> {
-    /// 按销售单读取全部活跃应收子账，供服务端关联列表投影使用。
-    pub async fn find_accounts_by_sales_order_id(
-        &self,
-        sales_order_id: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<ReceivableAccount>> {
-        self.find_many(doc! { "sales_order_id": sales_order_id }, executor).await
-    }
-
-    /// 批量按应收子账 ID 读取活跃账户。
-    ///
-    /// # 参数
-    /// * `account_ids` - 应收子账 ID 字符串集合；空集合直接返回空结果
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回全部匹配且未删除的应收子账；返回顺序不承诺与输入一致。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_accounts_by_ids(
-        &self,
-        account_ids: &[String],
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<ReceivableAccount>> {
-        if account_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        self.find_many(doc! { "id": { "$in": account_ids } }, executor).await
-    }
-
-    /// 列出销售单的全部应收子账。
-    ///
-    /// # 参数
-    /// * `sales_order_id` - 来源销售单
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回按子账序号升序排列的应收子账。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    ///
-    /// # 约束
-    /// 仅查询本仓储拥有的 `receivable_accounts` 集合，不访问销售单集合。
-    pub async fn list_by_sales_order(
-        &self,
-        sales_order_id: &SalesOrderId,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<ReceivableAccount>> {
-        self.find_many_sorted(
-            doc! { "sales_order_id": sales_order_id.to_string() },
-            doc! { "account_seq": 1 },
-            executor,
-        )
-        .await
-    }
-
-    /// 查找销售单的首个应收子账。
-    ///
-    /// # 参数
-    /// * `sales_order_id` - 来源销售单
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回 `account_seq = 1` 的应收子账；尚未形成时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    ///
-    /// # 约束
-    /// 仅查询本仓储拥有的 `receivable_accounts` 集合，不访问销售单集合。
-    pub async fn find_primary_by_sales_order(
-        &self,
-        sales_order_id: &SalesOrderId,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<ReceivableAccount>> {
-        self.find_one(
-            doc! {
-                "sales_order_id": sales_order_id.to_string(),
-                "account_seq": 1,
-            },
-            executor,
-        )
-        .await
-    }
-
-    /// 按稳定 ID 读取销项开票任务使用的应收子账。
-    ///
-    /// 工作项入口的历史名称；纯主键读取，直接委托基类单条查询。
-    ///
-    /// # 参数
-    /// * `id` - 应收子账 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回未删除应收子账；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或反序列化失败时返回错误。
-    ///
-    /// # 约束
-    /// 仅查询本仓储拥有的 `receivable_accounts` 集合，不访问销售单集合。
-    pub async fn find_work_item_receivable_account(
-        &self,
-        id: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<ReceivableAccount>> {
-        self.find_by_id(id, executor).await
-    }
-
-    /// 按来源销售版本查找应收结果。
-    ///
-    /// # 参数
-    /// * `revision_id` - 来源销售单修订 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回引用该销售版本的应收账户；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    ///
-    /// # 约束
-    /// 仅查询本仓储拥有的 `receivable_accounts` 集合，按来源版本引用过滤，不访问销售单集合。
-    pub async fn find_by_source_sales_order_revision(
-        &self,
-        revision_id: &SalesOrderRevisionId,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<ReceivableAccount>> {
-        self.find_one(doc! { "source_sales_order_revision_id": revision_id.to_string() }, executor).await
     }
 }
 
@@ -725,7 +825,9 @@ mod tests {
     use mongodb::bson::{Bson, doc};
     use persistence_core::{NoTransaction, QueryFilter};
 
-    use super::{ReceivableAccountFilter, amount_bson, progress_pipeline, sort_doc};
+    use super::{
+        ReceivableAccountFilter, ReceivableAccountRepositoryExt, amount_bson, progress_pipeline, sort_doc,
+    };
     use crate::entity::receivable::ReceivableAccountStatus;
     use crate::repository::ReceivableExt;
     use crate::repository::owned::ReceivableAccountRepository;

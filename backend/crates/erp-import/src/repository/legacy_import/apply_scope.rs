@@ -11,7 +11,6 @@ use mongodb::bson::doc;
 use persistence_core::{Executor, Result, mongo_ops};
 
 use crate::entity::legacy_import::{ImportStatus, LegacyImportRow, dedupe_by_key};
-use crate::repository::owned::LegacyImportRowRepository;
 
 /// 一次应用请求对应的导入行持久化范围。
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -24,7 +23,9 @@ pub struct LegacyImportApplyScope {
     pub pending_outside_request: u64,
 }
 
-impl<'a> LegacyImportRowRepository<'a> {
+/// 导入行集合仓储扩展：按请求行 ID 读取批次约束下的应用范围。
+#[allow(async_fn_in_trait)]
+pub trait LegacyImportRowApplyScopeExt {
     /// 按请求行 ID 读取目标批次内的导入行，并返回缺失集合。
     ///
     /// 查询同时约束 `id ∈ requested` 与 `batch_id`，软删除行视为缺失。
@@ -45,7 +46,16 @@ impl<'a> LegacyImportRowRepository<'a> {
     ///
     /// # 约束
     /// 不返回 services DTO、HTTP View 或授权结论；不裁决未知 ID 是否失败关闭。
-    pub async fn apply_row_scope(
+    async fn apply_row_scope(
+        &self,
+        batch_id: &LegacyImportBatchId,
+        row_ids: &[LegacyImportRowId],
+        executor: &mut dyn Executor,
+    ) -> Result<LegacyImportApplyScope>;
+}
+
+impl LegacyImportRowApplyScopeExt for persistence_core::Repository<'_, LegacyImportRow> {
+    async fn apply_row_scope(
         &self,
         batch_id: &LegacyImportBatchId,
         row_ids: &[LegacyImportRowId],
@@ -59,65 +69,64 @@ impl<'a> LegacyImportRowRepository<'a> {
                 pending_outside_request: 0,
             });
         }
-        let found = self.load_apply_rows(batch_id, &unique_ids, executor).await?;
+        let found = load_apply_rows(self, batch_id, &unique_ids, executor).await?;
         let missing_row_ids = missing_row_ids(&unique_ids, &found);
         let pending_outside_request =
-            self.count_pending_outside_request(batch_id, &unique_ids, executor).await?;
+            count_pending_outside_request(self, batch_id, &unique_ids, executor).await?;
         Ok(LegacyImportApplyScope { rows: index_rows(found), missing_row_ids, pending_outside_request })
     }
+}
 
-    /// 按 ID 集合与批次约束装载未删除导入行。
-    ///
-    /// # 参数
-    /// * `batch_id` - 目标批次
-    /// * `row_ids` - 已去重的行 ID
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 返回稳定按 `id` 升序排列的命中行。
-    ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
-    async fn load_apply_rows(
-        &self,
-        batch_id: &LegacyImportBatchId,
-        row_ids: &[LegacyImportRowId],
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<LegacyImportRow>> {
-        let keys: Vec<mongodb::bson::Bson> = row_ids.iter().map(|id| id.to_string().into()).collect();
-        self.find_many_sorted(
-            doc! {
-                "id": { "$in": keys },
-                "batch_id": batch_id.to_string(),
-            },
-            doc! { "id": 1 },
-            executor,
-        )
-        .await
-    }
+/// 按 ID 集合与批次约束装载未删除导入行。
+///
+/// # 参数
+/// * `batch_id` - 目标批次
+/// * `row_ids` - 已去重的行 ID
+/// * `executor` - 调用方执行器
+///
+/// # 返回
+/// 返回稳定按 `id` 升序排列的命中行。
+///
+/// # 错误
+/// MongoDB 查询失败时返回错误。
+async fn load_apply_rows(
+    repo: &persistence_core::Repository<'_, LegacyImportRow>,
+    batch_id: &LegacyImportBatchId,
+    row_ids: &[LegacyImportRowId],
+    executor: &mut dyn Executor,
+) -> Result<Vec<LegacyImportRow>> {
+    let keys: Vec<mongodb::bson::Bson> = row_ids.iter().map(|id| id.to_string().into()).collect();
+    repo.find_many_sorted(
+        doc! {
+            "id": { "$in": keys },
+            "batch_id": batch_id.to_string(),
+        },
+        doc! { "id": 1 },
+        executor,
+    )
+    .await
+}
 
-    /// 统计目标批次中未包含在请求内的待导入行。
-    ///
-    /// # 参数
-    /// * `batch_id` - 目标批次
-    /// * `row_ids` - 已去重的请求行 ID
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 返回请求外仍为 `pending_import` 且未软删除的行数。
-    ///
-    /// # 错误
-    /// MongoDB 计数失败时返回错误。
-    async fn count_pending_outside_request(
-        &self,
-        batch_id: &LegacyImportBatchId,
-        row_ids: &[LegacyImportRowId],
-        executor: &mut dyn Executor,
-    ) -> Result<u64> {
-        let excluded: Vec<mongodb::bson::Bson> = row_ids.iter().map(|id| id.to_string().into()).collect();
-        mongo_ops::count_documents(&self.collection(), pending_outside_filter(batch_id, excluded), executor)
-            .await
-    }
+/// 统计目标批次中未包含在请求内的待导入行。
+///
+/// # 参数
+/// * `batch_id` - 目标批次
+/// * `row_ids` - 已去重的请求行 ID
+/// * `executor` - 调用方执行器
+///
+/// # 返回
+/// 返回请求外仍为 `pending_import` 且未软删除的行数。
+///
+/// # 错误
+/// MongoDB 计数失败时返回错误。
+async fn count_pending_outside_request(
+    repo: &persistence_core::Repository<'_, LegacyImportRow>,
+    batch_id: &LegacyImportBatchId,
+    row_ids: &[LegacyImportRowId],
+    executor: &mut dyn Executor,
+) -> Result<u64> {
+    let excluded: Vec<mongodb::bson::Bson> = row_ids.iter().map(|id| id.to_string().into()).collect();
+    mongo_ops::count_documents(&repo.collection(), pending_outside_filter(batch_id, excluded), executor).await
 }
 
 /// 构造请求外待导入行的精确计数条件。

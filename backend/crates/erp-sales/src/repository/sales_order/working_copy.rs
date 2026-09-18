@@ -7,7 +7,7 @@
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::SalesChangeOrderId;
 use mongodb::bson::{Document, doc};
-use persistence_core::{Executor, Pagination, QueryFilter, Result, mongo_ops};
+use persistence_core::{Executor, Pagination, QueryFilter, Repository, Result, mongo_ops};
 
 use super::{
     SALES_ORDER_SUBMISSION_LINES, SALES_ORDER_SUBMISSIONS, SALES_ORDER_WORKING_COPIES,
@@ -17,7 +17,7 @@ use crate::entity::sales_order::{
     SalesOrderId, SalesOrderSubmission, SalesOrderSubmissionLine, SalesOrderWorkingCopy,
     SalesOrderWorkingCopyId, SalesOrderWorkingCopyLine, WorkingCopyStatus, WorkingPurpose,
 };
-use crate::repository::owned::{SalesOrderWorkingCopyLineRepository, SalesOrderWorkingCopyRepository};
+use crate::repository::owned::SalesOrderWorkingCopyRepository;
 
 /// 工作副本列表筛选条件。
 #[derive(Debug, Clone)]
@@ -82,7 +82,9 @@ impl Pagination for WorkingCopyFilter {
     }
 }
 
-impl<'a> SalesOrderWorkingCopyRepository<'a> {
+/// 销售工作副本集合的域查询扩展。
+#[allow(async_fn_in_trait)]
+pub trait SalesOrderWorkingCopyRepositoryExt {
     /// 按销售单与编辑目的查找有效工作副本（`Editing`/`Conflict`）。
     ///
     /// 「同一销售单和编辑目的同时最多一个有效工作副本」由部分唯一索引
@@ -98,6 +100,54 @@ impl<'a> SalesOrderWorkingCopyRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
+    async fn find_active_by_order_and_purpose(
+        &self,
+        sales_order_id: &SalesOrderId,
+        working_purpose: WorkingPurpose,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SalesOrderWorkingCopy>>;
+
+    /// 按销售变更单查找其绑定的工作副本。
+    ///
+    /// # 参数
+    /// * `sales_change_order_id` - 销售变更单
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回绑定的销售变更工作副本；无匹配时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    async fn find_by_sales_change_order(
+        &self,
+        sales_change_order_id: &SalesChangeOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SalesOrderWorkingCopy>>;
+
+    /// 查找销售变更再次提交时可使用的工作副本。
+    ///
+    /// 优先返回仍处于有效编辑态的副本；撤回后无有效副本时回退到该变更单已绑定的
+    /// 已提交副本，以保持提交序号递增而不复制草稿。
+    ///
+    /// # 参数
+    /// * `sales_order_id` - 原销售单
+    /// * `sales_change_order_id` - 销售变更单
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回可再次提交的工作副本；两种来源均不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    async fn find_resubmittable_sales_change_copy(
+        &self,
+        sales_order_id: &SalesOrderId,
+        sales_change_order_id: &SalesChangeOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SalesOrderWorkingCopy>>;
+}
+
+impl SalesOrderWorkingCopyRepositoryExt for Repository<'_, SalesOrderWorkingCopy> {
     #[tracing::instrument(
         name = "repository.sales_order.find_active_working_copy",
         skip_all,
@@ -109,7 +159,7 @@ impl<'a> SalesOrderWorkingCopyRepository<'a> {
             db.operation.name = "find"
         )
     )]
-    pub async fn find_active_by_order_and_purpose(
+    async fn find_active_by_order_and_purpose(
         &self,
         sales_order_id: &SalesOrderId,
         working_purpose: WorkingPurpose,
@@ -131,18 +181,7 @@ impl<'a> SalesOrderWorkingCopyRepository<'a> {
         .await
     }
 
-    /// 按销售变更单查找其绑定的工作副本。
-    ///
-    /// # 参数
-    /// * `sales_change_order_id` - 销售变更单
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回绑定的销售变更工作副本；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_sales_change_order(
+    async fn find_by_sales_change_order(
         &self,
         sales_change_order_id: &SalesChangeOrderId,
         executor: &mut dyn Executor,
@@ -157,22 +196,7 @@ impl<'a> SalesOrderWorkingCopyRepository<'a> {
         .await
     }
 
-    /// 查找销售变更再次提交时可使用的工作副本。
-    ///
-    /// 优先返回仍处于有效编辑态的副本；撤回后无有效副本时回退到该变更单已绑定的
-    /// 已提交副本，以保持提交序号递增而不复制草稿。
-    ///
-    /// # 参数
-    /// * `sales_order_id` - 原销售单
-    /// * `sales_change_order_id` - 销售变更单
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回可再次提交的工作副本；两种来源均不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_resubmittable_sales_change_copy(
+    async fn find_resubmittable_sales_change_copy(
         &self,
         sales_order_id: &SalesOrderId,
         sales_change_order_id: &SalesChangeOrderId,
@@ -188,7 +212,9 @@ impl<'a> SalesOrderWorkingCopyRepository<'a> {
     }
 }
 
-impl<'a> SalesOrderWorkingCopyLineRepository<'a> {
+/// 销售工作副本明细集合的域查询扩展。
+#[allow(async_fn_in_trait)]
+pub trait SalesOrderWorkingCopyLineRepositoryExt {
     /// 列出工作副本的全部明细行（按行号升序）。
     ///
     /// # 参数
@@ -200,6 +226,14 @@ impl<'a> SalesOrderWorkingCopyLineRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn list_lines_by_working_copy(
+        &self,
+        working_copy_id: &SalesOrderWorkingCopyId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesOrderWorkingCopyLine>>;
+}
+
+impl SalesOrderWorkingCopyLineRepositoryExt for Repository<'_, SalesOrderWorkingCopyLine> {
     #[tracing::instrument(
         name = "repository.sales_order.list_working_copy_lines",
         skip_all,
@@ -211,7 +245,7 @@ impl<'a> SalesOrderWorkingCopyLineRepository<'a> {
             db.operation.name = "find"
         )
     )]
-    pub async fn list_lines_by_working_copy(
+    async fn list_lines_by_working_copy(
         &self,
         working_copy_id: &SalesOrderWorkingCopyId,
         executor: &mut dyn Executor,

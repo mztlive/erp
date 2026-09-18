@@ -11,6 +11,7 @@ use crate::entity::purchase_order::{
     PurchaseOrderSubmissionData, PurchaseOrderSubmissionLine, SubmissionStatus,
 };
 use crate::repository::PurchaseOrderExt;
+use crate::repository::prelude::*;
 use crate::{Error, Result};
 /// 待写入的新采购草稿提交及金额。
 pub struct DraftReplacement {

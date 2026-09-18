@@ -17,6 +17,7 @@ use crate::entity::catalog::product_brand::{ProductBrand, ProductBrandData, Prod
 use crate::error::Result;
 use crate::ports::{EmptyPendingAttachments, PendingAttachmentBatch};
 use crate::repository::CatalogExt;
+use crate::repository::prelude::*;
 
 /// 商品品牌列表筛选条件类型。
 type ProductBrandFilter = <mongodb::Database as CatalogExt>::ProductBrandFilter;

@@ -7,6 +7,7 @@ use crate::entity::integration_ops::{
     ReconciliationDifferenceResolution, ResolutionVersionCheck,
 };
 use crate::repository::IntegrationOpsExt;
+use crate::repository::prelude::*;
 use crate::{Error, Result};
 
 /// 为正式关联查询原始错误任务；此时不校验终态，保持原首错顺序。

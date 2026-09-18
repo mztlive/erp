@@ -31,12 +31,19 @@ mod wire_tests;
 
 pub use command::SupplierSettlementRepository;
 pub use detail_snapshot::SupplierSettlementStatementDetailSnapshot;
-pub use difference::{SupplierSettlementDifferenceFilter, SupplierSettlementDifferenceRow};
-pub use item::{SupplierSettlementItemFilter, SupplierSettlementItemRow};
+pub use difference::{
+    SupplierSettlementDifferenceEvidenceRepositoryExt, SupplierSettlementDifferenceFilter,
+    SupplierSettlementDifferenceRepositoryExt, SupplierSettlementDifferenceRow,
+};
+pub use item::{
+    SupplierSettlementItemFilter, SupplierSettlementItemRepositoryExt, SupplierSettlementItemRow,
+};
 pub use scope::{SettlementReadScope, SettlementScopeClause};
 pub use source_scope::SupplierSettlementSourceScope;
 pub use statement::{
-    SupplierSettlementStatementFilter, SupplierSettlementStatementRow, SupplierSettlementStatementStatsRow,
+    SupplierSettlementSourceEvidenceRepositoryExt, SupplierSettlementStatementFilter,
+    SupplierSettlementStatementRepositoryExt, SupplierSettlementStatementRow,
+    SupplierSettlementStatementStatsRow,
 };
 
 /// `supplier_settlement_statement` 集合名（单一来源：`SupplierSettlementExt` 关联常量）。

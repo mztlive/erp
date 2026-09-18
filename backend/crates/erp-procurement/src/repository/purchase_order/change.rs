@@ -15,7 +15,6 @@ use super::{PURCHASE_CHANGE_ORDERS, PurchaseOrderDomainRepository};
 use crate::entity::purchase_order::{
     PurchaseChangeOrder, PurchaseChangeOrderStatus, PurchaseChangeSubmission, PurchaseChangeSubmissionLine,
 };
-use crate::repository::owned::{PurchaseChangeSubmissionLineRepository, PurchaseChangeSubmissionRepository};
 
 /// 已归一化的采购变更查询；授权来源条件与业务筛选分别保留。
 #[derive(Debug, Clone, Copy)]
@@ -221,7 +220,9 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
     }
 }
 
-impl<'a> PurchaseChangeSubmissionRepository<'a> {
+/// 采购变更提交集合的域查询。
+#[allow(async_fn_in_trait)]
+pub trait PurchaseChangeSubmissionRepositoryExt {
     /// 批量读取指定变更单的全部有效提交，供审批历史摘要使用。
     ///
     /// # 参数
@@ -230,21 +231,11 @@ impl<'a> PurchaseChangeSubmissionRepository<'a> {
     /// 返回全部未删除提交；空集合返回空结果，不扫描全表。
     /// # 错误
     /// MongoDB 查询失败时返回仓储错误。
-    pub async fn list_by_change_orders(
+    async fn list_by_change_orders(
         &self,
         change_order_ids: &[PurchaseChangeOrderId],
         executor: &mut dyn Executor,
-    ) -> Result<Vec<PurchaseChangeSubmission>> {
-        if change_order_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        let ids = change_order_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
-        self.find_many(
-            doc! { "purchase_change_order_id": { "$in": ids }, "deleted_at": NOT_DELETED_TIMESTAMP_BSON },
-            executor,
-        )
-        .await
-    }
+    ) -> Result<Vec<PurchaseChangeSubmission>>;
 
     /// 按「变更单 + 提交序号」查找唯一变更提交。
     ///
@@ -260,7 +251,32 @@ impl<'a> PurchaseChangeSubmissionRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_order_and_submission_no(
+    async fn find_by_order_and_submission_no(
+        &self,
+        purchase_change_order_id: &PurchaseChangeOrderId,
+        submission_no: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<PurchaseChangeSubmission>>;
+}
+
+impl PurchaseChangeSubmissionRepositoryExt for persistence_core::Repository<'_, PurchaseChangeSubmission> {
+    async fn list_by_change_orders(
+        &self,
+        change_order_ids: &[PurchaseChangeOrderId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PurchaseChangeSubmission>> {
+        if change_order_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ids = change_order_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
+        self.find_many(
+            doc! { "purchase_change_order_id": { "$in": ids }, "deleted_at": NOT_DELETED_TIMESTAMP_BSON },
+            executor,
+        )
+        .await
+    }
+
+    async fn find_by_order_and_submission_no(
         &self,
         purchase_change_order_id: &PurchaseChangeOrderId,
         submission_no: &str,
@@ -324,7 +340,9 @@ fn change_order_filter(
     filter
 }
 
-impl<'a> PurchaseChangeSubmissionLineRepository<'a> {
+/// 采购变更提交行集合的域查询。
+#[allow(async_fn_in_trait)]
+pub trait PurchaseChangeSubmissionLineRepositoryExt {
     /// 批量取回多个变更提交的全部明细（`$in`，禁止 N+1）。
     ///
     /// 用于变更提交详情页一次取回行集合；空集合直接返回空结果。
@@ -338,7 +356,17 @@ impl<'a> PurchaseChangeSubmissionLineRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_lines_by_submission_ids(
+    async fn find_lines_by_submission_ids(
+        &self,
+        submission_ids: &[PurchaseChangeSubmissionId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PurchaseChangeSubmissionLine>>;
+}
+
+impl PurchaseChangeSubmissionLineRepositoryExt
+    for persistence_core::Repository<'_, PurchaseChangeSubmissionLine>
+{
+    async fn find_lines_by_submission_ids(
         &self,
         submission_ids: &[PurchaseChangeSubmissionId],
         executor: &mut dyn Executor,

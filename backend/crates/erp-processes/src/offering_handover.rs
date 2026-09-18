@@ -2,6 +2,7 @@
 
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
+use erp_identity::repository::prelude::*;
 use erp_identity::{AccessControlExt, Permission, SharedRbacService};
 use erp_supply::{HandoverCandidateView, HandoverSupplierOfferingRequest, HandoverSupplierOfferingView};
 use mongodb::Database;

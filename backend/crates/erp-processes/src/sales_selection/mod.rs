@@ -17,6 +17,7 @@ use erp_sales::dto::sales_selection::{
 };
 use erp_sales::entity::sales_selection::LinkTokenCrypto;
 use erp_sales::ports::sales_selection::SelectionImagePort;
+use erp_sales::repository::prelude::*;
 use erp_sales::service::sales_selection::SalesSelectionService;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};

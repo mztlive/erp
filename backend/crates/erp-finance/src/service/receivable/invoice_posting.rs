@@ -10,6 +10,7 @@ use persistence_core::Executor;
 use crate::entity::receivable::sales_invoice_allocation_plan::SalesInvoiceAllocationLine;
 use crate::entity::receivable::{Invoice, ReceivableAccount, SalesInvoiceAllocationPlan};
 use crate::repository::ReceivableExt;
+use crate::repository::prelude::*;
 use crate::{Error, Result};
 
 /// Apply invoice allocation amounts, register the invoice and persist allocation facts.

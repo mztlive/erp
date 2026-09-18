@@ -4,6 +4,7 @@ use application_core::AuditActor;
 use erp_core::ids::{PartyId, SupplierAccountId, SupplierApiConnectionId};
 use erp_party::PartyExt;
 use erp_supplier::SupplierExt;
+use erp_supplier::repository::prelude::*;
 use erp_supply::dto::supplier_api::{
     PageView, SafeReferencesView, SupplierActionBlockerView, SupplierApiCapabilitySummaryView,
     SupplierApiCapabilityView, SupplierApiConnectionDetailView, SupplierApiConnectionListItemView,
@@ -14,6 +15,7 @@ use erp_supply::entity::supplier_api::{
     SupplierConnectionGovernance, SupplierHealthCheckRun, SupplierHealthCheckType,
 };
 use erp_supply::repository::SupplierApiExt;
+use erp_supply::repository::prelude::*;
 use erp_supply::service::supplier_api::context::{
     blocker, governance_blocker_view, impact_view, safe_reference,
 };

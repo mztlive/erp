@@ -14,6 +14,7 @@ use crate::entity::procurement_responsibility::{
 };
 use crate::ports::procurement_responsibility::ProcurementResponsibilityFactsPort;
 use crate::repository::ProcurementResponsibilityExt;
+use crate::repository::prelude::*;
 use crate::{Error, Result};
 
 /// 保持调用方稳定行键、SKU 与区域的解析输入。

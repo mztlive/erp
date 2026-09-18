@@ -504,7 +504,10 @@ impl CommandReceipt {
     /// 无。
     pub fn message(&self, detail: Option<&str>) -> String {
         let base = format!("command_fingerprint={}", self.fingerprint.as_str());
-        detail.map_or(base.clone(), |detail| format!("{base}; {detail}"))
+        match detail {
+            Some(detail) => format!("{base}; {detail}"),
+            None => base,
+        }
     }
 
     /// 返回结构化指纹承载段，供展示拼接外的调用方直接使用。
@@ -593,7 +596,7 @@ fn extract_persisted_fingerprint(
     let Some(message) = message else {
         return Err(CommandReceiptMatch::Corrupted);
     };
-    let persisted = message.split(';').next().unwrap_or(message);
+    let persisted = message.split_once(';').map(|(head, _)| head).unwrap_or(message);
     if let Some(value) = persisted.strip_prefix("command_fingerprint=") {
         return Ok(PersistedFingerprint::Current(value));
     }

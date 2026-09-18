@@ -1,7 +1,7 @@
-# Common 公共基元（P0-1.4/1.5，P0 冻结后只读）
+# Common 公共基元
 
-本目录是 P0 为全部 34 个域预置的共享基元：字段基元、时间、来源类型与固定状态机。
-P1 各域实施者按下方判定表选用，**不得自行复制字段结构或另建一套时间/数值类型**。
+本目录提供 ERP 共享字段基元、时间、来源类型与固定状态机。
+业务领域按下方判定表选用，**不得自行复制字段结构或另建一套时间/数值类型**。
 
 ## 何时用哪个基元
 
@@ -19,15 +19,15 @@ P1 各域实施者按下方判定表选用，**不得自行复制字段结构或
 
 `BaseModel`（`entity_core`）承担持久化元数据：`id`、`version`、`created_at`、
 `updated_at`、`deleted_at`。**`BaseModel.version` ≡ 数据模型的 `lock_version`**
-（乐观并发版本），P0 已定，此后不再改名；`created_at`/`updated_at` 为 u64 秒，
+（乐观并发版本）；`created_at`/`updated_at` 为 u64 秒，
 与 `Instant` 的 i64 秒时间戳同一 JSON 数值形态。
 
 组合方式：实体 `#[serde(flatten)] BaseModel` + 按对象性质内嵌 `StableBase` /
 `RevisionBase` / `FactBase`。`StableBase.current_revision_id` 指向当前生效修订的
-`*RevisionId`（存 `String`，业务引用仍须用 `entities::ids` 的类型化 ID）。
+`*RevisionId`（存 `String`，业务引用仍须用 `erp_core::ids` 的类型化 ID）。
 
 ## 数值类型
 
-金额/单价/数量/税率一律使用 `entities::money`（P0 冻结，见 `money.rs` 与
-conventions.md 第 5 节）：`Amount`(2) / `UnitPrice`(4) / `Quantity`(6) / `Rate`(6)，
+金额/单价/数量/税率一律使用 `erp_core::money`（见 `money.rs`）：
+`Amount`(2) / `UnitPrice`(4) / `Quantity`(6) / `Rate`(6)，
 BSON 形态固定 `Decimal128`，HTTP 传输为字符串。禁止 `f64`、禁止裸 `String` 传金额。

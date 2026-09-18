@@ -12,7 +12,6 @@ use persistence_core::{Executor, Pagination, QueryFilter, Result, mongo_ops};
 use super::common::in_filter;
 use super::{PURCHASE_ORDER_SUBMISSION_LINES, PURCHASE_ORDER_SUBMISSIONS, PurchaseOrderDomainRepository};
 use crate::entity::purchase_order::{PurchaseOrderSubmission, PurchaseOrderSubmissionLine, SubmissionStatus};
-use crate::repository::owned::{PurchaseOrderSubmissionLineRepository, PurchaseOrderSubmissionRepository};
 
 /// 采购提交列表筛选条件（财务审核队列）。
 #[derive(Debug, Clone)]
@@ -170,7 +169,9 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
     }
 }
 
-impl<'a> PurchaseOrderSubmissionRepository<'a> {
+/// 采购提交集合的域查询。
+#[allow(async_fn_in_trait)]
+pub trait PurchaseOrderSubmissionRepositoryExt {
     /// 按「采购单 + 提交序号」查找唯一提交。
     ///
     /// 唯一性由 `uk_purchase_order_submissions_order_no` 唯一索引保证。
@@ -185,21 +186,12 @@ impl<'a> PurchaseOrderSubmissionRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_order_and_submission_no(
+    async fn find_by_order_and_submission_no(
         &self,
         purchase_order_id: &PurchaseOrderId,
         submission_no: &str,
         executor: &mut dyn Executor,
-    ) -> Result<Option<PurchaseOrderSubmission>> {
-        self.find_one(
-            doc! {
-                "purchase_order_id": purchase_order_id.to_string(),
-                "submission_no": submission_no,
-            },
-            executor,
-        )
-        .await
-    }
+    ) -> Result<Option<PurchaseOrderSubmission>>;
 
     /// 按稳定 ID 读取采购审核岗位分离使用的提交事实。
     ///
@@ -217,13 +209,11 @@ impl<'a> PurchaseOrderSubmissionRepository<'a> {
     ///
     /// # 约束
     /// 仅查询本仓储拥有的采购提交集合，不访问采购单主表。
-    pub async fn find_work_item_purchase_submission(
+    async fn find_work_item_purchase_submission(
         &self,
         id: &str,
         executor: &mut dyn Executor,
-    ) -> Result<Option<PurchaseOrderSubmission>> {
-        self.find_by_id(id, executor).await
-    }
+    ) -> Result<Option<PurchaseOrderSubmission>>;
 
     /// 批量读取采购单关联的全部简报提交。
     ///
@@ -241,7 +231,39 @@ impl<'a> PurchaseOrderSubmissionRepository<'a> {
     ///
     /// # 约束
     /// 仅查询本仓储拥有的采购提交集合，按所属采购单引用过滤，不访问采购单集合。
-    pub async fn list_work_item_brief_submissions_by_orders(
+    async fn list_work_item_brief_submissions_by_orders(
+        &self,
+        order_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PurchaseOrderSubmission>>;
+}
+
+impl PurchaseOrderSubmissionRepositoryExt for persistence_core::Repository<'_, PurchaseOrderSubmission> {
+    async fn find_by_order_and_submission_no(
+        &self,
+        purchase_order_id: &PurchaseOrderId,
+        submission_no: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<PurchaseOrderSubmission>> {
+        self.find_one(
+            doc! {
+                "purchase_order_id": purchase_order_id.to_string(),
+                "submission_no": submission_no,
+            },
+            executor,
+        )
+        .await
+    }
+
+    async fn find_work_item_purchase_submission(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<PurchaseOrderSubmission>> {
+        self.find_by_id(id, executor).await
+    }
+
+    async fn list_work_item_brief_submissions_by_orders(
         &self,
         order_ids: &[String],
         executor: &mut dyn Executor,
@@ -253,7 +275,9 @@ impl<'a> PurchaseOrderSubmissionRepository<'a> {
     }
 }
 
-impl<'a> PurchaseOrderSubmissionLineRepository<'a> {
+/// 采购提交行集合的域查询。
+#[allow(async_fn_in_trait)]
+pub trait PurchaseOrderSubmissionLineRepositoryExt {
     /// 批量取回多个提交的全部明细（`$in`，禁止 N+1）。
     ///
     /// 用于提交详情页一次取回行集合；空集合直接返回空结果。
@@ -267,7 +291,17 @@ impl<'a> PurchaseOrderSubmissionLineRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_lines_by_submission_ids(
+    async fn find_lines_by_submission_ids(
+        &self,
+        submission_ids: &[PurchaseOrderSubmissionId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PurchaseOrderSubmissionLine>>;
+}
+
+impl PurchaseOrderSubmissionLineRepositoryExt
+    for persistence_core::Repository<'_, PurchaseOrderSubmissionLine>
+{
+    async fn find_lines_by_submission_ids(
         &self,
         submission_ids: &[PurchaseOrderSubmissionId],
         executor: &mut dyn Executor,

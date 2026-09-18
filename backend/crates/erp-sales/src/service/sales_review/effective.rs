@@ -8,6 +8,7 @@ use persistence_core::NoTransaction;
 use super::SalesReviewService;
 use super::formalization::{build_change_revision, revision_gross};
 use crate::entity::sales_review::{SalesChangeOrder, SalesChangeSubmission, SalesChangeSubmissionLine};
+use crate::repository::prelude::*;
 use crate::repository::{SalesOrderExt, SalesReviewExt};
 use crate::{Error, Result};
 

@@ -3,6 +3,7 @@ use erp_audit::{AuditActorLogs, AuditExt};
 use erp_sales::dto::sales_order::{SaveWorkingCopyRequest, WorkingCopyView};
 use erp_sales::entity::sales_order::SalesOrderWorkingCopy;
 use erp_sales::repository::SalesOrderExt;
+use erp_sales::repository::prelude::*;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 

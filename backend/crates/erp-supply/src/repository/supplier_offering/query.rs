@@ -1,5 +1,7 @@
 //! 供给聚合通用查询：稳定身份按 ID 读取与商业条款修订查询。
 
+#![allow(async_fn_in_trait)]
+
 use erp_core::ids::{SupplierOfferingId, SupplierOfferingRevisionId};
 use mongodb::bson::doc;
 use persistence_core::{Executor, Result};
@@ -7,7 +9,9 @@ use persistence_core::{Executor, Result};
 use crate::entity::supplier_offering::{SupplierOffering, SupplierOfferingRevision};
 use crate::repository::owned::{SupplierOfferingRepository, SupplierOfferingRevisionRepository};
 
-impl<'a> SupplierOfferingRepository<'a> {
+/// 供给稳定身份仓储的发布只读查询。
+#[allow(async_fn_in_trait)]
+pub trait SupplierOfferingRepositoryQueryExt {
     /// 按稳定 ID 读取未删除的供给身份。
     ///
     /// 发布与安全暂停流程通过供给稳定 ID 引用供给身份，本方法提供该跨域只读
@@ -25,7 +29,15 @@ impl<'a> SupplierOfferingRepository<'a> {
     ///
     /// # 约束
     /// 只查询本聚合 `supplier_offerings` 集合，不触碰其他集合。
-    pub async fn find_publication_supplier_offering(
+    async fn find_publication_supplier_offering(
+        &self,
+        id: &SupplierOfferingId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierOffering>>;
+}
+
+impl SupplierOfferingRepositoryQueryExt for SupplierOfferingRepository<'_> {
+    async fn find_publication_supplier_offering(
         &self,
         id: &SupplierOfferingId,
         executor: &mut dyn Executor,
@@ -34,7 +46,9 @@ impl<'a> SupplierOfferingRepository<'a> {
     }
 }
 
-impl<'a> SupplierOfferingRevisionRepository<'a> {
+/// 供给商业条款修订仓储的发布只读查询。
+#[allow(async_fn_in_trait)]
+pub trait SupplierOfferingRevisionRepositoryQueryExt {
     /// 按稳定 ID 读取未删除的供给商业条款修订。
     ///
     /// 发布修订通过供给修订稳定 ID 引用不可变商业条款，本方法提供该跨域只读
@@ -52,13 +66,11 @@ impl<'a> SupplierOfferingRevisionRepository<'a> {
     ///
     /// # 约束
     /// 只查询本聚合 `supplier_offering_revisions` 集合，不触碰其他集合。
-    pub async fn find_publication_offering_revision(
+    async fn find_publication_offering_revision(
         &self,
         id: &SupplierOfferingRevisionId,
         executor: &mut dyn Executor,
-    ) -> Result<Option<SupplierOfferingRevision>> {
-        self.find_by_id(id.as_ref(), executor).await
-    }
+    ) -> Result<Option<SupplierOfferingRevision>>;
 
     /// 列出稳定供给的全部未删除不可变商业条款修订。
     ///
@@ -78,7 +90,23 @@ impl<'a> SupplierOfferingRevisionRepository<'a> {
     /// # 约束
     /// 只查询本聚合 `supplier_offering_revisions` 集合，按 `supplier_offering_id`
     /// 精确过滤，不触碰其他集合。
-    pub async fn list_publication_offering_revisions(
+    async fn list_publication_offering_revisions(
+        &self,
+        offering_id: &SupplierOfferingId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierOfferingRevision>>;
+}
+
+impl SupplierOfferingRevisionRepositoryQueryExt for SupplierOfferingRevisionRepository<'_> {
+    async fn find_publication_offering_revision(
+        &self,
+        id: &SupplierOfferingRevisionId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierOfferingRevision>> {
+        self.find_by_id(id.as_ref(), executor).await
+    }
+
+    async fn list_publication_offering_revisions(
         &self,
         offering_id: &SupplierOfferingId,
         executor: &mut dyn Executor,

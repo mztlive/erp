@@ -36,6 +36,7 @@ use crate::error::{Error, Result};
 use crate::ports::{
     ApprovalObjectReadPort, FailClosedObjectReadPort, ObjectFactPort, UpgradeSubjectPort, WorkflowAuditPort,
 };
+use crate::repository::prelude::*;
 use crate::repository::{ApprovalIntegrationExt, BpmExt, WorkItemExt};
 use crate::service::approval::{ApprovalDomainActionPort, FailClosedApprovalActionPort};
 

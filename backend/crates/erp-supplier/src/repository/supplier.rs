@@ -29,13 +29,17 @@ mod command;
 mod qualification;
 mod revision;
 
-pub use account::{SupplierAccountFilter, SupplierAccountRow};
+pub use account::{SupplierAccountFilter, SupplierAccountRepositoryExt, SupplierAccountRow};
 pub use bundle::{
     SupplierDetailBundle, SupplierListBundle, SupplierListSearchInput, SupplierQualificationHealthFilter,
 };
-pub use capability::SupplierCapabilityFilter;
-pub use qualification::SupplierQualificationFilter;
-pub use revision::SupplierCommercialProfileFilter;
+pub use capability::{SupplierCapabilityFilter, SupplierCapabilityRepositoryExt};
+pub use command::SupplierProfileCommandRepositoryExt;
+pub use qualification::{
+    SupplierQualificationCapabilityRepositoryExt, SupplierQualificationFilter,
+    SupplierQualificationRepositoryExt,
+};
+pub use revision::{SupplierCommercialProfileFilter, SupplierCommercialProfileRevisionRepositoryExt};
 
 /// `supplier_account` 集合名（单一来源：`SupplierExt` 关联常量）。
 const SUPPLIER_ACCOUNTS: &str = <mongodb::Database as SupplierExt>::SUPPLIER_ACCOUNTS;

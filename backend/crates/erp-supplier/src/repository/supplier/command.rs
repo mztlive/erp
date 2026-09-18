@@ -1,6 +1,6 @@
 use erp_core::ids::SupplierQualificationId;
 use mongodb::bson::doc;
-use persistence_core::{Executor, Result, mongo_ops};
+use persistence_core::{Executor, Repository, Result, mongo_ops};
 
 use super::{
     SUPPLIER_ACCOUNTS, SUPPLIER_COMMERCIAL_PROFILE_REVISIONS, SUPPLIER_PROFILE_COMMANDS,
@@ -12,12 +12,22 @@ use crate::entity::supplier::{
 };
 use crate::repository::owned::SupplierProfileCommandRepository;
 
-impl<'a> SupplierProfileCommandRepository<'a> {
+/// 供应商资料命令集合上的域查询。
+#[allow(async_fn_in_trait)]
+pub trait SupplierProfileCommandRepositoryExt {
     /// 按客户端幂等键读取已成功命令结果。
     ///
     /// # Errors
     /// MongoDB 查询失败时返回错误。
-    pub async fn find_by_idempotency_key(
+    async fn find_by_idempotency_key(
+        &self,
+        idempotency_key: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierProfileCommand>>;
+}
+
+impl SupplierProfileCommandRepositoryExt for Repository<'_, SupplierProfileCommand> {
+    async fn find_by_idempotency_key(
         &self,
         idempotency_key: &str,
         executor: &mut dyn Executor,

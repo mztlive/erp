@@ -9,6 +9,7 @@ use crate::entity::supplier_api::SupplierApiCapabilityCode;
 use crate::entity::supplier_fulfillment::*;
 use crate::ports::supplier_gateway::{DispatchOutcome, InvestigationOutcome};
 use crate::repository::SupplierFulfillmentExt;
+use crate::repository::prelude::*;
 use crate::{Error, Result};
 const INVESTIGATION_EVIDENCE_SCHEMA: &str = "W26_INVESTIGATION_V1";
 const INVESTIGATION_INTENT_SCHEMA: &str = "W26_INVESTIGATION_INTENT_V1";

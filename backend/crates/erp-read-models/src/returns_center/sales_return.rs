@@ -1,5 +1,6 @@
 //! SalesReturnCase 详情与分页视图装配。
 use erp_returns::repository::ReturnsExt;
+use erp_returns::repository::prelude::*;
 use persistence_core::NoTransaction;
 use validator::Validate;
 

@@ -16,6 +16,7 @@ use crate::dto::RoleItem;
 use crate::entity::rbac::Permission;
 use crate::entity::role::Role;
 use crate::error::Result;
+use crate::repository::prelude::*;
 
 /// 由批量直接权限装配角色响应项（两个列表入口共用该映射）。
 ///

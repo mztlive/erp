@@ -6,6 +6,7 @@ use std::pin::Pin;
 
 use application_core::AuditActor;
 use erp_core::AccountKind;
+use erp_identity::repository::prelude::*;
 use erp_identity::service::access_control::resolve::DataScopeService;
 use erp_identity::{
     AccessControlExt, MongoCasbinAdapter, Permission, PermissionSet, SharedRbacService, subject,

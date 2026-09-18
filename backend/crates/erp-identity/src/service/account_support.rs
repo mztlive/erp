@@ -8,6 +8,7 @@ use crate::AccessControlExt;
 use crate::entity::account_core::{AccountCore, AccountCoreUpdate};
 use crate::entity::auth::LoginAccount;
 use crate::error::Result;
+use crate::repository::prelude::*;
 use crate::service::auth::password;
 
 /// 将可选账号收窄为指定后台类型，缺失或类型不符统一按不存在处理。

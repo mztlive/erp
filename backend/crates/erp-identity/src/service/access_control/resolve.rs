@@ -11,6 +11,7 @@ use crate::access_control::{DataScopeSubjectType, ResolvedScope, ScopeClause, Sc
 use crate::entity::organization::OrgTree;
 use crate::entity::organization_change::OrganizationState;
 use crate::repository::OrganizationRepository;
+use crate::repository::prelude::*;
 use crate::{AccessControlExt, Error, Permission, Result, SharedRbacService};
 
 /// 服务端授权上下文；原始范围和组织事实不直接序列化给客户端。

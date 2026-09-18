@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 use application_core::{AuditActor, FilteredPage};
 use erp_identity::AccessControlExt;
+use erp_identity::repository::prelude::*;
 use erp_procurement::dto::purchase_order::{
     PageView, PurchaseOrderListParams, PurchaseSalesAllocationView, TotalsView,
 };
@@ -54,12 +55,12 @@ impl PurchaseOrderReadService {
         params.validate()?;
         let snapshot = self.list_snapshot(params, actor).await?;
         if expected.is_some_and(|value| value != snapshot.context.scope_version) {
-            return Err(Error::ConflictError("DATA_SCOPE_CHANGED：数据范围已变化，请从第一页刷新".into()));
+            return Err(crate::support::data_scope_changed("数据范围已变化，请从第一页刷新"));
         }
         let items = map_list_items(&snapshot.page.items, &snapshot.facts)?;
         let current = self.list_snapshot(params, actor).await?;
         if current.context.scope_version != snapshot.context.scope_version {
-            return Err(Error::ConflictError("DATA_SCOPE_CHANGED：数据范围或业务单据已变化，请刷新".into()));
+            return Err(crate::support::data_scope_changed("数据范围或业务单据已变化，请刷新"));
         }
         Ok(PurchaseListView {
             scope_version: snapshot.context.scope_version,
@@ -231,9 +232,7 @@ impl PurchaseOrderReadService {
         if let (Some(actor), Some(expected)) = (actor, access_version) {
             let (_, current) = self.access().detail(actor, id).await?;
             if current != expected {
-                return Err(Error::ConflictError(
-                    "DATA_SCOPE_CHANGED：数据范围或采购单已变化，请刷新".into(),
-                ));
+                return Err(crate::support::data_scope_changed("数据范围或采购单已变化，请刷新"));
             }
         }
         Ok(view)

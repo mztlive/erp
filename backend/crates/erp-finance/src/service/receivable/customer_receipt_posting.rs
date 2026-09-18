@@ -10,6 +10,7 @@ use persistence_core::Executor;
 
 use crate::entity::receivable::{CustomerReceipt, ReceivableAccount, ReceivableEntry, ReceivableFundsLedger};
 use crate::repository::ReceivableExt;
+use crate::repository::prelude::*;
 use crate::service::receivable::mapping::map_ledger_error;
 use crate::{Error, Result};
 

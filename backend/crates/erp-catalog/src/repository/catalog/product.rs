@@ -22,9 +22,6 @@ use crate::entity::catalog::{
     SkuCoverageStatus,
 };
 use crate::repository::CatalogExt;
-use crate::repository::owned::{
-    ProductRepository, ProductRevisionMediaRepository, ProductRevisionRepository,
-};
 
 /// `product_revision_media` 集合名（单一来源：`CatalogExt` 关联常量）。
 const PRODUCT_REVISION_MEDIAS: &str = <mongodb::Database as CatalogExt>::PRODUCT_REVISION_MEDIAS;
@@ -190,7 +187,9 @@ impl Pagination for ProductFilter {
     }
 }
 
-impl<'a> ProductRepository<'a> {
+/// 商品集合上的域查询。
+#[allow(async_fn_in_trait)]
+pub trait ProductRepositoryExt {
     /// 按稳定主键批量查询商品。
     ///
     /// # 参数
@@ -202,12 +201,7 @@ impl<'a> ProductRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn find_by_ids(&self, ids: &[ProductId], executor: &mut dyn Executor) -> Result<Vec<Product>> {
-        let Some(filter) = batch_ids_filter("id", ids) else {
-            return Ok(Vec::new());
-        };
-        self.find_many(filter, executor).await
-    }
+    async fn find_by_ids(&self, ids: &[ProductId], executor: &mut dyn Executor) -> Result<Vec<Product>>;
 
     /// 列出当前范围内的商品主键，供采购负责人批量解析。
     ///
@@ -223,7 +217,37 @@ impl<'a> ProductRepository<'a> {
     ///
     /// # 关键业务约束
     /// 仓储不得按登录用户自行推断权限；公司范围应由调用方跳过本方法。
-    pub async fn list_authorized_ids(
+    async fn list_authorized_ids(
+        &self,
+        scope: &super::scope::CatalogReadScope,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<String>>;
+
+    /// 列出未删除商品主键，供公司范围采购负责人筛选。
+    ///
+    /// # 参数
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 最多 10001 个主键；调用方必须整体拒绝超限。
+    ///
+    /// # 错误
+    /// 数据库读取失败时返回仓储错误。
+    ///
+    /// # 关键业务约束
+    /// 仅用于已证明的公司范围；不得替代授权条件。
+    async fn list_ids(&self, executor: &mut dyn Executor) -> Result<Vec<String>>;
+}
+
+impl ProductRepositoryExt for persistence_core::Repository<'_, Product> {
+    async fn find_by_ids(&self, ids: &[ProductId], executor: &mut dyn Executor) -> Result<Vec<Product>> {
+        let Some(filter) = batch_ids_filter("id", ids) else {
+            return Ok(Vec::new());
+        };
+        self.find_many(filter, executor).await
+    }
+
+    async fn list_authorized_ids(
         &self,
         scope: &super::scope::CatalogReadScope,
         executor: &mut dyn Executor,
@@ -245,20 +269,7 @@ impl<'a> ProductRepository<'a> {
         Ok(rows.into_iter().map(|row| row.id).collect())
     }
 
-    /// 列出未删除商品主键，供公司范围采购负责人筛选。
-    ///
-    /// # 参数
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 最多 10001 个主键；调用方必须整体拒绝超限。
-    ///
-    /// # 错误
-    /// 数据库读取失败时返回仓储错误。
-    ///
-    /// # 关键业务约束
-    /// 仅用于已证明的公司范围；不得替代授权条件。
-    pub async fn list_ids(&self, executor: &mut dyn Executor) -> Result<Vec<String>> {
+    async fn list_ids(&self, executor: &mut dyn Executor) -> Result<Vec<String>> {
         #[derive(serde::Deserialize)]
         struct ProductIdRow {
             id: String,
@@ -365,7 +376,9 @@ impl Pagination for ProductRevisionFilter {
     }
 }
 
-impl<'a> ProductRevisionRepository<'a> {
+/// 商品修订集合上的域查询。
+#[allow(async_fn_in_trait)]
+pub trait ProductRevisionRepositoryExt {
     /// 分页检索商品修订列表（投影查询）。
     ///
     /// 只返回 [`ProductRevisionRow`] 所需的列表字段；排序字段白名单化
@@ -380,20 +393,11 @@ impl<'a> ProductRevisionRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_product_revisions(
+    async fn search_product_revisions(
         &self,
         filter: &ProductRevisionFilter,
         executor: &mut dyn Executor,
-    ) -> Result<PageResult<ProductRevisionRow>> {
-        let options = FindOptions::builder()
-            .sort(product_revision_sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
-            .skip(filter.skip())
-            .limit(filter.limit())
-            .projection(product_revision_projection())
-            .build();
-        let collection = self.collection().clone_with_type::<ProductRevisionRow>();
-        super::shared::search_projected(&collection, &self.collection(), filter, options, executor).await
-    }
+    ) -> Result<PageResult<ProductRevisionRow>>;
 
     /// 按稳定主键批量查询商品修订。
     ///
@@ -406,16 +410,11 @@ impl<'a> ProductRevisionRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn find_by_ids(
+    async fn find_by_ids(
         &self,
         ids: &[ProductRevisionId],
         executor: &mut dyn Executor,
-    ) -> Result<Vec<ProductRevision>> {
-        let Some(filter) = batch_ids_filter("id", ids) else {
-            return Ok(Vec::new());
-        };
-        self.find_many(filter, executor).await
-    }
+    ) -> Result<Vec<ProductRevision>>;
 
     /// 批量查询一组商品的修订（`$in`，一次取回）。
     ///
@@ -430,7 +429,41 @@ impl<'a> ProductRevisionRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_by_product_ids(
+    async fn find_by_product_ids(
+        &self,
+        product_ids: &[ProductId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ProductRevision>>;
+}
+
+impl ProductRevisionRepositoryExt for persistence_core::Repository<'_, ProductRevision> {
+    async fn search_product_revisions(
+        &self,
+        filter: &ProductRevisionFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<ProductRevisionRow>> {
+        let options = FindOptions::builder()
+            .sort(product_revision_sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
+            .skip(filter.skip())
+            .limit(filter.limit())
+            .projection(product_revision_projection())
+            .build();
+        let collection = self.collection().clone_with_type::<ProductRevisionRow>();
+        super::shared::search_projected(&collection, &self.collection(), filter, options, executor).await
+    }
+
+    async fn find_by_ids(
+        &self,
+        ids: &[ProductRevisionId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ProductRevision>> {
+        let Some(filter) = batch_ids_filter("id", ids) else {
+            return Ok(Vec::new());
+        };
+        self.find_many(filter, executor).await
+    }
+
+    async fn find_by_product_ids(
         &self,
         product_ids: &[ProductId],
         executor: &mut dyn Executor,
@@ -442,7 +475,9 @@ impl<'a> ProductRevisionRepository<'a> {
     }
 }
 
-impl<'a> ProductRevisionMediaRepository<'a> {
+/// 商品修订媒体集合上的域查询。
+#[allow(async_fn_in_trait)]
+pub trait ProductRevisionMediaRepositoryExt {
     /// 按商品修订 ID 批量读取媒体行。
     ///
     /// # 参数
@@ -454,7 +489,15 @@ impl<'a> ProductRevisionMediaRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_media_by_revision_ids(
+    async fn find_media_by_revision_ids(
+        &self,
+        revision_ids: &[ProductRevisionId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ProductRevisionMedia>>;
+}
+
+impl ProductRevisionMediaRepositoryExt for persistence_core::Repository<'_, ProductRevisionMedia> {
+    async fn find_media_by_revision_ids(
         &self,
         revision_ids: &[ProductRevisionId],
         executor: &mut dyn Executor,
@@ -669,17 +712,7 @@ impl<'a> CatalogRepository<'a> {
     }
 }
 
-/// 从同一商品的修订集合解析当前修订。
-///
-/// # 参数
-/// * `product` - 商品稳定实体
-/// * `revisions` - 该商品的全部修订
-///
-/// # 返回
-/// 优先返回当前指针命中的修订；否则返回最大修订号；无修订时返回 `None`。
-///
-/// # 错误
-/// 无。
+/// 优先当前修订指针，否则最大修订号。
 fn select_current_product_revision<'a>(
     product: &Product,
     revisions: &'a [ProductRevision],
@@ -692,17 +725,7 @@ fn select_current_product_revision<'a>(
     )
 }
 
-/// 批量解析商品当前修订映射。
-///
-/// # 参数
-/// * `products` - 商品稳定实体集合
-/// * `revisions` - 这些商品的全部修订
-///
-/// # 返回
-/// 返回 `product_id -> 当前修订` 映射，没有修订的商品被忽略。
-///
-/// # 错误
-/// 无。
+/// 批量解析 `product_id -> 当前修订` 映射。
 fn select_current_product_revisions(
     products: &[Product],
     revisions: Vec<ProductRevision>,
@@ -722,16 +745,7 @@ fn select_current_product_revisions(
         .collect()
 }
 
-/// 按商品修订 ID 分组并排序媒体行。
-///
-/// # 参数
-/// * `rows` - 多个商品修订的媒体关系行
-///
-/// # 返回
-/// 返回 `product_revision_id -> 媒体行` 映射，各组按展示顺序升序排列。
-///
-/// # 错误
-/// 无。
+/// 按商品修订 ID 分组媒体行并按展示顺序排序。
 fn group_product_revision_media(
     rows: Vec<ProductRevisionMedia>,
 ) -> HashMap<String, Vec<ProductRevisionMedia>> {

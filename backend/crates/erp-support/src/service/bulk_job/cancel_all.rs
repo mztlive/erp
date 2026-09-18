@@ -6,6 +6,7 @@ use tracing::warn;
 use validator::Validate;
 
 use super::{BulkJobService, CancelAllBackgroundJobsRequest, CancelAllBackgroundJobsResponse};
+use crate::repository::prelude::*;
 use crate::{BackgroundJob, BulkJobExt, CancelBackgroundJobFailure, Error, Result};
 
 impl BulkJobService {

@@ -8,6 +8,7 @@ use erp_sales::entity::sales_order::{
     SalesOrder, SalesOrderLine, SalesOrderWorkingCopy, SalesOrderWorkingCopyLine, WorkingPurpose,
 };
 use erp_sales::repository::SalesOrderExt;
+use erp_sales::repository::prelude::*;
 use erp_sales::service::sales_order::draft_working_copy::DraftStableLines;
 use persistence_core::{NoTransaction, Transactional};
 

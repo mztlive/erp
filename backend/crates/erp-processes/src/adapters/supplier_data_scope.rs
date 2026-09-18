@@ -17,7 +17,10 @@ use erp_supplier::{
 use mongodb::Database;
 use persistence_core::Executor;
 
+use super::identity_error::map_identity_error;
 use super::scope_support::{expand_org_ids, load_organization_state, member_ids};
+
+map_identity_error!(erp_supplier);
 
 /// 组合层供应商范围 adapter，持有身份域解析所需依赖。
 #[derive(Clone)]
@@ -136,26 +139,6 @@ fn map_clause(clause: &ScopeClause) -> erp_supplier::Result<SupplierResolvedClau
         collaborative: clause.collaborative,
         org_unit_ids: clause.org_unit_ids.iter().cloned().collect(),
     })
-}
-
-fn map_identity_error(error: erp_identity::Error) -> erp_supplier::Error {
-    match error {
-        erp_identity::Error::Internal(payload) => erp_supplier::Error::Internal(payload),
-        erp_identity::Error::NotFound(payload) => erp_supplier::Error::NotFound(payload),
-        erp_identity::Error::ValidationError(payload) => erp_supplier::Error::ValidationError(payload),
-        erp_identity::Error::BusinessLogicError(payload) => erp_supplier::Error::BusinessLogicError(payload),
-        erp_identity::Error::ConflictError(payload) => erp_supplier::Error::ConflictError(payload),
-        erp_identity::Error::ReceiptDuplicate(payload) => erp_supplier::Error::ReceiptDuplicate(payload),
-        erp_identity::Error::TransientTransaction(payload) => {
-            erp_supplier::Error::TransientTransaction(payload)
-        },
-        erp_identity::Error::Forbidden(payload) => erp_supplier::Error::Forbidden(payload),
-        erp_identity::Error::Unauthenticated(payload) => erp_supplier::Error::Unauthenticated(payload),
-        erp_identity::Error::Logic(payload) => erp_supplier::Error::Logic(payload),
-        erp_identity::Error::Rbac(payload) => erp_supplier::Error::Internal(payload),
-        erp_identity::Error::OutcomeUnknown(payload) => erp_supplier::Error::OutcomeUnknown(payload),
-        erp_identity::Error::RepositoryError(payload) => erp_supplier::Error::RepositoryError(payload),
-    }
 }
 
 fn evaluate_object(

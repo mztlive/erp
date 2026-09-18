@@ -37,9 +37,9 @@ mod service_fulfillment;
 
 use std::collections::HashMap;
 
-pub use customer_acceptance::CustomerAcceptanceFilter;
-pub use delivery::DeliveryFilter;
-pub use electronic_delivery::ElectronicDeliveryFilter;
+pub use customer_acceptance::{CustomerAcceptanceFilter, CustomerAcceptanceRepositoryExt};
+pub use delivery::{DeliveryFilter, DeliveryRepositoryExt};
+pub use electronic_delivery::{ElectronicDeliveryFilter, ElectronicDeliveryRepositoryExt};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::{
     CustomerAcceptanceId, CustomerAcceptanceLineId, DeliveryId, ElectronicDeliveryId, PurchaseOrderId,
@@ -51,9 +51,9 @@ use mongodb::Database;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{Executor, PageResult, Result, mongo_ops};
-pub use purchase_receipt::PurchaseReceiptFilter;
+pub use purchase_receipt::{PurchaseReceiptFilter, PurchaseReceiptRepositoryExt};
 use serde::{Deserialize, Serialize};
-pub use service_fulfillment::ServiceFulfillmentFilter;
+pub use service_fulfillment::{ServiceFulfillmentFilter, ServiceFulfillmentRepositoryExt};
 
 use super::extensions::FulfillmentExt;
 use crate::entity::fulfillment::{

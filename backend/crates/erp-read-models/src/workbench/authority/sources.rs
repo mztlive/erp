@@ -4,6 +4,7 @@ use erp_inventory::InventoryExt;
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_sales::repository::{SalesOrderExt, SalesReviewExt};
 use erp_supply::repository::SupplierSettlementExt;
+use erp_supply::repository::prelude::*;
 use persistence_core::Executor;
 
 use super::WorkItemFactsReader;

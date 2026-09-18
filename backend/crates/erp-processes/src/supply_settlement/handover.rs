@@ -2,8 +2,7 @@
 
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
-use erp_identity::entity::organization::OrgTree;
-use erp_identity::repository::OrganizationRepository;
+use erp_identity::repository::prelude::*;
 use erp_identity::{AccessControlExt, Permission, PermissionSet, SharedRbacService};
 use erp_supply::dto::supplier_settlement::{
     HandoverCandidateView, HandoverSettlementRequest, HandoverSettlementView,
@@ -15,6 +14,7 @@ use sha2::{Digest, Sha256};
 use validator::Validate;
 
 use super::SupplierSettlementProcess;
+use crate::handover_common::ensure_org_enabled;
 use crate::{Error, Result};
 
 impl SupplierSettlementProcess {
@@ -313,23 +313,6 @@ async fn ensure_target_qualified(
     let required = Permission::parse("supplier_settlement_statement:update")?;
     if !granted.covers(&PermissionSet::new(vec![required])) {
         return Err(Error::Forbidden("目标账号不存在、已失效或不具备结算维护资格".into()));
-    }
-    Ok(())
-}
-
-async fn ensure_org_enabled(
-    db: &mongodb::Database,
-    target_org: Option<&str>,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    let Some(org) = target_org.map(str::trim).filter(|value| !value.is_empty()) else {
-        return Ok(());
-    };
-    let state = OrganizationRepository::new(db).state(executor).await?;
-    let tree = OrgTree::new(&state.units)?;
-    let path = tree.path(org)?;
-    if path.iter().any(|node| !node.enabled) {
-        return Err(Error::BusinessLogicError("目标业务组织已停用".into()));
     }
     Ok(())
 }

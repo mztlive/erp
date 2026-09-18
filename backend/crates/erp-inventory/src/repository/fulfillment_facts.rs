@@ -1,12 +1,13 @@
 //! 库存拥有的履约入库预占来源查询。
 
 use erp_core::ids::PurchaseReceiptLineId;
-use persistence_core::{Executor, Result};
+use persistence_core::{Executor, Repository, Result};
 
 use crate::StockReservation;
-use crate::repository::owned::StockReservationRepository;
 
-impl StockReservationRepository<'_> {
+/// 履约入库预占来源查询。
+#[allow(async_fn_in_trait)]
+pub trait StockReservationRepositoryFulfillmentExt {
     /// 查询入库行形成的库存预占。
     ///
     /// # 参数
@@ -18,7 +19,15 @@ impl StockReservationRepository<'_> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_stock_reservations_for_receipt_lines(
+    async fn list_stock_reservations_for_receipt_lines(
+        &self,
+        receipt_line_ids: &[PurchaseReceiptLineId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<StockReservation>>;
+}
+
+impl StockReservationRepositoryFulfillmentExt for Repository<'_, StockReservation> {
+    async fn list_stock_reservations_for_receipt_lines(
         &self,
         receipt_line_ids: &[PurchaseReceiptLineId],
         executor: &mut dyn Executor,

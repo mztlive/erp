@@ -18,6 +18,7 @@ use crate::dto::{
 use crate::entity::catalog::{ListingStatus, Product, ProductListingStatus, Sku};
 use crate::error::{Error, Result};
 use crate::repository::CatalogExt;
+use crate::repository::prelude::*;
 
 /// 商品上架汇总投影类型（经 `CatalogExt` 关联类型跨 crate 可达）。
 type ProductListingSummary = <mongodb::Database as CatalogExt>::ProductListingSummary;

@@ -2,18 +2,18 @@
 //!
 //! 差异列表页此前对当前页每行各执行一次最新决定查询（N+1）；本模块提供按
 //! 当前页差异 ID 集合一次装载全部决定行、再按 `(差异 ID, 决定序号)` 在内存中
-//! 取每差异最新一条的批量接口。最新语义与单差异 [`Repository::find_latest_by_difference`]
+//! 取每差异最新一条的批量接口。最新语义与单差异
+//! [`super::ReconciliationDifferenceResolutionRepositoryExt::find_latest_by_difference`]
 //! 一致（决定序号最大者胜出），无决定行的差异不在结果中，由 Service 解释为
 //! 无状态、版本零。
 
 use std::collections::{HashMap, HashSet};
 
 use mongodb::bson::{Document, doc};
-use persistence_core::{Executor, Result};
+use persistence_core::{Executor, Repository, Result};
 
 use crate::entity::integration_ops::ReconciliationDifferenceResolution;
 use crate::repository::integration_ops::undeleted_base;
-use crate::repository::owned::ReconciliationDifferenceResolutionRepository;
 
 /// 对差异 ID 集合去重并保持首次出现顺序。
 ///
@@ -61,7 +61,7 @@ fn latest_batch_filter(ids: &[String]) -> Document {
 
 /// 在内存中按差异取决定序号最大的一条（与单差异查询同序）。
 ///
-/// 最新定义与 [`ReconciliationDifferenceResolutionRepository::find_latest_by_difference`]
+/// 最新定义与 [`super::ReconciliationDifferenceResolutionRepositoryExt::find_latest_by_difference`]
 /// 一致：`resolution_no` 最大者胜出；决定序号在同一差异内唯一，无并列。
 /// 无决定行的差异不出现，由 Service 解释为无状态。
 ///
@@ -94,7 +94,9 @@ fn latest_per_difference(
     latest
 }
 
-impl<'a> ReconciliationDifferenceResolutionRepository<'a> {
+/// 对账差异解决记录的批量最新决定查询。
+#[allow(async_fn_in_trait)]
+pub trait ReconciliationDifferenceResolutionBatchExt {
     /// 按当前页差异 ID 集合批量读取各差异最新决定（INT-R26）。
     ///
     /// 一次 `$in` 查询装载本页全部决议行，再按单差异查询同序在内存中取每
@@ -115,7 +117,15 @@ impl<'a> ReconciliationDifferenceResolutionRepository<'a> {
     /// # 约束
     /// 只返回实体，不返回 services DTO、HTTP View 或授权结论；不裁决缺失；
     /// 不开启或提交事务；软删除行永不命中。
-    pub async fn find_latest_by_differences(
+    async fn find_latest_by_differences(
+        &self,
+        difference_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<HashMap<String, ReconciliationDifferenceResolution>>;
+}
+
+impl ReconciliationDifferenceResolutionBatchExt for Repository<'_, ReconciliationDifferenceResolution> {
+    async fn find_latest_by_differences(
         &self,
         difference_ids: &[String],
         executor: &mut dyn Executor,

@@ -10,7 +10,6 @@ use serde::{Deserialize, Serialize};
 use super::shared::{default_paging, in_filter, sort_doc, whitelisted_sort};
 use crate::dto::catalog::PRODUCT_CATEGORY_SORT_FIELDS;
 use crate::entity::catalog::{EnableStatus, ProductCategory, ProductKind};
-use crate::repository::owned::ProductCategoryRepository;
 
 /// 商品分类列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -132,7 +131,9 @@ impl Pagination for ProductCategoryFilter {
     }
 }
 
-impl<'a> ProductCategoryRepository<'a> {
+/// 商品分类集合上的域查询。
+#[allow(async_fn_in_trait)]
+pub trait ProductCategoryRepositoryExt {
     /// 判断指定分类是否存在未删除的直接子分类。
     ///
     /// 查询使用存在性投影并在首条命中后停止；通用 Repository 会自动追加
@@ -147,9 +148,7 @@ impl<'a> ProductCategoryRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
-    pub async fn has_children(&self, parent_category_id: &str, executor: &mut dyn Executor) -> Result<bool> {
-        self.exists(doc! { "parent_category_id": parent_category_id }, executor).await
-    }
+    async fn has_children(&self, parent_category_id: &str, executor: &mut dyn Executor) -> Result<bool>;
 
     /// 按稳定主键批量查询商品分类。
     ///
@@ -162,16 +161,11 @@ impl<'a> ProductCategoryRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
-    pub async fn find_by_ids(
+    async fn find_by_ids(
         &self,
         ids: &[ProductCategoryId],
         executor: &mut dyn Executor,
-    ) -> Result<Vec<ProductCategory>> {
-        if ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        self.find_many(in_filter("id", ids.iter().map(ToString::to_string)), executor).await
-    }
+    ) -> Result<Vec<ProductCategory>>;
 
     /// 批量读取采购责任解析或规则展示引用的商品分类。
     ///
@@ -187,13 +181,11 @@ impl<'a> ProductCategoryRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
-    pub async fn list_procurement_responsibility_categories(
+    async fn list_procurement_responsibility_categories(
         &self,
         category_ids: &[ProductCategoryId],
         executor: &mut dyn Executor,
-    ) -> Result<Vec<ProductCategory>> {
-        self.find_by_ids(category_ids, executor).await
-    }
+    ) -> Result<Vec<ProductCategory>>;
 
     /// 判断采购责任规则引用的商品分类是否存在。
     ///
@@ -208,13 +200,11 @@ impl<'a> ProductCategoryRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
-    pub async fn has_procurement_responsibility_category(
+    async fn has_procurement_responsibility_category(
         &self,
         category_id: &ProductCategoryId,
         executor: &mut dyn Executor,
-    ) -> Result<bool> {
-        Ok(self.find_by_id(category_id.as_ref(), executor).await?.is_some())
-    }
+    ) -> Result<bool>;
 
     /// 分页检索商品分类列表（投影查询）。
     ///
@@ -230,7 +220,63 @@ impl<'a> ProductCategoryRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_product_categories(
+    async fn search_product_categories(
+        &self,
+        filter: &ProductCategoryFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<ProductCategoryRow>>;
+
+    /// 查询指定父分类的直接子节点（投影行，按分类代码升序）。
+    ///
+    /// # 参数
+    /// * `parent_category_id` - 父分类；`None` 表示查询根分类
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回子分类投影行集合。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    async fn find_children(
+        &self,
+        parent_category_id: Option<&str>,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ProductCategoryRow>>;
+}
+
+impl ProductCategoryRepositoryExt for persistence_core::Repository<'_, ProductCategory> {
+    async fn has_children(&self, parent_category_id: &str, executor: &mut dyn Executor) -> Result<bool> {
+        self.exists(doc! { "parent_category_id": parent_category_id }, executor).await
+    }
+
+    async fn find_by_ids(
+        &self,
+        ids: &[ProductCategoryId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ProductCategory>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many(in_filter("id", ids.iter().map(ToString::to_string)), executor).await
+    }
+
+    async fn list_procurement_responsibility_categories(
+        &self,
+        category_ids: &[ProductCategoryId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ProductCategory>> {
+        self.find_by_ids(category_ids, executor).await
+    }
+
+    async fn has_procurement_responsibility_category(
+        &self,
+        category_id: &ProductCategoryId,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        Ok(self.find_by_id(category_id.as_ref(), executor).await?.is_some())
+    }
+
+    async fn search_product_categories(
         &self,
         filter: &ProductCategoryFilter,
         executor: &mut dyn Executor,
@@ -245,47 +291,36 @@ impl<'a> ProductCategoryRepository<'a> {
         super::shared::search_projected(&collection, &self.collection(), filter, options, executor).await
     }
 
-    /// 查询指定父分类的直接子节点（投影行，按分类代码升序）。
-    ///
-    /// # 参数
-    /// * `parent_category_id` - 父分类；`None` 表示查询根分类
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回子分类投影行集合。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_children(
+    async fn find_children(
         &self,
         parent_category_id: Option<&str>,
         executor: &mut dyn Executor,
     ) -> Result<Vec<ProductCategoryRow>> {
         let parents = parent_category_id.map(|id| vec![id.to_string()]).unwrap_or_default();
-        self.find_children_of(&parents, executor).await
+        find_children_of(self, &parents, executor).await
     }
+}
 
-    /// 层序批量查询一批父分类的直接子节点（`$in`，一次取回）。
-    async fn find_children_of(
-        &self,
-        parent_ids: &[String],
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<ProductCategoryRow>> {
-        let filter = if parent_ids.is_empty() {
-            doc! { "parent_category_id": null, "deleted_at": NOT_DELETED_TIMESTAMP_BSON }
-        } else {
-            doc! {
-                "parent_category_id": { "$in": parent_ids },
-                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-            }
-        };
-        let options = FindOptions::builder()
-            .sort(doc! { "category_code": 1 })
-            .projection(product_category_projection())
-            .build();
-        let collection = self.collection().clone_with_type::<ProductCategoryRow>();
-        mongo_ops::find_many(&collection, filter, options, executor).await
-    }
+/// 层序批量查询一批父分类的直接子节点（`$in`，一次取回）。
+async fn find_children_of(
+    repo: &persistence_core::Repository<'_, ProductCategory>,
+    parent_ids: &[String],
+    executor: &mut dyn Executor,
+) -> Result<Vec<ProductCategoryRow>> {
+    let filter = if parent_ids.is_empty() {
+        doc! { "parent_category_id": null, "deleted_at": NOT_DELETED_TIMESTAMP_BSON }
+    } else {
+        doc! {
+            "parent_category_id": { "$in": parent_ids },
+            "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+        }
+    };
+    let options = FindOptions::builder()
+        .sort(doc! { "category_code": 1 })
+        .projection(product_category_projection())
+        .build();
+    let collection = repo.collection().clone_with_type::<ProductCategoryRow>();
+    mongo_ops::find_many(&collection, filter, options, executor).await
 }
 
 /// 分类-属性适用关系列表筛选条件。

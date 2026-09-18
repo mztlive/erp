@@ -18,7 +18,9 @@
 use crate::repository::owned::{PurchaseChangeOrderRepository, PurchaseOrderRepository};
 mod allocation;
 mod change;
-pub use change::PurchaseChangeSearch;
+pub use change::{
+    PurchaseChangeSearch, PurchaseChangeSubmissionLineRepositoryExt, PurchaseChangeSubmissionRepositoryExt,
+};
 mod common;
 mod coverage_sources;
 mod order;
@@ -26,11 +28,17 @@ mod revision;
 pub mod scope;
 mod submission;
 
+pub use allocation::PurchaseLineSalesAllocationRepositoryExt;
 pub use coverage_sources::PurchaseCoverageSources;
 use mongodb::Database;
-pub use order::{PurchaseOrderFilter, PurchaseOrderRow};
+pub use order::{PurchaseOrderFilter, PurchaseOrderRepositoryExt, PurchaseOrderRow};
 use persistence_core::{Executor, Result, mongo_ops};
-pub use submission::PurchaseOrderSubmissionFilter;
+pub use revision::PurchaseOrderRevisionLineRepositoryExt;
+pub use scope::PurchaseOrderRepositoryScopeExt;
+pub use submission::{
+    PurchaseOrderSubmissionFilter, PurchaseOrderSubmissionLineRepositoryExt,
+    PurchaseOrderSubmissionRepositoryExt,
+};
 
 use super::extensions::PurchaseOrderExt;
 use crate::entity::purchase_order::{

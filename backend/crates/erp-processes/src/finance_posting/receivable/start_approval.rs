@@ -16,6 +16,7 @@ use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::work_item::{DocumentApprovalWorkItemData, WorkItem, WorkItemPriority};
 use erp_workflow::repository::bpm::ApprovalInstanceListProjection;
+use erp_workflow::repository::prelude::*;
 use erp_workflow::service::approval::execution::authorization::{AuthorizationFailure, converge_eligibility};
 use erp_workflow::service::approval::execution::idempotency::{
     ReceiptBranch, StartIdentityParams, normalize_idempotency_key, payload_conflict_error, start_identity,

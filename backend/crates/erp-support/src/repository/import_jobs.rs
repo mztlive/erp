@@ -6,9 +6,10 @@ use mongodb::options::FindOptions;
 use persistence_core::{Executor, Result, mongo_ops};
 
 use crate::entity::bulk_job::{BackgroundJob, BackgroundJobId, BackgroundJobItem, JobStatus};
-use crate::repository::owned::{BackgroundJobItemRepository, BackgroundJobRepository};
 
-impl<'a> BackgroundJobRepository<'a> {
+/// 后台任务集合仓储的导入领取查询。
+#[allow(async_fn_in_trait)]
+pub trait BackgroundJobRepositoryImportExt {
     /// 读取指定领域类型且尚未终态的后台任务，供 worker 领取。
     ///
     /// # 参数
@@ -21,7 +22,16 @@ impl<'a> BackgroundJobRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询失败时返回错误。
-    pub async fn list_open_by_domain_job_type(
+    async fn list_open_by_domain_job_type(
+        &self,
+        domain_job_type: &str,
+        limit: i64,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<BackgroundJob>>;
+}
+
+impl BackgroundJobRepositoryImportExt for persistence_core::Repository<'_, BackgroundJob> {
+    async fn list_open_by_domain_job_type(
         &self,
         domain_job_type: &str,
         limit: i64,
@@ -44,7 +54,9 @@ impl<'a> BackgroundJobRepository<'a> {
     }
 }
 
-impl<'a> BackgroundJobItemRepository<'a> {
+/// 后台任务逐项集合仓储的导入全量读取。
+#[allow(async_fn_in_trait)]
+pub trait BackgroundJobItemRepositoryImportExt {
     /// 读取一个后台任务的全部逐项实体，按序号升序。
     ///
     /// # 参数
@@ -56,7 +68,15 @@ impl<'a> BackgroundJobItemRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询失败时返回错误。
-    pub async fn list_entities_by_job(
+    async fn list_entities_by_job(
+        &self,
+        job_id: &BackgroundJobId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<BackgroundJobItem>>;
+}
+
+impl BackgroundJobItemRepositoryImportExt for persistence_core::Repository<'_, BackgroundJobItem> {
+    async fn list_entities_by_job(
         &self,
         job_id: &BackgroundJobId,
         executor: &mut dyn Executor,

@@ -6,8 +6,10 @@
 //! （可软删除，身份类字段全局唯一），`customer_assignment` 是按有效期保存的
 //! 归属事实行（追加维护，**不提供**软删除）。
 //!
-//! 集合名常量统一从 `CustomerExt` 关联常量导入（唯一权威来源）；筛选/行类型
+//! 集合名常量统一从 `CustomerExt` 关联常量导入（唯一权威来源）；筛选条件
 //! 定义在本文件，经 `CustomerExt` 的关联类型对外暴露。
+
+#![allow(async_fn_in_trait)]
 
 use std::collections::HashMap;
 
@@ -17,77 +19,18 @@ use erp_core::ids::{CustomerAccountId, PartyId};
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{
-    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+    Executor, PageResult, Pagination, QueryFilter, Repository, Result, insert_literal_regex_filter, mongo_ops,
 };
 use serde::{Deserialize, Serialize};
 
+pub use super::customer_shared::CustomerAccountRow;
 use super::customer_shared::{
-    active_customer_user_assignment_filter, active_window_filter, current_owner_pipeline,
+    CustomerNumberRow, active_customer_user_assignment_filter, active_window_filter, current_owner_pipeline,
     customer_account_projection, customer_assignment_projection, distinct_sorted_customer_ids, sort_doc,
 };
 use crate::entity::customer::{
     AssignmentRole, CustomerAccount, CustomerAccountStatus, CustomerAssignment, CustomerProfileCommand,
 };
-use crate::repository::owned::{
-    CustomerAccountRepository, CustomerAssignmentRepository, CustomerProfileCommandRepository,
-};
-
-/// 客户角色列表投影行（列表接口只取必要字段，禁止返回整文档）。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct CustomerAccountRow {
-    /// 实体主键。
-    pub id: String,
-    /// 共用企业主体 ID。
-    pub party_id: String,
-    /// 客户编号。
-    pub customer_no: String,
-    /// 默认客户付款条件引用。
-    pub default_payment_term_id: Option<String>,
-    /// 启停状态。
-    pub status: CustomerAccountStatus,
-    /// 乐观锁版本。
-    pub version: u64,
-    /// 创建时间（秒级时间戳）。
-    pub created_at: u64,
-    /// 最后更新时间（秒级时间戳）。
-    pub updated_at: u64,
-}
-
-impl CustomerAccountRow {
-    /// 以稳定身份构造列表投影行，版本与时间戳从零开始。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键
-    /// * `party_id` - 共用企业主体 ID
-    /// * `customer_no` - 客户编号
-    ///
-    /// # 返回
-    /// 返回启用状态的投影行。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn new(id: impl Into<String>, party_id: impl Into<String>, customer_no: impl Into<String>) -> Self {
-        Self {
-            id: id.into(),
-            party_id: party_id.into(),
-            customer_no: customer_no.into(),
-            default_payment_term_id: None,
-            status: CustomerAccountStatus::Active,
-            version: 0,
-            created_at: 0,
-            updated_at: 0,
-        }
-    }
-}
-
-/// 客户编号窄投影行。
-#[derive(Debug, Clone, Deserialize)]
-struct CustomerNumberRow {
-    /// 客户稳定 ID。
-    id: String,
-    /// 客户编号。
-    customer_no: String,
-}
 
 /// 客户角色列表筛选条件。
 #[derive(Debug, Clone)]
@@ -183,7 +126,9 @@ impl Pagination for CustomerAccountFilter {
     }
 }
 
-impl<'a> CustomerAccountRepository<'a> {
+/// 客户账户集合上的域查询。
+#[allow(async_fn_in_trait)]
+pub trait CustomerAccountRepositoryExt {
     /// 批量读取未删除客户的稳定 ID 与客户编号。
     ///
     /// # 参数
@@ -195,7 +140,83 @@ impl<'a> CustomerAccountRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn customer_numbers_by_ids(
+    async fn customer_numbers_by_ids(
+        &self,
+        customer_ids: &[CustomerAccountId],
+        executor: &mut dyn Executor,
+    ) -> Result<HashMap<String, String>>;
+
+    /// 按客户角色 ID 集合批量读取活跃客户。
+    async fn find_accounts_by_ids(
+        &self,
+        customer_ids: &[CustomerAccountId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<CustomerAccount>>;
+
+    /// 按客户角色 ID 查找未删除客户。
+    ///
+    /// # 参数
+    /// * `id` - 客户角色 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配的未删除客户；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    async fn find_customer(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<CustomerAccount>>;
+
+    /// 分页检索客户角色列表（投影查询）。
+    ///
+    /// 只返回 [`CustomerAccountRow`] 所需的列表字段，不加载整文档；排序字段
+    /// 经仓储白名单校验（`created_at`/`updated_at`/`customer_no`/`status`），非法字段回落
+    /// 默认 `created_at`。
+    ///
+    /// # 参数
+    /// * `filter` - 筛选与分页条件
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回当前页投影行与满足筛选条件的总数。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    async fn search_customer_accounts(
+        &self,
+        filter: &CustomerAccountFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<CustomerAccountRow>>;
+
+    /// 按共用企业主体查找客户角色（一个主体至多一个客户角色，由
+    /// `uk_customer_accounts_party` 保证）。
+    ///
+    /// # 参数
+    /// * `party_id` - 共用企业主体 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配的未删除客户角色；无匹配时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    async fn find_by_party(
+        &self,
+        party_id: &PartyId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<CustomerAccount>>;
+
+    /// 返回匹配条件的未删除对象 ID，供跨域列表在分页前组合筛选。
+    ///
+    /// 数据库查询失败时返回错误；空命中返回空集合，不扩大范围。
+    async fn matching_ids_by_parties(
+        &self,
+        party_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<String>>;
+}
+
+impl CustomerAccountRepositoryExt for Repository<'_, CustomerAccount> {
+    async fn customer_numbers_by_ids(
         &self,
         customer_ids: &[CustomerAccountId],
         executor: &mut dyn Executor,
@@ -218,8 +239,7 @@ impl<'a> CustomerAccountRepository<'a> {
         Ok(rows.into_iter().map(|row| (row.id, row.customer_no)).collect())
     }
 
-    /// 按客户角色 ID 集合批量读取活跃客户。
-    pub async fn find_accounts_by_ids(
+    async fn find_accounts_by_ids(
         &self,
         customer_ids: &[CustomerAccountId],
         executor: &mut dyn Executor,
@@ -231,41 +251,11 @@ impl<'a> CustomerAccountRepository<'a> {
         self.find_many(doc! { "id": { "$in": ids } }, executor).await
     }
 
-    /// 按客户角色 ID 查找未删除客户。
-    ///
-    /// # 参数
-    /// * `id` - 客户角色 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的未删除客户；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_customer(
-        &self,
-        id: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<CustomerAccount>> {
+    async fn find_customer(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<CustomerAccount>> {
         self.find_by_id(id, executor).await
     }
 
-    /// 分页检索客户角色列表（投影查询）。
-    ///
-    /// 只返回 [`CustomerAccountRow`] 所需的列表字段，不加载整文档；排序字段
-    /// 经仓储白名单校验（`created_at`/`updated_at`/`customer_no`/`status`），非法字段回落
-    /// 默认 `created_at`。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_customer_accounts(
+    async fn search_customer_accounts(
         &self,
         filter: &CustomerAccountFilter,
         executor: &mut dyn Executor,
@@ -287,24 +277,27 @@ impl<'a> CustomerAccountRepository<'a> {
         Ok(PageResult { items, total: total as i64 })
     }
 
-    /// 按共用企业主体查找客户角色（一个主体至多一个客户角色，由
-    /// `uk_customer_accounts_party` 保证）。
-    ///
-    /// # 参数
-    /// * `party_id` - 共用企业主体 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的未删除客户角色；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_party(
+    async fn find_by_party(
         &self,
         party_id: &PartyId,
         executor: &mut dyn Executor,
     ) -> Result<Option<CustomerAccount>> {
         self.find_one(doc! { "party_id": party_id.to_string() }, executor).await
+    }
+
+    async fn matching_ids_by_parties(
+        &self,
+        party_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<String>> {
+        let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
+        filter.insert("party_id", doc! { "$in": party_ids });
+        let collection = self.collection();
+        let mut query = collection.distinct("id", filter);
+        if let Some(session) = executor.session() {
+            query = query.session(session);
+        }
+        Ok(query.await?.into_iter().filter_map(|id| id.as_str().map(str::to_owned)).collect())
     }
 }
 
@@ -380,7 +373,9 @@ impl Pagination for CustomerAssignmentFilter {
     }
 }
 
-impl<'a> CustomerAssignmentRepository<'a> {
+/// 客户归属集合上的域查询。
+#[allow(async_fn_in_trait)]
+pub trait CustomerAssignmentRepositoryExt {
     /// 在客户域内批量读取当前主责；可见客户边界与人员筛选共同求交。
     ///
     /// # 参数
@@ -394,7 +389,202 @@ impl<'a> CustomerAssignmentRepository<'a> {
     ///
     /// # 错误
     /// 查询或归属关系反序列化失败向上传播。
-    pub async fn current_owners(
+    async fn current_owners(
+        &self,
+        customer_ids: Option<&[String]>,
+        owner_ids: Option<&[String]>,
+        as_of: BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<CustomerAssignment>>;
+
+    /// 判断用户是否在指定日期拥有目标客户的有效归属。
+    ///
+    /// 查询同时约束客户、用户、OWNER/COLLABORATOR 角色与半开有效期；
+    /// 通用 Repository 自动追加未删除条件，并以存在性投影停止在首条命中。
+    ///
+    /// # 参数
+    /// * `customer_id` - 客户角色 ID
+    /// * `user_id` - 销售人员 ID
+    /// * `as_of` - 业务日期
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 命中当前有效 OWNER 或 COLLABORATOR 归属时返回 `true`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    async fn has_active_assignment_for_customer_user(
+        &self,
+        customer_id: &str,
+        user_id: &str,
+        as_of: BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<bool>;
+
+    /// 按归属 ID 查找未删除客户归属。
+    ///
+    /// # 参数
+    /// * `id` - 客户归属 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配的未删除归属；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    async fn find_assignment(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<CustomerAssignment>>;
+
+    /// 读取指定客户的全部归属行。
+    ///
+    /// 该查询供事务内执行归属换任冲突计算；领域冲突规则由
+    /// [`CustomerAssignment`] 自身判断。
+    ///
+    /// # 参数
+    /// * `customer_id` - 客户角色 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回该客户全部未删除归属。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn list_for_customer(
+        &self,
+        customer_id: &CustomerAccountId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<CustomerAssignment>>;
+
+    /// 按生效开始日与创建时间倒序读取客户归属历史。
+    ///
+    /// # 参数
+    /// * `customer_id` - 客户角色 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回最近生效的归属优先的完整历史。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn list_history_for_customer(
+        &self,
+        customer_id: &CustomerAccountId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<CustomerAssignment>>;
+
+    /// 批量读取指定客户在业务日期生效的全部归属。
+    ///
+    /// # 参数
+    /// * `customer_ids` - 客户角色 ID 集合；为空时直接返回空集合
+    /// * `as_of` - 业务日期
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回指定日期生效的 OWNER 与 COLLABORATOR 归属。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn list_active_for_customers(
+        &self,
+        customer_ids: &[String],
+        as_of: BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<CustomerAssignment>>;
+
+    /// 查找客户在指定日期生效的负责人归属。
+    ///
+    /// # 参数
+    /// * `customer_id` - 客户角色 ID
+    /// * `as_of` - 业务日期
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回当前 OWNER；没有生效负责人时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn find_current_owner(
+        &self,
+        customer_id: &CustomerAccountId,
+        as_of: BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<CustomerAssignment>>;
+
+    /// 分页检索客户归属列表（投影查询）。
+    ///
+    /// 排序字段经仓储白名单校验（`created_at`/`valid_from`/`valid_to`），
+    /// 非法字段回落默认 `created_at`。
+    ///
+    /// # 参数
+    /// * `filter` - 筛选与分页条件
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回当前页投影行与满足筛选条件的总数。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    async fn search_customer_assignments(
+        &self,
+        filter: &CustomerAssignmentFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<CustomerAssignmentRow>>;
+
+    /// 检索某销售人员在指定业务日期生效的归属（「我的客户」查询，§6.2）。
+    ///
+    /// 归属有效期按 ISO 日期字符串比较；`valid_to` 为 `None` 的开放区间
+    /// 视为长期有效。该查询由 `idx_customer_assignments_user` 支撑。
+    ///
+    /// # 参数
+    /// * `user_id` - 销售人员
+    /// * `as_of` - 业务日期
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回该业务日期生效的归属行。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn find_active_assignments_for_user(
+        &self,
+        user_id: &str,
+        as_of: BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<CustomerAssignment>>;
+
+    /// 去重后的生效客户 ID 投影（INT-R22）。
+    ///
+    /// 一次归属查询装载调用方当天的生效行，在仓储内按客户 ID 排序去重后返回；
+    /// 空结果返回空集合。业务日期边界与半开有效期语义与
+    /// [`Self::find_active_assignments_for_user`] 完全一致。
+    ///
+    /// # 参数
+    /// * `user_id` - 销售人员
+    /// * `as_of` - 业务日期边界，由 Service 显式注入
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回排序去重后的客户 ID；无生效归属时为空集合。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    ///
+    /// # 约束
+    /// 只返回强类型客户 ID 投影，不返回 services DTO、HTTP View 或授权结论；
+    /// 候选排序与数据范围仍由 Service 解释。
+    async fn distinct_active_customer_ids_for_user(
+        &self,
+        user_id: &str,
+        as_of: BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<String>>;
+}
+
+impl CustomerAssignmentRepositoryExt for Repository<'_, CustomerAssignment> {
+    async fn current_owners(
         &self,
         customer_ids: Option<&[String]>,
         owner_ids: Option<&[String]>,
@@ -422,23 +612,7 @@ impl<'a> CustomerAssignmentRepository<'a> {
         Ok(result)
     }
 
-    /// 判断用户是否在指定日期拥有目标客户的有效归属。
-    ///
-    /// 查询同时约束客户、用户、OWNER/COLLABORATOR 角色与半开有效期；
-    /// 通用 Repository 自动追加未删除条件，并以存在性投影停止在首条命中。
-    ///
-    /// # 参数
-    /// * `customer_id` - 客户角色 ID
-    /// * `user_id` - 销售人员 ID
-    /// * `as_of` - 业务日期
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 命中当前有效 OWNER 或 COLLABORATOR 归属时返回 `true`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn has_active_assignment_for_customer_user(
+    async fn has_active_assignment_for_customer_user(
         &self,
         customer_id: &str,
         user_id: &str,
@@ -448,18 +622,7 @@ impl<'a> CustomerAssignmentRepository<'a> {
         self.exists(active_customer_user_assignment_filter(customer_id, user_id, as_of), executor).await
     }
 
-    /// 按归属 ID 查找未删除客户归属。
-    ///
-    /// # 参数
-    /// * `id` - 客户归属 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的未删除归属；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_assignment(
+    async fn find_assignment(
         &self,
         id: &str,
         executor: &mut dyn Executor,
@@ -467,21 +630,7 @@ impl<'a> CustomerAssignmentRepository<'a> {
         self.find_by_id(id, executor).await
     }
 
-    /// 读取指定客户的全部归属行。
-    ///
-    /// 该查询供事务内执行归属换任冲突计算；领域冲突规则由
-    /// [`CustomerAssignment`] 自身判断。
-    ///
-    /// # 参数
-    /// * `customer_id` - 客户角色 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回该客户全部未删除归属。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_for_customer(
+    async fn list_for_customer(
         &self,
         customer_id: &CustomerAccountId,
         executor: &mut dyn Executor,
@@ -489,18 +638,7 @@ impl<'a> CustomerAssignmentRepository<'a> {
         self.find_many(doc! { "customer_id": customer_id.to_string() }, executor).await
     }
 
-    /// 按生效开始日与创建时间倒序读取客户归属历史。
-    ///
-    /// # 参数
-    /// * `customer_id` - 客户角色 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回最近生效的归属优先的完整历史。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_history_for_customer(
+    async fn list_history_for_customer(
         &self,
         customer_id: &CustomerAccountId,
         executor: &mut dyn Executor,
@@ -513,19 +651,7 @@ impl<'a> CustomerAssignmentRepository<'a> {
         .await
     }
 
-    /// 批量读取指定客户在业务日期生效的全部归属。
-    ///
-    /// # 参数
-    /// * `customer_ids` - 客户角色 ID 集合；为空时直接返回空集合
-    /// * `as_of` - 业务日期
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回指定日期生效的 OWNER 与 COLLABORATOR 归属。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_active_for_customers(
+    async fn list_active_for_customers(
         &self,
         customer_ids: &[String],
         as_of: BusinessDate,
@@ -541,19 +667,7 @@ impl<'a> CustomerAssignmentRepository<'a> {
         .await
     }
 
-    /// 查找客户在指定日期生效的负责人归属。
-    ///
-    /// # 参数
-    /// * `customer_id` - 客户角色 ID
-    /// * `as_of` - 业务日期
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回当前 OWNER；没有生效负责人时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_current_owner(
+    async fn find_current_owner(
         &self,
         customer_id: &CustomerAccountId,
         as_of: BusinessDate,
@@ -577,21 +691,7 @@ impl<'a> CustomerAssignmentRepository<'a> {
             .next())
     }
 
-    /// 分页检索客户归属列表（投影查询）。
-    ///
-    /// 排序字段经仓储白名单校验（`created_at`/`valid_from`/`valid_to`），
-    /// 非法字段回落默认 `created_at`。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_customer_assignments(
+    async fn search_customer_assignments(
         &self,
         filter: &CustomerAssignmentFilter,
         executor: &mut dyn Executor,
@@ -613,22 +713,7 @@ impl<'a> CustomerAssignmentRepository<'a> {
         Ok(PageResult { items, total: total as i64 })
     }
 
-    /// 检索某销售人员在指定业务日期生效的归属（「我的客户」查询，§6.2）。
-    ///
-    /// 归属有效期按 ISO 日期字符串比较；`valid_to` 为 `None` 的开放区间
-    /// 视为长期有效。该查询由 `idx_customer_assignments_user` 支撑。
-    ///
-    /// # 参数
-    /// * `user_id` - 销售人员
-    /// * `as_of` - 业务日期
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回该业务日期生效的归属行。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_active_assignments_for_user(
+    async fn find_active_assignments_for_user(
         &self,
         user_id: &str,
         as_of: BusinessDate,
@@ -637,27 +722,7 @@ impl<'a> CustomerAssignmentRepository<'a> {
         self.find_many(active_window_filter(&as_of, Some(doc! { "user_id": user_id }), None), executor).await
     }
 
-    /// 去重后的生效客户 ID 投影（INT-R22）。
-    ///
-    /// 一次归属查询装载调用方当天的生效行，在仓储内按客户 ID 排序去重后返回；
-    /// 空结果返回空集合。业务日期边界与半开有效期语义与
-    /// [`Self::find_active_assignments_for_user`] 完全一致。
-    ///
-    /// # 参数
-    /// * `user_id` - 销售人员
-    /// * `as_of` - 业务日期边界，由 Service 显式注入
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回排序去重后的客户 ID；无生效归属时为空集合。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    ///
-    /// # 约束
-    /// 只返回强类型客户 ID 投影，不返回 services DTO、HTTP View 或授权结论；
-    /// 候选排序与数据范围仍由 Service 解释。
-    pub async fn distinct_active_customer_ids_for_user(
+    async fn distinct_active_customer_ids_for_user(
         &self,
         user_id: &str,
         as_of: BusinessDate,
@@ -670,7 +735,9 @@ impl<'a> CustomerAssignmentRepository<'a> {
     }
 }
 
-impl<'a> CustomerProfileCommandRepository<'a> {
+/// 客户资料命令集合上的域查询。
+#[allow(async_fn_in_trait)]
+pub trait CustomerProfileCommandRepositoryExt {
     /// 按客户端幂等键读取已成功命令结果。
     ///
     /// # 参数
@@ -682,32 +749,20 @@ impl<'a> CustomerProfileCommandRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询失败时返回错误。
-    pub async fn find_by_idempotency_key(
+    async fn find_by_idempotency_key(
+        &self,
+        idempotency_key: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<CustomerProfileCommand>>;
+}
+
+impl CustomerProfileCommandRepositoryExt for Repository<'_, CustomerProfileCommand> {
+    async fn find_by_idempotency_key(
         &self,
         idempotency_key: &str,
         executor: &mut dyn Executor,
     ) -> Result<Option<CustomerProfileCommand>> {
         self.find_one(doc! { "idempotency_key": idempotency_key }, executor).await
-    }
-}
-
-impl CustomerAccountRepository<'_> {
-    /// 返回匹配条件的未删除对象 ID，供跨域列表在分页前组合筛选。
-    ///
-    /// 数据库查询失败时返回错误；空命中返回空集合，不扩大范围。
-    pub async fn matching_ids_by_parties(
-        &self,
-        party_ids: &[String],
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<String>> {
-        let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
-        filter.insert("party_id", doc! { "$in": party_ids });
-        let collection = self.collection();
-        let mut query = collection.distinct("id", filter);
-        if let Some(session) = executor.session() {
-            query = query.session(session);
-        }
-        Ok(query.await?.into_iter().filter_map(|id| id.as_str().map(str::to_owned)).collect())
     }
 }
 

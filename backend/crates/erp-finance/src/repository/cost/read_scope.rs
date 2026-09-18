@@ -4,14 +4,15 @@ use mongodb::options::FindOptions;
 use persistence_core::{Executor, QueryFilter, Result, mongo_ops};
 
 use super::{CostEntryFilter, CostEntryRow, cost_entry_projection};
-use crate::entity::cost::CostAllocation;
-use crate::repository::owned::{CostAllocationRepository, CostEntryRepository};
+use crate::entity::cost::{CostAllocation, CostEntry};
 
 /// 候选成本上限，超限由调用方整体拒绝，禁止截断合计。
 pub const ENTRY_LIMIT: usize = 10_000;
 /// 候选分配上限。
 pub const ALLOCATION_LIMIT: usize = 100_000;
-impl CostEntryRepository<'_> {
+
+#[allow(async_fn_in_trait)]
+pub trait CostEntryReadScopeExt {
     /// 装载业务筛选下完整的有界候选成本，不在权限裁剪前分页。
     ///
     /// # 返回
@@ -19,7 +20,16 @@ impl CostEntryRepository<'_> {
     ///
     /// # 错误
     /// 数据库读取失败时返回仓储错误。
-    pub async fn scope_candidates(
+    async fn scope_candidates(
+        &self,
+        filter: &CostEntryFilter,
+        id: Option<&str>,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<CostEntryRow>>;
+}
+
+impl CostEntryReadScopeExt for persistence_core::Repository<'_, CostEntry> {
+    async fn scope_candidates(
         &self,
         filter: &CostEntryFilter,
         id: Option<&str>,
@@ -42,7 +52,9 @@ impl CostEntryRepository<'_> {
         .await
     }
 }
-impl CostAllocationRepository<'_> {
+
+#[allow(async_fn_in_trait)]
+pub trait CostAllocationReadScopeExt {
     /// 批量读取成本对应分配，调用方必须检查上限并跨批次累计。
     ///
     /// # 返回
@@ -50,7 +62,15 @@ impl CostAllocationRepository<'_> {
     ///
     /// # 错误
     /// 数据库读取失败时返回仓储错误。
-    pub async fn scope_allocations(
+    async fn scope_allocations(
+        &self,
+        ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<CostAllocation>>;
+}
+
+impl CostAllocationReadScopeExt for persistence_core::Repository<'_, CostAllocation> {
+    async fn scope_allocations(
         &self,
         ids: &[String],
         executor: &mut dyn Executor,

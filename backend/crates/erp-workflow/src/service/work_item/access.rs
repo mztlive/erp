@@ -13,6 +13,7 @@ use crate::entity::work_item::{
 use crate::error::{Error, ErrorCode, Result};
 use crate::ports::{ObjectFact, ObjectFactMap, permission_covers};
 use crate::repository::DocumentRegistryExt;
+use crate::repository::prelude::*;
 
 pub fn object_policy(
     work_item_type: WorkItemType,

@@ -4,6 +4,7 @@ use erp_fulfillment::entity::fulfillment::{AcceptanceProgress, FulfillmentFactTy
 use erp_fulfillment::repository::FulfillmentExt;
 use erp_sales::entity::sales_order::BusinessType;
 use erp_sales::repository::SalesOrderExt;
+use erp_sales::repository::prelude::*;
 use mongodb::Database;
 
 use super::acceptance_eligibility::{EligibilityGroupSources, build_line_eligibilities, so_line_ids};

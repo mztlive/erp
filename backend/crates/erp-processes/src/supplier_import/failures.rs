@@ -2,6 +2,7 @@
 use application_core::AuditActor;
 use erp_supplier::dto::import::SupplierImportResult;
 use erp_supplier::dto::import_job::SupplierImportFailures;
+use erp_support::repository::prelude::*;
 use erp_support::{BackgroundJobId, BulkJobExt, ItemStatus};
 use persistence_core::NoTransaction;
 

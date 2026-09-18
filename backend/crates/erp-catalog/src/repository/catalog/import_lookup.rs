@@ -5,11 +5,10 @@ use mongodb::bson::doc;
 use persistence_core::{Executor, Result, mongo_ops};
 
 use crate::entity::catalog::{EnableStatus, Product, ProductBrand, ProductCategory, UnitOfMeasure};
-use crate::repository::owned::{
-    ProductBrandRepository, ProductCategoryRepository, ProductRepository, UnitOfMeasureRepository,
-};
 
-impl<'a> ProductBrandRepository<'a> {
+/// 导入用品牌精确查找。
+#[allow(async_fn_in_trait)]
+pub trait ProductBrandRepositoryImportLookupExt {
     /// 按品牌名称精确查找启用中的品牌。
     ///
     /// # 参数
@@ -21,7 +20,32 @@ impl<'a> ProductBrandRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询失败时返回错误。
-    pub async fn find_enabled_by_exact_name(
+    async fn find_enabled_by_exact_name(
+        &self,
+        name: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ProductBrand>>;
+
+    /// 按品牌代码精确查找启用中的品牌。
+    ///
+    /// # 参数
+    /// * `brand_code` - 稳定品牌代码
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 命中时返回品牌实体。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
+    async fn find_enabled_by_code(
+        &self,
+        brand_code: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ProductBrand>>;
+}
+
+impl ProductBrandRepositoryImportLookupExt for persistence_core::Repository<'_, ProductBrand> {
+    async fn find_enabled_by_exact_name(
         &self,
         name: &str,
         executor: &mut dyn Executor,
@@ -38,18 +62,7 @@ impl<'a> ProductBrandRepository<'a> {
         .await
     }
 
-    /// 按品牌代码精确查找启用中的品牌。
-    ///
-    /// # 参数
-    /// * `brand_code` - 稳定品牌代码
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 命中时返回品牌实体。
-    ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
-    pub async fn find_enabled_by_code(
+    async fn find_enabled_by_code(
         &self,
         brand_code: &str,
         executor: &mut dyn Executor,
@@ -67,7 +80,9 @@ impl<'a> ProductBrandRepository<'a> {
     }
 }
 
-impl<'a> ProductCategoryRepository<'a> {
+/// 导入用分类精确查找。
+#[allow(async_fn_in_trait)]
+pub trait ProductCategoryRepositoryImportLookupExt {
     /// 按分类名称精确查找启用中的分类。
     ///
     /// # 参数
@@ -79,7 +94,32 @@ impl<'a> ProductCategoryRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询失败时返回错误。
-    pub async fn find_enabled_by_exact_name(
+    async fn find_enabled_by_exact_name(
+        &self,
+        name: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ProductCategory>>;
+
+    /// 按分类代码精确查找启用中的分类。
+    ///
+    /// # 参数
+    /// * `category_code` - 稳定分类代码
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 命中时返回分类实体。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
+    async fn find_enabled_by_code(
+        &self,
+        category_code: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ProductCategory>>;
+}
+
+impl ProductCategoryRepositoryImportLookupExt for persistence_core::Repository<'_, ProductCategory> {
+    async fn find_enabled_by_exact_name(
         &self,
         name: &str,
         executor: &mut dyn Executor,
@@ -96,18 +136,7 @@ impl<'a> ProductCategoryRepository<'a> {
         .await
     }
 
-    /// 按分类代码精确查找启用中的分类。
-    ///
-    /// # 参数
-    /// * `category_code` - 稳定分类代码
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 命中时返回分类实体。
-    ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
-    pub async fn find_enabled_by_code(
+    async fn find_enabled_by_code(
         &self,
         category_code: &str,
         executor: &mut dyn Executor,
@@ -125,7 +154,9 @@ impl<'a> ProductCategoryRepository<'a> {
     }
 }
 
-impl<'a> ProductRepository<'a> {
+/// 导入用商品精确查找。
+#[allow(async_fn_in_trait)]
+pub trait ProductRepositoryImportLookupExt {
     /// 按商品编号精确查找未删除商品。
     ///
     /// # 参数
@@ -137,7 +168,15 @@ impl<'a> ProductRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询失败时返回错误。
-    pub async fn find_by_product_no(
+    async fn find_by_product_no(
+        &self,
+        product_no: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<Product>>;
+}
+
+impl ProductRepositoryImportLookupExt for persistence_core::Repository<'_, Product> {
+    async fn find_by_product_no(
         &self,
         product_no: &str,
         executor: &mut dyn Executor,
@@ -154,7 +193,9 @@ impl<'a> ProductRepository<'a> {
     }
 }
 
-impl<'a> UnitOfMeasureRepository<'a> {
+/// 导入用计量单位精确查找。
+#[allow(async_fn_in_trait)]
+pub trait UnitOfMeasureRepositoryImportLookupExt {
     /// 按单位代码精确查找启用中的计量单位。
     ///
     /// # 参数
@@ -166,7 +207,32 @@ impl<'a> UnitOfMeasureRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询失败时返回错误。
-    pub async fn find_enabled_by_code(
+    async fn find_enabled_by_code(
+        &self,
+        unit_code: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<UnitOfMeasure>>;
+
+    /// 按单位名称精确查找启用中的计量单位。
+    ///
+    /// # 参数
+    /// * `name` - 单位名称
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 命中时返回计量单位。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
+    async fn find_enabled_by_exact_name(
+        &self,
+        name: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<UnitOfMeasure>>;
+}
+
+impl UnitOfMeasureRepositoryImportLookupExt for persistence_core::Repository<'_, UnitOfMeasure> {
+    async fn find_enabled_by_code(
         &self,
         unit_code: &str,
         executor: &mut dyn Executor,
@@ -183,18 +249,7 @@ impl<'a> UnitOfMeasureRepository<'a> {
         .await
     }
 
-    /// 按单位名称精确查找启用中的计量单位。
-    ///
-    /// # 参数
-    /// * `name` - 单位名称
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 命中时返回计量单位。
-    ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
-    pub async fn find_enabled_by_exact_name(
+    async fn find_enabled_by_exact_name(
         &self,
         name: &str,
         executor: &mut dyn Executor,

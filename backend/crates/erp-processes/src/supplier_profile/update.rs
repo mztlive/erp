@@ -11,9 +11,11 @@ use erp_core::ids::{
     SupplierCommercialProfileRevisionId, SupplierQualificationCapabilityId, SupplierQualificationId,
     SupplierQualificationRevisionId, SupplierRatingRevisionId,
 };
+use erp_party::repository::prelude::*;
 use erp_party::{
     Party, PartyAddress, PartyBankAccount, PartyContact, PartyExt, PartyRevision, PartyTaxProfile,
 };
+use erp_supplier::repository::prelude::*;
 use erp_supplier::{
     QualificationStatus, SaveSupplierProfileRequest, SupplierAccount, SupplierCapability,
     SupplierCapabilityRevision, SupplierCapabilityUpdate, SupplierCommercialProfileRevision, SupplierExt,

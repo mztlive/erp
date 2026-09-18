@@ -24,6 +24,7 @@ use erp_workflow::entity::work_item::{
     AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemStatus, WorkItemType,
 };
 use erp_workflow::ports::WorkflowAuthorizationPort;
+use erp_workflow::repository::WorkItemRepositoryExt;
 use erp_workflow::repository::work_item::WorkItemFilter;
 use mongodb::bson::{Bson, Document, doc};
 use mongodb::{Client, Database};

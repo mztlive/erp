@@ -11,6 +11,7 @@ use crate::entity::purchase_order::{
     PurchaseOrderStatus, PurchaseOrderSubmissionLine,
 };
 use crate::repository::PurchaseOrderExt;
+use crate::repository::prelude::*;
 
 /// 采购单当前指针下的覆盖来源。
 #[derive(Debug, Clone, Default)]

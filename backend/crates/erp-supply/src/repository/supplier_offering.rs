@@ -3,6 +3,8 @@
 //! 本域只持久化供给稳定身份、不可变商业条款修订、实时可供投影和幂等命令。
 //! 公司商品/SKU 由 D10 持有，不建立供应商商品主档或映射集合。
 
+#![allow(async_fn_in_trait)]
+
 use std::collections::HashMap;
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
@@ -31,6 +33,7 @@ mod query;
 mod scope;
 pub(crate) mod write;
 
+pub use query::{SupplierOfferingRepositoryQueryExt, SupplierOfferingRevisionRepositoryQueryExt};
 pub use scope::{OfferingReadScope, OfferingScopeClause};
 
 const OFFERINGS: &str = <Database as SupplierOfferingExt>::SUPPLIER_OFFERINGS;
@@ -38,7 +41,9 @@ const OFFERING_REVISIONS: &str = <Database as SupplierOfferingExt>::SUPPLIER_OFF
 const OFFERING_AVAILABILITIES: &str = <Database as SupplierOfferingExt>::SUPPLIER_OFFERING_AVAILABILITIES;
 const OFFERING_SORT_FIELDS: &[&str] = &["created_at", "status", "supplier_sku_code"];
 
-impl<'a> SupplierOfferingCommandRepository<'a> {
+/// 供给命令仓储的域查询。
+#[allow(async_fn_in_trait)]
+pub trait SupplierOfferingCommandRepositoryExt {
     /// 按客户端幂等键查询已成功命令。
     ///
     /// # 参数
@@ -50,7 +55,15 @@ impl<'a> SupplierOfferingCommandRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询失败时返回错误。
-    pub async fn find_by_idempotency_key(
+    async fn find_by_idempotency_key(
+        &self,
+        idempotency_key: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierOfferingCommand>>;
+}
+
+impl SupplierOfferingCommandRepositoryExt for SupplierOfferingCommandRepository<'_> {
+    async fn find_by_idempotency_key(
         &self,
         idempotency_key: &str,
         executor: &mut dyn Executor,
@@ -212,7 +225,9 @@ impl Pagination for SupplierOfferingFilter {
     }
 }
 
-impl<'a> SupplierOfferingRepository<'a> {
+/// 供给稳定身份仓储的域查询。
+#[allow(async_fn_in_trait)]
+pub trait SupplierOfferingRepositoryExt {
     /// 分页检索供给列表。
     ///
     /// # 参数
@@ -224,7 +239,103 @@ impl<'a> SupplierOfferingRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询失败时返回错误。
-    pub async fn search_supplier_offerings(
+    async fn search_supplier_offerings(
+        &self,
+        filter: &SupplierOfferingFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<SupplierOfferingRow>>;
+
+    /// 按供给主键批量取回稳定身份。
+    ///
+    /// # 参数
+    /// * `offering_ids` - 供给主键集合
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回全部匹配的未删除供给稳定身份。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
+    async fn list_by_ids(
+        &self,
+        offering_ids: &[SupplierOfferingId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierOffering>>;
+
+    /// 按公司 SKU 批量取回供给。
+    ///
+    /// # 参数
+    /// * `sku_ids` - 公司 SKU 集合
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回全部匹配的供给身份。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
+    async fn find_by_sku_ids(
+        &self,
+        sku_ids: &[SkuId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierOffering>>;
+
+    /// 按供应商与供应商 SKU 编码查询唯一供给身份。
+    ///
+    /// # 参数
+    /// * `supplier_id` - 供应商
+    /// * `supplier_sku_code` - 供应商订货编码
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回匹配供给；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
+    async fn find_by_supplier_identity(
+        &self,
+        supplier_id: &SupplierAccountId,
+        supplier_sku_code: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierOffering>>;
+
+    /// 列出当前范围内的供给主键，供采购负责人批量解析。
+    ///
+    /// # 参数
+    /// * `scope` - 已证明的对象范围
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 最多 10001 个主键；调用方必须整体拒绝超限。
+    ///
+    /// # 错误
+    /// 数据库读取失败时返回仓储错误。
+    ///
+    /// # 关键业务约束
+    /// 仓储不得按登录用户自行推断权限；公司范围应由调用方跳过本方法。
+    async fn list_authorized_ids(
+        &self,
+        scope: &OfferingReadScope,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<String>>;
+
+    /// 列出未删除供给主键，供公司范围采购负责人筛选。
+    ///
+    /// # 参数
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 最多 10001 个主键；调用方必须整体拒绝超限。
+    ///
+    /// # 错误
+    /// 数据库读取失败时返回仓储错误。
+    ///
+    /// # 关键业务约束
+    /// 仅用于已证明的公司范围；不得替代授权条件。
+    async fn list_ids(&self, executor: &mut dyn Executor) -> Result<Vec<String>>;
+}
+
+impl SupplierOfferingRepositoryExt for SupplierOfferingRepository<'_> {
+    async fn search_supplier_offerings(
         &self,
         filter: &SupplierOfferingFilter,
         executor: &mut dyn Executor,
@@ -241,18 +352,7 @@ impl<'a> SupplierOfferingRepository<'a> {
         Ok(PageResult { items, total: total as i64 })
     }
 
-    /// 按供给主键批量取回稳定身份。
-    ///
-    /// # 参数
-    /// * `offering_ids` - 供给主键集合
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回全部匹配的未删除供给稳定身份。
-    ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
-    pub async fn list_by_ids(
+    async fn list_by_ids(
         &self,
         offering_ids: &[SupplierOfferingId],
         executor: &mut dyn Executor,
@@ -263,18 +363,7 @@ impl<'a> SupplierOfferingRepository<'a> {
         self.find_many(in_filter("id", offering_ids.iter().map(ToString::to_string)), executor).await
     }
 
-    /// 按公司 SKU 批量取回供给。
-    ///
-    /// # 参数
-    /// * `sku_ids` - 公司 SKU 集合
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回全部匹配的供给身份。
-    ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
-    pub async fn find_by_sku_ids(
+    async fn find_by_sku_ids(
         &self,
         sku_ids: &[SkuId],
         executor: &mut dyn Executor,
@@ -285,19 +374,7 @@ impl<'a> SupplierOfferingRepository<'a> {
         self.find_many(in_filter("sku_id", sku_ids.iter().map(ToString::to_string)), executor).await
     }
 
-    /// 按供应商与供应商 SKU 编码查询唯一供给身份。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 供应商
-    /// * `supplier_sku_code` - 供应商订货编码
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回匹配供给；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
-    pub async fn find_by_supplier_identity(
+    async fn find_by_supplier_identity(
         &self,
         supplier_id: &SupplierAccountId,
         supplier_sku_code: &str,
@@ -313,21 +390,7 @@ impl<'a> SupplierOfferingRepository<'a> {
         .await
     }
 
-    /// 列出当前范围内的供给主键，供采购负责人批量解析。
-    ///
-    /// # 参数
-    /// * `scope` - 已证明的对象范围
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 最多 10001 个主键；调用方必须整体拒绝超限。
-    ///
-    /// # 错误
-    /// 数据库读取失败时返回仓储错误。
-    ///
-    /// # 关键业务约束
-    /// 仓储不得按登录用户自行推断权限；公司范围应由调用方跳过本方法。
-    pub async fn list_authorized_ids(
+    async fn list_authorized_ids(
         &self,
         scope: &OfferingReadScope,
         executor: &mut dyn Executor,
@@ -349,20 +412,7 @@ impl<'a> SupplierOfferingRepository<'a> {
         Ok(rows.into_iter().map(|row| row.id).collect())
     }
 
-    /// 列出未删除供给主键，供公司范围采购负责人筛选。
-    ///
-    /// # 参数
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 最多 10001 个主键；调用方必须整体拒绝超限。
-    ///
-    /// # 错误
-    /// 数据库读取失败时返回仓储错误。
-    ///
-    /// # 关键业务约束
-    /// 仅用于已证明的公司范围；不得替代授权条件。
-    pub async fn list_ids(&self, executor: &mut dyn Executor) -> Result<Vec<String>> {
+    async fn list_ids(&self, executor: &mut dyn Executor) -> Result<Vec<String>> {
         #[derive(serde::Deserialize)]
         struct OfferingIdRow {
             id: String,
@@ -378,7 +428,9 @@ impl<'a> SupplierOfferingRepository<'a> {
     }
 }
 
-impl<'a> SupplierOfferingRevisionRepository<'a> {
+/// 供给商业条款修订仓储的域查询。
+#[allow(async_fn_in_trait)]
+pub trait SupplierOfferingRevisionRepositoryExt {
     /// 按修订主键批量取回商业条款修订。
     ///
     /// # 参数
@@ -390,16 +442,11 @@ impl<'a> SupplierOfferingRevisionRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询失败时返回错误。
-    pub async fn list_by_ids(
+    async fn list_by_ids(
         &self,
         revision_ids: &[String],
         executor: &mut dyn Executor,
-    ) -> Result<Vec<SupplierOfferingRevision>> {
-        if revision_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        self.find_many(in_filter("id", revision_ids.iter().cloned()), executor).await
-    }
+    ) -> Result<Vec<SupplierOfferingRevision>>;
 
     /// 读取供给当前最大修订号。
     ///
@@ -412,7 +459,43 @@ impl<'a> SupplierOfferingRevisionRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询失败时返回错误。
-    pub async fn current_revision_no(
+    async fn current_revision_no(
+        &self,
+        offering_id: &SupplierOfferingId,
+        executor: &mut dyn Executor,
+    ) -> Result<u32>;
+
+    /// 批量取回多个供给的全部商业条款修订。
+    ///
+    /// # 参数
+    /// * `offering_ids` - 供给主键集合
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回全部匹配修订。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
+    async fn find_revisions_by_offering_ids(
+        &self,
+        offering_ids: &[SupplierOfferingId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierOfferingRevision>>;
+}
+
+impl SupplierOfferingRevisionRepositoryExt for SupplierOfferingRevisionRepository<'_> {
+    async fn list_by_ids(
+        &self,
+        revision_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierOfferingRevision>> {
+        if revision_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many(in_filter("id", revision_ids.iter().cloned()), executor).await
+    }
+
+    async fn current_revision_no(
         &self,
         offering_id: &SupplierOfferingId,
         executor: &mut dyn Executor,
@@ -431,18 +514,7 @@ impl<'a> SupplierOfferingRevisionRepository<'a> {
         Ok(revisions.pop().map_or(0, |revision| revision.revision.revision_no))
     }
 
-    /// 批量取回多个供给的全部商业条款修订。
-    ///
-    /// # 参数
-    /// * `offering_ids` - 供给主键集合
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回全部匹配修订。
-    ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
-    pub async fn find_revisions_by_offering_ids(
+    async fn find_revisions_by_offering_ids(
         &self,
         offering_ids: &[SupplierOfferingId],
         executor: &mut dyn Executor,
@@ -458,7 +530,9 @@ impl<'a> SupplierOfferingRevisionRepository<'a> {
     }
 }
 
-impl<'a> SupplierOfferingAvailabilityRepository<'a> {
+/// 供给实时可供投影仓储的域查询。
+#[allow(async_fn_in_trait)]
+pub trait SupplierOfferingAvailabilityRepositoryExt {
     /// 按当前可供状态查询供给主键。
     ///
     /// # 参数
@@ -470,14 +544,11 @@ impl<'a> SupplierOfferingAvailabilityRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询失败时返回错误。
-    pub async fn find_offering_ids_by_status(
+    async fn find_offering_ids_by_status(
         &self,
         status: AvailabilityStatus,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<SupplierOfferingId>> {
-        let rows = self.find_many(doc! { "availability_status": status.as_str() }, executor).await?;
-        Ok(rows.into_iter().map(|row| row.supplier_offering_id).collect())
-    }
+    ) -> Result<Vec<SupplierOfferingId>>;
 
     /// 按供给主键查询实时可供投影。
     ///
@@ -490,13 +561,11 @@ impl<'a> SupplierOfferingAvailabilityRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询失败时返回错误。
-    pub async fn find_by_offering_id(
+    async fn find_by_offering_id(
         &self,
         offering_id: &SupplierOfferingId,
         executor: &mut dyn Executor,
-    ) -> Result<Option<SupplierOfferingAvailability>> {
-        self.find_one(doc! { "supplier_offering_id": offering_id.to_string() }, executor).await
-    }
+    ) -> Result<Option<SupplierOfferingAvailability>>;
 
     /// 批量取回供给的实时可供投影。
     ///
@@ -509,7 +578,32 @@ impl<'a> SupplierOfferingAvailabilityRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询失败时返回错误。
-    pub async fn find_by_offering_ids(
+    async fn find_by_offering_ids(
+        &self,
+        offering_ids: &[SupplierOfferingId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierOfferingAvailability>>;
+}
+
+impl SupplierOfferingAvailabilityRepositoryExt for SupplierOfferingAvailabilityRepository<'_> {
+    async fn find_offering_ids_by_status(
+        &self,
+        status: AvailabilityStatus,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierOfferingId>> {
+        let rows = self.find_many(doc! { "availability_status": status.as_str() }, executor).await?;
+        Ok(rows.into_iter().map(|row| row.supplier_offering_id).collect())
+    }
+
+    async fn find_by_offering_id(
+        &self,
+        offering_id: &SupplierOfferingId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierOfferingAvailability>> {
+        self.find_one(doc! { "supplier_offering_id": offering_id.to_string() }, executor).await
+    }
+
+    async fn find_by_offering_ids(
         &self,
         offering_ids: &[SupplierOfferingId],
         executor: &mut dyn Executor,

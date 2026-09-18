@@ -15,6 +15,7 @@ use super::shared::{
 use crate::dto::{CommitSupplierRefundRequest, CreateSupplierRefundRequest};
 use crate::entity::returns::{SupplierRefund, SupplierRefundData, SupplierRefundStatus};
 use crate::repository::ReturnsExt;
+use crate::repository::prelude::*;
 use crate::{Error, Result};
 
 /// 退款/冲正消费的最小原付款事实，不携带完整财务聚合。

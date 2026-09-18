@@ -7,10 +7,12 @@ use erp_finance::entity::cost::CostAllocation;
 use erp_finance::repository::CostExt;
 use erp_finance::repository::cost::read_scope::{ALLOCATION_LIMIT, ENTRY_LIMIT};
 use erp_finance::repository::cost::{CostEntryFilter, CostEntryRow};
+use erp_finance::repository::prelude::*;
 use erp_finance::service::cost::{cost_entry_filter, cost_entry_row_view};
 use erp_identity::Permission;
 use erp_identity::service::access_control::resolve::AuthorizedDataScope;
 use erp_sales::repository::SalesOrderExt;
+use erp_sales::repository::prelude::*;
 use erp_sales::repository::sales_order::scope::SalesReadScope;
 use persistence_core::{Executor, Transactional};
 
@@ -236,5 +238,5 @@ impl CostReadModel {
     }
 }
 fn changed() -> Error {
-    Error::ConflictError("DATA_SCOPE_CHANGED：数据范围已变化，请从第一页刷新".into())
+    crate::support::data_scope_changed("数据范围已变化，请从第一页刷新")
 }

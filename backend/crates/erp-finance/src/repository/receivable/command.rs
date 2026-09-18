@@ -3,8 +3,8 @@ use mongodb::bson::doc;
 use persistence_core::{Executor, PageResult, Result, mongo_ops};
 
 use super::super::extensions::ReceivableExt;
-use super::invoice::{InvoiceFilter, InvoiceRow};
-use super::receipt::{CustomerReceiptFilter, CustomerReceiptRow};
+use super::invoice::{InvoiceFilter, InvoiceRepositoryExt, InvoiceRow};
+use super::receipt::{CustomerReceiptFilter, CustomerReceiptRepositoryExt, CustomerReceiptRow};
 use super::{RECEIVABLE_ENTRIES, ReceivableRepository};
 use crate::entity::receivable::{
     CustomerReceiptStatus, InvoiceDirection, InvoiceKind, InvoiceStatus, ReceiptAllocation,

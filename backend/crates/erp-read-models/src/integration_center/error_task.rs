@@ -7,6 +7,7 @@ use erp_integration::ports::evidence::EvidenceSubject;
 use erp_integration::repository::IntegrationOpsExt;
 use erp_integration::service::evidence::{blocker_view, domain_kinds, error_evidence_policy};
 use erp_workflow::WorkItemExt;
+use erp_workflow::repository::prelude::*;
 use persistence_core::NoTransaction;
 
 use super::IntegrationCenterReadService;

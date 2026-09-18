@@ -2,6 +2,7 @@ use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_supply::dto::supplier_fulfillment::{RecordSupplierRejectRequest, SupplierOrderStatusHistoryView};
 use erp_supply::repository::SupplierFulfillmentExt;
+use erp_supply::repository::prelude::*;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 

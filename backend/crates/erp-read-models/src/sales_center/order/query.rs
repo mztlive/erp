@@ -4,15 +4,22 @@ use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
 use application_core::AuditActor;
+use erp_contract::repository::prelude::*;
 use erp_core::ids::{SalesOrderId, SalesOrderRevisionId, SalesOrderSubmissionId};
+use erp_customer::repository::prelude::*;
 use erp_finance::repository::ReceivableExt;
+use erp_finance::repository::prelude::*;
+use erp_identity::repository::prelude::*;
 use erp_identity::{AccessControlExt, Permission, subject};
 use erp_procurement::repository::PurchaseOrderExt;
+use erp_procurement::repository::prelude::*;
 use erp_sales::dto::sales_order::{PageView, SalesOrderLineView, SubmissionView};
 use erp_sales::entity::sales_order::{BusinessType, ReviewStatus, SalesOrderSubmissionLine, WorkingPurpose};
+use erp_sales::repository::prelude::*;
 use erp_sales::repository::{SalesOrderExt, SalesReviewExt};
 use erp_sales::service::sales_order::mapper::submission_view;
 use erp_workflow::WorkItemExt;
+use erp_workflow::repository::prelude::*;
 use erp_workflow::service::document_registry::find_approval_binding;
 use persistence_core::NoTransaction;
 
@@ -78,7 +85,7 @@ impl SalesOrderReadService {
         let super::scope::SalesSnapshot { page, owner_options, context, no_scope } =
             self.list_snapshot(params, search.clone(), actor).await?;
         if expected.is_some_and(|value| value != context.scope_version) {
-            return Err(Error::ConflictError("DATA_SCOPE_CHANGED：数据范围已变化，请从第一页刷新".into()));
+            return Err(crate::support::data_scope_changed("数据范围已变化，请从第一页刷新"));
         }
 
         let owners = self
@@ -146,7 +153,7 @@ impl SalesOrderReadService {
         let current =
             self.list_snapshot(params, self.keyword_search(params.q.as_deref()).await?, actor).await?;
         if current.context.scope_version != context.scope_version {
-            return Err(Error::ConflictError("DATA_SCOPE_CHANGED：数据范围或业务单据已变化，请刷新".into()));
+            return Err(crate::support::data_scope_changed("数据范围或业务单据已变化，请刷新"));
         }
         Ok(super::SalesListView {
             scope_version: context.scope_version,
@@ -335,9 +342,7 @@ impl SalesOrderReadService {
                     .detail(actor, id)
                     .await?;
             if current != expected {
-                return Err(Error::ConflictError(
-                    "DATA_SCOPE_CHANGED：数据范围或销售单已变化，请刷新".into(),
-                ));
+                return Err(crate::support::data_scope_changed("数据范围或销售单已变化，请刷新"));
             }
         }
 

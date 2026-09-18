@@ -3,11 +3,14 @@
 pub mod extensions;
 pub mod legacy_import;
 pub mod owned;
+pub mod prelude;
 
 pub use extensions::LegacyImportExt;
 pub use legacy_import::{
-    LegacyImportApplyScope, LegacyImportBatchFilter, LegacyImportBatchRow, LegacyImportConfirmationFilter,
-    LegacyImportConfirmationRow, LegacyImportRepository, LegacyImportRowFilter, LegacyImportRowRow,
+    LegacyImportApplyScope, LegacyImportBatchFilter, LegacyImportBatchRepositoryExt, LegacyImportBatchRow,
+    LegacyImportConfirmationFilter, LegacyImportConfirmationRepositoryExt, LegacyImportConfirmationRow,
+    LegacyImportConfirmationSupersedeBatchExt, LegacyImportRepository, LegacyImportRowApplyScopeExt,
+    LegacyImportRowFailedRetryExt, LegacyImportRowFilter, LegacyImportRowRepositoryExt, LegacyImportRowRow,
 };
 pub use owned::{LegacyImportBatchRepository, LegacyImportConfirmationRepository, LegacyImportRowRepository};
 

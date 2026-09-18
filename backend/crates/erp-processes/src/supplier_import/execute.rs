@@ -6,6 +6,7 @@ use erp_core::AccountKind;
 use erp_core::common::time::Instant;
 use erp_supplier::dto::import::{SupplierImportRequest, SupplierImportResult};
 use erp_supplier::dto::import_job::SupplierImportJobRequest;
+use erp_support::repository::prelude::*;
 use erp_support::{BackgroundJob, BackgroundJobId, BackgroundJobItem, BulkJobExt, ItemStatus, JobStatus};
 use persistence_core::{NoTransaction, Transactional};
 

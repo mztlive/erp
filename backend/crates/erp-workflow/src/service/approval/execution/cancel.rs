@@ -21,6 +21,7 @@ use super::start::map_engine_error;
 use super::{ExecutionCommandInput, PlannedWrites, PreparedExecution};
 use crate::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use crate::error::{Error, Result};
+use crate::repository::prelude::*;
 use crate::repository::{BpmExt, WorkItemExt};
 
 const EXECUTION_HISTORY_PAGE_SIZE: u32 = 50;

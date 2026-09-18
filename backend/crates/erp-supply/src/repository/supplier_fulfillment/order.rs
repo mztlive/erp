@@ -1,5 +1,7 @@
 //! 供应商履约订单查询：列表行、筛选条件与订单集合特有查询。
 
+#![allow(async_fn_in_trait)]
+
 use super::*;
 
 /// 供应商履约订单列表投影行。
@@ -159,7 +161,9 @@ impl Pagination for SupplierFulfillmentOrderFilter {
     }
 }
 
-impl<'a> SupplierFulfillmentOrderRepository<'a> {
+/// 供应商履约订单仓储的域查询。
+#[allow(async_fn_in_trait)]
+pub trait SupplierFulfillmentOrderRepositoryExt {
     /// 分页检索供应商履约订单列表（投影查询）。
     ///
     /// 只返回 [`SupplierFulfillmentOrderRow`] 所需的列表字段，不加载整文档；
@@ -174,7 +178,52 @@ impl<'a> SupplierFulfillmentOrderRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_supplier_fulfillment_orders(
+    async fn search_supplier_fulfillment_orders(
+        &self,
+        filter: &SupplierFulfillmentOrderFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<SupplierFulfillmentOrderRow>>;
+
+    /// 按供应商批量读取全部未删除履约订单。
+    ///
+    /// # 参数
+    /// * `supplier_id` - 供应商主键
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回该供应商的履约订单集合。
+    ///
+    /// # 错误
+    /// MongoDB 查询或游标读取失败时返回错误。
+    async fn list_by_supplier_id(
+        &self,
+        supplier_id: &SupplierAccountId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierFulfillmentOrder>>;
+
+    /// 按 ERP 供应商子订单号查找唯一履约订单。
+    ///
+    /// 唯一性由 `uk_supplier_fulfillment_orders_order_no` 唯一索引保证；该方法用于
+    /// 下单幂等判定，服务层不得做「先查后插」的重复性判断（§6.19）。
+    ///
+    /// # 参数
+    /// * `fulfillment_order_no` - ERP 供应商子订单号
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配的未删除履约订单；无匹配时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    async fn find_by_fulfillment_order_no(
+        &self,
+        fulfillment_order_no: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierFulfillmentOrder>>;
+}
+
+impl SupplierFulfillmentOrderRepositoryExt for SupplierFulfillmentOrderRepository<'_> {
+    async fn search_supplier_fulfillment_orders(
         &self,
         filter: &SupplierFulfillmentOrderFilter,
         executor: &mut dyn Executor,
@@ -192,18 +241,7 @@ impl<'a> SupplierFulfillmentOrderRepository<'a> {
         Ok(PageResult { items, total: total as i64 })
     }
 
-    /// 按供应商批量读取全部未删除履约订单。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 供应商主键
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回该供应商的履约订单集合。
-    ///
-    /// # 错误
-    /// MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_by_supplier_id(
+    async fn list_by_supplier_id(
         &self,
         supplier_id: &SupplierAccountId,
         executor: &mut dyn Executor,
@@ -211,21 +249,7 @@ impl<'a> SupplierFulfillmentOrderRepository<'a> {
         self.find_many(doc! { "supplier_id": supplier_id.to_string() }, executor).await
     }
 
-    /// 按 ERP 供应商子订单号查找唯一履约订单。
-    ///
-    /// 唯一性由 `uk_supplier_fulfillment_orders_order_no` 唯一索引保证；该方法用于
-    /// 下单幂等判定，服务层不得做「先查后插」的重复性判断（§6.19）。
-    ///
-    /// # 参数
-    /// * `fulfillment_order_no` - ERP 供应商子订单号
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的未删除履约订单；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_fulfillment_order_no(
+    async fn find_by_fulfillment_order_no(
         &self,
         fulfillment_order_no: &str,
         executor: &mut dyn Executor,

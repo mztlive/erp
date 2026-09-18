@@ -1,8 +1,10 @@
 //! 逐行创建供应商。每行复用原子根命令，失败不影响其他完整行。
 use application_core::AuditActor;
 use erp_party::PartyExt;
+use erp_party::repository::prelude::*;
 use erp_supplier::SupplierExt;
 use erp_supplier::dto::import::{SupplierImportRequest, SupplierImportResult, SupplierImportRow};
+use erp_supplier::repository::prelude::*;
 use persistence_core::NoTransaction;
 
 use super::SupplierProfileService;

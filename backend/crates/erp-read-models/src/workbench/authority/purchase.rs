@@ -7,6 +7,7 @@ use erp_procurement::entity::purchase_order::{
     PurchaseOrder, PurchaseOrderSubmission, PurchaseOrderSubmissionLine,
 };
 use erp_procurement::repository::PurchaseOrderExt;
+use erp_procurement::repository::prelude::*;
 use erp_workflow::ports::OrderTaskSource;
 use persistence_core::Executor;
 

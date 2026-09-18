@@ -4,13 +4,13 @@ use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{
-    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+    Executor, PageResult, Pagination, QueryFilter, Repository, Result, insert_literal_regex_filter, mongo_ops,
 };
 use serde::{Deserialize, Serialize};
 
 use super::{permission_projection, sort_doc};
-use crate::entity::access_control::UserRole;
-use crate::repository::owned::{PermissionRepository, UserRoleRepository};
+use crate::entity::access_control::{Permission, UserRole};
+
 /// 权限定义列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PermissionRow {
@@ -105,7 +105,9 @@ impl Pagination for PermissionFilter {
     }
 }
 
-impl<'a> PermissionRepository<'a> {
+/// 权限定义集合仓储的域特有查询。
+#[allow(async_fn_in_trait)]
+pub trait PermissionRepositoryExt {
     /// 分页检索权限定义列表（投影查询，权限目录）。
     ///
     /// 只返回 [`PermissionRow`] 所需的目录字段，不加载整文档；`resource` 按
@@ -121,7 +123,15 @@ impl<'a> PermissionRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_permissions(
+    async fn search_permissions(
+        &self,
+        filter: &PermissionFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<PermissionRow>>;
+}
+
+impl PermissionRepositoryExt for Repository<'_, Permission> {
+    async fn search_permissions(
         &self,
         filter: &PermissionFilter,
         executor: &mut dyn Executor,
@@ -140,7 +150,9 @@ impl<'a> PermissionRepository<'a> {
     }
 }
 
-impl<'a> UserRoleRepository<'a> {
+/// 用户角色绑定集合仓储的域特有查询。
+#[allow(async_fn_in_trait)]
+pub trait UserRoleRepositoryExt {
     /// 按用户批量取回全部角色绑定（W19：按当前、未来、已过期分开只读展示）。
     ///
     /// # 参数
@@ -152,7 +164,11 @@ impl<'a> UserRoleRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_by_user(&self, user_id: &str, executor: &mut dyn Executor) -> Result<Vec<UserRole>> {
+    async fn list_by_user(&self, user_id: &str, executor: &mut dyn Executor) -> Result<Vec<UserRole>>;
+}
+
+impl UserRoleRepositoryExt for Repository<'_, UserRole> {
+    async fn list_by_user(&self, user_id: &str, executor: &mut dyn Executor) -> Result<Vec<UserRole>> {
         self.find_many_sorted(doc! { "user_id": user_id }, doc! { "effective_from": -1 }, executor).await
     }
 }

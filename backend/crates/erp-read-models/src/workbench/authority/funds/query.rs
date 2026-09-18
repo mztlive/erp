@@ -3,6 +3,7 @@
 use std::collections::{HashMap, HashSet};
 
 use erp_audit::AuditExt;
+use erp_audit::repository::prelude::*;
 use erp_customer::CustomerExt;
 use erp_finance::entity::payable::PayableAccount;
 use erp_finance::entity::receivable::ReceivableAccount;

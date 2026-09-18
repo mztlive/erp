@@ -13,6 +13,7 @@ use crate::ports::{
     PurchaseDataScopePort, PurchaseResolvedClause, PurchaseResolvedScope, PurchaseScopeObject,
 };
 use crate::repository::PurchaseOrderExt;
+use crate::repository::prelude::*;
 use crate::repository::purchase_order::scope::{PurchaseReadScope, PurchaseScopeClause};
 
 /// 采购对象访问范围；列表、详情、候选、导出、变更／退货和写命令复用同一解析。

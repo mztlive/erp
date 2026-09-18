@@ -2,13 +2,14 @@
 
 use mongodb::Database;
 
-use super::super::owned::sales_selection::{
+use super::super::owned::{
     SalesSelectionBookletRepository, SalesSelectionDisplayItemRepository,
     SalesSelectionIdempotencyRepository, SalesSelectionPoolMemberRepository,
     SalesSelectionPrepareTaskRepository, SalesSelectionProposalDisplayLineRepository,
     SalesSelectionProposalRepository, SalesSelectionProposalSkuLineRepository,
     SalesSelectionSessionRepository,
 };
+use super::super::sales_selection::SalesSelectionRateRepository;
 
 /// 销售选品仓储访问器。
 pub trait SalesSelectionExt {
@@ -82,9 +83,7 @@ pub trait SalesSelectionExt {
     ///
     /// # 返回
     /// 返回限流仓储。
-    fn sales_selection_rate(
-        &self,
-    ) -> crate::repository::owned::sales_selection::SalesSelectionRateRepository<'_>;
+    fn sales_selection_rate(&self) -> SalesSelectionRateRepository<'_>;
 }
 
 impl SalesSelectionExt for Database {
@@ -124,9 +123,7 @@ impl SalesSelectionExt for Database {
         SalesSelectionIdempotencyRepository::new(self, Self::SALES_SELECTION_IDEMPOTENCY)
     }
 
-    fn sales_selection_rate(
-        &self,
-    ) -> crate::repository::owned::sales_selection::SalesSelectionRateRepository<'_> {
-        crate::repository::owned::sales_selection::SalesSelectionRateRepository::new(self)
+    fn sales_selection_rate(&self) -> SalesSelectionRateRepository<'_> {
+        SalesSelectionRateRepository::new(self)
     }
 }

@@ -1,4 +1,5 @@
-//! 35 个域的 ID newtype（P0-1.1 共享基元任务，P0 冻结后禁止在域内自定义 ID 类型）。
+//! 跨域共享的稳定 ID newtype（数据模型域编号 D01–D35；跳号域无独立 ID）。
+//! 禁止在业务领域 crate 内自定义并行 ID 类型。
 //!
 //! 生成规则：稳定主表 → `<Entity>Id`；修订表 → `<Entity>RevisionId`；
 //! 行表 → `<Entity>LineId`。实体名 = 表名 PascalCase（`source_system` → `SourceSystemId`，
@@ -6,7 +7,7 @@
 //! 值由 `id_generator::next_id()` 产生（UUID v4，32 位十六进制），ID 不承载业务含义
 //! （数据模型 4.1）；ID 是透明值对象，不校验格式。
 //!
-//! # 表 → ID 类型映射（分域，P1 各域实施者照抄）
+//! # 表 → ID 类型映射（分域）
 //!
 //! D01 `source_registry`：
 //! - `source_system` → `SourceSystemId`
@@ -35,7 +36,7 @@
 //! - `document_attachment` → `DocumentAttachmentId`
 //!
 //! D06 `access_control`：
-//! - `role` → 沿用 `erp_identity::RoleId`（P0 前已存在且带解析校验，本模块不重复定义）
+//! - `role` → 沿用 `erp_identity::RoleId`（本模块不重复定义）
 //! - `permission` → `PermissionId`
 //! - `user_role` → `UserRoleId`
 //! - `data_scope` → `DataScopeId`
@@ -95,7 +96,9 @@
 //! - `sales_change_order` → `SalesChangeOrderId`
 //! - `sales_change_submission` → `SalesChangeSubmissionId`
 //! - `sales_change_submission_line` → `SalesChangeSubmissionLineId`
-//! - `sales_change_review` → `SalesChangeReviewId`
+//!
+//! 采购职责规则（归属采购域）：
+//! - `procurement_responsibility_rule` → `ProcurementResponsibilityRuleId`
 //!
 //! D15 `purchase_order`：
 //! - `purchase_order` → `PurchaseOrderId`
@@ -291,8 +294,7 @@ id_type!(SalesChangeOrderId);
 id_type!(SalesChangeSubmissionId);
 id_type!(SalesChangeSubmissionLineId);
 
-// 采购职责规则：`procurement_responsibility_rule` → `ProcurementResponsibilityRuleId`（归属采购域，补齐映射表漂移）。
-// procurement responsibility
+// 采购职责规则（归属采购域）
 id_type!(ProcurementResponsibilityRuleId);
 
 // D15 purchase_order

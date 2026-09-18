@@ -14,6 +14,7 @@ use crate::entity::sales_order::SalesContentHash;
 use crate::entity::sales_review::{
     SalesChangeOrder, SalesChangeSubmission, SalesChangeSubmissionData, SalesChangeSubmissionLine,
 };
+use crate::repository::prelude::*;
 use crate::repository::{SalesOrderExt, SalesReviewExt};
 use crate::{Error, Result};
 

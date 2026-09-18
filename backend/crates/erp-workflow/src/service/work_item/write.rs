@@ -10,6 +10,7 @@ use super::{WorkItemConflict, WorkItemConflictKind, WorkItemMutationOutcome, Wor
 use crate::entity::work_item::WorkItem;
 use crate::error::{Error, Result};
 use crate::repository::WorkItemExt;
+use crate::repository::prelude::*;
 
 pub(super) const IDEMPOTENCY_AUDIT_PREFIX: &str = "work-item-command-";
 

@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 
 use super::sort_doc;
 use crate::entity::fulfillment::{AcceptanceResult, CustomerAcceptance, CustomerAcceptanceState};
-use crate::repository::owned::CustomerAcceptanceRepository;
 
 /// 客户验收单排序白名单（查询与测试共用）。
 const CUSTOMER_ACCEPTANCE_SORT_FIELDS: &[&str] = &["accepted_at", "created_at"];
@@ -80,7 +79,9 @@ impl Pagination for CustomerAcceptanceFilter {
     }
 }
 
-impl<'a> CustomerAcceptanceRepository<'a> {
+/// 客户验收单仓储扩展：列表投影查询与按验收单号身份查询。
+#[allow(async_fn_in_trait)]
+pub trait CustomerAcceptanceRepositoryExt {
     /// 按客户验收单号查询未删除验收单。
     ///
     /// # 参数
@@ -92,13 +93,11 @@ impl<'a> CustomerAcceptanceRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_acceptance_no(
+    async fn find_by_acceptance_no(
         &self,
         acceptance_no: &str,
         executor: &mut dyn Executor,
-    ) -> Result<Option<CustomerAcceptance>> {
-        self.find_one_by_field("acceptance_no", acceptance_no, executor).await
-    }
+    ) -> Result<Option<CustomerAcceptance>>;
 
     /// 分页检索客户验收单列表（投影查询）。
     ///
@@ -114,6 +113,22 @@ impl<'a> CustomerAcceptanceRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    async fn search_customer_acceptances(
+        &self,
+        filter: &CustomerAcceptanceFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<CustomerAcceptanceRow>>;
+}
+
+impl CustomerAcceptanceRepositoryExt for persistence_core::Repository<'_, CustomerAcceptance> {
+    async fn find_by_acceptance_no(
+        &self,
+        acceptance_no: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<CustomerAcceptance>> {
+        self.find_one_by_field("acceptance_no", acceptance_no, executor).await
+    }
+
     #[tracing::instrument(
         name = "repository.fulfillment.search_customer_acceptances",
         skip_all,
@@ -125,7 +140,7 @@ impl<'a> CustomerAcceptanceRepository<'a> {
             db.operation.name = "search"
         )
     )]
-    pub async fn search_customer_acceptances(
+    async fn search_customer_acceptances(
         &self,
         filter: &CustomerAcceptanceFilter,
         executor: &mut dyn Executor,

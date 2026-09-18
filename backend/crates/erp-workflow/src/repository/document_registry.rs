@@ -10,12 +10,13 @@
 
 use std::collections::HashSet;
 
-use entity_core::{HasBaseModel, NOT_DELETED_TIMESTAMP_BSON};
+use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::Instant;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{
-    Error, Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+    Error, Executor, PageResult, Pagination, QueryFilter, Repository, Result, insert_literal_regex_filter,
+    mongo_ops,
 };
 use serde::{Deserialize, Serialize};
 
@@ -24,10 +25,6 @@ use crate::entity::document_registry::business_document::ApprovalDefinitionBindi
 use crate::entity::document_registry::{
     BusinessDocument, BusinessDocumentId, DocumentParticipant, DocumentRelation, DocumentType,
     WorkflowAction, WorkflowActionType,
-};
-use crate::repository::owned::{
-    BusinessDocumentRepository, DocumentParticipantRepository, DocumentRelationRepository,
-    WorkflowActionRepository,
 };
 
 /// 单据注册列表投影行（列表接口只取必要字段，禁止返回整文档）。
@@ -138,7 +135,9 @@ impl Pagination for BusinessDocumentFilter {
     }
 }
 
-impl<'a> BusinessDocumentRepository<'a> {
+/// 业务单据集合仓储扩展。
+#[allow(async_fn_in_trait)]
+pub trait BusinessDocumentRepositoryExt {
     /// 在审批启动事务内永久写入注册表启动守卫。
     ///
     /// # 参数
@@ -160,7 +159,200 @@ impl<'a> BusinessDocumentRepository<'a> {
     /// # 关键业务约束
     /// 所有 `PROCESS_REQUIRED` 启动路径必须在写 BPM 实例前调用本入口。绑定升级
     /// 与启动因此竞争同一注册行，禁止退回“查询是否已有实例”的跨集合竞态。
-    pub async fn mark_approval_started(
+    async fn mark_approval_started(
+        &self,
+        document_id: &str,
+        document_type: DocumentType,
+        expected_definition_id: &bpm::ApprovalProcessDefinitionId,
+        expected_definition_version: u32,
+        at: Instant,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<BusinessDocument>>;
+
+    /// 在调用方已经加载并可能合法修改的注册实体上合并审批启动守卫后执行 CAS。
+    ///
+    /// # 返回
+    /// 精确类型、定义绑定时返回 `true`：首次启动合并守卫并执行 CAS，曾启动
+    /// 则保持首次时间且不写注册行；守卫不匹配时返回 `false`。CAS 或事务冲突
+    /// 返回仓储错误。
+    ///
+    /// # 关键业务约束
+    /// 创建并提交等同事务路径可用本入口把正式编号分配与启动守卫合并为一次
+    /// 注册行 CAS，避免先写守卫后以旧版本实体覆盖或冲突。调用方不得修改类型、
+    /// 已有绑定或首次启动时间。驳回或撤回后的新 subject version 可再次启动，
+    /// 但不得覆盖首次启动事实。
+    async fn mark_loaded_approval_started(
+        &self,
+        document: &mut BusinessDocument,
+        document_type: DocumentType,
+        expected_definition_id: &bpm::ApprovalProcessDefinitionId,
+        expected_definition_version: u32,
+        at: Instant,
+        executor: &mut dyn Executor,
+    ) -> Result<bool>;
+
+    /// 查询单据审批绑定事实，仅投影 `id` 与 `approval_binding`。
+    ///
+    /// # 参数
+    /// * `document_id` - 业务单据 ID
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回单据不存在、已注册未绑定、已注册且已绑定三态之一。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    async fn approval_binding_lookup(
+        &self,
+        document_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<ApprovalBindingLookup>;
+
+    /// 判断未删除的单据注册行是否存在。
+    ///
+    /// # 参数
+    /// * `document_id` - 业务单据 ID
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 存在时返回 `true`。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
+    async fn exists_by_id(
+        &self,
+        document_id: &BusinessDocumentId,
+        executor: &mut dyn Executor,
+    ) -> Result<bool>;
+
+    /// 批量返回输入 ID 中实际存在且未删除的单据 ID。
+    ///
+    /// 输入会先去重；查询仅投影 `id`，空集合不会访问数据库。
+    ///
+    /// # 参数
+    /// * `document_ids` - 待核验业务单据 ID
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回按 ID 升序排列的已存在 ID。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    async fn existing_ids(
+        &self,
+        document_ids: &[BusinessDocumentId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<String>>;
+
+    /// 批量按业务单据 ID 读取注册行。
+    ///
+    /// # 参数
+    /// * `document_ids` - 业务单据 ID 集合；空集合直接返回空结果
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回全部匹配且未删除的注册行；返回顺序不承诺与输入一致。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn find_documents_by_ids(
+        &self,
+        document_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<BusinessDocument>>;
+
+    /// 幂等注册业务单据。
+    ///
+    /// 跨域注册表入口（数据模型 §6.1）：空编号草稿可并存，但同一 `document_id`
+    /// 始终最多一行，由 `uk_business_documents_id` 仲裁；非空
+    /// `(document_type, document_no)` 由部分唯一索引 `uk_business_documents_identity`
+    /// 承担并发仲裁。已存在同 ID 的注册视为幂等成功并返回已存在行；
+    /// 同身份但 ID 不同的重复注册透出 [`persistence_core::Error::DuplicateKey`]。
+    ///
+    /// 本方法采用「先插后查」：唯一索引保证并发下同 ID 最多一条注册行，不存在
+    /// 读后写的竞态窗口，**不需要事务执行器**；传入 `NoTransaction` 时行为
+    /// 可预期（单条写入自动提交）。非空身份字段全局唯一：注册行软删除后仍占用
+    /// `(document_type, document_no)` 身份（与 accounts 处理一致），恢复语义
+    /// 不被身份复用破坏。
+    ///
+    /// # 参数
+    /// * `doc` - 待注册的单据（`document_no` 已由实体校验规范化）
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回 `Ok(None)` 表示本次写入新注册行；`Ok(Some(existing))` 表示同身份
+    /// 同 ID 的幂等命中，返回已存在的注册行。
+    ///
+    /// # 错误
+    /// 同身份不同 ID（含已软删除身份）写入时返回 [`persistence_core::Error::DuplicateKey`]；
+    /// 其他 MongoDB 写入或查询失败时返回错误。
+    async fn register(
+        &self,
+        doc: &BusinessDocument,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<BusinessDocument>>;
+
+    /// 注册已经通过实体无审批不变量校验的业务单据。
+    ///
+    /// 本方法提供给 `NO_APPROVAL` 创建路径使用；调用方必须先通过
+    /// [`BusinessDocument::ensure_no_approval_registration`] 校验业务类型、注册行
+    /// 预置绑定与统一绑定端口返回值，再调用本语义入口。
+    ///
+    /// # 参数
+    /// * `doc` - 已校验为无审批注册的业务单据
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回值与 [`Self::register`] 相同。
+    ///
+    /// # 错误
+    /// 唯一键冲突或 MongoDB 写入失败时返回错误。
+    async fn register_no_approval_document(
+        &self,
+        doc: &BusinessDocument,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<BusinessDocument>>;
+
+    /// 以 `id + document_no 为空 + expected_version` 一次性赋值正式编号。
+    ///
+    /// 成功时同时写入 `document_no_assigned_at`，不得覆盖已有编号。同载荷回读
+    /// 同一结果；不同编号竞争只允许一个成功。
+    ///
+    /// # 错误
+    /// 元数据越界或 MongoDB 更新失败时返回错误。
+    async fn assign_document_no(
+        &self,
+        id: &str,
+        document_no: &str,
+        expected_version: u64,
+        assigned_at: Instant,
+        executor: &mut dyn Executor,
+    ) -> Result<AssignDocumentNoOutcome<BusinessDocument>>;
+
+    /// 分页检索单据注册列表（投影查询）。
+    ///
+    /// 只返回 [`BusinessDocumentRow`] 所需的列表字段，不加载整文档；
+    /// `document_no` 按字面量忽略大小写模糊匹配（复用
+    /// `repository::regex_filter`，禁止自拼正则）。
+    ///
+    /// # 参数
+    /// * `filter` - 筛选与分页条件
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回当前页投影行与满足筛选条件的总数。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    async fn search_business_documents(
+        &self,
+        filter: &BusinessDocumentFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<BusinessDocumentRow>>;
+}
+
+impl BusinessDocumentRepositoryExt for Repository<'_, BusinessDocument> {
+    async fn mark_approval_started(
         &self,
         document_id: &str,
         document_type: DocumentType,
@@ -188,19 +380,7 @@ impl<'a> BusinessDocumentRepository<'a> {
         Ok(Some(document))
     }
 
-    /// 在调用方已经加载并可能合法修改的注册实体上合并审批启动守卫后执行 CAS。
-    ///
-    /// # 返回
-    /// 精确类型、定义绑定时返回 `true`：首次启动合并守卫并执行 CAS，曾启动
-    /// 则保持首次时间且不写注册行；守卫不匹配时返回 `false`。CAS 或事务冲突
-    /// 返回仓储错误。
-    ///
-    /// # 关键业务约束
-    /// 创建并提交等同事务路径可用本入口把正式编号分配与启动守卫合并为一次
-    /// 注册行 CAS，避免先写守卫后以旧版本实体覆盖或冲突。调用方不得修改类型、
-    /// 已有绑定或首次启动时间。驳回或撤回后的新 subject version 可再次启动，
-    /// 但不得覆盖首次启动事实。
-    pub async fn mark_loaded_approval_started(
+    async fn mark_loaded_approval_started(
         &self,
         document: &mut BusinessDocument,
         document_type: DocumentType,
@@ -228,18 +408,7 @@ impl<'a> BusinessDocumentRepository<'a> {
         Ok(true)
     }
 
-    /// 查询单据审批绑定事实，仅投影 `id` 与 `approval_binding`。
-    ///
-    /// # 参数
-    /// * `document_id` - 业务单据 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回单据不存在、已注册未绑定、已注册且已绑定三态之一。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn approval_binding_lookup(
+    async fn approval_binding_lookup(
         &self,
         document_id: &str,
         executor: &mut dyn Executor,
@@ -263,18 +432,7 @@ impl<'a> BusinessDocumentRepository<'a> {
         Ok(classify_approval_binding(row))
     }
 
-    /// 判断未删除的单据注册行是否存在。
-    ///
-    /// # 参数
-    /// * `document_id` - 业务单据 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 存在时返回 `true`。
-    ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
-    pub async fn exists_by_id(
+    async fn exists_by_id(
         &self,
         document_id: &BusinessDocumentId,
         executor: &mut dyn Executor,
@@ -282,20 +440,7 @@ impl<'a> BusinessDocumentRepository<'a> {
         self.exists(doc! { "id": document_id.to_string() }, executor).await
     }
 
-    /// 批量返回输入 ID 中实际存在且未删除的单据 ID。
-    ///
-    /// 输入会先去重；查询仅投影 `id`，空集合不会访问数据库。
-    ///
-    /// # 参数
-    /// * `document_ids` - 待核验业务单据 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回按 ID 升序排列的已存在 ID。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn existing_ids(
+    async fn existing_ids(
         &self,
         document_ids: &[BusinessDocumentId],
         executor: &mut dyn Executor,
@@ -324,18 +469,7 @@ impl<'a> BusinessDocumentRepository<'a> {
         Ok(existing)
     }
 
-    /// 批量按业务单据 ID 读取注册行。
-    ///
-    /// # 参数
-    /// * `document_ids` - 业务单据 ID 集合；空集合直接返回空结果
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回全部匹配且未删除的注册行；返回顺序不承诺与输入一致。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_documents_by_ids(
+    async fn find_documents_by_ids(
         &self,
         document_ids: &[String],
         executor: &mut dyn Executor,
@@ -346,32 +480,7 @@ impl<'a> BusinessDocumentRepository<'a> {
         self.find_many(doc! { "id": { "$in": document_ids } }, executor).await
     }
 
-    /// 幂等注册业务单据。
-    ///
-    /// 跨域注册表入口（数据模型 §6.1）：空编号草稿可并存，但同一 `document_id`
-    /// 始终最多一行，由 `uk_business_documents_id` 仲裁；非空
-    /// `(document_type, document_no)` 由部分唯一索引 `uk_business_documents_identity`
-    /// 承担并发仲裁。已存在同 ID 的注册视为幂等成功并返回已存在行；
-    /// 同身份但 ID 不同的重复注册透出 [`persistence_core::Error::DuplicateKey`]。
-    ///
-    /// 本方法采用「先插后查」：唯一索引保证并发下同 ID 最多一条注册行，不存在
-    /// 读后写的竞态窗口，**不需要事务执行器**；传入 `NoTransaction` 时行为
-    /// 可预期（单条写入自动提交）。非空身份字段全局唯一：注册行软删除后仍占用
-    /// `(document_type, document_no)` 身份（与 accounts 处理一致），恢复语义
-    /// 不被身份复用破坏。
-    ///
-    /// # 参数
-    /// * `doc` - 待注册的单据（`document_no` 已由实体校验规范化）
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回 `Ok(None)` 表示本次写入新注册行；`Ok(Some(existing))` 表示同身份
-    /// 同 ID 的幂等命中，返回已存在的注册行。
-    ///
-    /// # 错误
-    /// 同身份不同 ID（含已软删除身份）写入时返回 [`persistence_core::Error::DuplicateKey`]；
-    /// 其他 MongoDB 写入或查询失败时返回错误。
-    pub async fn register(
+    async fn register(
         &self,
         doc: &BusinessDocument,
         executor: &mut dyn Executor,
@@ -390,22 +499,7 @@ impl<'a> BusinessDocumentRepository<'a> {
         }
     }
 
-    /// 注册已经通过实体无审批不变量校验的业务单据。
-    ///
-    /// 本方法提供给 `NO_APPROVAL` 创建路径使用；调用方必须先通过
-    /// [`BusinessDocument::ensure_no_approval_registration`] 校验业务类型、注册行
-    /// 预置绑定与统一绑定端口返回值，再调用本语义入口。
-    ///
-    /// # 参数
-    /// * `doc` - 已校验为无审批注册的业务单据
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回值与 [`Self::register`] 相同。
-    ///
-    /// # 错误
-    /// 唯一键冲突或 MongoDB 写入失败时返回错误。
-    pub async fn register_no_approval_document(
+    async fn register_no_approval_document(
         &self,
         doc: &BusinessDocument,
         executor: &mut dyn Executor,
@@ -413,14 +507,7 @@ impl<'a> BusinessDocumentRepository<'a> {
         self.register(doc, executor).await
     }
 
-    /// 以 `id + document_no 为空 + expected_version` 一次性赋值正式编号。
-    ///
-    /// 成功时同时写入 `document_no_assigned_at`，不得覆盖已有编号。同载荷回读
-    /// 同一结果；不同编号竞争只允许一个成功。
-    ///
-    /// # 错误
-    /// 元数据越界或 MongoDB 更新失败时返回错误。
-    pub async fn assign_document_no(
+    async fn assign_document_no(
         &self,
         id: &str,
         document_no: &str,
@@ -443,27 +530,12 @@ impl<'a> BusinessDocumentRepository<'a> {
             current,
             expected_version,
             document_no,
-            |row| row.base().version,
+            |row| row.base.version,
             |row| row.document_no.as_str(),
         ))
     }
 
-    /// 分页检索单据注册列表（投影查询）。
-    ///
-    /// 只返回 [`BusinessDocumentRow`] 所需的列表字段，不加载整文档；
-    /// `document_no` 按字面量忽略大小写模糊匹配（复用
-    /// `repository::regex_filter`，禁止自拼正则）。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_business_documents(
+    async fn search_business_documents(
         &self,
         filter: &BusinessDocumentFilter,
         executor: &mut dyn Executor,
@@ -482,7 +554,9 @@ impl<'a> BusinessDocumentRepository<'a> {
     }
 }
 
-impl<'a> DocumentRelationRepository<'a> {
+/// 单据关系集合仓储扩展。
+#[allow(async_fn_in_trait)]
+pub trait DocumentRelationRepositoryExt {
     /// 单次查询与指定单据相关的全部出向及入向关系。
     ///
     /// # 参数
@@ -494,7 +568,15 @@ impl<'a> DocumentRelationRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_for_document(
+    async fn list_for_document(
+        &self,
+        document_id: &BusinessDocumentId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<DocumentRelation>>;
+}
+
+impl DocumentRelationRepositoryExt for Repository<'_, DocumentRelation> {
+    async fn list_for_document(
         &self,
         document_id: &BusinessDocumentId,
         executor: &mut dyn Executor,
@@ -508,7 +590,9 @@ impl<'a> DocumentRelationRepository<'a> {
     }
 }
 
-impl<'a> DocumentParticipantRepository<'a> {
+/// 单据参与人集合仓储扩展。
+#[allow(async_fn_in_trait)]
+pub trait DocumentParticipantRepositoryExt {
     /// 按参与人返回去重后的业务单据 ID，仅投影 `document_id`。
     ///
     /// # 参数
@@ -520,11 +604,28 @@ impl<'a> DocumentParticipantRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn document_ids_by_user(
+    async fn document_ids_by_user(&self, user_id: &str, executor: &mut dyn Executor) -> Result<Vec<String>>;
+
+    /// 按参与人查询其参与过的全部单据（“我的参与单据”）。
+    ///
+    /// # 参数
+    /// * `user_id` - 参与人用户 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回按参与时间倒序排列的参与记录。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn list_by_user(
         &self,
         user_id: &str,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<String>> {
+    ) -> Result<Vec<DocumentParticipant>>;
+}
+
+impl DocumentParticipantRepositoryExt for Repository<'_, DocumentParticipant> {
+    async fn document_ids_by_user(&self, user_id: &str, executor: &mut dyn Executor) -> Result<Vec<String>> {
         let collection = self.collection().clone_with_type::<ParticipantDocumentIdRow>();
         let options = FindOptions::builder().projection(doc! { "document_id": 1 }).build();
         let mut ids = mongo_ops::find_many(
@@ -545,18 +646,7 @@ impl<'a> DocumentParticipantRepository<'a> {
         Ok(ids)
     }
 
-    /// 按参与人查询其参与过的全部单据（“我的参与单据”）。
-    ///
-    /// # 参数
-    /// * `user_id` - 参与人用户 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回按参与时间倒序排列的参与记录。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_by_user(
+    async fn list_by_user(
         &self,
         user_id: &str,
         executor: &mut dyn Executor,
@@ -648,7 +738,9 @@ impl Pagination for WorkflowActionFilter {
     }
 }
 
-impl<'a> WorkflowActionRepository<'a> {
+/// 工作流动作集合仓储扩展。
+#[allow(async_fn_in_trait)]
+pub trait WorkflowActionRepositoryExt {
     /// 分页检索工作流动作（投影查询）。
     ///
     /// 只返回 [`WorkflowActionRow`] 所需的列表字段，不加载整文档；
@@ -663,7 +755,32 @@ impl<'a> WorkflowActionRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_workflow_actions(
+    async fn search_workflow_actions(
+        &self,
+        filter: &WorkflowActionFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<WorkflowActionRow>>;
+
+    /// 按单据查询动作历史（`idx_workflow_actions_document_created`）。
+    ///
+    /// # 参数
+    /// * `document_id` - 业务单据 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回按时间倒序排列的动作历史。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn list_by_document(
+        &self,
+        document_id: &BusinessDocumentId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkflowAction>>;
+}
+
+impl WorkflowActionRepositoryExt for Repository<'_, WorkflowAction> {
+    async fn search_workflow_actions(
         &self,
         filter: &WorkflowActionFilter,
         executor: &mut dyn Executor,
@@ -681,18 +798,7 @@ impl<'a> WorkflowActionRepository<'a> {
         Ok(PageResult { items, total: total as i64 })
     }
 
-    /// 按单据查询动作历史（`idx_workflow_actions_document_created`）。
-    ///
-    /// # 参数
-    /// * `document_id` - 业务单据 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回按时间倒序排列的动作历史。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_by_document(
+    async fn list_by_document(
         &self,
         document_id: &BusinessDocumentId,
         executor: &mut dyn Executor,

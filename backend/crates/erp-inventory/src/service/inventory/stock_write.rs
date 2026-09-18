@@ -15,6 +15,7 @@ use crate::entity::inventory::{
 };
 use crate::error::{Error, Result};
 use crate::repository::InventoryExt;
+use crate::repository::prelude::*;
 
 /// 在调用方事务内写入过账流水、余额与预占释放，并把调整单标为已过账。
 ///

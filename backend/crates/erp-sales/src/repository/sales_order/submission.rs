@@ -5,13 +5,12 @@
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{Document, doc};
-use persistence_core::{Executor, Pagination, QueryFilter, Result};
+use persistence_core::{Executor, Pagination, QueryFilter, Repository, Result};
 
 use crate::entity::sales_order::{
     SalesOrderId, SalesOrderSubmission, SalesOrderSubmissionId, SalesOrderSubmissionLine,
     SalesOrderWorkingCopyId, SubmissionStatus,
 };
-use crate::repository::owned::{SalesOrderSubmissionLineRepository, SalesOrderSubmissionRepository};
 
 /// 提交历史筛选条件。
 #[derive(Debug, Clone)]
@@ -70,7 +69,9 @@ impl Pagination for SubmissionFilter {
     }
 }
 
-impl<'a> SalesOrderSubmissionRepository<'a> {
+/// 销售提交快照集合的域查询扩展。
+#[allow(async_fn_in_trait)]
+pub trait SalesOrderSubmissionRepositoryExt {
     /// 按工作副本查找已冻结提交。
     ///
     /// # 参数
@@ -82,13 +83,11 @@ impl<'a> SalesOrderSubmissionRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_working_copy(
+    async fn find_by_working_copy(
         &self,
         working_copy_id: &SalesOrderWorkingCopyId,
         executor: &mut dyn Executor,
-    ) -> Result<Option<SalesOrderSubmission>> {
-        self.find_one(doc! { "working_copy_id": working_copy_id.to_string() }, executor).await
-    }
+    ) -> Result<Option<SalesOrderSubmission>>;
 
     /// 列出销售单提交历史，新提交在前。
     ///
@@ -101,29 +100,11 @@ impl<'a> SalesOrderSubmissionRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    #[tracing::instrument(
-        name = "repository.sales_order.list_submissions",
-        skip_all,
-        fields(
-            layer = "repository",
-            domain = "sales_order",
-            db.system.name = "mongodb",
-            db.collection.name = "sales_order_submissions",
-            db.operation.name = "find"
-        )
-    )]
-    pub async fn list_by_order_newest_first(
+    async fn list_by_order_newest_first(
         &self,
         sales_order_id: &SalesOrderId,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<SalesOrderSubmission>> {
-        self.find_many_sorted(
-            doc! { "sales_order_id": sales_order_id.to_string() },
-            doc! { "submission_no": -1 },
-            executor,
-        )
-        .await
-    }
+    ) -> Result<Vec<SalesOrderSubmission>>;
 
     /// 读取销售单最新冻结提交。
     ///
@@ -136,13 +117,11 @@ impl<'a> SalesOrderSubmissionRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_latest_by_order(
+    async fn find_latest_by_order(
         &self,
         sales_order_id: &SalesOrderId,
         executor: &mut dyn Executor,
-    ) -> Result<Option<SalesOrderSubmission>> {
-        Ok(self.list_by_order_newest_first(sales_order_id, executor).await?.into_iter().next())
-    }
+    ) -> Result<Option<SalesOrderSubmission>>;
 
     /// 按销售单与提交序号查找提交快照。
     ///
@@ -159,21 +138,12 @@ impl<'a> SalesOrderSubmissionRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_order_and_no(
+    async fn find_by_order_and_no(
         &self,
         sales_order_id: &SalesOrderId,
         submission_no: u32,
         executor: &mut dyn Executor,
-    ) -> Result<Option<SalesOrderSubmission>> {
-        self.find_one(
-            doc! {
-                "sales_order_id": sales_order_id.to_string(),
-                "submission_no": submission_no as i32,
-            },
-            executor,
-        )
-        .await
-    }
+    ) -> Result<Option<SalesOrderSubmission>>;
 
     /// 批量读取销售单关联的全部简报提交。
     ///
@@ -191,7 +161,71 @@ impl<'a> SalesOrderSubmissionRepository<'a> {
     ///
     /// # 约束
     /// 仅查询本仓储拥有的销售提交集合，按所属销售单引用过滤，不访问销售单集合。
-    pub async fn list_work_item_brief_submissions_by_orders(
+    async fn list_work_item_brief_submissions_by_orders(
+        &self,
+        order_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesOrderSubmission>>;
+}
+
+impl SalesOrderSubmissionRepositoryExt for Repository<'_, SalesOrderSubmission> {
+    async fn find_by_working_copy(
+        &self,
+        working_copy_id: &SalesOrderWorkingCopyId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SalesOrderSubmission>> {
+        self.find_one(doc! { "working_copy_id": working_copy_id.to_string() }, executor).await
+    }
+
+    #[tracing::instrument(
+        name = "repository.sales_order.list_submissions",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "sales_order",
+            db.system.name = "mongodb",
+            db.collection.name = "sales_order_submissions",
+            db.operation.name = "find"
+        )
+    )]
+    async fn list_by_order_newest_first(
+        &self,
+        sales_order_id: &SalesOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesOrderSubmission>> {
+        self.find_many_sorted(
+            doc! { "sales_order_id": sales_order_id.to_string() },
+            doc! { "submission_no": -1 },
+            executor,
+        )
+        .await
+    }
+
+    async fn find_latest_by_order(
+        &self,
+        sales_order_id: &SalesOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SalesOrderSubmission>> {
+        Ok(self.list_by_order_newest_first(sales_order_id, executor).await?.into_iter().next())
+    }
+
+    async fn find_by_order_and_no(
+        &self,
+        sales_order_id: &SalesOrderId,
+        submission_no: u32,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SalesOrderSubmission>> {
+        self.find_one(
+            doc! {
+                "sales_order_id": sales_order_id.to_string(),
+                "submission_no": submission_no as i32,
+            },
+            executor,
+        )
+        .await
+    }
+
+    async fn list_work_item_brief_submissions_by_orders(
         &self,
         order_ids: &[String],
         executor: &mut dyn Executor,
@@ -203,7 +237,9 @@ impl<'a> SalesOrderSubmissionRepository<'a> {
     }
 }
 
-impl<'a> SalesOrderSubmissionLineRepository<'a> {
+/// 销售提交明细集合的域查询扩展。
+#[allow(async_fn_in_trait)]
+pub trait SalesOrderSubmissionLineRepositoryExt {
     /// 按提交 ID 集合批量取回明细（`$in` 一次取回，禁止 N+1）。
     ///
     /// # 参数
@@ -215,6 +251,14 @@ impl<'a> SalesOrderSubmissionLineRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn list_lines_by_submissions(
+        &self,
+        submission_ids: &[SalesOrderSubmissionId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesOrderSubmissionLine>>;
+}
+
+impl SalesOrderSubmissionLineRepositoryExt for Repository<'_, SalesOrderSubmissionLine> {
     #[tracing::instrument(
         name = "repository.sales_order.list_submission_lines",
         skip_all,
@@ -226,7 +270,7 @@ impl<'a> SalesOrderSubmissionLineRepository<'a> {
             db.operation.name = "find"
         )
     )]
-    pub async fn list_lines_by_submissions(
+    async fn list_lines_by_submissions(
         &self,
         submission_ids: &[SalesOrderSubmissionId],
         executor: &mut dyn Executor,

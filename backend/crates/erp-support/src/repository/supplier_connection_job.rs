@@ -3,12 +3,30 @@ use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{Document, doc};
 use persistence_core::{Executor, Result, mongo_ops};
 
-use super::owned::BackgroundJobRepository;
 use crate::BackgroundJob;
 
-impl BackgroundJobRepository<'_> {
+/// 后台任务集合仓储的供应商连接治理查询。
+#[allow(async_fn_in_trait)]
+pub trait BackgroundJobRepositorySupplierConnectionExt {
     /// 返回属于指定连接及任务类型的后台任务；空白名单直接无结果。
-    pub async fn find_supplier_connection_job(
+    async fn find_supplier_connection_job(
+        &self,
+        connection_id: &str,
+        job_id: &str,
+        job_types: &[&str],
+        executor: &mut dyn Executor,
+    ) -> Result<Option<BackgroundJob>>;
+
+    /// 统计阻止连接停用的目录同步任务，使用原三个未结束状态。
+    async fn count_active_supplier_catalog_jobs(
+        &self,
+        connection_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<u64>;
+}
+
+impl BackgroundJobRepositorySupplierConnectionExt for persistence_core::Repository<'_, BackgroundJob> {
+    async fn find_supplier_connection_job(
         &self,
         connection_id: &str,
         job_id: &str,
@@ -21,8 +39,7 @@ impl BackgroundJobRepository<'_> {
         self.find_one(connection_job_filter(connection_id, job_id, job_types), executor).await
     }
 
-    /// 统计阻止连接停用的目录同步任务，使用原三个未结束状态。
-    pub async fn count_active_supplier_catalog_jobs(
+    async fn count_active_supplier_catalog_jobs(
         &self,
         connection_id: &str,
         executor: &mut dyn Executor,

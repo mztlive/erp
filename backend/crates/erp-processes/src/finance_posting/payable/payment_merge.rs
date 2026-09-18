@@ -11,6 +11,7 @@ use erp_finance::dto::payment_merge::{
 };
 use erp_finance::entity::payable::{PayableAccount, PayableSourceType};
 use erp_finance::repository::PayableExt;
+use erp_finance::repository::prelude::*;
 use erp_party::PartyExt;
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_supplier::SupplierExt;
@@ -18,6 +19,7 @@ use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{
     MAX_PAYMENT_EXECUTION_MERGE, WorkItem, WorkItemStatus, matches_supplier_payment_identity,
 };
+use erp_workflow::repository::prelude::*;
 use persistence_core::NoTransaction;
 use validator::Validate;
 

@@ -1,10 +1,9 @@
 //! 客户经营质量双口径的有界销售单事实查询；授权范围在数据库过滤中交集执行。
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, Result, mongo_ops};
+use persistence_core::{Executor, Repository, Result, mongo_ops};
 
 use crate::entity::sales_order::{CommercialStatus, SalesOrder};
-use crate::repository::owned::SalesOrderRepository;
 
 /// 双口径单次最多读取的销售单数；额外读取一条用于拒绝截断统计。
 pub const QUALITY_ORDER_LIMIT: usize = 10_000;
@@ -34,9 +33,19 @@ impl QualityOrderFilter {
     }
 }
 
-impl SalesOrderRepository<'_> {
+/// 客户经营质量双口径的销售单事实查询。
+#[allow(async_fn_in_trait)]
+pub trait SalesOrderRepositoryQualityExt {
     /// 有界读取期间正式销售单；调用方必须对超限结果整体拒绝。
-    pub async fn quality_orders(
+    async fn quality_orders(
+        &self,
+        filter: &QualityOrderFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesOrder>>;
+}
+
+impl SalesOrderRepositoryQualityExt for Repository<'_, SalesOrder> {
+    async fn quality_orders(
         &self,
         filter: &QualityOrderFilter,
         executor: &mut dyn Executor,

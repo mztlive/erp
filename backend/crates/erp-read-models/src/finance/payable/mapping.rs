@@ -5,6 +5,7 @@ use std::str::FromStr;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{PartyId, SupplierAccountId};
 use erp_core::money::Amount;
+use erp_party::repository::prelude::*;
 use erp_party::{PartyBankAccount, PartyExt};
 use erp_supplier::SupplierExt;
 use mongodb::Database;

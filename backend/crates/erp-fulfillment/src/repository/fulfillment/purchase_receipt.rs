@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 
 use super::sort_doc;
 use crate::entity::fulfillment::{PurchaseReceipt, PurchaseReceiptState};
-use crate::repository::owned::PurchaseReceiptRepository;
 
 /// 采购入库单排序白名单（查询与测试共用）。
 const PURCHASE_RECEIPT_SORT_FIELDS: &[&str] = &["created_at", "posted_at"];
@@ -101,7 +100,9 @@ impl Pagination for PurchaseReceiptFilter {
     }
 }
 
-impl<'a> PurchaseReceiptRepository<'a> {
+/// 采购入库单仓储扩展：列表投影查询与按入库单号身份查询。
+#[allow(async_fn_in_trait)]
+pub trait PurchaseReceiptRepositoryExt {
     /// 分页检索采购入库单列表（投影查询）。
     ///
     /// 只返回 [`PurchaseReceiptRow`] 所需的列表字段，不加载整文档；排序字段
@@ -116,6 +117,31 @@ impl<'a> PurchaseReceiptRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    async fn search_purchase_receipts(
+        &self,
+        filter: &PurchaseReceiptFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<PurchaseReceiptRow>>;
+
+    /// 按采购入库单号查找入库单（唯一单号，详情查询）。
+    ///
+    /// # 参数
+    /// * `receipt_no` - 采购入库单号
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配的未删除入库单；无匹配时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    async fn find_by_receipt_no(
+        &self,
+        receipt_no: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<PurchaseReceipt>>;
+}
+
+impl PurchaseReceiptRepositoryExt for persistence_core::Repository<'_, PurchaseReceipt> {
     #[tracing::instrument(
         name = "repository.fulfillment.search_purchase_receipts",
         skip_all,
@@ -127,7 +153,7 @@ impl<'a> PurchaseReceiptRepository<'a> {
             db.operation.name = "search"
         )
     )]
-    pub async fn search_purchase_receipts(
+    async fn search_purchase_receipts(
         &self,
         filter: &PurchaseReceiptFilter,
         executor: &mut dyn Executor,
@@ -144,18 +170,7 @@ impl<'a> PurchaseReceiptRepository<'a> {
         .await
     }
 
-    /// 按采购入库单号查找入库单（唯一单号，详情查询）。
-    ///
-    /// # 参数
-    /// * `receipt_no` - 采购入库单号
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的未删除入库单；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_receipt_no(
+    async fn find_by_receipt_no(
         &self,
         receipt_no: &str,
         executor: &mut dyn Executor,

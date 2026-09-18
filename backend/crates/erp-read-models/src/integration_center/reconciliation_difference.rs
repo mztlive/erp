@@ -8,10 +8,12 @@ use erp_integration::entity::integration_ops::{
 use erp_integration::ports::evidence::EvidenceSubject;
 use erp_integration::repository::IntegrationOpsExt;
 use erp_integration::repository::integration_ops::ResolutionHistoryRow;
+use erp_integration::repository::prelude::*;
 use erp_integration::service::evidence::{
     blocker_view, difference_evidence_policy, domain_kinds, reconciliation_reason_registry,
 };
 use erp_workflow::WorkItemExt;
+use erp_workflow::repository::prelude::*;
 use persistence_core::NoTransaction;
 
 use super::IntegrationCenterReadService;

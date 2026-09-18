@@ -12,6 +12,7 @@ use crate::ports::{
     SettlementDataScopePort, SettlementResolvedClause, SettlementResolvedScope, SettlementScopeObject,
 };
 use crate::repository::SupplierSettlementExt;
+use crate::repository::prelude::*;
 use crate::repository::supplier_settlement::{SettlementReadScope, SettlementScopeClause};
 
 /// 结算对象访问范围；列表、详情和写命令复用同一解析。

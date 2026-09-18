@@ -31,6 +31,7 @@ use crate::error::{Error, Result};
 use crate::ports::{
     AccountFactPort, CustomerAuditPort, CustomerDataScopePort, PartyFactPort, PartyIdentityFact,
 };
+use crate::repository::prelude::*;
 use crate::repository::{CustomerAccountRow, CustomerExt};
 
 pub mod access;

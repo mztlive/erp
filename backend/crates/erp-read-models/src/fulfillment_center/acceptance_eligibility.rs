@@ -7,6 +7,7 @@ use erp_fulfillment::entity::fulfillment::{
 };
 use erp_fulfillment::repository::FulfillmentExt;
 use erp_sales::repository::SalesOrderExt;
+use erp_sales::repository::prelude::*;
 use persistence_core::NoTransaction;
 
 use super::FulfillmentReadService;

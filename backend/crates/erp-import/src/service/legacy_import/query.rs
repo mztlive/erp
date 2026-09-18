@@ -8,6 +8,7 @@ use crate::dto::legacy_import::{
 };
 use crate::entity::legacy_import::{LegacyImportBatch, LegacyImportBatchId};
 use crate::error::{Error, Result};
+use crate::repository::prelude::*;
 use crate::repository::{
     LegacyImportBatchFilter, LegacyImportBatchRow, LegacyImportExt, LegacyImportRowFilter, LegacyImportRowRow,
 };

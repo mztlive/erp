@@ -8,6 +8,7 @@ use erp_integration::repository::IntegrationOpsExt;
 use erp_supply::entity::supplier_fulfillment::{SupplierFulfillmentOrder, SupplierOrderAction};
 use erp_supply::service::supplier_fulfillment::W26_BUSINESS_OBJECT_TYPE;
 use erp_supply::service::supplier_fulfillment::place::persist_dispatch_entities;
+use erp_workflow::repository::prelude::*;
 use erp_workflow::{WorkItemExt, WorkItemType};
 use mongodb::Database;
 use persistence_core::Executor;

@@ -23,7 +23,6 @@ use super::page::{created_updated_field, search_projected_page, sort_direction};
 use crate::entity::file_asset::{
     DocumentAttachment, FileAsset, RetentionClass, SecurityScanStatus, SensitivityClass,
 };
-use crate::repository::owned::{DocumentAttachmentRepository, FileAssetRepository};
 
 /// 文件资产列表投影行（列表接口只取必要字段，禁止返回整文档）。
 ///
@@ -130,7 +129,9 @@ impl Pagination for FileAssetFilter {
     }
 }
 
-impl<'a> FileAssetRepository<'a> {
+/// 文件资产集合仓储的域查询。
+#[allow(async_fn_in_trait)]
+pub trait FileAssetRepositoryExt {
     /// 在调用方执行器内有序批量创建文件资产。
     ///
     /// 空集合直接返回且不访问数据库；MongoDB 默认的 ordered 插入保证首个失败
@@ -142,13 +143,7 @@ impl<'a> FileAssetRepository<'a> {
     ///
     /// # 错误
     /// 插入失败时返回包含 MongoDB 批量写错误索引的仓储错误。
-    pub async fn create_many_ordered(&self, assets: &[FileAsset], executor: &mut dyn Executor) -> Result<()> {
-        if assets.is_empty() {
-            return Ok(());
-        }
-        mongo_ops::insert_many(&self.collection(), assets.to_vec(), executor).await?;
-        Ok(())
-    }
+    async fn create_many_ordered(&self, assets: &[FileAsset], executor: &mut dyn Executor) -> Result<()>;
 
     /// 批量按文件资产 ID 读取活跃文件事实。
     ///
@@ -164,17 +159,7 @@ impl<'a> FileAssetRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_by_ids(
-        &self,
-        ids: &[FileAssetId],
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<FileAsset>> {
-        if ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        let ids = ids.iter().map(ToString::to_string).collect::<Vec<_>>();
-        self.find_many(doc! { "id": { "$in": ids } }, executor).await
-    }
+    async fn find_by_ids(&self, ids: &[FileAssetId], executor: &mut dyn Executor) -> Result<Vec<FileAsset>>;
 
     /// 返回给定文件资产 ID 中尚未登记的缺失 ID。
     ///
@@ -193,7 +178,52 @@ impl<'a> FileAssetRepository<'a> {
     ///
     /// # 约束
     /// 只查询 `file_assets` 集合，不跨聚合访问其他集合。
-    pub async fn missing_file_asset_ids(
+    async fn missing_file_asset_ids(
+        &self,
+        ids: &[FileAssetId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<FileAssetId>>;
+
+    /// 分页检索文件资产列表（投影查询）。
+    ///
+    /// 只返回 [`FileAssetRow`] 所需的展示与治理字段，不加载整文档；
+    /// `file_name` 按字面量忽略大小写模糊匹配（复用 `repository::regex_filter`），
+    /// 状态/保留策略/敏感级别精确匹配覆盖 `idx_file_assets_scan_retention`。
+    ///
+    /// # 参数
+    /// * `filter` - 筛选与分页条件
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回当前页投影行与满足筛选条件的总数。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    async fn search_file_assets(
+        &self,
+        filter: &FileAssetFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<FileAssetRow>>;
+}
+
+impl FileAssetRepositoryExt for persistence_core::Repository<'_, FileAsset> {
+    async fn create_many_ordered(&self, assets: &[FileAsset], executor: &mut dyn Executor) -> Result<()> {
+        if assets.is_empty() {
+            return Ok(());
+        }
+        mongo_ops::insert_many(&self.collection(), assets.to_vec(), executor).await?;
+        Ok(())
+    }
+
+    async fn find_by_ids(&self, ids: &[FileAssetId], executor: &mut dyn Executor) -> Result<Vec<FileAsset>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ids = ids.iter().map(ToString::to_string).collect::<Vec<_>>();
+        self.find_many(doc! { "id": { "$in": ids } }, executor).await
+    }
+
+    async fn missing_file_asset_ids(
         &self,
         ids: &[FileAssetId],
         executor: &mut dyn Executor,
@@ -213,22 +243,7 @@ impl<'a> FileAssetRepository<'a> {
         Ok(missing)
     }
 
-    /// 分页检索文件资产列表（投影查询）。
-    ///
-    /// 只返回 [`FileAssetRow`] 所需的展示与治理字段，不加载整文档；
-    /// `file_name` 按字面量忽略大小写模糊匹配（复用 `repository::regex_filter`），
-    /// 状态/保留策略/敏感级别精确匹配覆盖 `idx_file_assets_scan_retention`。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_file_assets(
+    async fn search_file_assets(
         &self,
         filter: &FileAssetFilter,
         executor: &mut dyn Executor,
@@ -244,7 +259,9 @@ impl<'a> FileAssetRepository<'a> {
     }
 }
 
-impl<'a> DocumentAttachmentRepository<'a> {
+/// 单据附件集合仓储的域查询。
+#[allow(async_fn_in_trait)]
+pub trait DocumentAttachmentRepositoryExt {
     /// 按业务单据批量取回附件关联（`idx_document_attachments_document`，无 N+1）。
     ///
     /// # 参数
@@ -256,7 +273,15 @@ impl<'a> DocumentAttachmentRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_by_document(
+    async fn list_by_document(
+        &self,
+        document_id: &BusinessDocumentId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<DocumentAttachment>>;
+}
+
+impl DocumentAttachmentRepositoryExt for persistence_core::Repository<'_, DocumentAttachment> {
+    async fn list_by_document(
         &self,
         document_id: &BusinessDocumentId,
         executor: &mut dyn Executor,
@@ -310,7 +335,7 @@ mod tests {
     use mongodb::bson::doc;
     use persistence_core::{NoTransaction, QueryFilter};
 
-    use super::{FileAssetFilter, sort_doc};
+    use super::{FileAssetFilter, FileAssetRepositoryExt, sort_doc};
     use crate::entity::file_asset::{RetentionClass, SecurityScanStatus, SensitivityClass};
     use crate::repository::owned::FileAssetRepository;
 

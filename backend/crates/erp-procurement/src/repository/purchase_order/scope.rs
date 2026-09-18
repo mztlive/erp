@@ -185,7 +185,9 @@ impl PurchaseReadScope {
     }
 }
 
-impl super::super::owned::PurchaseOrderRepository<'_> {
+/// 采购主表授权范围查询。
+#[allow(async_fn_in_trait)]
+pub trait PurchaseOrderRepositoryScopeExt {
     /// 按独立授权条件读取采购单，ID 条件不能替换范围交集。
     ///
     /// # 参数
@@ -201,14 +203,12 @@ impl super::super::owned::PurchaseOrderRepository<'_> {
     ///
     /// # 关键业务约束
     /// 仓储不得按登录用户自行推断权限。
-    pub async fn find_authorized(
+    async fn find_authorized(
         &self,
         id: &str,
         scope: &PurchaseReadScope,
         executor: &mut dyn persistence_core::Executor,
-    ) -> persistence_core::Result<Option<crate::entity::purchase_order::PurchaseOrder>> {
-        self.find_one(doc! { "$and": [{ "id": id }, scope.document()] }, executor).await
-    }
+    ) -> persistence_core::Result<Option<crate::entity::purchase_order::PurchaseOrder>>;
 
     /// 读取范围内采购单主键，供变更单和退货沿来源单过滤。
     ///
@@ -224,7 +224,48 @@ impl super::super::owned::PurchaseOrderRepository<'_> {
     ///
     /// # 关键业务约束
     /// 仓储不得按登录用户自行推断权限；公司范围应由调用方跳过本方法。
-    pub async fn list_authorized_ids(
+    async fn list_authorized_ids(
+        &self,
+        scope: &PurchaseReadScope,
+        executor: &mut dyn persistence_core::Executor,
+    ) -> persistence_core::Result<Vec<String>>;
+
+    /// 装载查询的有界身份与版本集合，用于跨页及导出的一致性校验。
+    ///
+    /// # 参数
+    /// * `filter` - 业务筛选
+    /// * `scope` - 已证明的对象范围
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 最多 10001 行；调用方必须整体拒绝超限，不得截断版本集合。
+    ///
+    /// # 错误
+    /// 数据库读取失败时返回仓储错误。
+    ///
+    /// # 关键业务约束
+    /// 版本集合必须与列表同一授权条件和筛选快照。
+    async fn query_versions(
+        &self,
+        filter: &super::PurchaseOrderFilter,
+        scope: &PurchaseReadScope,
+        executor: &mut dyn persistence_core::Executor,
+    ) -> persistence_core::Result<Vec<PurchaseVersion>>;
+}
+
+impl PurchaseOrderRepositoryScopeExt
+    for persistence_core::Repository<'_, crate::entity::purchase_order::PurchaseOrder>
+{
+    async fn find_authorized(
+        &self,
+        id: &str,
+        scope: &PurchaseReadScope,
+        executor: &mut dyn persistence_core::Executor,
+    ) -> persistence_core::Result<Option<crate::entity::purchase_order::PurchaseOrder>> {
+        self.find_one(doc! { "$and": [{ "id": id }, scope.document()] }, executor).await
+    }
+
+    async fn list_authorized_ids(
         &self,
         scope: &PurchaseReadScope,
         executor: &mut dyn persistence_core::Executor,
@@ -246,22 +287,7 @@ impl super::super::owned::PurchaseOrderRepository<'_> {
         Ok(versions.into_iter().map(|row| row.id).collect())
     }
 
-    /// 装载查询的有界身份与版本集合，用于跨页及导出的一致性校验。
-    ///
-    /// # 参数
-    /// * `filter` - 业务筛选
-    /// * `scope` - 已证明的对象范围
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 最多 10001 行；调用方必须整体拒绝超限，不得截断版本集合。
-    ///
-    /// # 错误
-    /// 数据库读取失败时返回仓储错误。
-    ///
-    /// # 关键业务约束
-    /// 版本集合必须与列表同一授权条件和筛选快照。
-    pub async fn query_versions(
+    async fn query_versions(
         &self,
         filter: &super::PurchaseOrderFilter,
         scope: &PurchaseReadScope,

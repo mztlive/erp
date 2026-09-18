@@ -17,6 +17,7 @@ use super::version_conflict::conflict_if_stale_version;
 use crate::dto::{CommitReceiptReversalRequest, CreateReceiptReversalRequest};
 use crate::entity::returns::{ReceiptReversal, ReceiptReversalData, ReceiptReversalStatus};
 use crate::repository::ReturnsExt;
+use crate::repository::prelude::*;
 use crate::{Error, Result};
 
 /// 在请求校验后按原时点分配 ID，并由实体规范化创建数据。

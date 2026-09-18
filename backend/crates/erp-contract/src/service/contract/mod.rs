@@ -29,6 +29,7 @@ use crate::ports::{
     CustomerAssignmentFactsPort, CustomerFactsPort, FileAssetFact, FileAssetFactsPort, PreparedContractAudit,
 };
 use crate::repository::ContractExt;
+use crate::repository::prelude::*;
 
 pub mod access;
 mod archive;

@@ -3,9 +3,11 @@ use std::hash::{Hash, Hasher};
 
 use application_core::{AuditActor, FilterOption, FilteredPage, PageView};
 use erp_identity::AccessControlExt;
+use erp_identity::repository::prelude::*;
 use erp_identity::service::access_control::resolve::AuthorizedDataScope;
 use erp_sales::dto::sales_order::SalesOrderListParams;
 use erp_sales::repository::SalesOrderExt;
+use erp_sales::repository::prelude::*;
 use erp_sales::repository::sales_order::{SalesOrderRow, SalesOrderSearch};
 use persistence_core::Transactional;
 use serde::Serialize;

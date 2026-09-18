@@ -29,6 +29,7 @@ use crate::entity::file_asset::{AttachmentUsage, DocumentAttachment, FileAsset};
 use crate::error::{Error, Result};
 use crate::ports::{BusinessDocumentPort, SupportAuditPort};
 use crate::repository::FileAssetExt;
+use crate::repository::prelude::*;
 
 /// 文件资产列表筛选条件类型（经 `FileAssetExt` 关联类型跨 crate 可达）。
 type FileAssetFilter = <mongodb::Database as FileAssetExt>::FileAssetFilter;

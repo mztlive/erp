@@ -1,6 +1,7 @@
 //! 公司维护用例；所有写入复用主体名称修订事务。
 use super::*;
 use crate::dto::company::{CompanyListParams, CompanyView, SaveCompanyRequest};
+use crate::repository::prelude::*;
 
 impl PartyService {
     /// 分页查询我方公司，直接返回可选择的完整名称。

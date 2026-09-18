@@ -34,6 +34,7 @@ use crate::error::{Error, Result};
 use crate::ports::{
     FailClosedAuditPort, FailClosedObjectFactPort, ObjectFactPort, PreparedWorkflowAudit, WorkflowAuditPort,
 };
+use crate::repository::prelude::*;
 use crate::repository::{ApprovalBindingLookup, DocumentRegistryExt};
 
 /// 构造跨域单据注册行。

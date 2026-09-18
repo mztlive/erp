@@ -13,6 +13,7 @@ use erp_identity::service::access_control::resolve::AuthorizedDataScope;
 use erp_procurement::repository::purchase_order::scope::PurchaseReadScope;
 use erp_procurement::{PurchaseAccess, PurchaseResolvedScope};
 use erp_sales::repository::SalesOrderExt;
+use erp_sales::repository::prelude::*;
 use erp_sales::repository::sales_order::scope::SalesReadScope;
 use mongodb::Database;
 use persistence_core::Executor;
@@ -251,7 +252,7 @@ impl FundsAccess {
         Ok(resolved.allows(
             &ScopedObject {
                 owned: facts.owner_is(access.user_id.as_str()),
-                collaborating: facts.collaborating_is(access.user_id.as_str()),
+                collaborating: false,
                 historical_read_participant: false,
                 org_unit_id: facts.business_org_unit_id.as_deref(),
                 settlement_party_id: None,
@@ -446,11 +447,6 @@ impl FundsLinkedFacts {
         self.owner_user_id.as_deref() == Some(user)
     }
 
-    /// 判断当前操作人是否具备有效协作事实。
-    pub(super) fn collaborating_is(&self, _user: &str) -> bool {
-        false
-    }
-
     /// 返回关联单据业务版本，用于跨页版本绑定。
     pub fn version_part(&self) -> String {
         format!("{}:{}", self.linked_document_id, self.linked_document_version)
@@ -535,7 +531,7 @@ pub fn ensure_page(page: u64, version: Option<&str>) -> Result<()> {
 /// 版本不一致时返回可识别的范围变化错误并要求从第一页刷新。
 pub fn ensure_version(expected: Option<&str>, actual: &str) -> Result<()> {
     if expected.is_some_and(|version| version != actual) {
-        return Err(Error::ConflictError("DATA_SCOPE_CHANGED：数据范围已变化，请从第一页刷新".into()));
+        return Err(crate::support::data_scope_changed("数据范围已变化，请从第一页刷新"));
     }
     Ok(())
 }
@@ -590,7 +586,7 @@ pub(super) fn empty_page<T>(
 
 /// 版本不一致时返回可识别的范围变化错误并要求从第一页刷新。
 pub(super) fn changed() -> Error {
-    Error::ConflictError("DATA_SCOPE_CHANGED：数据范围已变化，请从第一页刷新".into())
+    crate::support::data_scope_changed("数据范围已变化，请从第一页刷新")
 }
 #[cfg(test)]
 mod tests {

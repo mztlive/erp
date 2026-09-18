@@ -4,13 +4,13 @@ use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{
-    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+    Executor, PageResult, Pagination, QueryFilter, Repository, Result, insert_literal_regex_filter, mongo_ops,
 };
 use serde::{Deserialize, Serialize};
 
 use super::{audit_event_projection, sort_doc};
-use crate::entity::access_control::AuditEventResult;
-use crate::repository::owned::AuditEventRepository;
+use crate::entity::access_control::{AuditEvent, AuditEventResult};
+
 /// 审计事件列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AuditEventRow {
@@ -208,7 +208,9 @@ impl Pagination for AuditEventFilter {
     }
 }
 
-impl<'a> AuditEventRepository<'a> {
+/// 审计事件集合仓储的域特有查询。
+#[allow(async_fn_in_trait)]
+pub trait AuditEventRepositoryExt {
     /// 分页检索审计事件（投影查询）。
     ///
     /// 只返回 [`AuditEventRow`] 所需的审计字段，不加载整文档；`actor_id` /
@@ -225,7 +227,15 @@ impl<'a> AuditEventRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_audit_events(
+    async fn search_audit_events(
+        &self,
+        filter: &AuditEventFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<AuditEventRow>>;
+}
+
+impl AuditEventRepositoryExt for Repository<'_, AuditEvent> {
+    async fn search_audit_events(
         &self,
         filter: &AuditEventFilter,
         executor: &mut dyn Executor,

@@ -7,7 +7,7 @@
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, Result, mongo_ops};
+use persistence_core::{Executor, Repository, Result, mongo_ops};
 use serde::Deserialize;
 
 use super::{
@@ -18,10 +18,7 @@ use crate::entity::sales_order::{
     SalesOrderGoodsServiceLineRevision, SalesOrderId, SalesOrderRevision, SalesOrderRevisionId,
     SalesOrderRevisionLine, SalesOrderRevisionLineId, SalesOrderVoucherLineRevision,
 };
-use crate::repository::owned::{
-    SalesOrderGoodsServiceLineRevisionRepository, SalesOrderRepository, SalesOrderRevisionLineRepository,
-    SalesOrderRevisionRepository, SalesOrderVoucherLineRevisionRepository,
-};
+use crate::repository::owned::SalesOrderRepository;
 
 /// 销售版本号最小投影行。
 #[derive(Debug, Deserialize)]
@@ -30,7 +27,9 @@ struct SalesOrderRevisionNoRow {
     revision_no: u32,
 }
 
-impl<'a> SalesOrderRevisionRepository<'a> {
+/// 销售正式版本集合的域查询扩展。
+#[allow(async_fn_in_trait)]
+pub trait SalesOrderRevisionRepositoryExt {
     /// 按销售版本 ID 集合批量读取正式版本。
     ///
     /// # 参数
@@ -42,16 +41,11 @@ impl<'a> SalesOrderRevisionRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_revisions_by_ids(
+    async fn find_revisions_by_ids(
         &self,
         revision_ids: &[String],
         executor: &mut dyn Executor,
-    ) -> Result<Vec<SalesOrderRevision>> {
-        if revision_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        self.find_many(doc! { "id": { "$in": revision_ids } }, executor).await
-    }
+    ) -> Result<Vec<SalesOrderRevision>>;
 
     /// 按销售单与版本号查找正式版本。
     ///
@@ -67,21 +61,12 @@ impl<'a> SalesOrderRevisionRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_order_and_no(
+    async fn find_by_order_and_no(
         &self,
         sales_order_id: &SalesOrderId,
         revision_no: u32,
         executor: &mut dyn Executor,
-    ) -> Result<Option<SalesOrderRevision>> {
-        self.find_one(
-            doc! {
-                "sales_order_id": sales_order_id.to_string(),
-                "revision_no": revision_no as i32,
-            },
-            executor,
-        )
-        .await
-    }
+    ) -> Result<Option<SalesOrderRevision>>;
 
     /// 列出销售单的版本历史（新版本在前）。
     ///
@@ -94,29 +79,11 @@ impl<'a> SalesOrderRevisionRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    #[tracing::instrument(
-        name = "repository.sales_order.list_revisions",
-        skip_all,
-        fields(
-            layer = "repository",
-            domain = "sales_order",
-            db.system.name = "mongodb",
-            db.collection.name = "sales_order_revisions",
-            db.operation.name = "find"
-        )
-    )]
-    pub async fn list_by_order(
+    async fn list_by_order(
         &self,
         sales_order_id: &SalesOrderId,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<SalesOrderRevision>> {
-        self.find_many_sorted(
-            doc! { "sales_order_id": sales_order_id.to_string() },
-            doc! { "revision_no": -1 },
-            executor,
-        )
-        .await
-    }
+    ) -> Result<Vec<SalesOrderRevision>>;
 
     /// 读取指定销售单的历史最大正式版本号。
     ///
@@ -131,20 +98,11 @@ impl<'a> SalesOrderRevisionRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或投影反序列化失败时返回错误。
-    pub async fn latest_revision_no(
+    async fn latest_revision_no(
         &self,
         sales_order_id: &SalesOrderId,
         executor: &mut dyn Executor,
-    ) -> Result<Option<u32>> {
-        let rows = mongo_ops::find_many(
-            &self.collection().clone_with_type::<SalesOrderRevisionNoRow>(),
-            latest_sales_order_revision_filter(sales_order_id),
-            latest_sales_order_revision_options(),
-            executor,
-        )
-        .await?;
-        Ok(sales_order_revision_no_from_rows(rows))
-    }
+    ) -> Result<Option<u32>>;
 
     /// 按稳定 ID 读取工作项当前销售正式版本。
     ///
@@ -162,7 +120,81 @@ impl<'a> SalesOrderRevisionRepository<'a> {
     ///
     /// # 约束
     /// 仅查询本仓储拥有的销售版本集合，不访问销售单主表。
-    pub async fn find_work_item_sales_order_revision(
+    async fn find_work_item_sales_order_revision(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SalesOrderRevision>>;
+}
+
+impl SalesOrderRevisionRepositoryExt for Repository<'_, SalesOrderRevision> {
+    async fn find_revisions_by_ids(
+        &self,
+        revision_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesOrderRevision>> {
+        if revision_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many(doc! { "id": { "$in": revision_ids } }, executor).await
+    }
+
+    async fn find_by_order_and_no(
+        &self,
+        sales_order_id: &SalesOrderId,
+        revision_no: u32,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SalesOrderRevision>> {
+        self.find_one(
+            doc! {
+                "sales_order_id": sales_order_id.to_string(),
+                "revision_no": revision_no as i32,
+            },
+            executor,
+        )
+        .await
+    }
+
+    #[tracing::instrument(
+        name = "repository.sales_order.list_revisions",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "sales_order",
+            db.system.name = "mongodb",
+            db.collection.name = "sales_order_revisions",
+            db.operation.name = "find"
+        )
+    )]
+    async fn list_by_order(
+        &self,
+        sales_order_id: &SalesOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesOrderRevision>> {
+        self.find_many_sorted(
+            doc! { "sales_order_id": sales_order_id.to_string() },
+            doc! { "revision_no": -1 },
+            executor,
+        )
+        .await
+    }
+
+    async fn latest_revision_no(
+        &self,
+        sales_order_id: &SalesOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<u32>> {
+        let rows = mongo_ops::find_many(
+            &self.collection().clone_with_type::<SalesOrderRevisionNoRow>(),
+            latest_sales_order_revision_filter(sales_order_id),
+            latest_sales_order_revision_options(),
+            executor,
+        )
+        .await?;
+        Ok(sales_order_revision_no_from_rows(rows))
+    }
+
+    async fn find_work_item_sales_order_revision(
         &self,
         id: &str,
         executor: &mut dyn Executor,
@@ -193,7 +225,9 @@ fn sales_order_revision_no_from_rows(rows: Vec<SalesOrderRevisionNoRow>) -> Opti
     rows.into_iter().next().map(|row| row.revision_no)
 }
 
-impl<'a> SalesOrderRevisionLineRepository<'a> {
+/// 销售版本行集合的域查询扩展。
+#[allow(async_fn_in_trait)]
+pub trait SalesOrderRevisionLineRepositoryExt {
     /// 列出版本的全部公共行版本（按行号升序）。
     ///
     /// # 参数
@@ -205,18 +239,11 @@ impl<'a> SalesOrderRevisionLineRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_lines_by_revision(
+    async fn list_lines_by_revision(
         &self,
         revision_id: &SalesOrderRevisionId,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<SalesOrderRevisionLine>> {
-        self.find_many_sorted(
-            doc! { "sales_order_revision_id": revision_id.to_string() },
-            doc! { "line_no": 1 },
-            executor,
-        )
-        .await
-    }
+    ) -> Result<Vec<SalesOrderRevisionLine>>;
 
     /// 按销售版本 ID 集合批量取回公共行版本（`$in` 一次取回，禁止 N+1）。
     ///
@@ -232,6 +259,27 @@ impl<'a> SalesOrderRevisionLineRepository<'a> {
     ///
     /// # 关键业务约束
     /// 空集合直接返回空列表，不发查询。
+    async fn list_lines_by_revisions(
+        &self,
+        revision_ids: &[SalesOrderRevisionId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesOrderRevisionLine>>;
+}
+
+impl SalesOrderRevisionLineRepositoryExt for Repository<'_, SalesOrderRevisionLine> {
+    async fn list_lines_by_revision(
+        &self,
+        revision_id: &SalesOrderRevisionId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesOrderRevisionLine>> {
+        self.find_many_sorted(
+            doc! { "sales_order_revision_id": revision_id.to_string() },
+            doc! { "line_no": 1 },
+            executor,
+        )
+        .await
+    }
+
     #[tracing::instrument(
         name = "repository.sales_order.list_revision_lines",
         skip_all,
@@ -243,7 +291,7 @@ impl<'a> SalesOrderRevisionLineRepository<'a> {
             db.operation.name = "find"
         )
     )]
-    pub async fn list_lines_by_revisions(
+    async fn list_lines_by_revisions(
         &self,
         revision_ids: &[SalesOrderRevisionId],
         executor: &mut dyn Executor,
@@ -256,7 +304,9 @@ impl<'a> SalesOrderRevisionLineRepository<'a> {
     }
 }
 
-impl<'a> SalesOrderGoodsServiceLineRevisionRepository<'a> {
+/// 实物及服务行版本集合的域查询扩展。
+#[allow(async_fn_in_trait)]
+pub trait SalesOrderGoodsServiceLineRevisionRepositoryExt {
     /// 按公共行版本 ID 集合批量取回实物及服务行（`$in` 一次取回，禁止 N+1）。
     ///
     /// # 参数
@@ -268,7 +318,15 @@ impl<'a> SalesOrderGoodsServiceLineRevisionRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_by_revision_line_ids(
+    async fn list_by_revision_line_ids(
+        &self,
+        revision_line_ids: &[SalesOrderRevisionLineId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesOrderGoodsServiceLineRevision>>;
+}
+
+impl SalesOrderGoodsServiceLineRevisionRepositoryExt for Repository<'_, SalesOrderGoodsServiceLineRevision> {
+    async fn list_by_revision_line_ids(
         &self,
         revision_line_ids: &[SalesOrderRevisionLineId],
         executor: &mut dyn Executor,
@@ -281,7 +339,9 @@ impl<'a> SalesOrderGoodsServiceLineRevisionRepository<'a> {
     }
 }
 
-impl<'a> SalesOrderVoucherLineRevisionRepository<'a> {
+/// 卡券行版本集合的域查询扩展。
+#[allow(async_fn_in_trait)]
+pub trait SalesOrderVoucherLineRevisionRepositoryExt {
     /// 按公共行版本 ID 集合批量取回卡券行（`$in` 一次取回，禁止 N+1）。
     ///
     /// # 参数
@@ -293,7 +353,15 @@ impl<'a> SalesOrderVoucherLineRevisionRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_by_revision_line_ids(
+    async fn list_by_revision_line_ids(
+        &self,
+        revision_line_ids: &[SalesOrderRevisionLineId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesOrderVoucherLineRevision>>;
+}
+
+impl SalesOrderVoucherLineRevisionRepositoryExt for Repository<'_, SalesOrderVoucherLineRevision> {
+    async fn list_by_revision_line_ids(
         &self,
         revision_line_ids: &[SalesOrderRevisionLineId],
         executor: &mut dyn Executor,

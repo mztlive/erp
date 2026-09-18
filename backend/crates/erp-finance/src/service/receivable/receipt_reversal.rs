@@ -13,6 +13,7 @@ use crate::entity::receivable::{
     ReceivableEntry,
 };
 use crate::repository::ReceivableExt;
+use crate::repository::prelude::*;
 /// 批量索引 helper 已下沉到 [`crate::service::offset_index`]；此处重导出仅保
 /// 持既有 `receipt_reversal::` 引用路径兼容，新代码请直引共享模块。
 pub use crate::service::offset_index::{

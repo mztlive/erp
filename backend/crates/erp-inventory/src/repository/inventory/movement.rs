@@ -4,13 +4,12 @@ use erp_core::ids::{SkuId, WarehouseId};
 use erp_core::money::Quantity;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Repository, Result, mongo_ops};
 use serde::{Deserialize, Serialize};
 
 use super::shared::{entities_by_ids, scoped_base_filter, sort_doc, with_id_tie_breaker};
 use super::{InventoryRepository, STOCK_MOVEMENTS};
 use crate::entity::inventory::{MovementDirection, MovementType, StockMovement};
-use crate::repository::owned::StockMovementRepository;
 
 /// 库存流水列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -141,7 +140,9 @@ impl Pagination for StockMovementFilter {
     }
 }
 
-impl<'a> StockMovementRepository<'a> {
+/// 库存流水集合上的领域查询。
+#[allow(async_fn_in_trait)]
+pub trait StockMovementRepositoryExt {
     /// 分页检索库存流水台账（投影查询）。
     ///
     /// 只返回 [`StockMovementRow`] 所需的列表字段，不加载整文档；排序字段走
@@ -156,6 +157,33 @@ impl<'a> StockMovementRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    async fn search_stock_movements(
+        &self,
+        filter: &StockMovementFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<StockMovementRow>>;
+
+    /// 按唯一来源单据标识查询库存流水（详情查询）。
+    ///
+    /// 同一来源单据（如一次采购入库）可能产生多行流水。
+    ///
+    /// # 参数
+    /// * `source_document_id` - 唯一来源单据标识
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配的流水集合。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn find_by_source_document(
+        &self,
+        source_document_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<StockMovement>>;
+}
+
+impl StockMovementRepositoryExt for Repository<'_, StockMovement> {
     #[tracing::instrument(
         name = "repository.inventory.search_stock_movements",
         skip_all,
@@ -167,7 +195,7 @@ impl<'a> StockMovementRepository<'a> {
             db.operation.name = "search"
         )
     )]
-    pub async fn search_stock_movements(
+    async fn search_stock_movements(
         &self,
         filter: &StockMovementFilter,
         executor: &mut dyn Executor,
@@ -185,20 +213,7 @@ impl<'a> StockMovementRepository<'a> {
         Ok(PageResult { items, total: total as i64 })
     }
 
-    /// 按唯一来源单据标识查询库存流水（详情查询）。
-    ///
-    /// 同一来源单据（如一次采购入库）可能产生多行流水。
-    ///
-    /// # 参数
-    /// * `source_document_id` - 唯一来源单据标识
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的流水集合。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_by_source_document(
+    async fn find_by_source_document(
         &self,
         source_document_id: &str,
         executor: &mut dyn Executor,

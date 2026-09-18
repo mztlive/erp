@@ -9,8 +9,10 @@ use erp_integration::entity::integration_ops::{
     W29CloseDecision,
 };
 use erp_integration::repository::IntegrationOpsExt;
+use erp_integration::repository::prelude::*;
 use erp_workflow::entity::work_item::WorkItem;
 use erp_workflow::ports::W29CloseFact;
+use erp_workflow::repository::prelude::*;
 use erp_workflow::{Error as WorkflowError, Result as WorkflowResult, WorkItemExt};
 use mongodb::Database;
 use persistence_core::Executor;

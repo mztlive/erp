@@ -28,9 +28,9 @@ pub mod audit_event;
 pub mod data_scope;
 pub mod permission;
 
-pub use audit_event::{AuditEventFilter, AuditEventRow};
-pub use data_scope::{DataScopeFilter, DataScopeRow, data_scope_subjects_filter};
-pub use permission::{PermissionFilter, PermissionRow};
+pub use audit_event::{AuditEventFilter, AuditEventRepositoryExt, AuditEventRow};
+pub use data_scope::{DataScopeFilter, DataScopeRepositoryExt, DataScopeRow, data_scope_subjects_filter};
+pub use permission::{PermissionFilter, PermissionRepositoryExt, PermissionRow, UserRoleRepositoryExt};
 
 /// D06 域专用仓储：跨集合、多步骤且必须位于事务内的聚合写入。
 ///
@@ -165,6 +165,7 @@ mod tests {
     use super::{AuditEventFilter, DataScopeFilter, PermissionFilter, data_scope_subjects_filter, sort_doc};
     use crate::entity::access_control::{AuditEventResult, DataScopeSubjectType, DataScopeType};
     use crate::repository::owned::DataScopeRepository;
+    use crate::repository::prelude::*;
 
     #[test]
     fn permission_filter_applies_resource_regex_and_flags() {

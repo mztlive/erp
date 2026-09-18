@@ -3,13 +3,12 @@ use erp_core::ids::PartyId;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{
-    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+    Executor, PageResult, Pagination, QueryFilter, Repository, Result, insert_literal_regex_filter, mongo_ops,
 };
 use serde::{Deserialize, Serialize};
 
 use super::shared::sort_doc;
 use crate::entity::party::PartyRevision;
-use crate::repository::owned::PartyRevisionRepository;
 
 /// 主体修订列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -78,7 +77,9 @@ impl Pagination for PartyRevisionFilter {
     }
 }
 
-impl<'a> PartyRevisionRepository<'a> {
+/// 主体修订集合仓储的域查询扩展。
+#[allow(async_fn_in_trait)]
+pub trait PartyRevisionRepositoryExt {
     /// 按修订 ID 集合批量读取主体修订（erp-party-012）。
     ///
     /// 历史别名：与 [`Self::list_by_ids`] 同语义，保留以兼容公开签名；新调用统一使用 `list_by_ids`。
@@ -92,13 +93,11 @@ impl<'a> PartyRevisionRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_revisions_by_ids(
+    async fn find_revisions_by_ids(
         &self,
         revision_ids: &[String],
         executor: &mut dyn Executor,
-    ) -> Result<Vec<PartyRevision>> {
-        self.list_by_ids(revision_ids, executor).await
-    }
+    ) -> Result<Vec<PartyRevision>>;
 
     /// 按修订 ID 查找主体修订。
     ///
@@ -111,13 +110,7 @@ impl<'a> PartyRevisionRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_revision(
-        &self,
-        id: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<PartyRevision>> {
-        self.find_by_id(id, executor).await
-    }
+    async fn find_revision(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<PartyRevision>>;
 
     /// 分页检索主体修订列表（投影查询）。
     ///
@@ -133,7 +126,96 @@ impl<'a> PartyRevisionRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_party_revisions(
+    async fn search_party_revisions(
+        &self,
+        filter: &PartyRevisionFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<PartyRevisionRow>>;
+
+    /// 检索某主体的完整修订历史（按 `revision_no` 升序，§6.2 历史查询）。
+    ///
+    /// # 参数
+    /// * `party_id` - 稳定主体 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回该主体的全部修订（修订集合追加式写入，无软删除）。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn list_revision_history(
+        &self,
+        party_id: &PartyId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyRevision>>;
+
+    /// 按修订 ID 集合批量读取主体修订（erp-party-012）。
+    ///
+    /// 本域修订批量读取的唯一入口；早期的 `find_revisions_by_ids` 别名已删除。
+    ///
+    /// # 参数
+    /// * `revision_ids` - 修订 ID 集合；为空时直接返回空集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配的主体修订。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    async fn list_by_ids(
+        &self,
+        revision_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyRevision>>;
+
+    /// 按法定名称或简称字面量模糊匹配修订所属主体 ID。
+    ///
+    /// 返回修订直属主体 ID；是否当前生效由调用方按 `current_revision_id` 回指判定，
+    /// 不要在本方法隐含当前性语义（erp-party-012）。
+    ///
+    /// # 参数
+    /// * `keyword` - 名称关键词
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回去重并按稳定 ID 排序的主体 ID。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    async fn matching_party_ids_by_name(
+        &self,
+        keyword: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyId>>;
+
+    /// 返回指定主体下一修订序号。
+    ///
+    /// # 参数
+    /// * `party_id` - 稳定主体 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 无历史时返回 `1`，否则返回最大修订号加一。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    async fn next_revision_no(&self, party_id: &PartyId, executor: &mut dyn Executor) -> Result<u32>;
+}
+
+impl PartyRevisionRepositoryExt for Repository<'_, PartyRevision> {
+    async fn find_revisions_by_ids(
+        &self,
+        revision_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyRevision>> {
+        self.list_by_ids(revision_ids, executor).await
+    }
+
+    async fn find_revision(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<PartyRevision>> {
+        self.find_by_id(id, executor).await
+    }
+
+    async fn search_party_revisions(
         &self,
         filter: &PartyRevisionFilter,
         executor: &mut dyn Executor,
@@ -151,18 +233,7 @@ impl<'a> PartyRevisionRepository<'a> {
         Ok(PageResult { items, total: total as i64 })
     }
 
-    /// 检索某主体的完整修订历史（按 `revision_no` 升序，§6.2 历史查询）。
-    ///
-    /// # 参数
-    /// * `party_id` - 稳定主体 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回该主体的全部修订（修订集合追加式写入，无软删除）。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_revision_history(
+    async fn list_revision_history(
         &self,
         party_id: &PartyId,
         executor: &mut dyn Executor,
@@ -171,20 +242,7 @@ impl<'a> PartyRevisionRepository<'a> {
             .await
     }
 
-    /// 按修订 ID 集合批量读取主体修订（erp-party-012）。
-    ///
-    /// 本域修订批量读取的唯一入口；早期的 `find_revisions_by_ids` 别名已删除。
-    ///
-    /// # 参数
-    /// * `revision_ids` - 修订 ID 集合；为空时直接返回空集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回全部匹配的主体修订。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或反序列化失败时返回错误。
-    pub async fn list_by_ids(
+    async fn list_by_ids(
         &self,
         revision_ids: &[String],
         executor: &mut dyn Executor,
@@ -195,21 +253,7 @@ impl<'a> PartyRevisionRepository<'a> {
         self.find_many(doc! { "id": { "$in": revision_ids } }, executor).await
     }
 
-    /// 按法定名称或简称字面量模糊匹配修订所属主体 ID。
-    ///
-    /// 返回修订直属主体 ID；是否当前生效由调用方按 `current_revision_id` 回指判定，
-    /// 不要在本方法隐含当前性语义（erp-party-012）。
-    ///
-    /// # 参数
-    /// * `keyword` - 名称关键词
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回去重并按稳定 ID 排序的主体 ID。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或反序列化失败时返回错误。
-    pub async fn matching_party_ids_by_name(
+    async fn matching_party_ids_by_name(
         &self,
         keyword: &str,
         executor: &mut dyn Executor,
@@ -232,18 +276,7 @@ impl<'a> PartyRevisionRepository<'a> {
         Ok(ids)
     }
 
-    /// 返回指定主体下一修订序号。
-    ///
-    /// # 参数
-    /// * `party_id` - 稳定主体 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 无历史时返回 `1`，否则返回最大修订号加一。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或反序列化失败时返回错误。
-    pub async fn next_revision_no(&self, party_id: &PartyId, executor: &mut dyn Executor) -> Result<u32> {
+    async fn next_revision_no(&self, party_id: &PartyId, executor: &mut dyn Executor) -> Result<u32> {
         let revisions = self.list_revision_history(party_id, executor).await?;
         PartyRevision::next_revision_no(party_id, &revisions)
             .map_err(|_| persistence_core::Error::EntityMetadataOutOfRange("revision_no"))

@@ -12,6 +12,7 @@ use crate::entity::receivable::{
     SalesBusinessTypeFact,
 };
 use crate::repository::ReceivableExt;
+use crate::repository::prelude::*;
 use crate::{Error, Result};
 
 /// 财务消费方所需的销售修订事实，不接收销售单或正式版本聚合。

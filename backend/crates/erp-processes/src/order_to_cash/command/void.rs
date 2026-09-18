@@ -5,6 +5,7 @@ use erp_read_models::sales_center::order::dto::SalesOrderDetailView;
 use erp_sales::dto::sales_order::VoidSalesOrderRequest;
 use erp_sales::entity::sales_order::WorkingPurpose;
 use erp_sales::repository::SalesOrderExt;
+use erp_sales::repository::prelude::*;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 

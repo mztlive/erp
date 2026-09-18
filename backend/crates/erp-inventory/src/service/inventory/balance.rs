@@ -16,6 +16,7 @@ use crate::dto::{
 use crate::entity::inventory::{StockBalance, StockMovement};
 use crate::error::{Error, Result};
 use crate::ports::{SkuFact, SkuRevisionFact, WarehouseFact, WarehouseRevisionFact};
+use crate::repository::prelude::*;
 use crate::repository::{InventoryExt, StockBalanceFilter, StockBalanceRow, StockMovementFilter};
 
 impl InventoryService {

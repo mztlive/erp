@@ -4,14 +4,20 @@ use std::collections::HashMap;
 
 use application_core::FilterOption;
 use erp_audit::AuditExt;
+use erp_audit::repository::prelude::*;
 use erp_core::money::Amount;
 use erp_finance::ports::funds_scope::FundsResolvedScope;
+use erp_finance::repository::prelude::*;
 use erp_finance::repository::{PayableExt, ReceivableExt};
 use erp_identity::AccessControlExt;
+use erp_identity::repository::prelude::*;
 use erp_procurement::repository::PurchaseOrderExt;
+use erp_procurement::repository::prelude::*;
 use erp_sales::repository::SalesOrderExt;
+use erp_sales::repository::prelude::*;
 use erp_workflow::WorkItemExt;
 use erp_workflow::repository::ApprovalIntegrationExt;
+use erp_workflow::repository::prelude::*;
 use persistence_core::Executor;
 use serde::Serialize;
 

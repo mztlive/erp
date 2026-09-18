@@ -5,6 +5,7 @@ use std::hash::{Hash, Hasher};
 
 use application_core::AuditActor;
 use erp_core::common::time::{BusinessDate, Instant};
+use erp_customer::repository::prelude::*;
 use erp_customer::{AssignmentRole, CustomerExt};
 use erp_identity::access_control::{ScopeClause, ScopedObject};
 use erp_identity::entity::organization::OrgTree;
@@ -13,9 +14,11 @@ use erp_identity::service::access_control::consumers::registration;
 use erp_identity::service::access_control::resolve::{AuthorizedDataScope, DataScopeService};
 use erp_identity::{Permission, SharedRbacService};
 use erp_sales::entity::sales_order::SalesOrder;
+use erp_sales::repository::prelude::*;
 use erp_sales::repository::sales_order::scope::{SalesReadScope, SalesScopeClause};
 use erp_sales::repository::{SalesOrderExt, SalesReviewExt};
 use erp_workflow::DocumentRegistryExt;
+use erp_workflow::repository::prelude::*;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 

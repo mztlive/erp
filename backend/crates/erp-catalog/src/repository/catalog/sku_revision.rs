@@ -13,7 +13,6 @@ use super::shared::{batch_ids_filter, default_paging, select_current_revision, s
 use crate::dto::catalog::SKU_REVISION_SORT_FIELDS;
 use crate::entity::catalog::{EnableStatus, Sku, SkuRevision};
 use crate::repository::CatalogExt;
-use crate::repository::owned::SkuRevisionRepository;
 
 /// `sku_revision_attribute_value` 集合名（单一来源：`CatalogExt` 关联常量）。
 pub(super) const SKU_REVISION_ATTRIBUTE_VALUES: &str =
@@ -136,7 +135,9 @@ impl Pagination for SkuRevisionFilter {
     }
 }
 
-impl<'a> SkuRevisionRepository<'a> {
+/// SKU 修订集合上的域查询。
+#[allow(async_fn_in_trait)]
+pub trait SkuRevisionRepositoryExt {
     /// 分页检索 SKU 修订列表（投影查询）。
     ///
     /// 只返回 [`SkuRevisionRow`] 所需的列表字段（含 Decimal128 销售可见价，
@@ -151,20 +152,11 @@ impl<'a> SkuRevisionRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_sku_revisions(
+    async fn search_sku_revisions(
         &self,
         filter: &SkuRevisionFilter,
         executor: &mut dyn Executor,
-    ) -> Result<PageResult<SkuRevisionRow>> {
-        let options = FindOptions::builder()
-            .sort(sku_revision_sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
-            .skip(filter.skip())
-            .limit(filter.limit())
-            .projection(sku_revision_projection())
-            .build();
-        let collection = self.collection().clone_with_type::<SkuRevisionRow>();
-        super::shared::search_projected(&collection, &self.collection(), filter, options, executor).await
-    }
+    ) -> Result<PageResult<SkuRevisionRow>>;
 
     /// 按稳定 ID 读取发布修订引用的 SKU 修订。
     ///
@@ -183,13 +175,11 @@ impl<'a> SkuRevisionRepository<'a> {
     ///
     /// # 约束
     /// 只查询本域 `sku_revisions` 集合，不触碰其他集合。
-    pub async fn find_publication_sku_revision(
+    async fn find_publication_sku_revision(
         &self,
         id: &SkuRevisionId,
         executor: &mut dyn Executor,
-    ) -> Result<Option<SkuRevision>> {
-        self.find_by_id(id.as_ref(), executor).await
-    }
+    ) -> Result<Option<SkuRevision>>;
 
     /// 按规范化条码精确查询全部「在用」SKU 修订。
     ///
@@ -206,20 +196,11 @@ impl<'a> SkuRevisionRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_active_by_barcode(
+    async fn find_active_by_barcode(
         &self,
         barcode: &str,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<SkuRevision>> {
-        self.find_many(
-            doc! {
-                "barcode": normalized_barcode(barcode),
-                "status": EnableStatus::Active.as_str(),
-            },
-            executor,
-        )
-        .await
-    }
+    ) -> Result<Vec<SkuRevision>>;
 
     /// 批量查询一组 SKU 的修订（`$in`，一次取回）。
     ///
@@ -234,16 +215,11 @@ impl<'a> SkuRevisionRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_by_sku_ids(
+    async fn find_by_sku_ids(
         &self,
         sku_ids: &[SkuId],
         executor: &mut dyn Executor,
-    ) -> Result<Vec<SkuRevision>> {
-        let Some(filter) = batch_ids_filter("sku_id", sku_ids) else {
-            return Ok(Vec::new());
-        };
-        self.find_many(filter, executor).await
-    }
+    ) -> Result<Vec<SkuRevision>>;
 
     /// 按稳定主键批量查询 SKU 修订。
     ///
@@ -256,16 +232,11 @@ impl<'a> SkuRevisionRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn find_by_ids(
+    async fn find_by_ids(
         &self,
         ids: &[SkuRevisionId],
         executor: &mut dyn Executor,
-    ) -> Result<Vec<SkuRevision>> {
-        let Some(filter) = batch_ids_filter("id", ids) else {
-            return Ok(Vec::new());
-        };
-        self.find_many(filter, executor).await
-    }
+    ) -> Result<Vec<SkuRevision>>;
 
     /// 批量读取采购责任规则展示需要的 SKU 当前修订。
     ///
@@ -281,7 +252,75 @@ impl<'a> SkuRevisionRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn list_procurement_responsibility_sku_revisions(
+    async fn list_procurement_responsibility_sku_revisions(
+        &self,
+        revision_ids: &[SkuRevisionId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SkuRevision>>;
+}
+
+impl SkuRevisionRepositoryExt for persistence_core::Repository<'_, SkuRevision> {
+    async fn search_sku_revisions(
+        &self,
+        filter: &SkuRevisionFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<SkuRevisionRow>> {
+        let options = FindOptions::builder()
+            .sort(sku_revision_sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
+            .skip(filter.skip())
+            .limit(filter.limit())
+            .projection(sku_revision_projection())
+            .build();
+        let collection = self.collection().clone_with_type::<SkuRevisionRow>();
+        super::shared::search_projected(&collection, &self.collection(), filter, options, executor).await
+    }
+
+    async fn find_publication_sku_revision(
+        &self,
+        id: &SkuRevisionId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SkuRevision>> {
+        self.find_by_id(id.as_ref(), executor).await
+    }
+
+    async fn find_active_by_barcode(
+        &self,
+        barcode: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SkuRevision>> {
+        self.find_many(
+            doc! {
+                "barcode": normalized_barcode(barcode),
+                "status": EnableStatus::Active.as_str(),
+            },
+            executor,
+        )
+        .await
+    }
+
+    async fn find_by_sku_ids(
+        &self,
+        sku_ids: &[SkuId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SkuRevision>> {
+        let Some(filter) = batch_ids_filter("sku_id", sku_ids) else {
+            return Ok(Vec::new());
+        };
+        self.find_many(filter, executor).await
+    }
+
+    async fn find_by_ids(
+        &self,
+        ids: &[SkuRevisionId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SkuRevision>> {
+        let Some(filter) = batch_ids_filter("id", ids) else {
+            return Ok(Vec::new());
+        };
+        self.find_many(filter, executor).await
+    }
+
+    async fn list_procurement_responsibility_sku_revisions(
         &self,
         revision_ids: &[SkuRevisionId],
         executor: &mut dyn Executor,

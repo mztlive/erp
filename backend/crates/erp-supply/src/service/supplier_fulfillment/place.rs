@@ -12,6 +12,7 @@ use crate::entity::failure::SupplierFailureClass;
 use crate::entity::supplier_api::{SupplierApiCapability, SupplierApiCapabilityCode, SupplierApiConnection};
 use crate::entity::supplier_fulfillment::*;
 use crate::ports::supplier_gateway::DispatchOutcome;
+use crate::repository::prelude::*;
 use crate::repository::{SupplierApiExt, SupplierFulfillmentExt};
 use crate::{Error, Result};
 /// 本域状态更新后需要的集成消息结果，错误政策由调用方给出。

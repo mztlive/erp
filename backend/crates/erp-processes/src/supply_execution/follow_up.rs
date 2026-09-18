@@ -5,6 +5,7 @@ use erp_core::ids::SupplierAccountId;
 use erp_identity::AccessControlExt;
 use erp_identity::entity::organization_change::OrganizationState;
 use erp_identity::repository::OrganizationRepository;
+use erp_supplier::repository::prelude::*;
 use erp_supplier::{CapabilityCode, SupplierExt};
 use mongodb::Database;
 use persistence_core::Executor;

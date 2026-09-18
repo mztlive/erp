@@ -1,11 +1,8 @@
 use erp_returns::entity::returns::CustomerRefundStatus;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
-use erp_workflow::service::approval::policy::ApprovalRequirement;
 
-use super::super::dto::{
-    DocumentApprovalHistoryPageView, DocumentApprovalInstanceView, DocumentApprovalView,
-};
-use super::definition_view_from_binding;
+use super::super::dto::{DocumentApprovalInstanceView, DocumentApprovalView};
+use super::process_required_view;
 
 /// 由绑定与可选实例事实构造只读审批结构。
 ///
@@ -23,27 +20,12 @@ pub fn document_approval_view(
     instance: Option<DocumentApprovalInstanceView>,
     status: CustomerRefundStatus,
 ) -> DocumentApprovalView {
-    DocumentApprovalView {
-        requirement: match ApprovalRequirement::ProcessRequired {
-            ApprovalRequirement::ProcessRequired => "PROCESS_REQUIRED",
-            ApprovalRequirement::NoApproval => "NO_APPROVAL",
-        }
-        .to_string(),
-        definition: binding.map(definition_view_from_binding),
+    process_required_view(
+        binding,
         instance,
-        recent_history: Vec::new(),
-        history_page: DocumentApprovalHistoryPageView::default(),
-        allowed_actions: allowed_document_actions(status),
-    }
-}
-
-/// 单据详情允许的审批相关动作。不含选择定义或审批人。
-fn allowed_document_actions(status: CustomerRefundStatus) -> Vec<String> {
-    match status {
-        CustomerRefundStatus::Draft => vec!["SUBMIT".to_string()],
-        CustomerRefundStatus::InApproval => vec!["CANCEL".to_string()],
-        CustomerRefundStatus::Posted | CustomerRefundStatus::Reversed => Vec::new(),
-    }
+        matches!(status, CustomerRefundStatus::Draft),
+        matches!(status, CustomerRefundStatus::InApproval),
+    )
 }
 
 #[cfg(test)]

@@ -8,6 +8,7 @@ use erp_audit::{AuditActorLogs, AuditExt, CommandReceiptServiceExt as _};
 use erp_core::ids::{FileAssetId, PartyBankAccountId, SupplierAccountId, SupplierPaymentId, WorkItemId};
 use erp_finance::entity::payable::{SupplierPayment, SupplierPaymentData};
 use erp_finance::repository::PayableExt;
+use erp_finance::repository::prelude::*;
 use erp_identity::SharedRbacService;
 use erp_party::PartyExt;
 use erp_supplier::SupplierExt;

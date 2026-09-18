@@ -11,7 +11,6 @@ use serde::Deserialize;
 
 use super::shared::PRODUCT_CATEGORIES;
 use crate::entity::catalog::ProductCategory;
-use crate::repository::owned::ProductCategoryRepository;
 
 /// 祖先链最大节点数（含起始父节点）。超出即视为异常链并失败关闭。
 const PARENT_CHAIN_MAX_NODES: usize = 32;
@@ -129,7 +128,9 @@ struct ParentChainAggregateRow {
     ancestors: Vec<ParentChainAncestorRow>,
 }
 
-impl<'a> ProductCategoryRepository<'a> {
+/// 商品分类祖先链投影查询。
+#[allow(async_fn_in_trait)]
+pub trait ProductCategoryRepositoryParentChainExt {
     /// 投影新父分类的祖先链事实。
     ///
     /// 根节点不访问数据库。非根时以一次 `$match` + `$graphLookup` 取回起始父
@@ -148,18 +149,11 @@ impl<'a> ProductCategoryRepository<'a> {
     ///
     /// # 约束
     /// 单次校验固定 0 或 1 次查询；历史断链、成环或过深必须标出，不得无限遍历。
-    pub async fn parent_chain(
+    async fn parent_chain(
         &self,
         parent_id: Option<&ProductCategoryId>,
         executor: &mut dyn Executor,
-    ) -> Result<CategoryParentChainFact> {
-        let Some(parent_id) = parent_id else {
-            return Ok(CategoryParentChainFact::root());
-        };
-        let start_parent_id = parent_id.as_ref();
-        let row = aggregate_parent_chain(&self.collection(), start_parent_id, executor).await?;
-        Ok(assemble_parent_chain_fact(start_parent_id, row))
-    }
+    ) -> Result<CategoryParentChainFact>;
 
     /// 返回祖先链 `$match` + `$graphLookup` 管道，供 explain 与行为测试共用。
     ///
@@ -173,7 +167,24 @@ impl<'a> ProductCategoryRepository<'a> {
     ///
     /// # 错误
     /// 无。
-    pub fn parent_chain_aggregation_pipeline(&self, start_parent_id: &str) -> Vec<Document> {
+    fn parent_chain_aggregation_pipeline(&self, start_parent_id: &str) -> Vec<Document>;
+}
+
+impl ProductCategoryRepositoryParentChainExt for persistence_core::Repository<'_, ProductCategory> {
+    async fn parent_chain(
+        &self,
+        parent_id: Option<&ProductCategoryId>,
+        executor: &mut dyn Executor,
+    ) -> Result<CategoryParentChainFact> {
+        let Some(parent_id) = parent_id else {
+            return Ok(CategoryParentChainFact::root());
+        };
+        let start_parent_id = parent_id.as_ref();
+        let row = aggregate_parent_chain(&self.collection(), start_parent_id, executor).await?;
+        Ok(assemble_parent_chain_fact(start_parent_id, row))
+    }
+
+    fn parent_chain_aggregation_pipeline(&self, start_parent_id: &str) -> Vec<Document> {
         parent_chain_pipeline(start_parent_id)
     }
 }

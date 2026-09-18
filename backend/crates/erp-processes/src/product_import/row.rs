@@ -2,6 +2,7 @@
 
 use application_core::AuditActor;
 use erp_catalog::entity::catalog::{EnableStatus, ProductKind};
+use erp_catalog::repository::prelude::*;
 use erp_catalog::{CatalogExt, CreateProductRequest, ProductMediaInput, ProductSkuInput};
 use erp_core::common::time::BusinessDate;
 use persistence_core::NoTransaction;

@@ -629,9 +629,6 @@ impl StockAdjustment {
                 .iter_mut()
                 .find(|line| line.base.id == update.line_id)
                 .ok_or_else(|| Error::from("明细行不属于该调整单"))?;
-            if line.stock_adjustment_id.as_ref() != self.base.id.as_str() {
-                return Err(Error::from("明细行不属于该调整单"));
-            }
             line.apply_update(self.reason_type, update.quantity, update.direction)?;
             changed.push(line.clone());
         }

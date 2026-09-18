@@ -11,6 +11,7 @@ use crate::dto::sales_selection::{
 };
 use crate::entity::sales_selection::{SalesSelectionBooklet, SalesSelectionProposal};
 use crate::repository::SalesSelectionExt;
+use crate::repository::prelude::*;
 use crate::repository::sales_selection::{SelectionBookFilter, validate_book_sort};
 use crate::{Error, Result};
 

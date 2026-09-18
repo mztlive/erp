@@ -1,8 +1,12 @@
 //! 供应商履约明细查询：按订单批量读取明细。
 
+#![allow(async_fn_in_trait)]
+
 use super::*;
 
-impl<'a> SupplierFulfillmentItemRepository<'a> {
+/// 供应商履约明细仓储的域查询。
+#[allow(async_fn_in_trait)]
+pub trait SupplierFulfillmentItemRepositoryExt {
     /// 批量按供应商子订单查询履约明细（`$in` 一次取回，避免 N+1）。
     ///
     /// 明细随子订单同事务创建且创建后不可修改（§6.19），本方法供详情页与
@@ -17,7 +21,15 @@ impl<'a> SupplierFulfillmentItemRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_items_by_order_ids(
+    async fn find_items_by_order_ids(
+        &self,
+        order_ids: &[SupplierFulfillmentOrderId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierFulfillmentItem>>;
+}
+
+impl SupplierFulfillmentItemRepositoryExt for SupplierFulfillmentItemRepository<'_> {
+    async fn find_items_by_order_ids(
         &self,
         order_ids: &[SupplierFulfillmentOrderId],
         executor: &mut dyn Executor,

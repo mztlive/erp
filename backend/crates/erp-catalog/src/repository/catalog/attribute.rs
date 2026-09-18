@@ -6,9 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use super::shared::{default_paging, sort_doc, whitelisted_sort};
 use crate::dto::catalog::{SKU_ATTRIBUTE_SORT_FIELDS, SKU_ATTRIBUTE_VALUE_SORT_FIELDS};
-use crate::entity::catalog::EnableStatus;
 use crate::entity::catalog::sku_attribute::AttributeValueType;
-use crate::repository::owned::{SkuAttributeRepository, SkuAttributeValueRepository};
+use crate::entity::catalog::{EnableStatus, SkuAttribute, SkuAttributeValue};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SkuAttributeRow {
@@ -106,7 +105,9 @@ impl Pagination for SkuAttributeFilter {
     }
 }
 
-impl<'a> SkuAttributeRepository<'a> {
+/// 规格属性集合上的域查询。
+#[allow(async_fn_in_trait)]
+pub trait SkuAttributeRepositoryExt {
     /// 分页检索规格属性列表（投影查询）。
     ///
     /// 只返回 [`SkuAttributeRow`] 所需的列表字段；排序字段白名单化
@@ -121,7 +122,15 @@ impl<'a> SkuAttributeRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_sku_attributes(
+    async fn search_sku_attributes(
+        &self,
+        filter: &SkuAttributeFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<SkuAttributeRow>>;
+}
+
+impl SkuAttributeRepositoryExt for persistence_core::Repository<'_, SkuAttribute> {
+    async fn search_sku_attributes(
         &self,
         filter: &SkuAttributeFilter,
         executor: &mut dyn Executor,
@@ -236,7 +245,9 @@ impl Pagination for SkuAttributeValueFilter {
     }
 }
 
-impl<'a> SkuAttributeValueRepository<'a> {
+/// 规格属性值集合上的域查询。
+#[allow(async_fn_in_trait)]
+pub trait SkuAttributeValueRepositoryExt {
     /// 分页检索规格属性值列表（投影查询）。
     ///
     /// 只返回 [`SkuAttributeValueRow`] 所需的列表字段；排序字段白名单化
@@ -251,7 +262,15 @@ impl<'a> SkuAttributeValueRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_sku_attribute_values(
+    async fn search_sku_attribute_values(
+        &self,
+        filter: &SkuAttributeValueFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<SkuAttributeValueRow>>;
+}
+
+impl SkuAttributeValueRepositoryExt for persistence_core::Repository<'_, SkuAttributeValue> {
+    async fn search_sku_attribute_values(
         &self,
         filter: &SkuAttributeValueFilter,
         executor: &mut dyn Executor,

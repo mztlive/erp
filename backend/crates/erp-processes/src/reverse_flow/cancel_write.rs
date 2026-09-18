@@ -5,6 +5,7 @@ use erp_core::common::time::Instant;
 use erp_returns::entity::returns::{CustomerRefund, PaymentReversal, ReceiptReversal, SupplierRefund};
 use erp_returns::service::ReturnsService;
 use erp_workflow::entity::work_item::WorkItem;
+use erp_workflow::repository::prelude::*;
 use erp_workflow::service::approval::execution::PreparedExecution;
 use erp_workflow::{BpmExt, WorkItemExt};
 use mongodb::Database;

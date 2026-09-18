@@ -13,6 +13,7 @@ use erp_supply::service::supplier_api::command::{
 };
 use erp_supply::service::supplier_api::context::{digest, map_command_shape_rejection};
 use erp_support::BulkJobExt;
+use erp_support::repository::prelude::*;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 

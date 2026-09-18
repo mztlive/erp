@@ -9,6 +9,7 @@ use erp_fulfillment::entity::fulfillment::{
 use erp_fulfillment::repository::FulfillmentExt;
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_sales::repository::SalesOrderExt;
+use erp_sales::repository::prelude::*;
 use erp_warehouse::repository::WarehouseExt;
 use persistence_core::Executor;
 

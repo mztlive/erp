@@ -8,6 +8,7 @@ use erp_supply::entity::supplier_api::{
 use erp_supply::repository::SupplierApiExt;
 use erp_supply::service::supplier_api::context::action_permission;
 use erp_support::BulkJobExt;
+use erp_support::repository::prelude::*;
 
 use super::SupplierApiReadService;
 use crate::Result;

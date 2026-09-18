@@ -3,13 +3,12 @@ use erp_core::ids::PartyId;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{
-    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+    Executor, PageResult, Pagination, QueryFilter, Repository, Result, insert_literal_regex_filter, mongo_ops,
 };
 use serde::{Deserialize, Serialize};
 
 use super::shared::{active_fact_filter, default_first_sort, party_default_marks_filter, sort_doc};
 use crate::entity::party::{EffectiveRecordStatus, PartyContact};
-use crate::repository::owned::PartyContactRepository;
 
 /// 联系人列表投影行。
 ///
@@ -129,7 +128,9 @@ impl Pagination for PartyContactFilter {
     }
 }
 
-impl<'a> PartyContactRepository<'a> {
+/// 联系人集合仓储的域查询扩展。
+#[allow(async_fn_in_trait)]
+pub trait PartyContactRepositoryExt {
     /// 分页检索联系人列表（投影查询，敏感字段不进投影）。
     ///
     /// 排序字段经仓储白名单校验（`created_at`/`contact_name`/`valid_from`），
@@ -144,7 +145,104 @@ impl<'a> PartyContactRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_party_contacts(
+    async fn search_party_contacts(
+        &self,
+        filter: &PartyContactFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<PartyContactRow>>;
+
+    /// 按联系人 ID 查找未删除联系人事实。
+    ///
+    /// # 参数
+    /// * `id` - 联系人事实 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配联系人；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    async fn find_contact(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<PartyContact>>;
+
+    /// 读取指定日期生效的主体联系人。
+    ///
+    /// # 参数
+    /// * `party_id` - 所属 Party ID
+    /// * `as_of` - 业务日期
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回该日期处于启用有效期的联系人。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn list_active_on(
+        &self,
+        party_id: &PartyId,
+        as_of: erp_core::common::time::BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyContact>>;
+
+    /// 按默认标记与创建时间读取指定日期生效的主体联系人。
+    ///
+    /// # 参数
+    /// * `party_id` - 所属 Party ID
+    /// * `as_of` - 业务日期
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回默认联系人优先、同组内最新创建优先的当前事实。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn list_current_on(
+        &self,
+        party_id: &PartyId,
+        as_of: erp_core::common::time::BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyContact>>;
+
+    /// 清除同一 Party 其他联系人的默认标记。
+    ///
+    /// 必须与主写入位于同一事务执行器中，避免并发或中途失败留下多个默认行。
+    ///
+    /// # 参数
+    /// * `party_id` - 所属 Party ID
+    /// * `exclude_id` - 保留默认标记的联系人 ID
+    /// * `executor` - 数据访问执行器，必须位于调用方事务中
+    ///
+    /// # 返回
+    /// 全部冲突默认标记清除后返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询、游标读取或 CAS 更新失败时返回错误。
+    async fn clear_other_default_marks(
+        &self,
+        party_id: &PartyId,
+        exclude_id: Option<&str>,
+        executor: &mut dyn Executor,
+    ) -> Result<()>;
+
+    /// 按默认标记和创建时间读取主体联系人。
+    ///
+    /// # 参数
+    /// * `party_id` - 所属主体 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回默认联系人优先、同组内最新创建优先的完整实体。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    async fn list_by_party(
+        &self,
+        party_id: &PartyId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyContact>>;
+}
+
+impl PartyContactRepositoryExt for Repository<'_, PartyContact> {
+    async fn search_party_contacts(
         &self,
         filter: &PartyContactFilter,
         executor: &mut dyn Executor,
@@ -166,34 +264,11 @@ impl<'a> PartyContactRepository<'a> {
         Ok(PageResult { items, total: total as i64 })
     }
 
-    /// 按联系人 ID 查找未删除联系人事实。
-    ///
-    /// # 参数
-    /// * `id` - 联系人事实 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配联系人；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_contact(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<PartyContact>> {
+    async fn find_contact(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<PartyContact>> {
         self.find_by_id(id, executor).await
     }
 
-    /// 读取指定日期生效的主体联系人。
-    ///
-    /// # 参数
-    /// * `party_id` - 所属 Party ID
-    /// * `as_of` - 业务日期
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回该日期处于启用有效期的联系人。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_active_on(
+    async fn list_active_on(
         &self,
         party_id: &PartyId,
         as_of: erp_core::common::time::BusinessDate,
@@ -202,19 +277,7 @@ impl<'a> PartyContactRepository<'a> {
         self.find_many(active_fact_filter(party_id, as_of), executor).await
     }
 
-    /// 按默认标记与创建时间读取指定日期生效的主体联系人。
-    ///
-    /// # 参数
-    /// * `party_id` - 所属 Party ID
-    /// * `as_of` - 业务日期
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回默认联系人优先、同组内最新创建优先的当前事实。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_current_on(
+    async fn list_current_on(
         &self,
         party_id: &PartyId,
         as_of: erp_core::common::time::BusinessDate,
@@ -223,21 +286,7 @@ impl<'a> PartyContactRepository<'a> {
         self.find_many_sorted(active_fact_filter(party_id, as_of), default_first_sort(), executor).await
     }
 
-    /// 清除同一 Party 其他联系人的默认标记。
-    ///
-    /// 必须与主写入位于同一事务执行器中，避免并发或中途失败留下多个默认行。
-    ///
-    /// # 参数
-    /// * `party_id` - 所属 Party ID
-    /// * `exclude_id` - 保留默认标记的联系人 ID
-    /// * `executor` - 数据访问执行器，必须位于调用方事务中
-    ///
-    /// # 返回
-    /// 全部冲突默认标记清除后返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或 CAS 更新失败时返回错误。
-    pub async fn clear_other_default_marks(
+    async fn clear_other_default_marks(
         &self,
         party_id: &PartyId,
         exclude_id: Option<&str>,
@@ -254,18 +303,7 @@ impl<'a> PartyContactRepository<'a> {
         Ok(())
     }
 
-    /// 按默认标记和创建时间读取主体联系人。
-    ///
-    /// # 参数
-    /// * `party_id` - 所属主体 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回默认联系人优先、同组内最新创建优先的完整实体。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或反序列化失败时返回错误。
-    pub async fn list_by_party(
+    async fn list_by_party(
         &self,
         party_id: &PartyId,
         executor: &mut dyn Executor,

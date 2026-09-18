@@ -4,7 +4,7 @@ use chrono::{Datelike, Days, NaiveDate};
 use serde::{Deserialize, Serialize};
 
 use super::time::BusinessDate;
-use crate::{Error, Result};
+use crate::Result;
 
 /// 周一开始的自然周，以及自然月、季度、半年、年。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -25,8 +25,7 @@ impl CalendarPeriod {
     pub fn end(self, date: BusinessDate) -> Result<BusinessDate> {
         let date = date.as_naive_date();
         let end = self.end_date(date).ok_or("自然周期日期超出支持范围")?;
-        BusinessDate::from_ymd(end.year(), end.month(), end.day())
-            .ok_or_else(|| Error::from("自然周期日期无效"))
+        Ok(BusinessDate::from_naive_date(end))
     }
 
     fn end_date(self, date: NaiveDate) -> Option<NaiveDate> {

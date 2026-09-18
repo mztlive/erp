@@ -5,7 +5,6 @@ use mongodb::options::FindOptions;
 use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
 
 use crate::entity::payable::{PaymentAllocation, PurchaseInvoiceAllocation};
-use crate::repository::owned::{PaymentAllocationRepository, PurchaseInvoiceAllocationRepository};
 
 /// 进项发票分配服务端分页筛选条件（FIN-R06）。
 #[derive(Debug, Clone)]
@@ -65,7 +64,8 @@ impl Pagination for PurchaseInvoiceAllocationFilter {
     }
 }
 
-impl<'a> PaymentAllocationRepository<'a> {
+#[allow(async_fn_in_trait)]
+pub trait PaymentAllocationRepositoryExt {
     /// 批量按付款单集合取回核销分配（`$in` 一次取回，禁止 N+1）。
     ///
     /// # 参数
@@ -77,17 +77,11 @@ impl<'a> PaymentAllocationRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_allocations_by_payments(
+    async fn find_allocations_by_payments(
         &self,
         payment_ids: &[erp_core::ids::SupplierPaymentId],
         executor: &mut dyn Executor,
-    ) -> Result<Vec<PaymentAllocation>> {
-        if payment_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        let payment_ids: Vec<String> = payment_ids.iter().map(ToString::to_string).collect();
-        self.find_many(doc! { "supplier_payment_id": { "$in": payment_ids } }, executor).await
-    }
+    ) -> Result<Vec<PaymentAllocation>>;
 
     /// 批量按应付分录集合取回核销分配（`$in`，用于反向核销锁定）。
     ///
@@ -100,7 +94,27 @@ impl<'a> PaymentAllocationRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_allocations_by_entries(
+    async fn find_allocations_by_entries(
+        &self,
+        entry_ids: &[PayableEntryId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PaymentAllocation>>;
+}
+
+impl PaymentAllocationRepositoryExt for persistence_core::Repository<'_, PaymentAllocation> {
+    async fn find_allocations_by_payments(
+        &self,
+        payment_ids: &[erp_core::ids::SupplierPaymentId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PaymentAllocation>> {
+        if payment_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let payment_ids: Vec<String> = payment_ids.iter().map(ToString::to_string).collect();
+        self.find_many(doc! { "supplier_payment_id": { "$in": payment_ids } }, executor).await
+    }
+
+    async fn find_allocations_by_entries(
         &self,
         entry_ids: &[PayableEntryId],
         executor: &mut dyn Executor,
@@ -113,7 +127,8 @@ impl<'a> PaymentAllocationRepository<'a> {
     }
 }
 
-impl<'a> PurchaseInvoiceAllocationRepository<'a> {
+#[allow(async_fn_in_trait)]
+pub trait PurchaseInvoiceAllocationRepositoryExt {
     /// 批量按发票集合取回进项发票分配（`$in` 一次取回，禁止 N+1）。
     ///
     /// # 参数
@@ -125,17 +140,11 @@ impl<'a> PurchaseInvoiceAllocationRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_allocations_by_invoices(
+    async fn find_allocations_by_invoices(
         &self,
         invoice_ids: &[erp_core::ids::InvoiceId],
         executor: &mut dyn Executor,
-    ) -> Result<Vec<PurchaseInvoiceAllocation>> {
-        if invoice_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        let invoice_ids: Vec<String> = invoice_ids.iter().map(ToString::to_string).collect();
-        self.find_many(doc! { "invoice_id": { "$in": invoice_ids } }, executor).await
-    }
+    ) -> Result<Vec<PurchaseInvoiceAllocation>>;
 
     /// 按账户/发票条件服务端分页检索进项发票分配（FIN-R06）。
     ///
@@ -154,7 +163,44 @@ impl<'a> PurchaseInvoiceAllocationRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_purchase_invoice_allocations(
+    async fn search_purchase_invoice_allocations(
+        &self,
+        filter: &PurchaseInvoiceAllocationFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<PurchaseInvoiceAllocation>>;
+
+    /// 批量按应付子账集合取回进项发票分配（`$in`，用于收票进度校验）。
+    ///
+    /// # 参数
+    /// * `account_ids` - 应付往来子账 ID 集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配分配。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn find_allocations_by_accounts(
+        &self,
+        account_ids: &[PayableAccountId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PurchaseInvoiceAllocation>>;
+}
+
+impl PurchaseInvoiceAllocationRepositoryExt for persistence_core::Repository<'_, PurchaseInvoiceAllocation> {
+    async fn find_allocations_by_invoices(
+        &self,
+        invoice_ids: &[erp_core::ids::InvoiceId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PurchaseInvoiceAllocation>> {
+        if invoice_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let invoice_ids: Vec<String> = invoice_ids.iter().map(ToString::to_string).collect();
+        self.find_many(doc! { "invoice_id": { "$in": invoice_ids } }, executor).await
+    }
+
+    async fn search_purchase_invoice_allocations(
         &self,
         filter: &PurchaseInvoiceAllocationFilter,
         executor: &mut dyn Executor,
@@ -170,18 +216,7 @@ impl<'a> PurchaseInvoiceAllocationRepository<'a> {
         Ok(PageResult { items, total: total as i64 })
     }
 
-    /// 批量按应付子账集合取回进项发票分配（`$in`，用于收票进度校验）。
-    ///
-    /// # 参数
-    /// * `account_ids` - 应付往来子账 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回全部匹配分配。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_allocations_by_accounts(
+    async fn find_allocations_by_accounts(
         &self,
         account_ids: &[PayableAccountId],
         executor: &mut dyn Executor,

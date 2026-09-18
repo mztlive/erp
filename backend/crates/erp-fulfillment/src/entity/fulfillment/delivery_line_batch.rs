@@ -59,9 +59,6 @@ impl DeliveryLineBatch {
         for (index, spec) in specs.into_iter().enumerate() {
             let offset = u32::try_from(index).map_err(|_| Error::from("发货行号溢出"))?;
             let line_no = first_line_no.checked_add(offset).ok_or_else(|| Error::from("发货行号溢出"))?;
-            if line_no < 1 {
-                return Err(Error::from("行号必须从 1 开始"));
-            }
             lines.push(DeliveryLine::new(
                 spec.line_id,
                 DeliveryLineData {

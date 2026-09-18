@@ -15,6 +15,7 @@ use crate::dto::contract::{ContractListParams, ContractListView, ContractRevisio
 use crate::error::Result;
 use crate::ports::{AccountNamePort, CustomerAssignmentFactsPort, CustomerFactsPort};
 use crate::repository::list_search::ContractCustomer;
+use crate::repository::prelude::*;
 use crate::repository::{ContractExt, ContractRow};
 
 impl ContractService {

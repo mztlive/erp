@@ -7,7 +7,7 @@ use futures_util::TryStreamExt;
 use mongodb::bson::{Bson, Document, doc};
 use mongodb::options::ReturnDocument;
 use mongodb::{Collection, Database};
-use persistence_core::{Error, Executor, Result, mongo_ops};
+use persistence_core::{Error, Executor, Repository, Result, mongo_ops};
 use serde::Deserialize;
 
 use super::bpm::{
@@ -18,7 +18,6 @@ use super::extensions::{ApprovalIntegrationExt, BpmExt};
 use crate::entity::approval_integration::{
     ApprovalNotificationDeliveryStatus, ApprovalNotificationOutbox, ApprovalSubjectSnapshot,
 };
-use crate::repository::owned::{ApprovalNotificationOutboxRepository, ApprovalSubjectSnapshotRepository};
 
 const MAX_OUTBOX_BATCH: i64 = 50;
 const INSTANCES: &str = <Database as BpmExt>::APPROVAL_PROCESS_INSTANCES;
@@ -372,18 +371,17 @@ fn runtime_read_facets(filter: &ApprovalInstanceListFilter) -> Document {
 }
 
 /// 写入与实例一一对应的不可变业务对象快照。
-impl<'a> ApprovalSubjectSnapshotRepository<'a> {
+#[allow(async_fn_in_trait)]
+pub trait ApprovalSubjectSnapshotRepositoryExt {
     /// 插入启动时冻结的业务对象快照；写后不得再更新。
     ///
     /// # 错误
     /// 同一实例已有快照或 MongoDB 写入失败时返回错误。
-    pub async fn create_immutable_snapshot(
+    async fn create_immutable_snapshot(
         &self,
         snapshot: &ApprovalSubjectSnapshot,
         executor: &mut dyn Executor,
-    ) -> Result<()> {
-        mongo_ops::insert_one(&self.collection(), snapshot, executor).await
-    }
+    ) -> Result<()>;
 
     /// 按已授权对象批量读取提交快照；调用方仍须校验对象类型和审批版本。
     ///
@@ -394,7 +392,50 @@ impl<'a> ApprovalSubjectSnapshotRepository<'a> {
     /// 返回未删除的匹配快照。
     /// # 错误
     /// 数据库读取失败时返回错误。
-    pub async fn list_by_business_objects(
+    async fn list_by_business_objects(
+        &self,
+        objects: &[(crate::entity::document_registry::DocumentType, String)],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ApprovalSubjectSnapshot>>;
+
+    /// 按审批实例读取唯一快照。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    async fn find_by_process_instance_id(
+        &self,
+        approval_process_instance_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ApprovalSubjectSnapshot>>;
+
+    /// 按审批实例批量读取不可变业务对象快照。
+    ///
+    /// # 参数
+    /// * `approval_process_instance_ids` - 当前列表页内的审批实例 ID
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回全部匹配且未删除的快照；调用方按实例 ID 关联。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    async fn find_by_process_instance_ids(
+        &self,
+        approval_process_instance_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ApprovalSubjectSnapshot>>;
+}
+
+impl ApprovalSubjectSnapshotRepositoryExt for Repository<'_, ApprovalSubjectSnapshot> {
+    async fn create_immutable_snapshot(
+        &self,
+        snapshot: &ApprovalSubjectSnapshot,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        mongo_ops::insert_one(&self.collection(), snapshot, executor).await
+    }
+
+    async fn list_by_business_objects(
         &self,
         objects: &[(crate::entity::document_registry::DocumentType, String)],
         executor: &mut dyn Executor,
@@ -409,11 +450,7 @@ impl<'a> ApprovalSubjectSnapshotRepository<'a> {
         self.find_many(doc! { "$or": clauses, "deleted_at": NOT_DELETED_TIMESTAMP_BSON }, executor).await
     }
 
-    /// 按审批实例读取唯一快照。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn find_by_process_instance_id(
+    async fn find_by_process_instance_id(
         &self,
         approval_process_instance_id: &str,
         executor: &mut dyn Executor,
@@ -421,18 +458,7 @@ impl<'a> ApprovalSubjectSnapshotRepository<'a> {
         self.find_one(snapshot_by_process_instance_filter(approval_process_instance_id), executor).await
     }
 
-    /// 按审批实例批量读取不可变业务对象快照。
-    ///
-    /// # 参数
-    /// * `approval_process_instance_ids` - 当前列表页内的审批实例 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回全部匹配且未删除的快照；调用方按实例 ID 关联。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn find_by_process_instance_ids(
+    async fn find_by_process_instance_ids(
         &self,
         approval_process_instance_ids: &[String],
         executor: &mut dyn Executor,
@@ -444,12 +470,72 @@ impl<'a> ApprovalSubjectSnapshotRepository<'a> {
     }
 }
 
-impl<'a> ApprovalNotificationOutboxRepository<'a> {
+/// 审批通知 outbox 集合仓储扩展。
+#[allow(async_fn_in_trait)]
+pub trait ApprovalNotificationOutboxRepositoryExt {
     /// 追加一条通知 outbox 记录。
     ///
     /// # 错误
     /// 去重键冲突或 MongoDB 写入失败时返回错误。
-    pub async fn enqueue_outbox(
+    async fn enqueue_outbox(
+        &self,
+        item: &ApprovalNotificationOutbox,
+        executor: &mut dyn Executor,
+    ) -> Result<()>;
+
+    /// 以原子条件更新领取一批可投递消息；两个 worker 不得同时取得同一条。
+    ///
+    /// # 错误
+    /// 元数据越界或 MongoDB 更新失败时返回错误。
+    async fn lease_outbox_batch(
+        &self,
+        worker_id: &str,
+        now: Instant,
+        lease_until: Instant,
+        limit: u32,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ApprovalNotificationOutbox>>;
+
+    /// 以当前租约持有者为条件标记投递成功。
+    ///
+    /// # 错误
+    /// MongoDB 更新或反序列化失败时返回错误。
+    async fn mark_outbox_delivered(
+        &self,
+        outbox_id: &str,
+        expected_lease_owner: &str,
+        delivered_at: Instant,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ApprovalNotificationOutbox>>;
+
+    /// 以当前租约持有者为条件重排下次尝试。
+    ///
+    /// # 错误
+    /// MongoDB 更新或反序列化失败时返回错误。
+    async fn reschedule_outbox(
+        &self,
+        outbox_id: &str,
+        expected_lease_owner: &str,
+        next_attempt_at: Instant,
+        error_kind: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ApprovalNotificationOutbox>>;
+
+    /// 以当前租约持有者为条件将消息转入死信。
+    ///
+    /// # 错误
+    /// MongoDB 更新或反序列化失败时返回错误。
+    async fn dead_letter_outbox(
+        &self,
+        outbox_id: &str,
+        expected_lease_owner: &str,
+        error_kind: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ApprovalNotificationOutbox>>;
+}
+
+impl ApprovalNotificationOutboxRepositoryExt for Repository<'_, ApprovalNotificationOutbox> {
+    async fn enqueue_outbox(
         &self,
         item: &ApprovalNotificationOutbox,
         executor: &mut dyn Executor,
@@ -457,11 +543,7 @@ impl<'a> ApprovalNotificationOutboxRepository<'a> {
         mongo_ops::insert_one(&self.collection(), item, executor).await
     }
 
-    /// 以原子条件更新领取一批可投递消息；两个 worker 不得同时取得同一条。
-    ///
-    /// # 错误
-    /// 元数据越界或 MongoDB 更新失败时返回错误。
-    pub async fn lease_outbox_batch(
+    async fn lease_outbox_batch(
         &self,
         worker_id: &str,
         now: Instant,
@@ -482,11 +564,7 @@ impl<'a> ApprovalNotificationOutboxRepository<'a> {
         Ok(leased)
     }
 
-    /// 以当前租约持有者为条件标记投递成功。
-    ///
-    /// # 错误
-    /// MongoDB 更新或反序列化失败时返回错误。
-    pub async fn mark_outbox_delivered(
+    async fn mark_outbox_delivered(
         &self,
         outbox_id: &str,
         expected_lease_owner: &str,
@@ -502,11 +580,7 @@ impl<'a> ApprovalNotificationOutboxRepository<'a> {
         .await
     }
 
-    /// 以当前租约持有者为条件重排下次尝试。
-    ///
-    /// # 错误
-    /// MongoDB 更新或反序列化失败时返回错误。
-    pub async fn reschedule_outbox(
+    async fn reschedule_outbox(
         &self,
         outbox_id: &str,
         expected_lease_owner: &str,
@@ -523,11 +597,7 @@ impl<'a> ApprovalNotificationOutboxRepository<'a> {
         .await
     }
 
-    /// 以当前租约持有者为条件将消息转入死信。
-    ///
-    /// # 错误
-    /// MongoDB 更新或反序列化失败时返回错误。
-    pub async fn dead_letter_outbox(
+    async fn dead_letter_outbox(
         &self,
         outbox_id: &str,
         expected_lease_owner: &str,

@@ -4,9 +4,10 @@ use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mo
 
 use super::ProcurementResponsibilityRuleFilter;
 use crate::entity::procurement_responsibility::{EnableStatus, ProcurementResponsibilityRule};
-use crate::repository::owned::ProcurementResponsibilityRuleRepository;
 
-impl<'a> ProcurementResponsibilityRuleRepository<'a> {
+/// 采购责任规则集合的域查询。
+#[allow(async_fn_in_trait)]
+pub trait ProcurementResponsibilityRuleRepositoryExt {
     /// 分页查询采购责任规则。
     ///
     /// # 参数
@@ -18,7 +19,49 @@ impl<'a> ProcurementResponsibilityRuleRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询、计数或反序列化失败时返回错误。
-    pub async fn search_procurement_responsibility_rules(
+    async fn search_procurement_responsibility_rules(
+        &self,
+        filter: &ProcurementResponsibilityRuleFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<ProcurementResponsibilityRule>>;
+
+    /// 读取全部启用采购责任规则。
+    ///
+    /// # 参数
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回全部未删除且启用规则。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    async fn list_active_procurement_responsibility_rules(
+        &self,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ProcurementResponsibilityRule>>;
+
+    /// 按稳定 ID 读取采购责任规则。
+    ///
+    /// # 参数
+    /// * `id` - 采购责任规则 ID
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回未删除规则；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    async fn find_procurement_responsibility_rule(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ProcurementResponsibilityRule>>;
+}
+
+impl ProcurementResponsibilityRuleRepositoryExt
+    for persistence_core::Repository<'_, ProcurementResponsibilityRule>
+{
+    async fn search_procurement_responsibility_rules(
         &self,
         filter: &ProcurementResponsibilityRuleFilter,
         executor: &mut dyn Executor,
@@ -33,17 +76,7 @@ impl<'a> ProcurementResponsibilityRuleRepository<'a> {
         Ok(PageResult { items, total: total as i64 })
     }
 
-    /// 读取全部启用采购责任规则。
-    ///
-    /// # 参数
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回全部未删除且启用规则。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn list_active_procurement_responsibility_rules(
+    async fn list_active_procurement_responsibility_rules(
         &self,
         executor: &mut dyn Executor,
     ) -> Result<Vec<ProcurementResponsibilityRule>> {
@@ -55,18 +88,7 @@ impl<'a> ProcurementResponsibilityRuleRepository<'a> {
         .await
     }
 
-    /// 按稳定 ID 读取采购责任规则。
-    ///
-    /// # 参数
-    /// * `id` - 采购责任规则 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回未删除规则；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn find_procurement_responsibility_rule(
+    async fn find_procurement_responsibility_rule(
         &self,
         id: &str,
         executor: &mut dyn Executor,

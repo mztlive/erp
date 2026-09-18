@@ -14,6 +14,7 @@ use crate::ports::{
     ContractScopeObject, CustomerAssignmentFactsPort,
 };
 use crate::repository::ContractExt;
+use crate::repository::prelude::*;
 use crate::repository::scope::{ContractReadScope, ContractScopeClause};
 
 /// 合同对象访问范围；列表、详情、附件、导出和写命令复用同一解析。

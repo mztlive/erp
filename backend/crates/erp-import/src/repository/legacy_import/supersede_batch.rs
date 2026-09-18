@@ -1,17 +1,16 @@
-//! 确认取代批量持久化：新试算失效与任务关闭的调用方事务写回（INT-R28）。
+//! 确认取代批量持久化：新试算失效确认的调用方事务写回（INT-R28）。
 //!
-//! 读取由 [`crate::repository::work_item::Repository::list_legacy_import_confirmations_by_ids`]
-//! 单次 `$in` 完成；本文件只提供调用方事务内的批量 CAS 写回：已就地
-//! `invalidate` 的确认与已就地 `close` 的任务。空集合零写，任一版本冲突
-//! 由调用方事务整体回滚。全部使用调用方 executor，不开事务。
+//! 本文件只提供调用方事务内的批量 CAS 写回：已就地 `invalidate` 的确认。
+//! 空集合零写，任一版本冲突由调用方事务整体回滚。全部使用调用方 executor，不开事务。
 
 use erp_core::ids::LegacyImportConfirmationId;
 use persistence_core::{Executor, Result};
 
 use crate::entity::legacy_import::{ConfirmationStatus, LegacyImportConfirmation};
-use crate::repository::owned::LegacyImportConfirmationRepository;
 
-impl<'a> LegacyImportConfirmationRepository<'a> {
+/// 导入确认集合仓储扩展：确认取代批量写回。
+#[allow(async_fn_in_trait)]
+pub trait LegacyImportConfirmationSupersedeBatchExt {
     /// 批量写回本轮已失效的确认事实（INT-R28 批量写）。
     ///
     /// 调用方先经实体 `invalidate` 完成 `Pending → Invalidated` 迁移，
@@ -33,7 +32,18 @@ impl<'a> LegacyImportConfirmationRepository<'a> {
     ///
     /// # 约束
     /// 不自行开启或提交事务；不做业务取代裁决，只持久化已失效行。
-    pub async fn persist_invalidated_confirmations(
+    async fn persist_invalidated_confirmations(
+        &self,
+        confirmations: &mut [LegacyImportConfirmation],
+        replacement_id: &LegacyImportConfirmationId,
+        executor: &mut dyn Executor,
+    ) -> Result<()>;
+}
+
+impl LegacyImportConfirmationSupersedeBatchExt
+    for persistence_core::Repository<'_, LegacyImportConfirmation>
+{
+    async fn persist_invalidated_confirmations(
         &self,
         confirmations: &mut [LegacyImportConfirmation],
         replacement_id: &LegacyImportConfirmationId,

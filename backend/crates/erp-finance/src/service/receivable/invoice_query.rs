@@ -11,6 +11,7 @@ use super::ReceivableService;
 use crate::dto::receivable::{InvoiceListParams, InvoiceView, PageView, SortDir};
 use crate::entity::payable::PurchaseInvoiceAllocation;
 use crate::entity::receivable::{AllocationAction, InvoiceDirection, InvoiceKind, SalesInvoiceAllocation};
+use crate::repository::prelude::*;
 use crate::repository::{PayableExt, ReceivableExt};
 use crate::service::receivable::mapping::zero_amount;
 use crate::{Error, Result};

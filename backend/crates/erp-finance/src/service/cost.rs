@@ -24,6 +24,7 @@ use crate::entity::cost::{
     CostScope,
 };
 use crate::repository::CostExt;
+use crate::repository::prelude::*;
 use crate::{Error, Result};
 
 /// 成本事实列表筛选条件类型（经 `CostExt` 关联类型跨 crate 可达）。

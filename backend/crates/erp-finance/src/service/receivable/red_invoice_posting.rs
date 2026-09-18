@@ -13,6 +13,7 @@ use crate::entity::receivable::{
     AllocationAction, Invoice, InvoiceDirection, RedInvoiceAllocationPlan, SalesInvoiceAllocation,
     SalesInvoiceAllocationData,
 };
+use crate::repository::prelude::*;
 use crate::repository::{PayableExt, ReceivableExt};
 use crate::{Error, Result};
 

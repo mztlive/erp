@@ -3,6 +3,7 @@
 use async_trait::async_trait;
 use erp_core::ids::SalesOrderId;
 use erp_finance::repository::ReceivableExt;
+use erp_finance::repository::prelude::*;
 use erp_sales::ports::sales_order::{ReceivableBalanceFact, SalesMoneyProgressPort};
 use mongodb::Database;
 use persistence_core::Executor;

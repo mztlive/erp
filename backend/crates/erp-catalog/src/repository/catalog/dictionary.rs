@@ -14,7 +14,6 @@ use crate::entity::catalog::voucher_defaults::{
 };
 use crate::entity::catalog::{EnableStatus, ProductBrand, ProductCategory, UnitOfMeasure};
 use crate::repository::CatalogExt;
-use crate::repository::owned::{ProductBrandRepository, UnitOfMeasureRepository};
 
 /// 商品品牌列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -112,7 +111,9 @@ impl Pagination for ProductBrandFilter {
     }
 }
 
-impl<'a> ProductBrandRepository<'a> {
+/// 商品品牌集合上的域查询。
+#[allow(async_fn_in_trait)]
+pub trait ProductBrandRepositoryExt {
     /// 分页检索商品品牌列表（投影查询）。
     ///
     /// 只返回 [`ProductBrandRow`] 所需的列表字段；排序字段白名单化
@@ -127,7 +128,15 @@ impl<'a> ProductBrandRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_product_brands(
+    async fn search_product_brands(
+        &self,
+        filter: &ProductBrandFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<ProductBrandRow>>;
+}
+
+impl ProductBrandRepositoryExt for persistence_core::Repository<'_, ProductBrand> {
+    async fn search_product_brands(
         &self,
         filter: &ProductBrandFilter,
         executor: &mut dyn Executor,
@@ -211,7 +220,9 @@ impl Pagination for UnitOfMeasureFilter {
     }
 }
 
-impl<'a> UnitOfMeasureRepository<'a> {
+/// 计量单位集合上的域查询。
+#[allow(async_fn_in_trait)]
+pub trait UnitOfMeasureRepositoryExt {
     /// 分页检索计量单位列表（投影查询）。
     ///
     /// 只返回 [`UnitOfMeasureRow`] 所需的列表字段；排序字段白名单化
@@ -226,7 +237,15 @@ impl<'a> UnitOfMeasureRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_unit_of_measures(
+    async fn search_unit_of_measures(
+        &self,
+        filter: &UnitOfMeasureFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<UnitOfMeasureRow>>;
+}
+
+impl UnitOfMeasureRepositoryExt for persistence_core::Repository<'_, UnitOfMeasure> {
+    async fn search_unit_of_measures(
         &self,
         filter: &UnitOfMeasureFilter,
         executor: &mut dyn Executor,

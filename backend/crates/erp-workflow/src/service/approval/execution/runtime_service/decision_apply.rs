@@ -42,6 +42,7 @@ use crate::entity::work_item::{ApprovalDecisionTaskError, WorkItem, WorkItemStat
 use crate::error::{Error, ErrorCode, Result};
 use crate::ports::PreparedWorkflowAudit;
 use crate::repository::bpm::ApprovalInstanceListProjection;
+use crate::repository::prelude::*;
 use crate::repository::{ApprovalIntegrationExt, BpmExt, WorkItemExt};
 use crate::service::approval::business_adapter::adapter_spec_of;
 use crate::service::approval::process_kind::process_kind_of;

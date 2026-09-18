@@ -15,6 +15,7 @@ use crate::dto::{
 use crate::entity::inventory::{MovementType, StockMovement};
 use crate::error::{Error, Result};
 use crate::ports::InventoryAuthorization;
+use crate::repository::prelude::*;
 use crate::repository::{InventoryExt, StockMovementFilter, StockMovementRow};
 
 impl InventoryService {

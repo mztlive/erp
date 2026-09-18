@@ -8,9 +8,6 @@ use async_trait::async_trait;
 use erp_core::common::time::Instant;
 use erp_identity::SharedRbacService;
 use erp_identity::access_control::{ResolvedScope, ScopeClause, ScopedObject};
-use erp_identity::entity::organization::OrgTree;
-use erp_identity::entity::organization_change::OrganizationState;
-use erp_identity::repository::OrganizationRepository;
 use erp_identity::service::access_control::consumers::registration;
 use erp_identity::service::access_control::resolve::DataScopeService;
 use erp_integration::{
@@ -19,6 +16,11 @@ use erp_integration::{
 };
 use mongodb::Database;
 use persistence_core::Executor;
+
+use super::identity_error::map_identity_error;
+use super::scope_support::{expand_org_ids, load_organization_state, member_ids};
+
+map_identity_error!(erp_integration);
 
 /// 组合层集成范围 adapter，持有身份域解析所需依赖。
 #[derive(Clone)]
@@ -96,8 +98,8 @@ impl IntegrationDataScopePort for MongoIntegrationDataScope {
         include_descendants: bool,
         executor: &mut dyn Executor,
     ) -> erp_integration::Result<BTreeSet<String>> {
-        let state = organization_state(&self.db, executor).await?;
-        expand_org_units(&state, org_unit_ids, include_descendants)
+        let state = load_organization_state(&self.db, executor).await?;
+        expand_org_ids(&state, org_unit_ids, include_descendants).map_err(map_identity_error)
     }
 
     async fn org_member_ids(
@@ -106,7 +108,7 @@ impl IntegrationDataScopePort for MongoIntegrationDataScope {
         at: Instant,
         executor: &mut dyn Executor,
     ) -> erp_integration::Result<Vec<String>> {
-        let state = organization_state(&self.db, executor).await?;
+        let state = load_organization_state(&self.db, executor).await?;
         Ok(member_ids(&state, org_unit_ids, at))
     }
 
@@ -116,7 +118,7 @@ impl IntegrationDataScopePort for MongoIntegrationDataScope {
         at: Instant,
         executor: &mut dyn Executor,
     ) -> erp_integration::Result<Option<String>> {
-        let state = organization_state(&self.db, executor).await?;
+        let state = load_organization_state(&self.db, executor).await?;
         Ok(state.own_org(user_id, at).map_err(map_identity_error)?.map(str::to_string))
     }
 }
@@ -127,45 +129,6 @@ fn ensure_integration_resource(resource: &str) -> erp_integration::Result<()> {
         return Ok(());
     }
     Err(erp_integration::Error::ValidationError("范围资源与消费方不一致".into()))
-}
-
-/// 在调用方事务内读取组织快照。
-async fn organization_state(
-    db: &Database,
-    executor: &mut dyn Executor,
-) -> erp_integration::Result<OrganizationState> {
-    Ok(OrganizationRepository::new(db).state(executor).await?)
-}
-
-/// 展开启用组织及其可选下级。
-fn expand_org_units(
-    state: &OrganizationState,
-    org_ids: &[String],
-    include_descendants: bool,
-) -> erp_integration::Result<BTreeSet<String>> {
-    let tree = OrgTree::new(&state.units).map_err(map_identity_error)?;
-    let mut expanded = BTreeSet::new();
-    for id in org_ids {
-        expanded.extend(tree.expand(id, include_descendants).map_err(map_identity_error)?);
-    }
-    Ok(expanded)
-}
-
-/// 读取指定组织在给定时点的有效主属成员。
-fn member_ids(state: &OrganizationState, org_ids: &BTreeSet<String>, at: Instant) -> Vec<String> {
-    let mut ids = state
-        .memberships
-        .iter()
-        .filter(|membership| {
-            !membership.base.is_deleted()
-                && org_ids.contains(&membership.org_unit_id)
-                && membership.validity.contains(at)
-        })
-        .map(|membership| membership.user_id.clone())
-        .collect::<Vec<_>>();
-    ids.sort();
-    ids.dedup();
-    ids
 }
 
 /// 将身份域已解析授权转换为集成 Port 事实。
@@ -200,29 +163,6 @@ fn map_clause(clause: &ScopeClause) -> erp_integration::Result<IntegrationResolv
         self_owned: clause.self_owned,
         org_unit_ids: clause.org_unit_ids.iter().cloned().collect(),
     })
-}
-
-/// 将身份域错误映射为集成领域错误。
-fn map_identity_error(error: erp_identity::Error) -> erp_integration::Error {
-    match error {
-        erp_identity::Error::Internal(payload) => erp_integration::Error::Internal(payload),
-        erp_identity::Error::NotFound(payload) => erp_integration::Error::NotFound(payload),
-        erp_identity::Error::ValidationError(payload) => erp_integration::Error::ValidationError(payload),
-        erp_identity::Error::BusinessLogicError(payload) => {
-            erp_integration::Error::BusinessLogicError(payload)
-        },
-        erp_identity::Error::ConflictError(payload) => erp_integration::Error::ConflictError(payload),
-        erp_identity::Error::ReceiptDuplicate(payload) => erp_integration::Error::ReceiptDuplicate(payload),
-        erp_identity::Error::TransientTransaction(payload) => {
-            erp_integration::Error::TransientTransaction(payload)
-        },
-        erp_identity::Error::Forbidden(payload) => erp_integration::Error::Forbidden(payload),
-        erp_identity::Error::Unauthenticated(payload) => erp_integration::Error::Unauthenticated(payload),
-        erp_identity::Error::Logic(payload) => erp_integration::Error::Logic(payload),
-        erp_identity::Error::Rbac(payload) => erp_integration::Error::Internal(payload),
-        erp_identity::Error::OutcomeUnknown(payload) => erp_integration::Error::OutcomeUnknown(payload),
-        erp_identity::Error::RepositoryError(payload) => erp_integration::Error::RepositoryError(payload),
-    }
 }
 
 /// 构造已接入公共解析器的集成服务。

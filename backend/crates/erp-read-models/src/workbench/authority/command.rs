@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet};
 use erp_import::LegacyImportExt;
 use erp_integration::entity::integration_ops::{ErrorClass, IntegrationErrorTask};
 use erp_supply::entity::supplier_offering::{AvailabilityStatus, OfferingStatus};
+use erp_supply::repository::prelude::*;
 use erp_supply::repository::{SupplierFulfillmentExt, SupplierOfferingExt};
 use erp_workflow::entity::work_item::WorkItemSubjectVersions;
 use persistence_core::Executor;

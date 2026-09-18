@@ -59,13 +59,7 @@ pub(crate) fn plan_enter_node(input: EnterNodeInput<'_>) -> EngineResult<Transit
     let node = match input.graph.node(input.node_key) {
         Some(node) => node,
         None => {
-            return structural_enter_without_node(
-                input.instance,
-                input.node_key,
-                input.participant,
-                input.execution_id,
-                input.now,
-            );
+            return structural_enter_without_node(input.node_key);
         },
     };
     build_enter_plan(input, node)
@@ -156,13 +150,7 @@ fn blocked_enter(
 }
 
 /// 节点定义缺失时，若缺少构造执行所需字段则拒绝提交半结构实体。
-fn structural_enter_without_node(
-    _instance: ApprovalProcessInstance,
-    node_key: &str,
-    _participant: ParticipantId,
-    _execution_id: ApprovalNodeExecutionId,
-    _now: Timestamp,
-) -> EngineResult<TransitionPlan> {
+fn structural_enter_without_node(node_key: &str) -> EngineResult<TransitionPlan> {
     if node_key.trim().is_empty() {
         return Err(EngineError::Uncommittable("缺失节点键，无法形成合法阻塞快照"));
     }

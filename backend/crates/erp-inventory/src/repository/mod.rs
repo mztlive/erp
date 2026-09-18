@@ -3,12 +3,17 @@
 pub mod extensions;
 pub mod inventory;
 pub mod owned;
+pub mod prelude;
+
+mod fulfillment_facts;
 
 pub use extensions::InventoryExt;
+pub use fulfillment_facts::StockReservationRepositoryFulfillmentExt;
 pub use inventory::{
     AdjustmentSnapshotReadFilter, InventoryRepository, InventorySearch, StockAdjustmentFilter,
-    StockAdjustmentRow, StockBalanceFilter, StockBalanceRow, StockMovementFilter, StockMovementRow,
-    StockReservationFilter, StockReservationRow,
+    StockAdjustmentLineRepositoryExt, StockAdjustmentRepositoryExt, StockAdjustmentRow, StockBalanceFilter,
+    StockBalanceRepositoryExt, StockBalanceRow, StockMovementFilter, StockMovementRepositoryExt,
+    StockMovementRow, StockReservationFilter, StockReservationRepositoryExt, StockReservationRow,
 };
 pub use owned::{
     StockAdjustmentLineRepository, StockAdjustmentRepository, StockBalanceRepository,
@@ -17,5 +22,3 @@ pub use owned::{
 
 #[cfg(test)]
 mod bson_roundtrip;
-
-mod fulfillment_facts;

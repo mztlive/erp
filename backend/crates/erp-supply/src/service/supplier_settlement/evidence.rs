@@ -8,6 +8,7 @@ use super::shared::*;
 use crate::dto::supplier_settlement::*;
 use crate::entity::supplier_settlement::*;
 use crate::repository::SupplierSettlementExt;
+use crate::repository::prelude::*;
 use crate::{Error, Result};
 impl SupplierSettlementService {
     /// 结算本域prepare_difference_evidence，保持原校验、构造和执行器顺序。

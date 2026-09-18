@@ -3,15 +3,25 @@
 use erp_core::ids::SalesOrderId;
 use persistence_core::{Executor, Result};
 
+use super::account::ReceivableAccountRepositoryExt;
+use crate::entity::receivable::ReceivableAccount;
 use crate::entity::receivable::money_progress_facts::ReceivableMoneyProgressFact;
-use crate::repository::owned::ReceivableAccountRepository;
 
-impl ReceivableAccountRepository<'_> {
+#[allow(async_fn_in_trait)]
+pub trait ReceivableAccountMoneyProgressExt {
     /// Read per-account balances with the original account filtering, ordering and errors.
     ///
     /// This reuses the established repository query and the caller's executor. No aggregation,
     /// review-status filtering or additional transaction is introduced.
-    pub async fn money_progress_facts(
+    async fn money_progress_facts(
+        &self,
+        id: &SalesOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ReceivableMoneyProgressFact>>;
+}
+
+impl ReceivableAccountMoneyProgressExt for persistence_core::Repository<'_, ReceivableAccount> {
+    async fn money_progress_facts(
         &self,
         id: &SalesOrderId,
         executor: &mut dyn Executor,

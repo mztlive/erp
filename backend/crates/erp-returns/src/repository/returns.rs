@@ -29,11 +29,6 @@ use crate::entity::returns::{
     PurchaseReturnStatus, ReceiptReversal, ReturnMode, ReturnRoute, SalesReturnCase, SalesReturnCaseStatus,
     SalesReturnLine, SupplierRefund,
 };
-use crate::repository::owned::{
-    CustomerRefundRepository, PaymentReversalRepository, PurchaseReturnLineRepository,
-    PurchaseReturnOrderRepository, ReceiptReversalRepository, SalesReturnCaseRepository,
-    SalesReturnLineRepository, SupplierRefundRepository,
-};
 
 /// `sales_return_line` 集合名（单一来源：`ReturnsExt` 关联常量）。
 const SALES_RETURN_LINES: &str = <mongodb::Database as ReturnsExt>::SALES_RETURN_LINES;
@@ -363,7 +358,9 @@ impl Pagination for CustomerRefundFilter {
     }
 }
 
-impl<'a> SalesReturnCaseRepository<'a> {
+/// 销售退货处理单集合仓储扩展。
+#[allow(async_fn_in_trait)]
+pub trait SalesReturnCaseRepositoryExt {
     /// 分页检索销售退货处理单列表（投影查询）。
     ///
     /// 只返回 [`SalesReturnCaseRow`] 所需的列表字段；退货处理号支持字面量
@@ -378,7 +375,15 @@ impl<'a> SalesReturnCaseRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_sales_return_cases(
+    async fn search_sales_return_cases(
+        &self,
+        filter: &SalesReturnCaseFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<SalesReturnCaseRow>>;
+}
+
+impl SalesReturnCaseRepositoryExt for persistence_core::Repository<'_, SalesReturnCase> {
+    async fn search_sales_return_cases(
         &self,
         filter: &SalesReturnCaseFilter,
         executor: &mut dyn Executor,
@@ -401,7 +406,9 @@ impl<'a> SalesReturnCaseRepository<'a> {
     }
 }
 
-impl<'a> SalesReturnLineRepository<'a> {
+/// 销售退货明细集合仓储扩展。
+#[allow(async_fn_in_trait)]
+pub trait SalesReturnLineRepositoryExt {
     /// 批量按退货处理单集合取回明细（`$in` 一次取回，禁止 N+1）。
     ///
     /// # 参数
@@ -413,7 +420,15 @@ impl<'a> SalesReturnLineRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_lines_by_cases(
+    async fn find_lines_by_cases(
+        &self,
+        case_ids: &[erp_core::ids::SalesReturnCaseId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesReturnLine>>;
+}
+
+impl SalesReturnLineRepositoryExt for persistence_core::Repository<'_, SalesReturnLine> {
+    async fn find_lines_by_cases(
         &self,
         case_ids: &[erp_core::ids::SalesReturnCaseId],
         executor: &mut dyn Executor,
@@ -426,7 +441,9 @@ impl<'a> SalesReturnLineRepository<'a> {
     }
 }
 
-impl<'a> PurchaseReturnOrderRepository<'a> {
+/// 采购退货单集合仓储扩展。
+#[allow(async_fn_in_trait)]
+pub trait PurchaseReturnOrderRepositoryExt {
     /// 分页检索采购退货单列表（投影查询）。
     ///
     /// 只返回 [`PurchaseReturnOrderRow`] 所需的列表字段；采购退货单号支持
@@ -441,7 +458,35 @@ impl<'a> PurchaseReturnOrderRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_purchase_return_orders(
+    async fn search_purchase_return_orders(
+        &self,
+        filter: &PurchaseReturnOrderFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<PurchaseReturnOrderRow>>;
+
+    /// 装载采购退货查询的有界身份与版本集合，用于跨页一致性校验。
+    ///
+    /// # 参数
+    /// * `filter` - 与列表相同的筛选
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 最多 10001 行主键与版本；调用方必须整体拒绝超限。
+    ///
+    /// # 错误
+    /// 数据库读取失败时返回仓储错误。
+    ///
+    /// # 关键业务约束
+    /// 版本集合必须与列表同一授权条件和筛选快照。
+    async fn query_purchase_return_versions(
+        &self,
+        filter: &PurchaseReturnOrderFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PurchaseReturnVersion>>;
+}
+
+impl PurchaseReturnOrderRepositoryExt for persistence_core::Repository<'_, PurchaseReturnOrder> {
+    async fn search_purchase_return_orders(
         &self,
         filter: &PurchaseReturnOrderFilter,
         executor: &mut dyn Executor,
@@ -463,21 +508,7 @@ impl<'a> PurchaseReturnOrderRepository<'a> {
         Ok(PageResult { items, total: total as i64 })
     }
 
-    /// 装载采购退货查询的有界身份与版本集合，用于跨页一致性校验。
-    ///
-    /// # 参数
-    /// * `filter` - 与列表相同的筛选
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 最多 10001 行主键与版本；调用方必须整体拒绝超限。
-    ///
-    /// # 错误
-    /// 数据库读取失败时返回仓储错误。
-    ///
-    /// # 关键业务约束
-    /// 版本集合必须与列表同一授权条件和筛选快照。
-    pub async fn query_purchase_return_versions(
+    async fn query_purchase_return_versions(
         &self,
         filter: &PurchaseReturnOrderFilter,
         executor: &mut dyn Executor,
@@ -505,7 +536,9 @@ pub struct PurchaseReturnVersion {
     pub version: u64,
 }
 
-impl<'a> PurchaseReturnLineRepository<'a> {
+/// 采购退货明细集合仓储扩展。
+#[allow(async_fn_in_trait)]
+pub trait PurchaseReturnLineRepositoryExt {
     /// 批量按退货单集合取回明细（`$in` 一次取回，禁止 N+1）。
     ///
     /// # 参数
@@ -517,7 +550,15 @@ impl<'a> PurchaseReturnLineRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_lines_by_orders(
+    async fn find_lines_by_orders(
+        &self,
+        order_ids: &[erp_core::ids::PurchaseReturnOrderId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PurchaseReturnLine>>;
+}
+
+impl PurchaseReturnLineRepositoryExt for persistence_core::Repository<'_, PurchaseReturnLine> {
+    async fn find_lines_by_orders(
         &self,
         order_ids: &[erp_core::ids::PurchaseReturnOrderId],
         executor: &mut dyn Executor,
@@ -530,7 +571,9 @@ impl<'a> PurchaseReturnLineRepository<'a> {
     }
 }
 
-impl<'a> CustomerRefundRepository<'a> {
+/// 客户退款集合仓储扩展。
+#[allow(async_fn_in_trait)]
+pub trait CustomerRefundRepositoryExt {
     /// 分页检索客户退款列表（投影查询）。
     ///
     /// 只返回 [`CustomerRefundRow`] 所需的列表字段；退款单号支持字面量模糊匹配。
@@ -544,7 +587,34 @@ impl<'a> CustomerRefundRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_customer_refunds(
+    async fn search_customer_refunds(
+        &self,
+        filter: &CustomerRefundFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<CustomerRefundRow>>;
+
+    /// 批量按原事实取回客户退款（`$in`，用于累计冲正校验）。
+    ///
+    /// # 参数
+    /// * `receipt_ids` - 原回款 ID 集合（可为空）
+    /// * `entry_ids` - 原应收分录 ID 集合（可为空）
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配退款。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn find_refunds_by_originals(
+        &self,
+        receipt_ids: &[CustomerReceiptId],
+        entry_ids: &[ReceivableEntryId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<CustomerRefund>>;
+}
+
+impl CustomerRefundRepositoryExt for persistence_core::Repository<'_, CustomerRefund> {
+    async fn search_customer_refunds(
         &self,
         filter: &CustomerRefundFilter,
         executor: &mut dyn Executor,
@@ -566,19 +636,7 @@ impl<'a> CustomerRefundRepository<'a> {
         Ok(PageResult { items, total: total as i64 })
     }
 
-    /// 批量按原事实取回客户退款（`$in`，用于累计冲正校验）。
-    ///
-    /// # 参数
-    /// * `receipt_ids` - 原回款 ID 集合（可为空）
-    /// * `entry_ids` - 原应收分录 ID 集合（可为空）
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回全部匹配退款。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_refunds_by_originals(
+    async fn find_refunds_by_originals(
         &self,
         receipt_ids: &[CustomerReceiptId],
         entry_ids: &[ReceivableEntryId],
@@ -589,7 +647,9 @@ impl<'a> CustomerRefundRepository<'a> {
     }
 }
 
-impl<'a> SupplierRefundRepository<'a> {
+/// 供应商退款集合仓储扩展。
+#[allow(async_fn_in_trait)]
+pub trait SupplierRefundRepositoryExt {
     /// 批量按原事实取回供应商退款（`$in`，用于累计冲正校验）。
     ///
     /// # 参数
@@ -602,7 +662,16 @@ impl<'a> SupplierRefundRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_refunds_by_originals(
+    async fn find_refunds_by_originals(
+        &self,
+        payment_ids: &[SupplierPaymentId],
+        entry_ids: &[erp_core::ids::PayableEntryId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierRefund>>;
+}
+
+impl SupplierRefundRepositoryExt for persistence_core::Repository<'_, SupplierRefund> {
+    async fn find_refunds_by_originals(
         &self,
         payment_ids: &[SupplierPaymentId],
         entry_ids: &[erp_core::ids::PayableEntryId],
@@ -613,7 +682,9 @@ impl<'a> SupplierRefundRepository<'a> {
     }
 }
 
-impl<'a> ReceiptReversalRepository<'a> {
+/// 回款冲正集合仓储扩展。
+#[allow(async_fn_in_trait)]
+pub trait ReceiptReversalRepositoryExt {
     /// 批量按原回款集合取回冲正单（`$in`，用于累计有效冲正校验）。
     ///
     /// # 参数
@@ -625,7 +696,15 @@ impl<'a> ReceiptReversalRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_reversals_by_receipts(
+    async fn find_reversals_by_receipts(
+        &self,
+        receipt_ids: &[CustomerReceiptId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ReceiptReversal>>;
+}
+
+impl ReceiptReversalRepositoryExt for persistence_core::Repository<'_, ReceiptReversal> {
+    async fn find_reversals_by_receipts(
         &self,
         receipt_ids: &[CustomerReceiptId],
         executor: &mut dyn Executor,
@@ -638,7 +717,9 @@ impl<'a> ReceiptReversalRepository<'a> {
     }
 }
 
-impl<'a> PaymentReversalRepository<'a> {
+/// 付款冲正集合仓储扩展。
+#[allow(async_fn_in_trait)]
+pub trait PaymentReversalRepositoryExt {
     /// 批量按原付款集合取回冲正单（`$in`，用于累计有效冲正校验）。
     ///
     /// # 参数
@@ -650,7 +731,15 @@ impl<'a> PaymentReversalRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_reversals_by_payments(
+    async fn find_reversals_by_payments(
+        &self,
+        payment_ids: &[SupplierPaymentId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PaymentReversal>>;
+}
+
+impl PaymentReversalRepositoryExt for persistence_core::Repository<'_, PaymentReversal> {
+    async fn find_reversals_by_payments(
         &self,
         payment_ids: &[SupplierPaymentId],
         executor: &mut dyn Executor,

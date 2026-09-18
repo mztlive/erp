@@ -3,8 +3,7 @@
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::ids::{SupplierAccountId, SupplierCapabilityRevisionId};
-use erp_identity::entity::organization::OrgTree;
-use erp_identity::repository::OrganizationRepository;
+use erp_identity::repository::prelude::*;
 use erp_identity::{AccessControlExt, Permission, PermissionSet, SharedRbacService};
 use erp_supplier::{
     HandoverCandidateView, HandoverSupplierCapabilityRequest, HandoverSupplierCapabilityView,
@@ -16,6 +15,7 @@ use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::SupplierProfileService;
+use crate::handover_common::ensure_org_enabled;
 use crate::{Error, Result};
 
 impl SupplierProfileService {
@@ -390,23 +390,6 @@ async fn account_can_maintain(
         return Ok(false);
     };
     Ok(granted.covers(&PermissionSet::new(vec![required])))
-}
-
-async fn ensure_org_enabled(
-    db: &mongodb::Database,
-    target_org: Option<&str>,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    let Some(org) = target_org.map(str::trim).filter(|value| !value.is_empty()) else {
-        return Ok(());
-    };
-    let state = OrganizationRepository::new(db).state(executor).await?;
-    let tree = OrgTree::new(&state.units)?;
-    let path = tree.path(org)?;
-    if path.iter().any(|node| !node.enabled) {
-        return Err(Error::BusinessLogicError("目标业务组织已停用".into()));
-    }
-    Ok(())
 }
 
 async fn list_candidates(

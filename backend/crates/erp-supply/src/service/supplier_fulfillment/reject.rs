@@ -9,6 +9,7 @@ use super::SupplierFulfillmentService;
 use crate::dto::supplier_fulfillment::*;
 use crate::entity::supplier_fulfillment::*;
 use crate::repository::SupplierFulfillmentExt;
+use crate::repository::prelude::*;
 use crate::{Error, Result};
 impl SupplierFulfillmentService {
     /// 加载该订单最近一次 `PLACE` 动作。

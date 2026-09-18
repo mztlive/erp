@@ -16,9 +16,8 @@ use mongodb::bson::{Bson, Decimal128, Document, doc};
 use persistence_core::{Executor, Result};
 use serde::Deserialize;
 
-use crate::entity::receivable::EntryDirection;
+use crate::entity::receivable::{EntryDirection, ReceivableAccount};
 use crate::repository::extensions::ReceivableExt;
-use crate::repository::owned::ReceivableAccountRepository;
 
 const RECEIVABLE_ENTRIES: &str = <Database as ReceivableExt>::RECEIVABLE_ENTRIES;
 const RECEIVABLE_ENTRY_OFFSETS: &str = <Database as ReceivableExt>::RECEIVABLE_ENTRY_OFFSETS;
@@ -32,7 +31,8 @@ pub struct CustomerCenterReceivableRow {
     pub earliest_overdue_date: Option<BusinessDate>,
 }
 
-impl<'a> ReceivableAccountRepository<'a> {
+#[allow(async_fn_in_trait)]
+pub trait ReceivableAccountCustomerCenterExt {
     /// 查询指定客户的应收跨账户汇总。
     ///
     /// # 参数
@@ -49,7 +49,16 @@ impl<'a> ReceivableAccountRepository<'a> {
     /// # 约束
     /// 仅查询本域拥有的 `receivable_accounts`、`receivable_entries` 与
     /// `receivable_entry_offsets` 集合，不访问客户集合；调用方负责客户存在性与授权校验。
-    pub async fn customer_center_receivable(
+    async fn customer_center_receivable(
+        &self,
+        customer_id: &str,
+        today: BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<CustomerCenterReceivableRow>;
+}
+
+impl ReceivableAccountCustomerCenterExt for persistence_core::Repository<'_, ReceivableAccount> {
+    async fn customer_center_receivable(
         &self,
         customer_id: &str,
         today: BusinessDate,

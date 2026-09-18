@@ -4,9 +4,11 @@ use std::collections::HashMap;
 
 use erp_core::common::time::Instant;
 use erp_core::ids::LegacyImportConfirmationId;
+use erp_import::repository::prelude::*;
 use erp_import::{ConfirmationStatus, LegacyImportConfirmation, LegacyImportExt};
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{WorkItem, WorkItemCloseData, WorkItemStatus};
+use erp_workflow::repository::prelude::*;
 use mongodb::Database;
 use persistence_core::Executor;
 

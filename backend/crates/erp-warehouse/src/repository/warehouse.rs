@@ -18,7 +18,7 @@ use mongodb::Database;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{
-    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+    Executor, PageResult, Pagination, QueryFilter, Repository, Result, insert_literal_regex_filter, mongo_ops,
 };
 use serde::{Deserialize, Serialize};
 
@@ -28,9 +28,6 @@ use crate::dto::warehouse::{
     WAREHOUSE_REVISION_SORT_FIELDS, WAREHOUSE_SKU_POLICY_SORT_FIELDS, WAREHOUSE_SORT_FIELDS,
 };
 use crate::entity::warehouse::{EnableStatus, Warehouse, WarehouseRevision, WarehouseSkuPolicy};
-use crate::repository::owned::{
-    WarehouseRepository, WarehouseRevisionRepository, WarehouseSkuPolicyRepository,
-};
 
 /// `warehouse` 集合名（单一来源：`WarehouseExt` 关联常量）。
 const WAREHOUSES: &str = <mongodb::Database as WarehouseExt>::WAREHOUSES;
@@ -143,7 +140,9 @@ impl Pagination for WarehouseFilter {
     }
 }
 
-impl<'a> WarehouseRepository<'a> {
+/// 仓库集合仓储的域特有查询。
+#[allow(async_fn_in_trait)]
+pub trait WarehouseRepositoryExt {
     /// 分页检索仓库列表（投影查询）。
     ///
     /// 只返回 [`WarehouseRow`] 所需的列表字段，不加载整文档；
@@ -158,12 +157,20 @@ impl<'a> WarehouseRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_warehouses(
+    async fn search_warehouses(
+        &self,
+        filter: &WarehouseFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<WarehouseRow>>;
+}
+
+impl WarehouseRepositoryExt for Repository<'_, Warehouse> {
+    async fn search_warehouses(
         &self,
         filter: &WarehouseFilter,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<WarehouseRow>> {
-        let query = self.keyword_filter(filter, executor).await?;
+        let query = keyword_filter(self, filter, executor).await?;
         search_projected_page(
             &self.collection(),
             query,
@@ -262,7 +269,9 @@ impl Pagination for WarehouseRevisionFilter {
     }
 }
 
-impl<'a> WarehouseRevisionRepository<'a> {
+/// 仓库修订集合仓储的域特有查询。
+#[allow(async_fn_in_trait)]
+pub trait WarehouseRevisionRepositoryExt {
     /// 分页检索仓库修订列表（投影查询）。
     ///
     /// 只返回 [`WarehouseRevisionRow`] 所需的列表字段，**不返回加密地址与
@@ -277,7 +286,15 @@ impl<'a> WarehouseRevisionRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_warehouse_revisions(
+    async fn search_warehouse_revisions(
+        &self,
+        filter: &WarehouseRevisionFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<WarehouseRevisionRow>>;
+}
+
+impl WarehouseRevisionRepositoryExt for Repository<'_, WarehouseRevision> {
+    async fn search_warehouse_revisions(
         &self,
         filter: &WarehouseRevisionFilter,
         executor: &mut dyn Executor,
@@ -378,7 +395,9 @@ impl Default for WarehouseSkuPolicyFilter {
     }
 }
 
-impl<'a> WarehouseSkuPolicyRepository<'a> {
+/// 仓库-SKU 预警策略集合仓储的域特有查询。
+#[allow(async_fn_in_trait)]
+pub trait WarehouseSkuPolicyRepositoryExt {
     /// 分页检索仓库-SKU 预警策略列表（投影查询）。
     ///
     /// 只返回 [`WarehouseSkuPolicyRow`] 所需的列表字段（含 Decimal128 预警阈值，
@@ -393,7 +412,34 @@ impl<'a> WarehouseSkuPolicyRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_warehouse_sku_policies(
+    async fn search_warehouse_sku_policies(
+        &self,
+        filter: &WarehouseSkuPolicyFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<WarehouseSkuPolicyRow>>;
+
+    /// 批量查询一组 SKU 的仓库预警策略（`$in`，一次取回）。
+    ///
+    /// 用于按 SKU 聚合策略明细，避免逐 SKU N+1。
+    ///
+    /// # 参数
+    /// * `sku_ids` - SKU ID 集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配的未删除策略实体集合。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn find_by_sku_ids(
+        &self,
+        sku_ids: &[SkuId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WarehouseSkuPolicy>>;
+}
+
+impl WarehouseSkuPolicyRepositoryExt for Repository<'_, WarehouseSkuPolicy> {
+    async fn search_warehouse_sku_policies(
         &self,
         filter: &WarehouseSkuPolicyFilter,
         executor: &mut dyn Executor,
@@ -410,20 +456,7 @@ impl<'a> WarehouseSkuPolicyRepository<'a> {
         .await
     }
 
-    /// 批量查询一组 SKU 的仓库预警策略（`$in`，一次取回）。
-    ///
-    /// 用于按 SKU 聚合策略明细，避免逐 SKU N+1。
-    ///
-    /// # 参数
-    /// * `sku_ids` - SKU ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的未删除策略实体集合。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_by_sku_ids(
+    async fn find_by_sku_ids(
         &self,
         sku_ids: &[SkuId],
         executor: &mut dyn Executor,
@@ -715,35 +748,33 @@ fn warehouse_sku_policy_projection() -> Document {
     }
 }
 
-impl WarehouseRepository<'_> {
-    /// 代码 OR 当前修订名称；历史修订命中不能使仓库进入结果。
-    ///
-    /// 名称关联仅读取修订 ID，读取失败向调用方传播。
-    async fn keyword_filter(
-        &self,
-        filter: &WarehouseFilter,
-        executor: &mut dyn Executor,
-    ) -> Result<Document> {
-        let mut query = filter.to_doc();
-        let Some(q) = filter.q.as_deref() else {
-            return Ok(query);
-        };
-        let mut name = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
-        insert_literal_regex_filter(&mut name, "name", Some(q));
-        let collection = self.database().collection::<Document>(WAREHOUSE_REVISIONS);
-        let mut revisions = collection.distinct("id", name);
-        if let Some(session) = executor.session() {
-            revisions = revisions.session(session);
-        }
-        let ids = revisions.await?;
-        if ids.len() > KEYWORD_REVISION_ID_CAP {
-            return Err(mongodb::error::Error::custom("关键词命中修订过多，请使用更精确的关键词").into());
-        }
-        let mut code = Document::new();
-        insert_literal_regex_filter(&mut code, "warehouse_code", Some(q));
-        query.insert("$or", vec![code, doc! { "current_revision_id": { "$in": ids } }]);
-        Ok(query)
+/// 代码 OR 当前修订名称；历史修订命中不能使仓库进入结果。
+///
+/// 名称关联仅读取修订 ID，读取失败向调用方传播。
+async fn keyword_filter(
+    repo: &Repository<'_, Warehouse>,
+    filter: &WarehouseFilter,
+    executor: &mut dyn Executor,
+) -> Result<Document> {
+    let mut query = filter.to_doc();
+    let Some(q) = filter.q.as_deref() else {
+        return Ok(query);
+    };
+    let mut name = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
+    insert_literal_regex_filter(&mut name, "name", Some(q));
+    let collection = repo.database().collection::<Document>(WAREHOUSE_REVISIONS);
+    let mut revisions = collection.distinct("id", name);
+    if let Some(session) = executor.session() {
+        revisions = revisions.session(session);
     }
+    let ids = revisions.await?;
+    if ids.len() > KEYWORD_REVISION_ID_CAP {
+        return Err(mongodb::error::Error::custom("关键词命中修订过多，请使用更精确的关键词").into());
+    }
+    let mut code = Document::new();
+    insert_literal_regex_filter(&mut code, "warehouse_code", Some(q));
+    query.insert("$or", vec![code, doc! { "current_revision_id": { "$in": ids } }]);
+    Ok(query)
 }
 
 #[cfg(test)]

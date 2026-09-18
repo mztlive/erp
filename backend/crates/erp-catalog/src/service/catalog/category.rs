@@ -12,6 +12,7 @@ use crate::entity::catalog::ProductCategoryId;
 use crate::entity::catalog::product_category::{ProductCategory, ProductCategoryUpdate};
 use crate::error::{Error, Result};
 use crate::repository::CatalogExt;
+use crate::repository::prelude::*;
 
 /// 商品分类列表筛选条件类型（经 `CatalogExt` 关联类型跨 crate 可达）。
 type ProductCategoryFilter = <mongodb::Database as CatalogExt>::ProductCategoryFilter;

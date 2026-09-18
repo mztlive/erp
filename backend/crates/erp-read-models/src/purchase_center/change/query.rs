@@ -3,6 +3,7 @@ use std::hash::{Hash, Hasher};
 use application_core::{AuditActor, PageView, SortDir, normalize_sort};
 use erp_procurement::dto::purchase_order::PurchaseChangeOrderListParams;
 use erp_procurement::repository::PurchaseOrderExt;
+use erp_procurement::repository::prelude::*;
 use erp_procurement::repository::purchase_order::PurchaseChangeSearch;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::service::document_registry::find_approval_binding;
@@ -62,11 +63,11 @@ impl PurchaseOrderReadService {
         params.validate()?;
         let snapshot = self.change_list_snapshot(params, actor).await?;
         if expected.is_some_and(|value| value != snapshot.scope_version) {
-            return Err(Error::ConflictError("DATA_SCOPE_CHANGED：数据范围已变化，请从第一页刷新".into()));
+            return Err(crate::support::data_scope_changed("数据范围已变化，请从第一页刷新"));
         }
         let current = self.change_list_snapshot(params, actor).await?;
         if current.scope_version != snapshot.scope_version {
-            return Err(Error::ConflictError("DATA_SCOPE_CHANGED：数据范围或业务单据已变化，请刷新".into()));
+            return Err(crate::support::data_scope_changed("数据范围或业务单据已变化，请刷新"));
         }
         Ok(snapshot)
     }
@@ -95,9 +96,7 @@ impl PurchaseOrderReadService {
         let first = load_authorized_change(&this_db, &this_access, &actor, &id).await?;
         let current = load_authorized_change(&this_db, &this_access, &actor, &id).await?;
         if first.1 != current.1 {
-            return Err(Error::ConflictError(
-                "DATA_SCOPE_CHANGED：数据范围或采购变更单已变化，请刷新".into(),
-            ));
+            return Err(crate::support::data_scope_changed("数据范围或采购变更单已变化，请刷新"));
         }
         let _ = self.load_change_binding(&id).await?;
         Ok(first.0)

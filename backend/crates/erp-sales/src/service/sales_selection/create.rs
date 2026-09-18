@@ -14,6 +14,7 @@ use crate::entity::sales_selection::{
 };
 use crate::ports::sales_selection::SelectionCustomerPort;
 use crate::repository::SalesSelectionExt;
+use crate::repository::prelude::*;
 use crate::{Error, Result};
 
 impl SalesSelectionService {

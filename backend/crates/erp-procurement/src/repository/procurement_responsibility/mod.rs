@@ -68,3 +68,4 @@ impl Pagination for ProcurementResponsibilityRuleFilter {
 }
 
 mod query;
+pub use query::ProcurementResponsibilityRuleRepositoryExt;

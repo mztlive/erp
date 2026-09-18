@@ -31,6 +31,7 @@ use crate::entity::approval_integration::ApprovalSubjectSnapshot;
 use crate::entity::document_registry::DocumentType;
 use crate::error::{Error, Result};
 use crate::ports::{ApprovalObjectReadPort, PreparedWorkflowAudit};
+use crate::repository::prelude::*;
 use crate::repository::{BpmExt, WorkItemExt};
 use crate::service::approval::business_adapter::{BindingRevalidationContext, adapter_spec_of};
 use crate::service::approval::{

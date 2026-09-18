@@ -4,9 +4,9 @@ use erp_core::ids::PurchaseOrderId;
 use persistence_core::{Executor, Result};
 
 use crate::entity::payable::{PayableAccount, PayableSourceType};
-use crate::repository::owned::PayableAccountRepository;
 
-impl PayableAccountRepository<'_> {
+#[allow(async_fn_in_trait)]
+pub trait PayableAccountFulfillmentFactsExt {
     /// 查询采购单来源的应付往来子账。
     ///
     /// # 参数
@@ -18,7 +18,15 @@ impl PayableAccountRepository<'_> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_payable_accounts_for_purchase_order(
+    async fn list_payable_accounts_for_purchase_order(
+        &self,
+        purchase_order_id: &PurchaseOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PayableAccount>>;
+}
+
+impl PayableAccountFulfillmentFactsExt for persistence_core::Repository<'_, PayableAccount> {
+    async fn list_payable_accounts_for_purchase_order(
         &self,
         purchase_order_id: &PurchaseOrderId,
         executor: &mut dyn Executor,

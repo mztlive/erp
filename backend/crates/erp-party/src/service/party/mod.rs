@@ -26,6 +26,7 @@ use crate::entity::party::{
 use crate::error::{Error, Result};
 use crate::ports::{PartyAuditPort, SupplierRolePort};
 use crate::repository::PartyExt;
+use crate::repository::prelude::*;
 
 pub mod address;
 pub mod bank_account;

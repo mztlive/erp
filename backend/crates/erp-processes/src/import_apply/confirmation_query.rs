@@ -2,12 +2,14 @@ use std::collections::HashMap;
 
 use application_core::AuditActor;
 use erp_identity::SharedRbacService;
+use erp_import::repository::prelude::*;
 use erp_import::{
     ConfirmationStatus, LegacyImportConfirmation, LegacyImportConfirmationFilter,
     LegacyImportConfirmationListParams, LegacyImportExt, PageView, SortDir,
 };
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus};
+use erp_workflow::repository::prelude::*;
 use erp_workflow::service::work_item::{ProcessingState, WorkItemAllowedAction};
 use persistence_core::NoTransaction;
 use validator::Validate;

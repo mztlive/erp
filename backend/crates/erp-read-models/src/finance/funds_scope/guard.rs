@@ -3,6 +3,7 @@
 use std::collections::BTreeSet;
 
 use application_core::AuditActor;
+use erp_finance::repository::prelude::*;
 use erp_finance::repository::{PayableExt, ReceivableExt, SupplierPaymentFilter};
 use erp_procurement::PurchaseAccess;
 use erp_sales::repository::SalesOrderExt;

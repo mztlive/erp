@@ -27,6 +27,7 @@ use crate::entity::customer::{
 use crate::error::{Error, Result};
 use crate::ports::{AccountFactPort, CustomerAuditPort, CustomerDataScopePort};
 use crate::repository::CustomerExt;
+use crate::repository::prelude::*;
 
 /// 客户归属列表筛选条件类型（经 `CustomerExt` 关联类型跨 crate 可达）。
 type CustomerAssignmentFilter = <mongodb::Database as CustomerExt>::CustomerAssignmentFilter;

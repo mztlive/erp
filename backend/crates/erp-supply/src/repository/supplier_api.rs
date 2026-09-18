@@ -8,6 +8,8 @@
 //! 筛选/行类型定义在本文件，经 `SupplierApiExt` 的关联类型对外暴露
 //! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
 
+#![allow(async_fn_in_trait)]
+
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
@@ -164,7 +166,9 @@ impl Pagination for SupplierApiConnectionFilter {
     }
 }
 
-impl<'a> SupplierApiConnectionRepository<'a> {
+/// 供应商 API 连接仓储的域查询。
+#[allow(async_fn_in_trait)]
+pub trait SupplierApiConnectionRepositoryExt {
     /// 分页检索供应商 API 连接列表（投影查询）。
     ///
     /// 只返回 [`SupplierApiConnectionRow`] 所需的列表字段，不加载整文档，
@@ -180,7 +184,15 @@ impl<'a> SupplierApiConnectionRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_supplier_api_connections(
+    async fn search_supplier_api_connections(
+        &self,
+        filter: &SupplierApiConnectionFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<SupplierApiConnectionRow>>;
+}
+
+impl SupplierApiConnectionRepositoryExt for SupplierApiConnectionRepository<'_> {
+    async fn search_supplier_api_connections(
         &self,
         filter: &SupplierApiConnectionFilter,
         executor: &mut dyn Executor,
@@ -279,7 +291,9 @@ impl Pagination for SupplierApiCapabilityFilter {
     }
 }
 
-impl<'a> SupplierApiCapabilityRepository<'a> {
+/// 供应商 API 能力仓储的域查询。
+#[allow(async_fn_in_trait)]
+pub trait SupplierApiCapabilityRepositoryExt {
     /// 按连接 ID 集合批量读取能力声明。
     ///
     /// 列表读模型使用一次查询补齐当前页能力摘要，禁止逐连接读取。
@@ -293,7 +307,55 @@ impl<'a> SupplierApiCapabilityRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_capabilities_by_connections(
+    async fn find_capabilities_by_connections(
+        &self,
+        connection_ids: &[SupplierApiConnectionId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierApiCapability>>;
+
+    /// 分页检索连接能力声明列表（投影查询）。
+    ///
+    /// 只返回 [`SupplierApiCapabilityRow`] 所需的列表字段，不加载整文档
+    /// （`constraint_snapshot` 长文本不进入列表投影）。
+    ///
+    /// # 参数
+    /// * `filter` - 筛选与分页条件
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回当前页投影行与满足筛选条件的总数。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    async fn search_supplier_api_capabilities(
+        &self,
+        filter: &SupplierApiCapabilityFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<SupplierApiCapabilityRow>>;
+
+    /// 查找指定连接的全部能力声明（按能力代码升序）。
+    ///
+    /// 单次查询取回整组能力，避免逐条 N+1；返回完整实体供 Service 做
+    /// 能力判定与替换计算。
+    ///
+    /// # 参数
+    /// * `connection_id` - 所属连接
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回该连接下按 `capability_code` 升序的能力声明。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn find_capabilities_by_connection(
+        &self,
+        connection_id: &SupplierApiConnectionId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierApiCapability>>;
+}
+
+impl SupplierApiCapabilityRepositoryExt for SupplierApiCapabilityRepository<'_> {
+    async fn find_capabilities_by_connections(
         &self,
         connection_ids: &[SupplierApiConnectionId],
         executor: &mut dyn Executor,
@@ -310,21 +372,7 @@ impl<'a> SupplierApiCapabilityRepository<'a> {
         .await
     }
 
-    /// 分页检索连接能力声明列表（投影查询）。
-    ///
-    /// 只返回 [`SupplierApiCapabilityRow`] 所需的列表字段，不加载整文档
-    /// （`constraint_snapshot` 长文本不进入列表投影）。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_supplier_api_capabilities(
+    async fn search_supplier_api_capabilities(
         &self,
         filter: &SupplierApiCapabilityFilter,
         executor: &mut dyn Executor,
@@ -342,21 +390,7 @@ impl<'a> SupplierApiCapabilityRepository<'a> {
         Ok(PageResult { items, total: total as i64 })
     }
 
-    /// 查找指定连接的全部能力声明（按能力代码升序）。
-    ///
-    /// 单次查询取回整组能力，避免逐条 N+1；返回完整实体供 Service 做
-    /// 能力判定与替换计算。
-    ///
-    /// # 参数
-    /// * `connection_id` - 所属连接
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回该连接下按 `capability_code` 升序的能力声明。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_capabilities_by_connection(
+    async fn find_capabilities_by_connection(
         &self,
         connection_id: &SupplierApiConnectionId,
         executor: &mut dyn Executor,
@@ -370,9 +404,28 @@ impl<'a> SupplierApiCapabilityRepository<'a> {
     }
 }
 
-impl<'a> BusinessCapabilityConfirmationRepository<'a> {
+/// 采购业务能力确认仓储的域查询。
+#[allow(async_fn_in_trait)]
+pub trait BusinessCapabilityConfirmationRepositoryExt {
     /// 按连接、操作人与幂等摘要查找既有业务确认。
-    pub async fn find_business_confirmation_receipt(
+    async fn find_business_confirmation_receipt(
+        &self,
+        connection_id: &SupplierApiConnectionId,
+        confirmed_by: &str,
+        idempotency_key_hash: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<BusinessCapabilityConfirmation>>;
+
+    /// 查询连接下全部追加式业务确认，按最新优先返回。
+    async fn find_business_confirmations_by_connection(
+        &self,
+        connection_id: &SupplierApiConnectionId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<BusinessCapabilityConfirmation>>;
+}
+
+impl BusinessCapabilityConfirmationRepositoryExt for BusinessCapabilityConfirmationRepository<'_> {
+    async fn find_business_confirmation_receipt(
         &self,
         connection_id: &SupplierApiConnectionId,
         confirmed_by: &str,
@@ -390,8 +443,7 @@ impl<'a> BusinessCapabilityConfirmationRepository<'a> {
         .await
     }
 
-    /// 查询连接下全部追加式业务确认，按最新优先返回。
-    pub async fn find_business_confirmations_by_connection(
+    async fn find_business_confirmations_by_connection(
         &self,
         connection_id: &SupplierApiConnectionId,
         executor: &mut dyn Executor,
@@ -405,9 +457,27 @@ impl<'a> BusinessCapabilityConfirmationRepository<'a> {
     }
 }
 
-impl<'a> SupplierHealthCheckRunRepository<'a> {
+/// 健康检查运行记录仓储的域查询。
+#[allow(async_fn_in_trait)]
+pub trait SupplierHealthCheckRunRepositoryExt {
     /// 按后台任务 ID 查询健康检查运行记录。
-    pub async fn find_health_run_by_job(
+    async fn find_health_run_by_job(
+        &self,
+        job_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierHealthCheckRun>>;
+
+    /// 查询连接最近的健康运行记录。
+    async fn find_health_runs_by_connection(
+        &self,
+        connection_id: &SupplierApiConnectionId,
+        limit: i64,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierHealthCheckRun>>;
+}
+
+impl SupplierHealthCheckRunRepositoryExt for SupplierHealthCheckRunRepository<'_> {
+    async fn find_health_run_by_job(
         &self,
         job_id: &str,
         executor: &mut dyn Executor,
@@ -415,8 +485,7 @@ impl<'a> SupplierHealthCheckRunRepository<'a> {
         self.find_one(doc! { "background_job_id": job_id }, executor).await
     }
 
-    /// 查询连接最近的健康运行记录。
-    pub async fn find_health_runs_by_connection(
+    async fn find_health_runs_by_connection(
         &self,
         connection_id: &SupplierApiConnectionId,
         limit: i64,
@@ -439,9 +508,22 @@ impl<'a> SupplierHealthCheckRunRepository<'a> {
     }
 }
 
-impl<'a> SupplierConnectionCommandReceiptRepository<'a> {
+/// 连接治理命令回执仓储的域查询。
+#[allow(async_fn_in_trait)]
+pub trait SupplierConnectionCommandReceiptRepositoryExt {
     /// 按连接、动作、操作人与幂等摘要查询命令回执。
-    pub async fn find_command_receipt(
+    async fn find_command_receipt(
+        &self,
+        connection_id: &SupplierApiConnectionId,
+        action: SupplierConnectionAction,
+        actor_id: &str,
+        idempotency_key_hash: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierConnectionCommandReceipt>>;
+}
+
+impl SupplierConnectionCommandReceiptRepositoryExt for SupplierConnectionCommandReceiptRepository<'_> {
+    async fn find_command_receipt(
         &self,
         connection_id: &SupplierApiConnectionId,
         action: SupplierConnectionAction,

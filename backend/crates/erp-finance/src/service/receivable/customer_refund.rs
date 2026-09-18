@@ -15,6 +15,7 @@ use crate::entity::receivable::{
     ReceivableEntryOffsetData, ReceivableEntryType,
 };
 use crate::repository::ReceivableExt;
+use crate::repository::prelude::*;
 use crate::service::offset_index::OffsetFacts;
 use crate::{Error, Result};
 /// 客户退款实际消费的财务仓储边界；生产算法保持全部事实构造时点。

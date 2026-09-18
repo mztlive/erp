@@ -3,6 +3,7 @@
 pub mod catalog;
 pub mod extensions;
 pub mod owned;
+pub mod prelude;
 
 pub use catalog::{
     CatalogReadScope, CatalogRepository, CatalogScopeClause, CategoryParentChainFact, ProductBrandFilter,
@@ -19,4 +20,12 @@ pub use owned::{
     ProductRevisionMediaRepository, ProductRevisionRepository, SkuAttributeRepository,
     SkuAttributeValueRepository, SkuRepository, SkuRevisionRepository, UnitOfMeasureRepository,
     VoucherCategoryProfileRevisionRepository,
+};
+pub use prelude::{
+    ProductBrandRepositoryExt, ProductBrandRepositoryImportLookupExt, ProductCategoryRepositoryExt,
+    ProductCategoryRepositoryImportLookupExt, ProductCategoryRepositoryParentChainExt, ProductRepositoryExt,
+    ProductRepositoryImportLookupExt, ProductRevisionMediaRepositoryExt, ProductRevisionRepositoryExt,
+    SkuAttributeRepositoryExt, SkuAttributeValueRepositoryExt, SkuRepositoryExt, SkuRevisionRepositoryExt,
+    UnitOfMeasureRepositoryExt, UnitOfMeasureRepositoryImportLookupExt,
+    VoucherCategoryProfileRevisionRepositoryExt,
 };

@@ -6,6 +6,7 @@ use super::SupplierApiService;
 use crate::Result;
 use crate::dto::supplier_api::*;
 use crate::repository::SupplierApiExt;
+use crate::repository::prelude::*;
 type SupplierApiConnectionFilter = <mongodb::Database as SupplierApiExt>::SupplierApiConnectionFilter;
 type SupplierApiCapabilityFilter = <mongodb::Database as SupplierApiExt>::SupplierApiCapabilityFilter;
 impl SupplierApiService {

@@ -9,6 +9,7 @@ use erp_customer::{
     CustomerProfileCommandResultData, CustomerProfileMutationView, CustomerProfileOperation,
     CustomerProfileReplayContext, SaveCustomerProfileRequest,
 };
+use erp_party::repository::prelude::*;
 use erp_party::{Party, PartyExt, PartyRevision, PartyRevisionData, PartyUpdate};
 use id_generator::next_id;
 use mongodb::Database;

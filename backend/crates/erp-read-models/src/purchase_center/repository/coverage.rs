@@ -9,12 +9,14 @@
 use std::collections::HashMap;
 
 use erp_catalog::CatalogExt;
+use erp_catalog::repository::prelude::*;
 use erp_core::ids::{SalesOrderId, SalesOrderRevisionId, SalesOrderRevisionLineId};
 use erp_inventory::InventoryExt;
 use erp_procurement::entity::purchase_order::ProcurementCoverageFacts;
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_sales::entity::sales_order::LineType;
 use erp_sales::repository::SalesOrderExt;
+use erp_sales::repository::prelude::*;
 use mongodb::Database;
 use mongodb::bson::doc;
 use persistence_core::{Executor, Result};

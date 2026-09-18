@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::entity::contract::{Contract, ContractId, ContractRevision, ContractStatus};
 use crate::repository::extensions::ContractExt;
-use crate::repository::owned::{ContractRepository, ContractRevisionRepository};
+use crate::repository::owned::ContractRepository;
 
 /// `contract` 集合名（单一来源：`ContractExt` 关联常量）。
 const CONTRACTS: &str = <mongodb::Database as ContractExt>::CONTRACTS;
@@ -136,7 +136,9 @@ impl Pagination for ContractFilter {
     }
 }
 
-impl<'a> ContractRepository<'a> {
+/// 合同集合上的域特有查询。
+#[allow(async_fn_in_trait)]
+pub trait ContractRepositoryExt {
     /// 分页检索合同列表（投影查询）。
     ///
     /// 只返回 [`ContractRow`] 所需的列表字段，不加载整文档；排序字段由 Service
@@ -151,7 +153,43 @@ impl<'a> ContractRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_contracts(
+    async fn search_contracts(
+        &self,
+        filter: &ContractFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<ContractRow>>;
+
+    /// 查找当前客户范围内指向指定结算主体的生效合同。
+    ///
+    /// # 参数
+    /// * `customer_ids` - 当前操作人可参与的客户 ID 集合
+    /// * `settlement_party_id` - 目标结算主体 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回任一客户范围内的生效合同；客户集合为空或无匹配时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    ///
+    /// # 约束
+    /// 仅查询本仓储拥有的 `contracts` 集合，不访问结算主体或客户集合。
+    async fn find_effective_for_settlement_party(
+        &self,
+        customer_ids: &[String],
+        settlement_party_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<Contract>>;
+
+    /// 返回匹配条件的未删除对象 ID，供跨域列表在分页前组合筛选。
+    ///
+    /// 数据库查询失败时返回错误；空命中返回空集合，不扩大范围。
+    async fn matching_ids_by_number(&self, keyword: &str, executor: &mut dyn Executor)
+    -> Result<Vec<String>>;
+}
+
+impl ContractRepositoryExt for persistence_core::Repository<'_, Contract> {
+    async fn search_contracts(
         &self,
         filter: &ContractFilter,
         executor: &mut dyn Executor,
@@ -169,22 +207,7 @@ impl<'a> ContractRepository<'a> {
         Ok(PageResult { items, total: total as i64 })
     }
 
-    /// 查找当前客户范围内指向指定结算主体的生效合同。
-    ///
-    /// # 参数
-    /// * `customer_ids` - 当前操作人可参与的客户 ID 集合
-    /// * `settlement_party_id` - 目标结算主体 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回任一客户范围内的生效合同；客户集合为空或无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    ///
-    /// # 约束
-    /// 仅查询本仓储拥有的 `contracts` 集合，不访问结算主体或客户集合。
-    pub async fn find_effective_for_settlement_party(
+    async fn find_effective_for_settlement_party(
         &self,
         customer_ids: &[String],
         settlement_party_id: &str,
@@ -203,20 +226,32 @@ impl<'a> ContractRepository<'a> {
         )
         .await
     }
+
+    async fn matching_ids_by_number(
+        &self,
+        keyword: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<String>> {
+        let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
+        insert_literal_regex_filter(&mut filter, "contract_no", Some(keyword));
+        let collection = self.collection();
+        let mut query = collection.distinct("id", filter);
+        if let Some(session) = executor.session() {
+            query = query.session(session);
+        }
+        Ok(query.await?.into_iter().filter_map(|id| id.as_str().map(str::to_owned)).collect())
+    }
 }
 
-impl<'a> ContractRevisionRepository<'a> {
+/// 合同修订集合上的域特有查询。
+#[allow(async_fn_in_trait)]
+pub trait ContractRevisionRepositoryExt {
     /// 按修订 ID 集合批量读取不可变合同版本。
-    pub async fn find_by_ids(
+    async fn find_by_ids(
         &self,
         revision_ids: &[String],
         executor: &mut dyn Executor,
-    ) -> Result<Vec<ContractRevision>> {
-        if revision_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        self.find_many(doc! { "id": { "$in": revision_ids } }, executor).await
-    }
+    ) -> Result<Vec<ContractRevision>>;
 
     /// 列出合同的全部版本（新版本在前）。
     ///
@@ -229,18 +264,11 @@ impl<'a> ContractRevisionRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_by_contract(
+    async fn list_by_contract(
         &self,
         contract_id: &ContractId,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<ContractRevision>> {
-        self.find_many_sorted(
-            doc! { "contract_id": contract_id.to_string() },
-            doc! { "revision_no": -1 },
-            executor,
-        )
-        .await
-    }
+    ) -> Result<Vec<ContractRevision>>;
 
     /// 读取指定合同的历史最大修订序号。
     ///
@@ -255,7 +283,39 @@ impl<'a> ContractRevisionRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或投影反序列化失败时返回错误。
-    pub async fn latest_revision_no(
+    async fn latest_revision_no(
+        &self,
+        contract_id: &ContractId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<u32>>;
+}
+
+impl ContractRevisionRepositoryExt for persistence_core::Repository<'_, ContractRevision> {
+    async fn find_by_ids(
+        &self,
+        revision_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ContractRevision>> {
+        if revision_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many(doc! { "id": { "$in": revision_ids } }, executor).await
+    }
+
+    async fn list_by_contract(
+        &self,
+        contract_id: &ContractId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ContractRevision>> {
+        self.find_many_sorted(
+            doc! { "contract_id": contract_id.to_string() },
+            doc! { "revision_no": -1 },
+            executor,
+        )
+        .await
+    }
+
+    async fn latest_revision_no(
         &self,
         contract_id: &ContractId,
         executor: &mut dyn Executor,
@@ -457,26 +517,6 @@ fn latest_contract_revision_options() -> FindOptions {
 /// 从已按修订号倒序返回的零或一条投影中读取最大修订号。
 fn contract_revision_no_from_rows(rows: Vec<ContractRevisionNoRow>) -> Option<u32> {
     rows.into_iter().next().map(|row| row.revision_no)
-}
-
-impl ContractRepository<'_> {
-    /// 返回匹配条件的未删除对象 ID，供跨域列表在分页前组合筛选。
-    ///
-    /// 数据库查询失败时返回错误；空命中返回空集合，不扩大范围。
-    pub async fn matching_ids_by_number(
-        &self,
-        keyword: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<String>> {
-        let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
-        insert_literal_regex_filter(&mut filter, "contract_no", Some(keyword));
-        let collection = self.collection();
-        let mut query = collection.distinct("id", filter);
-        if let Some(session) = executor.session() {
-            query = query.session(session);
-        }
-        Ok(query.await?.into_iter().filter_map(|id| id.as_str().map(str::to_owned)).collect())
-    }
 }
 
 #[cfg(test)]

@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 use super::shared::{batch_ids_filter, default_paging, in_filter, sort_doc, whitelisted_sort};
 use crate::dto::catalog::SKU_SORT_FIELDS;
 use crate::entity::catalog::{EnableStatus, ListingStatus, Sku};
-use crate::repository::owned::SkuRepository;
 
 /// SKU 列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -127,7 +126,9 @@ impl Pagination for SkuFilter {
     }
 }
 
-impl<'a> SkuRepository<'a> {
+/// SKU 集合上的域查询。
+#[allow(async_fn_in_trait)]
+pub trait SkuRepositoryExt {
     /// 按稳定主键批量查询 SKU。
     ///
     /// # 参数
@@ -139,12 +140,7 @@ impl<'a> SkuRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn find_by_ids(&self, ids: &[SkuId], executor: &mut dyn Executor) -> Result<Vec<Sku>> {
-        let Some(filter) = batch_ids_filter("id", ids) else {
-            return Ok(Vec::new());
-        };
-        self.find_many(filter, executor).await
-    }
+    async fn find_by_ids(&self, ids: &[SkuId], executor: &mut dyn Executor) -> Result<Vec<Sku>>;
 
     /// 批量查询一组商品下的全部 SKU。
     ///
@@ -157,16 +153,11 @@ impl<'a> SkuRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn find_by_product_ids(
+    async fn find_by_product_ids(
         &self,
         product_ids: &[ProductId],
         executor: &mut dyn Executor,
-    ) -> Result<Vec<Sku>> {
-        let Some(filter) = batch_ids_filter("product_id", product_ids) else {
-            return Ok(Vec::new());
-        };
-        self.find_many(filter, executor).await
-    }
+    ) -> Result<Vec<Sku>>;
 
     /// 批量读取采购责任解析或规则展示引用的 SKU。
     ///
@@ -182,13 +173,11 @@ impl<'a> SkuRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn list_procurement_responsibility_skus(
+    async fn list_procurement_responsibility_skus(
         &self,
         sku_ids: &[SkuId],
         executor: &mut dyn Executor,
-    ) -> Result<Vec<Sku>> {
-        self.find_by_ids(sku_ids, executor).await
-    }
+    ) -> Result<Vec<Sku>>;
 
     /// 判断采购责任规则引用的 SKU 是否存在。
     ///
@@ -203,13 +192,11 @@ impl<'a> SkuRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询失败时返回错误。
-    pub async fn has_procurement_responsibility_sku(
+    async fn has_procurement_responsibility_sku(
         &self,
         sku_id: &SkuId,
         executor: &mut dyn Executor,
-    ) -> Result<bool> {
-        Ok(self.find_by_id(sku_id.as_ref(), executor).await?.is_some())
-    }
+    ) -> Result<bool>;
 
     /// 分页检索 SKU 列表（投影查询）。
     ///
@@ -225,7 +212,49 @@ impl<'a> SkuRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_skus(
+    async fn search_skus(
+        &self,
+        filter: &SkuFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<SkuRow>>;
+}
+
+impl SkuRepositoryExt for persistence_core::Repository<'_, Sku> {
+    async fn find_by_ids(&self, ids: &[SkuId], executor: &mut dyn Executor) -> Result<Vec<Sku>> {
+        let Some(filter) = batch_ids_filter("id", ids) else {
+            return Ok(Vec::new());
+        };
+        self.find_many(filter, executor).await
+    }
+
+    async fn find_by_product_ids(
+        &self,
+        product_ids: &[ProductId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<Sku>> {
+        let Some(filter) = batch_ids_filter("product_id", product_ids) else {
+            return Ok(Vec::new());
+        };
+        self.find_many(filter, executor).await
+    }
+
+    async fn list_procurement_responsibility_skus(
+        &self,
+        sku_ids: &[SkuId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<Sku>> {
+        self.find_by_ids(sku_ids, executor).await
+    }
+
+    async fn has_procurement_responsibility_sku(
+        &self,
+        sku_id: &SkuId,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        Ok(self.find_by_id(sku_id.as_ref(), executor).await?.is_some())
+    }
+
+    async fn search_skus(
         &self,
         filter: &SkuFilter,
         executor: &mut dyn Executor,

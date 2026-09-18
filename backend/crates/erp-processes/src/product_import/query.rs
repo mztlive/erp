@@ -5,6 +5,7 @@ use erp_catalog::{
     ProductImportItemListParams, ProductImportItemView, ProductImportJobListParams, ProductImportJobView,
 };
 use erp_core::ids::BackgroundJobId;
+use erp_support::repository::prelude::*;
 use erp_support::{
     BackgroundJob, BackgroundJobFilter, BulkJobExt, FileAssetExt, JobType, PRODUCT_IMPORT_DOMAIN_JOB_TYPE,
 };

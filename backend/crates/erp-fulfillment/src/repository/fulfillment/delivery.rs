@@ -7,8 +7,7 @@ use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result};
 use serde::{Deserialize, Serialize};
 
 use super::sort_doc;
-use crate::entity::fulfillment::{DeliveryState, DeliveryType};
-use crate::repository::owned::DeliveryRepository;
+use crate::entity::fulfillment::{Delivery, DeliveryState, DeliveryType};
 
 /// 发货单排序白名单（查询与测试共用）。
 const DELIVERY_SORT_FIELDS: &[&str] = &["created_at", "shipped_at"];
@@ -86,7 +85,9 @@ impl Pagination for DeliveryFilter {
     }
 }
 
-impl<'a> DeliveryRepository<'a> {
+/// 发货单仓储扩展：列表投影查询。
+#[allow(async_fn_in_trait)]
+pub trait DeliveryRepositoryExt {
     /// 分页检索发货单列表（投影查询）。
     ///
     /// 只返回 [`DeliveryRow`] 所需的列表字段（敏感履约地址字段不进投影）；
@@ -101,6 +102,14 @@ impl<'a> DeliveryRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    async fn search_deliveries(
+        &self,
+        filter: &DeliveryFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<DeliveryRow>>;
+}
+
+impl DeliveryRepositoryExt for persistence_core::Repository<'_, Delivery> {
     #[tracing::instrument(
         name = "repository.fulfillment.search_deliveries",
         skip_all,
@@ -112,7 +121,7 @@ impl<'a> DeliveryRepository<'a> {
             db.operation.name = "search"
         )
     )]
-    pub async fn search_deliveries(
+    async fn search_deliveries(
         &self,
         filter: &DeliveryFilter,
         executor: &mut dyn Executor,

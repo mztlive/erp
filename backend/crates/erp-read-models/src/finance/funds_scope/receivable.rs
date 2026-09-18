@@ -6,7 +6,9 @@ use std::hash::{Hash, Hasher};
 use application_core::AuditActor;
 use erp_core::money::Amount;
 use erp_finance::repository::ReceivableExt;
+use erp_finance::repository::prelude::*;
 use erp_sales::repository::SalesOrderExt;
+use erp_sales::repository::prelude::*;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 

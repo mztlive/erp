@@ -11,6 +11,7 @@ use crate::entity::sales_order::{
     SalesOrderSubmission, SalesOrderSubmissionLine,
 };
 use crate::repository::SalesOrderExt;
+use crate::repository::prelude::*;
 use crate::{Error, Result};
 /// 读取该销售单最新提交及其明细。
 ///

@@ -32,9 +32,7 @@ impl ProfitLossQuery {
             return invalid("分页参数无效");
         }
         if self.page > 1 && self.scope_version.as_deref().is_none_or(str::is_empty) {
-            return Err(Error::ConflictError(
-                "DATA_SCOPE_CHANGED：跨页查询必须携带范围版本，请从第一页刷新".into(),
-            ));
+            return Err(crate::support::data_scope_changed("跨页查询必须携带范围版本，请从第一页刷新"));
         }
         if self.scope_version.as_ref().is_some_and(|version| version.len() > 128) {
             return invalid("范围版本无效");

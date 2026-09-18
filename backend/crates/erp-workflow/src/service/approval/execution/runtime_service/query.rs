@@ -39,6 +39,7 @@ use crate::repository::bpm::{
     ApprovalInstanceListCursor, ApprovalInstanceListFilter, ApprovalInstanceListProjection,
     ApprovalInstanceListView, ApprovalInstanceSummary, ApprovalInstanceTextQuery,
 };
+use crate::repository::prelude::*;
 use crate::repository::{ApprovalIntegrationExt, BpmExt, WorkItemExt};
 use crate::service::approval::business_adapter::adapter_spec_of;
 use crate::service::approval::policy::{ALL_DOCUMENT_TYPES, DocumentApprovalPolicy, policy_of};

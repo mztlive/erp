@@ -13,6 +13,7 @@ use erp_catalog::{
 };
 use erp_core::ids::FileAssetId;
 use erp_support::FileAssetExt;
+use erp_support::repository::prelude::*;
 use mongodb::Database;
 use persistence_core::Executor;
 

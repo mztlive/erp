@@ -11,9 +11,11 @@ use erp_supply::entity::supplier_fulfillment::{
     SupplierFulfillmentItem, SupplierFulfillmentOrder, SupplierFulfillmentOrderId, SupplierOrderAction,
     SupplierOrderActionType,
 };
+use erp_supply::repository::prelude::*;
 use erp_supply::repository::{SupplierApiExt, SupplierFulfillmentExt};
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::WorkItemType;
+use erp_workflow::repository::prelude::*;
 use erp_workflow::service::work_item::WorkItemAllowedAction;
 use persistence_core::NoTransaction;
 

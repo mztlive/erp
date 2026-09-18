@@ -15,7 +15,10 @@ use erp_identity::service::access_control::resolve::DataScopeService;
 use mongodb::Database;
 use persistence_core::Executor;
 
+use super::identity_error::map_identity_error;
 use super::scope_support::{expand_org_ids, load_organization_state, member_ids};
+
+map_identity_error!(erp_customer);
 
 /// 组合层客户范围 adapter，持有身份域解析所需依赖。
 #[derive(Clone)]
@@ -166,39 +169,6 @@ fn map_clause(clause: &ScopeClause) -> erp_customer::Result<CustomerResolvedClau
         collaborative: clause.collaborative,
         org_unit_ids: clause.org_unit_ids.iter().cloned().collect(),
     })
-}
-
-/// 将身份域错误映射为客户领域错误。
-///
-/// # 参数
-/// * `error` - 身份域错误
-///
-/// # 返回
-/// 返回同构载荷的客户错误；RBAC 内部失败归入系统错误。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 不得把身份域 Forbidden 改写成校验通过后的空集。
-fn map_identity_error(error: erp_identity::Error) -> erp_customer::Error {
-    match error {
-        erp_identity::Error::Internal(payload) => erp_customer::Error::Internal(payload),
-        erp_identity::Error::NotFound(payload) => erp_customer::Error::NotFound(payload),
-        erp_identity::Error::ValidationError(payload) => erp_customer::Error::ValidationError(payload),
-        erp_identity::Error::BusinessLogicError(payload) => erp_customer::Error::BusinessLogicError(payload),
-        erp_identity::Error::ConflictError(payload) => erp_customer::Error::ConflictError(payload),
-        erp_identity::Error::ReceiptDuplicate(payload) => erp_customer::Error::ReceiptDuplicate(payload),
-        erp_identity::Error::TransientTransaction(payload) => {
-            erp_customer::Error::TransientTransaction(payload)
-        },
-        erp_identity::Error::Forbidden(payload) => erp_customer::Error::Forbidden(payload),
-        erp_identity::Error::Unauthenticated(payload) => erp_customer::Error::Unauthenticated(payload),
-        erp_identity::Error::Logic(payload) => erp_customer::Error::Logic(payload),
-        erp_identity::Error::Rbac(payload) => erp_customer::Error::Internal(payload),
-        erp_identity::Error::OutcomeUnknown(payload) => erp_customer::Error::OutcomeUnknown(payload),
-        erp_identity::Error::RepositoryError(payload) => erp_customer::Error::RepositoryError(payload),
-    }
 }
 
 /// 构造绑定身份数据库的客户访问器。

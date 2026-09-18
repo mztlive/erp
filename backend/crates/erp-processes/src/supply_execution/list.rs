@@ -5,6 +5,7 @@ use std::hash::{Hash, Hasher};
 
 use application_core::{AuditActor, FilterOption, FilteredPage};
 use erp_identity::AccessControlExt;
+use erp_identity::repository::prelude::*;
 use erp_supply::dto::supplier_fulfillment::{
     FulfillmentOrderListQuery, SupplierFulfillmentOrderListParams, SupplierFulfillmentOrderListView,
     SupplierFulfillmentOrderView,

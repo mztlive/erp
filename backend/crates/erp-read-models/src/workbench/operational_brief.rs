@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 use erp_import::LegacyImportExt;
 use erp_supply::entity::supplier_fulfillment::SupplierFulfillmentOrder;
 use erp_supply::entity::supplier_offering::{SupplierOffering, SupplierOfferingAvailability};
+use erp_supply::repository::prelude::*;
 use erp_supply::repository::{SupplierFulfillmentExt, SupplierOfferingExt};
 use persistence_core::Executor;
 

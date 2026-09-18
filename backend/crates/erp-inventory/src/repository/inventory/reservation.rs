@@ -5,7 +5,7 @@ use erp_core::money::Quantity;
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Repository, Result, mongo_ops};
 use serde::{Deserialize, Serialize};
 
 use super::shared::{
@@ -15,7 +15,6 @@ use super::{InventoryRepository, STOCK_RESERVATIONS};
 use crate::entity::inventory::{
     ReservationStatus, StockReservation, StockReservationSourceType, zero_quantity,
 };
-use crate::repository::owned::StockReservationRepository;
 
 /// 库存预占列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -120,7 +119,9 @@ impl Pagination for StockReservationFilter {
     }
 }
 
-impl<'a> StockReservationRepository<'a> {
+/// 库存预占集合上的领域查询与原子条件写。
+#[allow(async_fn_in_trait)]
+pub trait StockReservationRepositoryExt {
     /// 分页检索库存预占列表（投影查询）。
     ///
     /// 只返回 [`StockReservationRow`] 所需的列表字段，不加载整文档；排序字段
@@ -135,34 +136,11 @@ impl<'a> StockReservationRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    #[tracing::instrument(
-        name = "repository.inventory.search_stock_reservations",
-        skip_all,
-        fields(
-            layer = "repository",
-            domain = "inventory",
-            db.system.name = "mongodb",
-            db.collection.name = "stock_reservations",
-            db.operation.name = "search"
-        )
-    )]
-    pub async fn search_stock_reservations(
+    async fn search_stock_reservations(
         &self,
         filter: &StockReservationFilter,
         executor: &mut dyn Executor,
-    ) -> Result<PageResult<StockReservationRow>> {
-        let query = filter.to_doc();
-        let options = FindOptions::builder()
-            .sort(stock_reservation_sort(filter))
-            .skip(filter.skip())
-            .limit(filter.limit())
-            .projection(stock_reservation_projection())
-            .build();
-        let collection = self.collection().clone_with_type::<StockReservationRow>();
-        let items = mongo_ops::find_many(&collection, query.clone(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), query, executor).await?;
-        Ok(PageResult { items, total: total as i64 })
-    }
+    ) -> Result<PageResult<StockReservationRow>>;
 
     /// ★原子条件写★：消耗预占（`reserved -= q`、`consumed += q`）。
     ///
@@ -183,6 +161,70 @@ impl<'a> StockReservationRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 写入失败时返回错误。
+    async fn consume_quantity(
+        &self,
+        id: &str,
+        quantity: Quantity,
+        executor: &mut dyn Executor,
+    ) -> Result<bool>;
+
+    /// ★原子条件写★：整体释放预占（`reserved -> 0`、`released += q`）。
+    ///
+    /// 实体状态一致性要求 `RELEASED` 时剩余预占必须为 0（§6.7），因此本方法
+    /// 只接受**全额释放**：写条件内联 `reserved_quantity == q` 且状态为有效/
+    /// 部分消耗，只有释放全部剩余预占时命中并把状态迁移到 `RELEASED`；剩余
+    /// 预占大于 `q` 时返回 `Ok(false)` 且文档不变（部分释放不构成合法状态，
+    /// 由 P3 按单据语义编排）。本方法不更新内存实体。
+    ///
+    /// # 参数
+    /// * `id` - 预占主键
+    /// * `quantity` - 待释放的剩余预占数量（必须等于当前 `reserved_quantity`）
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 剩余预占恰好等于 `quantity` 且命中时返回 `true`；数量不符、状态不符或
+    /// 预占不存在时返回 `false`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 写入失败时返回错误。
+    async fn release_quantity(
+        &self,
+        id: &str,
+        quantity: Quantity,
+        executor: &mut dyn Executor,
+    ) -> Result<bool>;
+}
+
+impl StockReservationRepositoryExt for Repository<'_, StockReservation> {
+    #[tracing::instrument(
+        name = "repository.inventory.search_stock_reservations",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "inventory",
+            db.system.name = "mongodb",
+            db.collection.name = "stock_reservations",
+            db.operation.name = "search"
+        )
+    )]
+    async fn search_stock_reservations(
+        &self,
+        filter: &StockReservationFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<StockReservationRow>> {
+        let query = filter.to_doc();
+        let options = FindOptions::builder()
+            .sort(stock_reservation_sort(filter))
+            .skip(filter.skip())
+            .limit(filter.limit())
+            .projection(stock_reservation_projection())
+            .build();
+        let collection = self.collection().clone_with_type::<StockReservationRow>();
+        let items = mongo_ops::find_many(&collection, query.clone(), options, executor).await?;
+        let total = mongo_ops::count_documents(&self.collection(), query, executor).await?;
+        Ok(PageResult { items, total: total as i64 })
+    }
+
     #[tracing::instrument(
         name = "repository.inventory.consume_reservation",
         skip_all,
@@ -194,7 +236,7 @@ impl<'a> StockReservationRepository<'a> {
             db.operation.name = "update"
         )
     )]
-    pub async fn consume_quantity(
+    async fn consume_quantity(
         &self,
         id: &str,
         quantity: Quantity,
@@ -242,25 +284,6 @@ impl<'a> StockReservationRepository<'a> {
         Ok(true)
     }
 
-    /// ★原子条件写★：整体释放预占（`reserved -> 0`、`released += q`）。
-    ///
-    /// 实体状态一致性要求 `RELEASED` 时剩余预占必须为 0（§6.7），因此本方法
-    /// 只接受**全额释放**：写条件内联 `reserved_quantity == q` 且状态为有效/
-    /// 部分消耗，只有释放全部剩余预占时命中并把状态迁移到 `RELEASED`；剩余
-    /// 预占大于 `q` 时返回 `Ok(false)` 且文档不变（部分释放不构成合法状态，
-    /// 由 P3 按单据语义编排）。本方法不更新内存实体。
-    ///
-    /// # 参数
-    /// * `id` - 预占主键
-    /// * `quantity` - 待释放的剩余预占数量（必须等于当前 `reserved_quantity`）
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 剩余预占恰好等于 `quantity` 且命中时返回 `true`；数量不符、状态不符或
-    /// 预占不存在时返回 `false`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 写入失败时返回错误。
     #[tracing::instrument(
         name = "repository.inventory.release_reservation",
         skip_all,
@@ -272,7 +295,7 @@ impl<'a> StockReservationRepository<'a> {
             db.operation.name = "update"
         )
     )]
-    pub async fn release_quantity(
+    async fn release_quantity(
         &self,
         id: &str,
         quantity: Quantity,

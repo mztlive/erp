@@ -7,6 +7,7 @@ use application_core::AuditActor;
 use erp_core::money::Amount;
 use erp_finance::entity::payable::AllocationAction as PayableAllocationAction;
 use erp_finance::ports::funds_scope::FundsResolvedScope;
+use erp_finance::repository::prelude::*;
 use erp_finance::repository::{PayableExt, ReceivableExt};
 use erp_procurement::PurchaseAccess;
 use persistence_core::{Executor, Transactional};

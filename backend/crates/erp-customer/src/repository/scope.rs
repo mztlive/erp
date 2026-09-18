@@ -1,12 +1,13 @@
 //! 客户授权条件；由应用层完成 DataScope 解析后再交给仓储。
 
+#![allow(async_fn_in_trait)]
+
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, QueryFilter, Result, mongo_ops};
+use persistence_core::{Executor, QueryFilter, Repository, Result, mongo_ops};
 use serde::Deserialize;
 
 use super::customer::CustomerAccountFilter;
-use super::owned::{CustomerAccountRepository, CustomerAssignmentRepository};
 use crate::entity::customer::{CustomerAccount, CustomerAssignment};
 
 /// 同一角色已证明的客户责任条件；主责、协作与负责人组织分别解释。
@@ -252,7 +253,9 @@ impl CustomerReadScope {
     }
 }
 
-impl CustomerAccountRepository<'_> {
+/// 客户账户集合上的授权范围查询。
+#[allow(async_fn_in_trait)]
+pub trait CustomerAccountRepositoryScopeExt {
     /// 按明确授权条件读取单个客户。
     ///
     /// # 参数
@@ -268,14 +271,12 @@ impl CustomerAccountRepository<'_> {
     ///
     /// # 关键业务约束
     /// ID 条件不能替换范围交集；空授权不得返回文档。
-    pub async fn find_authorized(
+    async fn find_authorized(
         &self,
         id: &str,
         scope: &CustomerReadScope,
         executor: &mut dyn Executor,
-    ) -> Result<Option<CustomerAccount>> {
-        self.find_one(doc! { "$and": [{ "id": id }, scope.document()] }, executor).await
-    }
+    ) -> Result<Option<CustomerAccount>>;
 
     /// 装载查询的有界身份与版本集合，用于跨页及导出一致性校验。
     ///
@@ -291,7 +292,24 @@ impl CustomerAccountRepository<'_> {
     ///
     /// # 关键业务约束
     /// 不得截断版本集合后继续拼接跨页结果。
-    pub async fn query_versions(
+    async fn query_versions(
+        &self,
+        filter: &CustomerAccountFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<CustomerVersion>>;
+}
+
+impl CustomerAccountRepositoryScopeExt for Repository<'_, CustomerAccount> {
+    async fn find_authorized(
+        &self,
+        id: &str,
+        scope: &CustomerReadScope,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<CustomerAccount>> {
+        self.find_one(doc! { "$and": [{ "id": id }, scope.document()] }, executor).await
+    }
+
+    async fn query_versions(
         &self,
         filter: &CustomerAccountFilter,
         executor: &mut dyn Executor,
@@ -310,7 +328,9 @@ impl CustomerAccountRepository<'_> {
     }
 }
 
-impl CustomerAssignmentRepository<'_> {
+/// 客户归属集合上的授权范围查询。
+#[allow(async_fn_in_trait)]
+pub trait CustomerAssignmentRepositoryScopeExt {
     /// 读取某账号全部未删除归属，供读取动作补充历史参与。
     ///
     /// # 参数
@@ -325,7 +345,15 @@ impl CustomerAssignmentRepository<'_> {
     ///
     /// # 关键业务约束
     /// 历史参与只用于读取；调用方不得把本结果当作修改资格。
-    pub async fn list_for_user(
+    async fn list_for_user(
+        &self,
+        user_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<CustomerAssignment>>;
+}
+
+impl CustomerAssignmentRepositoryScopeExt for Repository<'_, CustomerAssignment> {
+    async fn list_for_user(
         &self,
         user_id: &str,
         executor: &mut dyn Executor,

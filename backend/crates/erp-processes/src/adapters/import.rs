@@ -5,6 +5,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use erp_import::{BulkJobFactsPort, LegacyImportService};
 use erp_support::BulkJobExt;
+use erp_support::repository::prelude::*;
 use mongodb::Database;
 use persistence_core::Executor;
 

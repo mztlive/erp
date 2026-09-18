@@ -7,7 +7,6 @@ use persistence_core::{Executor, Result};
 use serde::Deserialize;
 
 use crate::entity::receivable::{ReceivableEntry, ReceivableEntryOffset};
-use crate::repository::owned::{ReceivableEntryOffsetRepository, ReceivableEntryRepository};
 
 /// 应收账户最早到期日聚合行。
 #[derive(Debug, Deserialize)]
@@ -19,7 +18,8 @@ struct AccountDueDateRow {
     due_date: BusinessDate,
 }
 
-impl<'a> ReceivableEntryRepository<'a> {
+#[allow(async_fn_in_trait)]
+pub trait ReceivableEntryRepositoryExt {
     /// 按应收账户聚合最早正向分录到期日。
     ///
     /// # 参数
@@ -31,7 +31,51 @@ impl<'a> ReceivableEntryRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 聚合或反序列化失败时返回错误。
-    pub async fn minimum_increase_due_dates_by_accounts(
+    async fn minimum_increase_due_dates_by_accounts(
+        &self,
+        account_ids: &[ReceivableAccountId],
+        executor: &mut dyn Executor,
+    ) -> Result<std::collections::HashMap<String, BusinessDate>>;
+
+    /// 批量按子账集合取回分录（`$in` 一次取回，禁止 N+1）。
+    ///
+    /// 用于账龄汇总与开票核销锁定；只返回未删除分录（事实类恒未删除）。
+    ///
+    /// # 参数
+    /// * `account_ids` - 应收往来子账 ID 集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配分录。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn find_entries_by_accounts(
+        &self,
+        account_ids: &[ReceivableAccountId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ReceivableEntry>>;
+
+    /// 按子账取回全部分录（按来源序号升序）。
+    ///
+    /// # 参数
+    /// * `account_id` - 应收往来子账 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回按 `source_sequence` 升序的全部分录。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn find_entries_by_account(
+        &self,
+        account_id: &ReceivableAccountId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ReceivableEntry>>;
+}
+
+impl ReceivableEntryRepositoryExt for persistence_core::Repository<'_, ReceivableEntry> {
+    async fn minimum_increase_due_dates_by_accounts(
         &self,
         account_ids: &[ReceivableAccountId],
         executor: &mut dyn Executor,
@@ -64,20 +108,7 @@ impl<'a> ReceivableEntryRepository<'a> {
         Ok(rows.into_iter().map(|row| (row.account_id, row.due_date)).collect())
     }
 
-    /// 批量按子账集合取回分录（`$in` 一次取回，禁止 N+1）。
-    ///
-    /// 用于账龄汇总与开票核销锁定；只返回未删除分录（事实类恒未删除）。
-    ///
-    /// # 参数
-    /// * `account_ids` - 应收往来子账 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回全部匹配分录。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_entries_by_accounts(
+    async fn find_entries_by_accounts(
         &self,
         account_ids: &[ReceivableAccountId],
         executor: &mut dyn Executor,
@@ -89,18 +120,7 @@ impl<'a> ReceivableEntryRepository<'a> {
         self.find_many(doc! { "receivable_account_id": { "$in": account_ids } }, executor).await
     }
 
-    /// 按子账取回全部分录（按来源序号升序）。
-    ///
-    /// # 参数
-    /// * `account_id` - 应收往来子账 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回按 `source_sequence` 升序的全部分录。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_entries_by_account(
+    async fn find_entries_by_account(
         &self,
         account_id: &ReceivableAccountId,
         executor: &mut dyn Executor,
@@ -134,7 +154,8 @@ fn minimum_due_dates_pipeline(account_ids: Vec<String>) -> Vec<Document> {
     ]
 }
 
-impl<'a> ReceivableEntryOffsetRepository<'a> {
+#[allow(async_fn_in_trait)]
+pub trait ReceivableEntryOffsetRepositoryExt {
     /// 按减少分录集合批量取回抵销记录。
     ///
     /// # 参数
@@ -146,17 +167,11 @@ impl<'a> ReceivableEntryOffsetRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_offsets_by_decreases(
+    async fn find_offsets_by_decreases(
         &self,
         decrease_entry_ids: &[ReceivableEntryId],
         executor: &mut dyn Executor,
-    ) -> Result<Vec<ReceivableEntryOffset>> {
-        if decrease_entry_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        let ids = decrease_entry_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
-        self.find_many(doc! { "decrease_entry_id": { "$in": ids } }, executor).await
-    }
+    ) -> Result<Vec<ReceivableEntryOffset>>;
 
     /// 按减少分录取回全部抵销（按抵销序号升序）。
     ///
@@ -171,18 +186,11 @@ impl<'a> ReceivableEntryOffsetRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_offsets_by_decrease(
+    async fn find_offsets_by_decrease(
         &self,
         decrease_entry_id: &ReceivableEntryId,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<ReceivableEntryOffset>> {
-        self.find_many_sorted(
-            doc! { "decrease_entry_id": decrease_entry_id.to_string() },
-            doc! { "offset_sequence": 1 },
-            executor,
-        )
-        .await
-    }
+    ) -> Result<Vec<ReceivableEntryOffset>>;
 
     /// 按增加分录取回被冲减的抵销集合。
     ///
@@ -197,7 +205,40 @@ impl<'a> ReceivableEntryOffsetRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_offsets_by_increase(
+    async fn find_offsets_by_increase(
+        &self,
+        increase_entry_id: &ReceivableEntryId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ReceivableEntryOffset>>;
+}
+
+impl ReceivableEntryOffsetRepositoryExt for persistence_core::Repository<'_, ReceivableEntryOffset> {
+    async fn find_offsets_by_decreases(
+        &self,
+        decrease_entry_ids: &[ReceivableEntryId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ReceivableEntryOffset>> {
+        if decrease_entry_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ids = decrease_entry_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
+        self.find_many(doc! { "decrease_entry_id": { "$in": ids } }, executor).await
+    }
+
+    async fn find_offsets_by_decrease(
+        &self,
+        decrease_entry_id: &ReceivableEntryId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ReceivableEntryOffset>> {
+        self.find_many_sorted(
+            doc! { "decrease_entry_id": decrease_entry_id.to_string() },
+            doc! { "offset_sequence": 1 },
+            executor,
+        )
+        .await
+    }
+
+    async fn find_offsets_by_increase(
         &self,
         increase_entry_id: &ReceivableEntryId,
         executor: &mut dyn Executor,

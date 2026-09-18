@@ -10,6 +10,7 @@ use erp_procurement::repository::PurchaseOrderExt;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::work_item::{WorkItem, WorkItemCloseData};
 use erp_workflow::repository::bpm::ApprovalInstanceListProjection;
+use erp_workflow::repository::prelude::*;
 use erp_workflow::service::approval::execution::authorization::converge_eligibility;
 use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
 use erp_workflow::service::approval::execution::start::map_engine_error;

@@ -12,6 +12,7 @@ use erp_supply::entity::supplier_api::SupplierApiConnection;
 use erp_supply::entity::supplier_fulfillment::{SupplierFulfillmentOrder, SupplierOrderAction};
 use erp_supply::ports::supplier_gateway::DispatchOutcome;
 use erp_supply::repository::SupplierFulfillmentExt;
+use erp_supply::repository::prelude::*;
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;

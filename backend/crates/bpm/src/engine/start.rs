@@ -65,7 +65,6 @@ pub fn start(
     bindings: &[StartAssigneeBinding],
 ) -> EngineResult<TransitionPlan> {
     let by_node = indexed_bindings(graph, bindings)?;
-    ensure_bindings_match_definition(graph, &by_node)?;
     let instance = ApprovalProcessInstance::start_running(NewProcessInstance {
         id: command.instance_id.clone(),
         process_definition_id: ApprovalProcessDefinitionId::new(graph.definition.base.id.clone()),
@@ -124,11 +123,15 @@ fn indexed_bindings<'a>(
     Ok(by_node)
 }
 
-/// 启动绑定必须逐节点匹配定义责任人及其有效资格。索引由调用方一次建好复用。
-fn ensure_bindings_match_definition(
+/// 校验启动绑定并冻结实例审批人，复用调用方已建好的索引，一次遍历定义节点。
+fn freeze_assignees(
+    instance: &ApprovalProcessInstance,
     graph: &DefinitionGraph,
     by_node: &HashMap<&str, &StartAssigneeBinding>,
-) -> EngineResult<()> {
+    now: Timestamp,
+) -> EngineResult<Vec<ApprovalInstanceAssignee>> {
+    let instance_id = instance.typed_id();
+    let mut assignees = Vec::with_capacity(graph.nodes.len());
     for node in &graph.nodes {
         let binding = by_node
             .get(node.node_key.as_str())
@@ -143,24 +146,6 @@ fn ensure_bindings_match_definition(
         if binding.eligibility.blocked_code().is_some() {
             return Err(EngineError::InvalidCommand("启动时全部审批人必须有效，不得创建受阻实例"));
         }
-    }
-    Ok(())
-}
-
-/// 为定义中每个节点冻结实例审批人，复用调用方已建好的索引不再重建。
-fn freeze_assignees(
-    instance: &ApprovalProcessInstance,
-    graph: &DefinitionGraph,
-    by_node: &HashMap<&str, &StartAssigneeBinding>,
-    now: Timestamp,
-) -> EngineResult<Vec<ApprovalInstanceAssignee>> {
-    let instance_id = instance.typed_id();
-    let mut assignees = Vec::with_capacity(graph.nodes.len());
-    for node in &graph.nodes {
-        let binding = by_node
-            .get(node.node_key.as_str())
-            .copied()
-            .ok_or(EngineError::InvalidCommand("节点审批人绑定缺失或重复"))?;
         assignees.push(ApprovalInstanceAssignee::from_definition(
             binding.id.clone(),
             instance_id.clone(),

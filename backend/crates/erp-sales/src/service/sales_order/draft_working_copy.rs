@@ -12,6 +12,7 @@ use crate::entity::sales_order::{
     SalesOrder, SalesOrderLine, SalesOrderLineData, SalesOrderWorkingCopy, SalesOrderWorkingCopyLine,
 };
 use crate::repository::SalesOrderExt;
+use crate::repository::prelude::*;
 /// Existing and newly allocated stable line identities for one draft.
 #[derive(Debug, Clone, Default)]
 pub struct DraftStableLines {

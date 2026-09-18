@@ -19,15 +19,15 @@ mod revision;
 mod shared;
 mod tax_profile;
 
-pub use address::PartyAddressFilter;
-pub use bank_account::PartyBankAccountFilter;
-pub use contact::PartyContactFilter;
-pub use record::PartyFilter;
-pub use revision::PartyRevisionFilter;
-pub use tax_profile::PartyTaxProfileFilter;
+pub use address::{PartyAddressFilter, PartyAddressRepositoryExt};
+pub use bank_account::{PartyBankAccountFilter, PartyBankAccountRepositoryExt};
+pub use contact::{PartyContactFilter, PartyContactRepositoryExt};
+pub use record::{PartyFilter, PartyRepositoryExt};
+pub use revision::{PartyRevisionFilter, PartyRevisionRepositoryExt};
+pub use tax_profile::{PartyTaxProfileFilter, PartyTaxProfileRepositoryExt};
 
 pub mod company;
-
+pub use company::PartyRepositoryCompanyExt;
 use mongodb::Database;
 
 use super::extensions::PartyExt;

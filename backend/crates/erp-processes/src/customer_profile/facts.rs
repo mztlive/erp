@@ -8,6 +8,7 @@ use erp_customer::{
     CustomerProfileAddressInput, CustomerProfileBankAccountInput, CustomerProfileContactInput,
     SaveCustomerProfileRequest,
 };
+use erp_party::repository::prelude::*;
 use erp_party::{
     EffectiveRecordStatus, PartyAddress, PartyAddressContentMatch, PartyAddressData, PartyAddressUpdate,
     PartyBankAccount, PartyBankAccountContentMatch, PartyBankAccountData, PartyBankAccountUpdate,

@@ -3,11 +3,13 @@ use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
 use erp_core::ids::{PartyId, WorkItemId};
+use erp_finance::repository::prelude::*;
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{
     FinanceResponsibilityOperation, SalesInvoiceTaskReason, SalesInvoiceTaskSpec, WorkItemStatus,
     new_approved_sales_invoice_task,
 };
+use erp_workflow::repository::prelude::*;
 use id_generator::next_id;
 
 use super::*;

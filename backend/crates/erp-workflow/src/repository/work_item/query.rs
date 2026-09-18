@@ -2,13 +2,14 @@ use std::num::NonZeroU32;
 
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, QueryFilter, Result, mongo_ops};
+use persistence_core::{Executor, QueryFilter, Repository, Result, mongo_ops};
 
 use super::{WorkItemFilter, WorkItemRow};
 use crate::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
-use crate::repository::owned::WorkItemRepository;
 
-impl<'a> WorkItemRepository<'a> {
+/// 工作项集合仓储扩展。
+#[allow(async_fn_in_trait)]
+pub trait WorkItemRepositoryExt {
     /// 按固定批次读取队列候选任务投影。
     ///
     /// 本方法不执行未授权候选总数统计；Service 必须逐批加载权威
@@ -25,22 +26,13 @@ impl<'a> WorkItemRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询、游标读取或反序列化失败时返回错误。
-    pub async fn scan_work_item_batch(
+    async fn scan_work_item_batch(
         &self,
         filter: &WorkItemFilter,
         offset: u64,
         batch_size: NonZeroU32,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<WorkItemRow>> {
-        let options = FindOptions::builder()
-            .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
-            .skip(offset)
-            .limit(i64::from(batch_size.get()))
-            .projection(work_item_projection())
-            .build();
-        let collection = self.collection().clone_with_type::<WorkItemRow>();
-        mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await
-    }
+    ) -> Result<Vec<WorkItemRow>>;
 
     /// 在与队列完全相同的授权筛选内查找焦点任务。
     ///
@@ -50,16 +42,12 @@ impl<'a> WorkItemRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn find_visible_by_id(
+    async fn find_visible_by_id(
         &self,
         id: &str,
         filter: &WorkItemFilter,
         executor: &mut dyn Executor,
-    ) -> Result<Option<WorkItem>> {
-        let mut document = filter.to_doc();
-        document.insert("id", id);
-        mongo_ops::find_one(&self.collection(), document, executor).await
-    }
+    ) -> Result<Option<WorkItem>>;
 
     /// 查询业务对象当前全部开放任务。
     ///
@@ -68,23 +56,12 @@ impl<'a> WorkItemRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn list_active_by_object(
+    async fn list_active_by_object(
         &self,
         business_object_type: &str,
         business_object_id: &str,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<WorkItem>> {
-        self.find_many_sorted(
-            doc! {
-                "business_object_type": business_object_type,
-                "business_object_id": business_object_id,
-                "status": WorkItemStatus::Open.as_str(),
-            },
-            doc! { "created_at": 1 },
-            executor,
-        )
-        .await
-    }
+    ) -> Result<Vec<WorkItem>>;
 
     /// 按任务类型、对象类型与当前处理人读取开放任务。
     ///
@@ -102,7 +79,129 @@ impl<'a> WorkItemRepository<'a> {
     ///
     /// # 关键业务约束
     /// 只返回当前开放任务，历史处理人不得命中。
-    pub async fn list_open_by_type_owners(
+    async fn list_open_by_type_owners(
+        &self,
+        work_item_type: WorkItemType,
+        business_object_type: &str,
+        owner_user_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItem>>;
+
+    /// 按稳定 ID 读取任意已注册工作项。
+    ///
+    /// # 参数
+    /// * `id` - 工作项 ID
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回未删除工作项；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    async fn find_work_item(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<WorkItem>>;
+
+    /// Persist already-closed confirmation work items in the caller transaction.
+    ///
+    /// # Parameters
+    /// * `work_items` - closed work items to write back with CAS
+    /// * `executor` - caller transaction executor
+    ///
+    /// # Errors
+    /// Version conflict or MongoDB write failures.
+    async fn persist_closed_confirmation_work_items(
+        &self,
+        work_items: &mut [WorkItem],
+        executor: &mut dyn Executor,
+    ) -> Result<()>;
+
+    /// 查找指定业务对象当前开放的供应异常人工任务。
+    ///
+    /// # 参数
+    /// * `business_object_type` - 业务对象类型
+    /// * `business_object_id` - 业务对象稳定 ID
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回开放的业务异常任务；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    async fn find_open_business_exception_for_object(
+        &self,
+        business_object_type: &str,
+        business_object_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<WorkItem>>;
+
+    /// 批量读取导入确认引用的正式任务。
+    ///
+    /// # 参数
+    /// * `work_item_ids` - 正式任务 ID 列表
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配的未删除任务；输入为空时返回空列表。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    ///
+    /// # 约束
+    /// 仅查询本仓储拥有的 `work_items` 集合，按主键 `$in` 批量读取，不访问确认事实集合。
+    async fn list_legacy_import_confirmations_by_ids(
+        &self,
+        work_item_ids: &[erp_core::ids::WorkItemId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItem>>;
+}
+
+impl WorkItemRepositoryExt for Repository<'_, WorkItem> {
+    async fn scan_work_item_batch(
+        &self,
+        filter: &WorkItemFilter,
+        offset: u64,
+        batch_size: NonZeroU32,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItemRow>> {
+        let options = FindOptions::builder()
+            .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
+            .skip(offset)
+            .limit(i64::from(batch_size.get()))
+            .projection(work_item_projection())
+            .build();
+        let collection = self.collection().clone_with_type::<WorkItemRow>();
+        mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await
+    }
+
+    async fn find_visible_by_id(
+        &self,
+        id: &str,
+        filter: &WorkItemFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<WorkItem>> {
+        let mut document = filter.to_doc();
+        document.insert("id", id);
+        mongo_ops::find_one(&self.collection(), document, executor).await
+    }
+
+    async fn list_active_by_object(
+        &self,
+        business_object_type: &str,
+        business_object_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItem>> {
+        self.find_many_sorted(
+            doc! {
+                "business_object_type": business_object_type,
+                "business_object_id": business_object_id,
+                "status": WorkItemStatus::Open.as_str(),
+            },
+            doc! { "created_at": 1 },
+            executor,
+        )
+        .await
+    }
+
+    async fn list_open_by_type_owners(
         &self,
         work_item_type: WorkItemType,
         business_object_type: &str,
@@ -125,30 +224,11 @@ impl<'a> WorkItemRepository<'a> {
         .await
     }
 
-    /// 按稳定 ID 读取任意已注册工作项。
-    ///
-    /// # 参数
-    /// * `id` - 工作项 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回未删除工作项；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn find_work_item(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<WorkItem>> {
+    async fn find_work_item(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<WorkItem>> {
         self.find_by_id(id, executor).await
     }
 
-    /// Persist already-closed confirmation work items in the caller transaction.
-    ///
-    /// # Parameters
-    /// * `work_items` - closed work items to write back with CAS
-    /// * `executor` - caller transaction executor
-    ///
-    /// # Errors
-    /// Version conflict or MongoDB write failures.
-    pub async fn persist_closed_confirmation_work_items(
+    async fn persist_closed_confirmation_work_items(
         &self,
         work_items: &mut [WorkItem],
         executor: &mut dyn Executor,
@@ -162,19 +242,7 @@ impl<'a> WorkItemRepository<'a> {
         Ok(())
     }
 
-    /// 查找指定业务对象当前开放的供应异常人工任务。
-    ///
-    /// # 参数
-    /// * `business_object_type` - 业务对象类型
-    /// * `business_object_id` - 业务对象稳定 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回开放的业务异常任务；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn find_open_business_exception_for_object(
+    async fn find_open_business_exception_for_object(
         &self,
         business_object_type: &str,
         business_object_id: &str,
@@ -192,21 +260,7 @@ impl<'a> WorkItemRepository<'a> {
         .await
     }
 
-    /// 批量读取导入确认引用的正式任务。
-    ///
-    /// # 参数
-    /// * `work_item_ids` - 正式任务 ID 列表
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回全部匹配的未删除任务；输入为空时返回空列表。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    ///
-    /// # 约束
-    /// 仅查询本仓储拥有的 `work_items` 集合，按主键 `$in` 批量读取，不访问确认事实集合。
-    pub async fn list_legacy_import_confirmations_by_ids(
+    async fn list_legacy_import_confirmations_by_ids(
         &self,
         work_item_ids: &[erp_core::ids::WorkItemId],
         executor: &mut dyn Executor,

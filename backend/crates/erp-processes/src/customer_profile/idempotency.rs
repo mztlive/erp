@@ -1,5 +1,6 @@
 //! 客户资料命令幂等记录、事务恢复与返回视图映射。
 
+use erp_customer::repository::prelude::*;
 use erp_customer::{
     CustomerExt, CustomerProfileCommand, CustomerProfileMutationView, CustomerProfileReplayContext,
 };

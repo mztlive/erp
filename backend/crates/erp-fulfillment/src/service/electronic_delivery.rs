@@ -7,6 +7,7 @@ use super::FulfillmentService;
 use crate::dto::{ElectronicDeliveryListParams, ElectronicDeliveryView};
 use crate::entity::fulfillment::ElectronicDelivery;
 use crate::repository::FulfillmentExt;
+use crate::repository::prelude::*;
 use crate::{Error, Result};
 
 type ElectronicDeliveryFilter = <mongodb::Database as FulfillmentExt>::ElectronicDeliveryFilter;
@@ -44,10 +45,8 @@ impl FulfillmentService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: super::sort_ascending(query.paging.sort_dir),
         };
-        let page =
-            self.db.electronic_deliveries().search_electronic_deliveries(&filter, &mut NoTransaction).await?;
         super::map_search_page(
-            async { Ok(page) },
+            self.db.electronic_deliveries().search_electronic_deliveries(&filter, &mut NoTransaction),
             |row| ElectronicDeliveryView {
                 id: row.id,
                 fulfillment_no: row.fulfillment_no,

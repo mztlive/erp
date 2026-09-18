@@ -19,19 +19,17 @@ use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Repository, Result, mongo_ops};
 
 use super::IntegrationOpsExt;
 use crate::entity::integration_ops::{
     InboxMessage, IntegrationErrorTask, MessageType, ReconciliationDifference, ReconciliationDifferenceId,
     ReconciliationDifferenceResolution, SourceSystemId,
 };
-use crate::repository::owned::{
-    InboxMessageRepository, IntegrationErrorTaskRepository, ReconciliationDifferenceRepository,
-    ReconciliationDifferenceResolutionRepository,
-};
+use crate::repository::owned::InboxMessageRepository;
 
 mod difference_resolution_batch;
+pub use difference_resolution_batch::ReconciliationDifferenceResolutionBatchExt;
 
 /// `inbox_message` 集合名（单一来源：`IntegrationOpsExt` 关联常量）。
 const INBOX_MESSAGES: &str = <mongodb::Database as IntegrationOpsExt>::INBOX_MESSAGES;
@@ -56,7 +54,9 @@ pub use filters::{
     ReconciliationDifferenceFilter, ReconciliationDifferenceRow, ResolutionHistoryRow,
 };
 
-impl<'a> InboxMessageRepository<'a> {
+/// 入站消息集合的域特异查询。
+#[allow(async_fn_in_trait)]
+pub trait InboxMessageRepositoryExt {
     /// 按「来源系统 + 来源事件 ID」查找已接收消息（消息层去重判定）。
     ///
     /// 消息层唯一性由 `uk_inbox_messages_identity` 唯一索引保证；本方法用于
@@ -72,21 +72,12 @@ impl<'a> InboxMessageRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_identity(
+    async fn find_by_identity(
         &self,
         source_system_id: &SourceSystemId,
         source_event_id: &str,
         executor: &mut dyn Executor,
-    ) -> Result<Option<InboxMessage>> {
-        self.find_one(
-            doc! {
-                "source_system_id": source_system_id.to_string(),
-                "source_event_id": source_event_id,
-            },
-            executor,
-        )
-        .await
-    }
+    ) -> Result<Option<InboxMessage>>;
 
     /// 按「消息类型 + 业务事实键」查找已接收消息（业务事实去重判定）。
     ///
@@ -104,21 +95,12 @@ impl<'a> InboxMessageRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_business_fact_key(
+    async fn find_by_business_fact_key(
         &self,
         message_type: MessageType,
         business_fact_key: &str,
         executor: &mut dyn Executor,
-    ) -> Result<Option<InboxMessage>> {
-        self.find_one(
-            doc! {
-                "message_type": message_type.as_str(),
-                "business_fact_key": business_fact_key,
-            },
-            executor,
-        )
-        .await
-    }
+    ) -> Result<Option<InboxMessage>>;
 
     /// 分页检索已接收消息列表（投影查询）。
     ///
@@ -135,7 +117,47 @@ impl<'a> InboxMessageRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_inbox_messages(
+    async fn search_inbox_messages(
+        &self,
+        filter: &InboxMessageFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<InboxMessageRow>>;
+}
+
+impl InboxMessageRepositoryExt for Repository<'_, InboxMessage> {
+    async fn find_by_identity(
+        &self,
+        source_system_id: &SourceSystemId,
+        source_event_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<InboxMessage>> {
+        self.find_one(
+            doc! {
+                "source_system_id": source_system_id.to_string(),
+                "source_event_id": source_event_id,
+            },
+            executor,
+        )
+        .await
+    }
+
+    async fn find_by_business_fact_key(
+        &self,
+        message_type: MessageType,
+        business_fact_key: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<InboxMessage>> {
+        self.find_one(
+            doc! {
+                "message_type": message_type.as_str(),
+                "business_fact_key": business_fact_key,
+            },
+            executor,
+        )
+        .await
+    }
+
+    async fn search_inbox_messages(
         &self,
         filter: &InboxMessageFilter,
         executor: &mut dyn Executor,
@@ -154,7 +176,9 @@ impl<'a> InboxMessageRepository<'a> {
     }
 }
 
-impl<'a> IntegrationErrorTaskRepository<'a> {
+/// 集成错误任务集合的域特异查询。
+#[allow(async_fn_in_trait)]
+pub trait IntegrationErrorTaskRepositoryExt {
     /// 按稳定 ID 读取 W29 集成异常对象。
     ///
     /// 工作项入口的历史名称；纯主键读取，直接委托基类单条查询。
@@ -171,13 +195,11 @@ impl<'a> IntegrationErrorTaskRepository<'a> {
     ///
     /// # 约束
     /// 仅查询本仓储拥有的集成错误任务集合，不访问入站消息集合。
-    pub async fn find_work_item_integration_error_task(
+    async fn find_work_item_integration_error_task(
         &self,
         id: &str,
         executor: &mut dyn Executor,
-    ) -> Result<Option<IntegrationErrorTask>> {
-        self.find_by_id(id, executor).await
-    }
+    ) -> Result<Option<IntegrationErrorTask>>;
 
     /// 分页检索错误任务列表（投影查询）。
     ///
@@ -193,7 +215,23 @@ impl<'a> IntegrationErrorTaskRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_error_tasks(
+    async fn search_error_tasks(
+        &self,
+        filter: &IntegrationErrorTaskFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<IntegrationErrorTaskRow>>;
+}
+
+impl IntegrationErrorTaskRepositoryExt for Repository<'_, IntegrationErrorTask> {
+    async fn find_work_item_integration_error_task(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<IntegrationErrorTask>> {
+        self.find_by_id(id, executor).await
+    }
+
+    async fn search_error_tasks(
         &self,
         filter: &IntegrationErrorTaskFilter,
         executor: &mut dyn Executor,
@@ -212,7 +250,9 @@ impl<'a> IntegrationErrorTaskRepository<'a> {
     }
 }
 
-impl<'a> ReconciliationDifferenceRepository<'a> {
+/// 对账差异集合的域特异查询。
+#[allow(async_fn_in_trait)]
+pub trait ReconciliationDifferenceRepositoryExt {
     /// 按稳定 ID 读取 W29 对账差异对象。
     ///
     /// 工作项入口的历史名称；纯主键读取，直接委托基类单条查询。
@@ -229,13 +269,11 @@ impl<'a> ReconciliationDifferenceRepository<'a> {
     ///
     /// # 约束
     /// 仅查询本仓储拥有的对账差异集合，不访问解决记录集合。
-    pub async fn find_work_item_reconciliation_difference(
+    async fn find_work_item_reconciliation_difference(
         &self,
         id: &str,
         executor: &mut dyn Executor,
-    ) -> Result<Option<ReconciliationDifference>> {
-        self.find_by_id(id, executor).await
-    }
+    ) -> Result<Option<ReconciliationDifference>>;
 
     /// 分页检索对账差异列表（投影查询）。
     ///
@@ -251,7 +289,23 @@ impl<'a> ReconciliationDifferenceRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_differences(
+    async fn search_differences(
+        &self,
+        filter: &ReconciliationDifferenceFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<ReconciliationDifferenceRow>>;
+}
+
+impl ReconciliationDifferenceRepositoryExt for Repository<'_, ReconciliationDifference> {
+    async fn find_work_item_reconciliation_difference(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ReconciliationDifference>> {
+        self.find_by_id(id, executor).await
+    }
+
+    async fn search_differences(
         &self,
         filter: &ReconciliationDifferenceFilter,
         executor: &mut dyn Executor,
@@ -270,7 +324,9 @@ impl<'a> ReconciliationDifferenceRepository<'a> {
     }
 }
 
-impl<'a> ReconciliationDifferenceResolutionRepository<'a> {
+/// 对账差异解决记录集合的域特异查询。
+#[allow(async_fn_in_trait)]
+pub trait ReconciliationDifferenceResolutionRepositoryExt {
     /// 按差异 ID 读取全部解决记录（不可变追加历史，按处理序号升序）。
     ///
     /// 处理记录不可更新或删除（§6.21），只提供追加与只读查询；
@@ -285,7 +341,51 @@ impl<'a> ReconciliationDifferenceResolutionRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn search_resolutions(
+    async fn search_resolutions(
+        &self,
+        difference_id: &ReconciliationDifferenceId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ResolutionHistoryRow>>;
+
+    /// 按历史处理人读取其参与过的差异 ID；不删除处理留痕。
+    ///
+    /// # 参数
+    /// * `handled_by` - 历史处理人稳定 ID
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 返回去重后的差异 ID。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
+    async fn find_difference_ids_handled_by(
+        &self,
+        handled_by: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<String>>;
+
+    /// 读取差异的最新一条解决记录（派生当前处理状态）。
+    ///
+    /// 按处理序号降序取首条，当前处理状态由最后一条处理动作派生（§6.21）。
+    ///
+    /// # 参数
+    /// * `difference_id` - 所属对账差异 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回最新解决记录；尚无处理记录时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn find_latest_by_difference(
+        &self,
+        difference_id: &ReconciliationDifferenceId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ReconciliationDifferenceResolution>>;
+}
+
+impl ReconciliationDifferenceResolutionRepositoryExt for Repository<'_, ReconciliationDifferenceResolution> {
+    async fn search_resolutions(
         &self,
         difference_id: &ReconciliationDifferenceId,
         executor: &mut dyn Executor,
@@ -302,18 +402,7 @@ impl<'a> ReconciliationDifferenceResolutionRepository<'a> {
         mongo_ops::find_many(&collection, filter, options, executor).await
     }
 
-    /// 按历史处理人读取其参与过的差异 ID；不删除处理留痕。
-    ///
-    /// # 参数
-    /// * `handled_by` - 历史处理人稳定 ID
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 返回去重后的差异 ID。
-    ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
-    pub async fn find_difference_ids_handled_by(
+    async fn find_difference_ids_handled_by(
         &self,
         handled_by: &[String],
         executor: &mut dyn Executor,
@@ -338,20 +427,7 @@ impl<'a> ReconciliationDifferenceResolutionRepository<'a> {
         Ok(ids)
     }
 
-    /// 读取差异的最新一条解决记录（派生当前处理状态）。
-    ///
-    /// 按处理序号降序取首条，当前处理状态由最后一条处理动作派生（§6.21）。
-    ///
-    /// # 参数
-    /// * `difference_id` - 所属对账差异 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回最新解决记录；尚无处理记录时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_latest_by_difference(
+    async fn find_latest_by_difference(
         &self,
         difference_id: &ReconciliationDifferenceId,
         executor: &mut dyn Executor,

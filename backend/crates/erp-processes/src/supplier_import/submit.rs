@@ -2,6 +2,7 @@
 use application_core::AuditActor;
 use application_core::command::CommandFingerprint;
 use erp_supplier::dto::import_job::SupplierImportJobRequest;
+use erp_support::repository::prelude::*;
 use erp_support::{
     BackgroundJob, BackgroundJobAggregate, BackgroundJobAggregateData, BackgroundJobId, BackgroundJobItem,
     BackgroundJobItemDraft, BackgroundJobItemId, BackgroundJobRegistration, BackgroundJobView, BulkJobExt,

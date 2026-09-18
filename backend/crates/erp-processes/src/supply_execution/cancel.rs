@@ -6,6 +6,7 @@ use erp_integration::repository::IntegrationOpsExt;
 use erp_supply::dto::supplier_fulfillment::{SubmitActionResultView, SubmitAfterSalesActionRequest};
 use erp_supply::entity::supplier_api::SupplierApiCapabilityCode;
 use erp_supply::entity::supplier_fulfillment::SupplierOrderActionType;
+use erp_supply::repository::prelude::*;
 use erp_supply::repository::{SupplierApiExt, SupplierFulfillmentExt};
 use erp_supply::service::supplier_fulfillment::mapping::action_line_view;
 use erp_supply::service::supplier_fulfillment::place::ensure_capability;

@@ -10,7 +10,6 @@ use serde::{Deserialize, Serialize};
 
 use super::sort_doc;
 use crate::entity::payable::{SupplierPayment, SupplierPaymentStatus};
-use crate::repository::owned::SupplierPaymentRepository;
 
 /// 供应商付款单列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -128,7 +127,8 @@ impl Pagination for SupplierPaymentFilter {
     }
 }
 
-impl<'a> SupplierPaymentRepository<'a> {
+#[allow(async_fn_in_trait)]
+pub trait SupplierPaymentRepositoryExt {
     /// 按付款单号查询未删除付款单。
     ///
     /// # 参数
@@ -140,13 +140,11 @@ impl<'a> SupplierPaymentRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_payment_no(
+    async fn find_by_payment_no(
         &self,
         payment_no: &str,
         executor: &mut dyn Executor,
-    ) -> Result<Option<SupplierPayment>> {
-        self.find_one_by_field("payment_no", payment_no, executor).await
-    }
+    ) -> Result<Option<SupplierPayment>>;
 
     /// 按主键集合批量取回供应商付款单（FIN-R02，`$in` 一次取回，禁止 N+1）。
     ///
@@ -159,17 +157,11 @@ impl<'a> SupplierPaymentRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_supplier_payments_by_ids(
+    async fn find_supplier_payments_by_ids(
         &self,
         payment_ids: &[erp_core::ids::SupplierPaymentId],
         executor: &mut dyn Executor,
-    ) -> Result<Vec<SupplierPayment>> {
-        if payment_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        let ids: Vec<String> = payment_ids.iter().map(ToString::to_string).collect();
-        self.find_many(doc! { "id": { "$in": ids } }, executor).await
-    }
+    ) -> Result<Vec<SupplierPayment>>;
 
     /// 分页检索供应商付款单列表（投影查询）。
     ///
@@ -185,7 +177,35 @@ impl<'a> SupplierPaymentRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_supplier_payments(
+    async fn search_supplier_payments(
+        &self,
+        filter: &SupplierPaymentFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<SupplierPaymentRow>>;
+}
+
+impl SupplierPaymentRepositoryExt for persistence_core::Repository<'_, SupplierPayment> {
+    async fn find_by_payment_no(
+        &self,
+        payment_no: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierPayment>> {
+        self.find_one_by_field("payment_no", payment_no, executor).await
+    }
+
+    async fn find_supplier_payments_by_ids(
+        &self,
+        payment_ids: &[erp_core::ids::SupplierPaymentId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierPayment>> {
+        if payment_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ids: Vec<String> = payment_ids.iter().map(ToString::to_string).collect();
+        self.find_many(doc! { "id": { "$in": ids } }, executor).await
+    }
+
+    async fn search_supplier_payments(
         &self,
         filter: &SupplierPaymentFilter,
         executor: &mut dyn Executor,

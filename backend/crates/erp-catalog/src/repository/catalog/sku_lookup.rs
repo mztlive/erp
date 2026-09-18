@@ -15,6 +15,7 @@ use super::sku_revision::{
 use crate::entity::catalog::{Sku, SkuRevision, SkuRevisionAttributeValue};
 use crate::repository::CatalogExt;
 use crate::repository::owned::{ProductRepository, SkuRepository, SkuRevisionRepository};
+use crate::repository::prelude::*;
 
 impl<'a> CatalogRepository<'a> {
     /// 按 SKU 编号或当前修订名称解析公司 SKU 主键。

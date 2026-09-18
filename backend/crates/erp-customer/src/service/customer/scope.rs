@@ -13,6 +13,7 @@ use super::access::{ensure_limit, intersect_ids, sorted_unique_ids};
 use crate::dto::customer::{CustomerListParams, CustomerListQuery, CustomerScope, CustomerView, SortDir};
 use crate::error::{Error, Result};
 use crate::ports::{AccountFactPort, CustomerDataScopePort, CustomerResolvedScope, PartyFactPort};
+use crate::repository::prelude::*;
 use crate::repository::scope::{CustomerReadScope, CustomerVersion};
 use crate::repository::{CustomerAccountFilter, CustomerExt};
 

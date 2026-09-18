@@ -5,6 +5,7 @@ use erp_core::ids::PurchaseOrderId;
 use erp_procurement::entity::purchase_order::{PurchaseOrder, PurchaseOrderStatus};
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_workflow::entity::work_item::WorkItem;
+use erp_workflow::repository::prelude::*;
 use erp_workflow::{Error as WorkflowError, Result as WorkflowResult, WorkItemExt};
 use mongodb::Database;
 use persistence_core::Executor;

@@ -9,6 +9,7 @@ use crate::entity::procurement_responsibility::{
 };
 use crate::ports::procurement_responsibility::ProcurementResponsibilityFactsPort;
 use crate::repository::ProcurementResponsibilityExt;
+use crate::repository::prelude::*;
 use crate::{Error, Result};
 
 impl ProcurementResponsibilityService {

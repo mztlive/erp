@@ -4,7 +4,7 @@ use erp_core::ids::{SkuId, StockMovementId, WarehouseId};
 use erp_core::money::Quantity;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Repository, Result, mongo_ops};
 use serde::{Deserialize, Serialize};
 
 use super::shared::{
@@ -13,7 +13,6 @@ use super::shared::{
 };
 use super::{InventoryRepository, STOCK_BALANCES};
 use crate::entity::inventory::StockBalance;
-use crate::repository::owned::StockBalanceRepository;
 
 /// 库存余额列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -104,7 +103,9 @@ impl Pagination for StockBalanceFilter {
     }
 }
 
-impl<'a> StockBalanceRepository<'a> {
+/// 库存余额集合上的领域查询与原子条件写。
+#[allow(async_fn_in_trait)]
+pub trait StockBalanceRepositoryExt {
     /// 分页检索库存余额列表（投影查询）。
     ///
     /// 只返回 [`StockBalanceRow`] 所需的列表字段，不加载整文档；排序字段走
@@ -119,33 +120,11 @@ impl<'a> StockBalanceRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    #[tracing::instrument(
-        name = "repository.inventory.search_stock_balances",
-        skip_all,
-        fields(
-            layer = "repository",
-            domain = "inventory",
-            db.system.name = "mongodb",
-            db.collection.name = "stock_balances",
-            db.operation.name = "search"
-        )
-    )]
-    pub async fn search_stock_balances(
+    async fn search_stock_balances(
         &self,
         filter: &StockBalanceFilter,
         executor: &mut dyn Executor,
-    ) -> Result<PageResult<StockBalanceRow>> {
-        let options = FindOptions::builder()
-            .sort(stock_balance_sort(filter))
-            .skip(filter.skip())
-            .limit(filter.limit())
-            .projection(stock_balance_projection())
-            .build();
-        let collection = self.collection().clone_with_type::<StockBalanceRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-        Ok(PageResult { items, total: total as i64 })
-    }
+    ) -> Result<PageResult<StockBalanceRow>>;
 
     /// 按库存维度查找余额（`(warehouse_id, sku_id)` 全局唯一）。
     ///
@@ -159,21 +138,12 @@ impl<'a> StockBalanceRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_dimensions(
+    async fn find_by_dimensions(
         &self,
         warehouse_id: &WarehouseId,
         sku_id: &SkuId,
         executor: &mut dyn Executor,
-    ) -> Result<Option<StockBalance>> {
-        self.find_one(
-            doc! {
-                "warehouse_id": warehouse_id.to_string(),
-                "sku_id": sku_id.to_string(),
-            },
-            executor,
-        )
-        .await
-    }
+    ) -> Result<Option<StockBalance>>;
 
     /// ★原子条件写★：入库增加账面现存（`on_hand += q`、`available += q`）。
     ///
@@ -191,28 +161,12 @@ impl<'a> StockBalanceRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 写入失败时返回错误。
-    #[tracing::instrument(
-        name = "repository.inventory.increase_on_hand",
-        skip_all,
-        fields(
-            layer = "repository",
-            domain = "inventory",
-            db.system.name = "mongodb",
-            db.collection.name = "stock_balances",
-            db.operation.name = "update"
-        )
-    )]
-    pub async fn increase_on_hand(
+    async fn increase_on_hand(
         &self,
         id: &str,
         quantity: Quantity,
         executor: &mut dyn Executor,
-    ) -> Result<bool> {
-        let filter = doc! { "id": id, "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
-        let update = both_inc(quantity, "on_hand_quantity", "available_quantity")?;
-        let result = mongo_ops::update_one(&self.collection(), filter, update, false, executor).await?;
-        Ok(result.matched_count > 0)
-    }
+    ) -> Result<bool>;
 
     /// ★原子条件写★：预占可用量（`reserved += q`、`available -= q`）。
     ///
@@ -230,33 +184,12 @@ impl<'a> StockBalanceRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 写入失败时返回错误。
-    #[tracing::instrument(
-        name = "repository.inventory.reserve_quantity",
-        skip_all,
-        fields(
-            layer = "repository",
-            domain = "inventory",
-            db.system.name = "mongodb",
-            db.collection.name = "stock_balances",
-            db.operation.name = "update"
-        )
-    )]
-    pub async fn reserve_quantity(
+    async fn reserve_quantity(
         &self,
         id: &str,
         quantity: Quantity,
         executor: &mut dyn Executor,
-    ) -> Result<bool> {
-        let quantity_bson = to_bson(quantity)?;
-        let filter = doc! {
-            "id": id,
-            "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-            "available_quantity": { "$gte": &quantity_bson },
-        };
-        let update = cross_inc(quantity, "reserved_quantity", "available_quantity")?;
-        let result = mongo_ops::update_one(&self.collection(), filter, update, false, executor).await?;
-        Ok(result.matched_count > 0)
-    }
+    ) -> Result<bool>;
 
     /// ★原子条件写★：扣减可用量（`on_hand -= q`、`available -= q`）。
     ///
@@ -274,33 +207,12 @@ impl<'a> StockBalanceRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 写入失败时返回错误。
-    #[tracing::instrument(
-        name = "repository.inventory.deduct_available",
-        skip_all,
-        fields(
-            layer = "repository",
-            domain = "inventory",
-            db.system.name = "mongodb",
-            db.collection.name = "stock_balances",
-            db.operation.name = "update"
-        )
-    )]
-    pub async fn deduct_available(
+    async fn deduct_available(
         &self,
         id: &str,
         quantity: Quantity,
         executor: &mut dyn Executor,
-    ) -> Result<bool> {
-        let quantity_bson = to_bson(quantity)?;
-        let filter = doc! {
-            "id": id,
-            "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-            "available_quantity": { "$gte": &quantity_bson },
-        };
-        let update = both_dec(quantity, "on_hand_quantity", "available_quantity")?;
-        let result = mongo_ops::update_one(&self.collection(), filter, update, false, executor).await?;
-        Ok(result.matched_count > 0)
-    }
+    ) -> Result<bool>;
 
     /// ★原子条件写★：释放预占（`reserved -= q`、`available += q`）。
     ///
@@ -318,6 +230,159 @@ impl<'a> StockBalanceRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 写入失败时返回错误。
+    async fn release_reserved(
+        &self,
+        id: &str,
+        quantity: Quantity,
+        executor: &mut dyn Executor,
+    ) -> Result<bool>;
+
+    /// 登记余额「已应用最后流水」（台账最后变动列）。
+    ///
+    /// 与数量增减同事务调用；行不存在或已软删除时返回 `false`。
+    ///
+    /// # 参数
+    /// * `id` - 余额主键
+    /// * `movement_id` - 刚应用的正式流水主键
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 命中并更新返回 `true`；余额行不存在时返回 `false`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 写入失败时返回错误。
+    async fn apply_last_movement(
+        &self,
+        id: &str,
+        movement_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<bool>;
+}
+
+impl StockBalanceRepositoryExt for Repository<'_, StockBalance> {
+    #[tracing::instrument(
+        name = "repository.inventory.search_stock_balances",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "inventory",
+            db.system.name = "mongodb",
+            db.collection.name = "stock_balances",
+            db.operation.name = "search"
+        )
+    )]
+    async fn search_stock_balances(
+        &self,
+        filter: &StockBalanceFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<StockBalanceRow>> {
+        let options = FindOptions::builder()
+            .sort(stock_balance_sort(filter))
+            .skip(filter.skip())
+            .limit(filter.limit())
+            .projection(stock_balance_projection())
+            .build();
+        let collection = self.collection().clone_with_type::<StockBalanceRow>();
+        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
+        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
+        Ok(PageResult { items, total: total as i64 })
+    }
+
+    async fn find_by_dimensions(
+        &self,
+        warehouse_id: &WarehouseId,
+        sku_id: &SkuId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<StockBalance>> {
+        self.find_one(
+            doc! {
+                "warehouse_id": warehouse_id.to_string(),
+                "sku_id": sku_id.to_string(),
+            },
+            executor,
+        )
+        .await
+    }
+
+    #[tracing::instrument(
+        name = "repository.inventory.increase_on_hand",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "inventory",
+            db.system.name = "mongodb",
+            db.collection.name = "stock_balances",
+            db.operation.name = "update"
+        )
+    )]
+    async fn increase_on_hand(
+        &self,
+        id: &str,
+        quantity: Quantity,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        let filter = doc! { "id": id, "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
+        let update = both_inc(quantity, "on_hand_quantity", "available_quantity")?;
+        let result = mongo_ops::update_one(&self.collection(), filter, update, false, executor).await?;
+        Ok(result.matched_count > 0)
+    }
+
+    #[tracing::instrument(
+        name = "repository.inventory.reserve_quantity",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "inventory",
+            db.system.name = "mongodb",
+            db.collection.name = "stock_balances",
+            db.operation.name = "update"
+        )
+    )]
+    async fn reserve_quantity(
+        &self,
+        id: &str,
+        quantity: Quantity,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        let quantity_bson = to_bson(quantity)?;
+        let filter = doc! {
+            "id": id,
+            "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            "available_quantity": { "$gte": &quantity_bson },
+        };
+        let update = cross_inc(quantity, "reserved_quantity", "available_quantity")?;
+        let result = mongo_ops::update_one(&self.collection(), filter, update, false, executor).await?;
+        Ok(result.matched_count > 0)
+    }
+
+    #[tracing::instrument(
+        name = "repository.inventory.deduct_available",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "inventory",
+            db.system.name = "mongodb",
+            db.collection.name = "stock_balances",
+            db.operation.name = "update"
+        )
+    )]
+    async fn deduct_available(
+        &self,
+        id: &str,
+        quantity: Quantity,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        let quantity_bson = to_bson(quantity)?;
+        let filter = doc! {
+            "id": id,
+            "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            "available_quantity": { "$gte": &quantity_bson },
+        };
+        let update = both_dec(quantity, "on_hand_quantity", "available_quantity")?;
+        let result = mongo_ops::update_one(&self.collection(), filter, update, false, executor).await?;
+        Ok(result.matched_count > 0)
+    }
+
     #[tracing::instrument(
         name = "repository.inventory.release_reserved",
         skip_all,
@@ -329,7 +394,7 @@ impl<'a> StockBalanceRepository<'a> {
             db.operation.name = "update"
         )
     )]
-    pub async fn release_reserved(
+    async fn release_reserved(
         &self,
         id: &str,
         quantity: Quantity,
@@ -346,20 +411,6 @@ impl<'a> StockBalanceRepository<'a> {
         Ok(result.matched_count > 0)
     }
 
-    /// 登记余额「已应用最后流水」（台账最后变动列）。
-    ///
-    /// 与数量增减同事务调用；行不存在或已软删除时返回 `false`。
-    ///
-    /// # 参数
-    /// * `id` - 余额主键
-    /// * `movement_id` - 刚应用的正式流水主键
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 命中并更新返回 `true`；余额行不存在时返回 `false`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 写入失败时返回错误。
     #[tracing::instrument(
         name = "repository.inventory.apply_last_movement",
         skip_all,
@@ -371,7 +422,7 @@ impl<'a> StockBalanceRepository<'a> {
             db.operation.name = "update"
         )
     )]
-    pub async fn apply_last_movement(
+    async fn apply_last_movement(
         &self,
         id: &str,
         movement_id: &str,

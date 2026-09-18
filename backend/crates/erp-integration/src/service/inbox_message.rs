@@ -9,6 +9,7 @@ use super::IntegrationOpsService;
 use crate::dto::*;
 use crate::entity::integration_ops::*;
 use crate::repository::IntegrationOpsExt;
+use crate::repository::prelude::*;
 use crate::{Error, Result};
 /// 入站消息列表筛选条件类型（经 `IntegrationOpsExt` 关联类型跨 crate 可达）。
 type InboxMessageFilter = <Database as IntegrationOpsExt>::InboxMessageFilter;

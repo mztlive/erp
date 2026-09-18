@@ -5,7 +5,7 @@ use erp_core::ids::{StockAdjustmentId, WarehouseId};
 use erp_core::money::Quantity;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Repository, Result, mongo_ops};
 use serde::{Deserialize, Serialize};
 
 use super::shared::{
@@ -17,7 +17,6 @@ use crate::entity::inventory::{
     AdjustmentReasonType, MovementDirection, StockAdjustment, StockAdjustmentLine, StockAdjustmentState,
 };
 use crate::repository::extensions::InventoryExt;
-use crate::repository::owned::{StockAdjustmentLineRepository, StockAdjustmentRepository};
 
 /// 库存调整单列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -128,7 +127,9 @@ impl Pagination for StockAdjustmentFilter {
     }
 }
 
-impl<'a> StockAdjustmentRepository<'a> {
+/// 库存调整单集合上的领域查询。
+#[allow(async_fn_in_trait)]
+pub trait StockAdjustmentRepositoryExt {
     /// 分页检索库存调整单列表（投影查询）。
     ///
     /// 只返回 [`StockAdjustmentRow`] 所需的列表字段，不加载整文档；排序字段
@@ -143,33 +144,11 @@ impl<'a> StockAdjustmentRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    #[tracing::instrument(
-        name = "repository.inventory.search_stock_adjustments",
-        skip_all,
-        fields(
-            layer = "repository",
-            domain = "inventory",
-            db.system.name = "mongodb",
-            db.collection.name = "stock_adjustments",
-            db.operation.name = "search"
-        )
-    )]
-    pub async fn search_stock_adjustments(
+    async fn search_stock_adjustments(
         &self,
         filter: &StockAdjustmentFilter,
         executor: &mut dyn Executor,
-    ) -> Result<PageResult<StockAdjustmentRow>> {
-        let options = FindOptions::builder()
-            .sort(stock_adjustment_sort(filter))
-            .skip(filter.skip())
-            .limit(filter.limit())
-            .projection(stock_adjustment_projection())
-            .build();
-        let collection = self.collection().clone_with_type::<StockAdjustmentRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-        Ok(PageResult { items, total: total as i64 })
-    }
+    ) -> Result<PageResult<StockAdjustmentRow>>;
 
     /// 按稳定 ID 读取库存调整岗位分离事实。
     ///
@@ -187,7 +166,43 @@ impl<'a> StockAdjustmentRepository<'a> {
     ///
     /// # 约束
     /// 仅查询本仓储拥有的库存调整单集合，不访问明细集合。
-    pub async fn find_work_item_stock_adjustment(
+    async fn find_work_item_stock_adjustment(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<StockAdjustment>>;
+}
+
+impl StockAdjustmentRepositoryExt for Repository<'_, StockAdjustment> {
+    #[tracing::instrument(
+        name = "repository.inventory.search_stock_adjustments",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "inventory",
+            db.system.name = "mongodb",
+            db.collection.name = "stock_adjustments",
+            db.operation.name = "search"
+        )
+    )]
+    async fn search_stock_adjustments(
+        &self,
+        filter: &StockAdjustmentFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<StockAdjustmentRow>> {
+        let options = FindOptions::builder()
+            .sort(stock_adjustment_sort(filter))
+            .skip(filter.skip())
+            .limit(filter.limit())
+            .projection(stock_adjustment_projection())
+            .build();
+        let collection = self.collection().clone_with_type::<StockAdjustmentRow>();
+        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
+        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
+        Ok(PageResult { items, total: total as i64 })
+    }
+
+    async fn find_work_item_stock_adjustment(
         &self,
         id: &str,
         executor: &mut dyn Executor,
@@ -196,7 +211,9 @@ impl<'a> StockAdjustmentRepository<'a> {
     }
 }
 
-impl<'a> StockAdjustmentLineRepository<'a> {
+/// 库存调整明细集合上的领域查询。
+#[allow(async_fn_in_trait)]
+pub trait StockAdjustmentLineRepositoryExt {
     /// 批量读取库存调整简报明细。
     ///
     /// 工作项简报 hydration 入口：按调整单 `$in` 一次取回全部明细，禁止 N+1。
@@ -213,7 +230,15 @@ impl<'a> StockAdjustmentLineRepository<'a> {
     ///
     /// # 约束
     /// 仅查询本仓储拥有的库存调整明细集合，按所属调整单引用过滤，不访问表头集合。
-    pub async fn list_work_item_brief_lines_by_adjustments(
+    async fn list_work_item_brief_lines_by_adjustments(
+        &self,
+        adjustment_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<StockAdjustmentLine>>;
+}
+
+impl StockAdjustmentLineRepositoryExt for Repository<'_, StockAdjustmentLine> {
+    async fn list_work_item_brief_lines_by_adjustments(
         &self,
         adjustment_ids: &[String],
         executor: &mut dyn Executor,

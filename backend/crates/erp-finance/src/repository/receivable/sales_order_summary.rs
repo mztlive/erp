@@ -10,8 +10,7 @@ use mongodb::bson::{Document, doc};
 use persistence_core::{Executor, Result};
 use serde::Deserialize;
 
-use crate::entity::receivable::SalesOrderReceivableAmountSummary;
-use crate::repository::owned::ReceivableAccountRepository;
+use crate::entity::receivable::{ReceivableAccount, SalesOrderReceivableAmountSummary};
 
 /// 销售单应收合计聚合行（Decimal128 求和结果）。
 #[derive(Debug, Deserialize)]
@@ -26,7 +25,8 @@ struct SalesOrderAmountSummaryRow {
     gross_total: Amount,
 }
 
-impl<'a> ReceivableAccountRepository<'a> {
+#[allow(async_fn_in_trait)]
+pub trait ReceivableAccountSalesOrderSummaryExt {
     /// 按销售单聚合已核销、已开票与含税应收合计。
     ///
     /// # 参数
@@ -41,7 +41,15 @@ impl<'a> ReceivableAccountRepository<'a> {
     ///
     /// # 关键业务约束
     /// 必须使用 Decimal128 `$sum`，不得加载完整实体后在内存折叠；软删除子账排除。
-    pub async fn sales_order_amount_summary(
+    async fn sales_order_amount_summary(
+        &self,
+        sales_order_id: &SalesOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<SalesOrderReceivableAmountSummary>;
+}
+
+impl ReceivableAccountSalesOrderSummaryExt for persistence_core::Repository<'_, ReceivableAccount> {
+    async fn sales_order_amount_summary(
         &self,
         sales_order_id: &SalesOrderId,
         executor: &mut dyn Executor,
@@ -230,6 +238,7 @@ mod tests {
     async fn sales_order_amount_summary_matches_entity_add_and_hits_identity_index() {
         use persistence_core::NoTransaction;
 
+        use super::ReceivableAccountSalesOrderSummaryExt;
         use crate::indexes::ensure as ensure_indexes;
         use crate::repository::extensions::ReceivableExt;
         use crate::repository::test_fixture::{TestDb, require_mongo};

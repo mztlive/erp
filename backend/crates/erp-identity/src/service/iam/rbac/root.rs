@@ -6,6 +6,7 @@ use crate::AccessControlExt;
 use crate::entity::rbac::Permission;
 use crate::entity::role::{Role, RoleData};
 use crate::error::{Error, Result};
+use crate::repository::prelude::*;
 
 /// 确保 root 角色存在、拥有全量权限，且空范围时具备公司级 DataScope。
 ///

@@ -6,6 +6,7 @@ use application_core::{AuditActor, CommandReceipt};
 use erp_audit::{AuditActorLogs, AuditExt, CommandReceiptServiceExt as _};
 use erp_core::ids::{InvoiceId, PayableAccountId, SupplierAccountId};
 use erp_finance::entity::payable::PayableAccount;
+use erp_supplier::repository::prelude::*;
 use erp_supplier::{SupplierAccount, SupplierExt};
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;

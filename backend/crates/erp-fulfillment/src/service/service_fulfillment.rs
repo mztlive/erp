@@ -8,6 +8,7 @@ use crate::Result;
 use crate::dto::{ServiceFulfillmentListParams, ServiceFulfillmentView};
 use crate::entity::fulfillment::ServiceFulfillment;
 use crate::repository::FulfillmentExt;
+use crate::repository::prelude::*;
 
 type ServiceFulfillmentFilter = <mongodb::Database as FulfillmentExt>::ServiceFulfillmentFilter;
 
@@ -44,10 +45,8 @@ impl FulfillmentService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: super::sort_ascending(query.paging.sort_dir),
         };
-        let page =
-            self.db.service_fulfillments().search_service_fulfillments(&filter, &mut NoTransaction).await?;
         super::map_search_page(
-            async { Ok(page) },
+            self.db.service_fulfillments().search_service_fulfillments(&filter, &mut NoTransaction),
             |row| ServiceFulfillmentView {
                 id: row.id,
                 fulfillment_no: row.fulfillment_no,

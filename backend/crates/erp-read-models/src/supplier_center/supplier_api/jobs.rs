@@ -1,3 +1,4 @@
+use erp_support::repository::prelude::*;
 use erp_support::{
     BackgroundJob, BulkJobExt, SUPPLIER_CATALOG_SYNC_JOB_TYPE, SUPPLIER_HEALTH_CHECK_JOB_TYPE,
 };

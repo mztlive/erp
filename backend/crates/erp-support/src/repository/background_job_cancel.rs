@@ -4,10 +4,11 @@ use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{Executor, Result, mongo_ops};
 
-use super::owned::BackgroundJobRepository;
 use crate::{BackgroundJob, JobStatus, JobType};
 
-impl BackgroundJobRepository<'_> {
+/// 后台任务集合仓储的批量取消候选查询。
+#[allow(async_fn_in_trait)]
+pub trait BackgroundJobRepositoryCancelExt {
     /// 查询未删除且可能被批量取消的后台任务。
     ///
     /// # 参数
@@ -20,7 +21,15 @@ impl BackgroundJobRepository<'_> {
     ///
     /// # 错误
     /// MongoDB 查询或实体解码失败时返回持久层错误。
-    pub async fn cancellation_candidates(
+    async fn cancellation_candidates(
+        &self,
+        job_type: Option<JobType>,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<BackgroundJob>>;
+}
+
+impl BackgroundJobRepositoryCancelExt for persistence_core::Repository<'_, BackgroundJob> {
+    async fn cancellation_candidates(
         &self,
         job_type: Option<JobType>,
         executor: &mut dyn Executor,

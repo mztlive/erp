@@ -3,10 +3,11 @@
 use mongodb::bson::Document;
 use persistence_core::{Executor, Result};
 
-use crate::repository::owned::PayableAccountRepository;
+use crate::entity::payable::PayableAccount;
 pub(super) use crate::repository::progress::{amount_bson, progress_pipeline};
 
-impl<'a> PayableAccountRepository<'a> {
+#[allow(async_fn_in_trait)]
+pub(crate) trait PayableAccountWriteExt {
     /// 执行单文档条件更新（管道形态）。
     ///
     /// 直接按执行器会话语义执行：带会话时加入调用方事务，否则自动提交；
@@ -22,7 +23,16 @@ impl<'a> PayableAccountRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 更新失败时返回错误。
-    pub(super) async fn conditional_update(
+    async fn conditional_update(
+        &self,
+        filter: Document,
+        pipeline: Vec<Document>,
+        executor: &mut dyn Executor,
+    ) -> Result<bool>;
+}
+
+impl PayableAccountWriteExt for persistence_core::Repository<'_, PayableAccount> {
+    async fn conditional_update(
         &self,
         filter: Document,
         pipeline: Vec<Document>,

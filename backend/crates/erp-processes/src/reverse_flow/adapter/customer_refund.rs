@@ -210,10 +210,7 @@ pub fn execute_customer_refund_domain_action(
 /// # 错误
 /// 组织或审批人为空时返回校验错误。
 pub fn customer_refund_object_readable(organization_id: &str, assignee_user_id: &str) -> Result<bool> {
-    if organization_id.trim().is_empty() || assignee_user_id.trim().is_empty() {
-        return Err(Error::ValidationError("单据组织或审批人不能为空".to_string()));
-    }
-    Ok(true)
+    crate::document_object_readable(organization_id, assignee_user_id)
 }
 
 /// 责任组织取往来主体，不得用空串或当前登录人组织补位。

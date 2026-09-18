@@ -6,6 +6,7 @@ use super::dto::ResetAdminPasswordParams;
 use crate::AccessControlExt;
 use crate::entity::{AccountCore, AccountCoreUpdate};
 use crate::error::{Error, Result};
+use crate::repository::prelude::*;
 use crate::service::account_support::{account_of_kind, apply_account_update};
 
 /// 管理员密码重置结果。

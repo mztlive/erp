@@ -13,6 +13,7 @@ use crate::dto::{
 };
 use crate::entity::fulfillment::{Delivery, DeliveryData, DeliveryLine, DeliveryLineBatch};
 use crate::repository::FulfillmentExt;
+use crate::repository::prelude::*;
 use crate::{Error, Result};
 
 /// 发货单列表筛选条件类型。
@@ -49,9 +50,8 @@ impl FulfillmentService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: super::sort_ascending(query.paging.sort_dir),
         };
-        let page = self.db.deliveries().search_deliveries(&filter, &mut NoTransaction).await?;
         super::map_search_page(
-            async { Ok(page) },
+            self.db.deliveries().search_deliveries(&filter, &mut NoTransaction),
             |row| DeliveryView {
                 id: row.id,
                 delivery_no: row.delivery_no,

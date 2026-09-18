@@ -8,6 +8,7 @@ use validator::Validate;
 pub use crate::dto::{AuditLogItem, AuditLogListParams};
 use crate::entity::{AuditLog, AuditLogData};
 use crate::error::Result;
+use crate::repository::prelude::*;
 use crate::repository::{AuditExt, AuditLogFilter};
 
 /// 由审计领域消费 [`AuditActor`] 构造可持久化审计日志。

@@ -1,5 +1,6 @@
 //! 供应商跨域只读视图。
 
+use erp_supplier::repository::prelude::*;
 pub mod fulfillment_detail;
 
 pub use fulfillment_detail::SupplierFulfillmentDetailReadService;

@@ -14,6 +14,12 @@ mod fulfillment;
 mod integration_task_binding;
 mod query;
 
+pub use approval::WorkItemRepositoryApprovalExt;
+pub use finance::{FinanceResponsibilityRuleRepositoryExt, WorkItemRepositoryFinanceExt};
+pub use fulfillment::WorkItemRepositoryFulfillmentExt;
+pub use integration_task_binding::WorkItemRepositoryIntegrationTaskBindingExt;
+pub use query::WorkItemRepositoryExt;
+
 /// 队列列表的最小任务事实投影。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct WorkItemRow {

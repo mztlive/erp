@@ -7,6 +7,7 @@ use crate::AccessControlExt;
 use crate::entity::account_core::AccountCore;
 use crate::entity::auth::LoginAccount;
 use crate::error::{Error, Result};
+use crate::repository::prelude::*;
 
 pub(crate) mod password;
 

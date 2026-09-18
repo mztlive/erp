@@ -5,10 +5,11 @@ use mongodb::bson::{Bson, Document, doc};
 use persistence_core::{Executor, Result};
 
 use super::InvoicingBatchResult;
-use super::write::{amount_bson, progress_pipeline};
-use crate::repository::owned::PayableAccountRepository;
+use super::write::{PayableAccountWriteExt, amount_bson, progress_pipeline};
+use crate::entity::payable::PayableAccount;
 
-impl<'a> PayableAccountRepository<'a> {
+#[allow(async_fn_in_trait)]
+pub trait PayableAccountInvoicingExt {
     /// 条件收票：增加净已收票进度（不超过可收票额度）。
     ///
     /// 进项蓝票 `APPLY` 的原子写入口：以写条件保证
@@ -26,22 +27,13 @@ impl<'a> PayableAccountRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 更新失败时返回错误。
-    pub async fn apply_invoicing(
+    async fn apply_invoicing(
         &self,
         id: &str,
         amount: &Amount,
         updated_by: &str,
         executor: &mut dyn Executor,
-    ) -> Result<bool> {
-        let amount = amount_bson(amount)?;
-        let filter = invoicing_guard(id, &amount);
-        self.conditional_update(
-            filter,
-            progress_pipeline("invoiced_total", "open_invoiceable_total", &amount, true, updated_by),
-            executor,
-        )
-        .await
-    }
+    ) -> Result<bool>;
 
     /// 批量条件收票：按账户聚合增量逐个执行不超额收票。
     ///
@@ -65,7 +57,86 @@ impl<'a> PayableAccountRepository<'a> {
     /// # 约束
     /// 聚合口径（同一账户增量求和、同一账户只更新一次）由 Service 经领域
     /// 计划保证；本方法不自行开启事务、不决定跨账户业务结论。
-    pub async fn apply_invoicings_many(
+    async fn apply_invoicings_many(
+        &self,
+        deltas: &[(PayableAccountId, Amount)],
+        updated_by: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<InvoicingBatchResult>;
+
+    /// 条件收票冲减：减少净已收票进度（不产生负已收票）。
+    ///
+    /// 进项红票 `REVERSE` 的原子写入口：以写条件保证 `本次红冲 <= invoiced_total`，
+    /// 不满足时整个更新不生效，返回 `false`。累计红冲由 P3 登记事务结合
+    /// `reverses_allocation_id` 校验，本方法防止已收票进度被冲成负数。
+    ///
+    /// # 参数
+    /// * `id` - 应付往来子账 ID
+    /// * `amount` - 本次红冲含税金额（正数）
+    /// * `updated_by` - 本次更新执行人
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 红冲在已收票额度内并已生效时返回 `true`；超过已收票金额被拒绝时返回 `false`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 更新失败时返回错误。
+    async fn revert_invoicing(
+        &self,
+        id: &str,
+        amount: &Amount,
+        updated_by: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<bool>;
+
+    /// 批量条件收票冲减：按子账聚合增量原子回退收票进度（FIN-R11）。
+    ///
+    /// 对已去重并按账户聚合的 `deltas` 逐账户执行条件更新（写条件保证
+    /// `本次红冲 <= invoiced_total`），并按输入顺序报告命中情况；调用方
+    /// （Service）负责将 `rejected` 转译为业务错误，失败时整个事务回滚。
+    /// 本方法只执行计划，不判断红票业务资格。
+    ///
+    /// # 参数
+    /// * `deltas` - 按子账聚合的红冲增量（已去重、首次出现顺序，同一账户只出现一次）
+    /// * `updated_by` - 本次更新执行人
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回按账户报告命中情况的 [`InvoicingBatchResult`]。
+    ///
+    /// # 错误
+    /// 当 MongoDB 更新失败时返回错误。
+    ///
+    /// # 约束
+    /// 聚合口径由 Service 经领域计划保证；本方法不自行开启事务、
+    /// 不决定跨账户业务结论。
+    async fn revert_invoicings_many(
+        &self,
+        deltas: &[(PayableAccountId, Amount)],
+        updated_by: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<InvoicingBatchResult>;
+}
+
+impl PayableAccountInvoicingExt for persistence_core::Repository<'_, PayableAccount> {
+    async fn apply_invoicing(
+        &self,
+        id: &str,
+        amount: &Amount,
+        updated_by: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        let amount = amount_bson(amount)?;
+        let filter = invoicing_guard(id, &amount);
+        self.conditional_update(
+            filter,
+            progress_pipeline("invoiced_total", "open_invoiceable_total", &amount, true, updated_by),
+            executor,
+        )
+        .await
+    }
+
+    async fn apply_invoicings_many(
         &self,
         deltas: &[(PayableAccountId, Amount)],
         updated_by: &str,
@@ -92,24 +163,7 @@ impl<'a> PayableAccountRepository<'a> {
         Ok(InvoicingBatchResult { applied, rejected })
     }
 
-    /// 条件收票冲减：减少净已收票进度（不产生负已收票）。
-    ///
-    /// 进项红票 `REVERSE` 的原子写入口：以写条件保证 `本次红冲 <= invoiced_total`，
-    /// 不满足时整个更新不生效，返回 `false`。累计红冲由 P3 登记事务结合
-    /// `reverses_allocation_id` 校验，本方法防止已收票进度被冲成负数。
-    ///
-    /// # 参数
-    /// * `id` - 应付往来子账 ID
-    /// * `amount` - 本次红冲含税金额（正数）
-    /// * `updated_by` - 本次更新执行人
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 红冲在已收票额度内并已生效时返回 `true`；超过已收票金额被拒绝时返回 `false`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 更新失败时返回错误。
-    pub async fn revert_invoicing(
+    async fn revert_invoicing(
         &self,
         id: &str,
         amount: &Amount,
@@ -132,28 +186,7 @@ impl<'a> PayableAccountRepository<'a> {
         .await
     }
 
-    /// 批量条件收票冲减：按子账聚合增量原子回退收票进度（FIN-R11）。
-    ///
-    /// 对已去重并按账户聚合的 `deltas` 逐账户执行条件更新（写条件保证
-    /// `本次红冲 <= invoiced_total`），并按输入顺序报告命中情况；调用方
-    /// （Service）负责将 `rejected` 转译为业务错误，失败时整个事务回滚。
-    /// 本方法只执行计划，不判断红票业务资格。
-    ///
-    /// # 参数
-    /// * `deltas` - 按子账聚合的红冲增量（已去重、首次出现顺序，同一账户只出现一次）
-    /// * `updated_by` - 本次更新执行人
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回按账户报告命中情况的 [`InvoicingBatchResult`]。
-    ///
-    /// # 错误
-    /// 当 MongoDB 更新失败时返回错误。
-    ///
-    /// # 约束
-    /// 聚合口径由 Service 经领域计划保证；本方法不自行开启事务、
-    /// 不决定跨账户业务结论。
-    pub async fn revert_invoicings_many(
+    async fn revert_invoicings_many(
         &self,
         deltas: &[(PayableAccountId, Amount)],
         updated_by: &str,

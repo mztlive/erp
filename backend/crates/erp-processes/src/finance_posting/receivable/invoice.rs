@@ -5,6 +5,7 @@ use erp_audit::{AuditActorLogs, AuditExt, CommandReceiptServiceExt as _};
 use erp_core::ids::InvoiceId;
 use erp_finance::entity::receivable::{Invoice, InvoiceData, InvoiceStatus};
 use erp_finance::repository::ReceivableExt;
+use erp_finance::repository::prelude::*;
 use erp_finance::service::receivable::invoice_commit::{
     PreparedInvoiceCommit, convert_post_allocations, ensure_sales_invoice,
 };

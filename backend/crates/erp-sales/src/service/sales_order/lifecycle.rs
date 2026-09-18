@@ -54,6 +54,7 @@ use crate::entity::sales_order::{
     SalesOrderWorkingCopy, SalesOrderWorkingCopyLine, SalesOrderWorkingCopyUpdate,
 };
 use crate::repository::SalesOrderExt;
+use crate::repository::prelude::*;
 
 /// Sales-owned write plan for replacing or creating the submission's working copy.
 #[derive(Clone, Default)]

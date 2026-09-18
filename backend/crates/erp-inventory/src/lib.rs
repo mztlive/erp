@@ -30,8 +30,10 @@ pub use ports::{
 };
 pub use repository::{
     AdjustmentSnapshotReadFilter, InventoryExt, InventoryRepository, StockAdjustmentFilter,
-    StockAdjustmentLineRepository, StockAdjustmentRepository, StockAdjustmentRow, StockBalanceFilter,
-    StockBalanceRepository, StockBalanceRow, StockMovementFilter, StockMovementRepository, StockMovementRow,
-    StockReservationFilter, StockReservationRepository, StockReservationRow,
+    StockAdjustmentLineRepository, StockAdjustmentLineRepositoryExt, StockAdjustmentRepository,
+    StockAdjustmentRepositoryExt, StockAdjustmentRow, StockBalanceFilter, StockBalanceRepository,
+    StockBalanceRepositoryExt, StockBalanceRow, StockMovementFilter, StockMovementRepository,
+    StockMovementRepositoryExt, StockMovementRow, StockReservationFilter, StockReservationRepository,
+    StockReservationRepositoryExt, StockReservationRepositoryFulfillmentExt, StockReservationRow,
 };
 pub use service::{InventoryService, apply_posted_adjustment_in_transaction, build_adjustment_line_updates};

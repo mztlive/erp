@@ -1,3 +1,5 @@
+#![allow(async_fn_in_trait)]
+
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{PayableAccountId, SupplierAccountId};
@@ -275,7 +277,9 @@ impl Pagination for SupplierSettlementStatementFilter {
     }
 }
 
-impl<'a> SupplierSettlementStatementRepository<'a> {
+/// 供应商结算单仓储的域查询。
+#[allow(async_fn_in_trait)]
+pub trait SupplierSettlementStatementRepositoryExt {
     /// 按明确授权条件读取单个结算单。
     ///
     /// # 参数
@@ -288,14 +292,12 @@ impl<'a> SupplierSettlementStatementRepository<'a> {
     ///
     /// # 关键业务约束
     /// ID 条件不能替换范围交集；空授权不得返回文档。
-    pub async fn find_authorized(
+    async fn find_authorized(
         &self,
         id: &str,
         scope: &super::SettlementReadScope,
         executor: &mut dyn Executor,
-    ) -> Result<Option<SupplierSettlementStatement>> {
-        self.find_one(doc! { "$and": [{ "id": id }, scope.document()] }, executor).await
-    }
+    ) -> Result<Option<SupplierSettlementStatement>>;
 
     /// 按结算单 ID 集合批量读取结算单。
     ///
@@ -308,16 +310,11 @@ impl<'a> SupplierSettlementStatementRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_statements_by_ids(
+    async fn find_statements_by_ids(
         &self,
         statement_ids: &[String],
         executor: &mut dyn Executor,
-    ) -> Result<Vec<SupplierSettlementStatement>> {
-        if statement_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        self.find_many(doc! { "id": { "$in": statement_ids } }, executor).await
-    }
+    ) -> Result<Vec<SupplierSettlementStatement>>;
 
     /// 按结算单 ID 集合一次批量返回来源 ID 到结算单号的事实映射（FIN-R03）。
     ///
@@ -334,7 +331,111 @@ impl<'a> SupplierSettlementStatementRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn statement_nos_by_ids(
+    async fn statement_nos_by_ids(
+        &self,
+        statement_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<std::collections::HashMap<String, String>>;
+
+    /// 分页检索供应商结算单列表（投影查询）。
+    ///
+    /// 只返回 [`SupplierSettlementStatementRow`] 所需的列表字段，不加载整文档；
+    /// 排序字段走白名单映射（`STATEMENT_SORT_FIELDS`），白名单外一律回退 `created_at`。
+    ///
+    /// # 参数
+    /// * `filter` - 筛选与分页条件
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回当前页投影行与满足筛选条件的总数。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    async fn search_supplier_settlement_statements(
+        &self,
+        filter: &SupplierSettlementStatementFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<SupplierSettlementStatementRow>>;
+
+    /// 按 ERP 结算单号查找唯一结算单。
+    ///
+    /// 唯一性由 `uk_supplier_settlement_statements_statement_no` 唯一索引保证；
+    /// 该方法用于结算单号幂等判定与外部账单回填定位，服务层不得做
+    /// 「先查后插」的重复性判断（§6.20）。
+    ///
+    /// # 参数
+    /// * `statement_no` - ERP 结算单号
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配的未删除结算单；无匹配时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    async fn find_by_statement_no(
+        &self,
+        statement_no: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierSettlementStatement>>;
+
+    /// 按稳定 ID 读取供应商结算岗位分离事实。
+    ///
+    /// 工作项入口的历史名称；纯主键读取，直接委托基类单条查询。
+    ///
+    /// # 参数
+    /// * `id` - 供应商结算单 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回未删除结算单；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// # 约束
+    /// 仅查询本仓储拥有的结算单集合，不访问结算明细集合。
+    async fn find_work_item_supplier_settlement(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierSettlementStatement>>;
+
+    /// 按列表完全相同的过滤条件计算跨页状态和确认金额汇总。
+    async fn aggregate_supplier_settlement_statement_stats(
+        &self,
+        filter: &SupplierSettlementStatementFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierSettlementStatementStatsRow>>;
+
+    /// 按业务编号返回全部匹配身份，供跨域列表在分页前筛选。
+    ///
+    /// 只投影 ID、排除软删除；数据库错误向上返回。
+    async fn matching_ids_by_number(&self, keyword: &str, executor: &mut dyn Executor)
+    -> Result<Vec<String>>;
+}
+
+impl SupplierSettlementStatementRepositoryExt for SupplierSettlementStatementRepository<'_> {
+    async fn find_authorized(
+        &self,
+        id: &str,
+        scope: &super::SettlementReadScope,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierSettlementStatement>> {
+        self.find_one(doc! { "$and": [{ "id": id }, scope.document()] }, executor).await
+    }
+
+    async fn find_statements_by_ids(
+        &self,
+        statement_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierSettlementStatement>> {
+        if statement_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many(doc! { "id": { "$in": statement_ids } }, executor).await
+    }
+
+    async fn statement_nos_by_ids(
         &self,
         statement_ids: &[String],
         executor: &mut dyn Executor,
@@ -366,21 +467,7 @@ impl<'a> SupplierSettlementStatementRepository<'a> {
         Ok(map)
     }
 
-    /// 分页检索供应商结算单列表（投影查询）。
-    ///
-    /// 只返回 [`SupplierSettlementStatementRow`] 所需的列表字段，不加载整文档；
-    /// 排序字段走白名单映射（`STATEMENT_SORT_FIELDS`），白名单外一律回退 `created_at`。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_supplier_settlement_statements(
+    async fn search_supplier_settlement_statements(
         &self,
         filter: &SupplierSettlementStatementFilter,
         executor: &mut dyn Executor,
@@ -398,22 +485,7 @@ impl<'a> SupplierSettlementStatementRepository<'a> {
         Ok(PageResult { items, total: total as i64 })
     }
 
-    /// 按 ERP 结算单号查找唯一结算单。
-    ///
-    /// 唯一性由 `uk_supplier_settlement_statements_statement_no` 唯一索引保证；
-    /// 该方法用于结算单号幂等判定与外部账单回填定位，服务层不得做
-    /// 「先查后插」的重复性判断（§6.20）。
-    ///
-    /// # 参数
-    /// * `statement_no` - ERP 结算单号
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的未删除结算单；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_statement_no(
+    async fn find_by_statement_no(
         &self,
         statement_no: &str,
         executor: &mut dyn Executor,
@@ -421,23 +493,7 @@ impl<'a> SupplierSettlementStatementRepository<'a> {
         self.find_one(doc! { "statement_no": statement_no }, executor).await
     }
 
-    /// 按稳定 ID 读取供应商结算岗位分离事实。
-    ///
-    /// 工作项入口的历史名称；纯主键读取，直接委托基类单条查询。
-    ///
-    /// # 参数
-    /// * `id` - 供应商结算单 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回未删除结算单；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或反序列化失败时返回错误。
-    ///
-    /// # 约束
-    /// 仅查询本仓储拥有的结算单集合，不访问结算明细集合。
-    pub async fn find_work_item_supplier_settlement(
+    async fn find_work_item_supplier_settlement(
         &self,
         id: &str,
         executor: &mut dyn Executor,
@@ -445,8 +501,7 @@ impl<'a> SupplierSettlementStatementRepository<'a> {
         self.find_by_id(id, executor).await
     }
 
-    /// 按列表完全相同的过滤条件计算跨页状态和确认金额汇总。
-    pub async fn aggregate_supplier_settlement_statement_stats(
+    async fn aggregate_supplier_settlement_statement_stats(
         &self,
         filter: &SupplierSettlementStatementFilter,
         executor: &mut dyn Executor,
@@ -499,11 +554,80 @@ impl<'a> SupplierSettlementStatementRepository<'a> {
         };
         Ok(rows.into_iter().next())
     }
+
+    async fn matching_ids_by_number(
+        &self,
+        keyword: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<String>> {
+        let clauses = ["statement_no", "external_bill_no"]
+            .into_iter()
+            .map(|field| {
+                let mut clause = Document::new();
+                insert_literal_regex_filter(&mut clause, field, Some(keyword));
+                clause
+            })
+            .collect::<Vec<_>>();
+        let collection = self.collection();
+        let mut query =
+            collection.distinct("id", doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$or": clauses });
+        if let Some(session) = executor.session() {
+            query = query.session(session);
+        }
+        Ok(query.await?.into_iter().filter_map(|id| id.as_str().map(str::to_owned)).collect())
+    }
 }
 
-impl<'a> SupplierSettlementSourceEvidenceRepository<'a> {
+/// 供应商结算来源证据仓储的域查询。
+#[allow(async_fn_in_trait)]
+pub trait SupplierSettlementSourceEvidenceRepositoryExt {
     /// 按稳定请求 ID 查找不可变来源证据批次。
-    pub async fn find_by_request_id(
+    async fn find_by_request_id(
+        &self,
+        request_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierSettlementSourceEvidence>>;
+
+    /// 读取供应商、周期与策略版本下最新的完整来源证据批次。
+    async fn latest_for_period(
+        &self,
+        supplier_id: &SupplierAccountId,
+        period_start: BusinessDate,
+        period_end: BusinessDate,
+        period_policy_id: &str,
+        period_policy_version: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierSettlementSourceEvidence>>;
+
+    /// 读取供应商与周期下最近登记的完整来源证据，用于创建前服务端预检。
+    async fn latest_for_scope(
+        &self,
+        supplier_id: &SupplierAccountId,
+        period_start: BusinessDate,
+        period_end: BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierSettlementSourceEvidence>>;
+
+    /// 按冻结来源摘要批量读取不可变来源证据。
+    ///
+    /// # 参数
+    /// * `source_hashes` - 结算单持有的来源快照摘要
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回匹配且未软删除的来源证据批次。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    async fn list_by_source_hashes(
+        &self,
+        source_hashes: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierSettlementSourceEvidence>>;
+}
+
+impl SupplierSettlementSourceEvidenceRepositoryExt for SupplierSettlementSourceEvidenceRepository<'_> {
+    async fn find_by_request_id(
         &self,
         request_id: &str,
         executor: &mut dyn Executor,
@@ -511,8 +635,7 @@ impl<'a> SupplierSettlementSourceEvidenceRepository<'a> {
         self.find_one(doc! { "request_id": request_id }, executor).await
     }
 
-    /// 读取供应商、周期与策略版本下最新的完整来源证据批次。
-    pub async fn latest_for_period(
+    async fn latest_for_period(
         &self,
         supplier_id: &SupplierAccountId,
         period_start: BusinessDate,
@@ -542,8 +665,7 @@ impl<'a> SupplierSettlementSourceEvidenceRepository<'a> {
         Ok(values.pop())
     }
 
-    /// 读取供应商与周期下最近登记的完整来源证据，用于创建前服务端预检。
-    pub async fn latest_for_scope(
+    async fn latest_for_scope(
         &self,
         supplier_id: &SupplierAccountId,
         period_start: BusinessDate,
@@ -569,18 +691,7 @@ impl<'a> SupplierSettlementSourceEvidenceRepository<'a> {
         Ok(values.pop())
     }
 
-    /// 按冻结来源摘要批量读取不可变来源证据。
-    ///
-    /// # 参数
-    /// * `source_hashes` - 结算单持有的来源快照摘要
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回匹配且未软删除的来源证据批次。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn list_by_source_hashes(
+    async fn list_by_source_hashes(
         &self,
         source_hashes: &[String],
         executor: &mut dyn Executor,
@@ -594,33 +705,6 @@ impl<'a> SupplierSettlementSourceEvidenceRepository<'a> {
             executor,
         )
         .await
-    }
-}
-
-impl SupplierSettlementStatementRepository<'_> {
-    /// 按业务编号返回全部匹配身份，供跨域列表在分页前筛选。
-    ///
-    /// 只投影 ID、排除软删除；数据库错误向上返回。
-    pub async fn matching_ids_by_number(
-        &self,
-        keyword: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<String>> {
-        let clauses = ["statement_no", "external_bill_no"]
-            .into_iter()
-            .map(|field| {
-                let mut clause = Document::new();
-                insert_literal_regex_filter(&mut clause, field, Some(keyword));
-                clause
-            })
-            .collect::<Vec<_>>();
-        let collection = self.collection();
-        let mut query =
-            collection.distinct("id", doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$or": clauses });
-        if let Some(session) = executor.session() {
-            query = query.session(session);
-        }
-        Ok(query.await?.into_iter().filter_map(|id| id.as_str().map(str::to_owned)).collect())
     }
 }
 

@@ -10,5 +10,7 @@ mod service;
 pub use dto::{AuditLogItem, AuditLogListParams};
 pub use entity::{AuditLog, AuditLogData};
 pub use error::{Error, Result};
-pub use repository::{AuditExt, AuditLogFilter, AuditLogRepository, SeparationAuditFact};
+pub use repository::{
+    AuditExt, AuditLogFilter, AuditLogRepository, AuditLogRepositoryExt, SeparationAuditFact,
+};
 pub use service::{AuditActorLogs, AuditLogService, CommandReceipt, CommandReceiptServiceExt};

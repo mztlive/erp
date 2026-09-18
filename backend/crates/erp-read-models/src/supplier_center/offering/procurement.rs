@@ -6,13 +6,16 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use erp_catalog::CatalogExt;
 use erp_catalog::entity::catalog::{Product, ProductKind, ProductRevision};
+use erp_catalog::repository::prelude::*;
 use erp_core::ids::{ProductCategoryId, SkuId, SupplierOfferingId};
 use erp_procurement::entity::facts::ProductKind as ProcurementProductKind;
 use erp_procurement::entity::procurement_responsibility::{
     ProcurementResponsibilityContext, ProcurementResponsibilityRuleSet,
 };
 use erp_procurement::repository::ProcurementResponsibilityExt;
+use erp_procurement::repository::prelude::*;
 use erp_supply::SupplierOfferingExt;
+use erp_supply::repository::prelude::*;
 use mongodb::Database;
 use persistence_core::Executor;
 

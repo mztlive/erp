@@ -14,6 +14,7 @@ use crate::entity::payable::{
     PayableAccount, PurchaseInvoiceAllocation, PurchaseInvoiceAllocationLine, PurchaseInvoiceAllocationPlan,
 };
 use crate::entity::receivable::{Invoice, InvoiceData, InvoiceDirection, InvoiceKind};
+use crate::repository::prelude::*;
 use crate::repository::{PayableExt, ReceivableExt};
 use crate::{Error, Result};
 type PurchaseInvoiceAllocationFilter = <mongodb::Database as PayableExt>::PurchaseInvoiceAllocationFilter;

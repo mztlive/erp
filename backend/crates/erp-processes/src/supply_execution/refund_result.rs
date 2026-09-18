@@ -8,6 +8,7 @@ use erp_integration::entity::integration_ops::{
 use erp_supply::dto::supplier_fulfillment::{RecordRefundResultRequest, SupplierRefundFactView};
 use erp_supply::entity::supplier_fulfillment::SupplierFulfillmentOrder;
 use erp_supply::repository::SupplierFulfillmentExt;
+use erp_supply::repository::prelude::*;
 use erp_supply::service::supplier_fulfillment::mapping::refund_fact_view;
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};

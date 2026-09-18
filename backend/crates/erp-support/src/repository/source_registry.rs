@@ -24,9 +24,6 @@ use crate::entity::source_registry::{
     ExternalIdKey, ExternalIdentityMap, ExternalIdentityTarget, ExternalObjectType, MappingStatus,
     RelationRole, SourceSystem, SourceSystemId, SourceSystemStatus, SourceSystemType, TargetStatus,
 };
-use crate::repository::owned::{
-    ExternalIdentityMapRepository, ExternalIdentityTargetRepository, SourceSystemRepository,
-};
 
 /// Encode an external identity comparison key as BSON Binary (Generic).
 ///
@@ -131,7 +128,9 @@ impl Pagination for SourceSystemFilter {
     }
 }
 
-impl<'a> SourceSystemRepository<'a> {
+/// 来源系统集合仓储的域查询。
+#[allow(async_fn_in_trait)]
+pub trait SourceSystemRepositoryExt {
     /// 分页检索来源系统列表（投影查询）。
     ///
     /// 只返回 [`SourceSystemRow`] 所需的列表字段，不加载整文档；
@@ -146,20 +145,11 @@ impl<'a> SourceSystemRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_source_systems(
+    async fn search_source_systems(
         &self,
         filter: &SourceSystemFilter,
         executor: &mut dyn Executor,
-    ) -> Result<PageResult<SourceSystemRow>> {
-        let options = FindOptions::builder()
-            .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
-            .skip(filter.skip())
-            .limit(filter.limit())
-            .projection(source_system_projection())
-            .build();
-        let collection = self.collection().clone_with_type::<SourceSystemRow>();
-        search_projected_page(&self.collection(), &collection, filter, options, executor).await
-    }
+    ) -> Result<PageResult<SourceSystemRow>>;
 
     /// 按来源系统 ID 集合批量读取来源系统（INT-R17）。
     ///
@@ -177,7 +167,30 @@ impl<'a> SourceSystemRepository<'a> {
     ///
     /// # 约束
     /// 只返回实体，不返回 services DTO、HTTP View 或授权结论。
-    pub async fn find_systems_by_ids(
+    async fn find_systems_by_ids(
+        &self,
+        source_system_ids: &[SourceSystemId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SourceSystem>>;
+}
+
+impl SourceSystemRepositoryExt for persistence_core::Repository<'_, SourceSystem> {
+    async fn search_source_systems(
+        &self,
+        filter: &SourceSystemFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<SourceSystemRow>> {
+        let options = FindOptions::builder()
+            .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
+            .skip(filter.skip())
+            .limit(filter.limit())
+            .projection(source_system_projection())
+            .build();
+        let collection = self.collection().clone_with_type::<SourceSystemRow>();
+        search_projected_page(&self.collection(), &collection, filter, options, executor).await
+    }
+
+    async fn find_systems_by_ids(
         &self,
         source_system_ids: &[SourceSystemId],
         executor: &mut dyn Executor,
@@ -255,7 +268,9 @@ impl Pagination for ExternalIdentityMapFilter {
     }
 }
 
-impl<'a> ExternalIdentityMapRepository<'a> {
+/// 外部身份映射集合仓储的域查询。
+#[allow(async_fn_in_trait)]
+pub trait ExternalIdentityMapRepositoryExt {
     /// 分页检索外部身份映射列表（投影查询）。
     ///
     /// 只返回 [`ExternalIdentityMapRow`] 所需的列表字段，不加载整文档
@@ -270,20 +285,11 @@ impl<'a> ExternalIdentityMapRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_external_identity_maps(
+    async fn search_external_identity_maps(
         &self,
         filter: &ExternalIdentityMapFilter,
         executor: &mut dyn Executor,
-    ) -> Result<PageResult<ExternalIdentityMapRow>> {
-        let options = FindOptions::builder()
-            .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
-            .skip(filter.skip())
-            .limit(filter.limit())
-            .projection(external_identity_map_projection())
-            .build();
-        let collection = self.collection().clone_with_type::<ExternalIdentityMapRow>();
-        search_projected_page(&self.collection(), &collection, filter, options, executor).await
-    }
+    ) -> Result<PageResult<ExternalIdentityMapRow>>;
 
     /// 按「来源系统 + 对象类型 + 规范化比较键」查找唯一映射。
     ///
@@ -301,23 +307,13 @@ impl<'a> ExternalIdentityMapRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_identity(
+    async fn find_by_identity(
         &self,
         source_system_id: &SourceSystemId,
         object_type: ExternalObjectType,
         external_id_key: &ExternalIdKey,
         executor: &mut dyn Executor,
-    ) -> Result<Option<ExternalIdentityMap>> {
-        self.find_one(
-            doc! {
-                "source_system_id": source_system_id.to_string(),
-                "object_type": object_type.as_str(),
-                "external_id_key": external_id_key_bson(external_id_key),
-            },
-            executor,
-        )
-        .await
-    }
+    ) -> Result<Option<ExternalIdentityMap>>;
 
     /// 按页面来源身份集合批量读取外部身份映射（INT-R17）。
     ///
@@ -337,7 +333,48 @@ impl<'a> ExternalIdentityMapRepository<'a> {
     ///
     /// # 约束
     /// 只返回实体，不返回 services DTO、HTTP View 或授权结论。
-    pub async fn find_maps_by_identities(
+    async fn find_maps_by_identities(
+        &self,
+        lookups: &[(SourceSystemId, ExternalObjectType, ExternalIdKey)],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ExternalIdentityMap>>;
+}
+
+impl ExternalIdentityMapRepositoryExt for persistence_core::Repository<'_, ExternalIdentityMap> {
+    async fn search_external_identity_maps(
+        &self,
+        filter: &ExternalIdentityMapFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<ExternalIdentityMapRow>> {
+        let options = FindOptions::builder()
+            .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
+            .skip(filter.skip())
+            .limit(filter.limit())
+            .projection(external_identity_map_projection())
+            .build();
+        let collection = self.collection().clone_with_type::<ExternalIdentityMapRow>();
+        search_projected_page(&self.collection(), &collection, filter, options, executor).await
+    }
+
+    async fn find_by_identity(
+        &self,
+        source_system_id: &SourceSystemId,
+        object_type: ExternalObjectType,
+        external_id_key: &ExternalIdKey,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ExternalIdentityMap>> {
+        self.find_one(
+            doc! {
+                "source_system_id": source_system_id.to_string(),
+                "object_type": object_type.as_str(),
+                "external_id_key": external_id_key_bson(external_id_key),
+            },
+            executor,
+        )
+        .await
+    }
+
+    async fn find_maps_by_identities(
         &self,
         lookups: &[(SourceSystemId, ExternalObjectType, ExternalIdKey)],
         executor: &mut dyn Executor,
@@ -359,7 +396,9 @@ impl<'a> ExternalIdentityMapRepository<'a> {
     }
 }
 
-impl<'a> ExternalIdentityTargetRepository<'a> {
+/// 外部身份目标集合仓储的域查询。
+#[allow(async_fn_in_trait)]
+pub trait ExternalIdentityTargetRepositoryExt {
     /// 查询外部身份映射的全部目标历史，最新有效期优先。
     ///
     /// # 参数
@@ -374,18 +413,11 @@ impl<'a> ExternalIdentityTargetRepository<'a> {
     ///
     /// # 约束
     /// 仅查询本仓储拥有的 `external_identity_targets` 集合，不访问映射集合。
-    pub async fn list_for_external_identity_map(
+    async fn list_for_external_identity_map(
         &self,
         mapping_id: &str,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<ExternalIdentityTarget>> {
-        self.find_many_sorted(
-            doc! { "external_identity_map_id": mapping_id },
-            doc! { "valid_from": -1, "id": 1 },
-            executor,
-        )
-        .await
-    }
+    ) -> Result<Vec<ExternalIdentityTarget>>;
 
     /// 查询外部身份映射当前有效目标，按生效时间稳定排序。
     ///
@@ -401,21 +433,11 @@ impl<'a> ExternalIdentityTargetRepository<'a> {
     ///
     /// # 约束
     /// 仅查询本仓储拥有的 `external_identity_targets` 集合，不访问映射集合。
-    pub async fn list_active_for_external_identity_map(
+    async fn list_active_for_external_identity_map(
         &self,
         mapping_id: &str,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<ExternalIdentityTarget>> {
-        self.find_many_sorted(
-            doc! {
-                "external_identity_map_id": mapping_id,
-                "status": TargetStatus::Active.as_str(),
-            },
-            doc! { "valid_from": 1, "id": 1 },
-            executor,
-        )
-        .await
-    }
+    ) -> Result<Vec<ExternalIdentityTarget>>;
 
     /// 在调用方执行器下批量 CAS 过期谱系目标（INT-R24）。
     ///
@@ -436,24 +458,11 @@ impl<'a> ExternalIdentityTargetRepository<'a> {
     ///
     /// # 约束
     /// 不开事务、不提交事务；调用方必须在 `conflicts` 非空时失败关闭并回滚。
-    pub async fn expire_targets_batch(
+    async fn expire_targets_batch(
         &self,
         targets: &mut [ExternalIdentityTarget],
         executor: &mut dyn Executor,
-    ) -> Result<ExpireTargetsOutcome> {
-        let mut outcome = ExpireTargetsOutcome::default();
-        for target in targets.iter_mut() {
-            let target_id = target.base.id.clone();
-            match self.update(target, executor).await {
-                Ok(()) => outcome.applied.push(target_id),
-                Err(persistence_core::Error::OptimisticLockingError) => {
-                    outcome.conflicts.push(target_id);
-                },
-                Err(error) => return Err(error),
-            }
-        }
-        Ok(outcome)
-    }
+    ) -> Result<ExpireTargetsOutcome>;
 
     /// 按映射 ID 集合批量加载谱系目标历史（INT-R17）。
     ///
@@ -472,7 +481,63 @@ impl<'a> ExternalIdentityTargetRepository<'a> {
     ///
     /// # 约束
     /// 仅查询本仓储拥有的 `external_identity_targets` 集合，不访问映射集合。
-    pub async fn list_targets_for_maps(
+    async fn list_targets_for_maps(
+        &self,
+        mapping_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ExternalIdentityTarget>>;
+}
+
+impl ExternalIdentityTargetRepositoryExt for persistence_core::Repository<'_, ExternalIdentityTarget> {
+    async fn list_for_external_identity_map(
+        &self,
+        mapping_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ExternalIdentityTarget>> {
+        self.find_many_sorted(
+            doc! { "external_identity_map_id": mapping_id },
+            doc! { "valid_from": -1, "id": 1 },
+            executor,
+        )
+        .await
+    }
+
+    async fn list_active_for_external_identity_map(
+        &self,
+        mapping_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ExternalIdentityTarget>> {
+        self.find_many_sorted(
+            doc! {
+                "external_identity_map_id": mapping_id,
+                "status": TargetStatus::Active.as_str(),
+            },
+            doc! { "valid_from": 1, "id": 1 },
+            executor,
+        )
+        .await
+    }
+
+    async fn expire_targets_batch(
+        &self,
+        targets: &mut [ExternalIdentityTarget],
+        executor: &mut dyn Executor,
+    ) -> Result<ExpireTargetsOutcome> {
+        let mut outcome = ExpireTargetsOutcome::default();
+        for target in targets.iter_mut() {
+            let target_id = target.base.id.clone();
+            match self.update(target, executor).await {
+                Ok(()) => outcome.applied.push(target_id),
+                Err(persistence_core::Error::OptimisticLockingError) => {
+                    outcome.conflicts.push(target_id);
+                },
+                Err(error) => return Err(error),
+            }
+        }
+        Ok(outcome)
+    }
+
+    async fn list_targets_for_maps(
         &self,
         mapping_ids: &[String],
         executor: &mut dyn Executor,

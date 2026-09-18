@@ -18,6 +18,7 @@ use crate::AccessControlExt;
 use crate::entity::rbac::{Permission, PermissionSet, RoleIdSet};
 use crate::entity::role::Role;
 use crate::error::{Error, Result};
+use crate::repository::prelude::*;
 
 /// 同一 Enforcer 快照下的操作人权限集与 policy 版本。
 struct ActorPermissionSnapshot<'a> {

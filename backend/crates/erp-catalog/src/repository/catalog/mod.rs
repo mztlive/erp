@@ -29,18 +29,36 @@ mod sku_revision;
 mod specification_audit;
 mod voucher;
 
-pub use attribute::{SkuAttributeFilter, SkuAttributeRow, SkuAttributeValueFilter, SkuAttributeValueRow};
-pub use category::{ProductCategoryAttributeFilter, ProductCategoryFilter, ProductCategoryRow};
-pub use dictionary::{ProductBrandFilter, ProductBrandRow, UnitOfMeasureFilter, UnitOfMeasureRow};
+pub use attribute::{
+    SkuAttributeFilter, SkuAttributeRepositoryExt, SkuAttributeRow, SkuAttributeValueFilter,
+    SkuAttributeValueRepositoryExt, SkuAttributeValueRow,
+};
+pub use category::{
+    ProductCategoryAttributeFilter, ProductCategoryFilter, ProductCategoryRepositoryExt, ProductCategoryRow,
+};
+pub use dictionary::{
+    ProductBrandFilter, ProductBrandRepositoryExt, ProductBrandRow, UnitOfMeasureFilter,
+    UnitOfMeasureRepositoryExt, UnitOfMeasureRow,
+};
+pub use import_lookup::{
+    ProductBrandRepositoryImportLookupExt, ProductCategoryRepositoryImportLookupExt,
+    ProductRepositoryImportLookupExt, UnitOfMeasureRepositoryImportLookupExt,
+};
 pub use listing::{ProductListingSummary, sku_is_listed_expr};
 use mongodb::Database;
-pub use parent_chain::CategoryParentChainFact;
-pub use product::{ProductFilter, ProductRevisionFilter, ProductRevisionRow, ProductRow};
+pub use parent_chain::{CategoryParentChainFact, ProductCategoryRepositoryParentChainExt};
+pub use product::{
+    ProductFilter, ProductRepositoryExt, ProductRevisionFilter, ProductRevisionMediaRepositoryExt,
+    ProductRevisionRepositoryExt, ProductRevisionRow, ProductRow,
+};
 pub use scope::{CatalogReadScope, CatalogScopeClause};
 pub use sellable::{SellableSkuFilter, SellableSkuRow};
-pub use sku::{SkuFilter, SkuRow};
-pub use sku_revision::{SkuRevisionFilter, SkuRevisionRow};
-pub use voucher::{VoucherCategoryProfileRevisionFilter, VoucherCategoryProfileRevisionRow};
+pub use sku::{SkuFilter, SkuRepositoryExt, SkuRow};
+pub use sku_revision::{SkuRevisionFilter, SkuRevisionRepositoryExt, SkuRevisionRow};
+pub use voucher::{
+    VoucherCategoryProfileRevisionFilter, VoucherCategoryProfileRevisionRepositoryExt,
+    VoucherCategoryProfileRevisionRow,
+};
 
 /// D10 域专用仓储：跨集合聚合查询与必须位于事务内的多步骤写入。
 ///

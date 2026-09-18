@@ -3,6 +3,8 @@
 //! 本模块不读取账号、权限或仓储；调用方必须先按自身授权规则收敛每个节点的
 //! [`Eligibility`] 并注入绑定主键，再交给 [`plan_start`] 校验与组装。
 
+use std::collections::HashMap;
+
 use super::{Eligibility, EngineError, EngineResult, StartAssigneeBinding};
 use crate::graph::DefinitionGraph;
 use crate::ids::ApprovalInstanceAssigneeId;
@@ -68,9 +70,18 @@ pub fn plan_start(input: StartPlanInput<'_>) -> EngineResult<StartPlan> {
     if bindings.len() != graph.nodes.len() {
         return Err(EngineError::InvalidCommand("启动绑定必须与定义节点一一对应"));
     }
+    let mut by_node = HashMap::with_capacity(bindings.len());
+    for binding in &bindings {
+        if by_node.insert(binding.node_key.as_str(), binding).is_some() {
+            return Err(EngineError::InvalidCommand("节点审批人绑定缺失或重复"));
+        }
+    }
     let mut frozen = Vec::with_capacity(graph.nodes.len());
     for node in &graph.nodes {
-        let binding = binding_for(&bindings, &node.node_key)?;
+        let binding = by_node
+            .get(node.node_key.as_str())
+            .copied()
+            .ok_or(EngineError::InvalidCommand("节点审批人绑定缺失或重复"))?;
         if binding.eligibility.participant() != node.assignee_participant_id {
             return Err(EngineError::InvalidCommand("资格结果必须属于定义审批人"));
         }
@@ -91,15 +102,6 @@ pub fn plan_start(input: StartPlanInput<'_>) -> EngineResult<StartPlan> {
         .map(|item| item.eligibility.clone())
         .ok_or(EngineError::InvalidCommand("入口节点缺少审批人绑定"))?;
     Ok(StartPlan { bindings: frozen, entry_node_key: entry.node_key.clone(), entry_eligibility })
-}
-
-/// 按节点键查找启动绑定输入；缺失或重复时失败关闭。
-fn binding_for<'a>(bindings: &'a [StartBindingInput], node_key: &str) -> EngineResult<&'a StartBindingInput> {
-    let matches: Vec<_> = bindings.iter().filter(|item| item.node_key == node_key).collect();
-    match matches.as_slice() {
-        [only] => Ok(*only),
-        _ => Err(EngineError::InvalidCommand("节点审批人绑定缺失或重复")),
-    }
 }
 
 #[cfg(test)]

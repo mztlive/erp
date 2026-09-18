@@ -17,6 +17,7 @@ use crate::repository::owned::SupplierSettlementStatementRepository;
 
 /// 本域草稿替换的六个数据库步骤，不拥有事务或业务状态校验。
 #[async_trait]
+#[allow(async_fn_in_trait)]
 pub(super) trait DraftSnapshotStore: Send {
     async fn delete_evidence(&mut self, difference_ids: &[String], executor: &mut dyn Executor)
     -> Result<()>;

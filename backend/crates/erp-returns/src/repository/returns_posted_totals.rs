@@ -11,9 +11,7 @@ use mongodb::bson::{Document, doc};
 use persistence_core::{Executor, Result};
 use serde::Deserialize;
 
-use crate::repository::owned::{
-    CustomerRefundRepository, PaymentReversalRepository, ReceiptReversalRepository, SupplierRefundRepository,
-};
+use crate::entity::returns::{CustomerRefund, PaymentReversal, ReceiptReversal, SupplierRefund};
 
 /// 已过账金额聚合行（Decimal128 求和结果）。
 #[derive(Debug, Deserialize)]
@@ -140,7 +138,9 @@ where
     posted_total(collection, pipeline, executor).await
 }
 
-impl<'a> CustomerRefundRepository<'a> {
+/// 客户退款已过账累计聚合。
+#[allow(async_fn_in_trait)]
+pub trait CustomerRefundPostedTotalsExt {
     /// 按原回款聚合已过账客户退款合计（经共享入口，约束见该处）。
     ///
     /// # 参数
@@ -153,7 +153,16 @@ impl<'a> CustomerRefundRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 聚合、游标读取或 Decimal128 反序列化失败时返回错误。
-    pub async fn posted_refund_total_by_receipt(
+    async fn posted_refund_total_by_receipt(
+        &self,
+        receipt_id: &CustomerReceiptId,
+        exclude_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Amount>;
+}
+
+impl CustomerRefundPostedTotalsExt for persistence_core::Repository<'_, CustomerRefund> {
+    async fn posted_refund_total_by_receipt(
         &self,
         receipt_id: &CustomerReceiptId,
         exclude_id: &str,
@@ -170,7 +179,9 @@ impl<'a> CustomerRefundRepository<'a> {
     }
 }
 
-impl<'a> SupplierRefundRepository<'a> {
+/// 供应商退款已过账累计聚合。
+#[allow(async_fn_in_trait)]
+pub trait SupplierRefundPostedTotalsExt {
     /// 按原付款聚合已过账供应商退款合计（经共享入口，约束见该处）。
     ///
     /// # 参数
@@ -183,7 +194,16 @@ impl<'a> SupplierRefundRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 聚合、游标读取或 Decimal128 反序列化失败时返回错误。
-    pub async fn posted_refund_total_by_payment(
+    async fn posted_refund_total_by_payment(
+        &self,
+        payment_id: &SupplierPaymentId,
+        exclude_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Amount>;
+}
+
+impl SupplierRefundPostedTotalsExt for persistence_core::Repository<'_, SupplierRefund> {
+    async fn posted_refund_total_by_payment(
         &self,
         payment_id: &SupplierPaymentId,
         exclude_id: &str,
@@ -200,7 +220,9 @@ impl<'a> SupplierRefundRepository<'a> {
     }
 }
 
-impl<'a> ReceiptReversalRepository<'a> {
+/// 回款冲正已过账累计聚合。
+#[allow(async_fn_in_trait)]
+pub trait ReceiptReversalPostedTotalsExt {
     /// 按原回款聚合已过账回款冲正合计（经共享入口，约束见该处）。
     ///
     /// # 参数
@@ -213,7 +235,16 @@ impl<'a> ReceiptReversalRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 聚合、游标读取或 Decimal128 反序列化失败时返回错误。
-    pub async fn posted_reversal_total_by_receipt(
+    async fn posted_reversal_total_by_receipt(
+        &self,
+        receipt_id: &CustomerReceiptId,
+        exclude_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Amount>;
+}
+
+impl ReceiptReversalPostedTotalsExt for persistence_core::Repository<'_, ReceiptReversal> {
+    async fn posted_reversal_total_by_receipt(
         &self,
         receipt_id: &CustomerReceiptId,
         exclude_id: &str,
@@ -230,7 +261,9 @@ impl<'a> ReceiptReversalRepository<'a> {
     }
 }
 
-impl<'a> PaymentReversalRepository<'a> {
+/// 付款冲正已过账累计聚合。
+#[allow(async_fn_in_trait)]
+pub trait PaymentReversalPostedTotalsExt {
     /// 按原付款聚合已过账付款冲正合计（经共享入口，约束见该处）。
     ///
     /// # 参数
@@ -243,7 +276,16 @@ impl<'a> PaymentReversalRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 聚合、游标读取或 Decimal128 反序列化失败时返回错误。
-    pub async fn posted_reversal_total_by_payment(
+    async fn posted_reversal_total_by_payment(
+        &self,
+        payment_id: &SupplierPaymentId,
+        exclude_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Amount>;
+}
+
+impl PaymentReversalPostedTotalsExt for persistence_core::Repository<'_, PaymentReversal> {
+    async fn posted_reversal_total_by_payment(
         &self,
         payment_id: &SupplierPaymentId,
         exclude_id: &str,

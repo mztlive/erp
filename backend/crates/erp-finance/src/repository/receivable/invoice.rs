@@ -14,7 +14,6 @@ use super::sort_doc;
 use crate::entity::receivable::{
     Invoice, InvoiceDirection, InvoiceKind, InvoiceStatus, SalesInvoiceAllocation,
 };
-use crate::repository::owned::{InvoiceRepository, SalesInvoiceAllocationRepository};
 
 /// 发票列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -153,7 +152,8 @@ impl Pagination for InvoiceFilter {
     }
 }
 
-impl<'a> InvoiceRepository<'a> {
+#[allow(async_fn_in_trait)]
+pub trait InvoiceRepositoryExt {
     /// 分页检索发票列表（投影查询）。
     ///
     /// 只返回 [`InvoiceRow`] 所需的列表字段；发票号码支持字面量模糊匹配。
@@ -168,7 +168,55 @@ impl<'a> InvoiceRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_invoices(
+    async fn search_invoices(
+        &self,
+        filter: &InvoiceFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<InvoiceRow>>;
+
+    /// 按「方向 + 规范化号码」查找发票（无代码数电票唯一键）。
+    ///
+    /// 唯一性由 `uk_invoices_uncoded` 部分唯一索引保证（有代码发票走
+    /// `uk_invoices_coded`）；本方法用于登记前幂等判定与 D19 进项发票引用，
+    /// 服务层不得做「先查后插」的重复性判断。
+    ///
+    /// # 参数
+    /// * `invoice_direction` - 发票方向
+    /// * `normalized_no` - 规范化发票号码（去空白转大写）
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配的发票；无匹配时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    async fn find_by_direction_and_normalized_no(
+        &self,
+        invoice_direction: InvoiceDirection,
+        normalized_no: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<Invoice>>;
+
+    /// 批量按发票 ID 读取活跃发票事实。
+    ///
+    /// # 参数
+    /// * `invoice_ids` - 发票 ID 字符串集合；空集合直接返回空结果
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配且未删除的发票；返回顺序不承诺与输入一致。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn find_invoices_by_ids(
+        &self,
+        invoice_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<Invoice>>;
+}
+
+impl InvoiceRepositoryExt for persistence_core::Repository<'_, Invoice> {
+    async fn search_invoices(
         &self,
         filter: &InvoiceFilter,
         executor: &mut dyn Executor,
@@ -190,23 +238,7 @@ impl<'a> InvoiceRepository<'a> {
         Ok(PageResult { items, total: total as i64 })
     }
 
-    /// 按「方向 + 规范化号码」查找发票（无代码数电票唯一键）。
-    ///
-    /// 唯一性由 `uk_invoices_uncoded` 部分唯一索引保证（有代码发票走
-    /// `uk_invoices_coded`）；本方法用于登记前幂等判定与 D19 进项发票引用，
-    /// 服务层不得做「先查后插」的重复性判断。
-    ///
-    /// # 参数
-    /// * `invoice_direction` - 发票方向
-    /// * `normalized_no` - 规范化发票号码（去空白转大写）
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的发票；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_direction_and_normalized_no(
+    async fn find_by_direction_and_normalized_no(
         &self,
         invoice_direction: InvoiceDirection,
         normalized_no: &str,
@@ -222,18 +254,7 @@ impl<'a> InvoiceRepository<'a> {
         .await
     }
 
-    /// 批量按发票 ID 读取活跃发票事实。
-    ///
-    /// # 参数
-    /// * `invoice_ids` - 发票 ID 字符串集合；空集合直接返回空结果
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回全部匹配且未删除的发票；返回顺序不承诺与输入一致。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_invoices_by_ids(
+    async fn find_invoices_by_ids(
         &self,
         invoice_ids: &[String],
         executor: &mut dyn Executor,
@@ -246,7 +267,8 @@ impl<'a> InvoiceRepository<'a> {
     }
 }
 
-impl<'a> SalesInvoiceAllocationRepository<'a> {
+#[allow(async_fn_in_trait)]
+pub trait SalesInvoiceAllocationRepositoryExt {
     /// 批量按发票集合取回销项发票分配（`$in` 一次取回，禁止 N+1）。
     ///
     /// # 参数
@@ -258,17 +280,11 @@ impl<'a> SalesInvoiceAllocationRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_allocations_by_invoices(
+    async fn find_allocations_by_invoices(
         &self,
         invoice_ids: &[InvoiceId],
         executor: &mut dyn Executor,
-    ) -> Result<Vec<SalesInvoiceAllocation>> {
-        if invoice_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        let invoice_ids: Vec<String> = invoice_ids.iter().map(ToString::to_string).collect();
-        self.find_many(doc! { "invoice_id": { "$in": invoice_ids } }, executor).await
-    }
+    ) -> Result<Vec<SalesInvoiceAllocation>>;
 
     /// 批量按应收子账集合取回销项发票分配（`$in`，用于开票进度校验）。
     ///
@@ -281,7 +297,27 @@ impl<'a> SalesInvoiceAllocationRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_allocations_by_accounts(
+    async fn find_allocations_by_accounts(
+        &self,
+        account_ids: &[ReceivableAccountId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesInvoiceAllocation>>;
+}
+
+impl SalesInvoiceAllocationRepositoryExt for persistence_core::Repository<'_, SalesInvoiceAllocation> {
+    async fn find_allocations_by_invoices(
+        &self,
+        invoice_ids: &[InvoiceId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesInvoiceAllocation>> {
+        if invoice_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let invoice_ids: Vec<String> = invoice_ids.iter().map(ToString::to_string).collect();
+        self.find_many(doc! { "invoice_id": { "$in": invoice_ids } }, executor).await
+    }
+
+    async fn find_allocations_by_accounts(
         &self,
         account_ids: &[ReceivableAccountId],
         executor: &mut dyn Executor,

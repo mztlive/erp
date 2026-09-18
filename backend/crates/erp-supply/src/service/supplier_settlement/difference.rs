@@ -9,6 +9,7 @@ use crate::dto::supplier_settlement as dto;
 use crate::dto::supplier_settlement::*;
 use crate::entity::supplier_settlement::*;
 use crate::repository::SupplierSettlementExt;
+use crate::repository::prelude::*;
 use crate::{Error, Result};
 /// 结算差异列表筛选条件类型。
 type DifferenceFilter = <mongodb::Database as SupplierSettlementExt>::SupplierSettlementDifferenceFilter;

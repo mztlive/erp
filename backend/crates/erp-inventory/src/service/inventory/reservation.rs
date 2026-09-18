@@ -6,6 +6,7 @@ use super::InventoryService;
 use crate::dto::{PageView, StockReservationListParams, StockReservationView};
 use crate::entity::inventory::StockReservation;
 use crate::error::{Error, Result};
+use crate::repository::prelude::*;
 use crate::repository::{InventoryExt, StockReservationFilter};
 
 impl InventoryService {

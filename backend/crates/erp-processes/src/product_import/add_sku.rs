@@ -5,6 +5,7 @@ use std::collections::HashSet;
 use application_core::AuditActor;
 use erp_catalog::entity::catalog::product_revision_media::MediaRole;
 use erp_catalog::entity::catalog::{Product, Sku, SpecSignatureEntry, compute_specification_signature};
+use erp_catalog::repository::prelude::*;
 use erp_catalog::{CatalogExt, ProductMediaInput, ProductSkuInput, UpdateProductRequest};
 use erp_core::ids::ProductId;
 use persistence_core::NoTransaction;

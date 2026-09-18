@@ -13,11 +13,13 @@ pub use people_read::AdjustmentSnapshotReadFilter;
 pub use search::InventorySearch;
 mod shared;
 
-pub use adjustment::{StockAdjustmentFilter, StockAdjustmentRow};
-pub use balance::{StockBalanceFilter, StockBalanceRow};
+pub use adjustment::{
+    StockAdjustmentFilter, StockAdjustmentLineRepositoryExt, StockAdjustmentRepositoryExt, StockAdjustmentRow,
+};
+pub use balance::{StockBalanceFilter, StockBalanceRepositoryExt, StockBalanceRow};
 use mongodb::Database;
-pub use movement::{StockMovementFilter, StockMovementRow};
-pub use reservation::{StockReservationFilter, StockReservationRow};
+pub use movement::{StockMovementFilter, StockMovementRepositoryExt, StockMovementRow};
+pub use reservation::{StockReservationFilter, StockReservationRepositoryExt, StockReservationRow};
 
 use super::extensions::InventoryExt;
 

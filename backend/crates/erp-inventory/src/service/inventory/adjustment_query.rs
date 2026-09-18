@@ -14,6 +14,7 @@ use crate::dto::{
 use crate::entity::inventory::{StockAdjustment, StockAdjustmentLine, StockMovement};
 use crate::error::{Error, Result};
 use crate::ports::{AdjustmentPeopleFact, InventoryAuthorization, intersect_object_ids};
+use crate::repository::prelude::*;
 use crate::repository::{InventoryExt, StockAdjustmentFilter, StockAdjustmentRow};
 
 impl InventoryService {

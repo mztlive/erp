@@ -11,6 +11,7 @@ use erp_workflow::entity::approval_integration::{
     ApprovalSubjectCounterparty, ApprovalSubjectSnapshotPayload,
 };
 use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
+use erp_workflow::repository::prelude::*;
 use erp_workflow::service::approval::binding::{BindPublishedDefinitionCommand, attach_published_binding};
 use erp_workflow::service::approval::business_adapter::{BindingRevalidationContext, adapter_spec_of};
 use erp_workflow::service::approval::execution::{PreparedExecution, prepare_start};

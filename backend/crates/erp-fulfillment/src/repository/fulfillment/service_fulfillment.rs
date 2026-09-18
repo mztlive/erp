@@ -7,8 +7,7 @@ use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result};
 use serde::{Deserialize, Serialize};
 
 use super::sort_doc;
-use crate::entity::fulfillment::{FulfillmentResult, ServiceFulfillmentState};
-use crate::repository::owned::ServiceFulfillmentRepository;
+use crate::entity::fulfillment::{FulfillmentResult, ServiceFulfillment, ServiceFulfillmentState};
 
 /// 线下服务履约记录排序白名单（查询与测试共用）。
 const SERVICE_FULFILLMENT_SORT_FIELDS: &[&str] = &["occurred_at", "recorded_at", "created_at"];
@@ -84,7 +83,9 @@ impl Pagination for ServiceFulfillmentFilter {
     }
 }
 
-impl<'a> ServiceFulfillmentRepository<'a> {
+/// 线下服务履约记录仓储扩展：列表投影查询。
+#[allow(async_fn_in_trait)]
+pub trait ServiceFulfillmentRepositoryExt {
     /// 分页检索线下服务履约记录列表（投影查询）。
     ///
     /// 只返回 [`ServiceFulfillmentRow`] 所需的列表字段（交付对象快照、服务
@@ -100,6 +101,14 @@ impl<'a> ServiceFulfillmentRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    async fn search_service_fulfillments(
+        &self,
+        filter: &ServiceFulfillmentFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<ServiceFulfillmentRow>>;
+}
+
+impl ServiceFulfillmentRepositoryExt for persistence_core::Repository<'_, ServiceFulfillment> {
     #[tracing::instrument(
         name = "repository.fulfillment.search_service_fulfillments",
         skip_all,
@@ -111,7 +120,7 @@ impl<'a> ServiceFulfillmentRepository<'a> {
             db.operation.name = "search"
         )
     )]
-    pub async fn search_service_fulfillments(
+    async fn search_service_fulfillments(
         &self,
         filter: &ServiceFulfillmentFilter,
         executor: &mut dyn Executor,

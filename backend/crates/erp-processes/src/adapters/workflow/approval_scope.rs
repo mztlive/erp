@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_identity::access_control::ScopedObject;
+use erp_identity::repository::prelude::*;
 use erp_identity::service::access_control::resolve::{AuthorizedDataScope, DataScopeService};
 use erp_identity::{AccessControlExt, Error as IdentityError, Permission, SharedRbacService};
 use erp_workflow::ports::{WorkflowDataScope, WorkflowScopeObject, WorkflowScopePredicate};

@@ -3,6 +3,10 @@
 //! 单集合 CRUD 直接复用 `owned` 仓储；本模块只承载跨集合多步骤写入入口与
 //! 列表投影查询。集合名统一取 `SalesSelectionExt` 关联常量。
 
+mod queries;
+mod rate;
+pub mod scope;
+
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
@@ -10,6 +14,15 @@ use mongodb::options::FindOptions;
 use persistence_core::{
     Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
 };
+pub use queries::{
+    SalesSelectionBookletRepositoryExt, SalesSelectionDisplayItemRepositoryExt,
+    SalesSelectionIdempotencyRepositoryExt, SalesSelectionPoolMemberRepositoryExt,
+    SalesSelectionPrepareTaskRepositoryExt, SalesSelectionProposalDisplayLineRepositoryExt,
+    SalesSelectionProposalRepositoryExt, SalesSelectionProposalSkuLineRepositoryExt,
+    SalesSelectionSessionRepositoryExt,
+};
+pub use rate::SalesSelectionRateRepository;
+pub use scope::{SelectionReadScope, SelectionScopeClause};
 
 use crate::entity::sales_selection::{
     SalesSelectionBooklet, SalesSelectionDisplayItem, SalesSelectionIdempotency, SalesSelectionPoolMember,
@@ -18,10 +31,6 @@ use crate::entity::sales_selection::{
 };
 use crate::repository::extensions::SalesSelectionExt;
 use crate::repository::filter::push_undeleted;
-
-pub mod scope;
-
-pub use scope::{SelectionReadScope, SelectionScopeClause};
 
 /// 选品册集合名（单一来源）。
 const BOOKLETS: &str = <mongodb::Database as SalesSelectionExt>::SALES_SELECTION_BOOKLETS;

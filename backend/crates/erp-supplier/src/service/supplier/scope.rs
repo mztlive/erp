@@ -11,6 +11,7 @@ use super::list_view::{SupplierViewAssembleInput, assemble_supplier_views};
 use crate::dto::supplier::{SupplierListParams, SupplierListQuery, SupplierView};
 use crate::error::{Error, Result};
 use crate::ports::SupplierResolvedScope;
+use crate::repository::prelude::*;
 use crate::repository::scope::SupplierReadScope;
 use crate::repository::{SupplierExt, SupplierListSearchInput};
 

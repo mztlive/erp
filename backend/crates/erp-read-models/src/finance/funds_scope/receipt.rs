@@ -7,6 +7,7 @@ use application_core::AuditActor;
 use erp_core::money::Amount;
 use erp_finance::ports::funds_scope::FundsResolvedScope;
 use erp_finance::repository::ReceivableExt;
+use erp_finance::repository::prelude::*;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 

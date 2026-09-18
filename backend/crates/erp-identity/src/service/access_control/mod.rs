@@ -31,6 +31,7 @@ use crate::entity::access_control::{
     PermissionId, UserRole, UserRoleId,
 };
 use crate::ports::ScopeTargetPort;
+use crate::repository::prelude::*;
 pub mod consumers;
 mod query;
 pub mod resolve;

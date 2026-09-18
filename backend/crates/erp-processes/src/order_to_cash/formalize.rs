@@ -16,6 +16,7 @@ use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{
     AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
 };
+use erp_workflow::repository::prelude::*;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Executor;

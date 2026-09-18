@@ -15,6 +15,7 @@ use crate::entity::payable::{
     PaymentAllocation, PaymentAllocationData, SupplierPayment, SupplierPaymentStatus,
 };
 use crate::repository::PayableExt;
+use crate::repository::prelude::*;
 use crate::{Error, Result};
 
 /// 财务执行只消费退款稳定身份、金额和原发生时点。

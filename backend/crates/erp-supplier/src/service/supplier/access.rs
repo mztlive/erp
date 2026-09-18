@@ -11,6 +11,7 @@ use crate::ports::{
     SupplierDataScopePort, SupplierResolvedClause, SupplierResolvedScope, SupplierScopeObject,
 };
 use crate::repository::SupplierExt;
+use crate::repository::prelude::*;
 use crate::repository::scope::{SupplierReadScope, SupplierScopeClause};
 
 /// 供应商对象访问范围；列表、详情、导出和写命令复用同一解析。

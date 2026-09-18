@@ -16,7 +16,6 @@ use crate::entity::purchase_order::{
     PurchaseType,
 };
 use crate::repository::extensions::PurchaseOrderExt;
-use crate::repository::owned::PurchaseOrderRepository;
 
 /// 采购单列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -247,7 +246,9 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
     }
 }
 
-impl<'a> PurchaseOrderRepository<'a> {
+/// 采购主表集合的域查询。
+#[allow(async_fn_in_trait)]
+pub trait PurchaseOrderRepositoryExt {
     /// 返回未删除且落在已证明范围内的负责人集合。
     ///
     /// # 参数
@@ -262,21 +263,11 @@ impl<'a> PurchaseOrderRepository<'a> {
     ///
     /// # 关键业务约束
     /// 候选必须与列表同一授权边界，不得按登录用户自行推断。
-    pub async fn current_owner_ids(
+    async fn current_owner_ids(
         &self,
         scope: &super::scope::PurchaseReadScope,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<String>> {
-        let collection = self.collection();
-        let mut query = collection.distinct(
-            "owner_user_id",
-            doc! { "deleted_at": entity_core::NOT_DELETED_TIMESTAMP_BSON, "$and": [scope.document()] },
-        );
-        if let Some(session) = executor.session() {
-            query = query.session(session);
-        }
-        Ok(query.await?.into_iter().filter_map(|v| v.as_str().map(str::to_owned)).collect())
-    }
+    ) -> Result<Vec<String>>;
 
     /// 分页检索采购单列表（投影查询）。
     ///
@@ -296,7 +287,85 @@ impl<'a> PurchaseOrderRepository<'a> {
     ///
     /// # 关键业务约束
     /// 授权条件由调用方传入，仓储不得按登录用户推断权限。
-    pub async fn search_purchase_orders(
+    async fn search_purchase_orders(
+        &self,
+        filter: &PurchaseOrderFilter,
+        scope: &super::scope::PurchaseReadScope,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<PurchaseOrderRow>>;
+
+    /// 查询销售单当前采购覆盖所需的采购单。
+    ///
+    /// 只返回未删除且状态为草稿、旧待财务、审批中、生效、部分执行或已完成的
+    /// 采购单；作废采购单不占用销售数量。调用方必须继续沿每张采购单的当前提交
+    /// 或当前版本指针读取数量，禁止累计历史提交或历史版本。
+    ///
+    /// # 参数
+    /// * `sales_order_id` - 来源销售单稳定身份
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回参与当前采购覆盖计算的采购单。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn find_covering_by_sales_order(
+        &self,
+        sales_order_id: &SalesOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PurchaseOrder>>;
+
+    /// 统计销售单关联的有效采购单。
+    ///
+    /// 统计口径与采购创建依据一致：草稿、审批中、生效、部分执行和已完成均视为
+    /// 已建采购；作废单不阻断重新建单，也不计入销售单的有效采购关联数。
+    ///
+    /// # 参数
+    /// * `sales_order_id` - 来源销售单稳定身份
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回未删除且非作废的关联采购单数量。
+    ///
+    /// # 错误
+    /// 当 MongoDB 计数失败时返回错误。
+    async fn count_active_by_sales_order(
+        &self,
+        sales_order_id: &SalesOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<u64>;
+
+    /// 按业务编号返回全部匹配身份，供跨域列表在分页前筛选。
+    ///
+    /// 只投影 ID、排除软删除；数据库错误向上返回。
+    async fn matching_ids_by_number(&self, keyword: &str, executor: &mut dyn Executor)
+    -> Result<Vec<String>>;
+
+    /// 判断组织是否仍有需要交接的未结单据。
+    ///
+    /// # 错误
+    /// 查询失败返回仓储错误；失败不得解释为没有业务。
+    async fn has_unsettled_business_org(&self, org: &str, executor: &mut dyn Executor) -> Result<bool>;
+}
+
+impl PurchaseOrderRepositoryExt for persistence_core::Repository<'_, PurchaseOrder> {
+    async fn current_owner_ids(
+        &self,
+        scope: &super::scope::PurchaseReadScope,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<String>> {
+        let collection = self.collection();
+        let mut query = collection.distinct(
+            "owner_user_id",
+            doc! { "deleted_at": entity_core::NOT_DELETED_TIMESTAMP_BSON, "$and": [scope.document()] },
+        );
+        if let Some(session) = executor.session() {
+            query = query.session(session);
+        }
+        Ok(query.await?.into_iter().filter_map(|v| v.as_str().map(str::to_owned)).collect())
+    }
+
+    async fn search_purchase_orders(
         &self,
         filter: &PurchaseOrderFilter,
         scope: &super::scope::PurchaseReadScope,
@@ -326,22 +395,7 @@ impl<'a> PurchaseOrderRepository<'a> {
         Ok(PageResult { items, total: total as i64 })
     }
 
-    /// 查询销售单当前采购覆盖所需的采购单。
-    ///
-    /// 只返回未删除且状态为草稿、旧待财务、审批中、生效、部分执行或已完成的
-    /// 采购单；作废采购单不占用销售数量。调用方必须继续沿每张采购单的当前提交
-    /// 或当前版本指针读取数量，禁止累计历史提交或历史版本。
-    ///
-    /// # 参数
-    /// * `sales_order_id` - 来源销售单稳定身份
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回参与当前采购覆盖计算的采购单。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_covering_by_sales_order(
+    async fn find_covering_by_sales_order(
         &self,
         sales_order_id: &SalesOrderId,
         executor: &mut dyn Executor,
@@ -349,27 +403,36 @@ impl<'a> PurchaseOrderRepository<'a> {
         self.find_many(active_purchase_order_filter(sales_order_id), executor).await
     }
 
-    /// 统计销售单关联的有效采购单。
-    ///
-    /// 统计口径与采购创建依据一致：草稿、审批中、生效、部分执行和已完成均视为
-    /// 已建采购；作废单不阻断重新建单，也不计入销售单的有效采购关联数。
-    ///
-    /// # 参数
-    /// * `sales_order_id` - 来源销售单稳定身份
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回未删除且非作废的关联采购单数量。
-    ///
-    /// # 错误
-    /// 当 MongoDB 计数失败时返回错误。
-    pub async fn count_active_by_sales_order(
+    async fn count_active_by_sales_order(
         &self,
         sales_order_id: &SalesOrderId,
         executor: &mut dyn Executor,
     ) -> Result<u64> {
         mongo_ops::count_documents(&self.collection(), active_purchase_order_filter(sales_order_id), executor)
             .await
+    }
+
+    async fn matching_ids_by_number(
+        &self,
+        keyword: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<String>> {
+        let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
+        insert_literal_regex_filter(&mut filter, "purchase_no", Some(keyword));
+        let collection = self.collection();
+        let mut query = collection.distinct("id", filter);
+        if let Some(session) = executor.session() {
+            query = query.session(session);
+        }
+        Ok(query.await?.into_iter().filter_map(|id| id.as_str().map(str::to_owned)).collect())
+    }
+
+    async fn has_unsettled_business_org(&self, org: &str, executor: &mut dyn Executor) -> Result<bool> {
+        self.exists(
+            mongodb::bson::doc! { "business_org_unit_id": org, "status": { "$nin": ["COMPLETED", "VOIDED"] } },
+            executor,
+        )
+        .await
     }
 }
 
@@ -419,48 +482,6 @@ fn purchase_order_projection() -> Document {
         "current_revision_id": 1,
         "version": 1,
         "created_at": 1,
-    }
-}
-
-impl PurchaseOrderRepository<'_> {
-    /// 按业务编号返回全部匹配身份，供跨域列表在分页前筛选。
-    ///
-    /// 只投影 ID、排除软删除；数据库错误向上返回。
-    pub async fn matching_ids_by_number(
-        &self,
-        keyword: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<String>> {
-        let clauses = ["purchase_no"]
-            .into_iter()
-            .map(|field| {
-                let mut clause = Document::new();
-                insert_literal_regex_filter(&mut clause, field, Some(keyword));
-                clause
-            })
-            .collect::<Vec<_>>();
-        let collection = self.collection();
-        let mut query =
-            collection.distinct("id", doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$or": clauses });
-        if let Some(session) = executor.session() {
-            query = query.session(session);
-        }
-        Ok(query.await?.into_iter().filter_map(|id| id.as_str().map(str::to_owned)).collect())
-    }
-}
-
-/// 未结业务组织查询用于组织停用准入。
-impl PurchaseOrderRepository<'_> {
-    /// 判断组织是否仍有需要交接的未结单据。
-    ///
-    /// # 错误
-    /// 查询失败返回仓储错误；失败不得解释为没有业务。
-    pub async fn has_unsettled_business_org(
-        &self,
-        org: &str,
-        executor: &mut dyn persistence_core::Executor,
-    ) -> persistence_core::Result<bool> {
-        self.exists(mongodb::bson::doc! { "business_org_unit_id": org, "status": { "$nin": ["COMPLETED", "VOIDED"] } }, executor).await
     }
 }
 

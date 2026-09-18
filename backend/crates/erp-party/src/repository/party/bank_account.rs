@@ -2,12 +2,11 @@ use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::PartyId;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Repository, Result, mongo_ops};
 use serde::{Deserialize, Serialize};
 
 use super::shared::{active_fact_filter, default_first_sort, party_default_marks_filter, sort_doc};
 use crate::entity::party::{EffectiveRecordStatus, PartyBankAccount};
-use crate::repository::owned::PartyBankAccountRepository;
 
 /// 银行账户列表投影行。
 ///
@@ -93,7 +92,9 @@ impl Pagination for PartyBankAccountFilter {
     }
 }
 
-impl<'a> PartyBankAccountRepository<'a> {
+/// 银行账户集合仓储的域查询扩展。
+#[allow(async_fn_in_trait)]
+pub trait PartyBankAccountRepositoryExt {
     /// 分页检索银行账户列表（投影查询，敏感字段不进投影）。
     ///
     /// 排序字段经仓储白名单校验（`created_at`/`bank_account_no`/`valid_from`），
@@ -108,7 +109,128 @@ impl<'a> PartyBankAccountRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_party_bank_accounts(
+    async fn search_party_bank_accounts(
+        &self,
+        filter: &PartyBankAccountFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<PartyBankAccountRow>>;
+
+    /// 按银行账户 ID 查找未删除账户事实。
+    ///
+    /// # 参数
+    /// * `id` - 银行账户事实 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配账户；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    async fn find_bank_account(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<PartyBankAccount>>;
+
+    /// 按银行账户 ID 集合批量取回未删除账户事实（FIN-R02，`$in` 一次取回）。
+    ///
+    /// 只返回实体事实；掩码与可见字段选择由 Service 集中完成，
+    /// 本方法不执行脱敏策略。空集合直接返回空列表，不发送空 `$in`。
+    ///
+    /// # 参数
+    /// * `ids` - 银行账户事实 ID 集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配账户事实。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn find_bank_accounts_by_ids(
+        &self,
+        ids: &[erp_core::ids::PartyBankAccountId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyBankAccount>>;
+
+    /// 读取指定日期生效的主体银行账户。
+    ///
+    /// # 参数
+    /// * `party_id` - 所属 Party ID
+    /// * `as_of` - 业务日期
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回该日期处于启用有效期的银行账户。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn list_active_on(
+        &self,
+        party_id: &PartyId,
+        as_of: erp_core::common::time::BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyBankAccount>>;
+
+    /// 按默认标记与创建时间读取指定日期生效的主体银行账户。
+    ///
+    /// # 参数
+    /// * `party_id` - 所属 Party ID
+    /// * `as_of` - 业务日期
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回默认账户优先、同组内最新创建优先的当前事实。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn list_current_on(
+        &self,
+        party_id: &PartyId,
+        as_of: erp_core::common::time::BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyBankAccount>>;
+
+    /// 清除同一 Party 其他银行账户的默认标记。
+    ///
+    /// 必须与主写入位于同一事务执行器中，避免并发或中途失败留下多个默认行。
+    ///
+    /// # 参数
+    /// * `party_id` - 所属 Party ID
+    /// * `exclude_id` - 保留默认标记的银行账户 ID
+    /// * `executor` - 数据访问执行器，必须位于调用方事务中
+    ///
+    /// # 返回
+    /// 全部冲突默认标记清除后返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询、游标读取或 CAS 更新失败时返回错误。
+    async fn clear_other_default_marks(
+        &self,
+        party_id: &PartyId,
+        exclude_id: Option<&str>,
+        executor: &mut dyn Executor,
+    ) -> Result<()>;
+
+    /// 按默认标记和创建时间读取主体银行账户。
+    ///
+    /// # 参数
+    /// * `party_id` - 所属主体 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回默认账户优先、同组内最新创建优先的完整实体。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    async fn list_by_party(
+        &self,
+        party_id: &PartyId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyBankAccount>>;
+}
+
+impl PartyBankAccountRepositoryExt for Repository<'_, PartyBankAccount> {
+    async fn search_party_bank_accounts(
         &self,
         filter: &PartyBankAccountFilter,
         executor: &mut dyn Executor,
@@ -130,18 +252,7 @@ impl<'a> PartyBankAccountRepository<'a> {
         Ok(PageResult { items, total: total as i64 })
     }
 
-    /// 按银行账户 ID 查找未删除账户事实。
-    ///
-    /// # 参数
-    /// * `id` - 银行账户事实 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配账户；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_bank_account(
+    async fn find_bank_account(
         &self,
         id: &str,
         executor: &mut dyn Executor,
@@ -149,21 +260,7 @@ impl<'a> PartyBankAccountRepository<'a> {
         self.find_by_id(id, executor).await
     }
 
-    /// 按银行账户 ID 集合批量取回未删除账户事实（FIN-R02，`$in` 一次取回）。
-    ///
-    /// 只返回实体事实；掩码与可见字段选择由 Service 集中完成，
-    /// 本方法不执行脱敏策略。空集合直接返回空列表，不发送空 `$in`。
-    ///
-    /// # 参数
-    /// * `ids` - 银行账户事实 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回全部匹配账户事实。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_bank_accounts_by_ids(
+    async fn find_bank_accounts_by_ids(
         &self,
         ids: &[erp_core::ids::PartyBankAccountId],
         executor: &mut dyn Executor,
@@ -175,19 +272,7 @@ impl<'a> PartyBankAccountRepository<'a> {
         self.find_many(doc! { "id": { "$in": ids } }, executor).await
     }
 
-    /// 读取指定日期生效的主体银行账户。
-    ///
-    /// # 参数
-    /// * `party_id` - 所属 Party ID
-    /// * `as_of` - 业务日期
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回该日期处于启用有效期的银行账户。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_active_on(
+    async fn list_active_on(
         &self,
         party_id: &PartyId,
         as_of: erp_core::common::time::BusinessDate,
@@ -196,19 +281,7 @@ impl<'a> PartyBankAccountRepository<'a> {
         self.find_many(active_fact_filter(party_id, as_of), executor).await
     }
 
-    /// 按默认标记与创建时间读取指定日期生效的主体银行账户。
-    ///
-    /// # 参数
-    /// * `party_id` - 所属 Party ID
-    /// * `as_of` - 业务日期
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回默认账户优先、同组内最新创建优先的当前事实。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_current_on(
+    async fn list_current_on(
         &self,
         party_id: &PartyId,
         as_of: erp_core::common::time::BusinessDate,
@@ -217,21 +290,7 @@ impl<'a> PartyBankAccountRepository<'a> {
         self.find_many_sorted(active_fact_filter(party_id, as_of), default_first_sort(), executor).await
     }
 
-    /// 清除同一 Party 其他银行账户的默认标记。
-    ///
-    /// 必须与主写入位于同一事务执行器中，避免并发或中途失败留下多个默认行。
-    ///
-    /// # 参数
-    /// * `party_id` - 所属 Party ID
-    /// * `exclude_id` - 保留默认标记的银行账户 ID
-    /// * `executor` - 数据访问执行器，必须位于调用方事务中
-    ///
-    /// # 返回
-    /// 全部冲突默认标记清除后返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或 CAS 更新失败时返回错误。
-    pub async fn clear_other_default_marks(
+    async fn clear_other_default_marks(
         &self,
         party_id: &PartyId,
         exclude_id: Option<&str>,
@@ -248,18 +307,7 @@ impl<'a> PartyBankAccountRepository<'a> {
         Ok(())
     }
 
-    /// 按默认标记和创建时间读取主体银行账户。
-    ///
-    /// # 参数
-    /// * `party_id` - 所属主体 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回默认账户优先、同组内最新创建优先的完整实体。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或反序列化失败时返回错误。
-    pub async fn list_by_party(
+    async fn list_by_party(
         &self,
         party_id: &PartyId,
         executor: &mut dyn Executor,

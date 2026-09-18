@@ -15,6 +15,7 @@ use super::shared::{
 use crate::dto::{CommitPaymentReversalRequest, CreatePaymentReversalRequest};
 use crate::entity::returns::{PaymentReversal, PaymentReversalData, PaymentReversalStatus};
 use crate::repository::ReturnsExt;
+use crate::repository::prelude::*;
 use crate::{Error, Result};
 
 /// 退款/冲正消费的最小原付款事实，不携带完整财务聚合。

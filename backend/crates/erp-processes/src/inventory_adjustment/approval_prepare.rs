@@ -6,6 +6,7 @@ use bpm::ids::{
 use bpm::model::types::ApprovalCommandKind;
 use bpm::model::{IdempotencyKey, ParticipantId, SubjectRef, Timestamp};
 use erp_core::common::time::Instant;
+use erp_identity::repository::prelude::*;
 use erp_identity::{AccessControlExt, SharedRbacService};
 use erp_inventory::{
     ExpectedStockBalanceVersion, InventoryExt, StockAdjustment, StockAdjustmentLine, StockAdjustmentState,
@@ -14,6 +15,7 @@ use erp_inventory::{
 use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshot;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::repository::prelude::*;
 use erp_workflow::service::approval::business_adapter::ensure_separation_of_duties;
 use erp_workflow::service::approval::execution::authorization::converge_eligibility;
 use erp_workflow::service::approval::execution::idempotency::{

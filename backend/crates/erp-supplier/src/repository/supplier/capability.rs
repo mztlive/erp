@@ -1,7 +1,7 @@
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::SupplierAccountId;
 use mongodb::bson::{Document, doc};
-use persistence_core::{Executor, Pagination, QueryFilter, Result};
+use persistence_core::{Executor, Pagination, QueryFilter, Repository, Result};
 
 use super::account::supplier_id_strings;
 use super::{SUPPLIER_CAPABILITIES, SupplierRepository};
@@ -71,7 +71,9 @@ impl Pagination for SupplierCapabilityFilter {
     }
 }
 
-impl<'a> SupplierCapabilityRepository<'a> {
+/// 供应商能力集合上的域查询。
+#[allow(async_fn_in_trait)]
+pub trait SupplierCapabilityRepositoryExt {
     /// 按「供应商 + 能力代码」查找能力（唯一性由
     /// `uk_supplier_capabilities_supplier_code` 保证）。
     ///
@@ -85,7 +87,53 @@ impl<'a> SupplierCapabilityRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_supplier_and_code(
+    async fn find_by_supplier_and_code(
+        &self,
+        supplier_id: &SupplierAccountId,
+        capability_code: CapabilityCode,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierCapability>>;
+
+    /// 检索启用能力的到期预警列表（§6.2：`capability_code + status + valid_to`
+    /// 用于选品和到期预警），按 `valid_to` 升序。
+    ///
+    /// # 参数
+    /// * `capability_code` - 能力代码
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配的启用能力（含已到期记录，由调用方按业务日期过滤）。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn list_active_for_expiry_warning(
+        &self,
+        capability_code: CapabilityCode,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierCapability>>;
+
+    /// 查询命中任一当前有效能力的供应商角色 ID。
+    ///
+    /// # 参数
+    /// * `capability_codes` - 供应能力代码；调用方保证非空
+    /// * `as_of` - 当前业务日，格式为 `YYYY-MM-DD`
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回去重、稳定排序后的供应商角色 ID。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    async fn list_supplier_ids_by_active_capability_codes(
+        &self,
+        capability_codes: &[CapabilityCode],
+        as_of: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierAccountId>>;
+}
+
+impl SupplierCapabilityRepositoryExt for Repository<'_, SupplierCapability> {
+    async fn find_by_supplier_and_code(
         &self,
         supplier_id: &SupplierAccountId,
         capability_code: CapabilityCode,
@@ -101,19 +149,7 @@ impl<'a> SupplierCapabilityRepository<'a> {
         .await
     }
 
-    /// 检索启用能力的到期预警列表（§6.2：`capability_code + status + valid_to`
-    /// 用于选品和到期预警），按 `valid_to` 升序。
-    ///
-    /// # 参数
-    /// * `capability_code` - 能力代码
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的启用能力（含已到期记录，由调用方按业务日期过滤）。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_active_for_expiry_warning(
+    async fn list_active_for_expiry_warning(
         &self,
         capability_code: CapabilityCode,
         executor: &mut dyn Executor,
@@ -129,19 +165,7 @@ impl<'a> SupplierCapabilityRepository<'a> {
         .await
     }
 
-    /// 查询命中任一当前有效能力的供应商角色 ID。
-    ///
-    /// # 参数
-    /// * `capability_codes` - 供应能力代码；调用方保证非空
-    /// * `as_of` - 当前业务日，格式为 `YYYY-MM-DD`
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回去重、稳定排序后的供应商角色 ID。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn list_supplier_ids_by_active_capability_codes(
+    async fn list_supplier_ids_by_active_capability_codes(
         &self,
         capability_codes: &[CapabilityCode],
         as_of: &str,

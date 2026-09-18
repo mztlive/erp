@@ -4,13 +4,16 @@ use erp_core::ids::{PayableAccountId, PayableEntryId, PurchaseLineSalesAllocatio
 use erp_core::money::Amount;
 use erp_finance::entity::payable::AllocationAction as PayableAllocationAction;
 use erp_finance::repository::PayableExt;
+use erp_finance::repository::prelude::*;
 use erp_fulfillment::entity::facts::{
     PrepaymentRequirementFact, PurchaseAllocationFact, PurchaseOrderStatusFact, PurchaseRevisionLineFact,
 };
 use erp_fulfillment::entity::fulfillment::PurchaseFulfillmentEligibility;
 use erp_procurement::entity::purchase_order::{PurchaseOrder, PurchaseOrderRevision};
 use erp_procurement::repository::PurchaseOrderExt;
+use erp_procurement::repository::prelude::*;
 use erp_sales::repository::SalesOrderExt;
+use erp_sales::repository::prelude::*;
 use mongodb::Database;
 use persistence_core::Executor;
 

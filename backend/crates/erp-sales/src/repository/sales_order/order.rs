@@ -6,7 +6,7 @@ use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{
-    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+    Executor, PageResult, Pagination, QueryFilter, Repository, Result, insert_literal_regex_filter, mongo_ops,
 };
 use serde::{Deserialize, Serialize};
 
@@ -15,7 +15,6 @@ use crate::entity::sales_order::{
     BusinessType, CommercialStatus, ReviewStatus, SalesOrder, SalesOrderId, SalesOrderLine,
 };
 use crate::repository::filter::undeleted_condition;
-use crate::repository::owned::{SalesOrderLineRepository, SalesOrderRepository};
 
 /// 销售单列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -285,7 +284,9 @@ impl Pagination for SalesOrderFilter {
     }
 }
 
-impl<'a> SalesOrderRepository<'a> {
+/// 销售单集合的域查询扩展。
+#[allow(async_fn_in_trait)]
+pub trait SalesOrderRepositoryExt {
     /// 返回未删除单据的负责人集合。当前调用入口使用资源级列表权限；S2 必须传入 v2 对象边界。
     ///
     /// # 参数
@@ -296,21 +297,11 @@ impl<'a> SalesOrderRepository<'a> {
     ///
     /// # 错误
     /// 数据库查询失败向上传播。
-    pub async fn current_owner_ids(
+    async fn current_owner_ids(
         &self,
         scope: &super::scope::SalesReadScope,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<String>> {
-        let collection = self.collection();
-        let mut query = collection.distinct(
-            "sales_owner_user_id",
-            doc! { "deleted_at": entity_core::NOT_DELETED_TIMESTAMP_BSON, "$and": [scope.document()] },
-        );
-        if let Some(session) = executor.session() {
-            query = query.session(session);
-        }
-        Ok(query.await?.into_iter().filter_map(|v| v.as_str().map(str::to_owned)).collect())
-    }
+    ) -> Result<Vec<String>>;
 
     /// 按销售单 ID 集合批量读取活跃销售单。
     ///
@@ -323,17 +314,11 @@ impl<'a> SalesOrderRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_orders_by_ids(
+    async fn find_orders_by_ids(
         &self,
         sales_order_ids: &[SalesOrderId],
         executor: &mut dyn Executor,
-    ) -> Result<Vec<SalesOrder>> {
-        if sales_order_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        let ids = sales_order_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
-        self.find_many(doc! { "id": { "$in": ids } }, executor).await
-    }
+    ) -> Result<Vec<SalesOrder>>;
 
     /// 按销售单 ID 集合批量读取已生效且可作为采购来源的销售单。
     ///
@@ -349,7 +334,125 @@ impl<'a> SalesOrderRepository<'a> {
     ///
     /// # 约束
     /// 未删除过滤与 [`Self::find_orders_by_ids`] 一致，由基类 `find_many` 统一追加。
-    pub async fn find_effective_orders_by_ids(
+    async fn find_effective_orders_by_ids(
+        &self,
+        sales_order_ids: &[SalesOrderId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesOrder>>;
+
+    /// 按稳定 ID 读取工作项当前销售单事实。
+    ///
+    /// 工作项入口的历史名称；纯主键读取，直接委托基类单条查询。
+    ///
+    /// # 参数
+    /// * `id` - 销售单 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回未删除销售单；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// # 约束
+    /// 仅查询本仓储拥有的销售单集合，不访问应收或版本集合。
+    async fn find_work_item_sales_order(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SalesOrder>>;
+
+    /// 分页检索销售单列表（投影查询）。
+    ///
+    /// 只返回 [`SalesOrderRow`] 所需的列表字段，不加载整文档；排序字段由
+    /// Service 层白名单校验后传入（api-contract §4）。
+    ///
+    /// # 参数
+    /// * `filter` - 筛选与分页条件
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回当前页投影行与满足筛选条件的总数。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    async fn search_sales_orders(
+        &self,
+        filter: &SalesOrderFilter,
+        scope: &super::scope::SalesReadScope,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<SalesOrderRow>>;
+
+    /// 装载查询的有界身份与版本集合，用于跨页及导出的一致性校验。
+    ///
+    /// # 返回
+    /// 最多 10001 行；调用方必须整体拒绝超限，不得截断版本集合。
+    ///
+    /// # 错误
+    /// 数据库读取失败时返回仓储错误。
+    async fn query_versions(
+        &self,
+        filter: &SalesOrderFilter,
+        scope: &super::scope::SalesReadScope,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<super::scope::SalesVersion>>;
+
+    /// 按销售单号字面量匹配未删除单据身份。
+    ///
+    /// # 参数
+    /// * `keyword` - 忽略大小写的单号关键词
+    /// * `executor` - 调用方执行器
+    /// # 返回
+    /// 返回全部命中身份，供消费方在分页前组合筛选。
+    /// # 错误
+    /// 查询或反序列化失败时返回仓储错误。
+    async fn matching_ids_by_number(
+        &self,
+        keyword: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesOrderId>>;
+
+    /// 判断组织是否仍有需要交接的未结单据。
+    ///
+    /// # 错误
+    /// 查询失败返回仓储错误；失败不得解释为没有业务。
+    async fn has_unsettled_business_org(
+        &self,
+        org: &str,
+        executor: &mut dyn persistence_core::Executor,
+    ) -> persistence_core::Result<bool>;
+}
+
+impl SalesOrderRepositoryExt for Repository<'_, SalesOrder> {
+    async fn current_owner_ids(
+        &self,
+        scope: &super::scope::SalesReadScope,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<String>> {
+        let collection = self.collection();
+        let mut query = collection.distinct(
+            "sales_owner_user_id",
+            doc! { "deleted_at": entity_core::NOT_DELETED_TIMESTAMP_BSON, "$and": [scope.document()] },
+        );
+        if let Some(session) = executor.session() {
+            query = query.session(session);
+        }
+        Ok(query.await?.into_iter().filter_map(|v| v.as_str().map(str::to_owned)).collect())
+    }
+
+    async fn find_orders_by_ids(
+        &self,
+        sales_order_ids: &[SalesOrderId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesOrder>> {
+        if sales_order_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ids = sales_order_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
+        self.find_many(doc! { "id": { "$in": ids } }, executor).await
+    }
+
+    async fn find_effective_orders_by_ids(
         &self,
         sales_order_ids: &[SalesOrderId],
         executor: &mut dyn Executor,
@@ -368,23 +471,7 @@ impl<'a> SalesOrderRepository<'a> {
         .await
     }
 
-    /// 按稳定 ID 读取工作项当前销售单事实。
-    ///
-    /// 工作项入口的历史名称；纯主键读取，直接委托基类单条查询。
-    ///
-    /// # 参数
-    /// * `id` - 销售单 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回未删除销售单；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或反序列化失败时返回错误。
-    ///
-    /// # 约束
-    /// 仅查询本仓储拥有的销售单集合，不访问应收或版本集合。
-    pub async fn find_work_item_sales_order(
+    async fn find_work_item_sales_order(
         &self,
         id: &str,
         executor: &mut dyn Executor,
@@ -392,20 +479,6 @@ impl<'a> SalesOrderRepository<'a> {
         self.find_by_id(id, executor).await
     }
 
-    /// 分页检索销售单列表（投影查询）。
-    ///
-    /// 只返回 [`SalesOrderRow`] 所需的列表字段，不加载整文档；排序字段由
-    /// Service 层白名单校验后传入（api-contract §4）。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
     #[tracing::instrument(
         name = "repository.sales_order.search",
         skip_all,
@@ -417,7 +490,7 @@ impl<'a> SalesOrderRepository<'a> {
             db.operation.name = "search"
         )
     )]
-    pub async fn search_sales_orders(
+    async fn search_sales_orders(
         &self,
         filter: &SalesOrderFilter,
         scope: &super::scope::SalesReadScope,
@@ -446,14 +519,8 @@ impl<'a> SalesOrderRepository<'a> {
 
         Ok(PageResult { items, total: total as i64 })
     }
-    /// 装载查询的有界身份与版本集合，用于跨页及导出的一致性校验。
-    ///
-    /// # 返回
-    /// 最多 10001 行；调用方必须整体拒绝超限，不得截断版本集合。
-    ///
-    /// # 错误
-    /// 数据库读取失败时返回仓储错误。
-    pub async fn query_versions(
+
+    async fn query_versions(
         &self,
         filter: &SalesOrderFilter,
         scope: &super::scope::SalesReadScope,
@@ -471,9 +538,39 @@ impl<'a> SalesOrderRepository<'a> {
         )
         .await
     }
+
+    async fn matching_ids_by_number(
+        &self,
+        keyword: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesOrderId>> {
+        if keyword.trim().is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut filter = undeleted_condition();
+        insert_literal_regex_filter(&mut filter, "order_no", Some(keyword));
+        let rows = mongo_ops::find_many(
+            &self.collection().clone_with_type::<SalesSearchId>(),
+            filter,
+            FindOptions::builder().projection(doc! { "id": 1, "_id": 0 }).build(),
+            executor,
+        )
+        .await?;
+        Ok(rows.into_iter().map(|row| SalesOrderId::new(row.id)).collect())
+    }
+
+    async fn has_unsettled_business_org(
+        &self,
+        org: &str,
+        executor: &mut dyn persistence_core::Executor,
+    ) -> persistence_core::Result<bool> {
+        self.exists(mongodb::bson::doc! { "business_org_unit_id": org, "commercial_status": { "$ne": "VOIDED" }, "close_status": { "$ne": "CLOSED" } }, executor).await
+    }
 }
 
-impl<'a> SalesOrderLineRepository<'a> {
+/// 销售单明细集合的域查询扩展。
+#[allow(async_fn_in_trait)]
+pub trait SalesOrderLineRepositoryExt {
     /// 列出销售单的全部稳定明细行（按行号升序）。
     ///
     /// # 参数
@@ -485,6 +582,14 @@ impl<'a> SalesOrderLineRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn list_lines_by_order(
+        &self,
+        sales_order_id: &SalesOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesOrderLine>>;
+}
+
+impl SalesOrderLineRepositoryExt for Repository<'_, SalesOrderLine> {
     #[tracing::instrument(
         name = "repository.sales_order.list_lines",
         skip_all,
@@ -496,7 +601,7 @@ impl<'a> SalesOrderLineRepository<'a> {
             db.operation.name = "find"
         )
     )]
-    pub async fn list_lines_by_order(
+    async fn list_lines_by_order(
         &self,
         sales_order_id: &SalesOrderId,
         executor: &mut dyn Executor,
@@ -605,37 +710,6 @@ struct SalesSearchId {
     id: String,
 }
 
-impl SalesOrderRepository<'_> {
-    /// 按销售单号字面量匹配未删除单据身份。
-    ///
-    /// # 参数
-    /// * `keyword` - 忽略大小写的单号关键词
-    /// * `executor` - 调用方执行器
-    /// # 返回
-    /// 返回全部命中身份，供消费方在分页前组合筛选。
-    /// # 错误
-    /// 查询或反序列化失败时返回仓储错误。
-    pub async fn matching_ids_by_number(
-        &self,
-        keyword: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<SalesOrderId>> {
-        if keyword.trim().is_empty() {
-            return Ok(Vec::new());
-        }
-        let mut filter = undeleted_condition();
-        insert_literal_regex_filter(&mut filter, "order_no", Some(keyword));
-        let rows = mongo_ops::find_many(
-            &self.collection().clone_with_type::<SalesSearchId>(),
-            filter,
-            FindOptions::builder().projection(doc! { "id": 1, "_id": 0 }).build(),
-            executor,
-        )
-        .await?;
-        Ok(rows.into_iter().map(|row| SalesOrderId::new(row.id)).collect())
-    }
-}
-
 /// 由读取模型解析的销售单关键词，不承载结构化筛选或权限。
 #[derive(Debug, Clone, Default)]
 pub struct SalesOrderSearch {
@@ -645,21 +719,6 @@ pub struct SalesOrderSearch {
     pub customer_ids: Vec<String>,
     /// 合同号命中的合同 ID。
     pub contract_ids: Vec<String>,
-}
-
-/// 未结业务组织查询用于组织停用准入。
-impl SalesOrderRepository<'_> {
-    /// 判断组织是否仍有需要交接的未结单据。
-    ///
-    /// # 错误
-    /// 查询失败返回仓储错误；失败不得解释为没有业务。
-    pub async fn has_unsettled_business_org(
-        &self,
-        org: &str,
-        executor: &mut dyn persistence_core::Executor,
-    ) -> persistence_core::Result<bool> {
-        self.exists(mongodb::bson::doc! { "business_org_unit_id": org, "commercial_status": { "$ne": "VOIDED" }, "close_status": { "$ne": "CLOSED" } }, executor).await
-    }
 }
 
 #[cfg(test)]

@@ -3,7 +3,7 @@ use erp_core::ids::SupplierAccountId;
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Error, Executor, Pagination, QueryFilter, Result, mongo_ops};
+use persistence_core::{Error, Executor, Pagination, QueryFilter, Repository, Result, mongo_ops};
 use serde::Deserialize;
 
 use super::{
@@ -55,7 +55,9 @@ impl Pagination for SupplierCommercialProfileFilter {
     }
 }
 
-impl<'a> SupplierCommercialProfileRevisionRepository<'a> {
+/// 供应商商务结算修订集合上的域查询。
+#[allow(async_fn_in_trait)]
+pub trait SupplierCommercialProfileRevisionRepositoryExt {
     /// 检索某供应商的商务版本历史（按 `revision_no` 升序，§6.2 历史查询）。
     ///
     /// # 参数
@@ -67,7 +69,15 @@ impl<'a> SupplierCommercialProfileRevisionRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_revision_history(
+    async fn list_revision_history(
+        &self,
+        supplier_id: &SupplierAccountId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierCommercialProfileRevision>>;
+}
+
+impl SupplierCommercialProfileRevisionRepositoryExt for Repository<'_, SupplierCommercialProfileRevision> {
+    async fn list_revision_history(
         &self,
         supplier_id: &SupplierAccountId,
         executor: &mut dyn Executor,

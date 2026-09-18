@@ -1,8 +1,12 @@
 //! 供应商履约状态历史查询：按订单时间线读取。
 
+#![allow(async_fn_in_trait)]
+
 use super::*;
 
-impl<'a> SupplierOrderStatusHistoryRepository<'a> {
+/// 供应商履约状态历史仓储的域查询。
+#[allow(async_fn_in_trait)]
+pub trait SupplierOrderStatusHistoryRepositoryExt {
     /// 按履约订单读取状态历史，按发生时间和主键升序排列。
     ///
     /// # 参数
@@ -14,18 +18,11 @@ impl<'a> SupplierOrderStatusHistoryRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_by_order_chronological(
+    async fn list_by_order_chronological(
         &self,
         order_id: &SupplierFulfillmentOrderId,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<SupplierOrderStatusHistory>> {
-        self.find_many_sorted(
-            doc! { "supplier_fulfillment_order_id": order_id.to_string() },
-            doc! { "occurred_at": 1, "id": 1 },
-            executor,
-        )
-        .await
-    }
+    ) -> Result<Vec<SupplierOrderStatusHistory>>;
 
     /// 按「连接 + 外部事件 ID」查找状态历史（回调幂等判定）。
     ///
@@ -42,7 +39,29 @@ impl<'a> SupplierOrderStatusHistoryRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_connection_and_event(
+    async fn find_by_connection_and_event(
+        &self,
+        connection_id: &SupplierApiConnectionId,
+        external_event_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierOrderStatusHistory>>;
+}
+
+impl SupplierOrderStatusHistoryRepositoryExt for SupplierOrderStatusHistoryRepository<'_> {
+    async fn list_by_order_chronological(
+        &self,
+        order_id: &SupplierFulfillmentOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierOrderStatusHistory>> {
+        self.find_many_sorted(
+            doc! { "supplier_fulfillment_order_id": order_id.to_string() },
+            doc! { "occurred_at": 1, "id": 1 },
+            executor,
+        )
+        .await
+    }
+
+    async fn find_by_connection_and_event(
         &self,
         connection_id: &SupplierApiConnectionId,
         external_event_id: &str,

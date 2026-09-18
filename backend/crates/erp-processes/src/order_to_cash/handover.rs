@@ -5,8 +5,7 @@
 
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
-use erp_identity::entity::organization::OrgTree;
-use erp_identity::repository::OrganizationRepository;
+use erp_identity::repository::prelude::*;
 use erp_identity::{AccessControlExt, Permission, PermissionSet, SharedRbacService};
 use erp_sales::dto::sales_order::{HandoverCandidateView, HandoverSalesOrderRequest, HandoverSalesOrderView};
 use erp_sales::repository::SalesOrderExt;
@@ -16,12 +15,14 @@ use erp_sales::service::sales_order::command::identity::{
 };
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{WorkItem, WorkItemType};
+use erp_workflow::repository::prelude::*;
 use erp_workflow::service::approval::business_adapter::ensure_separation_of_duties;
 use erp_workflow::service::approval::policy::SeparationOfDutiesPolicy;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::SalesOrderCommandProcess;
+use crate::handover_common::ensure_org_enabled;
 use crate::{Error, Result};
 
 /// 客户验收完整执行权限的固定对象类型。
@@ -334,38 +335,6 @@ async fn ensure_target_qualified(
         return Ok(());
     }
     Err(Error::Forbidden("目标账号不存在、已失效或不具备销售验收读取与执行资格".to_string()))
-}
-
-/// 校验显式目标业务组织启用状态；留空表示保留原组织。
-///
-/// # 参数
-/// * `db` - 目标数据库
-/// * `target_org` - 显式目标业务组织；`None` 或空白保留原组织
-/// * `executor` - 调用方执行器（事务外预检与原事务重验共用）
-///
-/// # 返回
-/// 留空或目标组织链路全部启用时成功。
-///
-/// # 错误
-/// 目标组织未知或链路存在停用节点时拒绝。
-///
-/// # 关键业务约束
-/// 组织不随接收人部门隐式变化；本检查不提供任何范围授权。
-async fn ensure_org_enabled(
-    db: &mongodb::Database,
-    target_org: Option<&str>,
-    executor: &mut dyn persistence_core::Executor,
-) -> Result<()> {
-    let Some(org) = target_org.map(str::trim).filter(|value| !value.is_empty()) else {
-        return Ok(());
-    };
-    let state = OrganizationRepository::new(db).state(executor).await?;
-    let tree = OrgTree::new(&state.units)?;
-    let path = tree.path(org)?;
-    if path.iter().any(|node| !node.enabled) {
-        return Err(Error::BusinessLogicError("目标业务组织已停用".to_string()));
-    }
-    Ok(())
 }
 
 /// 强制交接目标与开放审批任务的提交—审批岗位分离。

@@ -9,6 +9,7 @@ use crate::entity::approval_integration::{
 };
 use crate::error::{Error, Result};
 use crate::repository::ApprovalIntegrationExt;
+use crate::repository::prelude::*;
 
 /// 单次 outbox 领取上限。
 const OUTBOX_BATCH_LIMIT: u32 = 20;

@@ -10,7 +10,6 @@
 //! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
 
 pub mod profit_loss;
-
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::Instant;
 use erp_core::ids::{CostEntryId, SalesOrderId, SupplierAccountId};
@@ -21,11 +20,11 @@ use mongodb::options::FindOptions;
 use persistence_core::{
     Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
 };
+pub use profit_loss::{CostAllocationProfitLossExt, CostEntryProfitLossExt};
 use serde::{Deserialize, Serialize};
 
 use super::extensions::CostExt;
 use crate::entity::cost::{CostAllocation, CostBasis, CostEntry, CostScope, CostStage, CostType};
-use crate::repository::owned::{CostAllocationRepository, CostEntryRepository};
 
 /// `cost_allocation` 集合名（单一来源：`CostExt` 关联常量）。
 const COST_ALLOCATIONS: &str = <mongodb::Database as CostExt>::COST_ALLOCATIONS;
@@ -244,7 +243,8 @@ impl Pagination for CostAllocationFilter {
     }
 }
 
-impl<'a> CostEntryRepository<'a> {
+#[allow(async_fn_in_trait)]
+pub trait CostEntryRepositoryExt {
     /// 分页检索成本事实列表（投影查询）。
     ///
     /// 只返回 [`CostEntryRow`] 所需的列表字段；来源单据 ID 支持字面量模糊匹配
@@ -259,7 +259,15 @@ impl<'a> CostEntryRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_cost_entries(
+    async fn search_cost_entries(
+        &self,
+        filter: &CostEntryFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<CostEntryRow>>;
+}
+
+impl CostEntryRepositoryExt for persistence_core::Repository<'_, CostEntry> {
+    async fn search_cost_entries(
         &self,
         filter: &CostEntryFilter,
         executor: &mut dyn Executor,
@@ -282,7 +290,8 @@ impl<'a> CostEntryRepository<'a> {
     }
 }
 
-impl<'a> CostAllocationRepository<'a> {
+#[allow(async_fn_in_trait)]
+pub trait CostAllocationRepositoryExt {
     /// 分页检索成本分配列表（投影查询）。
     ///
     /// 只返回 [`CostAllocationRow`] 所需的列表字段；支持按成本事实与销售单筛选。
@@ -296,7 +305,34 @@ impl<'a> CostAllocationRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_cost_allocations(
+    async fn search_cost_allocations(
+        &self,
+        filter: &CostAllocationFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<CostAllocationRow>>;
+
+    /// 批量按成本事实集合取回分配（`$in` 一次取回，禁止 N+1）。
+    ///
+    /// 用于校验「成本分配合计等于成本事实金额」（数据模型 §6.10）。
+    ///
+    /// # 参数
+    /// * `entry_ids` - 成本事实 ID 集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配分配。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn find_allocations_by_entries(
+        &self,
+        entry_ids: &[CostEntryId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<CostAllocation>>;
+}
+
+impl CostAllocationRepositoryExt for persistence_core::Repository<'_, CostAllocation> {
+    async fn search_cost_allocations(
         &self,
         filter: &CostAllocationFilter,
         executor: &mut dyn Executor,
@@ -318,20 +354,7 @@ impl<'a> CostAllocationRepository<'a> {
         Ok(PageResult { items, total: total as i64 })
     }
 
-    /// 批量按成本事实集合取回分配（`$in` 一次取回，禁止 N+1）。
-    ///
-    /// 用于校验「成本分配合计等于成本事实金额」（数据模型 §6.10）。
-    ///
-    /// # 参数
-    /// * `entry_ids` - 成本事实 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回全部匹配分配。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_allocations_by_entries(
+    async fn find_allocations_by_entries(
         &self,
         entry_ids: &[CostEntryId],
         executor: &mut dyn Executor,
@@ -544,3 +567,4 @@ mod tests {
 }
 
 pub mod read_scope;
+pub use read_scope::{CostAllocationReadScopeExt, CostEntryReadScopeExt};

@@ -7,6 +7,7 @@ use erp_fulfillment::service::electronic_delivery_crypto::electronic_delivery_dr
 use erp_identity::SharedRbacService;
 use erp_workflow::DocumentRegistryExt;
 use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
+use erp_workflow::repository::prelude::*;
 use erp_workflow::service::approval::binding::{
     BindPublishedDefinitionCommand, BindingDecision, binding_decision,
 };

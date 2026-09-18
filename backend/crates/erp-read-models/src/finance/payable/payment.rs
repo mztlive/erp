@@ -6,9 +6,13 @@ use erp_core::ids::{FileAssetId, PartyBankAccountId, SupplierPaymentId};
 use erp_core::money::Amount;
 use erp_finance::entity::payable::{AllocationAction, PaymentAllocation, SupplierPayment};
 use erp_finance::repository::PayableExt;
+use erp_finance::repository::prelude::*;
+use erp_party::repository::prelude::*;
 use erp_party::{PartyBankAccount, PartyExt};
+use erp_supplier::repository::prelude::*;
 use erp_supplier::{SupplierAccount, SupplierExt};
 use erp_support::FileAssetExt;
+use erp_support::repository::prelude::*;
 use persistence_core::NoTransaction;
 use validator::Validate;
 

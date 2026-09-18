@@ -2,12 +2,15 @@
 
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::PartyId;
+use erp_customer::repository::prelude::*;
 use erp_customer::{
     AssignmentRole, CustomerAccount, CustomerAccountId, CustomerAccountStatus, CustomerActionBlockerView,
     CustomerAssignment, CustomerAssignmentView, CustomerExt, CustomerProfileDetailView,
     CustomerSensitiveFieldView, CustomerView,
 };
 use erp_identity::AccessControlExt;
+use erp_identity::repository::prelude::*;
+use erp_party::repository::prelude::*;
 use erp_party::{Party, PartyAddress, PartyBankAccount, PartyContact, PartyExt, PartyRevision};
 use persistence_core::NoTransaction;
 

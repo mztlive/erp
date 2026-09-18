@@ -5,10 +5,11 @@ use mongodb::bson::{Bson, Document, doc};
 use persistence_core::{Executor, Result};
 
 use super::SettlementBatchResult;
-use super::write::{amount_bson, progress_pipeline};
-use crate::repository::owned::PayableAccountRepository;
+use super::write::{PayableAccountWriteExt, amount_bson, progress_pipeline};
+use crate::entity::payable::PayableAccount;
 
-impl<'a> PayableAccountRepository<'a> {
+#[allow(async_fn_in_trait)]
+pub trait PayableAccountSettlementExt {
     /// 条件核销：增加已核销进度（不超额核销）。
     ///
     /// 原子写入口（P2 计划 §5）：以写条件而非读后判断保证
@@ -28,22 +29,13 @@ impl<'a> PayableAccountRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 更新失败时返回错误。
-    pub async fn apply_settlement(
+    async fn apply_settlement(
         &self,
         id: &str,
         amount: &Amount,
         updated_by: &str,
         executor: &mut dyn Executor,
-    ) -> Result<bool> {
-        let amount = amount_bson(amount)?;
-        let filter = settlement_guard(id, &amount);
-        self.conditional_update(
-            filter,
-            progress_pipeline("settled_total", "open_total", &amount, true, updated_by),
-            executor,
-        )
-        .await
-    }
+    ) -> Result<bool>;
 
     /// 批量条件核销：按账户聚合增量逐个执行不超额核销。
     ///
@@ -67,7 +59,58 @@ impl<'a> PayableAccountRepository<'a> {
     /// # 约束
     /// 聚合口径（同一账户增量求和、同一账户只更新一次）由 Service 经领域
     /// 计划保证；本方法不自行开启事务、不决定跨账户业务结论。
-    pub async fn apply_settlements_many(
+    async fn apply_settlements_many(
+        &self,
+        deltas: &[(PayableAccountId, Amount)],
+        updated_by: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<SettlementBatchResult>;
+
+    /// 条件核销冲减：减少已核销进度（不产生负已核销）。
+    ///
+    /// 反向核销（`REVERSE` 分配）的原子写入口：以写条件保证
+    /// `本次冲减 <= settled_total`，不满足时整个更新不生效，返回 `false`。
+    /// 用于冲正/退款时追加反向核销，防止冲减超过已核销金额。
+    ///
+    /// # 参数
+    /// * `id` - 应付往来子账 ID
+    /// * `amount` - 本次冲减含税金额（正数）
+    /// * `updated_by` - 本次更新执行人
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 冲减在已核销额度内并已生效时返回 `true`；超过已核销金额被拒绝时返回 `false`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 更新失败时返回错误。
+    async fn revert_settlement(
+        &self,
+        id: &str,
+        amount: &Amount,
+        updated_by: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<bool>;
+}
+
+impl PayableAccountSettlementExt for persistence_core::Repository<'_, PayableAccount> {
+    async fn apply_settlement(
+        &self,
+        id: &str,
+        amount: &Amount,
+        updated_by: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        let amount = amount_bson(amount)?;
+        let filter = settlement_guard(id, &amount);
+        self.conditional_update(
+            filter,
+            progress_pipeline("settled_total", "open_total", &amount, true, updated_by),
+            executor,
+        )
+        .await
+    }
+
+    async fn apply_settlements_many(
         &self,
         deltas: &[(PayableAccountId, Amount)],
         updated_by: &str,
@@ -94,24 +137,7 @@ impl<'a> PayableAccountRepository<'a> {
         Ok(SettlementBatchResult { applied, rejected })
     }
 
-    /// 条件核销冲减：减少已核销进度（不产生负已核销）。
-    ///
-    /// 反向核销（`REVERSE` 分配）的原子写入口：以写条件保证
-    /// `本次冲减 <= settled_total`，不满足时整个更新不生效，返回 `false`。
-    /// 用于冲正/退款时追加反向核销，防止冲减超过已核销金额。
-    ///
-    /// # 参数
-    /// * `id` - 应付往来子账 ID
-    /// * `amount` - 本次冲减含税金额（正数）
-    /// * `updated_by` - 本次更新执行人
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 冲减在已核销额度内并已生效时返回 `true`；超过已核销金额被拒绝时返回 `false`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 更新失败时返回错误。
-    pub async fn revert_settlement(
+    async fn revert_settlement(
         &self,
         id: &str,
         amount: &Amount,

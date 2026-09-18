@@ -1,7 +1,6 @@
 //! Approval definition and history views based on frozen workflow facts.
 use erp_sales::entity::sales_order::{CommercialStatus, ReviewStatus};
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
-use erp_workflow::service::approval::policy::ApprovalRequirement;
 
 use super::dto::{
     DocumentApprovalDefinitionView, DocumentApprovalHistoryItemView, DocumentApprovalHistoryPageView,
@@ -64,11 +63,7 @@ pub(super) fn document_approval_view_with_history(
     review: ReviewStatus,
 ) -> DocumentApprovalView {
     DocumentApprovalView {
-        requirement: match ApprovalRequirement::ProcessRequired {
-            ApprovalRequirement::ProcessRequired => "PROCESS_REQUIRED",
-            ApprovalRequirement::NoApproval => "NO_APPROVAL",
-        }
-        .to_string(),
+        requirement: "PROCESS_REQUIRED".to_string(),
         definition: binding.map(definition_view_from_binding),
         instance,
         recent_history,

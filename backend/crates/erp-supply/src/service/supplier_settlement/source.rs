@@ -20,6 +20,7 @@ use crate::entity::supplier_settlement::{
     SupplierSettlementSourceEvidenceLine, SupplierSettlementSourceEvidenceLineData,
 };
 use crate::repository::SupplierSettlementExt;
+use crate::repository::prelude::*;
 use crate::{Error, Result};
 
 impl SupplierSettlementService {

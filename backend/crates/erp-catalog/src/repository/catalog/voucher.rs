@@ -12,7 +12,6 @@ use super::shared::{in_filter, max_revision_no, sort_doc, whitelisted_sort};
 use crate::dto::catalog::VOUCHER_PROFILE_SORT_FIELDS;
 use crate::entity::catalog::{EnableStatus, Product, Sku, VoucherCategoryProfileRevision};
 use crate::repository::CatalogExt;
-use crate::repository::owned::VoucherCategoryProfileRevisionRepository;
 
 /// 卡券类目扩展修订列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -119,7 +118,9 @@ impl Pagination for VoucherCategoryProfileRevisionFilter {
     }
 }
 
-impl<'a> VoucherCategoryProfileRevisionRepository<'a> {
+/// 卡券类目扩展修订集合上的域查询。
+#[allow(async_fn_in_trait)]
+pub trait VoucherCategoryProfileRevisionRepositoryExt {
     /// 分页检索卡券类目扩展修订列表（投影查询）。
     ///
     /// 只返回 [`VoucherCategoryProfileRevisionRow`] 所需的列表字段；排序字段
@@ -134,20 +135,11 @@ impl<'a> VoucherCategoryProfileRevisionRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_voucher_category_profile_revisions(
+    async fn search_voucher_category_profile_revisions(
         &self,
         filter: &VoucherCategoryProfileRevisionFilter,
         executor: &mut dyn Executor,
-    ) -> Result<PageResult<VoucherCategoryProfileRevisionRow>> {
-        let options = FindOptions::builder()
-            .sort(voucher_revision_sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
-            .skip(filter.skip())
-            .limit(filter.limit())
-            .projection(voucher_revision_projection())
-            .build();
-        let collection = self.collection().clone_with_type::<VoucherCategoryProfileRevisionRow>();
-        super::shared::search_projected(&collection, &self.collection(), filter, options, executor).await
-    }
+    ) -> Result<PageResult<VoucherCategoryProfileRevisionRow>>;
 
     /// 查找 SKU 当前启用的卡券类目扩展修订。
     ///
@@ -163,7 +155,32 @@ impl<'a> VoucherCategoryProfileRevisionRepository<'a> {
     ///
     /// # 约束
     /// 仅查询本仓储拥有的卡券类目扩展修订集合，按 SKU 引用过滤，不访问 SKU 集合。
-    pub async fn find_active_by_sku(
+    async fn find_active_by_sku(
+        &self,
+        sku_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<VoucherCategoryProfileRevision>>;
+}
+
+impl VoucherCategoryProfileRevisionRepositoryExt
+    for persistence_core::Repository<'_, VoucherCategoryProfileRevision>
+{
+    async fn search_voucher_category_profile_revisions(
+        &self,
+        filter: &VoucherCategoryProfileRevisionFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<VoucherCategoryProfileRevisionRow>> {
+        let options = FindOptions::builder()
+            .sort(voucher_revision_sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
+            .skip(filter.skip())
+            .limit(filter.limit())
+            .projection(voucher_revision_projection())
+            .build();
+        let collection = self.collection().clone_with_type::<VoucherCategoryProfileRevisionRow>();
+        super::shared::search_projected(&collection, &self.collection(), filter, options, executor).await
+    }
+
+    async fn find_active_by_sku(
         &self,
         sku_id: &str,
         executor: &mut dyn Executor,

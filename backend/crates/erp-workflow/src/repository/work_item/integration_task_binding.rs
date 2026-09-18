@@ -8,10 +8,9 @@
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, Result, mongo_ops};
+use persistence_core::{Executor, Repository, Result, mongo_ops};
 
 use crate::entity::work_item::WorkItem;
-use crate::repository::owned::WorkItemRepository;
 
 /// 构造集成错误任务唯一责任查询的精确过滤文档。
 ///
@@ -79,7 +78,9 @@ fn unique_read_options() -> FindOptions {
     FindOptions::builder().sort(doc! { "created_at": 1, "id": 1 }).limit(2).build()
 }
 
-impl<'a> WorkItemRepository<'a> {
+/// 工作项集成责任有界读取扩展。
+#[allow(async_fn_in_trait)]
+pub trait WorkItemRepositoryIntegrationTaskBindingExt {
     /// 按集成错误任务精确查找唯一正式责任任务的有界读取（INT-R25）。
     ///
     /// 业务对象范围与旧无界读取一致（对象类型 + 对象 ID，同样排除软删除行），
@@ -99,19 +100,11 @@ impl<'a> WorkItemRepository<'a> {
     /// # 约束
     /// 只返回实体，不返回 services DTO、HTTP View 或授权结论；大于一条的损坏
     /// 结论由 Service 解释为冲突错误，本方法不裁决；不开启或提交事务。
-    pub async fn find_unique_for_integration_error_task(
+    async fn find_unique_for_integration_error_task(
         &self,
         task_id: &str,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<WorkItem>> {
-        mongo_ops::find_many(
-            &self.collection(),
-            integration_error_task_unique_filter(task_id),
-            unique_read_options(),
-            executor,
-        )
-        .await
-    }
+    ) -> Result<Vec<WorkItem>>;
 
     /// 按对账差异精确查找唯一正式责任任务的有界读取（INT-R25）。
     ///
@@ -133,7 +126,29 @@ impl<'a> WorkItemRepository<'a> {
     /// # 约束
     /// 只返回实体，不返回 services DTO、HTTP View 或授权结论；大于一条的损坏
     /// 结论由 Service 解释为冲突错误，本方法不裁决；不开启或提交事务。
-    pub async fn find_unique_for_reconciliation_difference(
+    async fn find_unique_for_reconciliation_difference(
+        &self,
+        difference_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItem>>;
+}
+
+impl WorkItemRepositoryIntegrationTaskBindingExt for Repository<'_, WorkItem> {
+    async fn find_unique_for_integration_error_task(
+        &self,
+        task_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItem>> {
+        mongo_ops::find_many(
+            &self.collection(),
+            integration_error_task_unique_filter(task_id),
+            unique_read_options(),
+            executor,
+        )
+        .await
+    }
+
+    async fn find_unique_for_reconciliation_difference(
         &self,
         difference_id: &str,
         executor: &mut dyn Executor,

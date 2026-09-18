@@ -12,15 +12,16 @@ use erp_catalog::{
 use erp_core::common::time::Instant;
 use erp_identity::SharedRbacService;
 use erp_identity::access_control::{ResolvedScope, ScopeClause, ScopedObject};
-use erp_identity::entity::organization::OrgTree;
-use erp_identity::entity::organization_change::OrganizationState;
-use erp_identity::repository::OrganizationRepository;
 use erp_identity::service::access_control::consumers::registration;
 use erp_identity::service::access_control::resolve::DataScopeService;
 use mongodb::Database;
 use persistence_core::Executor;
 
 use super::catalog::{MongoCatalogAudit, MongoCatalogFileAssets};
+use super::identity_error::map_identity_error;
+use super::scope_support::{expand_org_ids, load_organization_state, member_ids};
+
+map_identity_error!(erp_catalog);
 
 /// 组合层商品范围 adapter，持有身份域解析所需依赖。
 #[derive(Clone)]
@@ -92,8 +93,8 @@ impl CatalogDataScopePort for MongoCatalogDataScope {
         include_descendants: bool,
         executor: &mut dyn Executor,
     ) -> erp_catalog::Result<BTreeSet<String>> {
-        let state = organization_state(&self.db, executor).await?;
-        expand_org_units(&state, org_unit_ids, include_descendants)
+        let state = load_organization_state(&self.db, executor).await?;
+        expand_org_ids(&state, org_unit_ids, include_descendants).map_err(map_identity_error)
     }
 
     async fn org_member_ids(
@@ -102,7 +103,7 @@ impl CatalogDataScopePort for MongoCatalogDataScope {
         at: Instant,
         executor: &mut dyn Executor,
     ) -> erp_catalog::Result<Vec<String>> {
-        let state = organization_state(&self.db, executor).await?;
+        let state = load_organization_state(&self.db, executor).await?;
         Ok(member_ids(&state, org_unit_ids, at))
     }
 
@@ -112,89 +113,9 @@ impl CatalogDataScopePort for MongoCatalogDataScope {
         at: Instant,
         executor: &mut dyn Executor,
     ) -> erp_catalog::Result<Option<String>> {
-        let state = organization_state(&self.db, executor).await?;
+        let state = load_organization_state(&self.db, executor).await?;
         Ok(state.own_org(user_id, at).map_err(map_identity_error)?.map(str::to_string))
     }
-}
-
-/// 在调用方事务内读取组织快照。
-///
-/// # 参数
-/// * `db` - 身份数据库
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回同一事务中的组织状态。
-///
-/// # 错误
-/// 组织集合读取失败时拒绝。
-///
-/// # 关键业务约束
-/// 不得另开事务或换成 `NoTransaction`。
-async fn organization_state(
-    db: &Database,
-    executor: &mut dyn Executor,
-) -> erp_catalog::Result<OrganizationState> {
-    Ok(OrganizationRepository::new(db).state(executor).await?)
-}
-
-/// 展开启用组织及其可选下级。
-///
-/// # 参数
-/// * `state` - 当前组织事实
-/// * `org_ids` - 请求中的组织 ID
-/// * `include_descendants` - 是否包含有效下级
-///
-/// # 返回
-/// 返回启用节点的组织 ID 集合。
-///
-/// # 错误
-/// 未知组织或组织树非法时拒绝。
-///
-/// # 关键业务约束
-/// 筛选只能收窄授权结果，不得忽略未知组织。
-fn expand_org_units(
-    state: &OrganizationState,
-    org_ids: &[String],
-    include_descendants: bool,
-) -> erp_catalog::Result<BTreeSet<String>> {
-    let tree = OrgTree::new(&state.units).map_err(map_identity_error)?;
-    let mut expanded = BTreeSet::new();
-    for id in org_ids {
-        expanded.extend(tree.expand(id, include_descendants).map_err(map_identity_error)?);
-    }
-    Ok(expanded)
-}
-
-/// 读取指定组织在给定时点的有效主属成员。
-///
-/// # 参数
-/// * `state` - 组织事实
-/// * `org_ids` - 内部组织集合
-/// * `at` - 授权时点
-///
-/// # 返回
-/// 返回排序去重后的人员 ID。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 过期或未生效成员不得进入当前维护人组织筛选。
-fn member_ids(state: &OrganizationState, org_ids: &BTreeSet<String>, at: Instant) -> Vec<String> {
-    let mut ids = state
-        .memberships
-        .iter()
-        .filter(|membership| {
-            !membership.base.is_deleted()
-                && org_ids.contains(&membership.org_unit_id)
-                && membership.validity.contains(at)
-        })
-        .map(|membership| membership.user_id.clone())
-        .collect::<Vec<_>>();
-    ids.sort();
-    ids.dedup();
-    ids
 }
 
 /// 将身份域已解析授权转换为商品 Port 事实。
@@ -254,39 +175,6 @@ fn map_clause(clause: &ScopeClause) -> erp_catalog::Result<CatalogResolvedClause
         collaborative: clause.collaborative,
         org_unit_ids: clause.org_unit_ids.iter().cloned().collect(),
     })
-}
-
-/// 将身份域错误映射为商品领域错误。
-///
-/// # 参数
-/// * `error` - 身份域错误
-///
-/// # 返回
-/// 返回同构载荷的商品错误；RBAC 内部失败归入系统错误。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 不得把身份域 Forbidden 改写成校验通过后的空集。
-fn map_identity_error(error: erp_identity::Error) -> erp_catalog::Error {
-    match error {
-        erp_identity::Error::Internal(payload) => erp_catalog::Error::Internal(payload),
-        erp_identity::Error::NotFound(payload) => erp_catalog::Error::NotFound(payload),
-        erp_identity::Error::ValidationError(payload) => erp_catalog::Error::ValidationError(payload),
-        erp_identity::Error::BusinessLogicError(payload) => erp_catalog::Error::BusinessLogicError(payload),
-        erp_identity::Error::ConflictError(payload) => erp_catalog::Error::ConflictError(payload),
-        erp_identity::Error::ReceiptDuplicate(payload) => erp_catalog::Error::ReceiptDuplicate(payload),
-        erp_identity::Error::TransientTransaction(payload) => {
-            erp_catalog::Error::TransientTransaction(payload)
-        },
-        erp_identity::Error::Forbidden(payload) => erp_catalog::Error::Forbidden(payload),
-        erp_identity::Error::Unauthenticated(payload) => erp_catalog::Error::Unauthenticated(payload),
-        erp_identity::Error::Logic(payload) => erp_catalog::Error::Logic(payload),
-        erp_identity::Error::Rbac(payload) => erp_catalog::Error::Internal(payload),
-        erp_identity::Error::OutcomeUnknown(payload) => erp_catalog::Error::OutcomeUnknown(payload),
-        erp_identity::Error::RepositoryError(payload) => erp_catalog::Error::RepositoryError(payload),
-    }
 }
 
 /// 将本域已解析事实无损转回公共判定输入，不读取或重解释原始规则。

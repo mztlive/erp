@@ -14,6 +14,7 @@ use crate::entity::fulfillment::{
     PurchaseReceipt, PurchaseReceiptData, PurchaseReceiptLine, PurchaseReceiptLineBatch,
 };
 use crate::repository::FulfillmentExt;
+use crate::repository::prelude::*;
 use crate::{Error, Result};
 /// 采购入库单列表筛选条件类型（经 `FulfillmentExt` 关联类型跨 crate 可达）。
 type PurchaseReceiptFilter = <mongodb::Database as FulfillmentExt>::PurchaseReceiptFilter;
@@ -48,9 +49,8 @@ impl FulfillmentService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: super::sort_ascending(query.paging.sort_dir),
         };
-        let page = self.db.purchase_receipts().search_purchase_receipts(&filter, &mut NoTransaction).await?;
         super::map_search_page(
-            async { Ok(page) },
+            self.db.purchase_receipts().search_purchase_receipts(&filter, &mut NoTransaction),
             |row| PurchaseReceiptView {
                 id: row.id,
                 receipt_no: row.receipt_no,

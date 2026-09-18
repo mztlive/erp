@@ -25,13 +25,18 @@ mod receipt;
 pub mod customer_center;
 
 mod snapshot;
+pub use snapshot::{ReceivableAccountSnapshotExt, ReceivableEntrySnapshotExt};
 
 mod sales_order_summary;
-
-pub use account::{ReceivableAccountFilter, SettlementBatchResult};
+pub use account::{ReceivableAccountFilter, ReceivableAccountRepositoryExt, SettlementBatchResult};
 pub use command::{ReceivableListScope, ScopedCustomerReceiptQuery, ScopedInvoiceQuery};
-pub use invoice::{InvoiceFilter, InvoiceRow};
-pub use receipt::{CustomerReceiptFilter, CustomerReceiptRow};
+pub use customer_center::ReceivableAccountCustomerCenterExt;
+pub use entry::{ReceivableEntryOffsetRepositoryExt, ReceivableEntryRepositoryExt};
+pub use invoice::{InvoiceFilter, InvoiceRepositoryExt, InvoiceRow, SalesInvoiceAllocationRepositoryExt};
+pub use receipt::{
+    CustomerReceiptFilter, CustomerReceiptRepositoryExt, CustomerReceiptRow, ReceiptAllocationRepositoryExt,
+};
+pub use sales_order_summary::ReceivableAccountSalesOrderSummaryExt;
 
 /// `receivable_entry` 集合名（单一来源：`ReceivableExt` 关联常量）。
 const RECEIVABLE_ENTRIES: &str = <mongodb::Database as ReceivableExt>::RECEIVABLE_ENTRIES;
@@ -73,5 +78,7 @@ pub(super) fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&
 }
 
 pub mod money_progress;
+pub use money_progress::ReceivableAccountMoneyProgressExt;
 
 mod invoice_request;
+pub use invoice_request::SalesInvoiceRequestRepositoryExt;

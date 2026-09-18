@@ -10,6 +10,7 @@ use erp_sales::entity::sales_order::SalesOrder;
 use erp_sales::repository::SalesOrderExt;
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
+use erp_workflow::repository::prelude::*;
 use id_generator::next_id;
 use persistence_core::Executor;
 use rust_decimal::Decimal;

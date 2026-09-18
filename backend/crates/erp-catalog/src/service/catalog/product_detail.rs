@@ -15,6 +15,7 @@ use crate::dto::{
 };
 use crate::error::{Error, Result};
 use crate::repository::CatalogExt;
+use crate::repository::prelude::*;
 
 impl CatalogService {
     /// 读取指定商品的全部修订（强制路径商品，倒序）。

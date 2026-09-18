@@ -3,12 +3,11 @@ use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{
-    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+    Executor, PageResult, Pagination, QueryFilter, Repository, Result, insert_literal_regex_filter, mongo_ops,
 };
 use serde::Deserialize;
 
 use crate::entity::AuditLog;
-use crate::repository::owned::AuditLogRepository;
 
 #[derive(Debug, Deserialize)]
 struct CommandReceiptRow {
@@ -35,12 +34,205 @@ impl From<CommandReceiptRow> for CommandReceiptFact {
     }
 }
 
-impl<'a> AuditLogRepository<'a> {
+/// 职责分离校验的最小审计事实投影（FIN-R13）。
+///
+/// 只携带策略解释所需的 actor/action/资源三元组；调用方 Service 继续解释
+/// SoD 政策、当前 actor 与拒绝文案。
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct SeparationAuditFact {
+    /// 资源类型稳定代码。
+    pub resource_type: String,
+    /// 资源业务 ID。
+    pub resource_id: Option<String>,
+    /// 经办人账号 ID。
+    pub actor_id: String,
+    /// 审计动作（含版本化后缀，如 `customer_receipt.post:`）。
+    pub action: String,
+}
+
+/// 映射任务审计的资源类型稳定代码（erp-audit-002）。
+///
+/// 四个资源审计查询的 `MASTER_MAPPING_TASK` 字面量唯一来源。
+const MASTER_MAPPING_TASK_RESOURCE: &str = "MASTER_MAPPING_TASK";
+
+/// 审计日志集合上的领域查询与批量写入。
+#[allow(async_fn_in_trait)]
+pub trait AuditLogRepositoryExt {
     /// 按当前及历史候选 ID 批量读取命令收据最小事实。
     ///
     /// 空集合不访问数据库；返回顺序不表达收据优先级，调用方必须
     /// 按候选 ID 顺序选择当前格式或历史格式。
-    pub async fn find_command_receipts_by_ids(
+    async fn find_command_receipts_by_ids(
+        &self,
+        ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<CommandReceiptFact>>;
+
+    /// 在调用方执行器内有序批量创建审计日志。
+    ///
+    /// 空集合直接返回且不访问数据库；完整原子性由调用方事务负责。
+    ///
+    /// # 参数
+    /// * `logs` - 按对应业务事实顺序排列的审计日志
+    /// * `executor` - 调用方事务或非事务执行器
+    ///
+    /// # 错误
+    /// 插入失败时返回包含 MongoDB 批量写错误索引的仓储错误。
+    async fn create_many_ordered(&self, logs: &[AuditLog], executor: &mut dyn Executor) -> Result<()>;
+
+    /// 按条件检索审计日志列表。
+    ///
+    /// # 参数
+    /// * `filter` - 审计日志筛选条件
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回值
+    /// 返回分页后的审计日志集合
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或计数失败时返回错误。
+    async fn search_logs(
+        &self,
+        filter: &AuditLogFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<AuditLog>>;
+
+    /// 按资源读取全部成功审计事实。
+    ///
+    /// # 参数
+    /// * `resource_type` - 资源类型稳定代码
+    /// * `resource_id` - 资源业务 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回该资源全部成功且未删除的审计日志；调用方按业务动作判定所需事实。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn list_successful_by_resource(
+        &self,
+        resource_type: &str,
+        resource_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<AuditLog>>;
+
+    /// 按资源 pair 集合批量返回最小职责分离事实（FIN-R13）。
+    ///
+    /// 单次 `$or` 查询全部 `(resource_type, resource_id)` 的成功审计，
+    /// 只投影 actor/action/资源三元组；空输入不访问数据库。仅成功事件计入
+    /// 证据，非正式动作由 Service 按前缀判定，本方法不解释 SoD 政策。
+    ///
+    /// # 参数
+    /// * `pairs` - 资源 pair 集合，每项为 `(resource_type, resource_id)`
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部命中资源的最小事实；无命中返回空集合（调用方 fail closed）。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    async fn list_separation_facts_by_resources(
+        &self,
+        pairs: &[(String, String)],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SeparationAuditFact>>;
+
+    /// 查询映射任务的不可变审计时间线。
+    ///
+    /// # 参数
+    /// * `mapping_task_id` - 映射任务 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回资源匹配的审计记录，按创建时间与 ID 升序排列。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    ///
+    /// # 约束
+    /// 仅查询本仓储拥有的审计日志集合，按资源引用过滤映射任务，不访问映射任务集合。
+    async fn list_master_mapping_task_history(
+        &self,
+        mapping_task_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<AuditLog>>;
+
+    /// 按页面映射任务 ID 集合批量加载不可变审计时间线（INT-R17）。
+    ///
+    /// 一次 `$in` 查询装载本页全部任务的审计记录，按任务归组由 Service 解释；
+    /// 返回整体按创建时间与 ID 稳定排序，不承诺与输入一致。
+    ///
+    /// # 参数
+    /// * `mapping_task_ids` - 本页映射任务 ID 集合；空集合直接返回空结果
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配的审计记录；缺项表示该任务尚无历史。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    ///
+    /// # 约束
+    /// 仅查询本仓储拥有的审计日志集合，不访问映射任务集合；不裁决最新语义。
+    async fn list_master_mapping_task_histories(
+        &self,
+        mapping_task_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<AuditLog>>;
+
+    /// 批量读取指定资源的成功创建审计。
+    ///
+    /// 工作项简报 hydration 入口：只返回动作固定为 `<resource_type>.create` 的
+    /// 成功审计，供调用方解析创建人事实。
+    ///
+    /// # 参数
+    /// * `resource_type` - 资源类型
+    /// * `resource_ids` - 资源 ID 集合；为空时直接返回空集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回动作固定为 `<resource_type>.create` 的成功审计。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// # 约束
+    /// 仅查询本仓储拥有的审计日志集合，不访问业务资源集合。
+    async fn list_work_item_creation_audits(
+        &self,
+        resource_type: &str,
+        resource_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<AuditLog>>;
+
+    /// 批量读取指定资源的全部成功工作项事实审计。
+    ///
+    /// 工作项简报 hydration 入口：返回资源类型和 ID 命中的全部成功审计，
+    /// 调用方按业务动作判定所需事实。
+    ///
+    /// # 参数
+    /// * `resource_type` - 资源类型
+    /// * `resource_ids` - 资源 ID 集合；为空时直接返回空集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回资源类型和 ID 命中的全部成功审计。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// # 约束
+    /// 仅查询本仓储拥有的审计日志集合，不访问业务资源集合。
+    async fn list_successful_work_item_fact_audits(
+        &self,
+        resource_type: &str,
+        resource_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<AuditLog>>;
+}
+
+impl AuditLogRepositoryExt for Repository<'_, AuditLog> {
+    async fn find_command_receipts_by_ids(
         &self,
         ids: &[String],
         executor: &mut dyn Executor,
@@ -73,17 +265,7 @@ impl<'a> AuditLogRepository<'a> {
         Ok(rows.into_iter().map(Into::into).collect())
     }
 
-    /// 在调用方执行器内有序批量创建审计日志。
-    ///
-    /// 空集合直接返回且不访问数据库；完整原子性由调用方事务负责。
-    ///
-    /// # 参数
-    /// * `logs` - 按对应业务事实顺序排列的审计日志
-    /// * `executor` - 调用方事务或非事务执行器
-    ///
-    /// # 错误
-    /// 插入失败时返回包含 MongoDB 批量写错误索引的仓储错误。
-    pub async fn create_many_ordered(&self, logs: &[AuditLog], executor: &mut dyn Executor) -> Result<()> {
+    async fn create_many_ordered(&self, logs: &[AuditLog], executor: &mut dyn Executor) -> Result<()> {
         if logs.is_empty() {
             return Ok(());
         }
@@ -91,18 +273,7 @@ impl<'a> AuditLogRepository<'a> {
         Ok(())
     }
 
-    /// 按条件检索审计日志列表。
-    ///
-    /// # 参数
-    /// * `filter` - 审计日志筛选条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回值
-    /// 返回分页后的审计日志集合
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或计数失败时返回错误。
-    pub async fn search_logs(
+    async fn search_logs(
         &self,
         filter: &AuditLogFilter,
         executor: &mut dyn Executor,
@@ -110,19 +281,7 @@ impl<'a> AuditLogRepository<'a> {
         self.search(filter, executor).await
     }
 
-    /// 按资源读取全部成功审计事实。
-    ///
-    /// # 参数
-    /// * `resource_type` - 资源类型稳定代码
-    /// * `resource_id` - 资源业务 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回该资源全部成功且未删除的审计日志；调用方按业务动作判定所需事实。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_successful_by_resource(
+    async fn list_successful_by_resource(
         &self,
         resource_type: &str,
         resource_id: &str,
@@ -138,41 +297,8 @@ impl<'a> AuditLogRepository<'a> {
         )
         .await
     }
-}
 
-/// 职责分离校验的最小审计事实投影（FIN-R13）。
-///
-/// 只携带策略解释所需的 actor/action/资源三元组；调用方 Service 继续解释
-/// SoD 政策、当前 actor 与拒绝文案。
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-pub struct SeparationAuditFact {
-    /// 资源类型稳定代码。
-    pub resource_type: String,
-    /// 资源业务 ID。
-    pub resource_id: Option<String>,
-    /// 经办人账号 ID。
-    pub actor_id: String,
-    /// 审计动作（含版本化后缀，如 `customer_receipt.post:`）。
-    pub action: String,
-}
-
-impl<'a> AuditLogRepository<'a> {
-    /// 按资源 pair 集合批量返回最小职责分离事实（FIN-R13）。
-    ///
-    /// 单次 `$or` 查询全部 `(resource_type, resource_id)` 的成功审计，
-    /// 只投影 actor/action/资源三元组；空输入不访问数据库。仅成功事件计入
-    /// 证据，非正式动作由 Service 按前缀判定，本方法不解释 SoD 政策。
-    ///
-    /// # 参数
-    /// * `pairs` - 资源 pair 集合，每项为 `(resource_type, resource_id)`
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回全部命中资源的最小事实；无命中返回空集合（调用方 fail closed）。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或反序列化失败时返回错误。
-    pub async fn list_separation_facts_by_resources(
+    async fn list_separation_facts_by_resources(
         &self,
         pairs: &[(String, String)],
         executor: &mut dyn Executor,
@@ -210,29 +336,14 @@ impl<'a> AuditLogRepository<'a> {
         )
         .await
     }
-}
 
-impl<'a> AuditLogRepository<'a> {
-    /// 查询映射任务的不可变审计时间线。
-    ///
-    /// # 参数
-    /// * `mapping_task_id` - 映射任务 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回资源匹配的审计记录，按创建时间与 ID 升序排列。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    ///
-    /// # 约束
-    /// 仅查询本仓储拥有的审计日志集合，按资源引用过滤映射任务，不访问映射任务集合。
-    pub async fn list_master_mapping_task_history(
+    async fn list_master_mapping_task_history(
         &self,
         mapping_task_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Vec<AuditLog>> {
-        self.find_mapping_task_history(
+        find_mapping_task_history(
+            self,
             doc! {
                 "resource_type": MASTER_MAPPING_TASK_RESOURCE,
                 "resource_id": mapping_task_id,
@@ -242,24 +353,7 @@ impl<'a> AuditLogRepository<'a> {
         .await
     }
 
-    /// 按页面映射任务 ID 集合批量加载不可变审计时间线（INT-R17）。
-    ///
-    /// 一次 `$in` 查询装载本页全部任务的审计记录，按任务归组由 Service 解释；
-    /// 返回整体按创建时间与 ID 稳定排序，不承诺与输入一致。
-    ///
-    /// # 参数
-    /// * `mapping_task_ids` - 本页映射任务 ID 集合；空集合直接返回空结果
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回全部匹配的审计记录；缺项表示该任务尚无历史。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    ///
-    /// # 约束
-    /// 仅查询本仓储拥有的审计日志集合，不访问映射任务集合；不裁决最新语义。
-    pub async fn list_master_mapping_task_histories(
+    async fn list_master_mapping_task_histories(
         &self,
         mapping_task_ids: &[String],
         executor: &mut dyn Executor,
@@ -267,7 +361,8 @@ impl<'a> AuditLogRepository<'a> {
         if mapping_task_ids.is_empty() {
             return Ok(Vec::new());
         }
-        self.find_mapping_task_history(
+        find_mapping_task_history(
+            self,
             doc! {
                 "resource_type": MASTER_MAPPING_TASK_RESOURCE,
                 "resource_id": { "$in": mapping_task_ids },
@@ -277,31 +372,14 @@ impl<'a> AuditLogRepository<'a> {
         .await
     }
 
-    /// 批量读取指定资源的成功创建审计。
-    ///
-    /// 工作项简报 hydration 入口：只返回动作固定为 `<resource_type>.create` 的
-    /// 成功审计，供调用方解析创建人事实。
-    ///
-    /// # 参数
-    /// * `resource_type` - 资源类型
-    /// * `resource_ids` - 资源 ID 集合；为空时直接返回空集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回动作固定为 `<resource_type>.create` 的成功审计。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或反序列化失败时返回错误。
-    ///
-    /// # 约束
-    /// 仅查询本仓储拥有的审计日志集合，不访问业务资源集合。
-    pub async fn list_work_item_creation_audits(
+    async fn list_work_item_creation_audits(
         &self,
         resource_type: &str,
         resource_ids: &[String],
         executor: &mut dyn Executor,
     ) -> Result<Vec<AuditLog>> {
-        self.find_work_item_audits(
+        find_work_item_audits(
+            self,
             resource_type,
             resource_ids,
             Some(format!("{resource_type}.create")),
@@ -310,89 +388,64 @@ impl<'a> AuditLogRepository<'a> {
         .await
     }
 
-    /// 批量读取指定资源的全部成功工作项事实审计。
-    ///
-    /// 工作项简报 hydration 入口：返回资源类型和 ID 命中的全部成功审计，
-    /// 调用方按业务动作判定所需事实。
-    ///
-    /// # 参数
-    /// * `resource_type` - 资源类型
-    /// * `resource_ids` - 资源 ID 集合；为空时直接返回空集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回资源类型和 ID 命中的全部成功审计。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或反序列化失败时返回错误。
-    ///
-    /// # 约束
-    /// 仅查询本仓储拥有的审计日志集合，不访问业务资源集合。
-    pub async fn list_successful_work_item_fact_audits(
+    async fn list_successful_work_item_fact_audits(
         &self,
         resource_type: &str,
         resource_ids: &[String],
         executor: &mut dyn Executor,
     ) -> Result<Vec<AuditLog>> {
-        self.find_work_item_audits(resource_type, resource_ids, None, executor).await
+        find_work_item_audits(self, resource_type, resource_ids, None, executor).await
     }
 }
 
-impl<'a> AuditLogRepository<'a> {
-    /// 按资源批量读取成功工作项审计的唯一入口（erp-audit-002）。
-    ///
-    /// 空集合直接返回且不访问数据库；`action` 为 `Some` 时限定固定创建动作，
-    /// 为 `None` 时返回全部成功事实。
-    ///
-    /// # 参数
-    /// * `resource_type` - 资源类型
-    /// * `resource_ids` - 资源 ID 集合；为空时直接返回空集合
-    /// * `action` - 限定的审计动作；`None` 表示全部成功事实
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回命中的成功审计。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或反序列化失败时返回错误。
-    async fn find_work_item_audits(
-        &self,
-        resource_type: &str,
-        resource_ids: &[String],
-        action: Option<String>,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<AuditLog>> {
-        if resource_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        self.find_many(work_item_resource_filter(resource_type, resource_ids, action), executor).await
-    }
-}
-
-/// 映射任务审计的资源类型稳定代码（erp-audit-002）。
+/// 按资源批量读取成功工作项审计的唯一入口（erp-audit-002）。
 ///
-/// 四个资源审计查询的 `MASTER_MAPPING_TASK` 字面量唯一来源。
-const MASTER_MAPPING_TASK_RESOURCE: &str = "MASTER_MAPPING_TASK";
-
-impl<'a> AuditLogRepository<'a> {
-    /// 按过滤条件返回映射任务审计时间线（erp-audit-002）。
-    ///
-    /// # 参数
-    /// * `filter` - 资源引用过滤条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回按创建时间与 ID 升序排列的审计记录。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    async fn find_mapping_task_history(
-        &self,
-        filter: Document,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<AuditLog>> {
-        self.find_many_sorted(filter, doc! { "created_at": 1, "id": 1 }, executor).await
+/// 空集合直接返回且不访问数据库；`action` 为 `Some` 时限定固定创建动作，
+/// 为 `None` 时返回全部成功事实。
+///
+/// # 参数
+/// * `repo` - 审计日志仓储
+/// * `resource_type` - 资源类型
+/// * `resource_ids` - 资源 ID 集合；为空时直接返回空集合
+/// * `action` - 限定的审计动作；`None` 表示全部成功事实
+/// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+///
+/// # 返回
+/// 返回命中的成功审计。
+///
+/// # 错误
+/// 当 MongoDB 查询或反序列化失败时返回错误。
+async fn find_work_item_audits(
+    repo: &Repository<'_, AuditLog>,
+    resource_type: &str,
+    resource_ids: &[String],
+    action: Option<String>,
+    executor: &mut dyn Executor,
+) -> Result<Vec<AuditLog>> {
+    if resource_ids.is_empty() {
+        return Ok(Vec::new());
     }
+    repo.find_many(work_item_resource_filter(resource_type, resource_ids, action), executor).await
+}
+
+/// 按过滤条件返回映射任务审计时间线（erp-audit-002）。
+///
+/// # 参数
+/// * `repo` - 审计日志仓储
+/// * `filter` - 资源引用过滤条件
+/// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+///
+/// # 返回
+/// 返回按创建时间与 ID 升序排列的审计记录。
+///
+/// # 错误
+/// 当 MongoDB 查询或游标读取失败时返回错误。
+async fn find_mapping_task_history(
+    repo: &Repository<'_, AuditLog>,
+    filter: Document,
+    executor: &mut dyn Executor,
+) -> Result<Vec<AuditLog>> {
+    repo.find_many_sorted(filter, doc! { "created_at": 1, "id": 1 }, executor).await
 }
 
 /// 组装工作项资源审计过滤条件（erp-audit-002）。
@@ -489,6 +542,8 @@ mod tests {
     use persistence_core::{Pagination, QueryFilter};
 
     use super::AuditLogFilter;
+    use crate::repository::owned::AuditLogRepository;
+    use crate::repository::prelude::*;
 
     #[test]
     fn audit_log_filter_default_starts_at_page_one_size_twenty() {
@@ -511,12 +566,10 @@ mod tests {
     /// 空资源集合直接返回空且不访问数据库。
     #[tokio::test]
     async fn separation_facts_empty_input_returns_empty_without_db() {
-        use crate::repository::owned::AuditLogRepository;
         let client =
             mongodb::Client::with_uri_str("mongodb://127.0.0.1:1").await.expect("客户端句柄创建失败");
         let database = client.database("unused");
         let repository = AuditLogRepository::new(&database, "audit_logs");
-        let repository: super::AuditLogRepository<'_> = repository;
         let facts = repository
             .list_separation_facts_by_resources(&[], &mut persistence_core::NoTransaction)
             .await

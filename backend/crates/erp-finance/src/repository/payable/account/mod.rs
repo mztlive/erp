@@ -13,6 +13,10 @@ mod query;
 mod settlement;
 mod write;
 
+pub use invoicing::PayableAccountInvoicingExt;
+pub use query::PayableAccountRepositoryExt;
+pub use settlement::PayableAccountSettlementExt;
+
 #[cfg(test)]
 mod tests;
 

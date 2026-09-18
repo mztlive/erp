@@ -12,6 +12,7 @@ use super::SalesReviewService;
 use crate::dto::sales_review::CreateSalesChangeOrderRequest;
 use crate::entity::sales_order::{SalesContentHash, SalesOrderWorkingCopyLineData, WorkingPurpose};
 use crate::entity::sales_review::{SalesChangeOrder, SalesChangeOrderData};
+use crate::repository::prelude::*;
 use crate::repository::{SalesOrderExt, SalesReviewExt};
 use crate::{Error, Result};
 

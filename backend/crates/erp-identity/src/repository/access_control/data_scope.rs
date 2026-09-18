@@ -3,12 +3,12 @@
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Repository, Result, mongo_ops};
 use serde::{Deserialize, Serialize};
 
 use super::{data_scope_projection, sort_doc};
 use crate::entity::access_control::{DataScope, DataScopeSubjectType, DataScopeType};
-use crate::repository::owned::DataScopeRepository;
+
 /// 数据范围列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DataScopeRow {
@@ -125,28 +125,19 @@ impl Pagination for DataScopeFilter {
     }
 }
 
-impl<'a> DataScopeRepository<'a> {
+/// 数据范围集合仓储的域特有查询。
+#[allow(async_fn_in_trait)]
+pub trait DataScopeRepositoryExt {
     /// 查询主体资源的全部配置留痕，包含撤销记录，防止初始化恢复授权。
     ///
     /// # 错误
     /// 底层读取失败时返回仓储错误。
-    pub async fn has_subject_resource_history(
+    async fn has_subject_resource_history(
         &self,
         role_id: &str,
         resource: &str,
         executor: &mut dyn Executor,
-    ) -> Result<bool> {
-        let collection = self
-            .database()
-            .collection::<Document>(<mongodb::Database as crate::AccessControlExt>::DATA_SCOPES);
-        Ok(persistence_core::mongo_ops::find_one(
-            &collection,
-            doc! { "subject_type": "role", "subject_id": role_id, "resource": resource },
-            executor,
-        )
-        .await?
-        .is_some())
-    }
+    ) -> Result<bool>;
 
     /// 判断指定主体是否存在至少一个未软删除的数据范围。
     ///
@@ -162,21 +153,12 @@ impl<'a> DataScopeRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询失败时返回错误。
-    pub async fn exists_by_subject(
+    async fn exists_by_subject(
         &self,
         subject_type: DataScopeSubjectType,
         subject_id: &str,
         executor: &mut dyn Executor,
-    ) -> Result<bool> {
-        self.exists(
-            doc! {
-                "subject_type": subject_type.as_str(),
-                "subject_id": subject_id,
-            },
-            executor,
-        )
-        .await
-    }
+    ) -> Result<bool>;
 
     /// 分页检索数据范围列表（投影查询）。
     ///
@@ -191,23 +173,11 @@ impl<'a> DataScopeRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_data_scopes(
+    async fn search_data_scopes(
         &self,
         filter: &DataScopeFilter,
         executor: &mut dyn Executor,
-    ) -> Result<PageResult<DataScopeRow>> {
-        let options = FindOptions::builder()
-            .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
-            .skip(filter.skip())
-            .limit(filter.limit())
-            .projection(data_scope_projection())
-            .build();
-        let collection = self.collection().clone_with_type::<DataScopeRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
-        Ok(PageResult { items, total: total as i64 })
-    }
+    ) -> Result<PageResult<DataScopeRow>>;
 
     /// 检测未迁移的个人上限；旧个人规则不能因 v2 过滤而丢失收窄效果。
     ///
@@ -218,13 +188,7 @@ impl<'a> DataScopeRepository<'a> {
     /// 存在未软删除且非 v2 的个人规则时为 true。
     /// # 错误
     /// 数据库错误传播，不转换为无上限。
-    pub async fn has_legacy_user_limit(&self, user_id: &str, executor: &mut dyn Executor) -> Result<bool> {
-        self.exists(
-            doc! { "subject_type": "user", "subject_id": user_id, "schema_version": { "$ne": 2 } },
-            executor,
-        )
-        .await
-    }
+    async fn has_legacy_user_limit(&self, user_id: &str, executor: &mut dyn Executor) -> Result<bool>;
 
     /// 按单个主体取回数据范围。
     ///
@@ -238,23 +202,12 @@ impl<'a> DataScopeRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_by_subject(
+    async fn list_by_subject(
         &self,
         subject_type: DataScopeSubjectType,
         subject_id: &str,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<DataScope>> {
-        self.find_many_sorted(
-            doc! {
-                "schema_version": 2,
-                "subject_type": subject_type.as_str(),
-                "subject_id": subject_id,
-            },
-            doc! { "created_at": 1, "id": 1 },
-            executor,
-        )
-        .await
-    }
+    ) -> Result<Vec<DataScope>>;
 
     /// 按同类主体 ID 集合批量取回数据范围。
     ///
@@ -272,7 +225,94 @@ impl<'a> DataScopeRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_by_subjects(
+    async fn list_by_subjects(
+        &self,
+        subject_type: DataScopeSubjectType,
+        subject_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<DataScope>>;
+}
+
+impl DataScopeRepositoryExt for Repository<'_, DataScope> {
+    async fn has_subject_resource_history(
+        &self,
+        role_id: &str,
+        resource: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        let collection = self
+            .database()
+            .collection::<Document>(<mongodb::Database as crate::AccessControlExt>::DATA_SCOPES);
+        Ok(persistence_core::mongo_ops::find_one(
+            &collection,
+            doc! { "subject_type": "role", "subject_id": role_id, "resource": resource },
+            executor,
+        )
+        .await?
+        .is_some())
+    }
+
+    async fn exists_by_subject(
+        &self,
+        subject_type: DataScopeSubjectType,
+        subject_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        self.exists(
+            doc! {
+                "subject_type": subject_type.as_str(),
+                "subject_id": subject_id,
+            },
+            executor,
+        )
+        .await
+    }
+
+    async fn search_data_scopes(
+        &self,
+        filter: &DataScopeFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<DataScopeRow>> {
+        let options = FindOptions::builder()
+            .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
+            .skip(filter.skip())
+            .limit(filter.limit())
+            .projection(data_scope_projection())
+            .build();
+        let collection = self.collection().clone_with_type::<DataScopeRow>();
+        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
+        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
+
+        Ok(PageResult { items, total: total as i64 })
+    }
+
+    async fn has_legacy_user_limit(&self, user_id: &str, executor: &mut dyn Executor) -> Result<bool> {
+        self.exists(
+            doc! { "subject_type": "user", "subject_id": user_id, "schema_version": { "$ne": 2 } },
+            executor,
+        )
+        .await
+    }
+
+    async fn list_by_subject(
+        &self,
+        subject_type: DataScopeSubjectType,
+        subject_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<DataScope>> {
+        self.find_many_sorted(
+            doc! {
+                "schema_version": 2,
+                "subject_type": subject_type.as_str(),
+                "subject_id": subject_id,
+            },
+            doc! { "created_at": 1, "id": 1 },
+            executor,
+        )
+        .await
+    }
+
+    async fn list_by_subjects(
         &self,
         subject_type: DataScopeSubjectType,
         subject_ids: &[String],

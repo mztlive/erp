@@ -4,6 +4,7 @@ use std::collections::HashSet;
 
 use erp_sales::entity::sales_order::{SalesOrder, SalesOrderSubmission, SubmissionStatus};
 use erp_sales::repository::SalesOrderExt;
+use erp_sales::repository::prelude::*;
 use erp_workflow::ports::OrderTaskSource;
 use persistence_core::Executor;
 

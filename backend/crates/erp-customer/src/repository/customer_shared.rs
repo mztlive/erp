@@ -1,13 +1,14 @@
 //! 客户仓储共享查询构造（erp-customer-001 拆分）。
 //!
-//! 半开有效期窗口、排序白名单、主责聚合管道与投影文档集中在此一处；
+//! 半开有效期窗口、排序白名单、主责聚合管道、投影文档与列表投影行集中在此一处；
 //! `customer.rs` 只保留筛选结构与仓储方法，查询语义保持不变。
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::BusinessDate;
 use mongodb::bson::{Document, doc};
+use serde::{Deserialize, Serialize};
 
-use crate::entity::customer::AssignmentRole;
+use crate::entity::customer::{AssignmentRole, CustomerAccountStatus};
 use crate::repository::CustomerExt;
 
 /// 对客户 ID 迭代器排序去重（INT-R22 投影归一化）。
@@ -159,4 +160,61 @@ pub(crate) fn customer_assignment_projection() -> Document {
         "version": 1,
         "created_at": 1,
     }
+}
+
+/// 客户角色列表投影行（列表接口只取必要字段，禁止返回整文档）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CustomerAccountRow {
+    /// 实体主键。
+    pub id: String,
+    /// 共用企业主体 ID。
+    pub party_id: String,
+    /// 客户编号。
+    pub customer_no: String,
+    /// 默认客户付款条件引用。
+    pub default_payment_term_id: Option<String>,
+    /// 启停状态。
+    pub status: CustomerAccountStatus,
+    /// 乐观锁版本。
+    pub version: u64,
+    /// 创建时间（秒级时间戳）。
+    pub created_at: u64,
+    /// 最后更新时间（秒级时间戳）。
+    pub updated_at: u64,
+}
+
+impl CustomerAccountRow {
+    /// 以稳定身份构造列表投影行，版本与时间戳从零开始。
+    ///
+    /// # 参数
+    /// * `id` - 实体主键
+    /// * `party_id` - 共用企业主体 ID
+    /// * `customer_no` - 客户编号
+    ///
+    /// # 返回
+    /// 返回启用状态的投影行。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new(id: impl Into<String>, party_id: impl Into<String>, customer_no: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            party_id: party_id.into(),
+            customer_no: customer_no.into(),
+            default_payment_term_id: None,
+            status: CustomerAccountStatus::Active,
+            version: 0,
+            created_at: 0,
+            updated_at: 0,
+        }
+    }
+}
+
+/// 客户编号窄投影行。
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct CustomerNumberRow {
+    /// 客户稳定 ID。
+    pub(crate) id: String,
+    /// 客户编号。
+    pub(crate) customer_no: String,
 }

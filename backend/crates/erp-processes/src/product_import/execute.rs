@@ -6,6 +6,7 @@ use application_core::AuditActor;
 use erp_core::AccountKind;
 use erp_core::common::time::Instant;
 use erp_core::ids::BackgroundJobId;
+use erp_support::repository::prelude::*;
 use erp_support::{
     BackgroundJob, BackgroundJobItem, BulkJobExt, FileAssetExt, ItemStatus, JobStatus,
     PRODUCT_IMPORT_DOMAIN_JOB_TYPE,

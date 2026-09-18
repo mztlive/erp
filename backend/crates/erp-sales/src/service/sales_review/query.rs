@@ -8,6 +8,7 @@ use super::{SalesChangeOrderFilter, SalesReviewService};
 use crate::Result;
 use crate::dto::sales_review::{self as dto, PageView, SalesChangeOrderListParams, SalesChangeOrderView};
 use crate::repository::SalesReviewExt;
+use crate::repository::prelude::*;
 
 impl SalesReviewService {
     /// 分页查询销售变更单。

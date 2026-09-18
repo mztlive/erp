@@ -7,7 +7,9 @@ use application_core::AuditActor;
 use erp_finance::entity::receivable::SalesInvoiceRequest;
 use erp_finance::ports::funds_scope::FundsResolvedScope;
 use erp_finance::repository::ReceivableExt;
+use erp_finance::repository::prelude::*;
 use erp_sales::repository::SalesOrderExt;
+use erp_sales::repository::prelude::*;
 use persistence_core::{Executor, Transactional};
 
 use super::authorization::*;

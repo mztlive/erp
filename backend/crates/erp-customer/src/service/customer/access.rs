@@ -14,6 +14,7 @@ use crate::ports::{
     CustomerDataScopePort, CustomerResolvedClause, CustomerResolvedScope, CustomerScopeObject,
 };
 use crate::repository::CustomerExt;
+use crate::repository::prelude::*;
 use crate::repository::scope::{CustomerReadScope, CustomerScopeClause};
 
 /// 客户对象访问范围；列表、详情、导出和写命令复用同一解析。

@@ -12,6 +12,7 @@ use erp_finance::entity::payable::{
     EntryDirection, PayableAccount, PayableEntry, PayableSourceType, PendingPaymentAllocation,
 };
 use erp_finance::repository::PayableExt;
+use erp_finance::repository::prelude::*;
 use erp_supplier::SupplierExt;
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{
@@ -20,6 +21,7 @@ use erp_workflow::entity::work_item::{
     is_purchase_payable, matches_supplier_payment_identity, new_supplier_payment_task, payment_due_at,
     supplier_payment_impact_summary,
 };
+use erp_workflow::repository::prelude::*;
 use id_generator::next_id;
 use persistence_core::Executor;
 

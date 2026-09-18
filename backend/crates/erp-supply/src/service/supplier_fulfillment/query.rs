@@ -7,6 +7,7 @@ use crate::dto::supplier_fulfillment::{
     SupplierFulfillmentOrderView,
 };
 use crate::entity::supplier_fulfillment::SupplierFulfillmentOrder;
+use crate::repository::prelude::*;
 use crate::repository::{FulfillmentOrderReadScope, SupplierFulfillmentExt};
 use crate::{Error, Result};
 

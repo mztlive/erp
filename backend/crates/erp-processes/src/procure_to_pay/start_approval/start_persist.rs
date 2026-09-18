@@ -19,6 +19,7 @@ use erp_workflow::entity::approval_integration::{ApprovalSubjectSnapshot, Approv
 use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
 use erp_workflow::entity::work_item::{DocumentApprovalWorkItemData, WorkItem, WorkItemPriority};
 use erp_workflow::repository::bpm::ApprovalInstanceListProjection;
+use erp_workflow::repository::prelude::*;
 use erp_workflow::service::approval::execution::{PreparedExecution, map_receipt_first_write_error};
 use erp_workflow::{ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, WorkItemExt};
 use id_generator::next_id;

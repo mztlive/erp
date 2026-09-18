@@ -4,6 +4,7 @@ use erp_core::ids::StockAdjustmentId;
 use erp_inventory::{InventoryExt, StockAdjustment, StockAdjustmentView};
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::work_item::{AssignmentSource, WorkItemStatus, WorkItemType};
+use erp_workflow::repository::prelude::*;
 use erp_workflow::{ApprovalActionContext, ApprovalIntegrationExt, BpmExt, WorkItemExt};
 use mongodb::Database;
 use persistence_core::Executor;

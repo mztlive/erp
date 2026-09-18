@@ -15,6 +15,7 @@ use crate::entity::payable::{
     PaymentReversePlanRow, SupplierPayment, SupplierPaymentStatus,
 };
 use crate::repository::PayableExt;
+use crate::repository::prelude::*;
 use crate::{Error, Result};
 
 /// 反向财务分配实际消费的金额与原发生时间。

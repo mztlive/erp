@@ -6,6 +6,7 @@ pub(crate) use cancel::cancel_in_transaction;
 use erp_core::money::Amount;
 use erp_finance::entity::receivable::{ReceivableAccount, SalesInvoiceRequest};
 use erp_finance::repository::ReceivableExt;
+use erp_finance::repository::prelude::*;
 pub(crate) use execution::*;
 use mongodb::Database;
 use persistence_core::Executor;

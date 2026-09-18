@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
+use erp_import::repository::prelude::*;
 use erp_import::{
     ApplyLegacyImportBatchRequest, ApplyResultDraft, ApplyResultItem, ApplyResultOutcome, ApplyResultSet,
     ApplyRowOutcome, ApplyRowResult, CUSTOMER_NOT_FOUND_ERROR_CODE, CUSTOMER_NOT_FOUND_ERROR_DETAIL,
@@ -15,7 +16,9 @@ use erp_import::{
     LegacyImportRow,
 };
 use erp_party::PartyExt;
+use erp_party::repository::prelude::*;
 use erp_support::BulkJobExt;
+use erp_support::repository::prelude::*;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;

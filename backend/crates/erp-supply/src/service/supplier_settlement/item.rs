@@ -6,6 +6,7 @@ use super::dto::{SettlementPageView, SupplierSettlementItemListParams, SupplierS
 use crate::Result;
 use crate::dto::supplier_fulfillment::SortDir;
 use crate::repository::SupplierSettlementExt;
+use crate::repository::prelude::*;
 
 /// 结算明细列表筛选条件类型。
 type ItemFilter = <mongodb::Database as SupplierSettlementExt>::SupplierSettlementItemFilter;

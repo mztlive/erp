@@ -8,6 +8,7 @@ use async_trait::async_trait;
 use entity_core::BaseModel;
 use erp_audit::{AuditActorLogs, AuditExt, AuditLog, AuditLogData};
 use erp_catalog::CatalogExt;
+use erp_catalog::repository::prelude::*;
 use erp_core::ids::SkuId;
 use erp_fulfillment::repository::FulfillmentExt;
 use erp_identity::access_control::ScopedObject;

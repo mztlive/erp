@@ -19,6 +19,7 @@ use crate::entity::work_item::{
 use crate::error::{Error, Result};
 use crate::ports::PreparedWorkflowAudit;
 use crate::repository::WorkItemExt;
+use crate::repository::prelude::*;
 
 const AUTHORIZATION_SNAPSHOT_ATTEMPTS: usize = 3;
 

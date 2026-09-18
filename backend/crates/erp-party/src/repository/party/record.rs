@@ -3,13 +3,12 @@ use erp_core::ids::PartyId;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{
-    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+    Executor, PageResult, Pagination, QueryFilter, Repository, Result, insert_literal_regex_filter, mongo_ops,
 };
 use serde::{Deserialize, Serialize};
 
 use super::shared::sort_doc;
 use crate::entity::party::{Party, PartyKind, PartyStatus};
-use crate::repository::owned::PartyRepository;
 
 /// 主体列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -118,7 +117,9 @@ impl Pagination for PartyFilter {
     }
 }
 
-impl<'a> PartyRepository<'a> {
+/// 主体集合仓储的域查询扩展。
+#[allow(async_fn_in_trait)]
+pub trait PartyRepositoryExt {
     /// 按主体 ID 集合批量读取活跃主体（erp-party-012）。
     ///
     /// 历史别名：与 [`Self::list_by_ids`] 同语义，保留以兼容公开签名；新调用统一使用 `list_by_ids`。
@@ -132,13 +133,11 @@ impl<'a> PartyRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_parties_by_ids(
+    async fn find_parties_by_ids(
         &self,
         party_ids: &[PartyId],
         executor: &mut dyn Executor,
-    ) -> Result<Vec<Party>> {
-        self.list_by_ids(party_ids, executor).await
-    }
+    ) -> Result<Vec<Party>>;
 
     /// 按主体 ID 查找未删除 Party。
     ///
@@ -151,9 +150,7 @@ impl<'a> PartyRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_party(&self, id: &PartyId, executor: &mut dyn Executor) -> Result<Option<Party>> {
-        self.find_by_id(id.as_ref(), executor).await
-    }
+    async fn find_party(&self, id: &PartyId, executor: &mut dyn Executor) -> Result<Option<Party>>;
 
     /// 分页检索主体列表（投影查询）。
     ///
@@ -169,7 +166,82 @@ impl<'a> PartyRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_parties(
+    async fn search_parties(
+        &self,
+        filter: &PartyFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<PartyRow>>;
+
+    /// 按主体编号查找主体，包含已软删除记录。
+    ///
+    /// 全局唯一索引包含软删除记录；编号占用校验必须使用本方法，避免
+    /// 仅查未删除记录时误判为可用。
+    ///
+    /// # 参数
+    /// * `party_no` - 主体编号
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配的主体（含已软删除）；无匹配时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    async fn find_by_party_no_including_deleted(
+        &self,
+        party_no: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<Party>>;
+
+    /// 按统一社会信用代码查找主体，包含已软删除记录。
+    ///
+    /// 部分唯一索引 `uk_parties_credit_code` 仅约束非空代码且包含软删除；
+    /// 信用代码占用校验必须使用本方法。
+    ///
+    /// # 参数
+    /// * `unified_credit_code` - 已规范化的统一社会信用代码
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配的主体（含已软删除）；无匹配时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    async fn find_by_unified_credit_code_including_deleted(
+        &self,
+        unified_credit_code: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<Party>>;
+
+    /// 按主体 ID 集合批量读取未删除主体（erp-party-012）。
+    ///
+    /// 本域批量读取的唯一入口；早期的 `find_parties_by_ids` 别名已删除，调用方统一使用本方法。
+    ///
+    /// # 参数
+    /// * `party_ids` - 主体 ID 集合；为空时直接返回空集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配的未删除主体。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    async fn list_by_ids(&self, party_ids: &[PartyId], executor: &mut dyn Executor) -> Result<Vec<Party>>;
+}
+
+impl PartyRepositoryExt for Repository<'_, Party> {
+    async fn find_parties_by_ids(
+        &self,
+        party_ids: &[PartyId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<Party>> {
+        self.list_by_ids(party_ids, executor).await
+    }
+
+    async fn find_party(&self, id: &PartyId, executor: &mut dyn Executor) -> Result<Option<Party>> {
+        self.find_by_id(id.as_ref(), executor).await
+    }
+
+    async fn search_parties(
         &self,
         filter: &PartyFilter,
         executor: &mut dyn Executor,
@@ -191,21 +263,7 @@ impl<'a> PartyRepository<'a> {
         Ok(PageResult { items, total: total as i64 })
     }
 
-    /// 按主体编号查找主体，包含已软删除记录。
-    ///
-    /// 全局唯一索引包含软删除记录；编号占用校验必须使用本方法，避免
-    /// 仅查未删除记录时误判为可用。
-    ///
-    /// # 参数
-    /// * `party_no` - 主体编号
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的主体（含已软删除）；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_party_no_including_deleted(
+    async fn find_by_party_no_including_deleted(
         &self,
         party_no: &str,
         executor: &mut dyn Executor,
@@ -213,21 +271,7 @@ impl<'a> PartyRepository<'a> {
         mongo_ops::find_one(&self.collection(), doc! { "party_no": party_no }, executor).await
     }
 
-    /// 按统一社会信用代码查找主体，包含已软删除记录。
-    ///
-    /// 部分唯一索引 `uk_parties_credit_code` 仅约束非空代码且包含软删除；
-    /// 信用代码占用校验必须使用本方法。
-    ///
-    /// # 参数
-    /// * `unified_credit_code` - 已规范化的统一社会信用代码
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的主体（含已软删除）；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_unified_credit_code_including_deleted(
+    async fn find_by_unified_credit_code_including_deleted(
         &self,
         unified_credit_code: &str,
         executor: &mut dyn Executor,
@@ -236,24 +280,7 @@ impl<'a> PartyRepository<'a> {
             .await
     }
 
-    /// 按主体 ID 集合批量读取未删除主体（erp-party-012）。
-    ///
-    /// 本域批量读取的唯一入口；早期的 `find_parties_by_ids` 别名已删除，调用方统一使用本方法。
-    ///
-    /// # 参数
-    /// * `party_ids` - 主体 ID 集合；为空时直接返回空集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回全部匹配的未删除主体。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或反序列化失败时返回错误。
-    pub async fn list_by_ids(
-        &self,
-        party_ids: &[PartyId],
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<Party>> {
+    async fn list_by_ids(&self, party_ids: &[PartyId], executor: &mut dyn Executor) -> Result<Vec<Party>> {
         if party_ids.is_empty() {
             return Ok(Vec::new());
         }

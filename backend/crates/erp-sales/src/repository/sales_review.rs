@@ -7,16 +7,14 @@ use erp_core::ids::{SalesChangeOrderId, SalesChangeSubmissionId, SalesOrderId};
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Repository, Result, mongo_ops};
 use serde::{Deserialize, Serialize};
 
 use super::extensions::SalesReviewExt;
 use crate::entity::sales_review::{
     SalesChangeOrder, SalesChangeOrderStatus, SalesChangeSubmission, SalesChangeSubmissionLine,
 };
-use crate::repository::owned::{
-    SalesChangeOrderRepository, SalesChangeSubmissionLineRepository, SalesChangeSubmissionRepository,
-};
+use crate::repository::owned::SalesChangeOrderRepository;
 
 /// `sales_change_order` 集合名。
 const SALES_CHANGE_ORDERS: &str = <mongodb::Database as SalesReviewExt>::SALES_CHANGE_ORDERS;
@@ -104,7 +102,9 @@ impl Pagination for SalesChangeOrderFilter {
     }
 }
 
-impl<'a> SalesChangeOrderRepository<'a> {
+/// 销售变更单集合的域查询扩展。
+#[allow(async_fn_in_trait)]
+pub trait SalesChangeOrderRepositoryExt {
     /// 分页检索销售变更单（投影查询）。
     ///
     /// # 参数
@@ -116,7 +116,73 @@ impl<'a> SalesChangeOrderRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_sales_change_orders(
+    async fn search_sales_change_orders(
+        &self,
+        filter: &SalesChangeOrderFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<SalesChangeOrderRow>>;
+
+    /// 装载变更查询的有界身份与版本集合，用于跨页一致性校验。
+    ///
+    /// # 参数
+    /// * `filter` - 已包含授权来源限制的筛选
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 最多 10001 行；调用方必须整体拒绝超限。
+    ///
+    /// # 错误
+    /// 数据库读取失败时返回仓储错误。
+    ///
+    /// # 关键业务约束
+    /// 版本集合必须与列表同一授权条件和筛选快照。
+    async fn query_change_versions(
+        &self,
+        filter: &SalesChangeOrderFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesChangeVersion>>;
+
+    /// 按「销售单 + 基准版本」查找进行中变更单。
+    ///
+    /// # 参数
+    /// * `sales_order_id` - 原销售单
+    /// * `base_revision_id` - 发起时当前版本
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回进行中变更单；无匹配时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    async fn find_in_progress_by_order_and_base(
+        &self,
+        sales_order_id: &SalesOrderId,
+        base_revision_id: &crate::entity::sales_order::SalesOrderRevisionId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SalesChangeOrder>>;
+
+    /// 判断同一销售单基准版本是否已有进行中变更。
+    ///
+    /// # 参数
+    /// * `sales_order_id` - 原销售单
+    /// * `base_revision_id` - 发起时当前版本
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 存在草稿、审批中或兼容历史进行中状态的变更单时返回 `true`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    async fn has_in_progress_by_order_and_base(
+        &self,
+        sales_order_id: &SalesOrderId,
+        base_revision_id: &crate::entity::sales_order::SalesOrderRevisionId,
+        executor: &mut dyn Executor,
+    ) -> Result<bool>;
+}
+
+impl SalesChangeOrderRepositoryExt for Repository<'_, SalesChangeOrder> {
+    async fn search_sales_change_orders(
         &self,
         filter: &SalesChangeOrderFilter,
         executor: &mut dyn Executor,
@@ -134,21 +200,7 @@ impl<'a> SalesChangeOrderRepository<'a> {
         Ok(PageResult { items, total: total as i64 })
     }
 
-    /// 装载变更查询的有界身份与版本集合，用于跨页一致性校验。
-    ///
-    /// # 参数
-    /// * `filter` - 已包含授权来源限制的筛选
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 最多 10001 行；调用方必须整体拒绝超限。
-    ///
-    /// # 错误
-    /// 数据库读取失败时返回仓储错误。
-    ///
-    /// # 关键业务约束
-    /// 版本集合必须与列表同一授权条件和筛选快照。
-    pub async fn query_change_versions(
+    async fn query_change_versions(
         &self,
         filter: &SalesChangeOrderFilter,
         executor: &mut dyn Executor,
@@ -166,19 +218,7 @@ impl<'a> SalesChangeOrderRepository<'a> {
         .await
     }
 
-    /// 按「销售单 + 基准版本」查找进行中变更单。
-    ///
-    /// # 参数
-    /// * `sales_order_id` - 原销售单
-    /// * `base_revision_id` - 发起时当前版本
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回进行中变更单；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_in_progress_by_order_and_base(
+    async fn find_in_progress_by_order_and_base(
         &self,
         sales_order_id: &SalesOrderId,
         base_revision_id: &crate::entity::sales_order::SalesOrderRevisionId,
@@ -203,19 +243,7 @@ impl<'a> SalesChangeOrderRepository<'a> {
         .await
     }
 
-    /// 判断同一销售单基准版本是否已有进行中变更。
-    ///
-    /// # 参数
-    /// * `sales_order_id` - 原销售单
-    /// * `base_revision_id` - 发起时当前版本
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 存在草稿、审批中或兼容历史进行中状态的变更单时返回 `true`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn has_in_progress_by_order_and_base(
+    async fn has_in_progress_by_order_and_base(
         &self,
         sales_order_id: &SalesOrderId,
         base_revision_id: &crate::entity::sales_order::SalesOrderRevisionId,
@@ -228,7 +256,9 @@ impl<'a> SalesChangeOrderRepository<'a> {
     }
 }
 
-impl<'a> SalesChangeSubmissionRepository<'a> {
+/// 销售变更提交集合的域查询扩展。
+#[allow(async_fn_in_trait)]
+pub trait SalesChangeSubmissionRepositoryExt {
     /// 批量读取指定变更单的全部有效提交，供审批历史摘要使用。
     ///
     /// # 参数
@@ -237,21 +267,11 @@ impl<'a> SalesChangeSubmissionRepository<'a> {
     /// 返回全部未删除提交；空集合返回空结果，不扫描全表。
     /// # 错误
     /// MongoDB 查询失败时返回仓储错误。
-    pub async fn list_by_change_orders(
+    async fn list_by_change_orders(
         &self,
         change_order_ids: &[SalesChangeOrderId],
         executor: &mut dyn Executor,
-    ) -> Result<Vec<SalesChangeSubmission>> {
-        if change_order_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        let ids = change_order_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
-        self.find_many(
-            doc! { "sales_change_order_id": { "$in": ids }, "deleted_at": NOT_DELETED_TIMESTAMP_BSON },
-            executor,
-        )
-        .await
-    }
+    ) -> Result<Vec<SalesChangeSubmission>>;
 
     /// 列出销售变更单提交历史，新提交在前。
     ///
@@ -264,18 +284,11 @@ impl<'a> SalesChangeSubmissionRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_by_change_order_newest_first(
+    async fn list_by_change_order_newest_first(
         &self,
         sales_change_order_id: &SalesChangeOrderId,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<SalesChangeSubmission>> {
-        self.find_many_sorted(
-            doc! { "sales_change_order_id": sales_change_order_id.to_string() },
-            doc! { "submission_no": -1 },
-            executor,
-        )
-        .await
-    }
+    ) -> Result<Vec<SalesChangeSubmission>>;
 
     /// 读取销售变更单最新提交序号。
     ///
@@ -288,18 +301,11 @@ impl<'a> SalesChangeSubmissionRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn latest_submission_no_by_change_order(
+    async fn latest_submission_no_by_change_order(
         &self,
         sales_change_order_id: &SalesChangeOrderId,
         executor: &mut dyn Executor,
-    ) -> Result<u32> {
-        Ok(self
-            .list_by_change_order_newest_first(sales_change_order_id, executor)
-            .await?
-            .first()
-            .map(|submission| submission.submission_no)
-            .unwrap_or(0))
-    }
+    ) -> Result<u32>;
 
     /// 按「变更单 + 提交序号」查找变更提交。
     ///
@@ -313,21 +319,12 @@ impl<'a> SalesChangeSubmissionRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_order_and_no(
+    async fn find_by_order_and_no(
         &self,
         sales_change_order_id: &SalesChangeOrderId,
         submission_no: u32,
         executor: &mut dyn Executor,
-    ) -> Result<Option<SalesChangeSubmission>> {
-        self.find_one(
-            doc! {
-                "sales_change_order_id": sales_change_order_id.to_string(),
-                "submission_no": submission_no as i32,
-            },
-            executor,
-        )
-        .await
-    }
+    ) -> Result<Option<SalesChangeSubmission>>;
 
     /// 按稳定 ID 读取销售变更岗位分离使用的提交事实。
     ///
@@ -345,7 +342,73 @@ impl<'a> SalesChangeSubmissionRepository<'a> {
     ///
     /// # 约束
     /// 仅查询本仓储拥有的销售变更提交集合，不访问销售变更单集合。
-    pub async fn find_work_item_sales_change_submission(
+    async fn find_work_item_sales_change_submission(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SalesChangeSubmission>>;
+}
+
+impl SalesChangeSubmissionRepositoryExt for Repository<'_, SalesChangeSubmission> {
+    async fn list_by_change_orders(
+        &self,
+        change_order_ids: &[SalesChangeOrderId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesChangeSubmission>> {
+        if change_order_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ids = change_order_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
+        self.find_many(
+            doc! { "sales_change_order_id": { "$in": ids }, "deleted_at": NOT_DELETED_TIMESTAMP_BSON },
+            executor,
+        )
+        .await
+    }
+
+    async fn list_by_change_order_newest_first(
+        &self,
+        sales_change_order_id: &SalesChangeOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesChangeSubmission>> {
+        self.find_many_sorted(
+            doc! { "sales_change_order_id": sales_change_order_id.to_string() },
+            doc! { "submission_no": -1 },
+            executor,
+        )
+        .await
+    }
+
+    async fn latest_submission_no_by_change_order(
+        &self,
+        sales_change_order_id: &SalesChangeOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<u32> {
+        Ok(self
+            .list_by_change_order_newest_first(sales_change_order_id, executor)
+            .await?
+            .first()
+            .map(|submission| submission.submission_no)
+            .unwrap_or(0))
+    }
+
+    async fn find_by_order_and_no(
+        &self,
+        sales_change_order_id: &SalesChangeOrderId,
+        submission_no: u32,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SalesChangeSubmission>> {
+        self.find_one(
+            doc! {
+                "sales_change_order_id": sales_change_order_id.to_string(),
+                "submission_no": submission_no as i32,
+            },
+            executor,
+        )
+        .await
+    }
+
+    async fn find_work_item_sales_change_submission(
         &self,
         id: &str,
         executor: &mut dyn Executor,
@@ -354,7 +417,9 @@ impl<'a> SalesChangeSubmissionRepository<'a> {
     }
 }
 
-impl<'a> SalesChangeSubmissionLineRepository<'a> {
+/// 销售变更提交明细集合的域查询扩展。
+#[allow(async_fn_in_trait)]
+pub trait SalesChangeSubmissionLineRepositoryExt {
     /// 批量列出多个变更提交的全部明细。
     ///
     /// # 参数
@@ -366,7 +431,32 @@ impl<'a> SalesChangeSubmissionLineRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_lines_by_submissions(
+    async fn list_lines_by_submissions(
+        &self,
+        submission_ids: &[SalesChangeSubmissionId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesChangeSubmissionLine>>;
+
+    /// 列出变更提交的全部明细（按行号升序）。
+    ///
+    /// # 参数
+    /// * `submission_id` - 所属变更提交
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回按行号升序的变更提交明细列表。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn list_lines_by_submission(
+        &self,
+        submission_id: &SalesChangeSubmissionId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesChangeSubmissionLine>>;
+}
+
+impl SalesChangeSubmissionLineRepositoryExt for Repository<'_, SalesChangeSubmissionLine> {
+    async fn list_lines_by_submissions(
         &self,
         submission_ids: &[SalesChangeSubmissionId],
         executor: &mut dyn Executor,
@@ -385,18 +475,7 @@ impl<'a> SalesChangeSubmissionLineRepository<'a> {
         .await
     }
 
-    /// 列出变更提交的全部明细（按行号升序）。
-    ///
-    /// # 参数
-    /// * `submission_id` - 所属变更提交
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回按行号升序的变更提交明细列表。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_lines_by_submission(
+    async fn list_lines_by_submission(
         &self,
         submission_id: &SalesChangeSubmissionId,
         executor: &mut dyn Executor,

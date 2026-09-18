@@ -1,14 +1,14 @@
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::{SupplierAccountId, SupplierQualificationId};
 use mongodb::bson::{Document, doc};
-use persistence_core::{Executor, Pagination, QueryFilter, Result};
+use persistence_core::{Executor, Pagination, QueryFilter, Repository, Result};
 
 use super::account::supplier_id_strings;
 use super::{SUPPLIER_QUALIFICATIONS, SupplierRepository};
 use crate::entity::supplier::{
     QualificationStatus, QualificationType, SupplierQualification, SupplierQualificationCapability,
 };
-use crate::repository::owned::{SupplierQualificationCapabilityRepository, SupplierQualificationRepository};
+use crate::repository::owned::SupplierQualificationRepository;
 
 /// 供应商资质列表筛选条件。
 #[derive(Debug, Clone)]
@@ -80,7 +80,9 @@ impl Pagination for SupplierQualificationFilter {
     }
 }
 
-impl<'a> SupplierQualificationRepository<'a> {
+/// 供应商资质集合上的域查询。
+#[allow(async_fn_in_trait)]
+pub trait SupplierQualificationRepositoryExt {
     /// 检索资质的到期预警列表（§6.2：`valid_to + status` 到期预警索引），
     /// 按 `valid_to` 升序。
     ///
@@ -92,17 +94,10 @@ impl<'a> SupplierQualificationRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_active_for_expiry_warning(
+    async fn list_active_for_expiry_warning(
         &self,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<SupplierQualification>> {
-        self.find_many_sorted(
-            doc! { "status": QualificationStatus::Active.as_str() },
-            doc! { "valid_to": 1 },
-            executor,
-        )
-        .await
-    }
+    ) -> Result<Vec<SupplierQualification>>;
 
     /// 查询已登记任一指定资质类型的供应商角色 ID。
     ///
@@ -115,18 +110,11 @@ impl<'a> SupplierQualificationRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn list_supplier_ids_by_qualification_types(
+    async fn list_supplier_ids_by_qualification_types(
         &self,
         qualification_types: &[QualificationType],
         executor: &mut dyn Executor,
-    ) -> Result<Vec<SupplierAccountId>> {
-        super::find_supplier_ids(
-            self.collection().clone_with_type(),
-            qualification_type_filter(qualification_types),
-            executor,
-        )
-        .await
-    }
+    ) -> Result<Vec<SupplierAccountId>>;
 
     /// 查询当前有效的供应商资质对应的供应商角色 ID。
     ///
@@ -140,16 +128,12 @@ impl<'a> SupplierQualificationRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn list_supplier_ids_by_valid_qualifications(
+    async fn list_supplier_ids_by_valid_qualifications(
         &self,
         qualification_types: &[QualificationType],
         as_of: &str,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<SupplierAccountId>> {
-        let mut filter = active_window_filter(qualification_types, as_of);
-        filter.insert("$or", vec![doc! { "valid_to": null }, doc! { "valid_to": { "$gte": as_of } }]);
-        super::find_supplier_ids(self.collection().clone_with_type(), filter, executor).await
-    }
+    ) -> Result<Vec<SupplierAccountId>>;
 
     /// 查询将在指定日期前到期且当前仍有效的供应商资质对应的供应商角色 ID。
     ///
@@ -164,17 +148,13 @@ impl<'a> SupplierQualificationRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn list_supplier_ids_by_expiring_qualifications(
+    async fn list_supplier_ids_by_expiring_qualifications(
         &self,
         qualification_types: &[QualificationType],
         as_of: &str,
         expires_by: &str,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<SupplierAccountId>> {
-        let mut filter = active_window_filter(qualification_types, as_of);
-        filter.insert("valid_to", doc! { "$gte": as_of, "$lte": expires_by });
-        super::find_supplier_ids(self.collection().clone_with_type(), filter, executor).await
-    }
+    ) -> Result<Vec<SupplierAccountId>>;
 
     /// 查询已失效供应商资质对应的供应商角色 ID。
     ///
@@ -188,7 +168,75 @@ impl<'a> SupplierQualificationRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn list_supplier_ids_by_expired_qualifications(
+    async fn list_supplier_ids_by_expired_qualifications(
+        &self,
+        qualification_types: &[QualificationType],
+        as_of: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierAccountId>>;
+
+    /// 读取指定供应商能力已经关联的合同，沿用调用方执行器。
+    ///
+    /// # Errors
+    /// 关联或资质读取失败时返回错误，不将读取失败当作没有合同。
+    async fn linked_contracts(
+        &self,
+        supplier_id: &SupplierAccountId,
+        capability_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierQualification>>;
+}
+
+impl SupplierQualificationRepositoryExt for Repository<'_, SupplierQualification> {
+    async fn list_active_for_expiry_warning(
+        &self,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierQualification>> {
+        self.find_many_sorted(
+            doc! { "status": QualificationStatus::Active.as_str() },
+            doc! { "valid_to": 1 },
+            executor,
+        )
+        .await
+    }
+
+    async fn list_supplier_ids_by_qualification_types(
+        &self,
+        qualification_types: &[QualificationType],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierAccountId>> {
+        super::find_supplier_ids(
+            self.collection().clone_with_type(),
+            qualification_type_filter(qualification_types),
+            executor,
+        )
+        .await
+    }
+
+    async fn list_supplier_ids_by_valid_qualifications(
+        &self,
+        qualification_types: &[QualificationType],
+        as_of: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierAccountId>> {
+        let mut filter = active_window_filter(qualification_types, as_of);
+        filter.insert("$or", vec![doc! { "valid_to": null }, doc! { "valid_to": { "$gte": as_of } }]);
+        super::find_supplier_ids(self.collection().clone_with_type(), filter, executor).await
+    }
+
+    async fn list_supplier_ids_by_expiring_qualifications(
+        &self,
+        qualification_types: &[QualificationType],
+        as_of: &str,
+        expires_by: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierAccountId>> {
+        let mut filter = active_window_filter(qualification_types, as_of);
+        filter.insert("valid_to", doc! { "$gte": as_of, "$lte": expires_by });
+        super::find_supplier_ids(self.collection().clone_with_type(), filter, executor).await
+    }
+
+    async fn list_supplier_ids_by_expired_qualifications(
         &self,
         qualification_types: &[QualificationType],
         as_of: &str,
@@ -208,14 +256,8 @@ impl<'a> SupplierQualificationRepository<'a> {
         );
         super::find_supplier_ids(self.collection().clone_with_type(), filter, executor).await
     }
-}
 
-impl SupplierQualificationRepository<'_> {
-    /// 读取指定供应商能力已经关联的合同，沿用调用方执行器。
-    ///
-    /// # Errors
-    /// 关联或资质读取失败时返回错误，不将读取失败当作没有合同。
-    pub async fn linked_contracts(
+    async fn linked_contracts(
         &self,
         supplier_id: &SupplierAccountId,
         capability_id: &str,
@@ -235,12 +277,22 @@ impl SupplierQualificationRepository<'_> {
     }
 }
 
-impl<'a> SupplierQualificationCapabilityRepository<'a> {
+/// 供应商资质适用能力关联集合上的域查询。
+#[allow(async_fn_in_trait)]
+pub trait SupplierQualificationCapabilityRepositoryExt {
     /// 批量读取指定资质的适用能力关联。
     ///
     /// # Errors
     /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn list_by_qualification_ids(
+    async fn list_by_qualification_ids(
+        &self,
+        qualification_ids: &[SupplierQualificationId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierQualificationCapability>>;
+}
+
+impl SupplierQualificationCapabilityRepositoryExt for Repository<'_, SupplierQualificationCapability> {
+    async fn list_by_qualification_ids(
         &self,
         qualification_ids: &[SupplierQualificationId],
         executor: &mut dyn Executor,

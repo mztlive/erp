@@ -18,6 +18,7 @@ use crate::entity::supplier::{
 };
 use crate::error::{Error, Result};
 use crate::repository::SupplierExt;
+use crate::repository::prelude::*;
 
 /// 校验指定供应商能力修订在业务日是否仍为当前启用版本。
 ///

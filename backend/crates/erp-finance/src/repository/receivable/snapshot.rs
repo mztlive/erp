@@ -12,14 +12,16 @@ use erp_core::money::Amount;
 use mongodb::bson::{Bson, Document, doc};
 use persistence_core::{Executor, Result, mongo_ops};
 
-use super::account::{amount_bson, progress_pipeline};
+use super::account::{ReceivableAccountWriteExt, amount_bson, progress_pipeline};
+use super::entry::ReceivableEntryRepositoryExt;
+use super::invoice::{InvoiceRepositoryExt, SalesInvoiceAllocationRepositoryExt};
+use super::receipt::{CustomerReceiptRepositoryExt, ReceiptAllocationRepositoryExt};
 use super::{ReceivableRepository, SettlementBatchResult};
 use crate::entity::receivable::{
-    CustomerReceipt, Invoice, ReceiptAllocation, ReceivableEntry, SalesInvoiceAllocation,
+    CustomerReceipt, Invoice, ReceiptAllocation, ReceivableAccount, ReceivableEntry, SalesInvoiceAllocation,
 };
 use crate::ports::receivable::ReceivableSnapshot;
 use crate::repository::extensions::ReceivableExt;
-use crate::repository::owned::{ReceivableAccountRepository, ReceivableEntryRepository};
 
 /// 应收票款快照的有界持久化事实（FIN-R12）。
 ///
@@ -169,7 +171,8 @@ impl<'a> ReceivableRepository<'a> {
     }
 }
 
-impl<'a> ReceivableAccountRepository<'a> {
+#[allow(async_fn_in_trait)]
+pub trait ReceivableAccountSnapshotExt {
     /// 批量条件核销：按账户聚合增量逐个执行不超额核销（FIN-R09）。
     ///
     /// # 参数
@@ -185,7 +188,16 @@ impl<'a> ReceivableAccountRepository<'a> {
     ///
     /// # 约束
     /// 聚合口径由领域账本保证；本方法不裁决跨账户业务结论、不开事务。
-    pub async fn apply_settlements_many(
+    async fn apply_settlements_many(
+        &self,
+        deltas: &[(ReceivableAccountId, Amount)],
+        updated_by: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<SettlementBatchResult>;
+}
+
+impl ReceivableAccountSnapshotExt for persistence_core::Repository<'_, ReceivableAccount> {
+    async fn apply_settlements_many(
         &self,
         deltas: &[(ReceivableAccountId, Amount)],
         updated_by: &str,
@@ -212,7 +224,8 @@ impl<'a> ReceivableAccountRepository<'a> {
     }
 }
 
-impl<'a> ReceivableEntryRepository<'a> {
+#[allow(async_fn_in_trait)]
+pub trait ReceivableEntrySnapshotExt {
     /// 按主键集合批量取回应收分录（`$in` 一次取回，禁止 N+1）。
     ///
     /// # 参数
@@ -227,7 +240,15 @@ impl<'a> ReceivableEntryRepository<'a> {
     ///
     /// # 约束
     /// 仓储内不去重业务结论；调用方负责解释缺项。
-    pub async fn find_entries_by_ids(
+    async fn find_entries_by_ids(
+        &self,
+        entry_ids: &[ReceivableEntryId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ReceivableEntry>>;
+}
+
+impl ReceivableEntrySnapshotExt for persistence_core::Repository<'_, ReceivableEntry> {
+    async fn find_entries_by_ids(
         &self,
         entry_ids: &[ReceivableEntryId],
         executor: &mut dyn Executor,
@@ -300,7 +321,10 @@ mod tests {
     use mongodb::bson::Bson;
     use persistence_core::NoTransaction;
 
-    use super::{ReceivableSnapshotFacts, settlement_guard, unique_ids};
+    use super::{
+        ReceivableAccountSnapshotExt, ReceivableEntrySnapshotExt, ReceivableSnapshotFacts, settlement_guard,
+        unique_ids,
+    };
     use crate::entity::receivable::{ReceivableAccount, ReceivableEntry};
     use crate::repository::extensions::ReceivableExt;
     use crate::repository::owned::{ReceivableAccountRepository, ReceivableEntryRepository};

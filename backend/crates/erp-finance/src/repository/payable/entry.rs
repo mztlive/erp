@@ -10,7 +10,6 @@ use persistence_core::{Executor, Result, mongo_ops};
 use serde::Deserialize;
 
 use crate::entity::payable::{PayableEntry, PayableEntryOffset};
-use crate::repository::owned::{PayableEntryOffsetRepository, PayableEntryRepository};
 
 /// 应付账户最早到期日聚合行。
 #[derive(Debug, Deserialize)]
@@ -29,7 +28,8 @@ struct IncreaseDueDateRow {
     due_date: BusinessDate,
 }
 
-impl<'a> PayableEntryRepository<'a> {
+#[allow(async_fn_in_trait)]
+pub trait PayableEntryRepositoryExt {
     /// 按应付账户聚合最早分录到期日。
     ///
     /// # 参数
@@ -41,7 +41,90 @@ impl<'a> PayableEntryRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 聚合或反序列化失败时返回错误。
-    pub async fn minimum_due_dates_by_accounts(
+    async fn minimum_due_dates_by_accounts(
+        &self,
+        account_ids: &[PayableAccountId],
+        executor: &mut dyn Executor,
+    ) -> Result<HashMap<String, BusinessDate>>;
+
+    /// 批量按子账集合取回分录（`$in` 一次取回，禁止 N+1）。
+    ///
+    /// 用于账龄汇总与付款核销锁定；只返回未删除分录（事实类恒未删除）。
+    ///
+    /// # 参数
+    /// * `account_ids` - 应付往来子账 ID 集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配分录。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn find_entries_by_accounts(
+        &self,
+        account_ids: &[PayableAccountId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PayableEntry>>;
+
+    /// 按主键集合批量取回应付分录（`$in` 一次取回，禁止 N+1）。
+    ///
+    /// # 参数
+    /// * `entry_ids` - 应付分录 ID 集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配分录；空集合直接返回空列表。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn find_entries_by_ids(
+        &self,
+        entry_ids: &[PayableEntryId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PayableEntry>>;
+
+    /// 按子账取回全部分录（按来源序号升序）。
+    ///
+    /// # 参数
+    /// * `account_id` - 应付往来子账 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回按 `source_sequence` 升序的全部分录。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn find_entries_by_account(
+        &self,
+        account_id: &PayableAccountId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PayableEntry>>;
+
+    /// 按业务范围取最早增加分录到期日（FIN-R07）。
+    ///
+    /// 按子账过滤 `direction = increase`，只投影 `due_date`，按
+    /// `(due_date, id)` 稳定升序取第一条；无增加分录时返回 `None`，
+    /// 由 Service 转译既有“缺少增加分录”错误。空集不访问数据库；
+    /// 查询形状由 `idx_payable_entries_account_direction_due` 覆盖。
+    ///
+    /// # 参数
+    /// * `account_id` - 应付往来子账 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回确定性最早到期日；无增加分录时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn earliest_increase_due_date(
+        &self,
+        account_id: &PayableAccountId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<BusinessDate>>;
+}
+
+impl PayableEntryRepositoryExt for persistence_core::Repository<'_, PayableEntry> {
+    async fn minimum_due_dates_by_accounts(
         &self,
         account_ids: &[PayableAccountId],
         executor: &mut dyn Executor,
@@ -74,20 +157,7 @@ impl<'a> PayableEntryRepository<'a> {
         Ok(rows.into_iter().map(|row| (row.account_id, row.due_date)).collect())
     }
 
-    /// 批量按子账集合取回分录（`$in` 一次取回，禁止 N+1）。
-    ///
-    /// 用于账龄汇总与付款核销锁定；只返回未删除分录（事实类恒未删除）。
-    ///
-    /// # 参数
-    /// * `account_ids` - 应付往来子账 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回全部匹配分录。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_entries_by_accounts(
+    async fn find_entries_by_accounts(
         &self,
         account_ids: &[PayableAccountId],
         executor: &mut dyn Executor,
@@ -99,18 +169,7 @@ impl<'a> PayableEntryRepository<'a> {
         self.find_many(doc! { "payable_account_id": { "$in": account_ids } }, executor).await
     }
 
-    /// 按主键集合批量取回应付分录（`$in` 一次取回，禁止 N+1）。
-    ///
-    /// # 参数
-    /// * `entry_ids` - 应付分录 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回全部匹配分录；空集合直接返回空列表。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_entries_by_ids(
+    async fn find_entries_by_ids(
         &self,
         entry_ids: &[PayableEntryId],
         executor: &mut dyn Executor,
@@ -122,18 +181,7 @@ impl<'a> PayableEntryRepository<'a> {
         self.find_many(doc! { "id": { "$in": ids } }, executor).await
     }
 
-    /// 按子账取回全部分录（按来源序号升序）。
-    ///
-    /// # 参数
-    /// * `account_id` - 应付往来子账 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回按 `source_sequence` 升序的全部分录。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_entries_by_account(
+    async fn find_entries_by_account(
         &self,
         account_id: &PayableAccountId,
         executor: &mut dyn Executor,
@@ -146,23 +194,7 @@ impl<'a> PayableEntryRepository<'a> {
         .await
     }
 
-    /// 按业务范围取最早增加分录到期日（FIN-R07）。
-    ///
-    /// 按子账过滤 `direction = increase`，只投影 `due_date`，按
-    /// `(due_date, id)` 稳定升序取第一条；无增加分录时返回 `None`，
-    /// 由 Service 转译既有“缺少增加分录”错误。空集不访问数据库；
-    /// 查询形状由 `idx_payable_entries_account_direction_due` 覆盖。
-    ///
-    /// # 参数
-    /// * `account_id` - 应付往来子账 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回确定性最早到期日；无增加分录时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn earliest_increase_due_date(
+    async fn earliest_increase_due_date(
         &self,
         account_id: &PayableAccountId,
         executor: &mut dyn Executor,
@@ -212,7 +244,8 @@ fn minimum_due_dates_pipeline(
     ]
 }
 
-impl<'a> PayableEntryOffsetRepository<'a> {
+#[allow(async_fn_in_trait)]
+pub trait PayableEntryOffsetRepositoryExt {
     /// 按减少分录取回全部抵销（按抵销序号升序）。
     ///
     /// 用于校验「减少分录分配合计等于其金额」（数据模型 §6.9）。
@@ -226,18 +259,11 @@ impl<'a> PayableEntryOffsetRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_offsets_by_decrease(
+    async fn find_offsets_by_decrease(
         &self,
         decrease_entry_id: &PayableEntryId,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<PayableEntryOffset>> {
-        self.find_many_sorted(
-            doc! { "decrease_entry_id": decrease_entry_id.to_string() },
-            doc! { "offset_sequence": 1 },
-            executor,
-        )
-        .await
-    }
+    ) -> Result<Vec<PayableEntryOffset>>;
 
     /// 按增加分录取回被冲减的抵销集合。
     ///
@@ -252,7 +278,28 @@ impl<'a> PayableEntryOffsetRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_offsets_by_increase(
+    async fn find_offsets_by_increase(
+        &self,
+        increase_entry_id: &PayableEntryId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PayableEntryOffset>>;
+}
+
+impl PayableEntryOffsetRepositoryExt for persistence_core::Repository<'_, PayableEntryOffset> {
+    async fn find_offsets_by_decrease(
+        &self,
+        decrease_entry_id: &PayableEntryId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PayableEntryOffset>> {
+        self.find_many_sorted(
+            doc! { "decrease_entry_id": decrease_entry_id.to_string() },
+            doc! { "offset_sequence": 1 },
+            executor,
+        )
+        .await
+    }
+
+    async fn find_offsets_by_increase(
         &self,
         increase_entry_id: &PayableEntryId,
         executor: &mut dyn Executor,

@@ -1,11 +1,11 @@
 //! 公司专用查询始终限定我方公司角色。
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, PageResult, Result, mongo_ops};
+use persistence_core::{Executor, PageResult, Repository, Result, mongo_ops};
 
+use crate::Party;
 use crate::dto::company::CompanyListParams;
 use crate::entity::party::company::identity_name;
-use crate::{Party, PartyRepository};
 
 /// 构建分页前公司筛选条件，列表和总数共用。
 fn company_filter(params: &CompanyListParams) -> Document {
@@ -20,12 +20,28 @@ fn company_filter(params: &CompanyListParams) -> Document {
     filter
 }
 
-impl PartyRepository<'_> {
+/// 公司专用查询扩展，始终限定我方公司角色。
+#[allow(async_fn_in_trait)]
+pub trait PartyRepositoryCompanyExt {
     /// 查询公司列表，稳定排序且有界分页。
     ///
     /// # Errors
     /// 查询或计数失败时返回仓储错误。
-    pub async fn companies(
+    async fn companies(
+        &self,
+        params: &CompanyListParams,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<Party>>;
+
+    /// 精确解析公司全称、简称或别名；不使用模糊结果猜测身份。
+    ///
+    /// # Errors
+    /// 查询失败返回仓储错误；已停用或无匹配返回空值。
+    async fn company_by_name(&self, name: &str, executor: &mut dyn Executor) -> Result<Option<Party>>;
+}
+
+impl PartyRepositoryCompanyExt for Repository<'_, Party> {
+    async fn companies(
         &self,
         params: &CompanyListParams,
         executor: &mut dyn Executor,
@@ -43,11 +59,7 @@ impl PartyRepository<'_> {
         Ok(PageResult { items, total: total as i64 })
     }
 
-    /// 精确解析公司全称、简称或别名；不使用模糊结果猜测身份。
-    ///
-    /// # Errors
-    /// 查询失败返回仓储错误；已停用或无匹配返回空值。
-    pub async fn company_by_name(&self, name: &str, executor: &mut dyn Executor) -> Result<Option<Party>> {
+    async fn company_by_name(&self, name: &str, executor: &mut dyn Executor) -> Result<Option<Party>> {
         self.find_one(doc! { "company_profile.names": identity_name(name), "status": "active" }, executor)
             .await
     }

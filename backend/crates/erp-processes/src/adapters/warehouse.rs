@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use entity_core::BaseModel;
 use erp_audit::{AuditActorLogs, AuditExt, AuditLog, AuditLogData};
 use erp_core::AccountKind;
+use erp_identity::repository::prelude::*;
 use erp_identity::{AccessControlExt, Permission, SharedRbacService};
 use erp_support::content_fingerprint;
 use erp_warehouse::{

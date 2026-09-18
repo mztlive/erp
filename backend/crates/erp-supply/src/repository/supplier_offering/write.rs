@@ -10,6 +10,7 @@ use crate::entity::supplier_offering::{
 use crate::repository::SupplierOfferingExt;
 /// 同域持久化步骤，既有复合仓储和命令写入共用唯一实现。
 #[async_trait]
+#[allow(async_fn_in_trait)]
 pub(crate) trait OfferingWritePort: Sync {
     async fn offering(&self, value: &SupplierOffering, executor: &mut dyn Executor) -> Result<()>;
     async fn revision(&self, value: &SupplierOfferingRevision, executor: &mut dyn Executor) -> Result<()>;

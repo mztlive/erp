@@ -2,7 +2,6 @@
 use bpm::engine::DefinitionGraph;
 use erp_procurement::entity::purchase_order::PurchaseOrderStatus;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
-use erp_workflow::service::approval::policy::ApprovalRequirement;
 
 use super::super::dto::{
     DocumentApprovalDefinitionView, DocumentApprovalHistoryPageView, DocumentApprovalInstanceView,
@@ -52,11 +51,7 @@ pub fn document_approval_view_with_definition(
     status: PurchaseOrderStatus,
 ) -> DocumentApprovalView {
     DocumentApprovalView {
-        requirement: match ApprovalRequirement::ProcessRequired {
-            ApprovalRequirement::ProcessRequired => "PROCESS_REQUIRED",
-            ApprovalRequirement::NoApproval => "NO_APPROVAL",
-        }
-        .to_string(),
+        requirement: "PROCESS_REQUIRED".to_string(),
         definition: binding.map(|item| definition_view_from_binding(item, graph)),
         instance,
         recent_history: Vec::new(),

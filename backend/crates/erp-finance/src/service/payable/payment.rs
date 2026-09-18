@@ -12,6 +12,7 @@ use crate::entity::payable::{
     SupplierPaymentStatus,
 };
 use crate::repository::PayableExt;
+use crate::repository::prelude::*;
 use crate::{Error, Result};
 /// 已在当前 Executor 更新应付余额的核销结果。
 /// 组合层必须先同步这些账户的付款任务，然后用同一 Executor 完成付款写入。

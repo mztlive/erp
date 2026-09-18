@@ -13,11 +13,13 @@ use erp_procurement::entity::purchase_order::{
     PurchaseOrderRevisionLine, PurchaseOrderSubmissionLine,
 };
 use erp_procurement::repository::PurchaseOrderExt;
+use erp_procurement::repository::prelude::*;
 use erp_sales::entity::sales_order::{
     SalesOrderGoodsServiceLineRevision, SalesOrderRevision, SalesOrderRevisionLine,
     SalesOrderVoucherLineRevision,
 };
 use erp_sales::entity::sales_review::{SalesChangeOrder, SalesChangeSubmission, SalesChangeSubmissionLine};
+use erp_sales::repository::prelude::*;
 use erp_sales::repository::{SalesOrderExt, SalesReviewExt};
 use persistence_core::Executor;
 

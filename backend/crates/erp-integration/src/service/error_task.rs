@@ -10,6 +10,7 @@ use super::scope::{ScopedIntegrationList, ensure_page, resolve_list_scope};
 use crate::dto::{self, *};
 use crate::entity::integration_ops::*;
 use crate::repository::IntegrationOpsExt;
+use crate::repository::prelude::*;
 use crate::{Error, Result};
 /// 错误任务列表筛选条件类型。
 type ErrorTaskFilter = <Database as IntegrationOpsExt>::IntegrationErrorTaskFilter;

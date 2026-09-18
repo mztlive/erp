@@ -15,6 +15,7 @@ use erp_supply::entity::supplier_offering::{
     SupplierOfferingRevision,
 };
 use erp_supply::repository::SupplierOfferingExt;
+use erp_supply::repository::prelude::*;
 use erp_supply::repository::supplier_offering::{SupplierOfferingFilter, SupplierOfferingRow};
 use persistence_core::{Executor, PageResult, Result};
 

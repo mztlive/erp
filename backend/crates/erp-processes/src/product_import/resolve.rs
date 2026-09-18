@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 use application_core::AuditActor;
 use erp_catalog::entity::catalog::{EnableStatus, ProductKind};
+use erp_catalog::repository::prelude::*;
 use erp_catalog::{
     CatalogExt, CreateProductBrandRequest, CreateProductCategoryRequest, PRODUCT_IMPORT_UNIT_CODE,
     PRODUCT_IMPORT_UNIT_NAME,

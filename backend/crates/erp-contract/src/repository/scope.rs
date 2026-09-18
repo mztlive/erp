@@ -7,7 +7,6 @@ use serde::Deserialize;
 
 use super::contract::{ContractDomainRepository, ContractFilter};
 use super::extensions::ContractExt;
-use super::owned::ContractRepository;
 use crate::entity::contract::Contract;
 
 /// 同一角色已证明的合同责任条件；当前客户主责、协作与负责人组织分别解释。
@@ -295,7 +294,9 @@ pub fn authorization_document(
     }
 }
 
-impl ContractRepository<'_> {
+/// 合同集合上的授权读取。
+#[allow(async_fn_in_trait)]
+pub trait ContractRepositoryScopeExt {
     /// 按明确授权条件读取单个合同。
     ///
     /// # 参数
@@ -311,14 +312,12 @@ impl ContractRepository<'_> {
     ///
     /// # 关键业务约束
     /// ID 条件不能替换范围交集；空授权不得返回文档。
-    pub async fn find_authorized(
+    async fn find_authorized(
         &self,
         id: &str,
         scope: &ContractReadScope,
         executor: &mut dyn Executor,
-    ) -> Result<Option<Contract>> {
-        self.find_one(doc! { "$and": [{ "id": id }, scope.document()] }, executor).await
-    }
+    ) -> Result<Option<Contract>>;
 
     /// 装载指定合同的身份与所属客户，供历史参与收窄。
     ///
@@ -334,7 +333,24 @@ impl ContractRepository<'_> {
     ///
     /// # 关键业务约束
     /// 不得把其他单据类型的参与 ID 当作合同。
-    pub async fn customer_refs_by_ids(
+    async fn customer_refs_by_ids(
+        &self,
+        ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ContractCustomerRef>>;
+}
+
+impl ContractRepositoryScopeExt for persistence_core::Repository<'_, Contract> {
+    async fn find_authorized(
+        &self,
+        id: &str,
+        scope: &ContractReadScope,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<Contract>> {
+        self.find_one(doc! { "$and": [{ "id": id }, scope.document()] }, executor).await
+    }
+
+    async fn customer_refs_by_ids(
         &self,
         ids: &[String],
         executor: &mut dyn Executor,

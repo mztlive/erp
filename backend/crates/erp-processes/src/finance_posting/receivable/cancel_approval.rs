@@ -12,6 +12,7 @@ use erp_finance::entity::receivable::CustomerReceipt;
 use erp_finance::repository::ReceivableExt;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::work_item::WorkItem;
+use erp_workflow::repository::prelude::*;
 use erp_workflow::service::approval::execution::authorization::converge_eligibility;
 use erp_workflow::service::approval::execution::{
     CancelExecutionInput, ExecutionCommandInput, PreparedExecution,

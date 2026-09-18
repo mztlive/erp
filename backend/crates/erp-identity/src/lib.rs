@@ -16,9 +16,11 @@ pub use entity::{
 pub use error::{Error, Result};
 pub use ports::{AuthorizationPort, IdentityAuditPort, OrganizationScopeFact, PreparedResourceAudit};
 pub use repository::{
-    AccessControlExt, AccessControlRepository, AccountCoreRepository, AuditEventFilter, AuditEventRepository,
-    AuditEventRow, CASBIN_RULES, DataScopeFilter, DataScopeRepository, DataScopeRow, MongoCasbinAdapter,
-    PermissionFilter, PermissionRepository, PermissionRow, RoleRepository, UserRoleRepository,
+    AccessControlExt, AccessControlRepository, AccountCoreRepository, AccountCoreRepositoryExt,
+    AuditEventFilter, AuditEventRepository, AuditEventRepositoryExt, AuditEventRow, CASBIN_RULES,
+    DataScopeFilter, DataScopeRepository, DataScopeRepositoryExt, DataScopeRow, MongoCasbinAdapter,
+    PermissionFilter, PermissionRepository, PermissionRepositoryExt, PermissionRow, RoleRepository,
+    RoleRepositoryExt, UserRoleRepository, UserRoleRepositoryExt,
 };
 pub use service::access_control::AccessControlService;
 pub use service::auth::{AuthRequest, AuthResponse, BackofficeAuthResult, BackofficeAuthService};

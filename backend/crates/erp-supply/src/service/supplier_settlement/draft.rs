@@ -13,6 +13,7 @@ use super::shared::*;
 use crate::dto::supplier_settlement::*;
 use crate::entity::supplier_settlement::*;
 use crate::repository::SupplierSettlementExt;
+use crate::repository::prelude::*;
 use crate::{Error, Result};
 /// 已核验的创建结算单与冻结来源快照。
 pub struct PreparedStatement {

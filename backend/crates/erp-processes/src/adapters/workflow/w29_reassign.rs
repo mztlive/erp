@@ -3,6 +3,7 @@
 use erp_core::common::time::Instant;
 use erp_identity::repository::OrganizationRepository;
 use erp_integration::repository::IntegrationOpsExt;
+use erp_integration::repository::prelude::*;
 use erp_workflow::entity::work_item::WorkItem;
 use erp_workflow::{Error as WorkflowError, Result as WorkflowResult};
 use mongodb::Database;

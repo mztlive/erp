@@ -10,13 +10,17 @@
 use erp_core::ids::{PurchaseOrderRevisionLineId, PurchaseOrderSubmissionId};
 use erp_core::money::Amount;
 use erp_finance::repository::PayableExt;
+use erp_finance::repository::prelude::*;
 use erp_identity::AccessControlExt;
+use erp_identity::repository::prelude::*;
 use erp_procurement::entity::purchase_order::{
     PurchaseChangeOrder, PurchaseLineSalesAllocation, PurchaseOrder, PurchaseOrderRevision,
     PurchaseOrderRevisionLine, PurchaseOrderSubmission, PurchaseOrderSubmissionLine,
 };
 use erp_procurement::repository::PurchaseOrderExt;
+use erp_procurement::repository::prelude::*;
 use erp_sales::repository::SalesOrderExt;
+use erp_sales::repository::prelude::*;
 use mongodb::Database;
 use persistence_core::{Executor, Result};
 

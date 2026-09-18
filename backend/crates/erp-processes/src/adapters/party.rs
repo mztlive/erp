@@ -9,6 +9,7 @@ use erp_audit::{AuditActorLogs, AuditExt, AuditLog, AuditLogData};
 use erp_core::ids::PartyId;
 use erp_party::{PartyAuditPort, PreparedPartyAudit, SupplierRolePort};
 use erp_supplier::SupplierExt;
+use erp_supplier::repository::prelude::*;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 

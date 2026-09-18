@@ -1,3 +1,5 @@
+#![allow(async_fn_in_trait)]
+
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
@@ -86,7 +88,9 @@ impl Pagination for SupplierSettlementItemFilter {
     }
 }
 
-impl<'a> SupplierSettlementItemRepository<'a> {
+/// 供应商结算明细仓储的域查询。
+#[allow(async_fn_in_trait)]
+pub trait SupplierSettlementItemRepositoryExt {
     /// 按结算单读取全部冻结明细，按创建时间和主键升序排列。
     ///
     /// # 参数
@@ -98,18 +102,11 @@ impl<'a> SupplierSettlementItemRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_by_statement(
+    async fn list_by_statement(
         &self,
         statement_id: &str,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<SupplierSettlementItem>> {
-        self.find_many_sorted(
-            doc! { "statement_id": statement_id },
-            doc! { "created_at": 1, "id": 1 },
-            executor,
-        )
-        .await
-    }
+    ) -> Result<Vec<SupplierSettlementItem>>;
 
     /// 按结算单主键批量读取全部冻结明细。
     ///
@@ -122,21 +119,11 @@ impl<'a> SupplierSettlementItemRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn list_by_statement_ids(
+    async fn list_by_statement_ids(
         &self,
         statement_ids: &[String],
         executor: &mut dyn Executor,
-    ) -> Result<Vec<SupplierSettlementItem>> {
-        if statement_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        self.find_many_sorted(
-            doc! { "statement_id": { "$in": statement_ids } },
-            doc! { "statement_id": 1, "created_at": 1, "id": 1 },
-            executor,
-        )
-        .await
-    }
+    ) -> Result<Vec<SupplierSettlementItem>>;
 
     /// 分页检索供应商结算明细列表（投影查询）。
     ///
@@ -152,7 +139,44 @@ impl<'a> SupplierSettlementItemRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_supplier_settlement_items(
+    async fn search_supplier_settlement_items(
+        &self,
+        filter: &SupplierSettlementItemFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<SupplierSettlementItemRow>>;
+}
+
+impl SupplierSettlementItemRepositoryExt for SupplierSettlementItemRepository<'_> {
+    async fn list_by_statement(
+        &self,
+        statement_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierSettlementItem>> {
+        self.find_many_sorted(
+            doc! { "statement_id": statement_id },
+            doc! { "created_at": 1, "id": 1 },
+            executor,
+        )
+        .await
+    }
+
+    async fn list_by_statement_ids(
+        &self,
+        statement_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierSettlementItem>> {
+        if statement_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many_sorted(
+            doc! { "statement_id": { "$in": statement_ids } },
+            doc! { "statement_id": 1, "created_at": 1, "id": 1 },
+            executor,
+        )
+        .await
+    }
+
+    async fn search_supplier_settlement_items(
         &self,
         filter: &SupplierSettlementItemFilter,
         executor: &mut dyn Executor,

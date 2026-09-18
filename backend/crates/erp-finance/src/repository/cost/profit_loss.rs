@@ -4,13 +4,22 @@ use mongodb::options::FindOptions;
 use persistence_core::{Executor, Result, mongo_ops};
 
 use crate::entity::cost::{CostAllocation, CostEntry};
-use crate::repository::owned::{CostAllocationRepository, CostEntryRepository};
 
 /// 单次报表的成本分配上限；额外一条用于报错而非静默截断。
 pub const PROFIT_LOSS_ALLOCATION_LIMIT: usize = 100_000;
-impl CostAllocationRepository<'_> {
+
+#[allow(async_fn_in_trait)]
+pub trait CostAllocationProfitLossExt {
     /// 返回目标订单的分配，使用已有销售单索引；空范围不访问数据库。
-    pub async fn profit_loss_allocations(
+    async fn profit_loss_allocations(
+        &self,
+        ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<CostAllocation>>;
+}
+
+impl CostAllocationProfitLossExt for persistence_core::Repository<'_, CostAllocation> {
+    async fn profit_loss_allocations(
         &self,
         ids: &[String],
         executor: &mut dyn Executor,
@@ -28,9 +37,19 @@ impl CostAllocationRepository<'_> {
         .await
     }
 }
-impl CostEntryRepository<'_> {
+
+#[allow(async_fn_in_trait)]
+pub trait CostEntryProfitLossExt {
     /// 按分配引用读取完整成本事实；调用方校验缺失事实，禁止视为零成本。
-    pub async fn profit_loss_entries(
+    async fn profit_loss_entries(
+        &self,
+        ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<CostEntry>>;
+}
+
+impl CostEntryProfitLossExt for persistence_core::Repository<'_, CostEntry> {
+    async fn profit_loss_entries(
         &self,
         ids: &[String],
         executor: &mut dyn Executor,

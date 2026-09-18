@@ -3,6 +3,7 @@
 use application_core::AuditActor;
 use erp_catalog::entity::catalog::product_import::{collapse_import_text, truncate_import_text};
 use erp_catalog::{PRODUCT_IMPORT_SHEET_NAME, ProductImportJobView};
+use erp_support::repository::prelude::*;
 use erp_support::{
     BackgroundJob, BackgroundJobAggregate, BackgroundJobAggregateData, BackgroundJobId, BackgroundJobItem,
     BackgroundJobItemDraft, BackgroundJobItemId, BackgroundJobRegistration, BulkJobExt, FileAsset,

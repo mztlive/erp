@@ -7,6 +7,7 @@
 use std::collections::HashMap;
 
 use erp_identity::AccessControlExt;
+use erp_identity::repository::prelude::*;
 use persistence_core::Executor;
 
 use super::dto::WorkItemSummarySection;

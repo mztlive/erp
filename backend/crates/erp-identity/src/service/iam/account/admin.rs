@@ -15,6 +15,7 @@ use crate::entity::auth::LoginAccount;
 use crate::entity::rbac::RoleIdSet;
 use crate::error::Result;
 use crate::ports::PreparedResourceAudit;
+use crate::repository::prelude::*;
 use crate::service::account_support::{account_of_kind, apply_account_update, ensure_account_available};
 use crate::service::auth::password;
 use crate::service::iam::{AuthorizedAccountManagement, AuthorizedRoleGrant, SharedRbacService};

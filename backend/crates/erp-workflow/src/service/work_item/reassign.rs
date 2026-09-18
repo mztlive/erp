@@ -24,6 +24,7 @@ use crate::entity::work_item::{
 use crate::error::{Error, Result};
 use crate::ports::PreparedWorkflowAudit;
 use crate::repository::WorkItemExt;
+use crate::repository::prelude::*;
 
 const REASSIGN_VERSION_CONFLICT: &str = "任务版本已变化";
 const AUTHORIZATION_SNAPSHOT_ATTEMPTS: usize = 3;

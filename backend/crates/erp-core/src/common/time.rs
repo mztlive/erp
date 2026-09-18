@@ -1,4 +1,4 @@
-//! `BusinessDate` / `Instant` 时间基元（P0-1.4 共享基元任务）。
+//! `BusinessDate` / `Instant` 时间基元。
 //!
 //! - `BusinessDate`：业务自然日（`chrono::NaiveDate`），无时区语义，用于到期日、
 //!   结算期间等只关心自然日的字段；serde 形态为 `YYYY-MM-DD` 字符串。
@@ -35,6 +35,20 @@ impl BusinessDate {
     /// 日期合法返回 `Some`，非法（如 2 月 30 日）返回 `None`。
     pub fn from_ymd(year: i32, month: u32, day: u32) -> Option<Self> {
         NaiveDate::from_ymd_opt(year, month, day).map(Self)
+    }
+
+    /// 由已合法的 `NaiveDate` 构造业务日期。
+    ///
+    /// # 参数
+    /// * `date` - 已构造成功的日历日期
+    ///
+    /// # 返回
+    /// 返回对应业务日期。
+    ///
+    /// # 错误
+    /// 无。
+    pub(crate) fn from_naive_date(date: NaiveDate) -> Self {
+        Self(date)
     }
 
     /// 返回今天的业务自然日。

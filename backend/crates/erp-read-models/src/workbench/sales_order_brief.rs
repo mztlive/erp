@@ -11,6 +11,7 @@ use erp_core::money::Amount;
 use erp_core::money::Quantity;
 use erp_sales::entity::sales_order::{SalesOrder, SalesOrderSubmission, SalesOrderSubmissionLine};
 use erp_sales::repository::SalesOrderExt;
+use erp_sales::repository::prelude::*;
 use persistence_core::Executor;
 
 use super::authority::sales::preferred_submission;

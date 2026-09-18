@@ -15,6 +15,7 @@ use crate::entity::sales_selection::{
 };
 use crate::ports::sales_selection::{SelectionCatalogPort, SelectionImagePort};
 use crate::repository::SalesSelectionExt;
+use crate::repository::prelude::*;
 use crate::{Error, Result};
 
 /// 完整计算结果仅在通过任务身份、运行代数、册版本和期限检查后提交。

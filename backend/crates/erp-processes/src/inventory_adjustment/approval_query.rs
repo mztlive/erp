@@ -12,6 +12,7 @@ use erp_inventory::{
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::work_item::WorkItem;
+use erp_workflow::repository::prelude::*;
 use erp_workflow::service::approval::execution::authorization::requires_blocked_cancel;
 use erp_workflow::service::approval::execution::{
     RuntimeHistoryItem, history_item_from_execution, history_page_from, latest_rejection_reason,

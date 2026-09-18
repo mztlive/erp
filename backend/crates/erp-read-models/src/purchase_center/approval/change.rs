@@ -1,7 +1,6 @@
 //! 冻结绑定与业务状态的采购审批只读投影。
 use erp_procurement::entity::purchase_order::PurchaseChangeOrderStatus;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
-use erp_workflow::service::approval::policy::ApprovalRequirement;
 
 use super::super::dto::{
     DocumentApprovalDefinitionView, DocumentApprovalHistoryPageView, DocumentApprovalInstanceView,
@@ -24,11 +23,7 @@ pub fn document_approval_view(
     status: PurchaseChangeOrderStatus,
 ) -> DocumentApprovalView {
     DocumentApprovalView {
-        requirement: match ApprovalRequirement::ProcessRequired {
-            ApprovalRequirement::ProcessRequired => "PROCESS_REQUIRED",
-            ApprovalRequirement::NoApproval => "NO_APPROVAL",
-        }
-        .to_string(),
+        requirement: "PROCESS_REQUIRED".to_string(),
         definition: binding.map(definition_view_from_binding),
         instance,
         recent_history: Vec::new(),

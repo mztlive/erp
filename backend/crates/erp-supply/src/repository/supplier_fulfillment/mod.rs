@@ -46,6 +46,9 @@ use crate::repository::owned::{
     SupplierOfferingRevisionRepository, SupplierOrderActionLineRepository, SupplierOrderActionRepository,
     SupplierOrderStatusHistoryRepository, SupplierRefundAllocationRepository, SupplierRefundFactRepository,
 };
+use crate::repository::supplier_offering::{
+    SupplierOfferingRepositoryExt, SupplierOfferingRevisionRepositoryExt,
+};
 
 /// `supplier_fulfillment_order` 集合名（单一来源：`SupplierFulfillmentExt` 关联常量）。
 const SUPPLIER_FULFILLMENT_ORDERS: &str =
@@ -75,8 +78,16 @@ mod item;
 mod order;
 mod refund;
 
-pub use order::{SupplierFulfillmentOrderFilter, SupplierFulfillmentOrderRow};
-pub use refund::{RefundFinancialSnapshot, SupplierRefundFactBundle};
+pub use action::{SupplierOrderActionLineRepositoryExt, SupplierOrderActionRepositoryExt};
+pub use history::SupplierOrderStatusHistoryRepositoryExt;
+pub use item::SupplierFulfillmentItemRepositoryExt;
+pub use order::{
+    SupplierFulfillmentOrderFilter, SupplierFulfillmentOrderRepositoryExt, SupplierFulfillmentOrderRow,
+};
+pub use refund::{
+    RefundFinancialSnapshot, SupplierRefundAllocationRepositoryExt, SupplierRefundFactBundle,
+    SupplierRefundFactRepositoryExt,
+};
 
 /// 订单金额合计聚合行（FUL-R05）。
 #[derive(Debug, Deserialize)]

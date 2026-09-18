@@ -2,9 +2,13 @@
 use erp_finance::repository::keyword::{FinanceKeyword, FinanceKeywordRepository, FinanceSearchTarget};
 use erp_party::PartyExt;
 use erp_procurement::repository::PurchaseOrderExt;
+use erp_procurement::repository::prelude::*;
 use erp_sales::repository::SalesOrderExt;
+use erp_sales::repository::prelude::*;
 use erp_supplier::SupplierExt;
+use erp_supplier::repository::prelude::*;
 use erp_supply::repository::SupplierSettlementExt;
+use erp_supply::repository::prelude::*;
 use mongodb::Database;
 use persistence_core::NoTransaction;
 

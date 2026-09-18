@@ -5,7 +5,9 @@ use erp_core::ids::{SalesOrderId, SkuId};
 use erp_procurement::entity::purchase_order::SalesProcurementCoverage;
 use erp_procurement::service::purchase_order::creation_basis::{basis_groups_from_facts, zero_quantity};
 use erp_sales::repository::SalesOrderExt;
+use erp_sales::repository::prelude::*;
 use erp_workflow::WorkItemExt;
+use erp_workflow::repository::prelude::*;
 use persistence_core::NoTransaction;
 
 use super::super::PurchaseOrderReadService;

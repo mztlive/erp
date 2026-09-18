@@ -4,10 +4,12 @@ use std::collections::BTreeSet;
 use erp_finance::entity::cost::{CostAllocation, CostEntry};
 use erp_finance::repository::CostExt;
 use erp_finance::repository::cost::profit_loss::PROFIT_LOSS_ALLOCATION_LIMIT;
+use erp_finance::repository::prelude::*;
 use erp_sales::entity::sales_order::{
     SalesOrderGoodsServiceLineRevision, SalesOrderRevision, SalesOrderRevisionLine,
 };
 use erp_sales::repository::SalesOrderExt;
+use erp_sales::repository::prelude::*;
 use erp_sales::repository::sales_order::profit_loss::{
     PROFIT_LOSS_ORDER_LIMIT, ProfitLossOrder, ProfitLossOrderFilter,
 };

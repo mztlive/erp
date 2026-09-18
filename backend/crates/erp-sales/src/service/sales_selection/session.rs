@@ -15,6 +15,7 @@ use crate::entity::sales_selection::{
     SessionChoice, build_proposal_lines, normalize_idempotency_key, request_hash, token_hash,
 };
 use crate::repository::SalesSelectionExt;
+use crate::repository::prelude::*;
 use crate::{Error, Result};
 
 impl SalesSelectionService {

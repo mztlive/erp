@@ -6,7 +6,11 @@ use mongodb::bson::doc;
 use persistence_core::{Executor, Result, mongo_ops};
 
 use super::super::extensions::PartyExt;
-use super::{PARTIES, PARTY_REVISIONS, PartyDomainRepository};
+use super::{
+    PARTIES, PARTY_REVISIONS, PartyAddressRepositoryExt, PartyBankAccountRepositoryExt,
+    PartyContactRepositoryExt, PartyDomainRepository, PartyRepositoryExt, PartyRevisionRepositoryExt,
+    PartyTaxProfileRepositoryExt,
+};
 use crate::entity::party::{
     Party, PartyAddress, PartyBankAccount, PartyContact, PartyRevision, PartyTaxProfile,
 };

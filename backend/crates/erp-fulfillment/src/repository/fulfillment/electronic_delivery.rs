@@ -7,8 +7,7 @@ use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result};
 use serde::{Deserialize, Serialize};
 
 use super::sort_doc;
-use crate::entity::fulfillment::{ElectronicDeliveryState, FulfillmentResult};
-use crate::repository::owned::ElectronicDeliveryRepository;
+use crate::entity::fulfillment::{ElectronicDelivery, ElectronicDeliveryState, FulfillmentResult};
 
 /// 电子交付记录排序白名单（查询与测试共用）。
 const ELECTRONIC_DELIVERY_SORT_FIELDS: &[&str] = &["occurred_at", "recorded_at", "created_at"];
@@ -84,7 +83,9 @@ impl Pagination for ElectronicDeliveryFilter {
     }
 }
 
-impl<'a> ElectronicDeliveryRepository<'a> {
+/// 电子交付记录仓储扩展：列表投影查询。
+#[allow(async_fn_in_trait)]
+pub trait ElectronicDeliveryRepositoryExt {
     /// 分页检索电子交付记录列表（投影查询）。
     ///
     /// 只返回 [`ElectronicDeliveryRow`] 所需的列表字段（交付对象快照及其指纹
@@ -99,6 +100,14 @@ impl<'a> ElectronicDeliveryRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    async fn search_electronic_deliveries(
+        &self,
+        filter: &ElectronicDeliveryFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<ElectronicDeliveryRow>>;
+}
+
+impl ElectronicDeliveryRepositoryExt for persistence_core::Repository<'_, ElectronicDelivery> {
     #[tracing::instrument(
         name = "repository.fulfillment.search_electronic_deliveries",
         skip_all,
@@ -110,7 +119,7 @@ impl<'a> ElectronicDeliveryRepository<'a> {
             db.operation.name = "search"
         )
     )]
-    pub async fn search_electronic_deliveries(
+    async fn search_electronic_deliveries(
         &self,
         filter: &ElectronicDeliveryFilter,
         executor: &mut dyn Executor,

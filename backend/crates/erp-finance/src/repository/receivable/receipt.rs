@@ -13,7 +13,6 @@ use super::sort_doc;
 use crate::entity::receivable::{
     CustomerReceipt, CustomerReceiptStatus, PendingReceiptAllocation, ReceiptAllocation,
 };
-use crate::repository::owned::{CustomerReceiptRepository, ReceiptAllocationRepository};
 
 /// 客户回款单列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -137,7 +136,8 @@ impl Pagination for CustomerReceiptFilter {
     }
 }
 
-impl<'a> CustomerReceiptRepository<'a> {
+#[allow(async_fn_in_trait)]
+pub trait CustomerReceiptRepositoryExt {
     /// 分页检索客户回款单列表（投影查询）。
     ///
     /// 只返回 [`CustomerReceiptRow`] 所需的列表字段；回款单号支持字面量
@@ -152,7 +152,49 @@ impl<'a> CustomerReceiptRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_customer_receipts(
+    async fn search_customer_receipts(
+        &self,
+        filter: &CustomerReceiptFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<CustomerReceiptRow>>;
+
+    /// 按回款单号精确查找（单号全局唯一，`uk_customer_receipts_no` 保证）。
+    ///
+    /// # 参数
+    /// * `receipt_no` - 回款单号
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配的回款单；无匹配时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    async fn find_by_receipt_no(
+        &self,
+        receipt_no: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<CustomerReceipt>>;
+
+    /// 批量按回款单 ID 读取活跃回款事实。
+    ///
+    /// # 参数
+    /// * `receipt_ids` - 回款单 ID 字符串集合；空集合直接返回空结果
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配且未删除的回款单；返回顺序不承诺与输入一致。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn find_receipts_by_ids(
+        &self,
+        receipt_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<CustomerReceipt>>;
+}
+
+impl CustomerReceiptRepositoryExt for persistence_core::Repository<'_, CustomerReceipt> {
+    async fn search_customer_receipts(
         &self,
         filter: &CustomerReceiptFilter,
         executor: &mut dyn Executor,
@@ -174,18 +216,7 @@ impl<'a> CustomerReceiptRepository<'a> {
         Ok(PageResult { items, total: total as i64 })
     }
 
-    /// 按回款单号精确查找（单号全局唯一，`uk_customer_receipts_no` 保证）。
-    ///
-    /// # 参数
-    /// * `receipt_no` - 回款单号
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的回款单；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_receipt_no(
+    async fn find_by_receipt_no(
         &self,
         receipt_no: &str,
         executor: &mut dyn Executor,
@@ -193,18 +224,7 @@ impl<'a> CustomerReceiptRepository<'a> {
         self.find_one_by_field("receipt_no", receipt_no, executor).await
     }
 
-    /// 批量按回款单 ID 读取活跃回款事实。
-    ///
-    /// # 参数
-    /// * `receipt_ids` - 回款单 ID 字符串集合；空集合直接返回空结果
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回全部匹配且未删除的回款单；返回顺序不承诺与输入一致。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_receipts_by_ids(
+    async fn find_receipts_by_ids(
         &self,
         receipt_ids: &[String],
         executor: &mut dyn Executor,
@@ -217,7 +237,8 @@ impl<'a> CustomerReceiptRepository<'a> {
     }
 }
 
-impl<'a> ReceiptAllocationRepository<'a> {
+#[allow(async_fn_in_trait)]
+pub trait ReceiptAllocationRepositoryExt {
     /// 批量按回款单集合取回核销分配（`$in` 一次取回，禁止 N+1）。
     ///
     /// # 参数
@@ -229,17 +250,11 @@ impl<'a> ReceiptAllocationRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_allocations_by_receipts(
+    async fn find_allocations_by_receipts(
         &self,
         receipt_ids: &[CustomerReceiptId],
         executor: &mut dyn Executor,
-    ) -> Result<Vec<ReceiptAllocation>> {
-        if receipt_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        let receipt_ids: Vec<String> = receipt_ids.iter().map(ToString::to_string).collect();
-        self.find_many(doc! { "customer_receipt_id": { "$in": receipt_ids } }, executor).await
-    }
+    ) -> Result<Vec<ReceiptAllocation>>;
 
     /// 批量按应收分录集合取回核销分配（`$in`，用于反向核销锁定）。
     ///
@@ -252,7 +267,27 @@ impl<'a> ReceiptAllocationRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_allocations_by_entries(
+    async fn find_allocations_by_entries(
+        &self,
+        entry_ids: &[ReceivableEntryId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ReceiptAllocation>>;
+}
+
+impl ReceiptAllocationRepositoryExt for persistence_core::Repository<'_, ReceiptAllocation> {
+    async fn find_allocations_by_receipts(
+        &self,
+        receipt_ids: &[CustomerReceiptId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ReceiptAllocation>> {
+        if receipt_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let receipt_ids: Vec<String> = receipt_ids.iter().map(ToString::to_string).collect();
+        self.find_many(doc! { "customer_receipt_id": { "$in": receipt_ids } }, executor).await
+    }
+
+    async fn find_allocations_by_entries(
         &self,
         entry_ids: &[ReceivableEntryId],
         executor: &mut dyn Executor,

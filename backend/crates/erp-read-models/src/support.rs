@@ -22,7 +22,7 @@ use crate::{Error, Result};
 /// * `ConflictError` - 后续页缺失范围版本时拒绝，要求从第一页刷新
 pub(crate) fn ensure_deep_page(page: u64, scope_version: Option<&str>) -> Result<()> {
     if page > 1 && scope_version.is_none_or(str::is_empty) {
-        return Err(Error::ConflictError("DATA_SCOPE_CHANGED：请从第一页刷新后继续查询".into()));
+        return Err(data_scope_changed("请从第一页刷新后继续查询"));
     }
     Ok(())
 }

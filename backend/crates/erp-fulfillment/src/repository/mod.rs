@@ -3,8 +3,13 @@
 pub mod extensions;
 pub mod fulfillment;
 pub mod owned;
+pub mod prelude;
 
 pub use extensions::FulfillmentExt;
+pub use fulfillment::{
+    CustomerAcceptanceRepositoryExt, DeliveryRepositoryExt, ElectronicDeliveryRepositoryExt,
+    PurchaseReceiptRepositoryExt, ServiceFulfillmentRepositoryExt,
+};
 
 #[cfg(test)]
 mod serialization_contract;

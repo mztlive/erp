@@ -1,5 +1,7 @@
 //! CustomerRefund 详情与分页视图装配。
 use erp_returns::repository::ReturnsExt;
+use erp_returns::repository::prelude::*;
+use erp_workflow::repository::prelude::*;
 use persistence_core::NoTransaction;
 use validator::Validate;
 
@@ -9,7 +11,6 @@ use crate::{Error, Result};
 /// 客户退款列表筛选条件类型。
 type CustomerRefundFilter = <mongodb::Database as ReturnsExt>::CustomerRefundFilter;
 use erp_workflow::DocumentRegistryExt;
-use erp_workflow::service::document_registry::find_approval_binding;
 
 use super::customer_refund_list::{
     CustomerRefundListFacts, customer_refund_view_from_facts, map_customer_refund_list_page,
@@ -107,14 +108,7 @@ impl ReturnsReadService {
             .find_by_id(&id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("客户退款单不存在".to_string()))?;
-        let binding = match find_approval_binding(&self.db, &id, &mut NoTransaction)
-            .await
-            .map_err(crate::Error::from)
-        {
-            Ok(binding) => binding,
-            Err(Error::NotFound(_)) => None,
-            Err(error) => return Err(error),
-        };
+        let binding = super::approval::optional_approval_binding(&self.db, &id).await?;
         let mut view =
             customer_refund_view_from_facts(CustomerRefundListFacts::from_refund(&refund), binding.as_ref());
         view.approval = super::approval::load_runtime(

@@ -9,6 +9,7 @@ use crate::entity::supplier_settlement::{
     SupplierSettlementDifference, SupplierSettlementItem, statement_digest_parts,
 };
 use crate::repository::SupplierSettlementExt;
+use crate::repository::prelude::*;
 use crate::{Error, Result};
 pub async fn load_statement_items(
     db: &Database,

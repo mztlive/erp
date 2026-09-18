@@ -3,6 +3,7 @@
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_catalog::{HandoverCandidateView, HandoverProductRequest, HandoverProductView};
+use erp_identity::repository::prelude::*;
 use erp_identity::{AccessControlExt, Permission, SharedRbacService};
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};

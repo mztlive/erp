@@ -22,9 +22,23 @@ mod submission;
 mod working_copy;
 
 use mongodb::Database;
-pub use order::{SalesOrderFilter, SalesOrderListView, SalesOrderRow, SalesOrderSearch};
-pub use submission::SubmissionFilter;
-pub use working_copy::WorkingCopyFilter;
+pub use order::{
+    SalesOrderFilter, SalesOrderLineRepositoryExt, SalesOrderListView, SalesOrderRepositoryExt,
+    SalesOrderRow, SalesOrderSearch,
+};
+pub use profit_loss::SalesOrderRepositoryProfitLossExt;
+pub use quality::SalesOrderRepositoryQualityExt;
+pub use revision::{
+    SalesOrderGoodsServiceLineRevisionRepositoryExt, SalesOrderRevisionLineRepositoryExt,
+    SalesOrderRevisionRepositoryExt, SalesOrderVoucherLineRevisionRepositoryExt,
+};
+pub use scope::SalesOrderRepositoryScopeExt;
+pub use submission::{
+    SalesOrderSubmissionLineRepositoryExt, SalesOrderSubmissionRepositoryExt, SubmissionFilter,
+};
+pub use working_copy::{
+    SalesOrderWorkingCopyLineRepositoryExt, SalesOrderWorkingCopyRepositoryExt, WorkingCopyFilter,
+};
 
 use super::extensions::SalesOrderExt;
 pub(crate) use crate::repository::filter::sort_doc;

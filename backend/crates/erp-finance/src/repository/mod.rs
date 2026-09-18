@@ -2,8 +2,10 @@
 
 pub mod cost;
 pub mod extensions;
+mod fulfillment_facts;
 pub mod owned;
 pub mod payable;
+pub mod prelude;
 mod progress;
 pub mod receivable;
 
@@ -19,6 +21,7 @@ pub use payable::{
     PayableAccountFilter, PayableAccountRow, PayableRepository, PurchaseInvoiceAllocationFilter,
     SupplierPaymentFilter, SupplierPaymentRow,
 };
+pub use prelude::*;
 pub use receivable::customer_center::CustomerCenterReceivableRow;
 pub use receivable::{
     CustomerReceiptFilter, CustomerReceiptRow, InvoiceFilter, InvoiceRow, ReceivableAccountFilter,
@@ -30,7 +33,5 @@ mod test_fixture;
 
 #[cfg(test)]
 mod serialization_contract;
-
-mod fulfillment_facts;
 
 pub mod keyword;

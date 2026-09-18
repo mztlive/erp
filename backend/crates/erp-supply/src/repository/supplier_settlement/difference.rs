@@ -1,3 +1,5 @@
+#![allow(async_fn_in_trait)]
+
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::Instant;
 use erp_core::ids::SupplierSettlementItemId;
@@ -97,9 +99,28 @@ impl Pagination for SupplierSettlementDifferenceFilter {
     }
 }
 
-impl<'a> SupplierSettlementDifferenceEvidenceRepository<'a> {
+/// 供应商结算差异补证仓储的域查询。
+#[allow(async_fn_in_trait)]
+pub trait SupplierSettlementDifferenceEvidenceRepositoryExt {
     /// 按稳定请求 ID 查找不可变差异补证。
-    pub async fn find_by_request_id(
+    async fn find_by_request_id(
+        &self,
+        request_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierSettlementDifferenceEvidence>>;
+
+    /// 批量读取差异对应的全部补证，避免详情 N+1。
+    async fn find_by_difference_ids(
+        &self,
+        difference_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierSettlementDifferenceEvidence>>;
+}
+
+impl SupplierSettlementDifferenceEvidenceRepositoryExt
+    for SupplierSettlementDifferenceEvidenceRepository<'_>
+{
+    async fn find_by_request_id(
         &self,
         request_id: &str,
         executor: &mut dyn Executor,
@@ -107,8 +128,7 @@ impl<'a> SupplierSettlementDifferenceEvidenceRepository<'a> {
         self.find_one(doc! { "request_id": request_id }, executor).await
     }
 
-    /// 批量读取差异对应的全部补证，避免详情 N+1。
-    pub async fn find_by_difference_ids(
+    async fn find_by_difference_ids(
         &self,
         difference_ids: &[String],
         executor: &mut dyn Executor,
@@ -125,7 +145,9 @@ impl<'a> SupplierSettlementDifferenceEvidenceRepository<'a> {
     }
 }
 
-impl<'a> SupplierSettlementDifferenceRepository<'a> {
+/// 供应商结算差异仓储的域查询。
+#[allow(async_fn_in_trait)]
+pub trait SupplierSettlementDifferenceRepositoryExt {
     /// 按结算明细批量读取差异，按创建时间和主键升序排列。
     ///
     /// # 参数
@@ -137,7 +159,35 @@ impl<'a> SupplierSettlementDifferenceRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_by_statement_item_ids(
+    async fn list_by_statement_item_ids(
+        &self,
+        statement_item_ids: &[SupplierSettlementItemId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierSettlementDifference>>;
+
+    /// 分页检索供应商结算差异列表（投影查询）。
+    ///
+    /// 只返回 [`SupplierSettlementDifferenceRow`] 所需的列表字段，不加载整文档；
+    /// 排序字段走白名单映射（`DIFFERENCE_SORT_FIELDS`），白名单外一律回退 `created_at`。
+    ///
+    /// # 参数
+    /// * `filter` - 筛选与分页条件
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回当前页投影行与满足筛选条件的总数。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    async fn search_supplier_settlement_differences(
+        &self,
+        filter: &SupplierSettlementDifferenceFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<SupplierSettlementDifferenceRow>>;
+}
+
+impl SupplierSettlementDifferenceRepositoryExt for SupplierSettlementDifferenceRepository<'_> {
+    async fn list_by_statement_item_ids(
         &self,
         statement_item_ids: &[SupplierSettlementItemId],
         executor: &mut dyn Executor,
@@ -157,21 +207,7 @@ impl<'a> SupplierSettlementDifferenceRepository<'a> {
         .await
     }
 
-    /// 分页检索供应商结算差异列表（投影查询）。
-    ///
-    /// 只返回 [`SupplierSettlementDifferenceRow`] 所需的列表字段，不加载整文档；
-    /// 排序字段走白名单映射（`DIFFERENCE_SORT_FIELDS`），白名单外一律回退 `created_at`。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_supplier_settlement_differences(
+    async fn search_supplier_settlement_differences(
         &self,
         filter: &SupplierSettlementDifferenceFilter,
         executor: &mut dyn Executor,

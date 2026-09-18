@@ -1,7 +1,7 @@
 use erp_core::ids::{PartyId, SupplierAccountId};
 use persistence_core::{Error, Executor, PageResult, Result};
 
-use super::super::account::{SupplierAccountFilter, SupplierAccountRow};
+use super::super::account::{SupplierAccountFilter, SupplierAccountRepositoryExt, SupplierAccountRow};
 use super::super::{SUPPLIER_ACCOUNTS, SupplierRepository};
 use super::{
     QualificationConstraintKind, SupplierListBundle, SupplierListSearchInput,

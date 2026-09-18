@@ -6,7 +6,7 @@ use futures_util::TryStreamExt;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{
-    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+    Executor, PageResult, Pagination, QueryFilter, Repository, Result, insert_literal_regex_filter, mongo_ops,
 };
 use serde::{Deserialize, Serialize};
 
@@ -269,7 +269,9 @@ impl Pagination for SupplierAccountFilter {
     }
 }
 
-impl<'a> SupplierAccountRepository<'a> {
+/// 供应商账号集合上的域查询。
+#[allow(async_fn_in_trait)]
+pub trait SupplierAccountRepositoryExt {
     /// 批量读取未删除供应商的稳定 ID 与供应商编号。
     ///
     /// # 参数
@@ -281,7 +283,86 @@ impl<'a> SupplierAccountRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn supplier_numbers_by_ids(
+    async fn supplier_numbers_by_ids(
+        &self,
+        supplier_ids: &[SupplierAccountId],
+        executor: &mut dyn Executor,
+    ) -> Result<HashMap<String, String>>;
+
+    /// 按供应商角色 ID 集合批量读取活跃账户。
+    ///
+    /// # 参数
+    /// * `supplier_ids` - 供应商角色 ID 集合；空集合直接返回空结果
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配且未删除的供应商角色；返回顺序不承诺与输入一致。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    async fn find_accounts_by_ids(
+        &self,
+        supplier_ids: &[SupplierAccountId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierAccount>>;
+
+    /// 分页检索供应商角色列表（投影查询）。
+    ///
+    /// 只返回 [`SupplierAccountRow`] 所需的列表字段，不加载整文档；排序字段
+    /// 经仓储白名单校验（`created_at`/`supplier_no`/`status`），非法字段回落
+    /// 默认 `created_at`。
+    ///
+    /// # 参数
+    /// * `filter` - 筛选与分页条件
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回当前页投影行与满足筛选条件的总数。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    async fn search_supplier_accounts(
+        &self,
+        filter: &SupplierAccountFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<SupplierAccountRow>>;
+
+    /// 按共用企业主体查找供应商角色（一个主体至多一个供应商角色，由
+    /// `uk_supplier_accounts_party` 保证）。
+    ///
+    /// # 参数
+    /// * `party_id` - 共用企业主体 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配的未删除供应商角色；无匹配时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    async fn find_by_party(
+        &self,
+        party_id: &PartyId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierAccount>>;
+
+    /// 读取命中主体名称的未删除供应商身份。
+    ///
+    /// # 参数
+    /// * `party_ids` - 主体领域返回的名称匹配身份
+    /// * `executor` - 调用方执行器
+    /// # 返回
+    /// 返回供应商稳定身份；空输入返回空集合。
+    /// # 错误
+    /// 查询或反序列化失败时返回仓储错误。
+    async fn matching_ids_by_parties(
+        &self,
+        party_ids: &[PartyId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierAccountId>>;
+}
+
+impl SupplierAccountRepositoryExt for Repository<'_, SupplierAccount> {
+    async fn supplier_numbers_by_ids(
         &self,
         supplier_ids: &[SupplierAccountId],
         executor: &mut dyn Executor,
@@ -304,18 +385,7 @@ impl<'a> SupplierAccountRepository<'a> {
         Ok(rows.into_iter().map(|row| (row.id, row.supplier_no)).collect())
     }
 
-    /// 按供应商角色 ID 集合批量读取活跃账户。
-    ///
-    /// # 参数
-    /// * `supplier_ids` - 供应商角色 ID 集合；空集合直接返回空结果
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回全部匹配且未删除的供应商角色；返回顺序不承诺与输入一致。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_accounts_by_ids(
+    async fn find_accounts_by_ids(
         &self,
         supplier_ids: &[SupplierAccountId],
         executor: &mut dyn Executor,
@@ -327,22 +397,7 @@ impl<'a> SupplierAccountRepository<'a> {
         self.find_many(doc! { "id": { "$in": ids } }, executor).await
     }
 
-    /// 分页检索供应商角色列表（投影查询）。
-    ///
-    /// 只返回 [`SupplierAccountRow`] 所需的列表字段，不加载整文档；排序字段
-    /// 经仓储白名单校验（`created_at`/`supplier_no`/`status`），非法字段回落
-    /// 默认 `created_at`。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_supplier_accounts(
+    async fn search_supplier_accounts(
         &self,
         filter: &SupplierAccountFilter,
         executor: &mut dyn Executor,
@@ -364,24 +419,31 @@ impl<'a> SupplierAccountRepository<'a> {
         Ok(PageResult { items, total: total as i64 })
     }
 
-    /// 按共用企业主体查找供应商角色（一个主体至多一个供应商角色，由
-    /// `uk_supplier_accounts_party` 保证）。
-    ///
-    /// # 参数
-    /// * `party_id` - 共用企业主体 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的未删除供应商角色；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_party(
+    async fn find_by_party(
         &self,
         party_id: &PartyId,
         executor: &mut dyn Executor,
     ) -> Result<Option<SupplierAccount>> {
         self.find_one(doc! { "party_id": party_id.to_string() }, executor).await
+    }
+
+    async fn matching_ids_by_parties(
+        &self,
+        party_ids: &[PartyId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierAccountId>> {
+        if party_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "party_id": { "$in": party_id_strings(party_ids) } };
+        let rows = mongo_ops::find_many(
+            &self.collection().clone_with_type::<SupplierSearchId>(),
+            filter,
+            FindOptions::builder().projection(doc! { "id": 1, "_id": 0 }).build(),
+            executor,
+        )
+        .await?;
+        Ok(rows.into_iter().map(|row| SupplierAccountId::new(row.id)).collect())
     }
 }
 
@@ -626,36 +688,6 @@ fn supplier_account_id_duplicate_pipeline() -> Vec<Document> {
 #[derive(Deserialize)]
 struct SupplierSearchId {
     id: String,
-}
-
-impl SupplierAccountRepository<'_> {
-    /// 读取命中主体名称的未删除供应商身份。
-    ///
-    /// # 参数
-    /// * `party_ids` - 主体领域返回的名称匹配身份
-    /// * `executor` - 调用方执行器
-    /// # 返回
-    /// 返回供应商稳定身份；空输入返回空集合。
-    /// # 错误
-    /// 查询或反序列化失败时返回仓储错误。
-    pub async fn matching_ids_by_parties(
-        &self,
-        party_ids: &[PartyId],
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<SupplierAccountId>> {
-        if party_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        let filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "party_id": { "$in": party_id_strings(party_ids) } };
-        let rows = mongo_ops::find_many(
-            &self.collection().clone_with_type::<SupplierSearchId>(),
-            filter,
-            FindOptions::builder().projection(doc! { "id": 1, "_id": 0 }).build(),
-            executor,
-        )
-        .await?;
-        Ok(rows.into_iter().map(|row| SupplierAccountId::new(row.id)).collect())
-    }
 }
 
 #[cfg(test)]

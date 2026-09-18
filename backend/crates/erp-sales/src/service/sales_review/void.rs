@@ -8,6 +8,7 @@ use validator::Validate;
 use super::SalesReviewService;
 use crate::dto::sales_review::VoidSalesChangeOrderRequest;
 use crate::entity::sales_review::SalesChangeOrder;
+use crate::repository::prelude::*;
 use crate::repository::{SalesOrderExt, SalesReviewExt};
 use crate::{Error, Result};
 

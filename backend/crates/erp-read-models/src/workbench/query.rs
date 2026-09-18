@@ -6,6 +6,7 @@ use std::num::NonZeroU32;
 use application_core::AuditActor;
 use erp_workflow::entity::work_item::{QueueContextField, QueueContextIdentity, WorkItem};
 use erp_workflow::ports::OrderTaskSource;
+use erp_workflow::repository::prelude::*;
 use erp_workflow::{BpmExt, WorkItemExt};
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
@@ -488,7 +489,7 @@ pub(super) fn queue_scope_version(identity: &str, query: &str, result: &str) -> 
 /// 后续页无版本或版本漂移必须失败关闭，禁止拼接不同范围结果。
 pub(super) fn ensure_scope_version(page: u64, provided: Option<&str>, expected: &str) -> Result<()> {
     if (page > 1 && provided.is_none()) || provided.is_some_and(|value| value != expected) {
-        return Err(Error::ConflictError("DATA_SCOPE_CHANGED：数据范围已变化，请从第一页刷新".into()));
+        return Err(crate::support::data_scope_changed("数据范围已变化，请从第一页刷新"));
     }
     Ok(())
 }
@@ -505,7 +506,7 @@ pub(super) fn ensure_queue_context(provided: &Option<String>, expected: &str) ->
     if provided.as_deref().is_none_or(|provided| provided == expected) {
         return Ok(());
     }
-    Err(Error::ConflictError("DATA_SCOPE_CHANGED：队列范围已变化，请从第一页刷新".to_string()))
+    Err(crate::support::data_scope_changed("队列范围已变化，请从第一页刷新"))
 }
 
 #[derive(Debug, PartialEq, Eq)]

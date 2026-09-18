@@ -8,6 +8,7 @@ mod customer;
 mod customer_data_scope;
 mod fulfillment_order_data_scope;
 mod funds_data_scope;
+mod identity_error;
 mod import;
 mod integration_data_scope;
 mod inventory;

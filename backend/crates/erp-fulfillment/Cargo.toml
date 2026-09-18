@@ -15,6 +15,7 @@ entity-macros = { workspace = true }
 erp-core = { workspace = true }
 futures-util = { workspace = true }
 hex = { workspace = true }
+hmac = { workspace = true }
 id-generator = { workspace = true }
 mongodb = { workspace = true }
 persistence-core = { workspace = true }
@@ -25,6 +26,3 @@ thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt", "macros"] }
 tracing = { workspace = true }
 validator = { workspace = true }
-
-[dev-dependencies]
-hmac = { workspace = true }

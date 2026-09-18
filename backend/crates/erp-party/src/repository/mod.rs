@@ -3,6 +3,7 @@
 pub mod extensions;
 pub mod owned;
 pub mod party;
+pub mod prelude;
 
 pub use extensions::PartyExt;
 pub use owned::{
@@ -10,6 +11,8 @@ pub use owned::{
     PartyRevisionRepository, PartyTaxProfileRepository,
 };
 pub use party::{
-    PartyAddressFilter, PartyBankAccountFilter, PartyContactFilter, PartyDomainRepository, PartyFilter,
-    PartyRevisionFilter, PartyTaxProfileFilter,
+    PartyAddressFilter, PartyAddressRepositoryExt, PartyBankAccountFilter, PartyBankAccountRepositoryExt,
+    PartyContactFilter, PartyContactRepositoryExt, PartyDomainRepository, PartyFilter,
+    PartyRepositoryCompanyExt, PartyRepositoryExt, PartyRevisionFilter, PartyRevisionRepositoryExt,
+    PartyTaxProfileFilter, PartyTaxProfileRepositoryExt,
 };
