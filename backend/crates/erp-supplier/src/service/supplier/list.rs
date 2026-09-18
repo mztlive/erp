@@ -2,9 +2,9 @@
 
 use std::collections::HashMap;
 
-use crate::entity::supplier::supplier_commercial_profile_revision::commercial_party_ids;
 use crate::dto::supplier::{SortDir, SupplierListQuery, SupplierQualificationHealth};
 use crate::entity::supplier::SupplierCommercialProfileRevision;
+use crate::entity::supplier::supplier_commercial_profile_revision::commercial_party_ids;
 use crate::error::Result;
 use crate::ports::PartyFactsPort;
 use crate::repository::SupplierListSearchInput;

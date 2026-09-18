@@ -4,7 +4,7 @@ use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::{ProductId, SkuId};
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result};
 use serde::{Deserialize, Serialize};
 
 use super::CatalogRepository;

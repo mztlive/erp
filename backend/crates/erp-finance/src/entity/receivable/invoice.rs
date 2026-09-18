@@ -316,9 +316,9 @@ impl RedInvoiceAllocationPlan {
     ) -> std::result::Result<Self, RedInvoiceAllocationPlanError> {
         let mut remaining = remaining_red_invoice_bases(direction, basis, reversals)?;
         remaining.sort_by_key(|line| line.allocation_seq);
-        remaining.retain(|line| line.gross > zero_amount());
-        let remaining_total = remaining.iter().fold(zero_amount(), |sum, line| sum.checked_add(line.gross));
-        if remaining_total <= zero_amount() {
+        remaining.retain(|line| line.gross > Amount::zero());
+        let remaining_total = remaining.iter().fold(Amount::zero(), |sum, line| sum.checked_add(line.gross));
+        if remaining_total <= Amount::zero() {
             return Err(RedInvoiceAllocationPlanError::NoRemainingAllocation);
         }
         let requested = validate_red_invoice_requested_amount(requested, remaining_total)?;
@@ -374,7 +374,7 @@ impl RedInvoiceAllocationPlan {
     /// # 约束
     /// 仅做定点加法，不重新分摊或舍入。
     pub fn totals(&self) -> (Amount, Amount, Amount) {
-        self.lines.iter().fold((zero_amount(), zero_amount(), zero_amount()), |(gross, net, tax), line| {
+        self.lines.iter().fold((Amount::zero(), Amount::zero(), Amount::zero()), |(gross, net, tax), line| {
             (gross.checked_add(line.gross), net.checked_add(line.net), tax.checked_add(line.tax))
         })
     }
@@ -426,7 +426,7 @@ fn remaining_red_invoice_basis(
     let reversed = reversals
         .iter()
         .filter(|reversal| reversal.original_allocation_id == line.original_allocation_id)
-        .fold((zero_amount(), zero_amount(), zero_amount()), |(gross, net, tax), reversal| {
+        .fold((Amount::zero(), Amount::zero(), Amount::zero()), |(gross, net, tax), reversal| {
             (gross.checked_add(reversal.gross), net.checked_add(reversal.net), tax.checked_add(reversal.tax))
         });
     if reversed.0 > line.gross || reversed.1 > line.net || reversed.2 > line.tax {
@@ -462,7 +462,7 @@ fn validate_red_invoice_requested_amount(
     remaining_total: Amount,
 ) -> std::result::Result<Amount, RedInvoiceAllocationPlanError> {
     let requested = requested.unwrap_or(remaining_total);
-    if requested <= zero_amount() || requested > remaining_total {
+    if requested <= Amount::zero() || requested > remaining_total {
         return Err(RedInvoiceAllocationPlanError::InvalidRequestedAmount);
     }
     Ok(requested)
@@ -489,7 +489,7 @@ fn build_red_invoice_allocation_lines(
     let mut unplanned = requested;
     let mut lines = Vec::new();
     for line in basis {
-        if unplanned == zero_amount() {
+        if unplanned == Amount::zero() {
             break;
         }
         let gross = std::cmp::min(line.gross, unplanned);
@@ -507,7 +507,7 @@ fn build_red_invoice_allocation_lines(
         });
         unplanned = unplanned.checked_sub(gross);
     }
-    if unplanned != zero_amount() {
+    if unplanned != Amount::zero() {
         return Err(RedInvoiceAllocationPlanError::UncoveredRequest);
     }
     Ok(lines)
@@ -537,23 +537,6 @@ fn partial_red_invoice_amounts(
         gross.to_decimal() * basis_tax.to_decimal() / basis_gross.to_decimal(),
     ))?;
     Ok((gross.checked_sub(tax), tax))
-}
-
-/// 返回红票分配规划使用的固定零金额。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回可精确参与 Amount 比较与加减的 `0.00`。
-///
-/// # 错误
-/// 不返回错误；固定常量若失效会触发不可恢复的程序错误。
-///
-/// # 约束
-/// 不进行舍入或读取外部状态。
-fn zero_amount() -> Amount {
-    "0.00".parse().expect("固定零金额必须可解析")
 }
 
 /// 发票实体（主表类，数据模型 §6.8）。

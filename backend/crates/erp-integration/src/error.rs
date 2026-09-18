@@ -106,7 +106,7 @@ pub fn optimistic_lock_conflict() -> Error {
     Error::ConflictError(OPTIMISTIC_LOCK_CONFLICT_MESSAGE.to_string())
 }
 
-/// 将唯一键冲突映射为面向用户的冲突提示。
+/// 将唯一键冲突映射为面向用户的冲突提示（唯一调用方为仓储错误映射）。
 ///
 /// 未知索引回落通用文案；错误分类保持 `Conflict` 不变。
 fn duplicate_key_conflict_message(error: &persistence_core::Error) -> String {

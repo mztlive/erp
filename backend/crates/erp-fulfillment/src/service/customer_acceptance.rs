@@ -4,15 +4,15 @@ use persistence_core::NoTransaction;
 use validator::Validate;
 
 use super::FulfillmentService;
+use crate::Result;
 use crate::dto::{
     AcceptanceAllocationView, CustomerAcceptanceDetailView, CustomerAcceptanceLineView,
-    CustomerAcceptanceListParams, CustomerAcceptanceView, SortDir,
+    CustomerAcceptanceListParams, CustomerAcceptanceView,
 };
 use crate::entity::fulfillment::{
     AcceptanceFulfillmentAllocation, CustomerAcceptance, CustomerAcceptanceLine,
 };
 use crate::repository::FulfillmentExt;
-use crate::{Error, Result};
 
 /// 客户验收单列表筛选条件类型。
 type CustomerAcceptanceFilter = <mongodb::Database as FulfillmentExt>::CustomerAcceptanceFilter;
@@ -48,7 +48,7 @@ impl FulfillmentService {
             page: query.paging.page,
             page_size: query.paging.page_size,
             sort_by: Some(query.paging.sort_by.to_string()),
-            sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
+            sort_ascending: super::sort_ascending(query.paging.sort_dir),
         };
         let page =
             self.db.customer_acceptances().search_customer_acceptances(&filter, &mut NoTransaction).await?;
@@ -175,11 +175,7 @@ pub fn prepare_customer_acceptance_draft(
             result: req.result,
         },
     )?;
-    let lines = crate::entity::fulfillment::CustomerAcceptanceLineBatch::build(
-        id,
-        super::customer_acceptance_lines::acceptance_line_specs(&req.lines),
-    )
-    .map_err(Error::Logic)?;
+    let lines = super::FulfillmentService::build_customer_acceptance_lines(id, &req.lines)?;
     Ok((acceptance, lines))
 }
 #[cfg(test)]
@@ -216,6 +212,10 @@ mod tests {
         let production =
             include_str!("customer_acceptance.rs").split("#[cfg(test)]").next().expect("生产代码");
         assert!(!production.contains("fn build_acceptance_lines"), "旧 helper 必须删除");
-        assert!(production.contains("CustomerAcceptanceLineBatch::build"), "创建路径必须调用实体工厂");
+        assert!(
+            production.contains("CustomerAcceptanceLineBatch::build")
+                || production.contains("build_customer_acceptance_lines"),
+            "创建路径必须调用实体工厂（直接或经同域构造入口）"
+        );
     }
 }

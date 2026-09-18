@@ -19,6 +19,8 @@ use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
+use super::ensure_positive_quantity;
+
 /// 来源引用最大长度。
 const SOURCE_REFERENCE_MAX_LEN: usize = 256;
 /// 记录人标识最大长度。
@@ -250,9 +252,7 @@ impl StockMovement {
     /// 数量非正、方向与类型不一致、来源单据标识为空、记录时间早于发生时间
     /// 或冲正引用自身时返回错误。
     pub fn new(id: StockMovementId, data: StockMovementData) -> Result<Self> {
-        if data.quantity.to_decimal() <= rust_decimal::Decimal::ZERO {
-            return Err(Error::from("库存流水数量必须为正数"));
-        }
+        ensure_positive_quantity(data.quantity, "库存流水数量必须为正数")?;
         if let Some(expected) = data.movement_type.inherent_direction()
             && expected != data.direction
         {

@@ -4,10 +4,9 @@ mod bulk_job;
 mod file_asset;
 mod source_registry;
 
-use mongodb::Database;
 use mongodb::bson::Document;
 use mongodb::options::IndexOptions;
-use mongodb::IndexModel;
+use mongodb::{Database, IndexModel};
 use persistence_core::Result;
 
 /// Create support collection indexes.

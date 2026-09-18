@@ -655,9 +655,8 @@ mod tests {
     #[test]
     fn version_conflict_maps_to_stable_conflict_error() {
         assert!(map_version_conflict(Ok(())).is_ok());
-        let error =
-            map_version_conflict(Err(erp_core::Error::from("数据已被其他请求修改，请刷新后重试")))
-                .unwrap_err();
+        let error = map_version_conflict(Err(erp_core::Error::from("数据已被其他请求修改，请刷新后重试")))
+            .unwrap_err();
         assert!(matches!(error, crate::error::Error::ConflictError(_)));
         assert_eq!(error.to_string(), "数据冲突: 数据已被其他请求修改，请刷新后重试");
     }

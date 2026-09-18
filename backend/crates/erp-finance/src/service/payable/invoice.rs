@@ -1,27 +1,20 @@
 //! 财务进项发票分配查询与事务内事实写入。
-use erp_core::ids::{PartyId, PayableAccountId, PurchaseInvoiceAllocationId};
+use erp_core::ids::{InvoiceId, PartyId, PayableAccountId, PurchaseInvoiceAllocationId};
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::Executor;
-
-use crate::dto::payable::RegisterPurchaseInvoiceRequest;
-use crate::entity::payable::{
-    PayableAccount, PurchaseInvoiceAllocation, PurchaseInvoiceAllocationLine, PurchaseInvoiceAllocationPlan,
-};
-use crate::entity::receivable::{Invoice, InvoiceData, InvoiceDirection, InvoiceKind};
-use crate::repository::{PayableExt, ReceivableExt};
-fn zero_amount() -> erp_core::money::Amount {
-    erp_core::money::Amount::zero()
-}
-use erp_core::ids::InvoiceId;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
 
 use super::PayableService;
 use crate::dto::payable::{
     PageView, PurchaseInvoiceAllocationListParams, PurchaseInvoiceAllocationView,
-    PurchaseInvoiceRegisteredView, SortDir,
+    PurchaseInvoiceRegisteredView, RegisterPurchaseInvoiceRequest, SortDir,
 };
+use crate::entity::payable::{
+    PayableAccount, PurchaseInvoiceAllocation, PurchaseInvoiceAllocationLine, PurchaseInvoiceAllocationPlan,
+};
+use crate::entity::receivable::{Invoice, InvoiceData, InvoiceDirection, InvoiceKind};
+use crate::repository::{PayableExt, ReceivableExt};
 use crate::{Error, Result};
 type PurchaseInvoiceAllocationFilter = <mongodb::Database as PayableExt>::PurchaseInvoiceAllocationFilter;
 impl PayableService {
@@ -147,7 +140,7 @@ pub fn prepare_purchase_invoice(
             gross_amount: req.gross_amount,
             net_amount: req.net_amount,
             tax_amount: req.tax_amount,
-            rounding_adjustment_amount: zero_amount(),
+            rounding_adjustment_amount: erp_core::money::Amount::zero(),
             rounding_reason: None,
             original_invoice_id: None,
         },

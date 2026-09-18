@@ -197,6 +197,9 @@ impl CommercialProfileView {
     ///
     /// # 参数
     /// * `names` - 主体 ID 到法定名称
+    ///
+    /// # 返回
+    /// 无返回值；视图在原地更新。
     pub(crate) fn fill_entity_names(&mut self, names: &HashMap<String, String>) {
         self.signing_entity_name =
             self.signing_entity_party_id.as_ref().and_then(|party_id| names.get(party_id)).cloned();

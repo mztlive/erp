@@ -1,6 +1,5 @@
 //! `purchase_receipt` 采购入库单仓储：列表投影查询与按入库单号身份查询。
 
-use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::Instant;
 use erp_core::ids::{PurchaseOrderId, WarehouseId};
 use mongodb::bson::{Document, doc};
@@ -81,7 +80,7 @@ impl QueryFilter for PurchaseReceiptFilter {
     /// # 返回
     /// 返回查询条件文档。
     fn to_doc(&self) -> Document {
-        let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
+        let mut filter = super::active_filter();
         if let Some(purchase_order_id) = &self.purchase_order_id {
             filter.insert("purchase_order_id", purchase_order_id.to_string());
         }
@@ -98,7 +97,7 @@ impl Pagination for PurchaseReceiptFilter {
     /// # 返回
     /// 返回 `(page, page_size)` 元组。
     fn page_and_size(&self) -> (u64, u64) {
-        (self.page, u64::from(self.page_size))
+        super::page_and_size(self.page, self.page_size)
     }
 }
 

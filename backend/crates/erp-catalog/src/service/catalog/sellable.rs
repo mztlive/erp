@@ -153,10 +153,12 @@ pub fn sellable_sku_invalid_error(sku_ids: &[String]) -> Error {
 
 /// 校验分页、价格并在原时点解释资格日期。
 pub fn prepare_sellable_sku_list(params: &SellableSkuListParams) -> Result<SellableSkuFilter> {
+    use application_core::{page_or_default, page_size_or_default};
+
     params.validate()?;
     validate_sales_price_range(params.sales_price_min, params.sales_price_max)?;
-    let page = params.page.unwrap_or(1);
-    let page_size = params.page_size.unwrap_or(20);
+    let page = page_or_default(params.page);
+    let page_size = page_size_or_default(params.page_size);
     let eligibility_as_of = params.eligibility_as_of.unwrap_or_else(BusinessDate::today);
     Ok(SellableSkuFilter {
         nationwide_only: false,

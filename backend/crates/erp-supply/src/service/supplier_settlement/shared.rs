@@ -4,9 +4,10 @@ use std::str::FromStr;
 use erp_core::money::Amount;
 use mongodb::Database;
 use persistence_core::Executor;
-use sha2::{Digest, Sha256};
 
-use crate::entity::supplier_settlement::{SupplierSettlementDifference, SupplierSettlementItem};
+use crate::entity::supplier_settlement::{
+    SupplierSettlementDifference, SupplierSettlementItem, statement_digest_parts,
+};
 use crate::repository::SupplierSettlementExt;
 use crate::{Error, Result};
 pub async fn load_statement_items(
@@ -40,14 +41,9 @@ pub fn ensure_same_id(path_id: &str, command_id: &str, object_name: &str) -> Res
     Ok(())
 }
 
-/// 对字段逐项加入长度前缀后计算稳定摘要，消除拼接歧义。
+/// 对字段逐项加入长度前缀后计算稳定摘要，复用结算主题摘要口径。
 pub fn digest_parts(parts: &[String]) -> String {
-    let mut digest = Sha256::new();
-    for part in parts {
-        digest.update((part.len() as u64).to_be_bytes());
-        digest.update(part.as_bytes());
-    }
-    hex::encode(digest.finalize())
+    statement_digest_parts(parts)
 }
 
 /// 返回零金额（表头金额累加起点）。

@@ -1,6 +1,6 @@
 //! 采购单查询与对象中心视图编排。
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use application_core::{AuditActor, FilteredPage};
 use erp_identity::AccessControlExt;
@@ -50,9 +50,7 @@ impl PurchaseOrderReadService {
         actor: &AuditActor,
     ) -> Result<PurchaseListView> {
         let expected = params.scope_version.as_deref();
-        if params.page.unwrap_or(1) > 1 && expected.is_none_or(str::is_empty) {
-            return Err(Error::ConflictError("DATA_SCOPE_CHANGED：请从第一页刷新后继续查询".into()));
-        }
+        crate::support::ensure_deep_page(params.page.unwrap_or(1), expected)?;
         params.validate()?;
         let snapshot = self.list_snapshot(params, actor).await?;
         if expected.is_some_and(|value| value != snapshot.context.scope_version) {
@@ -258,15 +256,7 @@ impl PurchaseOrderReadService {
         &self,
         account_ids: &[String],
     ) -> Result<HashMap<String, String>> {
-        let mut unique = Vec::new();
-        let mut seen = HashSet::new();
-        for account_id in account_ids {
-            let trimmed = account_id.trim();
-            if trimmed.is_empty() || !seen.insert(trimmed.to_string()) {
-                continue;
-            }
-            unique.push(trimmed.to_string());
-        }
+        let unique = crate::support::dedup_trimmed_nonempty(account_ids.iter().map(String::as_str));
         if unique.is_empty() {
             return Ok(HashMap::new());
         }

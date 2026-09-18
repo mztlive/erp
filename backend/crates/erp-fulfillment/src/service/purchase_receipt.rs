@@ -8,7 +8,7 @@ use super::FulfillmentService;
 use super::purchase_receipt_lines::receipt_line_specs;
 use crate::dto::{
     CreatePurchaseReceiptRequest, PurchaseReceiptDetailView, PurchaseReceiptLineView,
-    PurchaseReceiptListParams, PurchaseReceiptView, SortDir, UpdatePurchaseReceiptRequest,
+    PurchaseReceiptListParams, PurchaseReceiptView, UpdatePurchaseReceiptRequest,
 };
 use crate::entity::fulfillment::{
     PurchaseReceipt, PurchaseReceiptData, PurchaseReceiptLine, PurchaseReceiptLineBatch,
@@ -46,7 +46,7 @@ impl FulfillmentService {
             page: query.paging.page,
             page_size: query.paging.page_size,
             sort_by: Some(query.paging.sort_by.to_string()),
-            sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
+            sort_ascending: super::sort_ascending(query.paging.sort_dir),
         };
         let page = self.db.purchase_receipts().search_purchase_receipts(&filter, &mut NoTransaction).await?;
         super::map_search_page(

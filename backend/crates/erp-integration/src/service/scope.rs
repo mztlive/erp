@@ -98,6 +98,37 @@ pub fn ensure_scope_version(expected: Option<&str>, actual: &str) -> Result<()> 
     }
 }
 
+/// 列表授权解析结果（两类范围列表共用）。
+pub struct ResolvedListScope {
+    /// 已解析范围事实。
+    pub context: IntegrationResolvedScope,
+    /// 仓储读取条件。
+    pub read_scope: IntegrationReadScope,
+    /// 展开后的组织 ID。
+    pub owner_org_unit_ids: Vec<String>,
+    /// 范围元数据。
+    pub meta: ScopedIntegrationList,
+}
+
+/// 解析列表授权、展开组织筛选并校验范围版本（错误任务与差异列表共用）。
+///
+/// 顺序与原两处内联实现一致：授权解析 → 组织展开 → 元数据 → 版本校验 → 空集。
+pub async fn resolve_list_scope(
+    access: &super::IntegrationAccess,
+    actor: &application_core::AuditActor,
+    resource: &str,
+    org_unit_ids: &[String],
+    include_descendants: bool,
+    scope_version: Option<&str>,
+    executor: &mut dyn persistence_core::Executor,
+) -> Result<ResolvedListScope> {
+    let (context, read_scope) = access.resolve(actor, resource, "list", executor).await?;
+    let owner_org_unit_ids = expand_org_filter(access, org_unit_ids, include_descendants, executor).await?;
+    let meta = ScopedIntegrationList::from_access(&context, &read_scope);
+    ensure_scope_version(scope_version, &meta.scope_version)?;
+    Ok(ResolvedListScope { context, read_scope, owner_org_unit_ids, meta })
+}
+
 /// 展开请求组织筛选；空列表表示不按组织收窄。
 ///
 /// # 参数

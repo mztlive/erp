@@ -2,18 +2,17 @@
 //!
 //! 指纹由 Service/crypto port 预计算；本层只收强类型结果。
 
+use erp_core::Result;
 use erp_core::common::source::SourceType;
 use erp_core::common::time::Instant;
 use erp_core::ids::{
     ElectronicDeliveryId, FileAssetId, PurchaseLineSalesAllocationId, PurchaseOrderId, SalesOrderLineId,
 };
 use erp_core::money::Quantity;
-use erp_core::validation::normalize_required_text;
-use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 use super::electronic_delivery::{ElectronicDelivery, ElectronicDeliveryData, FulfillmentResult};
-use super::fingerprint::FINGERPRINT_HEX_LEN;
+use super::fingerprint::normalize_precomputed_fingerprint;
 
 /// 预计算的交付对象快照指纹（不含密钥与明文）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -34,16 +33,11 @@ impl ElectronicRecipientFingerprint {
     /// # 约束
     /// 不接收密钥与明文，不计算 HMAC。
     pub fn from_precomputed(hex: impl Into<String>) -> Result<Self> {
-        let hex = normalize_required_text(
-            hex.into(),
+        Ok(Self(normalize_precomputed_fingerprint(
             "交付对象查询指纹不能为空",
-            FINGERPRINT_HEX_LEN,
             "交付对象查询指纹过长",
-        )?;
-        if hex.len() != FINGERPRINT_HEX_LEN || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
-            return Err(Error::from("查询指纹必须是 64 位十六进制字符串"));
-        }
-        Ok(Self(hex))
+            hex.into(),
+        )?))
     }
 
     /// 返回指纹字符串。

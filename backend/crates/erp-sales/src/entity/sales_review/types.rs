@@ -4,342 +4,22 @@
 //! 或「卡券字段组」（§6.5 字段组概念），行金额一律由
 //! [`erp_core::money::line_amounts`] 统一计算（§4.2 铁律 1，逐行舍入）。
 //!
-//! 本组类型在 D14/D15 有同形副本（`common/**` P0 冻结，P1 §3 跨域约束），
-//! 待 `chore/erp-p0-amend-*` 地基修订统一收口到 `entities/src/common/`。
+//! 业务性质、行类型、福利场景、卡形态、字段组与行清单规则与销售单域同形
+//! （`common/**` P0 冻结，P1 §3 跨域约束），规范定义与纯规则由销售单域唯一承载，
+//! 本模块只做复用。唯一的本地形态是 [`VoucherLineDraft`]：与销售单域同形，差异
+//! 仅在线上传输层——卡张数只接受数字（销售单域同时接受十进制字符串，系外域历史
+//! 兼容）；序列化输出形状一致。
 
-use std::collections::HashSet;
-
-use erp_core::common::time::Instant;
-use erp_core::ids::{SalesOrderLineId, SkuId, SkuRevisionId};
-use erp_core::money::{Amount, Quantity, Rate, UnitPrice, line_amounts, round_to_cent};
-use erp_core::validation::normalize_required_text;
-use erp_core::{Error, Result};
-use rust_decimal::Decimal;
+use erp_core::Result;
+use erp_core::money::{Amount, Rate, UnitPrice};
 use serde::{Deserialize, Serialize};
 
-/// 基础单位代码最大长度。
-const BASE_UNIT_CODE_MAX_LEN: usize = 32;
-/// 服务区域最大长度。
-const SERVICE_REGION_MAX_LEN: usize = 128;
-
-/// 业务性质（数据模型 §6.4：`VOUCHER` 或 `GOODS_SERVICE`，创建后永久不变）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum BusinessType {
-    /// 卡券销售单。
-    Voucher,
-    /// 实物及服务销售单。
-    GoodsService,
-}
-
-impl BusinessType {
-    /// 返回类型的中文展示名。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::Voucher => "卡券",
-            Self::GoodsService => "实物及服务",
-        }
-    }
-
-    /// 返回类型的稳定代码。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Voucher => "VOUCHER",
-            Self::GoodsService => "GOODS_SERVICE",
-        }
-    }
-}
-
-/// 行类型（数据模型 §6.4/§6.5：`GOODS_SERVICE` 或 `VOUCHER`）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum LineType {
-    /// 实物及服务行。
-    GoodsService,
-    /// 卡券行。
-    Voucher,
-}
-
-impl LineType {
-    /// 返回行类型的中文展示名。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::GoodsService => "实物及服务",
-            Self::Voucher => "卡券",
-        }
-    }
-
-    /// 返回行类型的稳定代码。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::GoodsService => "GOODS_SERVICE",
-            Self::Voucher => "VOUCHER",
-        }
-    }
-}
-
-/// 福利场景（数据模型 §6.4：年节礼包、餐补、慰问品、消费金、其他）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum WelfareScenario {
-    /// 年节礼包。
-    AnnualGiftBag,
-    /// 餐补。
-    MealSubsidy,
-    /// 慰问品。
-    CondolenceGift,
-    /// 消费金。
-    ConsumptionFund,
-    /// 其他。
-    Other,
-}
-
-impl WelfareScenario {
-    /// 返回场景的中文展示名。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::AnnualGiftBag => "年节礼包",
-            Self::MealSubsidy => "餐补",
-            Self::CondolenceGift => "慰问品",
-            Self::ConsumptionFund => "消费金",
-            Self::Other => "其他",
-        }
-    }
-
-    /// 返回场景的稳定代码。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::AnnualGiftBag => "ANNUAL_GIFT_BAG",
-            Self::MealSubsidy => "MEAL_SUBSIDY",
-            Self::CondolenceGift => "CONDOLENCE_GIFT",
-            Self::ConsumptionFund => "CONSUMPTION_FUND",
-            Self::Other => "OTHER",
-        }
-    }
-}
-
-/// 卡券行卡形态（数据模型 §6.4：电子卡或实体卡）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "UPPERCASE")]
-pub enum CardForm {
-    /// 电子卡。
-    Electronic,
-    /// 实体卡。
-    Physical,
-}
-
-impl CardForm {
-    /// 返回卡形态的中文展示名。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::Electronic => "电子卡",
-            Self::Physical => "实体卡",
-        }
-    }
-
-    /// 返回卡形态的稳定代码。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Electronic => "ELECTRONIC",
-            Self::Physical => "PHYSICAL",
-        }
-    }
-}
-
-impl From<crate::entity::sales_order::BusinessType> for BusinessType {
-    fn from(value: crate::entity::sales_order::BusinessType) -> Self {
-        match value {
-            crate::entity::sales_order::BusinessType::Voucher => Self::Voucher,
-            crate::entity::sales_order::BusinessType::GoodsService => Self::GoodsService,
-        }
-    }
-}
-
-impl From<crate::entity::sales_order::LineType> for LineType {
-    fn from(value: crate::entity::sales_order::LineType) -> Self {
-        match value {
-            crate::entity::sales_order::LineType::GoodsService => Self::GoodsService,
-            crate::entity::sales_order::LineType::Voucher => Self::Voucher,
-        }
-    }
-}
-
-impl From<crate::entity::sales_order::WelfareScenario> for WelfareScenario {
-    fn from(value: crate::entity::sales_order::WelfareScenario) -> Self {
-        match value {
-            crate::entity::sales_order::WelfareScenario::AnnualGiftBag => Self::AnnualGiftBag,
-            crate::entity::sales_order::WelfareScenario::MealSubsidy => Self::MealSubsidy,
-            crate::entity::sales_order::WelfareScenario::CondolenceGift => Self::CondolenceGift,
-            crate::entity::sales_order::WelfareScenario::ConsumptionFund => Self::ConsumptionFund,
-            crate::entity::sales_order::WelfareScenario::Other => Self::Other,
-        }
-    }
-}
-
-impl From<crate::entity::sales_order::CardForm> for CardForm {
-    fn from(value: crate::entity::sales_order::CardForm) -> Self {
-        match value {
-            crate::entity::sales_order::CardForm::Electronic => Self::Electronic,
-            crate::entity::sales_order::CardForm::Physical => Self::Physical,
-        }
-    }
-}
-
-impl From<BusinessType> for crate::entity::sales_order::BusinessType {
-    /// 将审核域业务性质转为销售单域同形类型。
-    ///
-    /// # 参数
-    /// * `value` - 审核域业务性质
-    ///
-    /// # 返回
-    /// 返回销售单域业务性质。
-    fn from(value: BusinessType) -> Self {
-        match value {
-            BusinessType::Voucher => Self::Voucher,
-            BusinessType::GoodsService => Self::GoodsService,
-        }
-    }
-}
-
-impl From<LineType> for crate::entity::sales_order::LineType {
-    /// 将审核域行类型转为销售单域同形类型。
-    ///
-    /// # 参数
-    /// * `value` - 审核域行类型
-    ///
-    /// # 返回
-    /// 返回销售单域行类型。
-    fn from(value: LineType) -> Self {
-        match value {
-            LineType::GoodsService => Self::GoodsService,
-            LineType::Voucher => Self::Voucher,
-        }
-    }
-}
-
-impl From<WelfareScenario> for crate::entity::sales_order::WelfareScenario {
-    /// 将审核域福利场景转为销售单域同形类型。
-    ///
-    /// # 参数
-    /// * `value` - 审核域福利场景
-    ///
-    /// # 返回
-    /// 返回销售单域福利场景。
-    fn from(value: WelfareScenario) -> Self {
-        match value {
-            WelfareScenario::AnnualGiftBag => Self::AnnualGiftBag,
-            WelfareScenario::MealSubsidy => Self::MealSubsidy,
-            WelfareScenario::CondolenceGift => Self::CondolenceGift,
-            WelfareScenario::ConsumptionFund => Self::ConsumptionFund,
-            WelfareScenario::Other => Self::Other,
-        }
-    }
-}
-
-impl From<CardForm> for crate::entity::sales_order::CardForm {
-    /// 将审核域卡形态转为销售单域同形类型。
-    ///
-    /// # 参数
-    /// * `value` - 审核域卡形态
-    ///
-    /// # 返回
-    /// 返回销售单域卡形态。
-    fn from(value: CardForm) -> Self {
-        match value {
-            CardForm::Electronic => Self::Electronic,
-            CardForm::Physical => Self::Physical,
-        }
-    }
-}
-
-impl From<GoodsLineFields> for crate::entity::sales_order::GoodsLineFields {
-    /// 将审核域实物字段组转为销售单域同形字段组。
-    ///
-    /// # 参数
-    /// * `value` - 审核域实物字段组
-    ///
-    /// # 返回
-    /// 返回销售单域实物字段组。
-    fn from(value: GoodsLineFields) -> Self {
-        Self {
-            sku_id: value.sku_id,
-            sku_revision_id: value.sku_revision_id,
-            welfare_scenario: value.welfare_scenario.map(Into::into),
-            service_region: value.service_region,
-            fulfillment_due_at: value.fulfillment_due_at,
-            quantity: value.quantity,
-            base_unit_code: value.base_unit_code,
-            unit_price_gross: value.unit_price_gross,
-        }
-    }
-}
-
-impl From<VoucherLineDraft> for crate::entity::sales_order::VoucherLineDraft {
-    /// 将审核域卡券字段组转为销售单域同形字段组。
-    ///
-    /// # 参数
-    /// * `value` - 审核域卡券草稿字段组
-    ///
-    /// # 返回
-    /// 返回销售单域卡券草稿字段组。
-    fn from(value: VoucherLineDraft) -> Self {
-        Self {
-            face_value: value.face_value,
-            card_count: value.card_count,
-            unit_price_gross: value.unit_price_gross,
-            face_value_total: value.face_value_total,
-            transaction_amount: value.transaction_amount,
-            gift_amount: value.gift_amount,
-            gift_rate: value.gift_rate,
-            card_form: value.card_form.into(),
-        }
-    }
-}
-
-/// 实物及服务行字段组（数据模型 §6.4/§6.5「商品、数量、价格、履约字段组」）。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GoodsLineFields {
-    /// 正式销售项 SKU。
-    pub sku_id: SkuId,
-    /// 精确 SKU 修订；销售提交时重新校验销售资格。
-    pub sku_revision_id: SkuRevisionId,
-    /// 福利场景。
-    pub welfare_scenario: Option<WelfareScenario>,
-    /// 采购责任解析使用的服务区域。
-    pub service_region: Option<String>,
-    /// 公司对客户承诺完成本明细交付或服务的最晚时间。
-    pub fulfillment_due_at: Instant,
-    /// 基础单位数量。
-    pub quantity: Quantity,
-    /// 基础单位代码。
-    pub base_unit_code: String,
-    /// 含税成交单价快照。
-    pub unit_price_gross: UnitPrice,
-}
+/// 行金额与清单纯规则复用（签名只涉及已复用的同形类型与金额基元）。
+pub(crate) use crate::entity::sales_order::types::{BuiltLineGroups, LineSummary, validate_line_list};
+/// 业务性质、行类型、福利场景、卡形态与行字段组的规范定义复用。
+pub use crate::entity::sales_order::types::{
+    BusinessType, CardForm, GoodsLineFields, LineType, VoucherLineFields, WelfareScenario,
+};
 
 /// 卡券行字段组创建入参（数据模型 §6.4：来源同时提供面额、单价与合计，逐项核对；
 /// `gift_rate` 缺省时按 `gift_amount / transaction_amount` 推导）。
@@ -363,39 +43,26 @@ pub struct VoucherLineDraft {
     pub card_form: CardForm,
 }
 
-/// 卡券行字段组（实体保存形态，`gift_rate` 恒有确定值）。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct VoucherLineFields {
-    /// 单卡面额。
-    pub face_value: Amount,
-    /// 卡张数。
-    pub card_count: u32,
-    /// 单卡含税成交单价。
-    pub unit_price_gross: UnitPrice,
-    /// 面额小计。
-    pub face_value_total: Amount,
-    /// 最终成交金额。
-    pub transaction_amount: Amount,
-    /// 配赠金额。
-    pub gift_amount: Amount,
-    /// 配赠率。
-    pub gift_rate: Rate,
-    /// 卡形态。
-    pub card_form: CardForm,
-}
-
-/// 草稿/提交行字段组的构建结果。
-pub(crate) struct BuiltLineGroups {
-    /// 规范化后的实物及服务字段组。
-    pub goods: Option<GoodsLineFields>,
-    /// 规范化后的卡券字段组。
-    pub voucher: Option<VoucherLineFields>,
-    /// 行含税金额（`gross = net + tax` 精确成立）。
-    pub gross_amount: Amount,
-    /// 行不含税金额。
-    pub net_amount: Amount,
-    /// 行税额。
-    pub tax_amount: Amount,
+impl From<VoucherLineDraft> for crate::entity::sales_order::types::VoucherLineDraft {
+    /// 将审核域卡券字段组转为销售单域同形字段组。
+    ///
+    /// # 参数
+    /// * `value` - 审核域卡券草稿字段组
+    ///
+    /// # 返回
+    /// 返回销售单域卡券草稿字段组。
+    fn from(value: VoucherLineDraft) -> Self {
+        Self {
+            face_value: value.face_value,
+            card_count: value.card_count,
+            unit_price_gross: value.unit_price_gross,
+            face_value_total: value.face_value_total,
+            transaction_amount: value.transaction_amount,
+            gift_amount: value.gift_amount,
+            gift_rate: value.gift_rate,
+            card_form: value.card_form,
+        }
+    }
 }
 
 /// 构建行字段组并计算行金额三元组。
@@ -403,6 +70,7 @@ pub(crate) struct BuiltLineGroups {
 /// 行类型与字段组必须一一对应：实物及服务行只允许 `goods`，卡券行只允许 `voucher`。
 /// 金额按数据模型 §4.2 铁律 1 逐行计算并舍入到分；卡券行按 §6.4 校验面额小计、
 /// 成交金额与配赠金额的一致性，成交金额为零时拒绝生效（配赠率无定义）。
+/// 规则实现复用销售单域 [`crate::entity::sales_order::types::build_line_groups`]。
 ///
 /// # 参数
 /// * `line_type` - 行类型
@@ -421,216 +89,21 @@ pub(crate) fn build_line_groups(
     voucher: Option<VoucherLineDraft>,
     sales_tax_rate: Rate,
 ) -> Result<BuiltLineGroups> {
-    let (gross_amount, net_amount, tax_amount) = match (line_type, &goods, &voucher) {
-        (LineType::GoodsService, Some(_), None) => {
-            let goods = goods.as_ref().expect("已匹配 goods 字段组");
-            line_amounts(goods.unit_price_gross, goods.quantity, sales_tax_rate)
-        },
-        (LineType::Voucher, None, Some(voucher)) => {
-            let quantity = integer_quantity(voucher.card_count)?;
-            line_amounts(voucher.unit_price_gross, quantity, sales_tax_rate)
-        },
-        _ => {
-            return Err(Error::from(
-                "行类型与字段组不一致：实物及服务行必须提供商品字段组，卡券行必须提供卡券字段组",
-            ));
-        },
-    };
-
-    let voucher = match voucher {
-        Some(draft) => {
-            let gift_rate = validate_voucher_draft(&draft)?;
-            Some(VoucherLineFields {
-                face_value: draft.face_value,
-                card_count: draft.card_count,
-                unit_price_gross: draft.unit_price_gross,
-                face_value_total: draft.face_value_total,
-                transaction_amount: draft.transaction_amount,
-                gift_amount: draft.gift_amount,
-                gift_rate,
-                card_form: draft.card_form,
-            })
-        },
-        None => None,
-    };
-
-    let goods = match goods {
-        Some(mut fields) => {
-            fields.base_unit_code = normalize_required_text(
-                fields.base_unit_code,
-                "基础单位不能为空",
-                BASE_UNIT_CODE_MAX_LEN,
-                "基础单位过长",
-            )?;
-            fields.service_region = erp_core::validation::normalize_optional_text(
-                fields.service_region,
-                "服务区域",
-                SERVICE_REGION_MAX_LEN,
-            )?
-            .map(|region| region.to_ascii_uppercase());
-            Some(fields)
-        },
-        None => None,
-    };
-
-    Ok(BuiltLineGroups { goods, voucher, gross_amount, net_amount, tax_amount })
-}
-
-/// 校验草稿卡券字段组与推导金额的一致性（数据模型 §6.4）。
-///
-/// 来源同时提供面额、单价与合计时逐项核对：面额小计、成交金额、配赠金额与
-/// 配赠率必须与公式推导值一致；不一致由本实体拒绝（P3 在同步入口转为差异任务）。
-///
-/// # 参数
-/// * `draft` - 卡券字段组入参
-///
-/// # 返回
-/// 返回推导后的配赠率。
-///
-/// # 错误
-/// 任一金额与推导值不一致或成交金额为零时返回错误。
-fn validate_voucher_draft(draft: &VoucherLineDraft) -> Result<Rate> {
-    let amounts = derive_voucher_amounts(draft.face_value, draft.card_count, draft.unit_price_gross)?;
-    if draft.face_value_total != amounts.face_value_total {
-        return Err(Error::from("面额小计必须等于面额乘卡张数"));
-    }
-    if draft.transaction_amount != amounts.transaction_amount {
-        return Err(Error::from("成交金额必须等于单卡含税单价乘卡张数并按约定舍入"));
-    }
-    if draft.gift_amount != amounts.gift_amount {
-        return Err(Error::from("配赠金额必须等于面额小计减成交金额"));
-    }
-    if let Some(gift_rate) = draft.gift_rate
-        && gift_rate != amounts.gift_rate
-    {
-        return Err(Error::from("配赠率与配赠金额、成交金额不一致"));
-    }
-    Ok(amounts.gift_rate)
-}
-
-/// 卡券行的推导金额集合。
-pub(crate) struct VoucherAmounts {
-    /// 面额乘张数。
-    pub face_value_total: Amount,
-    /// 最终成交金额（按约定舍入的单价乘张数）。
-    pub transaction_amount: Amount,
-    /// 配赠金额（面额小计减成交金额）。
-    pub gift_amount: Amount,
-    /// 配赠率（以成交金额为分母，6 位小数）。
-    pub gift_rate: Rate,
-}
-
-/// 推导卡券行金额（数据模型 §6.4：正式版本由面额、张数与成交单价直接推导）。
-///
-/// # 参数
-/// * `face_value` - 单卡面额
-/// * `card_count` - 卡张数
-/// * `unit_price_gross` - 单卡含税成交单价
-///
-/// # 返回
-/// 返回推导金额集合。
-///
-/// # 错误
-/// 卡张数为零或成交金额为零（配赠率无定义）时返回错误。
-pub(crate) fn derive_voucher_amounts(
-    face_value: Amount,
-    card_count: u32,
-    unit_price_gross: UnitPrice,
-) -> Result<VoucherAmounts> {
-    if card_count == 0 {
-        return Err(Error::from("卡券行卡张数必须为正整数"));
-    }
-    let face_value_total = face_value.to_decimal() * Decimal::from(card_count);
-    let transaction_amount = round_to_cent(unit_price_gross.to_decimal() * Decimal::from(card_count));
-    if transaction_amount.is_zero() {
-        return Err(Error::from("成交金额为零时拒绝生效（配赠率无定义）"));
-    }
-    let gift_amount = face_value_total - transaction_amount;
-    let gift_rate = Rate::try_from((gift_amount / transaction_amount).round_dp(6))?;
-    Ok(VoucherAmounts {
-        face_value_total: Amount::try_from(face_value_total)?,
-        transaction_amount: Amount::try_from(transaction_amount)?,
-        gift_amount: Amount::try_from(gift_amount)?,
-        gift_rate,
-    })
-}
-
-/// 行列表校验元组（用于草稿/提交头的行清单一致性校验）。
-pub(crate) struct LineSummary {
-    /// 单内稳定行号。
-    pub line_no: u32,
-    /// 稳定明细身份。
-    pub line_id: SalesOrderLineId,
-    /// 行类型。
-    pub line_type: LineType,
-}
-
-/// 校验行清单（数据模型 §6.4/§6.5 跨行断言）。
-///
-/// 规则：行号与稳定明细身份不重复且行号为正；卡券销售单恰好一条卡券明细；
-/// 实物及服务销售单至少一行且只能有实物及服务行。
-///
-/// # 参数
-/// * `business_type` - 销售单业务性质
-/// * `lines` - 行清单摘要
-///
-/// # 返回
-/// 全部断言通过时返回 `Ok(())`。
-///
-/// # 错误
-/// 空清单、行号越界或重复、身份重复、行类型与业务性质不一致时返回错误。
-pub(crate) fn validate_line_list(business_type: BusinessType, lines: &[LineSummary]) -> Result<()> {
-    if lines.is_empty() {
-        return Err(Error::from("销售单明细不能为空"));
-    }
-    let mut line_nos = HashSet::new();
-    let mut line_ids = HashSet::new();
-    for line in lines {
-        if line.line_no == 0 {
-            return Err(Error::from("行号必须为正整数"));
-        }
-        if !line_nos.insert(line.line_no) {
-            return Err(Error::from("行号不能重复"));
-        }
-        if !line_ids.insert(line.line_id.clone()) {
-            return Err(Error::from("稳定明细身份不能重复"));
-        }
-    }
-    match business_type {
-        BusinessType::Voucher => {
-            if lines.len() != 1 || lines[0].line_type != LineType::Voucher {
-                return Err(Error::from("卡券销售单每个版本必须恰好包含一条卡券明细"));
-            }
-        },
-        BusinessType::GoodsService => {
-            if lines.iter().any(|line| line.line_type != LineType::GoodsService) {
-                return Err(Error::from("实物及服务销售单只能包含实物及服务行"));
-            }
-        },
-    }
-    Ok(())
-}
-
-/// 将卡张数转换为基础单位数量（整数，满足数量精度）。
-///
-/// # 参数
-/// * `count` - 卡张数
-///
-/// # 返回
-/// 返回对应 `Quantity`。
-///
-/// # 错误
-/// 数量超出精度（理论不可达，防御性分支）时返回错误。
-fn integer_quantity(count: u32) -> Result<Quantity> {
-    Quantity::try_from(Decimal::from(count))
-        .map_err(|error| Error::from(format!("卡张数超出数量精度：{error}")))
+    crate::entity::sales_order::types::build_line_groups(
+        line_type,
+        goods,
+        voucher.map(crate::entity::sales_order::types::VoucherLineDraft::from),
+        sales_tax_rate,
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
 
-    use erp_core::ids::SalesOrderLineId;
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{SalesOrderLineId, SkuId, SkuRevisionId};
+    use erp_core::money::Quantity;
 
     use super::*;
 
@@ -651,68 +124,16 @@ mod tests {
     }
 
     #[test]
-    fn sales_order_enum_conversions_round_trip() {
-        let business = [
-            crate::entity::sales_order::BusinessType::Voucher,
-            crate::entity::sales_order::BusinessType::GoodsService,
-        ];
-        for value in business {
-            assert_eq!(crate::entity::sales_order::BusinessType::from(BusinessType::from(value)), value);
-        }
-
-        let lines = [
-            crate::entity::sales_order::LineType::GoodsService,
-            crate::entity::sales_order::LineType::Voucher,
-        ];
-        for value in lines {
-            assert_eq!(crate::entity::sales_order::LineType::from(LineType::from(value)), value);
-        }
-
-        let scenarios = [
-            crate::entity::sales_order::WelfareScenario::AnnualGiftBag,
-            crate::entity::sales_order::WelfareScenario::MealSubsidy,
-            crate::entity::sales_order::WelfareScenario::CondolenceGift,
-            crate::entity::sales_order::WelfareScenario::ConsumptionFund,
-            crate::entity::sales_order::WelfareScenario::Other,
-        ];
-        for value in scenarios {
-            assert_eq!(
-                crate::entity::sales_order::WelfareScenario::from(WelfareScenario::from(value)),
-                value
-            );
-        }
-
-        let cards = [
-            crate::entity::sales_order::CardForm::Electronic,
-            crate::entity::sales_order::CardForm::Physical,
-        ];
-        for value in cards {
-            assert_eq!(crate::entity::sales_order::CardForm::from(CardForm::from(value)), value);
-        }
-    }
-
-    #[test]
-    fn enums_expose_labels_and_stable_codes() {
+    fn review_types_reuse_canonical_enums_and_rules() {
         assert_eq!(BusinessType::Voucher.label(), "卡券");
-        assert_eq!(serde_json::to_string(&BusinessType::GoodsService).unwrap(), "\"GOODS_SERVICE\"");
-        assert_eq!(LineType::Voucher.as_str(), "VOUCHER");
+        assert_eq!(BusinessType::Voucher.as_str(), "VOUCHER");
+        assert!(BusinessType::Voucher.is_voucher());
+        assert!(LineType::Voucher.belongs_to(BusinessType::Voucher));
+        assert!(!LineType::Voucher.belongs_to(BusinessType::GoodsService));
         assert_eq!(WelfareScenario::MealSubsidy.label(), "餐补");
         assert_eq!(CardForm::Physical.label(), "实体卡");
+        assert_eq!(serde_json::to_string(&BusinessType::GoodsService).unwrap(), "\"GOODS_SERVICE\"");
         assert_eq!(serde_json::to_string(&CardForm::Electronic).unwrap(), "\"ELECTRONIC\"");
-    }
-
-    #[test]
-    fn sales_order_types_map_without_service_switches() {
-        assert_eq!(
-            BusinessType::from(crate::entity::sales_order::BusinessType::GoodsService),
-            BusinessType::GoodsService
-        );
-        assert_eq!(LineType::from(crate::entity::sales_order::LineType::Voucher), LineType::Voucher);
-        assert_eq!(
-            WelfareScenario::from(crate::entity::sales_order::WelfareScenario::MealSubsidy),
-            WelfareScenario::MealSubsidy
-        );
-        assert_eq!(CardForm::from(crate::entity::sales_order::CardForm::Electronic), CardForm::Electronic);
     }
 
     #[test]

@@ -184,12 +184,8 @@ impl CustomerRefund {
         data: CustomerRefundData,
         created_by: impl Into<String>,
     ) -> Result<Self> {
-        let refund_no = normalize_required_text(
-            data.refund_no,
-            "退款单号不能为空",
-            DOCUMENT_NO_MAX_LEN,
-            "退款单号过长",
-        )?;
+        let refund_no =
+            normalize_required_text(data.refund_no, "退款单号不能为空", DOCUMENT_NO_MAX_LEN, "退款单号过长")?;
         let reason_text = normalize_required_text(
             data.reason_text,
             "退款原因不能为空",

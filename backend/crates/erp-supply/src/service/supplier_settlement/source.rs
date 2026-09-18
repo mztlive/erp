@@ -1,10 +1,9 @@
 //! W27 不可变来源证据录入与 D32 正式事实派生。
 
 use std::collections::{HashMap, HashSet};
-use std::str::FromStr;
 
-use erp_core::common::time::{BusinessDate, Instant};
-use erp_core::money::{Amount, line_amounts};
+use erp_core::common::time::Instant;
+use erp_core::money::line_amounts;
 use id_generator::next_id;
 use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
@@ -42,8 +41,8 @@ impl SupplierSettlementService {
     ) -> Result<SupplierSettlementSourceEvidenceView> {
         query.validate()?;
         let period = SettlementPeriod::new(
-            parse_business_date(&query.period_start, "结算期间开始")?,
-            parse_business_date(&query.period_end, "结算期间结束")?,
+            super::draft::parse_settlement_business_date(&query.period_start, "结算期间开始")?,
+            super::draft::parse_settlement_business_date(&query.period_end, "结算期间结束")?,
             SETTLEMENT_TIMEZONE,
         )
         .map_err(|error| Error::ValidationError(error.to_string()))?;
@@ -77,8 +76,8 @@ impl SupplierSettlementService {
         request_hash: String,
     ) -> Result<SupplierSettlementSourceEvidence> {
         let period = SettlementPeriod::new(
-            parse_business_date(&req.period_start, "结算期间开始")?,
-            parse_business_date(&req.period_end, "结算期间结束")?,
+            super::draft::parse_settlement_business_date(&req.period_start, "结算期间开始")?,
+            super::draft::parse_settlement_business_date(&req.period_end, "结算期间结束")?,
             &req.timezone,
         )
         .map_err(|error| Error::ValidationError(error.to_string()))?;
@@ -370,9 +369,9 @@ fn refund_amounts(
     period: SettlementPeriod,
     evidence_reference_ids: &mut Vec<String>,
 ) -> Result<SettlementAmountComponents> {
-    let mut gross = zero();
-    let mut net = zero();
-    let mut tax = zero();
+    let mut gross = super::shared::zero_amount();
+    let mut net = super::shared::zero_amount();
+    let mut tax = super::shared::zero_amount();
     for allocation in refund_allocations
         .iter()
         .filter(|allocation| allocation.supplier_fulfillment_item_id == input.supplier_fulfillment_item_id)
@@ -464,30 +463,6 @@ fn ensure_complete_source_scope(scope: CompleteSourceScope<'_>) -> Result<()> {
         )));
     }
     Ok(())
-}
-
-/// 解析客户端业务日期文本。
-///
-/// # 参数
-/// * `value` - ISO 业务日期文本
-/// * `field` - 参数校验错误使用的字段名称
-///
-/// # 返回
-/// 返回强类型业务日期。
-///
-/// # 错误
-/// 日期格式非法时返回 `ValidationError`。
-fn parse_business_date(value: &str, field: &str) -> Result<BusinessDate> {
-    BusinessDate::from_str(value.trim())
-        .map_err(|_| Error::ValidationError(format!("{field}不是合法业务日期")))
-}
-
-/// 返回来源金额汇总使用的零金额。
-///
-/// # 返回
-/// 返回精确到分的零金额。
-fn zero() -> Amount {
-    Amount::from_str("0.00").expect("零是合法金额")
 }
 
 /// 计算来源证据命令的稳定幂等指纹。

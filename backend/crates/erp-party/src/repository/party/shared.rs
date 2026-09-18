@@ -125,9 +125,6 @@ mod tests {
     fn subordinate_fact_sort_and_default_filter_share_single_source() {
         assert_eq!(default_first_sort(), doc! { "is_default": -1, "created_at": -1 });
         let party_id = erp_core::ids::PartyId::new("party-1");
-        assert_eq!(
-            party_default_marks_filter(&party_id),
-            doc! { "party_id": "party-1", "is_default": true }
-        );
+        assert_eq!(party_default_marks_filter(&party_id), doc! { "party_id": "party-1", "is_default": true });
     }
 }

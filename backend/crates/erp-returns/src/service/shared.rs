@@ -92,6 +92,17 @@ mod tests {
     }
 
     #[test]
+    fn shared_plumbing_keeps_not_found_reversed_and_limit_messages() {
+        assert_eq!(or_not_found(Some(1), "缺失").unwrap(), 1);
+        assert!(matches!(or_not_found::<i32>(None, "缺失"), Err(Error::NotFound(_))));
+        assert!(reject_if_reversed(false, "已冲正").is_ok());
+        assert!(matches!(reject_if_reversed(true, "已冲正"), Err(Error::BusinessLogicError(_))));
+        let amount = |value: &str| super::Amount::from_str(value).unwrap();
+        assert!(ensure_cumulative_within(amount("100"), amount("60"), amount("40"), "超限").is_ok());
+        assert!(ensure_cumulative_within(amount("100"), amount("60"), amount("41"), "超限").is_err());
+    }
+
+    #[test]
     fn tier_c_return_filters_default_to_first_page_size_20() {
         assert_eq!(
             (SalesReturnCaseFilter::default().page, SalesReturnCaseFilter::default().page_size),

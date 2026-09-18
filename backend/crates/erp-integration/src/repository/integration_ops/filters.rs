@@ -105,15 +105,24 @@ impl QueryFilter for InboxMessageFilter {
     }
 }
 
-impl Pagination for InboxMessageFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。
-    fn page_and_size(&self) -> (u64, u64) {
-        (self.page, u64::from(self.page_size))
-    }
+/// 三类列表筛选的分页字段（`page/page_size`）与分页 trait 去重宏。
+macro_rules! filter_pagination {
+    ($filter:ty) => {
+        impl Pagination for $filter {
+            /// 返回页码与单页条数。
+            ///
+            /// # 返回
+            /// 返回 `(page, page_size)` 元组。
+            fn page_and_size(&self) -> (u64, u64) {
+                (self.page, u64::from(self.page_size))
+            }
+        }
+    };
 }
+
+filter_pagination!(InboxMessageFilter);
+filter_pagination!(IntegrationErrorTaskFilter);
+filter_pagination!(ReconciliationDifferenceFilter);
 
 /// 集成错误任务列表投影行（列表接口只取必要字段；解决证据文本
 /// `resolution` 不进入列表投影）。
@@ -242,16 +251,6 @@ impl QueryFilter for IntegrationErrorTaskFilter {
     }
 }
 
-impl Pagination for IntegrationErrorTaskFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。
-    fn page_and_size(&self) -> (u64, u64) {
-        (self.page, u64::from(self.page_size))
-    }
-}
-
 /// 对账差异列表投影行（正式差异事实，只读）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ReconciliationDifferenceRow {
@@ -369,16 +368,6 @@ impl QueryFilter for ReconciliationDifferenceFilter {
             filter.remove("$or");
         }
         and_scope(filter, self.scope_document.as_ref())
-    }
-}
-
-impl Pagination for ReconciliationDifferenceFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。
-    fn page_and_size(&self) -> (u64, u64) {
-        (self.page, u64::from(self.page_size))
     }
 }
 

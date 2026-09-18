@@ -34,9 +34,7 @@ impl SupplierSettlementService {
             .find_by_id(difference_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("供应商结算差异不存在".to_string()))?;
-        if difference.base.version != req.expected_difference_version {
-            return Err(Error::ConflictError("结算差异版本已变化，请刷新后重试".to_string()));
-        }
+        ensure_difference_version(difference.base.version, req.expected_difference_version)?;
         let item = self
             .db
             .supplier_settlement_items()
@@ -101,6 +99,22 @@ impl SupplierSettlementService {
         Ok(Some(replay_evidence(existing, req, hash)?))
     }
 }
+
+/// 校验结算差异乐观锁版本（补证与正式结论共用同一冲突口径）。
+///
+/// # 参数
+/// * `actual` - 当前差异版本
+/// * `expected` - 命令声明的期望版本
+///
+/// # 错误
+/// 版本不一致时返回冲突错误。
+pub(super) fn ensure_difference_version(actual: u64, expected: u64) -> Result<()> {
+    if actual != expected {
+        return Err(Error::ConflictError("结算差异版本已变化，请刷新后重试".to_string()));
+    }
+    Ok(())
+}
+
 pub fn evidence_command_hash(req: &SettlementDifferenceEvidenceRequest) -> String {
     let mut references = req.evidence_reference_ids.clone();
     references.sort();
@@ -162,6 +176,12 @@ pub fn evidence_view(evidence: SupplierSettlementDifferenceEvidence) -> Settleme
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn difference_version_guard_rejects_stale_command() {
+        assert!(super::ensure_difference_version(1, 1).is_ok());
+        assert!(super::ensure_difference_version(2, 1).is_err());
+    }
 
     #[test]
     fn command_hash_is_order_insensitive_for_reference_set() {

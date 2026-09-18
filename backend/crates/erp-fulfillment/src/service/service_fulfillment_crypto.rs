@@ -70,8 +70,7 @@ pub fn service_fulfillment_draft_from_request(
     actor_id: &str,
     fingerprint_key: &[u8],
 ) -> Result<ServiceFulfillment> {
-    let occurred_at = Instant::from_unix_secs(req.occurred_at);
-    let recorded_at = Instant::now();
+    let (occurred_at, recorded_at) = super::draft_fact_times(req.occurred_at);
     ServiceFulfillmentDraft::build(
         ServiceFulfillmentId::new(next_id()),
         ServiceFulfillmentDraftData {

@@ -24,6 +24,7 @@ use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
+use super::check_expected_version;
 pub use crate::dto::bulk_job::{
     BackgroundJobItemView, BackgroundJobListParams, BackgroundJobView, BulkSelectionItemView,
     BulkSelectionSnapshotListParams, BulkSelectionSnapshotView, CancelAllBackgroundJobsRequest,
@@ -40,8 +41,6 @@ use crate::entity::bulk_job::{
 use crate::error::{Error, Result};
 use crate::ports::{BusinessDocumentPort, SupportAuditPort, is_business_document_type};
 use crate::repository::{BackgroundJobRegistration, BulkJobExt};
-
-use super::check_expected_version;
 
 /// 选择快照列表筛选条件类型（经 `BulkJobExt` 关联类型跨 crate 可达）。
 type BulkSelectionSnapshotFilter = <mongodb::Database as BulkJobExt>::BulkSelectionSnapshotFilter;

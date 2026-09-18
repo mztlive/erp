@@ -128,11 +128,7 @@ impl BackgroundJobItem {
         }
         let object_type = normalize_optional_text(data.object_type, "对象类型", OBJECT_TYPE_MAX_LEN)?;
         let object_id = normalize_optional_text(data.object_id, "对象ID", OBJECT_ID_MAX_LEN)?;
-        ensure_paired(
-            object_type.is_some(),
-            object_id.is_some(),
-            "对象类型与对象ID必须同时提供或同时省略",
-        )?;
+        ensure_paired(object_type.is_some(), object_id.is_some(), "对象类型与对象ID必须同时提供或同时省略")?;
         let expected_version = normalize_optional_text(data.expected_version, "预期版本", VERSION_MAX_LEN)?;
         let expected_hash = normalize_optional_text(data.expected_hash, "内容摘要", HASH_MAX_LEN)?;
         ensure_paired(

@@ -1,4 +1,6 @@
 //! 原命令写序与响应/命令ID生成时点，由生产Mongo provider执行。
+use serde::Serialize;
+
 use super::*;
 use crate::repository::supplier_offering::write::{self as repository_write, OfferingWritePort};
 /// 原同域写入顺序；每步使用同一调用方Executor。
@@ -33,15 +35,31 @@ pub(super) async fn revised<P: OfferingWritePort>(
         version: prepared.expected_version,
         safety_pause: None,
     };
-    let command = SupplierOfferingCommand::with_result(
-        next_id(),
+    store_command(
+        port,
         &prepared.idempotency_key,
         REVISE_OFFERING_COMMAND,
         &prepared.fingerprint,
         &result,
-    )?;
-    port.command(&command, executor).await?;
+        executor,
+    )
+    .await?;
     Ok(result)
+}
+
+/// 修订与可供写入共用原命令构造与落盘顺序；命令ID保留原生成时点。
+async fn store_command<P: OfferingWritePort, T: Serialize>(
+    port: &P,
+    idempotency_key: &str,
+    operation: &str,
+    fingerprint: &str,
+    result: &T,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let command =
+        SupplierOfferingCommand::with_result(next_id(), idempotency_key, operation, fingerprint, result)?;
+    port.command(&command, executor).await?;
+    Ok(())
 }
 /// 原同域写入顺序；每步使用同一调用方Executor。
 pub(super) async fn availability<P: OfferingWritePort>(
@@ -57,14 +75,15 @@ pub(super) async fn availability<P: OfferingWritePort>(
         source_updated_at: prepared.availability.source_updated_at.unix_secs(),
         safety_pause: None,
     };
-    let command = SupplierOfferingCommand::with_result(
-        next_id(),
+    store_command(
+        port,
         &prepared.idempotency_key,
         UPDATE_OFFERING_AVAILABILITY_COMMAND,
         &prepared.fingerprint,
         &result,
-    )?;
-    port.command(&command, executor).await?;
+        executor,
+    )
+    .await?;
     Ok(result)
 }
 

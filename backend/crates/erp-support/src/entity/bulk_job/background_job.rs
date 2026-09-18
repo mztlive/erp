@@ -111,12 +111,7 @@ impl DocumentState for JobStatus {
 ///
 /// # 错误
 /// 加法溢出时返回错误，不修改调用方状态。
-pub(super) fn add_progress_counts(
-    base: u64,
-    success: u64,
-    skipped: u64,
-    failed: u64,
-) -> Result<u64> {
+pub(super) fn add_progress_counts(base: u64, success: u64, skipped: u64, failed: u64) -> Result<u64> {
     base.checked_add(success)
         .and_then(|value| value.checked_add(skipped))
         .and_then(|value| value.checked_add(failed))
@@ -317,8 +312,7 @@ impl BackgroundJob {
         if !self.can_record_progress() {
             return Err(Error::from(format!("状态 {:?} 不允许记录进度", self.status)));
         }
-        let processed =
-            add_progress_counts(self.processed_count, success, skipped, failed)?;
+        let processed = add_progress_counts(self.processed_count, success, skipped, failed)?;
         if processed > self.total_count {
             return Err(Error::from("已处理数不能超过目标总数"));
         }

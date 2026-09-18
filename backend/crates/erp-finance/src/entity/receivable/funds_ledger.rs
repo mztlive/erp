@@ -390,13 +390,8 @@ impl ReceivableFundsLedger {
         )?;
         let account_id = entry.receivable_account_id.clone();
         let account_index = self.account_delta_index.get(account_id.as_ref()).copied();
-        let signed = match action {
-            AllocationAction::Apply => line.allocated_amount,
-            AllocationAction::Reverse => {
-                // 账户进度以正增量 APPLY 推进；REVERSE 从已聚合增量扣减。
-                line.allocated_amount
-            },
-        };
+        // 账户增量按符号聚合：APPLY 为正、REVERSE 从已聚合增量扣减，符号数与原值相同。
+        let signed = line.allocated_amount;
         let next_account_total = match (account_index, action) {
             (Some(index), AllocationAction::Apply) => {
                 checked_add_amount(self.account_deltas[index].1, signed)?

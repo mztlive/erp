@@ -12,6 +12,8 @@ use serde::{Deserialize, Serialize};
 use super::sort_doc;
 use crate::entity::receivable::{ReceivableAccount, ReceivableAccountStatus};
 use crate::repository::owned::ReceivableAccountRepository;
+// 金额形态与进度管道复用仓储共用实现；`snapshot` 经本模块转发，保持原引用路径。
+pub(super) use crate::repository::progress::{amount_bson, progress_pipeline};
 
 /// 应收往来子账列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -663,28 +665,11 @@ impl<'a> ReceivableAccountRepository<'a> {
     }
 }
 
-/// 将金额按 BSON Decimal128 形态转换（仓储层禁止任何舍入或换算）。
-///
-/// `bson::serialize_to_bson` 默认走 human-readable 字符串形态，与实体持久化的
-/// Decimal128 形态不一致；这里直接构造 Decimal128，确保 `$add`/`$lte`
-/// 等表达式与库内金额类型一致。
-///
-/// # 参数
-/// * `amount` - 定点金额
-///
-/// # 返回
-/// 返回 Decimal128 形态的 BSON 值。
-///
-/// # 错误
-/// 金额无法表示为 Decimal128 时返回错误。
-pub(super) fn amount_bson(amount: &Amount) -> Result<Bson> {
-    Ok(Bson::Decimal128(amount.to_string().parse()?))
-}
-
 /// 构造条件开票的写前置条件（不超额开票）。
 ///
 /// 以写条件而非读后判断保证 `invoiced_total + 本次开票 <= invoiceable_total`，
-/// 不满足时整个更新不生效（matched 为 0）。
+/// 不满足时整个更新不生效（matched 为 0）。金额形态与管道复用应付侧共用 helper，
+/// 本文件只保留应收特有的守卫文档。
 ///
 /// # 参数
 /// * `id` - 应收往来子账 ID
@@ -703,65 +688,6 @@ fn invoicing_guard(id: &str, amount: &Bson) -> Document {
             ],
         },
     }
-}
-
-/// 构建核销/开票进度条件更新管道。
-///
-/// 在单条 MongoDB 原子更新内重算进度字段、开放余额与派生状态：
-/// 增加方向 `progress = progress + amount`、`balance = total - progress`；
-/// 减少方向 `progress = progress - amount`、`balance = total - progress`。
-/// 状态仅由开放余额派生：增加后开放余额归零为 `settled`，减少后已核销归零为
-/// `open`，其余为 `partially_settled`；开票进度不派生状态。
-///
-/// # 参数
-/// * `progress_field` - 进度字段名（`settled_total` 或 `invoiced_total`）
-/// * `balance_field` - 开放余额字段名（`open_total` 或 `open_invoiceable_total`）
-/// * `amount` - 本次金额（正数）
-/// * `increase` - `true` 为增加进度，`false` 为冲减进度
-/// * `updated_by` - 本次更新执行人
-///
-/// # 返回
-/// 返回聚合管道更新文档。
-pub(super) fn progress_pipeline(
-    progress_field: &str,
-    balance_field: &str,
-    amount: &Bson,
-    increase: bool,
-    updated_by: &str,
-) -> Vec<Document> {
-    let total_field = if progress_field == "settled_total" { "gross_total" } else { "invoiceable_total" };
-    let new_progress = if increase {
-        doc! { "$add": ["$" .to_owned() + progress_field, amount] }
-    } else {
-        doc! { "$subtract": ["$" .to_owned() + progress_field, amount] }
-    };
-    let new_balance = doc! { "$subtract": ["$" .to_owned() + total_field, &new_progress] };
-    let mut set = doc! {
-        progress_field: &new_progress,
-        balance_field: &new_balance,
-        "updated_by": updated_by,
-        "version": { "$add": ["$version", 1] },
-        "updated_at": chrono::Local::now().timestamp(),
-    };
-    if progress_field == "settled_total" {
-        set.insert(
-            "status",
-            doc! {
-                "$cond": [
-                    { "$eq": [&new_balance, { "$toDecimal": "0" }] },
-                    "settled",
-                    {
-                        "$cond": [
-                            { "$eq": [&new_progress, { "$toDecimal": "0" }] },
-                            "open",
-                            "partially_settled",
-                        ]
-                    },
-                ],
-            },
-        );
-    }
-    vec![doc! { "$set": set }]
 }
 
 /// 应收往来子账列表投影字段。

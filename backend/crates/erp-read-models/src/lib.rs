@@ -1,6 +1,7 @@
 //! Cross-domain read models: workbench, customer center and fulfillment queue.
 
 mod errors;
+mod support;
 
 pub use errors::{Error, Result};
 

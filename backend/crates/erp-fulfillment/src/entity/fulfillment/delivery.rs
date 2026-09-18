@@ -445,6 +445,17 @@ impl Delivery {
         Ok(())
     }
 
+    /// 返回供应商直发的采购来源引用。
+    ///
+    /// # 返回
+    /// 直发且携带采购来源时返回引用。
+    ///
+    /// # 错误
+    /// 仓发或缺少采购来源时返回业务错误。
+    pub fn supplier_purchase_source(&self) -> Result<erp_core::ids::PurchaseOrderId> {
+        self.purchase_order_id.clone().ok_or_else(|| Error::from("供应商直发缺少采购来源"))
+    }
+
     /// 判断当前状态是否可编辑。
     ///
     /// # 返回
@@ -885,5 +896,33 @@ pub(crate) mod tests {
         assert!(!production.contains("approval_subject_version"));
         assert!(!production.contains("ApprovalDefinitionBinding"));
         assert!(!production.contains("PENDING_REVIEW"));
+    }
+
+    /// 采购来源提取纯规则：直发携带采购来源通过，缺失失败。
+    #[test]
+    fn supplier_source_extraction_covers_present_and_missing() {
+        let direct = Delivery::new(
+            DeliveryId::new("d-src-1"),
+            DeliveryData {
+                delivery_type: DeliveryType::SupplierDirect,
+                purchase_order_id: Some(PurchaseOrderId::new("po-1")),
+                warehouse_id: None,
+                ..delivery_data()
+            },
+        )
+        .unwrap();
+        assert_eq!(direct.supplier_purchase_source().unwrap(), PurchaseOrderId::new("po-1"));
+
+        let missing = Delivery::new(
+            DeliveryId::new("d-src-2"),
+            DeliveryData {
+                delivery_type: DeliveryType::WarehouseShip,
+                purchase_order_id: None,
+                warehouse_id: Some(WarehouseId::new("wh-1")),
+                ..delivery_data()
+            },
+        )
+        .unwrap();
+        assert!(missing.supplier_purchase_source().is_err());
     }
 }

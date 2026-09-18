@@ -6,7 +6,7 @@ use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::IntegrationOpsService;
-use super::scope::{ScopedIntegrationList, ensure_page, ensure_scope_version};
+use super::scope::{ScopedIntegrationList, ensure_page, resolve_list_scope};
 use crate::dto::{self, *};
 use crate::entity::integration_ops::*;
 use crate::repository::IntegrationOpsExt;
@@ -44,22 +44,22 @@ impl IntegrationOpsService {
         executor: &mut dyn Executor,
     ) -> Result<ErrorTaskListView> {
         let access = self.access();
-        let (context, read_scope) = access.resolve(actor, "integration_error_task", "list", executor).await?;
-        let owner_org_unit_ids = super::scope::expand_org_filter(
+        let scope = resolve_list_scope(
             &access,
+            actor,
+            "integration_error_task",
             &query.org_unit_ids,
             query.include_descendants,
+            query.scope_version.as_deref(),
             executor,
         )
         .await?;
-        let filter = error_task_filter(&query, &read_scope, owner_org_unit_ids);
-        let meta = ScopedIntegrationList::from_access(&context, &read_scope);
-        ensure_scope_version(query.scope_version.as_deref(), &meta.scope_version)?;
-        if meta.empty_reason == Some("no_scope") {
-            return Ok(empty_error_task_page(&filter, meta));
+        let filter = error_task_filter(&query, &scope.read_scope, scope.owner_org_unit_ids);
+        if scope.meta.empty_reason == Some("no_scope") {
+            return Ok(empty_error_task_page(&filter, scope.meta));
         }
         let page = self.db.integration_error_tasks().search_error_tasks(&filter, executor).await?;
-        Ok(error_task_list_view(page, &filter, meta))
+        Ok(error_task_list_view(page, &filter, scope.meta))
     }
 
     pub async fn ensure_message_exists(&self, id: &str) -> Result<()> {
@@ -78,14 +78,14 @@ pub fn prepare_error_task(
     req: &CreateErrorTaskRequest,
     owner_org_unit_id: String,
 ) -> Result<IntegrationErrorTask> {
-    IntegrationErrorTask::with_derived_owner_role(
+    Ok(IntegrationErrorTask::with_derived_owner_role(
         IntegrationErrorTaskId::new(next_id()),
         req.message_id.clone(),
         req.business_object_id.clone(),
         req.error_class,
         req.owner_user_id.clone(),
         owner_org_unit_id,
-    )
+    )?)
 }
 
 /// 把已规范化查询与授权条件装配为仓储筛选。

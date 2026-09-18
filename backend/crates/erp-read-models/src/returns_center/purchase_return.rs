@@ -56,9 +56,7 @@ impl ReturnsReadService {
         actor: &AuditActor,
     ) -> Result<PurchaseReturnListView> {
         let expected = params.scope_version.as_deref();
-        if params.page.unwrap_or(1) > 1 && expected.is_none_or(str::is_empty) {
-            return Err(Error::ConflictError("DATA_SCOPE_CHANGED：请从第一页刷新后继续查询".into()));
-        }
+        crate::support::ensure_deep_page(params.page.unwrap_or(1), expected)?;
         params.validate()?;
         let snapshot = self.purchase_return_list_snapshot(params, actor).await?;
         if expected.is_some_and(|value| value != snapshot.scope_version) {

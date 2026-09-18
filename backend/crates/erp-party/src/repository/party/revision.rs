@@ -79,6 +79,27 @@ impl Pagination for PartyRevisionFilter {
 }
 
 impl<'a> PartyRevisionRepository<'a> {
+    /// 按修订 ID 集合批量读取主体修订（erp-party-012）。
+    ///
+    /// 历史别名：与 [`Self::list_by_ids`] 同语义，保留以兼容公开签名；新调用统一使用 `list_by_ids`。
+    ///
+    /// # 参数
+    /// * `revision_ids` - 主体修订 ID 集合；空集合直接返回空结果
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配修订；返回顺序不承诺与输入一致。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn find_revisions_by_ids(
+        &self,
+        revision_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyRevision>> {
+        self.list_by_ids(revision_ids, executor).await
+    }
+
     /// 按修订 ID 查找主体修订。
     ///
     /// # 参数

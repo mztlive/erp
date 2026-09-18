@@ -94,10 +94,7 @@ impl CostReadModel {
 }
 /// 首页面后必须携带同一范围版本，禁止不同授权页拼接。
 fn ensure_page(page: u64, version: Option<&str>) -> Result<()> {
-    if page > 1 && version.is_none_or(str::is_empty) {
-        return Err(Error::ConflictError("DATA_SCOPE_CHANGED：请从第一页刷新后继续查询".into()));
-    }
-    Ok(())
+    crate::support::ensure_deep_page(page, version)
 }
 /// 使用饱和乘法避免非法大页码溢出。
 fn page_offset(page: u64, size: u32) -> usize {

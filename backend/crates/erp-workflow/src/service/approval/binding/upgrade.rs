@@ -59,6 +59,8 @@ use crate::repository::{BpmExt, DocumentRegistryExt};
 /// # 错误
 /// 身份、授权、收据、动作、强实体、注册行、定义图或人员重验失败时
 /// 返回错误。任何收据冲突之外的 duplicate 不得进入恢复。
+// 升级入口 8 参数：db/各 Port/命令/操作人/执行器由组合根固定装配，顺序由调用点锚定；告警逐项压制。
+#[allow(clippy::too_many_arguments)]
 pub async fn upgrade_unsubmitted_document_definition(
     db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,

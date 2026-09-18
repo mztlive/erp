@@ -4,6 +4,7 @@ pub mod cost;
 pub mod extensions;
 pub mod owned;
 pub mod payable;
+mod progress;
 pub mod receivable;
 
 pub use cost::{CostAllocationFilter, CostAllocationRow, CostEntryFilter, CostEntryRow, CostRepository};

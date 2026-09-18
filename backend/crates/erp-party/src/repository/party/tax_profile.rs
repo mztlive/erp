@@ -6,8 +6,7 @@ use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mo
 use serde::{Deserialize, Serialize};
 
 use super::shared::{
-    active_fact_filter, active_fact_window_filter, default_first_sort, party_default_marks_filter,
-    sort_doc,
+    active_fact_filter, active_fact_window_filter, default_first_sort, party_default_marks_filter, sort_doc,
 };
 use crate::entity::party::{EffectiveRecordStatus, PartyTaxProfile};
 use crate::repository::owned::PartyTaxProfileRepository;

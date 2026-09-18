@@ -17,7 +17,7 @@ use super::account::{
 };
 use crate::Result;
 use crate::entity::payable::{
-    AllocationAction, PayableSourceType, PendingPaymentAllocation, SupplierPaymentStatus,
+    AllocationAction, PayableSourceType, PaymentAllocation, PendingPaymentAllocation, SupplierPaymentStatus,
 };
 
 // ---------------------------------------------------------------------------
@@ -165,6 +165,32 @@ pub struct PaymentAllocationView {
     pub allocated_at: Instant,
     /// 反向分配引用的原 `APPLY`。
     pub reverses_allocation_id: Option<String>,
+}
+
+/// 分配视图装配辅助（金额正数校验由实体层完成）。
+impl From<&PaymentAllocation> for PaymentAllocationView {
+    /// 从付款核销分配实体构造视图。
+    ///
+    /// # 参数
+    /// * `allocation` - 付款核销分配实体
+    ///
+    /// # 返回
+    /// 返回响应视图。
+    fn from(allocation: &PaymentAllocation) -> Self {
+        Self {
+            id: allocation.base.id.clone(),
+            allocation_seq: allocation.allocation_seq,
+            allocation_action: allocation.allocation_action,
+            payable_entry_id: allocation.payable_entry_id.to_string(),
+            payable_account_id: None,
+            source_type: None,
+            source_document_id: None,
+            source_document_no: None,
+            allocated_amount: allocation.allocated_amount,
+            allocated_at: allocation.allocated_at,
+            reverses_allocation_id: allocation.reverses_allocation_id.as_ref().map(|id| id.to_string()),
+        }
+    }
 }
 
 /// 供应商付款单响应视图。

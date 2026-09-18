@@ -63,9 +63,7 @@ impl ReceivableReadService {
                 .await?;
                 sales.map(|mut ids| {
                     ids.extend(purchase.unwrap_or_default());
-                    ids.sort();
-                    ids.dedup();
-                    ids
+                    crate::support::dedup_sorted(ids)
                 })
             },
         };

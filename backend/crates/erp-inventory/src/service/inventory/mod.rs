@@ -14,7 +14,7 @@ use crate::ports::{
 mod adjustment_query;
 mod balance;
 mod mapping;
-mod movement;
+pub(super) mod movement;
 mod reservation;
 mod search;
 mod stock_write;

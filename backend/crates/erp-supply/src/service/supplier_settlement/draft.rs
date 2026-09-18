@@ -267,8 +267,8 @@ fn collect_draft_inputs(req: &CreateSettlementStatementRequest) -> Result<Collec
     if req.action != SettlementDraftAction::Create {
         return Err(Error::ValidationError("创建结算草稿必须使用 CREATE 动作".to_string()));
     }
-    let period_start = parse_business_date(&req.period_start, "结算期间开始")?;
-    let period_end = parse_business_date(&req.period_end, "结算期间结束")?;
+    let period_start = parse_settlement_business_date(&req.period_start, "结算期间开始")?;
+    let period_end = parse_settlement_business_date(&req.period_end, "结算期间结束")?;
     if period_end < period_start {
         return Err(Error::ValidationError("结算期间结束不得早于开始".to_string()));
     }
@@ -400,7 +400,18 @@ fn validate_create_replay(
     Ok(())
 }
 
-fn parse_business_date(value: &str, field: &str) -> Result<BusinessDate> {
+/// 解析结算业务日期文本（草稿创建与来源录入共用同一口径）。
+///
+/// # 参数
+/// * `value` - ISO 业务日期文本
+/// * `field` - 参数校验错误使用的字段名称
+///
+/// # 返回
+/// 返回强类型业务日期。
+///
+/// # 错误
+/// 日期格式非法时返回 `ValidationError`。
+pub(super) fn parse_settlement_business_date(value: &str, field: &str) -> Result<BusinessDate> {
     BusinessDate::from_str(value.trim())
         .map_err(|_| Error::ValidationError(format!("{field}不是合法业务日期")))
 }

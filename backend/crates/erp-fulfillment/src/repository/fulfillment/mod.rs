@@ -30,6 +30,7 @@
 mod customer_acceptance;
 mod delivery;
 mod electronic_delivery;
+mod filter;
 mod purchase_receipt;
 mod purchase_receipt_totals;
 mod service_fulfillment;
@@ -45,6 +46,7 @@ use erp_core::ids::{
     PurchaseOrderRevisionLineId, PurchaseReceiptId, SalesOrderLineId, ServiceFulfillmentId,
 };
 use erp_core::money::Quantity;
+pub(crate) use filter::{active_filter, page_and_size};
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;

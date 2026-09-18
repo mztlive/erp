@@ -3,11 +3,11 @@
 //! 集合名直接引用 `FileAssetExt` 关联常量（唯一权威来源，conventions §4.3），
 //! 不做本地转存。
 
-use mongodb::bson::{Document, doc};
-use mongodb::options::IndexOptions;
+use mongodb::bson::doc;
 use mongodb::{Database, IndexModel};
 use persistence_core::Result;
 
+use super::{create_indexes, named_index, unique_index};
 use crate::repository::extensions::FileAssetExt;
 
 /// 创建本域集合的幂等命名索引。
@@ -39,12 +39,6 @@ pub async fn ensure(db: &Database) -> Result<()> {
     Ok(())
 }
 
-/// 为单个集合创建一组幂等命名索引。
-async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
-    db.collection::<Document>(collection).create_indexes(indexes).await?;
-    Ok(())
-}
-
 /// 返回 `file_asset` 的身份约束、扫描队列与到期查询索引。
 fn file_asset_indexes() -> Vec<IndexModel> {
     vec![
@@ -64,19 +58,6 @@ fn document_attachment_indexes() -> Vec<IndexModel> {
         named_index("idx_document_attachments_document", doc! { "document_id": 1, "created_at": 1 }),
         named_index("idx_document_attachments_asset", doc! { "file_asset_id": 1 }),
     ]
-}
-
-/// 构建命名普通索引。
-fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
-}
-
-/// 构建命名唯一索引。
-fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).unique(true).build())
-        .build()
 }
 
 #[cfg(test)]

@@ -17,8 +17,8 @@ use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
-use super::handler::{reject_me_handler, require_handler_org_unit_id};
 use super::ReconciliationDifferenceId;
+use super::handler::{reject_me_handler, require_handler_org_unit_id};
 
 /// 差异对象类型最大长度。
 const BUSINESS_OBJECT_TYPE_MAX_LEN: usize = 64;

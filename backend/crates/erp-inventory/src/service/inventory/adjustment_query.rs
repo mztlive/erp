@@ -8,7 +8,7 @@ use validator::Validate;
 use super::InventoryService;
 use crate::dto::scope::{ADJUSTMENT_OWNERSHIP_BASIS, ADJUSTMENT_SCOPE_SUMMARY};
 use crate::dto::{
-    InventoryListPage, PageView, SortDir, StockAdjustmentLineView, StockAdjustmentListParams,
+    InventoryListPage, PageView, StockAdjustmentLineView, StockAdjustmentListParams,
     StockAdjustmentListQuery, StockAdjustmentView, ensure_scope_version,
 };
 use crate::entity::inventory::{StockAdjustment, StockAdjustmentLine, StockMovement};
@@ -216,6 +216,7 @@ fn adjustment_filter(
     search: crate::repository::InventorySearch,
     id_in: Option<Vec<String>>,
 ) -> StockAdjustmentFilter {
+    let (sort_by, sort_ascending) = query.paging.sort_selection();
     StockAdjustmentFilter {
         search,
         warehouse_ids: authorization
@@ -226,8 +227,8 @@ fn adjustment_filter(
         id_in,
         page: query.paging.page,
         page_size: query.paging.page_size,
-        sort_by: Some(query.paging.sort_by.to_string()),
-        sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
+        sort_by,
+        sort_ascending,
     }
 }
 

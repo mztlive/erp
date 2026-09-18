@@ -7,11 +7,12 @@ use persistence_core::Executor;
 use validator::Validate;
 
 use super::ReturnsService;
-use super::shared::{CUSTOMER_REFUND_COMMAND_PREFIX, DEFAULT_FINANCE_REVIEWER, return_command_no};
-use crate::dto::{CommitCustomerRefundRequest, CreateCustomerRefundRequest};
-use crate::entity::returns::{
-    CumulativeAmountLimit, CustomerRefund, CustomerRefundData, CustomerRefundStatus,
+use super::shared::{
+    CUSTOMER_REFUND_COMMAND_PREFIX, DEFAULT_FINANCE_REVIEWER, ensure_cumulative_within, or_not_found,
+    reject_if_reversed, return_command_no,
 };
+use crate::dto::{CommitCustomerRefundRequest, CreateCustomerRefundRequest};
+use crate::entity::returns::{CustomerRefund, CustomerRefundData, CustomerRefundStatus};
 use crate::repository::ReturnsExt;
 use crate::{Error, Result};
 /// 客户退款消费的原回款最小事实；读取时点由流程控制。
@@ -94,11 +95,7 @@ impl ReturnsService {
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<CustomerRefund> {
-        self.db
-            .customer_refunds()
-            .find_by_id(id, executor)
-            .await?
-            .ok_or_else(|| Error::NotFound("客户退款单不存在".to_string()))
+        or_not_found(self.db.customer_refunds().find_by_id(id, executor).await?, "客户退款单不存在")
     }
     /// 在调用方事务创建退款单；绑定和运行事实由流程保持原先后顺序。
     pub async fn create_customer_refund_in_transaction(
@@ -125,9 +122,7 @@ impl ReturnsService {
         executor: &mut dyn Executor,
     ) -> Result<CustomerRefund> {
         let refund = self.load_customer_refund(id, executor).await?;
-        if refund.status == CustomerRefundStatus::Reversed {
-            return Err(Error::BusinessLogicError("已冲正退款不能再过账".to_string()));
-        }
+        reject_if_reversed(refund.status == CustomerRefundStatus::Reversed, "已冲正退款不能再过账")?;
         super::approval::ensure_final_approve_posting(&refund)?;
         Ok(refund)
     }
@@ -151,8 +146,12 @@ impl ReturnsService {
             .customer_refunds()
             .posted_refund_total_by_receipt(original_receipt_id, &refund.base.id, executor)
             .await?;
-        CumulativeAmountLimit::ensure_within_limit(receipt_amount, refunded_before, refund.amount)
-            .map_err(|_| Error::BusinessLogicError("累计退款金额不得超过原回款金额".to_string()))
+        ensure_cumulative_within(
+            receipt_amount,
+            refunded_before,
+            refund.amount,
+            "累计退款金额不得超过原回款金额",
+        )
     }
     /// 财务写入全部成功后才标记已过账并执行退款CAS。
     pub async fn persist_posted_customer_refund(

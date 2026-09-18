@@ -285,6 +285,8 @@ async fn replay_decision_in_transaction(
 }
 
 /// 在同一事务内执行决定的完整前置、授权、领域动作与运行时写入。
+// 决定事务 8 参数：与受阻取消/恢复入口同形以便统一分派，顺序由调用点锚定；告警逐项压制。
+#[allow(clippy::too_many_arguments)]
 async fn submit_decision_in_transaction(
     db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,

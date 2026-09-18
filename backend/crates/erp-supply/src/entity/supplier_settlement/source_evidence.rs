@@ -16,7 +16,8 @@ use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
+
+use crate::entity::supplier_settlement::{normalize_statement_sha256, statement_digest_parts};
 
 const COMMAND_ID_MAX_LEN: usize = 128;
 const POLICY_VALUE_MAX_LEN: usize = 128;
@@ -24,7 +25,6 @@ const TIMEZONE_MAX_LEN: usize = 64;
 const BILL_VALUE_MAX_LEN: usize = 128;
 const EVIDENCE_REFERENCE_MAX_LEN: usize = 256;
 const ACTOR_MAX_LEN: usize = 128;
-const HASH_LEN: usize = 64;
 const MAX_LINES: usize = 1_000;
 const MAX_REFERENCES_PER_LINE: usize = 32;
 /// 当前结算期间策略支持的固定时区。
@@ -554,7 +554,7 @@ impl SupplierSettlementSourceEvidenceData {
         for line in lines {
             append_line_digest_parts(&mut parts, line);
         }
-        digest_parts(&parts)
+        statement_digest_parts(&parts)
     }
 }
 
@@ -770,22 +770,6 @@ fn append_line_digest_parts(parts: &mut Vec<String>, line: &SupplierSettlementSo
     ]);
 }
 
-/// 对字段逐项加入长度前缀后计算稳定摘要。
-///
-/// # 参数
-/// * `parts` - 按业务语义排序后的字段集合
-///
-/// # 返回
-/// 返回 64 位小写 SHA-256 十六进制摘要。
-fn digest_parts(parts: &[String]) -> String {
-    let mut digest = Sha256::new();
-    for part in parts {
-        digest.update((part.len() as u64).to_be_bytes());
-        digest.update(part.as_bytes());
-    }
-    digest.finalize().iter().map(|byte| format!("{byte:02x}")).collect()
-}
-
 /// 校验金额非负。
 ///
 /// # 参数
@@ -829,11 +813,8 @@ fn normalize_references(values: &mut Vec<String>, max: usize) -> Result<()> {
 }
 
 fn normalize_hash(value: String) -> Result<String> {
-    let value = value.trim().to_ascii_lowercase();
-    if value.len() != HASH_LEN || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        return Err(Error::from("来源证据摘要必须是64位SHA-256十六进制值"));
-    }
-    Ok(value)
+    normalize_statement_sha256(value, "来源证据摘要")
+        .map_err(|_| Error::from("来源证据摘要必须是64位SHA-256十六进制值"))
 }
 
 #[cfg(test)]

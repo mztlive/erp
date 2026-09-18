@@ -1,7 +1,5 @@
 //! 销售首次生效的应收子账与原始分录；只消费冻结财务事实并复用调用方事务。
 
-use std::str::FromStr;
-
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{
     CustomerAccountId, PartyId, ReceivableAccountId, ReceivableEntryId, SalesOrderId, SalesOrderRevisionId,
@@ -81,9 +79,9 @@ fn build_initial_receivable(
             reviewed_at: None,
             review_evidence_reference: None,
             gross_total: input.gross_total,
-            settled_total: Amount::from_str("0.00").expect("静态零值必须合法"),
+            settled_total: Amount::zero(),
             invoiceable_total: input.gross_total,
-            invoiced_total: Amount::from_str("0.00").expect("静态零值必须合法"),
+            invoiced_total: Amount::zero(),
         },
         "system",
     )
@@ -110,6 +108,7 @@ fn build_initial_receivable(
 #[cfg(test)]
 mod tests {
     use std::cell::Cell;
+    use std::str::FromStr;
 
     use super::*;
     use crate::entity::receivable::ReceivableAccountStatus;

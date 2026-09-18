@@ -451,6 +451,62 @@ pub(crate) fn intersect_supplier_ids(
 }
 
 #[cfg(test)]
+mod intersect_tests {
+    use erp_core::ids::SupplierAccountId;
+
+    use super::intersect_supplier_ids;
+
+    /// 双维度同时命中时取交集且保留首个输入顺序；单侧约束原样透传。
+    #[test]
+    fn candidate_intersection_preserves_order_and_empty() {
+        let capability_ids = Some(vec![
+            SupplierAccountId::new("s-1"),
+            SupplierAccountId::new("s-2"),
+            SupplierAccountId::new("s-3"),
+        ]);
+        let qualification_ids = Some(vec![
+            SupplierAccountId::new("s-2"),
+            SupplierAccountId::new("s-3"),
+            SupplierAccountId::new("s-4"),
+        ]);
+        assert_eq!(
+            intersect_supplier_ids(capability_ids, qualification_ids)
+                .unwrap()
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>(),
+            vec!["s-2".to_string(), "s-3".to_string()]
+        );
+        assert_eq!(
+            intersect_supplier_ids(Some(vec![SupplierAccountId::new("s-1")]), None)
+                .unwrap()
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>(),
+            vec!["s-1".to_string()]
+        );
+        assert_eq!(
+            intersect_supplier_ids(None, Some(vec![SupplierAccountId::new("s-9")]))
+                .unwrap()
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>(),
+            vec!["s-9".to_string()]
+        );
+        assert!(intersect_supplier_ids(None, None).is_none());
+        assert_eq!(
+            intersect_supplier_ids(
+                Some(vec![SupplierAccountId::new("s-1")]),
+                Some(vec![SupplierAccountId::new("s-9")])
+            )
+            .unwrap()
+            .len(),
+            0
+        );
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use erp_core::common::state::assert_adjacency_closed;
     use erp_core::field_update::FieldUpdate;

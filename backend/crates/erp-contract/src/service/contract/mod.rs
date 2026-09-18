@@ -13,7 +13,7 @@
 use std::sync::Arc;
 
 use application_core::AuditActor;
-use erp_core::ids::{CustomerAccountId, FileAssetId, PartyId};
+use erp_core::ids::{CustomerAccountId, FileAssetId};
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;

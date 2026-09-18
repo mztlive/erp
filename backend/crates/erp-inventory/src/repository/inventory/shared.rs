@@ -94,6 +94,22 @@ pub(super) fn apply_warehouse_scope_filter(filter: &mut Document, warehouse_ids:
     }
 }
 
+/// 把已证明可读的仓库范围与未删除过滤组成列表查询基底。
+///
+/// 四类列表筛选共用：调用方再追加各自维度条件与搜索交集。
+/// 空仓库集合保持空 `$in`，禁止退化为全量查询。
+///
+/// # 参数
+/// * `warehouse_ids` - Service 已证明的仓库集合；`None` 表示公司级不限
+///
+/// # 返回
+/// 返回含未删除过滤与仓库范围的查询文档。
+pub(super) fn scoped_base_filter(warehouse_ids: Option<&[WarehouseId]>) -> Document {
+    let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
+    apply_warehouse_scope_filter(&mut filter, warehouse_ids);
+    filter
+}
+
 /// 为分页排序追加唯一主键 tie-breaker，避免相同主排序值跨页重复或遗漏。
 ///
 /// # 参数

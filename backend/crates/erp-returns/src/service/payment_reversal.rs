@@ -8,11 +8,12 @@ use persistence_core::Executor;
 
 use super::ReturnsService;
 use super::approval::ensure_payment_reversal_final_approve_posting;
-use super::shared::{DEFAULT_FINANCE_REVIEWER, PAYMENT_REVERSAL_COMMAND_PREFIX, return_command_no};
-use crate::dto::{CommitPaymentReversalRequest, CreatePaymentReversalRequest};
-use crate::entity::returns::{
-    CumulativeAmountLimit, PaymentReversal, PaymentReversalData, PaymentReversalStatus,
+use super::shared::{
+    DEFAULT_FINANCE_REVIEWER, PAYMENT_REVERSAL_COMMAND_PREFIX, ensure_cumulative_within, or_not_found,
+    reject_if_reversed, return_command_no,
 };
+use crate::dto::{CommitPaymentReversalRequest, CreatePaymentReversalRequest};
+use crate::entity::returns::{PaymentReversal, PaymentReversalData, PaymentReversalStatus};
 use crate::repository::ReturnsExt;
 use crate::{Error, Result};
 
@@ -75,11 +76,7 @@ impl ReturnsService {
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<PaymentReversal> {
-        self.db
-            .payment_reversals()
-            .find_by_id(id, executor)
-            .await?
-            .ok_or_else(|| Error::NotFound("付款冲正单不存在".to_string()))
+        or_not_found(self.db.payment_reversals().find_by_id(id, executor).await?, "付款冲正单不存在")
     }
 
     /// 在调用方创建根内插入本域单据。
@@ -109,9 +106,7 @@ impl ReturnsService {
         executor: &mut dyn Executor,
     ) -> Result<PaymentReversal> {
         let record = self.load_payment_reversal(id, executor).await?;
-        if record.status == PaymentReversalStatus::Reversed {
-            return Err(Error::BusinessLogicError("已冲正单据不能再过账".to_string()));
-        }
+        reject_if_reversed(record.status == PaymentReversalStatus::Reversed, "已冲正单据不能再过账")?;
         ensure_payment_reversal_final_approve_posting(&record)?;
         Ok(record)
     }
@@ -129,8 +124,7 @@ impl ReturnsService {
             .payment_reversals()
             .posted_reversal_total_by_payment(&original_id, &record.base.id, executor)
             .await?;
-        CumulativeAmountLimit::ensure_within_limit(original_amount, before, record.amount)
-            .map_err(|_| Error::BusinessLogicError("累计冲正金额不得超过原付款金额".to_string()))
+        ensure_cumulative_within(original_amount, before, record.amount, "累计冲正金额不得超过原付款金额")
     }
 
     /// 财务事实写入后标记本域已过账并以原 CAS 持久化。

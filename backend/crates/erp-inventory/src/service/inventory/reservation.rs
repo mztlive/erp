@@ -3,7 +3,7 @@ use persistence_core::Transactional;
 use validator::Validate;
 
 use super::InventoryService;
-use crate::dto::{PageView, SortDir, StockReservationListParams, StockReservationView};
+use crate::dto::{PageView, StockReservationListParams, StockReservationView};
 use crate::entity::inventory::StockReservation;
 use crate::error::{Error, Result};
 use crate::repository::{InventoryExt, StockReservationFilter};
@@ -54,6 +54,7 @@ impl InventoryService {
                         session,
                     )
                     .await?;
+                    let (sort_by, sort_ascending) = query.paging.sort_selection();
                     let filter = StockReservationFilter {
                         search,
                         warehouse_ids: authorization
@@ -64,8 +65,8 @@ impl InventoryService {
                         sales_order_line_id: query.sales_order_line_id,
                         page: query.paging.page,
                         page_size: query.paging.page_size,
-                        sort_by: Some(query.paging.sort_by.to_string()),
-                        sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
+                        sort_by,
+                        sort_ascending,
                     };
                     Ok::<_, Error>(db.stock_reservations().search_stock_reservations(&filter, session).await?)
                 })

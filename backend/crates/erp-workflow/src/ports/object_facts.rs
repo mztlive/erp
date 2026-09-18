@@ -285,6 +285,8 @@ pub trait ObjectFactPort: Send + Sync {
     ) -> Result<W29CloseFact>;
 
     /// Persist W29 domain evidence on the same executor as the work-item close.
+    // 事务内证据写入：db 经执行器 + 审计字段 + 收据标识顺序敏感，拆包会破坏调用点可读性；告警逐项压制。
+    #[allow(clippy::too_many_arguments)]
     async fn persist_w29_close(
         &self,
         item: &WorkItem,

@@ -17,7 +17,7 @@
 //! P1 §3 跨域约束），待 `chore/erp-p0-amend-*` 地基修订统一收口到
 //! `entities/src/common/`。
 
-mod amount_validation;
+pub(crate) mod amount_validation;
 pub mod attribution;
 pub use attribution::{AttributionOrgNode, SalesAttribution};
 mod approval_quantity;

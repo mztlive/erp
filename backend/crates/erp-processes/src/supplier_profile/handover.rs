@@ -337,6 +337,7 @@ async fn apply_capability_handover(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn write_audit(
     db: &mongodb::Database,
     actor: &AuditActor,

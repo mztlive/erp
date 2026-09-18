@@ -8,7 +8,7 @@ use validator::Validate;
 use super::FulfillmentService;
 use super::delivery_lines::delivery_line_specs;
 use crate::dto::{
-    CreateDeliveryRequest, DeliveryDetailView, DeliveryLineView, DeliveryListParams, DeliveryView, SortDir,
+    CreateDeliveryRequest, DeliveryDetailView, DeliveryLineView, DeliveryListParams, DeliveryView,
     UpdateDeliveryRequest,
 };
 use crate::entity::fulfillment::{Delivery, DeliveryData, DeliveryLine, DeliveryLineBatch};
@@ -47,13 +47,13 @@ impl FulfillmentService {
             page: query.paging.page,
             page_size: query.paging.page_size,
             sort_by: Some(query.paging.sort_by.to_string()),
-            sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
+            sort_ascending: super::sort_ascending(query.paging.sort_dir),
         };
         let page = self.db.deliveries().search_deliveries(&filter, &mut NoTransaction).await?;
         super::map_search_page(
             async { Ok(page) },
             |row| DeliveryView {
-                id: row.id.clone(),
+                id: row.id,
                 delivery_no: row.delivery_no,
                 delivery_type: row.delivery_type,
                 sales_order_id: row.sales_order_id.to_string(),

@@ -2,26 +2,21 @@
 //!
 //! 双指纹均由 Service/crypto port 分别预计算；类型不可混用。
 
+use erp_core::Result;
 use erp_core::common::source::SourceType;
 use erp_core::common::time::Instant;
 use erp_core::ids::{
     FileAssetId, PurchaseLineSalesAllocationId, PurchaseOrderId, SalesOrderLineId, ServiceFulfillmentId,
 };
 use erp_core::money::Quantity;
-use erp_core::validation::normalize_required_text;
-use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 use super::electronic_delivery::FulfillmentResult;
-use super::fingerprint::FINGERPRINT_HEX_LEN;
+use super::fingerprint::normalize_precomputed_fingerprint;
 use super::service_fulfillment::{ServiceFulfillment, ServiceFulfillmentData};
 
 fn typed_fingerprint(label: &str, hex: String) -> Result<String> {
-    let value = normalize_required_text(hex, label, FINGERPRINT_HEX_LEN, label)?;
-    if value.len() != FINGERPRINT_HEX_LEN || !value.bytes().all(|b| b.is_ascii_hexdigit()) {
-        return Err(Error::from("查询指纹必须是 64 位十六进制字符串"));
-    }
-    Ok(value)
+    normalize_precomputed_fingerprint(label, label, hex)
 }
 
 /// 预计算的交付对象快照指纹（服务域专用，与地点指纹不可混用）。

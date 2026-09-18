@@ -1,11 +1,7 @@
 //! 供给列表的唯一跨域批量读取，沿原当前指针装配展示事实。
-use std::collections::HashMap;
-
 use erp_catalog::{CatalogExt, Product, Sku, SkuRevision};
 use erp_party::{Party, PartyExt, PartyRepository, PartyRevision, PartyRevisionRepository};
 use erp_supplier::{SupplierAccount, SupplierAccountRepository, SupplierExt};
-use erp_supply::entity::supplier_offering::SupplierOfferingRevision;
-use erp_supply::repository::SupplierOfferingExt;
 use erp_supply::repository::supplier_offering::SupplierOfferingRow;
 use mongodb::Database;
 use mongodb::bson::{Bson, Document, doc};
@@ -24,14 +20,6 @@ impl<'a> SupplierOfferingReadRepository<'a> {
     /// 绑定数据库；构造不查询事实。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
-    }
-    /// 批量读取冻结的供给当前修订；使用调用方执行器。
-    async fn load_current_revisions(
-        &self,
-        rows: &[SupplierOfferingRow],
-        executor: &mut dyn Executor,
-    ) -> Result<HashMap<String, SupplierOfferingRevision>> {
-        self.db.supplier_offering_repository().load_current_revisions(rows, executor).await
     }
     /// 批量加载供给列表展示所需的跨域只读实体。
     ///
@@ -101,10 +89,7 @@ pub struct SupplierOfferingDisplayEntities {
 }
 /// 对字符串集合排序去重，供跨域批量查询稳定生成 `$in` 候选。
 fn unique_strings(values: impl IntoIterator<Item = String>) -> Vec<String> {
-    let mut values = values.into_iter().collect::<Vec<_>>();
-    values.sort();
-    values.dedup();
-    values
+    crate::support::dedup_sorted(values)
 }
 fn in_filter(field: &str, values: impl IntoIterator<Item = String>) -> Document {
     let values = values.into_iter().map(Bson::String).collect::<Vec<_>>();

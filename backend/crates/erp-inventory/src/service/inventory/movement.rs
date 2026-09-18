@@ -9,7 +9,7 @@ use validator::Validate;
 use super::InventoryService;
 use crate::dto::scope::{MOVEMENT_OWNERSHIP_BASIS, MOVEMENT_SCOPE_SUMMARY};
 use crate::dto::{
-    InventoryListPage, PageView, SortDir, StockMovementListParams, StockMovementListQuery, StockMovementView,
+    InventoryListPage, PageView, StockMovementListParams, StockMovementListQuery, StockMovementView,
     ensure_scope_version,
 };
 use crate::entity::inventory::{MovementType, StockMovement};
@@ -101,6 +101,7 @@ fn movement_filter(
     authorization: &InventoryAuthorization,
     search: crate::repository::InventorySearch,
 ) -> StockMovementFilter {
+    let (sort_by, sort_ascending) = query.paging.sort_selection();
     StockMovementFilter {
         search,
         warehouse_ids: authorization
@@ -114,12 +115,12 @@ fn movement_filter(
         recorded_by_ids: query.operator_user_ids.clone(),
         page: query.paging.page,
         page_size: query.paging.page_size,
-        sort_by: Some(query.paging.sort_by.to_string()),
-        sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
+        sort_by,
+        sort_ascending,
     }
 }
 
-fn movement_row_view(row: StockMovementRow) -> StockMovementView {
+pub(super) fn movement_row_view(row: StockMovementRow) -> StockMovementView {
     StockMovementView {
         id: row.id,
         warehouse_id: row.warehouse_id.to_string(),
@@ -190,19 +191,18 @@ pub(super) async fn load_movement_source_document_nos(
 impl From<StockMovement> for StockMovementView {
     /// 从流水实体构造视图。
     fn from(movement: StockMovement) -> Self {
-        Self {
+        movement_row_view(StockMovementRow {
             id: movement.base.id,
-            warehouse_id: movement.warehouse_id.to_string(),
-            sku_id: movement.sku_id.to_string(),
+            warehouse_id: movement.warehouse_id,
+            sku_id: movement.sku_id,
             movement_type: movement.movement_type,
             direction: movement.direction,
             quantity: movement.quantity,
             source_document_id: movement.source_document_id,
-            source_document_no: None,
             source_line_id: movement.source_line_id,
-            occurred_at: movement.fact.occurred_at.unix_secs(),
-            recorded_at: movement.fact.recorded_at.unix_secs(),
-            recorded_by: movement.fact.recorded_by.clone(),
-        }
+            occurred_at: movement.fact.occurred_at,
+            recorded_at: movement.fact.recorded_at,
+            recorded_by: movement.fact.recorded_by,
+        })
     }
 }

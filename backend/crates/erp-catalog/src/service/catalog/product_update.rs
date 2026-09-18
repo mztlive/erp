@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use application_core::AuditActor;
+use erp_core::common::time::BusinessDate;
+use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
@@ -17,7 +19,7 @@ use crate::entity::catalog::product_revision::{ProductRevision, ProductRevisionD
 use crate::entity::catalog::product_revision_media::{MediaRole, ProductRevisionMedia};
 use crate::entity::catalog::sku::{Sku, SkuEditAction};
 use crate::entity::catalog::{
-    EnableStatus, ProductId, ProductRevisionId, SkuId, SpecificationSignatureSet, next_revision_no,
+    ProductId, ProductRevisionId, SkuId, SpecificationSignatureSet, next_revision_no,
 };
 use crate::error::Result;
 use crate::ports::{EmptyPendingAttachments, PendingAttachmentBatch};

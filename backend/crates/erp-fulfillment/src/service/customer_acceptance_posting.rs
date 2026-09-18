@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use erp_core::common::time::Instant;
 use erp_core::ids::{
     AcceptanceFulfillmentAllocationId, CustomerAcceptanceId, CustomerAcceptanceLineId, SalesOrderId,
+    SalesOrderLineId,
 };
 use erp_core::money::Quantity;
 use id_generator::next_id;
@@ -159,7 +160,7 @@ impl super::FulfillmentService {
         req: &ReverseCustomerAcceptanceRequest,
         session: &mut dyn persistence_core::Executor,
     ) -> Result<(CustomerAcceptance, CustomerAcceptance)> {
-        let mut original = db
+        let original = db
             .customer_acceptances()
             .find_by_id(original_id.as_ref(), session)
             .await?
@@ -186,62 +187,128 @@ impl super::FulfillmentService {
                 result: AcceptanceResult::Rejected,
             },
         )?;
-        let mut reverse_lines = Vec::with_capacity(original_lines.len());
-        let mut reverse_line_by_original = HashMap::with_capacity(original_lines.len());
-        for line in &original_lines {
-            let reverse_line_id = CustomerAcceptanceLineId::new(next_id());
-            reverse_line_by_original.insert(line.base.id.clone(), reverse_line_id.clone());
-            reverse_lines.push(
-                CustomerAcceptanceLine::new(
-                    reverse_line_id,
-                    CustomerAcceptanceLineData {
-                        customer_acceptance_id: reverse_acceptance.base.id.clone().into(),
-                        line_no: line.line_no,
-                        sales_order_line_id: line.sales_order_line_id.clone(),
-                        accepted_quantity: line.accepted_quantity,
-                        short_quantity: line.short_quantity,
-                        rejected_quantity: line.rejected_quantity,
-                        reason: Some(req.reason_text.clone()),
-                        evidence_attachment_id: None,
-                    },
-                )
-                .map_err(Error::Logic)?,
-            );
-        }
-        let mut reverse_allocations = Vec::with_capacity(original_allocations.len());
-        for allocation in &original_allocations {
-            let reverse_line_id = reverse_line_by_original
-                .get(allocation.customer_acceptance_line_id.as_ref())
-                .cloned()
-                .ok_or_else(|| Error::Internal("原验收分配没有对应验收行".to_string()))?;
-            reverse_allocations.push(
-                AcceptanceFulfillmentAllocation::new(
-                    AcceptanceFulfillmentAllocationId::new(next_id()),
-                    AcceptanceFulfillmentAllocationData {
-                        customer_acceptance_line_id: reverse_line_id,
-                        fulfillment_fact_type: allocation.fulfillment_fact_type,
-                        fulfillment_line_id: allocation.fulfillment_line_id.clone(),
-                        allocation_action: AllocationAction::Reverse,
-                        allocated_quantity: allocation.allocated_quantity,
-                        reverses_allocation_id: Some(allocation.base.id.clone().into()),
-                    },
-                )
-                .map_err(Error::Logic)?,
-            );
-        }
-        db.fulfillment()
-            .create_customer_acceptance_with_lines(&reverse_acceptance, &reverse_lines, session)
-            .await?;
-        for allocation in &reverse_allocations {
-            db.acceptance_fulfillment_allocations().create(allocation, session).await?;
-        }
-        let mut reverse_acceptance = reverse_acceptance;
-        reverse_acceptance.mark_posted()?;
-        db.customer_acceptances().update(&mut reverse_acceptance, session).await?;
-        original.reverse(reverse_acceptance.base.id.clone().into())?;
-        db.customer_acceptances().update(&mut original, session).await?;
-        Ok((original, reverse_acceptance))
+        let (reverse_lines, reverse_allocations) = build_reverse_lines_and_allocations(
+            &reverse_acceptance.base.id,
+            &original_lines,
+            &original_allocations,
+            &req.reason_text,
+        )?;
+        persist_reverse_acceptance(
+            db,
+            session,
+            original,
+            reverse_acceptance,
+            &reverse_lines,
+            &reverse_allocations,
+        )
+        .await
     }
+}
+
+/// 构造反向验收行与反向分配（冲正构造段；纯内存，无 I/O）。
+///
+/// 行号与数量沿用原行，依据说明替换为冲正原因；分配动作统一为 `Reverse` 并
+/// 引用原分配。行 ID 与分配 ID 由本函数内按原顺序生成。
+///
+/// # 参数
+/// * `reverse_acceptance_id` - 反向验收单主键
+/// * `original_lines` - 原验收行
+/// * `original_allocations` - 原验收分配（须全部为原始 `APPLY`，调用方已校验）
+/// * `reason_text` - 冲正原因说明
+///
+/// # 返回
+/// 返回（反向行，反向分配）；行与分配顺序与原集合一致。
+///
+/// # 错误
+/// 行/分配构造非法或分配缺少对应验收行时返回原错误。
+fn build_reverse_lines_and_allocations(
+    reverse_acceptance_id: &str,
+    original_lines: &[CustomerAcceptanceLine],
+    original_allocations: &[AcceptanceFulfillmentAllocation],
+    reason_text: &str,
+) -> Result<(Vec<CustomerAcceptanceLine>, Vec<AcceptanceFulfillmentAllocation>)> {
+    let mut reverse_lines = Vec::with_capacity(original_lines.len());
+    let mut reverse_line_by_original = HashMap::with_capacity(original_lines.len());
+    for line in original_lines {
+        let reverse_line_id = CustomerAcceptanceLineId::new(next_id());
+        reverse_line_by_original.insert(line.base.id.clone(), reverse_line_id.clone());
+        reverse_lines.push(
+            CustomerAcceptanceLine::new(
+                reverse_line_id,
+                CustomerAcceptanceLineData {
+                    customer_acceptance_id: reverse_acceptance_id.to_string().into(),
+                    line_no: line.line_no,
+                    sales_order_line_id: line.sales_order_line_id.clone(),
+                    accepted_quantity: line.accepted_quantity,
+                    short_quantity: line.short_quantity,
+                    rejected_quantity: line.rejected_quantity,
+                    reason: Some(reason_text.to_string()),
+                    evidence_attachment_id: None,
+                },
+            )
+            .map_err(Error::Logic)?,
+        );
+    }
+    let mut reverse_allocations = Vec::with_capacity(original_allocations.len());
+    for allocation in original_allocations {
+        let reverse_line_id = reverse_line_by_original
+            .get(allocation.customer_acceptance_line_id.as_ref())
+            .cloned()
+            .ok_or_else(|| Error::Internal("原验收分配没有对应验收行".to_string()))?;
+        reverse_allocations.push(
+            AcceptanceFulfillmentAllocation::new(
+                AcceptanceFulfillmentAllocationId::new(next_id()),
+                AcceptanceFulfillmentAllocationData {
+                    customer_acceptance_line_id: reverse_line_id,
+                    fulfillment_fact_type: allocation.fulfillment_fact_type,
+                    fulfillment_line_id: allocation.fulfillment_line_id.clone(),
+                    allocation_action: AllocationAction::Reverse,
+                    allocated_quantity: allocation.allocated_quantity,
+                    reverses_allocation_id: Some(allocation.base.id.clone().into()),
+                },
+            )
+            .map_err(Error::Logic)?,
+        );
+    }
+    Ok((reverse_lines, reverse_allocations))
+}
+
+/// 写入反向验收表头/行/分配并登记双方状态（冲正写入段；调用方事务内）。
+///
+/// 纯写入编排：新建反向单过账、原单冲正引用登记；校验已在加载段完成。
+///
+/// # 参数
+/// * `db` - 数据库实例
+/// * `session` - 事务会话执行器
+/// * `original` - 已校验可冲正的原验收单（本函数内登记冲正状态）
+/// * `reverse_acceptance` - 已构造的反向验收表头（本函数内过账）
+/// * `reverse_lines` - 反向验收行
+/// * `reverse_allocations` - 反向履约分配
+///
+/// # 返回
+/// 返回（已冲正原单，已过账反向单）。
+///
+/// # 错误
+/// 任一写入或状态迁移失败时返回原错误。
+async fn persist_reverse_acceptance(
+    db: &Database,
+    session: &mut dyn persistence_core::Executor,
+    mut original: CustomerAcceptance,
+    mut reverse_acceptance: CustomerAcceptance,
+    reverse_lines: &[CustomerAcceptanceLine],
+    reverse_allocations: &[AcceptanceFulfillmentAllocation],
+) -> Result<(CustomerAcceptance, CustomerAcceptance)> {
+    db.fulfillment()
+        .create_customer_acceptance_with_lines(&reverse_acceptance, reverse_lines, session)
+        .await?;
+    for allocation in reverse_allocations {
+        db.acceptance_fulfillment_allocations().create(allocation, session).await?;
+    }
+    reverse_acceptance.mark_posted()?;
+    db.customer_acceptances().update(&mut reverse_acceptance, session).await?;
+    original.reverse(reverse_acceptance.base.id.clone().into())?;
+    db.customer_acceptances().update(&mut original, session).await?;
+    Ok((original, reverse_acceptance))
 }
 
 /// 逐行校验分配守恒并写入分配（commit/post 共用；校验顺序与错误类型不变）。
@@ -264,15 +331,15 @@ async fn write_line_allocations(
     inputs: &[AcceptanceLineInput],
     sales_order_id: &SalesOrderId,
 ) -> Result<()> {
-    for line in lines {
-        let allocations = inputs
-            .iter()
-            .find(|input| input.sales_order_line_id == line.sales_order_line_id)
-            .map(|input| input.allocations.as_slice())
-            .ok_or_else(|| Error::ValidationError("登记请求缺少验收行".to_string()))?;
-        write_single_line_allocations(db, session, line, allocations, sales_order_id).await?;
-    }
-    Ok(())
+    write_matched_line_allocations(
+        db,
+        session,
+        lines,
+        inputs.iter().map(|input| (&input.sales_order_line_id, input.allocations.as_slice())),
+        "登记请求缺少验收行",
+        sales_order_id,
+    )
+    .await
 }
 
 /// 逐行校验分配守恒并写入分配（post 请求形态；校验顺序与错误类型不变）。
@@ -296,12 +363,53 @@ async fn write_post_line_allocations(
     inputs: &[PostAcceptanceLineInput],
     sales_order_id: &SalesOrderId,
 ) -> Result<()> {
+    write_matched_line_allocations(
+        db,
+        session,
+        lines,
+        inputs.iter().map(|input| (&input.sales_order_line_id, input.allocations.as_slice())),
+        "过账分配缺少验收行",
+        sales_order_id,
+    )
+    .await
+}
+
+/// 按销售明细匹配验收行与请求分配并逐行写入（commit/post 共用匹配循环）。
+///
+/// 匹配顺序、缺行错误文案（调用方传入）与单行写入语义不变；本函数只消除
+/// 两套逐行查找循环的重复。
+///
+/// # 参数
+/// * `db` - 数据库实例
+/// * `session` - 事务会话执行器
+/// * `lines` - 验收行集合
+/// * `inputs` - （销售明细，请求分配）对
+/// * `missing_line_message` - 某验收行在请求中缺失时的错误文案
+/// * `sales_order_id` - 销售单（校验事实归属）
+///
+/// # 返回
+/// 全部行校验并写入完成后返回 `Ok(())`。
+///
+/// # 错误
+/// 行缺失、分配为空、守恒失败或单条写入失败时返回原错误。
+async fn write_matched_line_allocations<'a, I>(
+    db: &Database,
+    session: &mut dyn persistence_core::Executor,
+    lines: &[CustomerAcceptanceLine],
+    inputs: I,
+    missing_line_message: &str,
+    sales_order_id: &SalesOrderId,
+) -> Result<()>
+where
+    I: IntoIterator<Item = (&'a SalesOrderLineId, &'a [AcceptanceAllocationInput])>,
+{
+    let inputs: Vec<(&SalesOrderLineId, &[AcceptanceAllocationInput])> = inputs.into_iter().collect();
     for line in lines {
         let allocations = inputs
             .iter()
-            .find(|input| input.sales_order_line_id == line.sales_order_line_id)
-            .map(|input| input.allocations.as_slice())
-            .ok_or_else(|| Error::ValidationError("过账分配缺少验收行".to_string()))?;
+            .find(|(sales_order_line_id, _)| **sales_order_line_id == line.sales_order_line_id)
+            .map(|(_, allocations)| *allocations)
+            .ok_or_else(|| Error::ValidationError(missing_line_message.to_string()))?;
         write_single_line_allocations(db, session, line, allocations, sales_order_id).await?;
     }
     Ok(())
@@ -387,19 +495,10 @@ fn ensure_post_lines_match(
     lines: &[CustomerAcceptanceLine],
     inputs: &[PostAcceptanceLineInput],
 ) -> Result<()> {
-    if lines.len() != inputs.len() {
-        return Err(Error::ValidationError("过账分配与验收行数量不一致".to_string()));
-    }
-    for line in lines {
-        let input = inputs
-            .iter()
-            .find(|input| input.sales_order_line_id == line.sales_order_line_id)
-            .ok_or_else(|| Error::ValidationError("过账分配缺少验收行".to_string()))?;
-        if input.allocations.is_empty() {
-            return Err(Error::ValidationError("验收行缺少履约分配".to_string()));
-        }
-    }
-    Ok(())
+    let projected: Vec<(erp_core::ids::SalesOrderLineId, usize)> =
+        inputs.iter().map(|input| (input.sales_order_line_id.clone(), input.allocations.len())).collect();
+    CustomerAcceptanceLine::ensure_post_inputs_match(lines, &projected)
+        .map_err(|error| Error::ValidationError(error.to_string()))
 }
 
 /// 写入单条验收履约分配并校验净验收上限（§8.2 第 5 条，位于调用方事务内）。

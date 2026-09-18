@@ -3,11 +3,11 @@
 //! 集合名直接引用 `SourceRegistryExt` 关联常量（唯一权威来源，conventions §4.3），
 //! 不做本地转存。
 
-use mongodb::bson::{Document, doc};
-use mongodb::options::IndexOptions;
+use mongodb::bson::doc;
 use mongodb::{Database, IndexModel};
 use persistence_core::Result;
 
+use super::{create_indexes, named_index, unique_index};
 use crate::repository::extensions::SourceRegistryExt;
 
 /// 创建本域集合的幂等命名索引。
@@ -36,12 +36,6 @@ pub async fn ensure(db: &Database) -> Result<()> {
         external_identity_target_indexes(),
     )
     .await?;
-    Ok(())
-}
-
-/// 为单个集合创建一组幂等命名索引。
-async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
-    db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
@@ -87,19 +81,6 @@ fn external_identity_target_indexes() -> Vec<IndexModel> {
         ),
         named_index("idx_external_identity_targets_pending_conflict", doc! { "status": 1 }),
     ]
-}
-
-/// 构建命名普通索引。
-fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
-}
-
-/// 构建命名唯一索引。
-fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).unique(true).build())
-        .build()
 }
 
 #[cfg(test)]

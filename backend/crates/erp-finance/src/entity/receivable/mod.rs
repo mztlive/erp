@@ -45,4 +45,6 @@ pub mod money_progress_facts;
 
 pub(crate) mod allocation_amount;
 
-pub(crate) use allocation_amount::{checked_add_amount, checked_sub_amount, zero_amount};
+pub(crate) use allocation_amount::{
+    checked_add_amount, checked_add_with_message, checked_sub_amount, zero_amount,
+};

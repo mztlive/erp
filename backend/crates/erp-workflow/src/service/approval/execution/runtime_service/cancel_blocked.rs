@@ -163,6 +163,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
 }
 
 /// 受阻取消先按实例终态证明原操作人并重验当前授权，再允许查询和比较收据。
+// 受阻取消事务 8/9 参数：db/各 Port/命令/幂等键/会话随同一事务传递，拆包破坏回放与提交对称；告警逐项压制。
+#[allow(clippy::too_many_arguments)]
 async fn replay_cancel_blocked_in_transaction(
     db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
@@ -334,6 +336,8 @@ pub(super) fn ensure_cancel_blocked_instance_preconditions(
 }
 
 /// 在同一事务内完成受阻取消的收据仲裁、授权、动作、运行时、通知与审计。
+// 与回放函数同形以便命令入口统一分派，参数顺序由字段名锚定；告警逐项压制。
+#[allow(clippy::too_many_arguments)]
 async fn cancel_blocked_in_transaction(
     db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,

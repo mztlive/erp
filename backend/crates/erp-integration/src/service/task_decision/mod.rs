@@ -71,3 +71,33 @@ fn append_resolution(
         }
     })
 }
+
+/// 追加决定记录并沿调用方执行器持久化（非终结动作与直接决定共用）。
+///
+/// 先经 [`append_resolution`] 形成不可变记录，再写入解决记录集合；
+/// 返回记录的决定序号字符串（即下一主题版本）。
+///
+/// # 参数
+/// * `db` - 数据库句柄
+/// * `difference` - 所属对账差异
+/// * `latest` - 当前最新决定
+/// * `fact` - 已验证的决定事实
+/// * `record_id` - 记录主键（调用方收据 ID）
+/// * `actor_id` - 决定人
+/// * `executor` - 调用方执行器
+pub(super) async fn persist_appended_resolution(
+    db: &mongodb::Database,
+    difference: &ReconciliationDifference,
+    latest: Option<&ReconciliationDifferenceResolution>,
+    fact: &DirectFact,
+    record_id: &str,
+    actor_id: &str,
+    executor: &mut dyn persistence_core::Executor,
+) -> Result<String> {
+    use crate::repository::IntegrationOpsExt;
+
+    let record = append_resolution(difference, latest, fact, record_id, actor_id)?;
+    let next_subject_version = record.resolution_no.to_string();
+    db.reconciliation_difference_resolutions().create(&record, executor).await?;
+    Ok(next_subject_version)
+}

@@ -9,13 +9,15 @@
 //! 事务与并发仍由 Service＋Repository 负责。
 
 use std::collections::HashMap;
-use std::str::FromStr;
 
 use erp_core::ids::{InvoiceId, ReceivableAccountId, SalesInvoiceAllocationId};
 use erp_core::money::Amount;
 use erp_core::{Error, Result};
 
-use crate::entity::receivable::{AllocationAction, SalesInvoiceAllocation, SalesInvoiceAllocationData};
+use crate::entity::receivable::{
+    AllocationAction, SalesInvoiceAllocation, SalesInvoiceAllocationData, checked_add_with_message,
+    zero_amount,
+};
 
 /// 销项发票分配计划输入行（金额三元组由计划统一校验）。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -89,15 +91,15 @@ impl SalesInvoiceAllocationPlan {
         if lines.len() != allocation_ids.len() {
             return Err(Error::from("分配 ID 数量必须与分配行数一致"));
         }
-        let gross_total = lines
-            .iter()
-            .try_fold(zero_amount(), |sum, line| checked_add_amount(sum, line.allocated_gross_amount))?;
-        let net_total = lines
-            .iter()
-            .try_fold(zero_amount(), |sum, line| checked_add_amount(sum, line.allocated_net_amount))?;
-        let tax_total = lines
-            .iter()
-            .try_fold(zero_amount(), |sum, line| checked_add_amount(sum, line.allocated_tax_amount))?;
+        let gross_total = lines.iter().try_fold(zero_amount(), |sum, line| {
+            checked_add_with_message(sum, line.allocated_gross_amount, "发票分配金额合计溢出")
+        })?;
+        let net_total = lines.iter().try_fold(zero_amount(), |sum, line| {
+            checked_add_with_message(sum, line.allocated_net_amount, "发票分配金额合计溢出")
+        })?;
+        let tax_total = lines.iter().try_fold(zero_amount(), |sum, line| {
+            checked_add_with_message(sum, line.allocated_tax_amount, "发票分配金额合计溢出")
+        })?;
         if gross_total != invoice_gross {
             return Err(Error::from("发票分配合计必须等于发票金额"));
         }
@@ -128,7 +130,11 @@ impl SalesInvoiceAllocationPlan {
             match account_delta_index.get(line.receivable_account_id.as_ref()) {
                 Some(&delta_index) => {
                     let (_, total) = &mut account_deltas[delta_index];
-                    *total = checked_add_amount(*total, line.allocated_gross_amount)?;
+                    *total = checked_add_with_message(
+                        *total,
+                        line.allocated_gross_amount,
+                        "发票分配金额合计溢出",
+                    )?;
                 },
                 None => {
                     account_delta_index.insert(line.receivable_account_id.to_string(), account_deltas.len());
@@ -177,35 +183,10 @@ impl SalesInvoiceAllocationPlan {
     }
 }
 
-/// 返回固定零金额。
-///
-/// # 返回
-/// 返回金额 `0.00`。
-fn zero_amount() -> Amount {
-    Amount::from_str("0.00").expect("固定零金额必须可解析")
-}
-
-/// 精确相加两个金额（溢出时失败）。
-///
-/// # 参数
-/// * `left` - 加数
-/// * `right` - 加数
-///
-/// # 返回
-/// 返回精确和。
-///
-/// # 错误
-/// 定点运算溢出时返回 [`Error::LogicError`]。
-fn checked_add_amount(left: Amount, right: Amount) -> Result<Amount> {
-    let sum = left
-        .to_decimal()
-        .checked_add(right.to_decimal())
-        .ok_or_else(|| Error::from("发票分配金额合计溢出"))?;
-    Amount::try_from(sum).map_err(|_| Error::from("发票分配金额合计溢出"))
-}
-
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use rust_decimal::Decimal;
 
     use super::*;
@@ -319,15 +300,15 @@ mod tests {
         let gross: Amount = plan
             .new_allocations()
             .iter()
-            .fold(zero_amount(), |sum, a| sum.checked_add(a.allocated_gross_amount));
+            .fold(Amount::zero(), |sum, a| sum.checked_add(a.allocated_gross_amount));
         let net: Amount = plan
             .new_allocations()
             .iter()
-            .fold(zero_amount(), |sum, a| sum.checked_add(a.allocated_net_amount));
+            .fold(Amount::zero(), |sum, a| sum.checked_add(a.allocated_net_amount));
         let tax: Amount = plan
             .new_allocations()
             .iter()
-            .fold(zero_amount(), |sum, a| sum.checked_add(a.allocated_tax_amount));
+            .fold(Amount::zero(), |sum, a| sum.checked_add(a.allocated_tax_amount));
         assert_eq!(gross, Amount::from_str("100.00").unwrap());
         assert_eq!(net, Amount::from_str("94.00").unwrap());
         assert_eq!(tax, Amount::from_str("6.00").unwrap());

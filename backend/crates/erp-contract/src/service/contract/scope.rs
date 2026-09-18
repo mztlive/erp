@@ -58,7 +58,7 @@ impl ContractService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let (mut context, scope, no_scope, as_of) =
+                    let (context, scope, no_scope, as_of) =
                         resolve_list_scope(&access, &actor, executor).await?;
                     let (filter, search) = load_list_filter_and_search(
                         &db,

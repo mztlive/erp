@@ -42,6 +42,32 @@ pub use review::{SettlementReviewDecision, SettlementReviewResult};
 pub use status::SettlementStatus;
 
 use self::hash::normalize_sha256;
+
+/// 结算主题与来源快照共用的长度前缀摘要（消除字符串拼接歧义）。
+///
+/// # 参数
+/// * `parts` - 按业务语义排序后的字段集合
+///
+/// # 返回
+/// 返回 64 位小写 SHA-256 十六进制摘要。
+pub fn statement_digest_parts(parts: &[String]) -> String {
+    self::hash::digest_parts(parts)
+}
+
+/// 规范化服务端生成的 SHA-256 十六进制摘要。
+///
+/// # 参数
+/// * `value` - 待规范化的摘要文本
+/// * `field` - 错误消息使用的业务字段名称
+///
+/// # 返回
+/// 返回小写 64 位十六进制摘要。
+///
+/// # 错误
+/// 非 64 位十六进制时返回领域错误。
+pub fn normalize_statement_sha256(value: String, field: &str) -> Result<String> {
+    normalize_sha256(value, field)
+}
 use self::status::ensure_status_move;
 
 /// 结算单创建数据（不含系统字段；`difference_amount` 由双方金额派生）。

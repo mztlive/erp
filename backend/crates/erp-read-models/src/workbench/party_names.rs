@@ -61,15 +61,14 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         items: &mut [super::ApprovalListItem],
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let mut ids = items
-            .iter()
-            .filter_map(|item| item.document_summary.as_ref())
-            .filter_map(|summary| submitter_section(&summary.summary_sections))
-            .map(|section| section.value.clone())
-            .filter(|value| is_account_id(value))
-            .collect::<Vec<_>>();
-        ids.sort();
-        ids.dedup();
+        let ids = crate::support::dedup_sorted(
+            items
+                .iter()
+                .filter_map(|item| item.document_summary.as_ref())
+                .filter_map(|summary| submitter_section(&summary.summary_sections))
+                .map(|section| section.value.clone())
+                .filter(|value| is_account_id(value)),
+        );
         if ids.is_empty() {
             return Ok(());
         }
@@ -118,19 +117,13 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
 /// # 错误
 /// 无。
 fn account_ids_for_lookup(items: &[WorkItemView]) -> Vec<String> {
-    let mut ids = items
-        .iter()
-        .flat_map(|item| {
-            let owner = item.owner_user.as_ref().map(|owner| owner.id.clone());
-            let submitter = submitter_section(&item.summary_sections)
-                .map(|section| section.value.clone())
-                .filter(|value| is_account_id(value));
-            owner.into_iter().chain(submitter)
-        })
-        .collect::<Vec<_>>();
-    ids.sort();
-    ids.dedup();
-    ids
+    crate::support::dedup_sorted(items.iter().flat_map(|item| {
+        let owner = item.owner_user.as_ref().map(|owner| owner.id.clone());
+        let submitter = submitter_section(&item.summary_sections)
+            .map(|section| section.value.clone())
+            .filter(|value| is_account_id(value));
+        owner.into_iter().chain(submitter)
+    }))
 }
 
 /// 找到简报里的提交人段。

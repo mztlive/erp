@@ -499,6 +499,36 @@ impl CustomerAcceptanceLine {
         }
         Ok(())
     }
+    /// 校验过账分配与草稿验收行一一对应且每行携带分配（§8.2 第 5 条「锁定验收行」）。
+    ///
+    /// 纯规则：只比较销售明细归属与每行分配条数，不触 I/O；DTO 形态由 Service
+    /// 投影为 `(销售明细, 分配条数)` 对后传入，本方法不依赖 DTO 类型。
+    ///
+    /// # 参数
+    /// * `lines` - 草稿验收行
+    /// * `inputs` - （销售明细，分配条数）对
+    ///
+    /// # 返回
+    /// 一致返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 行数不一致、某行缺失或某行分配为空时返回错误。
+    pub fn ensure_post_inputs_match(lines: &[Self], inputs: &[(SalesOrderLineId, usize)]) -> Result<()> {
+        if lines.len() != inputs.len() {
+            return Err(Error::from("过账分配与验收行数量不一致"));
+        }
+        for line in lines {
+            let count = inputs
+                .iter()
+                .find(|(sales_order_line_id, _)| *sales_order_line_id == line.sales_order_line_id)
+                .map(|(_, count)| *count)
+                .ok_or_else(|| Error::from("过账分配缺少验收行"))?;
+            if count == 0 {
+                return Err(Error::from("验收行缺少履约分配"));
+            }
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -672,5 +702,48 @@ pub(crate) mod tests {
         assert!(!production.contains("approval_subject_version"));
         assert!(!production.contains("ApprovalDefinitionBinding"));
         assert!(!production.contains("PENDING_REVIEW"));
+    }
+
+    /// 过账行匹配纯规则：行数/缺行/空分配失败，正确投影通过。
+    #[test]
+    fn post_inputs_match_covers_count_missing_and_empty() {
+        use std::str::FromStr;
+
+        use erp_core::ids::{CustomerAcceptanceLineId, SalesOrderLineId};
+        use erp_core::money::Quantity;
+
+        use crate::entity::fulfillment::{CustomerAcceptanceLine, CustomerAcceptanceLineData};
+
+        fn line(id: &str, sales_line: &str) -> CustomerAcceptanceLine {
+            CustomerAcceptanceLine::new(
+                CustomerAcceptanceLineId::new(id),
+                CustomerAcceptanceLineData {
+                    customer_acceptance_id: crate::entity::fulfillment::CustomerAcceptanceId::new("a-1"),
+                    line_no: 1,
+                    sales_order_line_id: SalesOrderLineId::new(sales_line),
+                    accepted_quantity: Quantity::from_str("2").unwrap(),
+                    short_quantity: Quantity::from_str("0").unwrap(),
+                    rejected_quantity: Quantity::from_str("0").unwrap(),
+                    reason: None,
+                    evidence_attachment_id: None,
+                },
+            )
+            .unwrap()
+        }
+
+        let lines = vec![line("l-1", "so-1")];
+        assert!(
+            CustomerAcceptanceLine::ensure_post_inputs_match(&lines, &[(SalesOrderLineId::new("so-1"), 1)])
+                .is_ok()
+        );
+        assert!(CustomerAcceptanceLine::ensure_post_inputs_match(&lines, &[]).is_err());
+        assert!(
+            CustomerAcceptanceLine::ensure_post_inputs_match(&lines, &[(SalesOrderLineId::new("other"), 1)])
+                .is_err()
+        );
+        assert!(
+            CustomerAcceptanceLine::ensure_post_inputs_match(&lines, &[(SalesOrderLineId::new("so-1"), 0)])
+                .is_err()
+        );
     }
 }

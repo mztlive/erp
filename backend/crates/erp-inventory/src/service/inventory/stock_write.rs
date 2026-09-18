@@ -1,7 +1,5 @@
 //! In-transaction stock writes for posted inventory adjustments.
 
-use std::str::FromStr;
-
 use application_core::AuditActor;
 use erp_core::common::source::SourceType;
 use erp_core::common::time::Instant;
@@ -13,7 +11,7 @@ use persistence_core::Executor;
 
 use crate::entity::inventory::{
     MovementDirection, ReservationEntryType, StockAdjustment, StockAdjustmentLine, StockMovement,
-    StockMovementData, StockReservationEntry, StockReservationEntryData,
+    StockMovementData, StockReservationEntry, StockReservationEntryData, zero_quantity,
 };
 use crate::error::{Error, Result};
 use crate::repository::InventoryExt;
@@ -162,7 +160,7 @@ async fn release_applicable_reservations(
     line: &StockAdjustmentLine,
 ) -> Result<()> {
     let reservations = db.inventory().oldest_operable_reservations(warehouse_id, sku_id, executor).await?;
-    let zero = Quantity::from_str("0").map_err(Error::Logic)?.to_decimal();
+    let zero = zero_quantity().to_decimal();
     let mut released_total = zero;
     let target = line.quantity.to_decimal();
     for reservation in reservations {

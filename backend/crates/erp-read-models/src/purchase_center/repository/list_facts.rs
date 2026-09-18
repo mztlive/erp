@@ -120,19 +120,7 @@ pub async fn load_purchase_order_list_page(
 fn unique_owner_ids(
     page: &PageResult<erp_procurement::repository::purchase_order::PurchaseOrderRow>,
 ) -> Vec<String> {
-    let mut seen = HashSet::new();
-    let mut unique = Vec::new();
-    for row in &page.items {
-        let Some(owner) = row.owner_user_id.as_deref() else {
-            continue;
-        };
-        let trimmed = owner.trim();
-        if trimmed.is_empty() || !seen.insert(trimmed.to_string()) {
-            continue;
-        }
-        unique.push(trimmed.to_string());
-    }
-    unique
+    crate::support::dedup_trimmed_nonempty(page.items.iter().filter_map(|row| row.owner_user_id.as_deref()))
 }
 
 /// 提取列表页去重后的供应商账号 ID。
@@ -151,14 +139,7 @@ fn unique_owner_ids(
 fn unique_supplier_ids(
     page: &PageResult<erp_procurement::repository::purchase_order::PurchaseOrderRow>,
 ) -> Vec<SupplierAccountId> {
-    let mut seen = HashSet::new();
-    let mut unique = Vec::new();
-    for row in &page.items {
-        if seen.insert(row.supplier_id.to_string()) {
-            unique.push(row.supplier_id.clone());
-        }
-    }
-    unique
+    crate::support::dedup_ordered(page.items.iter().map(|row| row.supplier_id.clone()))
 }
 
 /// 提取列表页去重后的来源销售单 ID。
@@ -177,14 +158,7 @@ fn unique_supplier_ids(
 fn unique_sales_ids(
     page: &PageResult<erp_procurement::repository::purchase_order::PurchaseOrderRow>,
 ) -> Vec<SalesOrderId> {
-    let mut seen = HashSet::new();
-    let mut unique = Vec::new();
-    for row in &page.items {
-        if seen.insert(row.sales_order_id.to_string()) {
-            unique.push(row.sales_order_id.clone());
-        }
-    }
-    unique
+    crate::support::dedup_ordered(page.items.iter().map(|row| row.sales_order_id.clone()))
 }
 
 /// 按命名空间拆分列表行当前内容指针。

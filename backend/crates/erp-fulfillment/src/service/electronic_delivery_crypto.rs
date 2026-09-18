@@ -2,7 +2,6 @@
 //!
 //! 指纹密钥不出本文件；领域工厂只收强类型指纹结果。
 
-use erp_core::common::time::Instant;
 use erp_core::ids::ElectronicDeliveryId;
 use id_generator::next_id;
 
@@ -50,8 +49,7 @@ pub fn electronic_delivery_draft_from_request(
     actor_id: &str,
     fingerprint_key: &[u8],
 ) -> Result<ElectronicDelivery> {
-    let occurred_at = Instant::from_unix_secs(req.occurred_at);
-    let recorded_at = Instant::now();
+    let (occurred_at, recorded_at) = super::draft_fact_times(req.occurred_at);
     ElectronicDeliveryDraft::build(
         ElectronicDeliveryId::new(next_id()),
         ElectronicDeliveryDraftData {

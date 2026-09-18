@@ -7,7 +7,7 @@ use super::guard::{
     ensure_difference_open, ensure_difference_subject, ensure_error_task_subject, latest_resolution,
     load_difference, load_error_task,
 };
-use super::{DirectFact, append_resolution};
+use super::{DirectFact, persist_appended_resolution};
 use crate::Result;
 use crate::dto::{
     ControlledEvidenceKind, DirectReconciliationStatus, IntegrationActionOutcome, IntegrationItemType,
@@ -118,9 +118,16 @@ async fn complete_difference(
         business_result_reference: Some(reference.clone()),
         verified_evidence: verified.into_iter().map(|evidence| evidence.reference).collect(),
     };
-    let record = append_resolution(&difference, latest.as_ref(), &fact, resolution_id, actor_id)?;
-    let next_subject_version = record.resolution_no.to_string();
-    db.reconciliation_difference_resolutions().create(&record, executor).await?;
+    let next_subject_version = persist_appended_resolution(
+        db,
+        &difference,
+        latest.as_ref(),
+        &fact,
+        resolution_id,
+        actor_id,
+        executor,
+    )
+    .await?;
     Ok(TerminalFact { reference, next_subject_version })
 }
 

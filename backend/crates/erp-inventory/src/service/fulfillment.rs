@@ -1,6 +1,5 @@
 //! 履约入库的库存余额、流水与销售预占写入；复用调用方唯一执行器。
 pub mod delivery;
-use std::str::FromStr;
 
 use async_trait::async_trait;
 use erp_core::common::source::SourceType;
@@ -14,6 +13,7 @@ use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Executor;
 
+use crate::entity::inventory::zero_quantity;
 use crate::{
     Error, InventoryExt, MovementDirection, MovementType, ReservationEntryType, ReservationStatus, Result,
     StockBalance, StockBalanceData, StockMovement, StockMovementData, StockReservation, StockReservationData,
@@ -293,7 +293,7 @@ async fn ensure_or_create_balance(
             warehouse_id: warehouse_id.clone(),
             sku_id: sku_id.clone(),
             on_hand_quantity: quantity,
-            reserved_quantity: Quantity::from_str("0").map_err(Error::Logic)?,
+            reserved_quantity: zero_quantity(),
             available_quantity: quantity,
             last_movement_id: None,
         },
@@ -352,8 +352,8 @@ impl<S: InventoryWriteStore> ReceiptReservationSteps for ReceiptReservationPosti
                 source_receipt_line_id: Some(self.fact.receipt_line_id.clone()),
                 source_allocation_id: None,
                 reserved_quantity: self.fact.quantity,
-                consumed_quantity: Quantity::from_str("0").map_err(Error::Logic)?,
-                released_quantity: Quantity::from_str("0").map_err(Error::Logic)?,
+                consumed_quantity: zero_quantity(),
+                released_quantity: zero_quantity(),
                 status: ReservationStatus::Active,
             },
         )?;
@@ -506,6 +506,8 @@ mod receipt_write_tests {
 
 #[cfg(test)]
 mod receipt_store_tests {
+    use std::str::FromStr;
+
     use super::*;
     struct TestExecutor {
         _identity: u8,

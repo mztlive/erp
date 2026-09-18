@@ -224,7 +224,8 @@ impl<'a> SupplierOfferingReadRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<SupplierOfferingListBundle> {
         let page = self.search_offering_list(query, executor).await?;
-        let revisions = self.load_current_revisions(&page.items, executor).await?;
+        let revisions =
+            self.db.supplier_offering_repository().load_current_revisions(&page.items, executor).await?;
         let offering_ids =
             page.items.iter().map(|row| SupplierOfferingId::new(row.id.clone())).collect::<Vec<_>>();
         let availabilities = self

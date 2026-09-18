@@ -3,11 +3,11 @@
 //! 集合名直接引用 `BulkJobExt` 关联常量（唯一权威来源，conventions §4.3），
 //! 不做本地转存。
 
-use mongodb::bson::{Document, doc};
-use mongodb::options::IndexOptions;
+use mongodb::bson::doc;
 use mongodb::{Database, IndexModel};
 use persistence_core::Result;
 
+use super::{create_indexes, named_index, unique_index};
 use crate::repository::extensions::BulkJobExt;
 
 /// 创建本域集合的幂等命名索引。
@@ -32,12 +32,6 @@ pub async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, <Database as BulkJobExt>::BULK_SELECTION_ITEMS, bulk_selection_item_indexes()).await?;
     create_indexes(db, <Database as BulkJobExt>::BACKGROUND_JOBS, background_job_indexes()).await?;
     create_indexes(db, <Database as BulkJobExt>::BACKGROUND_JOB_ITEMS, background_job_item_indexes()).await?;
-    Ok(())
-}
-
-/// 为单个集合创建一组幂等命名索引。
-async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
-    db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
@@ -89,19 +83,6 @@ fn background_job_item_indexes() -> Vec<IndexModel> {
         unique_index("uk_background_job_items_no", doc! { "background_job_id": 1, "item_no": 1 }),
         named_index("idx_background_job_items_status", doc! { "background_job_id": 1, "status": 1 }),
     ]
-}
-
-/// 构建命名普通索引。
-fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
-}
-
-/// 构建命名唯一索引。
-fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).unique(true).build())
-        .build()
 }
 
 #[cfg(test)]

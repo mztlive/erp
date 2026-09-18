@@ -170,13 +170,7 @@ async fn error_action_fact(
             })
         },
         IntegrationTaskActionKind::LinkCompensation => {
-            if !action
-                .evidence_refs
-                .iter()
-                .any(|evidence| evidence.kind == ControlledEvidenceKind::CompensationResult)
-            {
-                return Err(Error::ValidationError("关联补偿必须提供补偿结果证据".to_string()));
-            }
+            ensure_compensation_evidence(&action.evidence_refs)?;
             let verified =
                 verify_evidence_refs(authority, &subject, &action.evidence_refs, actor_id, executor).await?;
             Ok(ActionFact::with_verified(IntegrationActionOutcome::EvidenceLinked, verified)?)
@@ -314,59 +308,112 @@ pub(super) async fn difference_action_fact(
     let subject = EvidenceSubject::difference(difference);
     match action.kind {
         IntegrationTaskActionKind::QueryOriginalResult => {
-            let fact = query_action_fact(authority, &subject, executor).await?;
-            let evidence_reference = Some(audit_log_reference(receipt_id)?);
-            Ok(open_direct_fact(ResolutionAction::QueryOriginalResult, fact, evidence_reference))
+            difference_query_fact(authority, &subject, receipt_id, executor).await
         },
         IntegrationTaskActionKind::AddEvidence => {
-            let verified =
-                verify_evidence_refs(authority, &subject, &action.evidence_refs, actor_id, executor).await?;
-            let evidence = verified_reference(&verified)?;
-            Ok(pending_direct_fact(
-                ResolutionAction::AddEvidence,
-                Some(evidence),
-                IntegrationActionOutcome::EvidenceAdded,
-                None,
-                verified_refs(verified),
-            ))
+            difference_add_evidence_fact(authority, &subject, action, actor_id, executor).await
         },
         IntegrationTaskActionKind::ReplayOriginal => {
-            let reference = authority.replay_original(&subject, executor).await?;
-            Ok(open_direct_fact(
-                ResolutionAction::ReplayOriginal,
-                ActionFact::with_reference(IntegrationActionOutcome::ReplayAccepted, reference),
-                None,
-            ))
+            difference_replay_fact(authority, &subject, executor).await
         },
         IntegrationTaskActionKind::Reattribute => {
-            let reference = authority.verify_reattribution(&subject, executor).await?;
-            Ok(pending_direct_fact(
-                ResolutionAction::Reattribute,
-                Some(reference.clone()),
-                IntegrationActionOutcome::Reattributed,
-                Some(reference),
-                authority.discover_evidence(&subject, executor).await?,
-            ))
+            difference_reattribute_fact(authority, &subject, executor).await
         },
         IntegrationTaskActionKind::LinkCompensation => {
-            if !action
-                .evidence_refs
-                .iter()
-                .any(|evidence| evidence.kind == ControlledEvidenceKind::CompensationResult)
-            {
-                return Err(Error::ValidationError("关联补偿必须提供补偿结果证据".to_string()));
-            }
-            let verified =
-                verify_evidence_refs(authority, &subject, &action.evidence_refs, actor_id, executor).await?;
-            let reference = verified_reference(&verified)?;
-            Ok(pending_direct_fact(
-                ResolutionAction::LinkCompensation,
-                Some(reference.clone()),
-                IntegrationActionOutcome::EvidenceLinked,
-                Some(reference),
-                verified_refs(verified),
-            ))
+            difference_link_compensation_fact(authority, &subject, action, actor_id, executor).await
         },
+    }
+}
+
+/// 差异查询原结果分支（门禁 50 行内拆分）。
+async fn difference_query_fact(
+    authority: &dyn IntegrationEvidenceAuthority,
+    subject: &EvidenceSubject,
+    receipt_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<DirectFact> {
+    let fact = query_action_fact(authority, subject, executor).await?;
+    let evidence_reference = Some(audit_log_reference(receipt_id)?);
+    Ok(open_direct_fact(ResolutionAction::QueryOriginalResult, fact, evidence_reference))
+}
+
+/// 差异补证分支（门禁 50 行内拆分）。
+async fn difference_add_evidence_fact(
+    authority: &dyn IntegrationEvidenceAuthority,
+    subject: &EvidenceSubject,
+    action: &IntegrationNonTerminalTaskAction,
+    actor_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<DirectFact> {
+    let verified =
+        verify_evidence_refs(authority, subject, &action.evidence_refs, actor_id, executor).await?;
+    let evidence = verified_reference(&verified)?;
+    Ok(pending_direct_fact(
+        ResolutionAction::AddEvidence,
+        Some(evidence),
+        IntegrationActionOutcome::EvidenceAdded,
+        None,
+        verified_refs(verified),
+    ))
+}
+
+/// 差异重放分支（门禁 50 行内拆分）。
+async fn difference_replay_fact(
+    authority: &dyn IntegrationEvidenceAuthority,
+    subject: &EvidenceSubject,
+    executor: &mut dyn Executor,
+) -> Result<DirectFact> {
+    let reference = authority.replay_original(subject, executor).await?;
+    Ok(open_direct_fact(
+        ResolutionAction::ReplayOriginal,
+        ActionFact::with_reference(IntegrationActionOutcome::ReplayAccepted, reference),
+        None,
+    ))
+}
+
+/// 差异重新归集分支（门禁 50 行内拆分）。
+async fn difference_reattribute_fact(
+    authority: &dyn IntegrationEvidenceAuthority,
+    subject: &EvidenceSubject,
+    executor: &mut dyn Executor,
+) -> Result<DirectFact> {
+    let reference = authority.verify_reattribution(subject, executor).await?;
+    Ok(pending_direct_fact(
+        ResolutionAction::Reattribute,
+        Some(reference.clone()),
+        IntegrationActionOutcome::Reattributed,
+        Some(reference),
+        authority.discover_evidence(subject, executor).await?,
+    ))
+}
+
+/// 差异关联补偿分支（门禁 50 行内拆分）。
+async fn difference_link_compensation_fact(
+    authority: &dyn IntegrationEvidenceAuthority,
+    subject: &EvidenceSubject,
+    action: &IntegrationNonTerminalTaskAction,
+    actor_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<DirectFact> {
+    ensure_compensation_evidence(&action.evidence_refs)?;
+    let verified =
+        verify_evidence_refs(authority, subject, &action.evidence_refs, actor_id, executor).await?;
+    let reference = verified_reference(&verified)?;
+    Ok(pending_direct_fact(
+        ResolutionAction::LinkCompensation,
+        Some(reference.clone()),
+        IntegrationActionOutcome::EvidenceLinked,
+        Some(reference),
+        verified_refs(verified),
+    ))
+}
+
+/// 关联补偿必须携带补偿结果证据（两处决定入口共用，见 [`super::direct`]）。
+pub(super) fn ensure_compensation_evidence(refs: &[ControlledEvidenceRef]) -> Result<()> {
+    if refs.iter().any(|evidence| evidence.kind == ControlledEvidenceKind::CompensationResult) {
+        Ok(())
+    } else {
+        Err(Error::ValidationError("关联补偿必须提供补偿结果证据".to_string()))
     }
 }
 

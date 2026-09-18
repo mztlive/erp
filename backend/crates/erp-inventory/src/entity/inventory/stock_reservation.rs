@@ -19,6 +19,8 @@ use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
+use super::{ensure_non_negative_quantities, ensure_positive_quantity};
+
 /// 来源单据标识最大长度。
 const SOURCE_DOCUMENT_MAX_LEN: usize = 256;
 
@@ -242,7 +244,12 @@ impl StockReservation {
     /// # 错误
     /// 数量为负或状态与数量不一致时返回错误。
     pub fn new(id: StockReservationId, data: StockReservationData) -> Result<Self> {
-        ensure_quantities_valid(data.reserved_quantity, data.consumed_quantity, data.released_quantity)?;
+        ensure_non_negative_quantities(
+            data.reserved_quantity,
+            data.consumed_quantity,
+            data.released_quantity,
+            "预占、消耗与释放数量均不得为负",
+        )?;
         ensure_status_coherent(
             data.status,
             data.reserved_quantity,
@@ -285,7 +292,7 @@ impl StockReservation {
         let consumed = update.consumed_quantity.unwrap_or(self.consumed_quantity);
         let released = update.released_quantity.unwrap_or(self.released_quantity);
         let status = update.status.unwrap_or(self.status);
-        ensure_quantities_valid(reserved, consumed, released)?;
+        ensure_non_negative_quantities(reserved, consumed, released, "预占、消耗与释放数量均不得为负")?;
         ensure_status_coherent(status, reserved, consumed, released)?;
         self.reserved_quantity = reserved;
         self.consumed_quantity = consumed;
@@ -325,26 +332,6 @@ fn normalize_reservation_source(data: &StockReservationData) -> Result<Option<St
                 .map_or_else(|| Err(Error::from("现有库存预占必须关联分配动作")), |value| Ok(Some(value)))
         },
     }
-}
-
-/// 校验预占三个数量均非负。
-///
-/// # 参数
-/// * `reserved` - 当前有效预占
-/// * `consumed` - 已消耗数量
-/// * `released` - 已释放数量
-///
-/// # 返回
-/// 通过返回 `Ok(())`。
-///
-/// # 错误
-/// 任一数量为负时返回错误。
-fn ensure_quantities_valid(reserved: Quantity, consumed: Quantity, released: Quantity) -> Result<()> {
-    let zero = rust_decimal::Decimal::ZERO;
-    if reserved.to_decimal() < zero || consumed.to_decimal() < zero || released.to_decimal() < zero {
-        return Err(Error::from("预占、消耗与释放数量均不得为负"));
-    }
-    Ok(())
 }
 
 /// 校验预占状态与数量的一致性。
@@ -432,9 +419,7 @@ impl StockReservationEntry {
     /// # 错误
     /// 数量非正或来源单据为空/超长时返回错误。
     pub fn new(id: StockReservationEntryId, data: StockReservationEntryData) -> Result<Self> {
-        if data.quantity.to_decimal() <= rust_decimal::Decimal::ZERO {
-            return Err(Error::from("预占流水数量必须为正数"));
-        }
+        ensure_positive_quantity(data.quantity, "预占流水数量必须为正数")?;
         let source_document_id = normalize_required_text(
             data.source_document_id,
             "来源单据不能为空",

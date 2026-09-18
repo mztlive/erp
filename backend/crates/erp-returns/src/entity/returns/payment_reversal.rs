@@ -182,7 +182,7 @@ impl PaymentReversal {
         let reason_code = normalize_optional_text(data.reason_code, "原因代码", REASON_CODE_MAX_LEN)?;
         ensure_positive_amount(data.amount, "冲正金额必须为正数")?;
         let (handled_by, reviewed_by) = validate_actor_pair(data.handled_by, data.reviewed_by)?;
-        let created_by = normalize_created_by(created_by)?;;
+        let created_by = normalize_created_by(created_by)?;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),

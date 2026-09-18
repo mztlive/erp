@@ -1,5 +1,4 @@
 //! 供应商结算确认的财务应付构造与原账户/分录写入。
-use std::str::FromStr;
 
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{PayableAccountId, PayableEntryId, SupplierAccountId};
@@ -22,7 +21,7 @@ pub struct SettlementPayableSource {
     pub period_end: BusinessDate,
 }
 fn zero_amount() -> Amount {
-    Amount::from_str("0.00").expect("零是合法金额")
+    Amount::zero()
 }
 /// 按原 Account ID/new、Entry ID/new 时点构造结算应付；posted_at 复用调用者冻结时间。
 pub fn build_settlement_payable(
@@ -75,6 +74,8 @@ pub async fn persist_settlement_payable(
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::*;
     #[test]
     fn settlement_payable_preserves_source_money_due_date_and_posting_time() {

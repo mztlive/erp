@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use chrono::Local;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::{SalesOrderLineId, SkuId, WarehouseId};
@@ -11,10 +9,12 @@ use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mo
 use serde::{Deserialize, Serialize};
 
 use super::shared::{
-    apply_warehouse_scope_filter, ids_to_strings, negate_bson, sort_doc, to_bson, with_id_tie_breaker,
+    ids_to_strings, negate_bson, scoped_base_filter, sort_doc, to_bson, with_id_tie_breaker,
 };
 use super::{InventoryRepository, STOCK_RESERVATIONS};
-use crate::entity::inventory::{ReservationStatus, StockReservation, StockReservationSourceType};
+use crate::entity::inventory::{
+    ReservationStatus, StockReservation, StockReservationSourceType, zero_quantity,
+};
 use crate::repository::owned::StockReservationRepository;
 
 /// 库存预占列表投影行。
@@ -95,8 +95,7 @@ impl QueryFilter for StockReservationFilter {
     /// # 返回
     /// 返回查询条件文档。
     fn to_doc(&self) -> Document {
-        let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
-        apply_warehouse_scope_filter(&mut filter, self.warehouse_ids.as_deref());
+        let mut filter = scoped_base_filter(self.warehouse_ids.as_deref());
         if let Some(sku_id) = &self.sku_id {
             filter.insert("sku_id", sku_id.to_string());
         }
@@ -280,7 +279,7 @@ impl<'a> StockReservationRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<bool> {
         let quantity = to_bson(quantity)?;
-        let zero = to_bson(Quantity::from_str("0").expect("字面量 0 必然合法"))?;
+        let zero = to_bson(zero_quantity())?;
         let active_statuses =
             [ReservationStatus::Active.as_str(), ReservationStatus::PartiallyConsumed.as_str()];
         let filter = doc! {

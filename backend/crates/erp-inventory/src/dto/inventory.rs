@@ -40,6 +40,16 @@ pub struct PageParams {
     pub sort_dir: SortDir,
 }
 
+impl PageParams {
+    /// 返回 Repository 筛选共用的排序字段与方向。
+    ///
+    /// # 返回
+    /// 返回 `(排序字段, 是否升序)`；调用方四类列表查询共用，避免重复映射。
+    pub(crate) fn sort_selection(&self) -> (Option<String>, bool) {
+        (Some(self.sort_by.to_string()), matches!(self.sort_dir, SortDir::Asc))
+    }
+}
+
 /// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
 pub use application_core::PageView;
 /// 校验排序参数（白名单 + 方向），返回归一化排序字段与方向。

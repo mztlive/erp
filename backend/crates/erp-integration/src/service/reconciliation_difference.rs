@@ -6,7 +6,7 @@ use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::IntegrationOpsService;
-use super::scope::{ScopedIntegrationList, ensure_page, ensure_scope_version};
+use super::scope::{ScopedIntegrationList, ensure_page, resolve_list_scope};
 use crate::dto::{self, *};
 use crate::entity::integration_ops::*;
 use crate::repository::IntegrationOpsExt;
@@ -44,27 +44,27 @@ impl IntegrationOpsService {
         executor: &mut dyn Executor,
     ) -> Result<DifferenceListView> {
         let access = self.access();
-        let (context, read_scope) =
-            access.resolve(actor, "reconciliation_difference", "list", executor).await?;
-        let owner_org_unit_ids = super::scope::expand_org_filter(
+        let scope = resolve_list_scope(
             &access,
+            actor,
+            "reconciliation_difference",
             &query.org_unit_ids,
             query.include_descendants,
+            query.scope_version.as_deref(),
             executor,
         )
         .await?;
         let operator_difference_ids =
             self.operator_difference_ids(&query.operator_user_ids, executor).await?;
-        let filter = difference_filter(&query, &read_scope, owner_org_unit_ids, operator_difference_ids);
-        let meta = ScopedIntegrationList::from_access(&context, &read_scope);
-        ensure_scope_version(query.scope_version.as_deref(), &meta.scope_version)?;
-        if meta.empty_reason == Some("no_scope") {
-            return Ok(empty_difference_page(&filter, meta));
+        let filter =
+            difference_filter(&query, &scope.read_scope, scope.owner_org_unit_ids, operator_difference_ids);
+        if scope.meta.empty_reason == Some("no_scope") {
+            return Ok(empty_difference_page(&filter, scope.meta));
         }
         let page = self.db.reconciliation_differences().search_differences(&filter, executor).await?;
         let total = page.total;
         let items = project_difference_rows(self, page.items, executor).await?;
-        Ok(difference_list_view(total, items, &filter, meta))
+        Ok(difference_list_view(total, items, &filter, scope.meta))
     }
 
     /// 把历史处理人筛选解析为差异 ID 集合。

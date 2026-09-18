@@ -1,6 +1,5 @@
 //! `electronic_delivery` 电子交付记录仓储：列表投影查询。
 
-use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::Instant;
 use erp_core::ids::{PurchaseLineSalesAllocationId, PurchaseOrderId, SalesOrderLineId};
 use mongodb::bson::{Document, doc};
@@ -64,7 +63,7 @@ impl QueryFilter for ElectronicDeliveryFilter {
     /// # 返回
     /// 返回查询条件文档。
     fn to_doc(&self) -> Document {
-        let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
+        let mut filter = super::active_filter();
         if let Some(sales_order_line_id) = &self.sales_order_line_id {
             filter.insert("sales_order_line_id", sales_order_line_id.to_string());
         }
@@ -81,7 +80,7 @@ impl Pagination for ElectronicDeliveryFilter {
     /// # 返回
     /// 返回 `(page, page_size)` 元组。
     fn page_and_size(&self) -> (u64, u64) {
-        (self.page, u64::from(self.page_size))
+        super::page_and_size(self.page, self.page_size)
     }
 }
 

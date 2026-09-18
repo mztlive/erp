@@ -68,6 +68,32 @@ pub(crate) fn validate_fingerprint(fingerprint: &str) -> Result<()> {
     Ok(())
 }
 
+/// 规范化预计算的查询指纹（强类型指纹值对象共用入口）.
+///
+/// 只处理已计算好的十六进制串；密钥与明文不得传入.
+///
+/// # 参数
+/// * `empty_message` - 空白输入时的错误文案
+/// * `too_long_message` - 超长输入时的错误文案
+/// * `hex` - 预计算的指纹十六进制串
+///
+/// # 返回
+/// 返回规范化后的指纹串.
+///
+/// # 错误
+/// 空白、超长或非 64 位十六进制时返回错误.
+pub(crate) fn normalize_precomputed_fingerprint(
+    empty_message: &str,
+    too_long_message: &str,
+    hex: String,
+) -> Result<String> {
+    use erp_core::validation::normalize_required_text;
+
+    let value = normalize_required_text(hex, empty_message, FINGERPRINT_HEX_LEN, too_long_message)?;
+    validate_fingerprint(&value)?;
+    Ok(value)
+}
+
 /// 计算 SHA-256 摘要（FIPS 180-4）。
 ///
 /// # 参数
@@ -209,5 +235,24 @@ mod tests {
         assert!(validate_fingerprint(&"a".repeat(63)).is_err());
         assert!(validate_fingerprint(&"a".repeat(65)).is_err());
         assert!(validate_fingerprint(&format!("{}z", "a".repeat(63))).is_err());
+    }
+
+    /// 预计算指纹入口：trim 后校验长度与十六进制；空白/超长/非法字符失败。
+    #[test]
+    fn precomputed_fingerprint_normalizes_and_validates() {
+        use super::normalize_precomputed_fingerprint;
+
+        let padded = format!("  {}  ", "a".repeat(64));
+        assert_eq!(normalize_precomputed_fingerprint("不能为空", "过长", padded).unwrap().len(), 64);
+        assert!(normalize_precomputed_fingerprint("不能为空", "过长", "  ".to_string()).is_err());
+        assert!(normalize_precomputed_fingerprint("不能为空", "过长", "a".repeat(63)).is_err());
+        assert!(
+            normalize_precomputed_fingerprint("不能为空", "过长", format!("{}z", "a".repeat(63))).is_err()
+        );
+        let overlong = "a".repeat(65);
+        assert_eq!(
+            normalize_precomputed_fingerprint("不能为空", "过长哨兵", overlong).unwrap_err().to_string(),
+            "过长哨兵"
+        );
     }
 }

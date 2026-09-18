@@ -11,7 +11,7 @@ use validator::Validate;
 
 use super::ContractService;
 use super::scope::{ensure_page, ensure_scope_version, ensure_stable_snapshot, to_list_view};
-use crate::dto::contract::{ContractListParams, ContractListView, ContractRevisionView};
+use crate::dto::contract::{ContractListParams, ContractListView, ContractRevisionView, ContractView};
 use crate::error::Result;
 use crate::ports::{AccountNamePort, CustomerAssignmentFactsPort, CustomerFactsPort};
 use crate::repository::list_search::ContractCustomer;

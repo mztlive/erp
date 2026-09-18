@@ -244,7 +244,18 @@ fn insert_supplier_id_constraints(
 ///
 /// # 返回
 /// 返回保持输入顺序的字符串 ID 集合。
-fn supplier_id_strings(ids: &[SupplierAccountId]) -> Vec<String> {
+pub(super) fn supplier_id_strings(ids: &[SupplierAccountId]) -> Vec<String> {
+    ids.iter().map(ToString::to_string).collect()
+}
+
+/// 转换主体 ID，供 MongoDB 集合条件使用（erp-supplier-013）。
+///
+/// # 参数
+/// * `ids` - 强类型主体 ID 集合
+///
+/// # 返回
+/// 返回保持输入顺序的字符串 ID 集合。
+fn party_id_strings(ids: &[PartyId]) -> Vec<String> {
     ids.iter().map(ToString::to_string).collect()
 }
 
@@ -418,8 +429,7 @@ impl<'a> SupplierRepository<'a> {
         supplier_ids: &[SupplierAccountId],
         executor: &mut dyn Executor,
     ) -> Result<HashMap<String, PartyId>> {
-        let supplier_ids =
-            unique_strings(supplier_id_strings(supplier_ids).into_iter());
+        let supplier_ids = unique_strings(supplier_id_strings(supplier_ids));
         if supplier_ids.is_empty() {
             return Ok(HashMap::new());
         }
@@ -636,7 +646,7 @@ impl SupplierAccountRepository<'_> {
         if party_ids.is_empty() {
             return Ok(Vec::new());
         }
-        let filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "party_id": { "$in": party_ids.iter().map(ToString::to_string).collect::<Vec<_>>() } };
+        let filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "party_id": { "$in": party_id_strings(party_ids) } };
         let rows = mongo_ops::find_many(
             &self.collection().clone_with_type::<SupplierSearchId>(),
             filter,

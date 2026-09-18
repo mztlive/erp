@@ -68,8 +68,5 @@ impl FulfillmentService {
 /// # 错误
 /// 供应商直发缺少采购来源时返回原业务错误。
 pub fn supplier_purchase_source(delivery: &Delivery) -> Result<PurchaseOrderId> {
-    delivery
-        .purchase_order_id
-        .clone()
-        .ok_or_else(|| Error::BusinessLogicError("供应商直发缺少采购来源".to_string()))
+    delivery.supplier_purchase_source().map_err(|error| Error::BusinessLogicError(error.to_string()))
 }

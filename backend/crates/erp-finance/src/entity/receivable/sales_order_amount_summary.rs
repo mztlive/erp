@@ -3,8 +3,6 @@
 //! Repository 聚合结果必须与 [`SalesOrderReceivableAmountSummary::from_accounts`]
 //! 逐项精确一致；无子账为精确零且 `account_count = 0`。
 
-use std::str::FromStr;
-
 use erp_core::money::Amount;
 use serde::{Deserialize, Serialize};
 
@@ -37,9 +35,9 @@ impl SalesOrderReceivableAmountSummary {
     pub fn empty() -> Self {
         Self {
             account_count: 0,
-            settled_total: zero_amount(),
-            invoiced_total: zero_amount(),
-            gross_total: zero_amount(),
+            settled_total: Amount::zero(),
+            invoiced_total: Amount::zero(),
+            gross_total: Amount::zero(),
         }
     }
 
@@ -80,13 +78,6 @@ impl SalesOrderReceivableAmountSummary {
         }
         summary
     }
-}
-
-/// 返回精确零金额。
-///
-/// `Amount::from_str("0.00")` 对定点金额恒合法。
-fn zero_amount() -> Amount {
-    Amount::from_str("0.00").expect("零是合法金额")
 }
 
 #[cfg(test)]

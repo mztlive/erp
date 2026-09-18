@@ -761,16 +761,7 @@ fn customer_refund_originals_filter(
     receipt_ids: &[CustomerReceiptId],
     entry_ids: &[ReceivableEntryId],
 ) -> Document {
-    let mut filter = Document::new();
-    if !receipt_ids.is_empty() {
-        let ids: Vec<String> = receipt_ids.iter().map(ToString::to_string).collect();
-        filter.insert("original_receipt_id", doc! { "$in": ids });
-    }
-    if !entry_ids.is_empty() {
-        let ids: Vec<String> = entry_ids.iter().map(ToString::to_string).collect();
-        filter.insert("original_receivable_entry_id", doc! { "$in": ids });
-    }
-    filter
+    originals_filter(receipt_ids, "original_receipt_id", entry_ids, "original_receivable_entry_id")
 }
 
 /// 保留原事实筛选：两个来源集合都非空时同时匹配，都为空时交给基础仓储查询全部未删除事实。
@@ -778,14 +769,24 @@ fn supplier_refund_originals_filter(
     payment_ids: &[SupplierPaymentId],
     entry_ids: &[erp_core::ids::PayableEntryId],
 ) -> Document {
+    originals_filter(payment_ids, "original_payment_id", entry_ids, "original_payable_entry_id")
+}
+
+/// 两类原事实引用的共用 `$in` 筛选（字段名由调用方保持原语义）。
+fn originals_filter<A: ToString, B: ToString>(
+    ids_a: &[A],
+    field_a: &str,
+    ids_b: &[B],
+    field_b: &str,
+) -> Document {
     let mut filter = Document::new();
-    if !payment_ids.is_empty() {
-        let ids: Vec<String> = payment_ids.iter().map(ToString::to_string).collect();
-        filter.insert("original_payment_id", doc! { "$in": ids });
+    if !ids_a.is_empty() {
+        let ids: Vec<String> = ids_a.iter().map(ToString::to_string).collect();
+        filter.insert(field_a, doc! { "$in": ids });
     }
-    if !entry_ids.is_empty() {
-        let ids: Vec<String> = entry_ids.iter().map(ToString::to_string).collect();
-        filter.insert("original_payable_entry_id", doc! { "$in": ids });
+    if !ids_b.is_empty() {
+        let ids: Vec<String> = ids_b.iter().map(ToString::to_string).collect();
+        filter.insert(field_b, doc! { "$in": ids });
     }
     filter
 }

@@ -40,4 +40,5 @@ pub use source_evidence::{
 pub use statement::{
     SettlementReviewDecision, SettlementReviewResult, SettlementStatus, SupplierSettlementSnapshotUpdate,
     SupplierSettlementStatement, SupplierSettlementStatementData, SupplierSettlementStatementUpdate,
+    normalize_statement_sha256, statement_digest_parts,
 };

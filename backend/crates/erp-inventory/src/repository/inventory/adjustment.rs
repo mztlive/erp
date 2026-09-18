@@ -9,8 +9,8 @@ use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mo
 use serde::{Deserialize, Serialize};
 
 use super::shared::{
-    active_entity_by_id, apply_warehouse_scope_filter, entities_by_ids, find_by_field_in, ids_to_strings,
-    sort_doc, to_bson, with_id_tie_breaker,
+    active_entity_by_id, entities_by_ids, find_by_field_in, ids_to_strings, scoped_base_filter, sort_doc,
+    to_bson, with_id_tie_breaker,
 };
 use super::{InventoryRepository, STOCK_ADJUSTMENT_LINES, STOCK_ADJUSTMENTS};
 use crate::entity::inventory::{
@@ -103,8 +103,7 @@ impl QueryFilter for StockAdjustmentFilter {
     /// # 返回
     /// 返回查询条件文档。
     fn to_doc(&self) -> Document {
-        let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
-        apply_warehouse_scope_filter(&mut filter, self.warehouse_ids.as_deref());
+        let mut filter = scoped_base_filter(self.warehouse_ids.as_deref());
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());
         }

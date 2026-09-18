@@ -9,9 +9,6 @@ use crate::dto::payable::CreatePayableAccountRequest;
 use crate::entity::payable::{
     EntryDirection, PayableAccount, PayableAccountData, PayableEntry, PayableEntryData, PayableEntryType,
 };
-fn zero_amount() -> Amount {
-    Amount::zero()
-}
 /// 在来源事实校验后构建完整应付事实；不开始事务，也不写入外域。
 pub fn prepare_payable_account(
     req: CreatePayableAccountRequest,
@@ -26,9 +23,9 @@ pub fn prepare_payable_account(
             supplier_id: req.supplier_id.clone(),
             source_type: req.source_type,
             gross_total: req.gross_total,
-            settled_total: zero_amount(),
+            settled_total: Amount::zero(),
             invoiceable_total: req.invoiceable_total.unwrap_or(req.gross_total),
-            invoiced_total: zero_amount(),
+            invoiced_total: Amount::zero(),
         },
         actor_id,
     )?;

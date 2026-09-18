@@ -214,9 +214,7 @@ impl FundsAccess {
     ) -> Result<HashMap<String, String>> {
         use erp_core::ids::SalesOrderId;
         let mut map = HashMap::new();
-        let mut unique = ids.to_vec();
-        unique.sort();
-        unique.dedup();
+        let unique = crate::support::dedup_sorted(ids.iter().cloned());
         for chunk in unique.chunks(500) {
             let keys = chunk.iter().map(|id| SalesOrderId::new(id.clone())).collect::<Vec<_>>();
             for order in self.db.sales_orders().find_orders_by_ids(&keys, executor).await? {

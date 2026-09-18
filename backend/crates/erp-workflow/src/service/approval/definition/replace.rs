@@ -257,6 +257,8 @@ async fn prepare_replacement(
 }
 
 /// 以 CAS 写回草稿图并记录审计。
+// 草稿落盘 8 参数：db/审计/图/版本/操作人/动作/摘要/执行器随事务一体传递，拆包增加错序风险；告警逐项压制。
+#[allow(clippy::too_many_arguments)]
 async fn apply_draft_graph(
     db: &Database,
     audit: &dyn crate::ports::WorkflowAuditPort,

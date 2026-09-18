@@ -121,8 +121,7 @@ pub async fn load_creation_basis_facts(
 /// # 约束
 /// 去重只用于缩小 `$in` 范围，不改变任何业务语义。
 fn unique_sku_ids(sku_ids: &[SkuId]) -> Vec<SkuId> {
-    let mut seen = std::collections::HashSet::new();
-    sku_ids.iter().filter(|sku_id| seen.insert(sku_id.to_string())).cloned().collect()
+    crate::support::dedup_ordered(sku_ids.iter().cloned())
 }
 
 /// 提取供给涉及的供应商集合且保持首次出现顺序。
@@ -141,12 +140,7 @@ fn unique_sku_ids(sku_ids: &[SkuId]) -> Vec<SkuId> {
 fn unique_supplier_ids(
     offerings: &[erp_supply::entity::supplier_offering::SupplierOffering],
 ) -> Vec<SupplierAccountId> {
-    let mut seen = std::collections::HashSet::new();
-    offerings
-        .iter()
-        .filter(|offering| seen.insert(offering.supplier_id.to_string()))
-        .map(|offering| offering.supplier_id.clone())
-        .collect()
+    crate::support::dedup_ordered(offerings.iter().map(|offering| offering.supplier_id.clone()))
 }
 
 #[cfg(test)]

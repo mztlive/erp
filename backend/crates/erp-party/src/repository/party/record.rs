@@ -119,6 +119,27 @@ impl Pagination for PartyFilter {
 }
 
 impl<'a> PartyRepository<'a> {
+    /// 按主体 ID 集合批量读取活跃主体（erp-party-012）。
+    ///
+    /// 历史别名：与 [`Self::list_by_ids`] 同语义，保留以兼容公开签名；新调用统一使用 `list_by_ids`。
+    ///
+    /// # 参数
+    /// * `party_ids` - 主体 ID 集合；空集合直接返回空结果
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配且未删除的主体；返回顺序不承诺与输入一致。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn find_parties_by_ids(
+        &self,
+        party_ids: &[PartyId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<Party>> {
+        self.list_by_ids(party_ids, executor).await
+    }
+
     /// 按主体 ID 查找未删除 Party。
     ///
     /// # 参数

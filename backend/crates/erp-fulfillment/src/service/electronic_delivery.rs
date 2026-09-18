@@ -4,7 +4,7 @@ use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
 
 use super::FulfillmentService;
-use crate::dto::{ElectronicDeliveryListParams, ElectronicDeliveryView, SortDir};
+use crate::dto::{ElectronicDeliveryListParams, ElectronicDeliveryView};
 use crate::entity::fulfillment::ElectronicDelivery;
 use crate::repository::FulfillmentExt;
 use crate::{Error, Result};
@@ -42,14 +42,14 @@ impl FulfillmentService {
             page: query.paging.page,
             page_size: query.paging.page_size,
             sort_by: Some(query.paging.sort_by.to_string()),
-            sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
+            sort_ascending: super::sort_ascending(query.paging.sort_dir),
         };
         let page =
             self.db.electronic_deliveries().search_electronic_deliveries(&filter, &mut NoTransaction).await?;
         super::map_search_page(
             async { Ok(page) },
             |row| ElectronicDeliveryView {
-                id: row.id.clone(),
+                id: row.id,
                 fulfillment_no: row.fulfillment_no,
                 sales_order_line_id: row.sales_order_line_id.to_string(),
                 purchase_order_id: row.purchase_order_id.to_string(),

@@ -1,57 +1,5 @@
 use super::list::{qualification_constraint_kind, qualification_expiry_cutoff};
 use super::{QualificationConstraintKind, SupplierQualificationHealthFilter};
-use crate::entity::supplier::supplier_account::intersect_supplier_ids;
-
-#[test]
-fn supplier_list_candidate_intersection_preserves_order_and_empty() {
-    use erp_core::ids::SupplierAccountId;
-    // 能力与资质双维度同时命中时取交集，且保留能力侧顺序。
-    let capability_ids = Some(vec![
-        SupplierAccountId::new("s-1"),
-        SupplierAccountId::new("s-2"),
-        SupplierAccountId::new("s-3"),
-    ]);
-    let qualification_ids = Some(vec![
-        SupplierAccountId::new("s-2"),
-        SupplierAccountId::new("s-3"),
-        SupplierAccountId::new("s-4"),
-    ]);
-    assert_eq!(
-        intersect_supplier_ids(capability_ids, qualification_ids)
-            .unwrap()
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>(),
-        vec!["s-2".to_string(), "s-3".to_string()]
-    );
-    // 仅一侧约束时原样透传。
-    assert_eq!(
-        intersect_supplier_ids(Some(vec![SupplierAccountId::new("s-1")]), None)
-            .unwrap()
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>(),
-        vec!["s-1".to_string()]
-    );
-    assert_eq!(
-        intersect_supplier_ids(None, Some(vec![SupplierAccountId::new("s-9")]))
-            .unwrap()
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>(),
-        vec!["s-9".to_string()]
-    );
-    assert!(intersect_supplier_ids(None, None).is_none());
-    assert_eq!(
-        intersect_supplier_ids(
-            Some(vec![SupplierAccountId::new("s-1")]),
-            Some(vec![SupplierAccountId::new("s-9")])
-        )
-        .unwrap()
-        .len(),
-        0
-    );
-}
 
 /// 资质约束分支覆盖类型、健康状态与未登记排除路径。
 #[test]

@@ -8,11 +8,12 @@ use persistence_core::Executor;
 
 use super::ReturnsService;
 use super::approval::ensure_supplier_refund_final_approve_posting;
-use super::shared::{DEFAULT_FINANCE_REVIEWER, SUPPLIER_REFUND_COMMAND_PREFIX, return_command_no};
-use crate::dto::{CommitSupplierRefundRequest, CreateSupplierRefundRequest};
-use crate::entity::returns::{
-    CumulativeAmountLimit, SupplierRefund, SupplierRefundData, SupplierRefundStatus,
+use super::shared::{
+    DEFAULT_FINANCE_REVIEWER, SUPPLIER_REFUND_COMMAND_PREFIX, ensure_cumulative_within, or_not_found,
+    reject_if_reversed, return_command_no,
 };
+use crate::dto::{CommitSupplierRefundRequest, CreateSupplierRefundRequest};
+use crate::entity::returns::{SupplierRefund, SupplierRefundData, SupplierRefundStatus};
 use crate::repository::ReturnsExt;
 use crate::{Error, Result};
 
@@ -83,11 +84,7 @@ impl ReturnsService {
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<SupplierRefund> {
-        self.db
-            .supplier_refunds()
-            .find_by_id(id, executor)
-            .await?
-            .ok_or_else(|| Error::NotFound("供应商退款单不存在".to_string()))
+        or_not_found(self.db.supplier_refunds().find_by_id(id, executor).await?, "供应商退款单不存在")
     }
 
     /// 在调用方创建根内插入本域单据。
@@ -117,9 +114,7 @@ impl ReturnsService {
         executor: &mut dyn Executor,
     ) -> Result<SupplierRefund> {
         let record = self.load_supplier_refund(id, executor).await?;
-        if record.status == SupplierRefundStatus::Reversed {
-            return Err(Error::BusinessLogicError("已冲正退款不能再过账".to_string()));
-        }
+        reject_if_reversed(record.status == SupplierRefundStatus::Reversed, "已冲正退款不能再过账")?;
         ensure_supplier_refund_final_approve_posting(&record)?;
         Ok(record)
     }
@@ -137,8 +132,7 @@ impl ReturnsService {
             .supplier_refunds()
             .posted_refund_total_by_payment(&original_id, &record.base.id, executor)
             .await?;
-        CumulativeAmountLimit::ensure_within_limit(original_amount, before, record.amount)
-            .map_err(|_| Error::BusinessLogicError("累计退款金额不得超过原付款金额".to_string()))
+        ensure_cumulative_within(original_amount, before, record.amount, "累计退款金额不得超过原付款金额")
     }
 
     /// 财务事实写入后标记本域已过账并以原 CAS 持久化。

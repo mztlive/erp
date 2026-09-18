@@ -7,7 +7,7 @@ use mongodb::options::FindOptions;
 use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
 use serde::{Deserialize, Serialize};
 
-use super::shared::{apply_warehouse_scope_filter, entities_by_ids, sort_doc, with_id_tie_breaker};
+use super::shared::{entities_by_ids, scoped_base_filter, sort_doc, with_id_tie_breaker};
 use super::{InventoryRepository, STOCK_MOVEMENTS};
 use crate::entity::inventory::{MovementDirection, MovementType, StockMovement};
 use crate::repository::owned::StockMovementRepository;
@@ -103,8 +103,7 @@ impl QueryFilter for StockMovementFilter {
     /// # 返回
     /// 返回查询条件文档。
     fn to_doc(&self) -> Document {
-        let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
-        apply_warehouse_scope_filter(&mut filter, self.warehouse_ids.as_deref());
+        let mut filter = scoped_base_filter(self.warehouse_ids.as_deref());
         if let Some(sku_id) = &self.sku_id {
             filter.insert("sku_id", sku_id.to_string());
         }

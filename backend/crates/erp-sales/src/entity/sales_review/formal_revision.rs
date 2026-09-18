@@ -8,8 +8,7 @@ use super::sales_change_submission::{SalesChangeSubmission, SalesChangeSubmissio
 use super::types::{BusinessType, LineType};
 use crate::entity::sales_order::formal_revision::{FormalRevisionHeader, PreparedRevisionLine};
 use crate::entity::sales_order::{
-    FormalRevisionContext, FormalRevisionIdentities, LineType as SalesLineType, SalesContentHash,
-    SalesOrderRevisionAggregate,
+    FormalRevisionContext, FormalRevisionIdentities, SalesContentHash, SalesOrderRevisionAggregate,
 };
 
 impl FormalRevisionHeader {
@@ -58,9 +57,9 @@ impl PreparedRevisionLine {
     /// # 关键业务约束
     /// 必须通过变更提交行 `goods_fields`/`voucher_fields` 还原，禁止再拆 Optional。
     fn from_sales_change_submission_line(line: &SalesChangeSubmissionLine) -> Result<Self> {
-        let line_type = SalesLineType::from(line.line_type);
+        let line_type = line.line_type;
         let (goods, voucher) = match line.line_type {
-            LineType::GoodsService => (Some(line.goods_fields()?.into()), None),
+            LineType::GoodsService => (Some(line.goods_fields()?), None),
             LineType::Voucher => (None, Some(line.voucher_fields()?.into())),
         };
         Ok(Self {
@@ -136,7 +135,7 @@ fn ensure_change_business_type(
     expected: crate::entity::sales_order::BusinessType,
     actual: BusinessType,
 ) -> Result<()> {
-    if expected != crate::entity::sales_order::BusinessType::from(actual) {
+    if expected != actual {
         return Err(Error::from("销售单业务性质与提交不一致"));
     }
     Ok(())
@@ -156,7 +155,7 @@ mod tests {
 
     use super::*;
     use crate::entity::sales_order::{
-        FormalRevisionLineIdentity, FormalRevisionSubtypeIdentity, RevisionSource,
+        FormalRevisionLineIdentity, FormalRevisionSubtypeIdentity, LineType as SalesLineType, RevisionSource,
     };
     use crate::entity::sales_review::{
         CardForm, GoodsLineFields, SalesChangeSubmissionData, SalesChangeSubmissionLineData,

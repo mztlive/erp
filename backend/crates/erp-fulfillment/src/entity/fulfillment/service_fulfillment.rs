@@ -25,7 +25,7 @@ use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
-use super::electronic_delivery::FulfillmentResult;
+use super::electronic_delivery::{ElectronicDelivery, FulfillmentResult};
 use super::fingerprint::{FINGERPRINT_HEX_LEN, hmac_sha256_hex, validate_fingerprint};
 
 /// 履约记录号最大长度。
@@ -376,10 +376,7 @@ impl PartialEq for ServiceFulfillment {
 impl Eq for ServiceFulfillment {}
 
 impl ServiceFulfillment {
-    /// 生成交付对象快照查询指纹。
-    ///
-    /// 对必要交付对象规范化原文字符串计算带密钥 HMAC-SHA256（§4.5.5，
-    /// 禁止裸摘要）；密钥不持久化，精确查询时用同一密钥比对指纹。
+    /// 生成交付对象快照查询指纹（与电子交付共用同一 HMAC 规则）。
     ///
     /// # 参数
     /// * `plain` - 交付对象原文字符串
@@ -388,7 +385,7 @@ impl ServiceFulfillment {
     /// # 返回
     /// 返回 64 位小写十六进制指纹。
     pub fn recipient_snapshot_fingerprint(plain: &str, key: &[u8]) -> String {
-        hmac_sha256_hex(key, plain.as_bytes())
+        ElectronicDelivery::recipient_snapshot_fingerprint(plain, key)
     }
 
     /// 生成服务地点查询指纹。

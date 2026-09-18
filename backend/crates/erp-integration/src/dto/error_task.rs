@@ -2,7 +2,7 @@ use application_core::{QueryIds, normalized_text};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use super::common::{PageParams, normalize_scoped_list};
+use super::common::{PageParams, check_scoped_version, normalize_handler_filters, normalize_org_filter};
 use super::task_decision::{ControlledEvidenceRef, ResolutionEvidencePolicyView};
 use crate::Result;
 use crate::entity::integration_ops::{ErrorClass, ErrorTaskStatus, IntegrationErrorTask, ResolutionType};
@@ -107,18 +107,9 @@ impl ErrorTaskListParams {
     /// # 错误
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<ErrorTaskListQuery> {
-        let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, ERROR_TASK_SORT_FIELDS)?;
-        if self.scope_version.as_ref().is_some_and(|version| version.is_empty() || version.len() > 256) {
-            return Err(crate::Error::ValidationError("范围版本非法".into()));
-        }
-        if self.include_descendants == Some(true) && self.org_unit_ids.is_none() {
-            return Err(crate::Error::ValidationError("包含下级时必须提供组织筛选".into()));
-        }
-        let handler_user_ids = self.handler_user_ids.as_ref().map(QueryIds::as_slice).unwrap_or(&[]).to_vec();
-        let operator_user_ids =
-            self.operator_user_ids.as_ref().map(QueryIds::as_slice).unwrap_or(&[]).to_vec();
-        reject_me_ids(&handler_user_ids, "当前处理人")?;
-        reject_me_ids(&operator_user_ids, "历史处理人")?;
+        check_scoped_version(&self.scope_version, &self.org_unit_ids, self.include_descendants)?;
+        let (handler_user_ids, operator_user_ids) =
+            normalize_handler_filters(&self.handler_user_ids, &self.operator_user_ids)?;
         Ok(ErrorTaskListQuery {
             q: normalized_text(self.q.as_deref()),
             message_id: self.message_id.clone(),
@@ -128,15 +119,16 @@ impl ErrorTaskListParams {
             owner_role: normalized_text(self.owner_role.as_deref()),
             handler_user_ids,
             operator_user_ids,
-            org_unit_ids: self.org_unit_ids.as_ref().map(QueryIds::as_slice).unwrap_or(&[]).to_vec(),
+            org_unit_ids: normalize_org_filter(&self.org_unit_ids),
             include_descendants: self.include_descendants.unwrap_or(false),
             scope_version: self.scope_version.clone(),
-            paging: PageParams {
-                page: page_or_default(self.page),
-                page_size: page_size_or_default(self.page_size),
-                sort_by,
-                sort_dir,
-            },
+            paging: PageParams::normalized(
+                self.page,
+                self.page_size,
+                &self.sort_by,
+                &self.sort_dir,
+                ERROR_TASK_SORT_FIELDS,
+            )?,
         })
     }
 }

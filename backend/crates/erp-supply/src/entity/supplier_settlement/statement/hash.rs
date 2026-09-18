@@ -71,7 +71,7 @@ impl SupplierSettlementStatement {
 }
 
 /// 对字段逐项加入长度前缀后计算稳定摘要，消除字符串拼接歧义。
-pub(super) fn digest_parts(parts: &[String]) -> String {
+pub(crate) fn digest_parts(parts: &[String]) -> String {
     let mut digest = Sha256::new();
     for part in parts {
         digest.update((part.len() as u64).to_be_bytes());
@@ -81,7 +81,7 @@ pub(super) fn digest_parts(parts: &[String]) -> String {
 }
 
 /// 规范化服务端生成的 SHA-256 十六进制摘要。
-pub(super) fn normalize_sha256(value: String, field: &str) -> Result<String> {
+pub(crate) fn normalize_sha256(value: String, field: &str) -> Result<String> {
     let value = value.trim().to_ascii_lowercase();
     if value.len() != HASH_LEN || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return Err(Error::from(format!("{field}必须是64位SHA-256十六进制摘要")));

@@ -68,14 +68,9 @@ pub fn blocker(
     }
 }
 
-/// 将实体层治理阻塞原因转换为服务响应视图。
-pub fn governance_blocker_view(blocker: SupplierGovernanceBlocker) -> SupplierActionBlockerView {
-    SupplierActionBlockerView {
-        action: blocker.action.as_str().to_string(),
-        code: blocker.code.to_string(),
-        message: blocker.message,
-        destination_workspace_id: blocker.destination_workspace_id.map(str::to_string),
-    }
+/// 将实体层治理阻塞原因转换为服务响应视图，复用原动作阻塞投影。
+pub fn governance_blocker_view(cause: SupplierGovernanceBlocker) -> SupplierActionBlockerView {
+    blocker(cause.action.as_str(), cause.code, &cause.message, cause.destination_workspace_id)
 }
 
 /// 只投影绑定与可见状态，不暴露内部引用。

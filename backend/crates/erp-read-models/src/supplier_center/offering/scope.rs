@@ -30,11 +30,11 @@ impl SupplierOfferingReadService {
         actor: &AuditActor,
     ) -> Result<SupplierOfferingListView> {
         if params.page.unwrap_or(1) > 1 && params.scope_version.as_deref().is_none_or(str::is_empty) {
-            return Err(data_scope_changed("请从第一页刷新后继续查询"));
+            return Err(crate::support::data_scope_changed("请从第一页刷新后继续查询"));
         }
         let snapshot = self.list_snapshot(params, actor).await?;
         if params.scope_version.as_deref().is_some_and(|value| value != snapshot.scope_version) {
-            return Err(data_scope_changed("数据范围已变化，请从第一页刷新"));
+            return Err(crate::support::data_scope_changed("数据范围已变化，请从第一页刷新"));
         }
         Ok(SupplierOfferingListView {
             data: FilteredPage {
@@ -103,10 +103,8 @@ async fn build_snapshot(
     let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
     bundle.page.total.hash(&mut fingerprint);
     context.scope_version = format!("{}:{:x}", context.scope_version, fingerprint.finish());
-    let mut owner_ids: Vec<String> =
-        bundle.page.items.iter().map(|row| row.maintainer_user_id.clone()).collect();
-    owner_ids.sort();
-    owner_ids.dedup();
+    let owner_ids: Vec<String> =
+        crate::support::dedup_sorted(bundle.page.items.iter().map(|row| row.maintainer_user_id.clone()));
     let owner_options = db.accounts().filter_options(&owner_ids, executor).await?;
     let procurement_ids =
         params.procurement_owner_user_ids.as_ref().map(|ids| ids.as_slice().to_vec()).unwrap_or_default();
@@ -185,10 +183,6 @@ fn intersect_ids(
         return matched;
     };
     existing.into_iter().filter(|id| matched.iter().any(|other| other == id)).collect()
-}
-
-fn data_scope_changed(detail: &str) -> Error {
-    Error::ConflictError(format!("DATA_SCOPE_CHANGED：{detail}"))
 }
 
 #[cfg(test)]

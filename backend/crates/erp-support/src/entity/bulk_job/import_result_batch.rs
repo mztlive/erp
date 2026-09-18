@@ -45,8 +45,7 @@ impl BackgroundJob {
         if !self.can_record_progress() {
             return Err(Error::from(format!("状态 {:?} 不允许记录导入结果", self.status)));
         }
-        let next_processed =
-            add_progress_counts(self.processed_count, success, skipped, failed)?;
+        let next_processed = add_progress_counts(self.processed_count, success, skipped, failed)?;
         if next_processed > self.total_count {
             return Err(Error::from("已处理数不能超过目标总数"));
         }

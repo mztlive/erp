@@ -25,6 +25,7 @@ use super::types::{
     BusinessType, GoodsLineFields, LineSummary, LineType, VoucherLineDraft, WelfareScenario,
     build_line_groups, validate_line_list,
 };
+use crate::entity::sales_order::amount_validation::validate_amount_triple;
 
 /// 提交人标识最大长度。
 const SUBMITTER_MAX_LEN: usize = 128;
@@ -187,7 +188,7 @@ impl SalesChangeSubmissionData {
             sales_order_id: change_order.sales_order_id.clone(),
             working_copy_id,
             working_copy_version: working_copy.draft_version,
-            business_type: working_copy.business_type.into(),
+            business_type: working_copy.business_type,
             customer_id: working_copy.customer_id.clone(),
             contract_revision_id: working_copy.contract_revision_id.clone(),
             settlement_party_id: working_copy.settlement_party_id.clone(),
@@ -556,7 +557,7 @@ impl SalesChangeSubmissionLineData {
                     .sku_revision_id
                     .clone()
                     .ok_or_else(|| Error::from(format!("第 {} 行缺少 SKU 修订", line.line_no)))?,
-                welfare_scenario: line.welfare_scenario.map(Into::into),
+                welfare_scenario: line.welfare_scenario,
                 service_region: line.service_region.clone(),
                 fulfillment_due_at: line
                     .fulfillment_due_at
@@ -598,7 +599,6 @@ impl SalesChangeSubmissionLineData {
                 gift_rate: line.gift_rate,
                 card_form: line
                     .card_form
-                    .map(Into::into)
                     .ok_or_else(|| Error::from(format!("第 {} 行缺少卡形态", line.line_no)))?,
             })
         } else {
@@ -607,7 +607,7 @@ impl SalesChangeSubmissionLineData {
         Ok(Self {
             sales_order_line_id: line.sales_order_line_id.clone(),
             line_no: line.line_no,
-            line_type: line.line_type.into(),
+            line_type: line.line_type,
             sales_tax_rate: line.sales_tax_rate,
             item_name_snapshot: line.item_name_snapshot.clone(),
             spec_snapshot: line.spec_snapshot.clone(),
@@ -825,25 +825,6 @@ impl SalesChangeSubmissionLine {
                 .ok_or_else(|| Error::from(format!("第 {} 行缺少卡形态", self.line_no)))?,
         })
     }
-}
-
-/// 校验目标行汇总金额三元组恒等式（§4.2 规则 2）。
-///
-/// # 参数
-/// * `gross_amount` - 含税合计
-/// * `net_amount` - 不含税合计
-/// * `tax_amount` - 税额合计
-///
-/// # 返回
-/// 恒等式成立时返回 `Ok(())`。
-///
-/// # 错误
-/// `gross != net + tax` 时返回错误。
-fn validate_amount_triple(gross_amount: Amount, net_amount: Amount, tax_amount: Amount) -> Result<()> {
-    if gross_amount.to_decimal() != net_amount.to_decimal() + tax_amount.to_decimal() {
-        return Err(Error::from("表头金额必须满足 gross = net + tax"));
-    }
-    Ok(())
 }
 
 #[cfg(test)]

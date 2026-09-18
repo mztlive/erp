@@ -13,6 +13,7 @@ use erp_core::money::Quantity;
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
+use super::ensure_non_negative_quantities;
 use super::stock_adjustment::{StockAdjustment, StockAdjustmentLine};
 
 /// 库存余额创建数据。
@@ -82,10 +83,11 @@ impl StockBalance {
     /// # 错误
     /// 任一数量为负，或 `available` 不等于 `on_hand - reserved` 时返回错误。
     pub fn new(id: StockBalanceId, data: StockBalanceData) -> Result<Self> {
-        ensure_quantities_non_negative(
+        ensure_non_negative_quantities(
             data.on_hand_quantity,
             data.reserved_quantity,
             data.available_quantity,
+            "账面现存、有效预占与可用数量均不得为负",
         )?;
         if data.available_quantity.to_decimal()
             != data.on_hand_quantity.to_decimal() - data.reserved_quantity.to_decimal()
@@ -120,14 +122,17 @@ impl StockBalance {
         let on_hand = update.on_hand_quantity.unwrap_or(self.on_hand_quantity);
         let reserved = update.reserved_quantity.unwrap_or(self.reserved_quantity);
         let available = on_hand.to_decimal() - reserved.to_decimal();
-        let zero = rust_decimal::Decimal::ZERO;
-        if on_hand.to_decimal() < zero || reserved.to_decimal() < zero || available < zero {
-            return Err(Error::from("账面现存、有效预占与可用数量均不得为负"));
-        }
+        let available = Quantity::try_from(available)
+            .map_err(|_| Error::from("可用数量小数位超出数量精度，无法更新余额"))?;
+        ensure_non_negative_quantities(
+            on_hand,
+            reserved,
+            available,
+            "账面现存、有效预占与可用数量均不得为负",
+        )?;
         self.on_hand_quantity = on_hand;
         self.reserved_quantity = reserved;
-        self.available_quantity = Quantity::try_from(available)
-            .map_err(|_| Error::from("可用数量小数位超出数量精度，无法更新余额"))?;
+        self.available_quantity = available;
         if let Some(last_movement_id) = update.last_movement_id {
             self.last_movement_id = last_movement_id;
         }
@@ -163,26 +168,6 @@ impl StockBalance {
                 line.stock_adjustment_id.as_ref() == adjustment.base.id.as_str() && line.sku_id == self.sku_id
             })
     }
-}
-
-/// 校验三个数量均非负。
-///
-/// # 参数
-/// * `on_hand` - 账面现存
-/// * `reserved` - 有效预占
-/// * `available` - 可用数量
-///
-/// # 返回
-/// 通过返回 `Ok(())`。
-///
-/// # 错误
-/// 任一数量为负时返回错误。
-fn ensure_quantities_non_negative(on_hand: Quantity, reserved: Quantity, available: Quantity) -> Result<()> {
-    let zero = rust_decimal::Decimal::ZERO;
-    if on_hand.to_decimal() < zero || reserved.to_decimal() < zero || available.to_decimal() < zero {
-        return Err(Error::from("账面现存、有效预占与可用数量均不得为负"));
-    }
-    Ok(())
 }
 
 #[cfg(test)]

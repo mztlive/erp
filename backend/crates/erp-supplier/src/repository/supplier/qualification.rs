@@ -3,6 +3,7 @@ use erp_core::ids::{SupplierAccountId, SupplierQualificationId};
 use mongodb::bson::{Document, doc};
 use persistence_core::{Executor, Pagination, QueryFilter, Result};
 
+use super::account::supplier_id_strings;
 use super::{SUPPLIER_QUALIFICATIONS, SupplierRepository};
 use crate::entity::supplier::{
     QualificationStatus, QualificationType, SupplierQualification, SupplierQualificationCapability,
@@ -415,7 +416,7 @@ impl<'a> SupplierRepository<'a> {
         if supplier_ids.is_empty() {
             return Ok(Vec::new());
         }
-        let ids: Vec<String> = supplier_ids.iter().map(ToString::to_string).collect();
+        let ids = supplier_id_strings(supplier_ids);
         SupplierQualificationRepository::new(self.db, SUPPLIER_QUALIFICATIONS)
             .find_many(doc! { "supplier_id": { "$in": ids } }, executor)
             .await

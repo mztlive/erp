@@ -17,6 +17,7 @@ use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
+use super::check_expected_version;
 pub use crate::dto::source_registry::{
     CreateExternalIdentityMapRequest, CreateSourceSystemRequest, ExternalIdentityMapListParams,
     ExternalIdentityMapView, PageView, SourceSystemListParams, SourceSystemView, UpdateSourceSystemRequest,
@@ -29,8 +30,6 @@ use crate::entity::source_registry::{
 use crate::error::{Error, Result};
 use crate::ports::SupportAuditPort;
 use crate::repository::SourceRegistryExt;
-
-use super::check_expected_version;
 
 /// 来源系统列表筛选条件类型（经 `SourceRegistryExt` 关联类型跨 crate 可达）。
 type SourceSystemFilter = <mongodb::Database as SourceRegistryExt>::SourceSystemFilter;

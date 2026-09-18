@@ -529,10 +529,7 @@ pub fn summarize_matched_shares(
 
 /// 首页面后必须携带同一范围版本，禁止不同授权页拼接。
 pub fn ensure_page(page: u64, version: Option<&str>) -> Result<()> {
-    if page > 1 && version.is_none_or(str::is_empty) {
-        return Err(Error::ConflictError("DATA_SCOPE_CHANGED：请从第一页刷新后继续查询".into()));
-    }
-    Ok(())
+    crate::support::ensure_deep_page(page, version)
 }
 
 /// 版本不一致时返回可识别的范围变化错误并要求从第一页刷新。

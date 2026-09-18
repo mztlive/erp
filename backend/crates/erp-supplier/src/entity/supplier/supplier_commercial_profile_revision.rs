@@ -68,18 +68,16 @@ const RECONCILIATION_CYCLE_DISPLAY: [super::display::DisplayEntry<Reconciliation
     super::display::DisplayEntry { variant: ReconciliationCycle::Daily, label: "日", code: "daily" },
     super::display::DisplayEntry { variant: ReconciliationCycle::Weekly, label: "周", code: "weekly" },
     super::display::DisplayEntry { variant: ReconciliationCycle::Monthly, label: "月", code: "monthly" },
-    super::display::DisplayEntry {
-        variant: ReconciliationCycle::Quarterly,
-        label: "季",
-        code: "quarterly",
-    },
+    super::display::DisplayEntry { variant: ReconciliationCycle::Quarterly, label: "季", code: "quarterly" },
     super::display::DisplayEntry { variant: ReconciliationCycle::Yearly, label: "年", code: "yearly" },
     super::display::DisplayEntry {
         variant: ReconciliationCycle::HalfYearly,
         label: "半年",
         code: "half_yearly",
     },
-    super::display::DisplayEntry { variant: ReconciliationCycle::None, label: "无需周期对账", code: "none" },
+    super::display::DisplayEntry {
+        variant: ReconciliationCycle::None, label: "无需周期对账", code: "none"
+    },
 ];
 
 /// 发票类型（§6.2：增值税专用发票、增值税普通发票、电子发票等受控代码）。
@@ -129,9 +127,7 @@ const INVOICE_TYPE_DISPLAY: [super::display::DisplayEntry<InvoiceType>; 3] = [
         code: "vat_normal",
     },
     super::display::DisplayEntry {
-        variant: InvoiceType::Electronic,
-        label: "电子发票",
-        code: "electronic",
+        variant: InvoiceType::Electronic, label: "电子发票", code: "electronic"
     },
 ];
 

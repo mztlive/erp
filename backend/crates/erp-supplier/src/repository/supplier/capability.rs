@@ -3,6 +3,7 @@ use erp_core::ids::SupplierAccountId;
 use mongodb::bson::{Document, doc};
 use persistence_core::{Executor, Pagination, QueryFilter, Result};
 
+use super::account::supplier_id_strings;
 use super::{SUPPLIER_CAPABILITIES, SupplierRepository};
 use crate::entity::supplier::{CapabilityCode, CapabilityStatus, SupplierCapability};
 use crate::repository::owned::SupplierCapabilityRepository;
@@ -207,7 +208,7 @@ impl<'a> SupplierRepository<'a> {
         if supplier_ids.is_empty() {
             return Ok(Vec::new());
         }
-        let ids: Vec<String> = supplier_ids.iter().map(ToString::to_string).collect();
+        let ids = supplier_id_strings(supplier_ids);
         SupplierCapabilityRepository::new(self.db, SUPPLIER_CAPABILITIES)
             .find_many(doc! { "supplier_id": { "$in": ids } }, executor)
             .await

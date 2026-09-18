@@ -9,12 +9,13 @@ use persistence_core::{Executor, NoTransaction};
 
 use super::ReturnsService;
 use super::approval::{ensure_receipt_reversal_final_approve_posting, start_receipt_reversal_approval};
-use super::shared::{DEFAULT_FINANCE_REVIEWER, RECEIPT_REVERSAL_COMMAND_PREFIX, return_command_no};
+use super::shared::{
+    DEFAULT_FINANCE_REVIEWER, RECEIPT_REVERSAL_COMMAND_PREFIX, ensure_cumulative_within, or_not_found,
+    reject_if_reversed, return_command_no,
+};
 use super::version_conflict::conflict_if_stale_version;
 use crate::dto::{CommitReceiptReversalRequest, CreateReceiptReversalRequest};
-use crate::entity::returns::{
-    CumulativeAmountLimit, ReceiptReversal, ReceiptReversalData, ReceiptReversalStatus,
-};
+use crate::entity::returns::{ReceiptReversal, ReceiptReversalData, ReceiptReversalStatus};
 use crate::repository::ReturnsExt;
 use crate::{Error, Result};
 
@@ -92,11 +93,10 @@ impl ReturnsService {
     /// # 错误
     /// 不存在时返回 `NotFound`。
     pub async fn load_receipt_reversal(&self, id: &str) -> Result<ReceiptReversal> {
-        self.db
-            .receipt_reversals()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("回款冲正单不存在".to_string()))
+        or_not_found(
+            self.db.receipt_reversals().find_by_id(id, &mut NoTransaction).await?,
+            "回款冲正单不存在",
+        )
     }
 
     /// 读取冲正单并执行最终通过守卫；本接口不修改财务或销售事实。
@@ -105,14 +105,11 @@ impl ReturnsService {
         reversal_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<ReceiptReversal> {
-        let reversal = db
-            .receipt_reversals()
-            .find_by_id(reversal_id, executor)
-            .await?
-            .ok_or_else(|| Error::NotFound("回款冲正单不存在".to_string()))?;
-        if reversal.status == ReceiptReversalStatus::Reversed {
-            return Err(Error::BusinessLogicError("已冲正单据不能再过账".to_string()));
-        }
+        let reversal = or_not_found(
+            db.receipt_reversals().find_by_id(reversal_id, executor).await?,
+            "回款冲正单不存在",
+        )?;
+        reject_if_reversed(reversal.status == ReceiptReversalStatus::Reversed, "已冲正单据不能再过账")?;
         ensure_receipt_reversal_final_approve_posting(&reversal)?;
         Ok(reversal)
     }
@@ -132,8 +129,12 @@ impl ReturnsService {
                 executor,
             )
             .await?;
-        CumulativeAmountLimit::ensure_within_limit(receipt_amount, reversed_before, reversal.amount)
-            .map_err(|_| Error::BusinessLogicError("累计冲正金额不得超过原回款金额".to_string()))
+        ensure_cumulative_within(
+            receipt_amount,
+            reversed_before,
+            reversal.amount,
+            "累计冲正金额不得超过原回款金额",
+        )
     }
 
     /// 财务逆向分配成功后写回本域过账状态；审计与销售刷新由根流程继续执行。

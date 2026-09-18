@@ -295,21 +295,16 @@ mod tests {
     use crate::dto::{
         ControlledEvidenceKind, ControlledEvidenceRef, DifferenceReasonCode, DirectReconciliationConclusion,
     };
-    use crate::entity::integration_ops::{
-        ErrorClass, IntegrationErrorTask, IntegrationErrorTaskData, IntegrationErrorTaskId,
-    };
+    use crate::entity::integration_ops::{ErrorClass, IntegrationErrorTask, IntegrationErrorTaskId};
 
     fn task() -> IntegrationErrorTask {
-        IntegrationErrorTask::new(
+        IntegrationErrorTask::with_derived_owner_role(
             IntegrationErrorTaskId::new("task-1"),
-            IntegrationErrorTaskData {
-                message_id: Some(erp_core::ids::InboxMessageId::new("message-1")),
-                business_object_id: None,
-                error_class: ErrorClass::ResultUnknown,
-                owner_role: Some("role-operations".to_string()),
-                owner_user_id: Some("user-1".to_string()),
-                owner_org_unit_id: "org-ops".to_string(),
-            },
+            Some(erp_core::ids::InboxMessageId::new("message-1")),
+            None,
+            ErrorClass::ResultUnknown,
+            "user-1".to_string(),
+            "org-ops".to_string(),
         )
         .unwrap()
     }

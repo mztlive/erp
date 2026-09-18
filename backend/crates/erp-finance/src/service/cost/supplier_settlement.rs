@@ -1,5 +1,4 @@
 //! 结算成本差额缺少权威原成本链时保持原失败关闭。
-use std::str::FromStr;
 
 use erp_core::money::Amount;
 use mongodb::Database;
@@ -16,7 +15,7 @@ pub struct SettlementCostDeltaFact {
     pub tax: Amount,
 }
 fn zero_amount() -> Amount {
-    Amount::from_str("0.00").expect("零是合法金额")
+    Amount::zero()
 }
 /// 仅全零三元组返回空计划，其余保持原业务错误；不得伪造 CostEntry。
 pub fn build_settlement_cost_delta(delta: &SettlementCostDeltaFact) -> Result<Vec<CostEntry>> {
@@ -41,6 +40,8 @@ pub async fn persist_settlement_costs(
 }
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::*;
     #[test]
     fn cost_delta_writer_blocks_nonzero_delta_without_authoritative_lineage() {

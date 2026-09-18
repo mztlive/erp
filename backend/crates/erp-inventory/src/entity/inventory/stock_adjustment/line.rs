@@ -8,14 +8,15 @@ use std::str::FromStr;
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
+use erp_core::Result;
 use erp_core::ids::{SkuId, StockAdjustmentId, StockAdjustmentLineId};
 use erp_core::money::Quantity;
 use erp_core::validation::normalize_required_text;
-use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 use super::super::stock_movement::MovementDirection;
 use super::AdjustmentReasonType;
+use crate::entity::inventory::ensure_positive_quantity;
 
 /// 调整明细行主键最大长度。
 const LINE_ID_MAX_LEN: usize = 128;
@@ -65,7 +66,7 @@ impl StockAdjustmentLineUpdate {
         let line_id =
             normalize_required_text(line_id.into(), "明细行主键不能为空", LINE_ID_MAX_LEN, "明细行主键过长")?;
         let quantity = Quantity::from_str(quantity)?;
-        ensure_positive_quantity(quantity)?;
+        ensure_positive_quantity(quantity, "调整数量必须为正数")?;
         Ok(Self { line_id, quantity, direction })
     }
 }
@@ -104,7 +105,7 @@ impl StockAdjustmentLine {
     /// # 错误
     /// 调整数量非正时返回错误。
     pub fn new(id: StockAdjustmentLineId, data: StockAdjustmentLineData) -> Result<Self> {
-        ensure_positive_quantity(data.quantity)?;
+        ensure_positive_quantity(data.quantity, "调整数量必须为正数")?;
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             stock_adjustment_id: data.stock_adjustment_id,
@@ -153,30 +154,13 @@ impl StockAdjustmentLine {
         quantity: Quantity,
         direction: Option<MovementDirection>,
     ) -> Result<()> {
-        ensure_positive_quantity(quantity)?;
+        ensure_positive_quantity(quantity, "调整数量必须为正数")?;
         let direction = direction.unwrap_or(self.direction);
         reason_type.ensure_direction(direction)?;
         self.quantity = quantity;
         self.direction = direction;
         Ok(())
     }
-}
-
-/// 校验调整数量为正数。
-///
-/// # 参数
-/// * `quantity` - 待校验数量
-///
-/// # 返回
-/// 数量为正时返回 `Ok(())`。
-///
-/// # 错误
-/// 数量为零或负数时返回错误。
-fn ensure_positive_quantity(quantity: Quantity) -> Result<()> {
-    if quantity.to_decimal() <= rust_decimal::Decimal::ZERO {
-        return Err(Error::from("调整数量必须为正数"));
-    }
-    Ok(())
 }
 
 #[cfg(test)]

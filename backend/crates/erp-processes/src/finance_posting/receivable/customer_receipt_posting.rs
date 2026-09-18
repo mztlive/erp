@@ -591,6 +591,7 @@ pub(super) async fn persist_loaded_commit_start(
 ///
 /// # 错误
 /// 定义图、收据读取或输入装配失败时返回错误。
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn prepare_dispatch_start(
     db: &Database,
     binding: &ApprovalDefinitionBinding,

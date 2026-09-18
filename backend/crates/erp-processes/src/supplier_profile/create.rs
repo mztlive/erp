@@ -120,6 +120,7 @@ impl SupplierProfileService {
     }
 
     /// 从已校验创建命令构造全部待写实体。
+    #[allow(clippy::too_many_arguments)]
     fn prepare_create(
         &self,
         req: SaveSupplierProfileRequest,
@@ -403,6 +404,7 @@ fn party_from_seed(seed: &SupplierPartySeed) -> Result<(Party, PartyRevision)> {
 ///
 /// # 约束
 /// 本函数可分配 ID、读取 DTO 与操作人；不得实现实体不变式。
+#[allow(clippy::too_many_arguments)]
 fn allocate_creation_plan(
     req: &SaveSupplierProfileRequest,
     party_no: String,

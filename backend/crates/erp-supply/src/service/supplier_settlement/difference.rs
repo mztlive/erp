@@ -79,9 +79,7 @@ impl SupplierSettlementService {
             .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("结算差异不存在".to_string()))?;
-        difference
-            .ensure_version(req.expected_difference_version)
-            .map_err(|_| Error::ConflictError("结算差异版本已变化，请刷新后重试".to_string()))?;
+        super::evidence::ensure_difference_version(difference.base.version, req.expected_difference_version)?;
         let item = self
             .db
             .supplier_settlement_items()

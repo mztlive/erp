@@ -10,13 +10,13 @@ use super::InventoryService;
 use super::movement::load_movement_source_document_nos;
 use crate::dto::scope::{BALANCE_OWNERSHIP_BASIS, BALANCE_SCOPE_SUMMARY};
 use crate::dto::{
-    InventoryListPage, PageView, SortDir, StockBalanceDetailView, StockBalanceListParams, StockBalanceView,
+    InventoryListPage, PageView, StockBalanceDetailView, StockBalanceListParams, StockBalanceView,
     StockMovementView, ensure_scope_version,
 };
 use crate::entity::inventory::{StockBalance, StockMovement};
 use crate::error::{Error, Result};
 use crate::ports::{SkuFact, SkuRevisionFact, WarehouseFact, WarehouseRevisionFact};
-use crate::repository::{InventoryExt, StockBalanceFilter, StockMovementFilter};
+use crate::repository::{InventoryExt, StockBalanceFilter, StockBalanceRow, StockMovementFilter};
 
 impl InventoryService {
     /// 分页查询库存余额列表（W10 余额视图）。
@@ -76,6 +76,7 @@ impl InventoryService {
                         session,
                     )
                     .await?;
+                    let (sort_by, sort_ascending) = query.paging.sort_selection();
                     let filter = StockBalanceFilter {
                         search,
                         warehouse_ids: authorization
@@ -84,8 +85,8 @@ impl InventoryService {
                         sku_id: query.sku_id,
                         page: query.paging.page,
                         page_size: query.paging.page_size,
-                        sort_by: Some(query.paging.sort_by.to_string()),
-                        sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
+                        sort_by,
+                        sort_ascending,
                     };
                     let page = db.stock_balances().search_stock_balances(&filter, session).await?;
                     Ok::<_, Error>((page, authorization))
@@ -105,16 +106,7 @@ impl InventoryService {
             .items
             .into_iter()
             .map(|row| {
-                let balance = StockBalanceRef {
-                    id: row.id,
-                    warehouse_id: row.warehouse_id.to_string(),
-                    sku_id: row.sku_id.to_string(),
-                    on_hand_quantity: row.on_hand_quantity,
-                    reserved_quantity: row.reserved_quantity,
-                    available_quantity: row.available_quantity,
-                    version: row.version.to_string(),
-                    last_movement_id: row.last_movement_id.as_ref().map(ToString::to_string),
-                };
+                let balance = StockBalanceRef::from(row);
                 let has_active_reservation =
                     active_reservation_dims.contains(&(balance.warehouse_id.clone(), balance.sku_id.clone()));
                 let can_create_adjustment = enrichments.warehouses.contains_key(&balance.warehouse_id)
@@ -207,24 +199,8 @@ impl InventoryService {
             !reservations.is_empty(),
             authorization.can_create(balance.warehouse_id.as_ref()),
         );
-        let mut recent_movements: Vec<StockMovementView> = movements
-            .items
-            .into_iter()
-            .map(|row| StockMovementView {
-                id: row.id,
-                warehouse_id: row.warehouse_id.to_string(),
-                sku_id: row.sku_id.to_string(),
-                movement_type: row.movement_type,
-                direction: row.direction,
-                quantity: row.quantity,
-                source_document_id: row.source_document_id,
-                source_document_no: None,
-                source_line_id: row.source_line_id,
-                occurred_at: row.occurred_at.unix_secs(),
-                recorded_at: row.recorded_at.unix_secs(),
-                recorded_by: row.recorded_by.clone(),
-            })
-            .collect();
+        let mut recent_movements: Vec<StockMovementView> =
+            movements.items.into_iter().map(super::movement::movement_row_view).collect();
         let source_document_nos =
             load_movement_source_document_nos(&self.db, self.fulfillment_facts.as_ref(), &recent_movements)
                 .await?;
@@ -358,6 +334,38 @@ struct StockBalanceRef {
     /// 已应用最后流水。
     last_movement_id: Option<String>,
 }
+
+impl From<StockBalanceRow> for StockBalanceRef {
+    /// 由列表投影行组装最小余额事实。
+    fn from(row: StockBalanceRow) -> Self {
+        Self {
+            id: row.id,
+            warehouse_id: row.warehouse_id.to_string(),
+            sku_id: row.sku_id.to_string(),
+            on_hand_quantity: row.on_hand_quantity,
+            reserved_quantity: row.reserved_quantity,
+            available_quantity: row.available_quantity,
+            version: row.version.to_string(),
+            last_movement_id: row.last_movement_id.as_ref().map(ToString::to_string),
+        }
+    }
+}
+
+impl From<&StockBalance> for StockBalanceRef {
+    /// 由余额实体组装最小余额事实（详情与列表共用同一视图组装）。
+    fn from(balance: &StockBalance) -> Self {
+        Self {
+            id: balance.base.id.clone(),
+            warehouse_id: balance.warehouse_id.to_string(),
+            sku_id: balance.sku_id.to_string(),
+            on_hand_quantity: balance.on_hand_quantity,
+            reserved_quantity: balance.reserved_quantity,
+            available_quantity: balance.available_quantity,
+            version: balance.base.version.to_string(),
+            last_movement_id: balance.last_movement_id.as_ref().map(ToString::to_string),
+        }
+    }
+}
 /// 由余额事实与基础信息投影组装余额视图（列表与详情共用）。
 ///
 /// # 参数
@@ -419,16 +427,7 @@ fn build_balance_view(
     can_create_adjustment: bool,
 ) -> StockBalanceView {
     enrich_balance_view(
-        &StockBalanceRef {
-            id: balance.base.id.clone(),
-            warehouse_id: balance.warehouse_id.to_string(),
-            sku_id: balance.sku_id.to_string(),
-            on_hand_quantity: balance.on_hand_quantity,
-            reserved_quantity: balance.reserved_quantity,
-            available_quantity: balance.available_quantity,
-            version: balance.base.version.to_string(),
-            last_movement_id: balance.last_movement_id.as_ref().map(ToString::to_string),
-        },
+        &StockBalanceRef::from(balance),
         enrichments,
         has_active_reservation,
         can_create_adjustment,
