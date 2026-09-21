@@ -2,8 +2,6 @@
 
 import { UploadIcon } from "lucide-react"
 
-import { surfaceInsetClassName } from "@/components/business"
-import { cn } from "@/lib/utils"
 import { toFieldErrors } from "@/components/form"
 import { validateSalesOrderContractId } from "@/features/sales-orders/lib/sales-order-create-model"
 import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
@@ -29,7 +27,7 @@ export function SalesOrderCreateContractSection({
     onUploadClick,
 }: SalesOrderCreateContractSectionProps) {
     return (
-        <div className="space-y-3">
+        <div className="space-y-2">
             <form.AppField
                 name="contractId"
                 validators={{
@@ -43,6 +41,7 @@ export function SalesOrderCreateContractSection({
                     const errors = toFieldErrors(field.state.meta.errors)
                     return (
                         <Field
+                            className="max-w-4xl gap-2"
                             id="contractId"
                             tabIndex={-1}
                             data-invalid={isInvalid || undefined}
@@ -51,8 +50,8 @@ export function SalesOrderCreateContractSection({
                                 有效合同
                                 <span className="text-destructive">*</span>
                             </FieldLabel>
-                            <div className="flex items-start gap-2">
-                                <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-start gap-2">
+                                <div className="min-w-0 flex-1 basis-48">
                                     <ContractSearchCombobox
                                         id="sales-orders-create-contract"
                                         value={field.state.value || undefined}
@@ -98,12 +97,7 @@ export function SalesOrderCreateContractSection({
                     contractRevisionLabel ||
                     customerName ||
                     settlementEntity ? (
-                        <div
-                            className={cn(
-                                surfaceInsetClassName,
-                                "flex flex-wrap items-center gap-x-6 gap-y-2 px-3 py-3 text-sm",
-                            )}
-                        >
+                        <div className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-1 text-xs [&>span]:min-w-0 [&>span]:break-words">
                             {contractRevisionLabel ? (
                                 <Badge
                                     variant="outline"
@@ -136,8 +130,7 @@ export function SalesOrderCreateContractSection({
                         </div>
                     ) : (
                         <p className="text-xs leading-relaxed text-muted-foreground">
-                            选择合同后自动带出客户、合同版本与结算主体；无可用合同时，可上传合同
-                            PDF。
+                            选择合同后带入客户、结算主体和付款条件，付款条件可按本单调整。
                         </p>
                     )
                 }

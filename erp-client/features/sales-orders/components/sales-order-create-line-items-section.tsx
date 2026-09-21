@@ -2,8 +2,13 @@
 
 import * as React from "react"
 
-import { PlusIcon, PackageSearchIcon } from "lucide-react"
+import { PlusIcon, PackageSearchIcon, ChevronDownIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import {
+    Collapsible,
+    CollapsibleTrigger,
+    CollapsibleContent,
+} from "@/components/ui/collapsible"
 import { QuantityValue } from "@/components/business"
 import { toast } from "@/components/ui/toast"
 import { SellableSkuSelectDialog } from "@/features/sales-orders/components/sellable-sku-select-dialog"
@@ -30,6 +35,9 @@ export function SalesOrderCreateLineItemsSection({
     procurementFetching = false,
     procurementError = false,
 }: SalesOrderCreateLineItemsSectionProps) {
+    const [remarkOpen, setRemarkOpen] = React.useState(
+        Boolean(form.getFieldValue("remark")),
+    )
     const [picker, setPicker] = React.useState<SkuPickerState | null>(null)
 
     const handleConfirmPicks = React.useCallback(
@@ -70,7 +78,7 @@ export function SalesOrderCreateLineItemsSection({
             <section
                 id="sales-line-items-section"
                 tabIndex={-1}
-                className="min-w-0 space-y-4"
+                className="min-w-0 space-y-3"
                 aria-labelledby="sales-create-lines-title"
             >
                 <form.Subscribe
@@ -108,13 +116,14 @@ export function SalesOrderCreateLineItemsSection({
                                         )}
                                     </span>
                                 </div>
-                                {nature === "physical_service" &&
-                                lines.length > 0 ? (
+                                {nature === "physical_service" ? (
                                     <div className="flex flex-wrap items-center gap-3">
-                                        <SalesOrderCreateDueDateBatchBar
-                                            lineCount={lines.length}
-                                            onApply={handleApplyDueDate}
-                                        />
+                                        {lines.length > 0 ? (
+                                            <SalesOrderCreateDueDateBatchBar
+                                                lineCount={lines.length}
+                                                onApply={handleApplyDueDate}
+                                            />
+                                        ) : null}
                                         <Button
                                             id="sales-orders-create-line-items-add"
                                             type="button"
@@ -131,9 +140,9 @@ export function SalesOrderCreateLineItemsSection({
                             </div>
                             {nature === "physical_service" &&
                             lines.length === 0 ? (
-                                <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-border px-6 py-10 text-center">
+                                <div className="flex min-h-24 items-center justify-center gap-3 rounded-md border border-dashed border-border bg-muted/10 px-4 py-4">
                                     <PackageSearchIcon
-                                        className="size-6 text-muted-foreground"
+                                        className="size-5 shrink-0 text-muted-foreground"
                                         aria-hidden="true"
                                     />
                                     <div className="space-y-1">
@@ -141,20 +150,9 @@ export function SalesOrderCreateLineItemsSection({
                                             尚未添加商品
                                         </p>
                                         <p className="text-sm text-muted-foreground">
-                                            从商品池选择商品后，填写数量、含税单价和承诺交付日。
+                                            点击“添加商品”，选择后填写数量、含税单价和交付日。
                                         </p>
                                     </div>
-                                    <Button
-                                        id="sales-orders-create-line-items-add"
-                                        type="button"
-                                        variant="outline"
-                                        onClick={() =>
-                                            setPicker({ mode: "add" })
-                                        }
-                                    >
-                                        <PlusIcon aria-hidden="true" />
-                                        添加商品
-                                    </Button>
                                 </div>
                             ) : null}
                         </>
@@ -182,18 +180,45 @@ export function SalesOrderCreateLineItemsSection({
                     onConfirm={handleConfirmPicks}
                 />
             </section>
-            <section className="border-t border-grid pt-6">
-                <form.AppField name="remark">
-                    {(field) => (
-                        <field.TextareaField
-                            id="sales-orders-create-remark"
-                            label="内部说明（选填）"
-                            placeholder="补充客户确认、交付或内部协同说明"
-                            rows={2}
-                        />
-                    )}
-                </form.AppField>
-            </section>
+            <form.AppField name="remark">
+                {(field) => (
+                    <Collapsible
+                        open={remarkOpen || field.state.meta.errors.length > 0}
+                        onOpenChange={setRemarkOpen}
+                        className="border-t border-grid pt-3"
+                    >
+                        <CollapsibleTrigger
+                            id="sales-orders-create-remark-toggle"
+                            render={
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="-ml-2 text-muted-foreground"
+                                />
+                            }
+                        >
+                            <ChevronDownIcon
+                                className="size-4 transition-transform in-data-[panel-open]:rotate-180"
+                                aria-hidden="true"
+                            />
+                            {field.state.value
+                                ? "内部说明（已填写）"
+                                : "内部说明（选填）"}
+                        </CollapsibleTrigger>
+                        <CollapsibleContent keepMounted>
+                            <field.TextareaField
+                                id="sales-orders-create-remark"
+                                label="内部说明（选填）"
+                                hideLabel
+                                className="pt-2"
+                                placeholder="补充客户确认、交付或内部协同说明"
+                                rows={2}
+                            />
+                        </CollapsibleContent>
+                    </Collapsible>
+                )}
+            </form.AppField>
         </>
     )
 }

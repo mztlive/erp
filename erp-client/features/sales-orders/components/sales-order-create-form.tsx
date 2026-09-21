@@ -324,6 +324,7 @@ export function SalesOrderCreateForm({
             ) : null}
 
             <form
+                className="flex min-w-0 flex-1 flex-col"
                 noValidate
                 onSubmit={(event) => {
                     event.preventDefault()
@@ -331,17 +332,44 @@ export function SalesOrderCreateForm({
                     void form.handleSubmit()
                 }}
             >
-                <div className="min-w-0 space-y-7">
+                <div className="flex min-w-0 flex-1 flex-col gap-5">
                     <section
-                        className="min-w-0 space-y-4 border-b border-grid pb-6"
+                        className="min-w-0 space-y-4 rounded-lg border border-grid bg-muted/20 p-4"
                         aria-labelledby="sales-create-contract-title"
                     >
-                        <h2
-                            id="sales-create-contract-title"
-                            className="font-heading text-base font-semibold"
-                        >
-                            合同与客户
-                        </h2>
+                        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                            <h2
+                                id="sales-create-contract-title"
+                                className="font-heading text-sm font-semibold"
+                            >
+                                基本信息
+                            </h2>
+                            <form.AppField name="ownerUserId">
+                                {() => null}
+                            </form.AppField>
+                            <form.AppField name="ownerName">
+                                {(field) => (
+                                    <div
+                                        id="sales-orders-create-header-owner-name"
+                                        tabIndex={-1}
+                                        className="flex min-w-0 flex-wrap items-baseline gap-2 text-xs"
+                                        aria-live="polite"
+                                    >
+                                        <span className="text-muted-foreground">
+                                            负责销售
+                                        </span>
+                                        <span className="break-words font-medium">
+                                            {profileQuery.isPending
+                                                ? "加载当前用户…"
+                                                : profileQuery.isError
+                                                  ? "无法获取登录用户"
+                                                  : field.state.value ||
+                                                    "当前用户未就绪"}
+                                        </span>
+                                    </div>
+                                )}
+                            </form.AppField>
+                        </div>
                         <SalesOrderCreateContractSection
                             form={form}
                             initialCustomerId={initialCustomerId}
@@ -349,15 +377,13 @@ export function SalesOrderCreateForm({
                             onContractChange={handleContractChange}
                             onUploadClick={() => setUploadOpen(true)}
                         />
+                        <SalesOrderCreateHeaderFields
+                            form={form}
+                            natureLocked={natureLocked}
+                            applyNature={applyNature}
+                            onNatureChangeRequest={setPendingNature}
+                        />
                     </section>
-                    <SalesOrderCreateHeaderFields
-                        form={form}
-                        natureLocked={natureLocked}
-                        profilePending={profileQuery.isPending}
-                        profileError={profileQuery.isError}
-                        applyNature={applyNature}
-                        onNatureChangeRequest={setPendingNature}
-                    />
                     <SalesOrderCreateLineItemsSection
                         form={form}
                         procurementOwners={
@@ -442,7 +468,7 @@ export function SalesOrderCreateForm({
     if (chrome === "none") return editor
 
     return (
-        <PageScaffold className="pb-8">
+        <PageScaffold density="compact" className="pb-8">
             <DetailPageHeader
                 title={purpose === "create" ? "新建销售单" : "编辑销售单"}
                 documentNumber={submission.draftIdentity?.documentNumber}

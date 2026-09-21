@@ -95,7 +95,7 @@ export function SalesOrderCreateTotalBar({
                     )
                     return (
                         <StickyTotalBar
-                            className="rounded-none border-0 border-t border-grid px-0 py-4 shadow-none [&>div>div.grid]:block"
+                            className="mt-auto rounded-none border-0 border-t border-grid px-0 py-3 shadow-none [&>div>div.grid]:block"
                             items={[
                                 {
                                     id: "gross",
@@ -103,7 +103,7 @@ export function SalesOrderCreateTotalBar({
                                     value: (
                                         <MoneyValue
                                             value={totals.gross}
-                                            className="text-2xl font-semibold"
+                                            className="text-xl font-semibold"
                                         />
                                     ),
                                     description: (

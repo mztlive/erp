@@ -69,10 +69,12 @@ function Harness({
     nature = "physical_service",
     fetching = false,
     error = false,
+    remark = "",
 }: {
     nature?: SalesOrderNature
     fetching?: boolean
     error?: boolean
+    remark?: string
 }) {
     const defaultValues = useSalesOrderCreateDefaults({
         initialCustomerId: "",
@@ -81,7 +83,7 @@ function Harness({
         initialNature: nature,
         initialDraft: null,
     })
-    const form = useAppForm({ defaultValues })
+    const form = useAppForm({ defaultValues: { ...defaultValues, remark } })
     return (
         <form>
             <SalesOrderCreateLineItemsSection
@@ -220,4 +222,48 @@ test("an empty order shows the line error and can recover after adding a product
         expect(screen.getByText("至少需要一条销售明细")).toBeTruthy(),
     )
     expect(save).toHaveBeenCalledTimes(1)
+})
+
+test("collapsing internal notes preserves their value when reopened", async () => {
+    render(<Harness />)
+    const toggle = screen.getByRole("button", { name: "内部说明（选填）" })
+    expect(toggle.getAttribute("aria-expanded")).toBe("false")
+    fireEvent.click(toggle)
+    fireEvent.change(
+        screen.getByRole("textbox", { name: "内部说明（选填）" }),
+        {
+            target: { value: "交付前联系客户" },
+        },
+    )
+    const filledToggle = screen.getByRole("button", {
+        name: "内部说明（已填写）",
+    })
+    fireEvent.click(filledToggle)
+    await waitFor(() =>
+        expect(filledToggle.getAttribute("aria-expanded")).toBe("false"),
+    )
+    fireEvent.click(filledToggle)
+    expect(
+        (
+            screen.getByRole("textbox", {
+                name: "内部说明（选填）",
+            }) as HTMLTextAreaElement
+        ).value,
+    ).toBe("交付前联系客户")
+})
+
+test("existing internal notes are expanded when the editor opens", () => {
+    render(<Harness remark="客户已确认交付安排" />)
+    expect(
+        screen
+            .getByRole("button", { name: "内部说明（已填写）" })
+            .getAttribute("aria-expanded"),
+    ).toBe("true")
+    expect(
+        (
+            screen.getByRole("textbox", {
+                name: "内部说明（选填）",
+            }) as HTMLTextAreaElement
+        ).value,
+    ).toBe("客户已确认交付安排")
 })
