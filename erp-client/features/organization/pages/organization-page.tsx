@@ -17,7 +17,6 @@ import {
     listWorkspaceFilterStatusText,
     listWorkspaceStyles as styles,
 } from "@/components/business/list-workspace"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { OrganizationChangeDialog } from "@/features/organization/components/organization-change-dialog"
@@ -42,6 +41,7 @@ import {
 import {
     buildOrganizationForest,
     flattenTree,
+    matchesOrganizationFilters,
 } from "@/features/organization/lib/tree"
 import {
     mergeOrganizationSearchParams,
@@ -130,7 +130,7 @@ export function OrganizationPage() {
             <ListWorkspaceHeader
                 eyebrow="系统"
                 title="组织架构"
-                description={ORGANIZATION_BOUNDARY_NOTICE}
+                description="维护部门与团队，管理成员归属和组织管理范围。"
             >
                 {canManage ? (
                     <Button
@@ -150,18 +150,9 @@ export function OrganizationPage() {
                 ) : null}
             </ListWorkspaceHeader>
 
-            {view ? (
-                <Alert>
-                    <AlertTitle>当前范围</AlertTitle>
-                    <AlertDescription>
-                        {view.scopeSummary} · 组织版本{" "}
-                        {view.organizationVersion}
-                    </AlertDescription>
-                </Alert>
-            ) : null}
-
             <ListWorkSurface
                 ariaLabel="组织树"
+                tableClassName="p-0"
                 toolbar={
                     <ListWorkspaceFilterBar
                         idPrefix="organization"
@@ -223,7 +214,11 @@ export function OrganizationPage() {
                         resultStatus={listWorkspaceFilterStatusText({
                             loading: stateQuery.isFetching,
                             failed: stateQuery.isError,
-                            resultCount: view ? forest.length : undefined,
+                            resultCount: view
+                                ? view.units.filter((unit) =>
+                                      matchesOrganizationFilters(unit, url),
+                                  ).length
+                                : undefined,
                             noun: "个组织",
                         })}
                         chips={[
@@ -294,12 +289,22 @@ export function OrganizationPage() {
                             }
                         />
                     ) : (
-                        <div className="grid min-w-0 gap-6 overflow-x-hidden lg:grid-cols-[minmax(0,16rem)_minmax(0,1fr)]">
-                            <OrganizationTree
-                                nodes={forest}
-                                selectedId={selected?.unit.id}
-                                onSelect={(unitId) => pushUrl({ unitId })}
-                            />
+                        <div className="grid min-h-[32rem] min-w-0 overflow-x-hidden lg:grid-cols-[288px_minmax(0,1fr)]">
+                            <aside className="min-w-0 border-b border-border bg-muted/20 p-4 lg:border-r lg:border-b-0 lg:p-5">
+                                <div className="mb-4 flex items-center justify-between gap-3">
+                                    <h2 className="text-sm font-medium">
+                                        组织目录
+                                    </h2>
+                                    <span className="text-xs text-muted-foreground">
+                                        部门 / 团队
+                                    </span>
+                                </div>
+                                <OrganizationTree
+                                    nodes={forest}
+                                    selectedId={selected?.unit.id}
+                                    onSelect={(unitId) => pushUrl({ unitId })}
+                                />
+                            </aside>
                             {selected && view ? (
                                 <OrganizationUnitPanel
                                     node={selected}
@@ -317,6 +322,11 @@ export function OrganizationPage() {
                     )
                 }
             />
+
+            <div className="space-y-1 text-xs leading-5 text-muted-foreground">
+                <p>{ORGANIZATION_BOUNDARY_NOTICE}</p>
+                {view ? <p>当前范围：{view.scopeSummary}</p> : null}
+            </div>
 
             {view && canManage ? (
                 <OrganizationChangeDialog

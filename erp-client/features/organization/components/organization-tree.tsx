@@ -1,5 +1,7 @@
 "use client"
 
+import { Building2Icon, UsersIcon } from "lucide-react"
+
 import { Button } from "@/components/ui/button"
 import { KIND_LABEL } from "@/features/organization/lib/labels"
 import type { OrgTreeNode } from "@/features/organization/lib/tree"
@@ -28,11 +30,26 @@ function TreeItems({
                             type="button"
                             variant={selected ? "secondary" : "ghost"}
                             className={cn(
-                                "h-auto min-h-9 w-full min-w-0 justify-start gap-2 whitespace-normal px-2 py-1.5 text-left text-[13px]",
+                                "h-auto min-h-10 w-full min-w-0 justify-start gap-2 whitespace-normal rounded-md px-2 py-2 text-left text-[13px]",
+                                selected
+                                    ? "bg-primary/10 font-medium text-primary hover:bg-primary/15"
+                                    : "text-muted-foreground hover:text-foreground",
                             )}
-                            style={{ paddingLeft: 8 + depth * 16 }}
+                            style={{ paddingLeft: 8 + Math.min(depth, 6) * 12 }}
+                            aria-current={selected ? "page" : undefined}
                             onClick={() => onSelect(node.unit.id)}
                         >
+                            {node.unit.kind === "department" ? (
+                                <Building2Icon
+                                    className="size-4 shrink-0"
+                                    aria-hidden="true"
+                                />
+                            ) : (
+                                <UsersIcon
+                                    className="size-4 shrink-0"
+                                    aria-hidden="true"
+                                />
+                            )}
                             <span className="min-w-0 flex-1 wrap-anywhere">
                                 {node.unit.name}
                             </span>
@@ -66,7 +83,10 @@ export function OrganizationTree({
     onSelect: (id: string) => void
 }) {
     return (
-        <nav aria-label="组织树" className="min-w-0 overflow-x-hidden">
+        <nav
+            aria-label="组织树"
+            className="max-h-64 min-w-0 overflow-x-hidden overflow-y-auto lg:max-h-[36rem]"
+        >
             <TreeItems
                 nodes={nodes}
                 depth={0}

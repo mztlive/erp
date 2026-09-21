@@ -195,6 +195,14 @@ type AccessGrantView = Readonly<{
     sourceType: string
     sourceLabel: string
     note?: string
+    /** 数据范围绑定的资源编码。 */
+    resource?: string
+    /** 数据范围绑定的动作。 */
+    actions?: readonly string[]
+    /** 数据范围类型稳定码，如 self_owned。 */
+    scopeType?: string
+    /** 组织 / 团队等显式目标；本人负责、协作参与为空。 */
+    scopeTargets?: readonly string[]
 }>
 
 type AccessExplanationView = Readonly<{

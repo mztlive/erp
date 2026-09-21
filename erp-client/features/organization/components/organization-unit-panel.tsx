@@ -1,5 +1,8 @@
 "use client"
 
+import { PlusIcon, ShieldCheckIcon, UsersIcon } from "lucide-react"
+
+import { BusinessStatusBadge } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { KIND_LABEL } from "@/features/organization/lib/labels"
 import {
@@ -31,14 +34,45 @@ export function OrganizationUnitPanel({
     const unit = node.unit
     const segment = toAutomationIdSegment(unit.id)
     return (
-        <section className="min-w-0 space-y-4 overflow-x-hidden">
-            <div className="min-w-0 space-y-1">
-                <h2 className="text-lg font-semibold wrap-anywhere">
-                    {unit.name}
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                    {KIND_LABEL[unit.kind]} · {unit.enabled ? "启用" : "停用"}
+        <section
+            aria-label="组织资料"
+            className="min-w-0 space-y-7 overflow-x-hidden px-4 py-6 sm:px-6 lg:px-7"
+        >
+            <div className="min-w-0 space-y-3">
+                <p className="text-xs text-muted-foreground">
+                    {unit.parent_id
+                        ? (view.units.find((item) => item.id === unit.parent_id)
+                              ?.name ?? "上级组织不可见")
+                        : "一级组织"}{" "}
+                    / {KIND_LABEL[unit.kind]}
                 </p>
+                <div className="flex flex-wrap items-center gap-3">
+                    <h2 className="text-2xl font-semibold tracking-tight wrap-anywhere">
+                        {unit.name}
+                    </h2>
+                    <BusinessStatusBadge
+                        context="detail"
+                        label={unit.enabled ? "启用" : "停用"}
+                        tone={unit.enabled ? "success" : "neutral"}
+                    />
+                </div>
+                <p className="text-sm text-muted-foreground">
+                    主属成员{" "}
+                    <span className="num text-foreground">
+                        {node.members.length}
+                    </span>{" "}
+                    人<span className="mx-2 text-border">/</span>
+                    管理授权{" "}
+                    <span className="num text-foreground">
+                        {node.management.length}
+                    </span>{" "}
+                    项
+                </p>
+                {!unit.enabled ? (
+                    <p className="text-xs text-muted-foreground">
+                        该组织已停用，不能新增下级、调入成员或授予管理范围。
+                    </p>
+                ) : null}
             </div>
             {canManage ? (
                 <div className="flex min-w-0 flex-wrap gap-2">
@@ -52,6 +86,7 @@ export function OrganizationUnitPanel({
                             onChange("create_unit", { parentId: unit.id })
                         }
                     >
+                        <PlusIcon className="size-3.5" aria-hidden="true" />
                         新建下级
                     </Button>
                     <Button
@@ -93,43 +128,47 @@ export function OrganizationUnitPanel({
                     >
                         停用
                     </Button>
-                    <Button
-                        id={`organization-unit-${segment}-transfer`}
-                        type="button"
-                        size="sm"
-                        disabled={!unit.enabled}
-                        onClick={() =>
-                            onChange("transfer_member", { orgUnitId: unit.id })
-                        }
-                    >
-                        成员调岗
-                    </Button>
-                    <Button
-                        id={`organization-unit-${segment}-grant`}
-                        type="button"
-                        size="sm"
-                        disabled={!unit.enabled}
-                        onClick={() =>
-                            onChange("grant_management", { orgUnitId: unit.id })
-                        }
-                    >
-                        授予管理范围
-                    </Button>
                 </div>
             ) : null}
 
-            <div className="min-w-0 space-y-2">
-                <h3 className="text-sm font-medium">成员</h3>
+            <div className="min-w-0 space-y-4 border-t border-border pt-6">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <h3 className="flex items-center gap-2 text-sm font-medium">
+                        <UsersIcon
+                            className="size-4 text-muted-foreground"
+                            aria-hidden="true"
+                        />
+                        成员{" "}
+                        <span className="num text-xs text-muted-foreground">
+                            {node.members.length}
+                        </span>
+                    </h3>
+                    {canManage ? (
+                        <Button
+                            id={`organization-unit-${segment}-transfer`}
+                            type="button"
+                            size="sm"
+                            disabled={!unit.enabled}
+                            onClick={() =>
+                                onChange("transfer_member", {
+                                    orgUnitId: unit.id,
+                                })
+                            }
+                        >
+                            成员调岗
+                        </Button>
+                    ) : null}
+                </div>
                 {node.members.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="rounded-lg bg-muted/30 px-4 py-8 text-center text-sm leading-6 text-muted-foreground">
                         当前没有主属成员。
                     </p>
                 ) : (
-                    <ul className="min-w-0 space-y-2">
+                    <ul className="min-w-0 divide-y divide-border">
                         {node.members.map((member) => (
                             <li
                                 key={member.id}
-                                className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm"
+                                className="flex min-w-0 flex-wrap items-center justify-between gap-3 px-1 py-4 text-sm"
                             >
                                 <span className="min-w-0 wrap-anywhere">
                                     {personLabel(view.people, member.user_id)}
@@ -164,18 +203,45 @@ export function OrganizationUnitPanel({
                 )}
             </div>
 
-            <div className="min-w-0 space-y-2">
-                <h3 className="text-sm font-medium">管理授权</h3>
+            <div className="min-w-0 space-y-4 border-t border-border pt-6">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <h3 className="flex items-center gap-2 text-sm font-medium">
+                        <ShieldCheckIcon
+                            className="size-4 text-muted-foreground"
+                            aria-hidden="true"
+                        />
+                        管理授权{" "}
+                        <span className="num text-xs text-muted-foreground">
+                            {node.management.length}
+                        </span>
+                    </h3>
+                    {canManage ? (
+                        <Button
+                            id={`organization-unit-${segment}-grant`}
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={!unit.enabled}
+                            onClick={() =>
+                                onChange("grant_management", {
+                                    orgUnitId: unit.id,
+                                })
+                            }
+                        >
+                            授予管理范围
+                        </Button>
+                    ) : null}
+                </div>
                 {node.management.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="rounded-lg bg-muted/30 px-4 py-8 text-center text-sm leading-6 text-muted-foreground">
                         当前没有显式管理授权。部门负责人身份不会自动获得组织配置权。
                     </p>
                 ) : (
-                    <ul className="min-w-0 space-y-2">
+                    <ul className="min-w-0 divide-y divide-border">
                         {node.management.map((grant) => (
                             <li
                                 key={grant.id}
-                                className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm"
+                                className="flex min-w-0 flex-wrap items-center justify-between gap-3 px-1 py-4 text-sm"
                             >
                                 <span className="min-w-0 wrap-anywhere">
                                     {personLabel(view.people, grant.user_id)} ·{" "}

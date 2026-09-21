@@ -39,6 +39,8 @@ type BackendDataScope = {
         | "self_owned"
         | "collaborative"
     scope_targets: string[]
+    resource?: string
+    actions?: string[]
     version: number
     created_at: number
 }
