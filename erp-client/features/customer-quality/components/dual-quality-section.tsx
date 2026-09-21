@@ -8,6 +8,7 @@ import { MoneyValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { getErrorMessage } from "@/lib/api/errors"
+import { isDataScopeChanged } from "@/features/data-scope/cache"
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
 
 import { downloadQualityCsv } from "../api/dual-caliber"
@@ -59,18 +60,8 @@ const HISTORY_SORT_OPTIONS = [
     { value: "label:asc", label: "分组名称升序" },
 ]
 
-function errorCodeOf(error: unknown): string {
-    if (typeof error === "object" && error !== null && "code" in error) {
-        const code = (error as { code?: unknown }).code
-        return typeof code === "string" ? code : ""
-    }
-    return getErrorMessage(error, "")
-}
-
 function isScopeChanged(error: unknown): boolean {
-    const code = errorCodeOf(error)
-    if (code === "DATA_SCOPE_CHANGED") return true
-    return getErrorMessage(error, "").includes("DATA_SCOPE_CHANGED")
+    return isDataScopeChanged(error)
 }
 
 function toggleId(ids: readonly string[], id: string): string[] {

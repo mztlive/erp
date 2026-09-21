@@ -1,4 +1,4 @@
-import { apiGet, type ApiError } from "@/lib/api"
+import { apiGet } from "@/lib/api"
 import { PAYMENT_TERM_OPTIONS } from "@/lib/business-options"
 import type {
     ContractAction,
@@ -12,27 +12,11 @@ import type {
     BackendPartyView,
 } from "@/features/contracts/api/wire-types"
 
-export function isApiError(error: unknown): error is ApiError {
-    return (
-        typeof error === "object" &&
-        error !== null &&
-        "kind" in error &&
-        "message" in error
-    )
-}
-
 export function tsToIso(seconds: number | undefined | null): string {
     if (seconds == null || !Number.isFinite(seconds)) {
         return new Date().toISOString()
     }
     return new Date(seconds * 1000).toISOString()
-}
-
-export function asContractStatus(raw: string): ContractStatus {
-    if (raw === "TERMINATED" || raw === "EXPIRED" || raw === "EFFECTIVE") {
-        return raw
-    }
-    return "EFFECTIVE"
 }
 
 export function daysUntil(dateStr: string): number {

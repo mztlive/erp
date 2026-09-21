@@ -7,7 +7,7 @@ export type BackendContractView = {
     contract_no: string
     customer_id: string
     settlement_party_id: string
-    status: ContractStatus | string
+    status: ContractStatus
     current_revision_id?: string | null
     current_revision?: BackendContractRevision | null
     customer_no?: string | null

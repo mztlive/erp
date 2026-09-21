@@ -1,4 +1,5 @@
 import { apiPost } from "@/lib/api"
+import { isApiError } from "@/lib/api/errors"
 import { getErrorMessage } from "@/lib/api/errors"
 import type { FormalActionResponse } from "@/features/purchase-orders/types"
 import type {
@@ -11,7 +12,7 @@ import type {
     SubmitPurchaseOrderInput,
     VoidPurchaseOrderInput,
 } from "@/features/purchase-orders/types"
-import { formalActionFailure, isApiError } from "./purchase-order-errors"
+import { formalActionFailure } from "./purchase-order-errors"
 import type {
     BackendChangeStartResult,
     BackendCreateResult,

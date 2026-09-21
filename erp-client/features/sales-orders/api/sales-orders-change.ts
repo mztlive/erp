@@ -6,7 +6,7 @@
 
 import { isDataScopeChanged } from "@/features/data-scope/cache"
 import { apiGet, apiPost } from "@/lib/api"
-import type { ApiError } from "@/lib/api/errors"
+import { isApiError } from "@/lib/api/errors"
 import type {
     BackendSalesChangeOrder,
     PageView,
@@ -19,15 +19,6 @@ import type {
     SalesChangeOrderSummary,
     SalesOrderNature,
 } from "@/features/sales-orders/types"
-
-function isApiError(error: unknown): error is ApiError {
-    return (
-        typeof error === "object" &&
-        error !== null &&
-        "kind" in error &&
-        "message" in error
-    )
-}
 
 export type StartSalesChangeOrderIntent = {
     salesOrderId: string

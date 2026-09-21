@@ -51,40 +51,34 @@ export const isPurchaseReturnOrderWorkItem = (workItem?: {
 /**
  * 判断采购退货状态是否为待执行分工态。该态不是审批复核。
  *
- * @param status 服务端状态码；同时接受 snake_case 与 SCREAMING_SNAKE。
- * @returns `PENDING_EXECUTION` / `pending_execution` 时为 true。
+ * @param status 服务端状态码。
+ * @returns `pending_execution` 时为 true。
  */
 export const isPurchaseReturnExecutionStatus = (status?: string): boolean =>
-    status === "PENDING_EXECUTION" || status === "pending_execution"
+    status === "pending_execution"
 
 /**
  * 把采购退货状态映射为用户可见中文，不上屏枚举原值。
  *
- * `PENDING_EXECUTION` 是履约执行分工态，固定译为「待执行」，
+ * `pending_execution` 是履约执行分工态，固定译为「待执行」，
  * 不得渲染为「审批中」或「审批复核」。
  *
  * @param status 服务端状态码。
  */
 export const purchaseReturnOrderStatusLabel = (status?: string): string => {
     switch (status) {
-        case "DRAFT":
         case "draft":
             return "草稿"
-        case "PENDING_EXECUTION":
         case "pending_execution":
             return "待执行"
-        case "RETURNED":
         case "returned":
             return "已退货"
-        case "COMPLETED":
         case "completed":
             return "已完成"
-        case "VOIDED":
         case "voided":
-        case "VOID":
             return "作废"
         default:
-            return "采购退货"
+            return "未知状态"
     }
 }
 
@@ -113,13 +107,11 @@ export const purchaseReturnOrderStatusTone = (status?: string): StatusTone => {
 export const purchaseReturnModeLabel = (mode?: string): string => {
     switch (mode) {
         case "company_warehouse_to_supplier":
-        case "COMPANY_WAREHOUSE_TO_SUPPLIER":
             return "公司仓退供应商"
         case "direct_to_supplier":
-        case "DIRECT_TO_SUPPLIER":
             return "客户直退供应商"
         default:
-            return "采购退货"
+            return "未知退货模式"
     }
 }
 

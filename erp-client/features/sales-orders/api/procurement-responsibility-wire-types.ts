@@ -16,6 +16,6 @@ export type ResolvedProcurementResponsibilityLineWire = {
     rule_type?: string | null
 }
 
-export type ResolveProcurementResponsibilityResponseWire =
-    | { lines: ResolvedProcurementResponsibilityLineWire[] }
-    | ResolvedProcurementResponsibilityLineWire[]
+export type ResolveProcurementResponsibilityResponseWire = {
+    lines: ResolvedProcurementResponsibilityLineWire[]
+}

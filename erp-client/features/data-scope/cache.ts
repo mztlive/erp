@@ -1,5 +1,21 @@
 import { QueryClient, type Query } from "@tanstack/react-query"
 
+function numberField(
+    data: Record<string, unknown>,
+    key: string,
+): number | undefined {
+    const value = data[key]
+    return typeof value === "number" ? value : undefined
+}
+
+function stringField(
+    data: Record<string, unknown>,
+    key: string,
+): string | undefined {
+    const value = data[key]
+    return typeof value === "string" ? value : undefined
+}
+
 /** 会话身份和全局权限版本变化必须清除其他功能已缓存的业务内容。 */
 function authorizationVersion(data: unknown): string | null {
     if (!data || typeof data !== "object") return null
@@ -125,15 +141,16 @@ export function subscribeScopeCache(client: QueryClient): () => void {
             const data = query.state.data
             if (!data || typeof data !== "object") return
             const fields = data as Record<string, unknown>
-            const nextPolicy = fields.policyVersion ?? fields.policy_version
+            const nextPolicy =
+                numberField(fields, "policyVersion") ??
+                numberField(fields, "policy_version")
             const nextOrganization =
-                fields.organizationVersion ?? fields.organization_version
+                numberField(fields, "organizationVersion") ??
+                numberField(fields, "organization_version")
             // 已观察到新版本后，迟到或被中间缓存返回的旧版本不得成为新的可见数据。
             if (
-                (typeof nextPolicy === "number" &&
-                    policy != null &&
-                    nextPolicy < policy) ||
-                (typeof nextOrganization === "number" &&
+                (nextPolicy != null && policy != null && nextPolicy < policy) ||
+                (nextOrganization != null &&
                     organization != null &&
                     nextOrganization < organization)
             ) {
@@ -154,11 +171,11 @@ export function subscribeScopeCache(client: QueryClient): () => void {
                 return
             }
             let changed = false
-            if (typeof nextPolicy === "number") {
+            if (nextPolicy != null) {
                 changed ||= policy != null && nextPolicy > policy
                 policy = Math.max(policy ?? nextPolicy, nextPolicy)
             }
-            if (typeof nextOrganization === "number") {
+            if (nextOrganization != null) {
                 changed ||=
                     organization != null && nextOrganization > organization
                 organization = Math.max(
@@ -166,8 +183,10 @@ export function subscribeScopeCache(client: QueryClient): () => void {
                     nextOrganization,
                 )
             }
-            const nextScope = fields.scopeVersion ?? fields.scope_version
-            if (typeof nextScope === "string") {
+            const nextScope =
+                stringField(fields, "scopeVersion") ??
+                stringField(fields, "scope_version")
+            if (nextScope != null) {
                 const previous = scopeVersions.get(query.queryHash)
                 changed ||= previous != null && previous !== nextScope
                 scopeVersions.set(query.queryHash, nextScope)

@@ -108,18 +108,10 @@ type EvidenceRefWire = {
     label: string
 }
 
-function isNonEmpty(value: unknown): value is string {
-    return typeof value === "string" && value.trim().length > 0
-}
-
-function isPositiveVersion(value: unknown): value is number {
-    return Number.isSafeInteger(value) && Number(value) > 0
-}
-
 function parseEvidenceKinds(
     values: readonly string[],
 ): ControlledEvidenceKind[] | undefined {
-    if (!Array.isArray(values) || values.length === 0) return undefined
+    if (values.length === 0) return undefined
     if (!values.every((value) => EVIDENCE_KINDS.has(value))) {
         return undefined
     }
@@ -175,23 +167,18 @@ export function toEvidenceRefsWire(
 export function mapBackendEvidenceRefs(
     evidenceRefs: readonly BackendControlledEvidenceRef[] | null | undefined,
 ): ControlledTerminalEvidenceRef[] {
-    if (!Array.isArray(evidenceRefs)) return []
-    const mapped: ControlledTerminalEvidenceRef[] = []
-    for (const evidence of evidenceRefs) {
-        if (
-            !EVIDENCE_KINDS.has(evidence.kind) ||
-            !isNonEmpty(evidence.record_id) ||
-            !isNonEmpty(evidence.label)
-        ) {
-            continue
-        }
-        mapped.push({
-            kind: evidence.kind as ControlledEvidenceKind,
-            recordId: evidence.record_id,
-            label: evidence.label,
-        })
-    }
-    return mapped
+    if (!evidenceRefs) return []
+    return evidenceRefs.flatMap((evidence) =>
+        EVIDENCE_KINDS.has(evidence.kind)
+            ? [
+                  {
+                      kind: evidence.kind as ControlledEvidenceKind,
+                      recordId: evidence.record_id,
+                      label: evidence.label,
+                  },
+              ]
+            : [],
+    )
 }
 
 export function mapBackendResolutionEvidencePolicy(
@@ -199,10 +186,7 @@ export function mapBackendResolutionEvidencePolicy(
 ): ResolutionEvidencePolicyView | undefined {
     if (
         !policy ||
-        !isNonEmpty(policy.evidence_policy_id) ||
-        !isPositiveVersion(policy.evidence_policy_version) ||
-        !isNonEmpty(policy.key?.error_type) ||
-        !FUNDS_IMPACTS.has(policy.key?.funds_impact) ||
+        !FUNDS_IMPACTS.has(policy.key.funds_impact) ||
         !REVIEWER_SEPARATIONS.has(policy.reviewer_separation)
     ) {
         return undefined
@@ -227,13 +211,7 @@ export function mapBackendResolutionEvidencePolicy(
 export function mapBackendReconciliationReasonRegistry(
     registry: BackendReconciliationReasonRegistry | null | undefined,
 ): ReconciliationReasonRegistryView | undefined {
-    if (
-        !registry ||
-        !isNonEmpty(registry.reason_registry_id) ||
-        !isPositiveVersion(registry.reason_registry_version) ||
-        !Array.isArray(registry.registered_reasons) ||
-        registry.registered_reasons.length === 0
-    ) {
+    if (!registry) {
         return undefined
     }
 
@@ -244,11 +222,8 @@ export function mapBackendReconciliationReasonRegistry(
             reason.required_evidence_kinds,
         )
         if (
-            !isNonEmpty(reason.registered_reason_id) ||
             !DIRECT_RECONCILIATION_REASONS.has(reason.registered_reason_id) ||
-            !isPositiveVersion(reason.registered_reason_version) ||
             !RECONCILIATION_CONCLUSIONS.has(reason.conclusion) ||
-            !isNonEmpty(reason.label) ||
             !requiredEvidenceKinds ||
             registeredReasonIds.has(reason.registered_reason_id) ||
             DIRECT_REASON_CONCLUSIONS[

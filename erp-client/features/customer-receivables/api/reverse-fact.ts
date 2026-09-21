@@ -1,7 +1,7 @@
 /** Reverse facts (receipt reversal / refund / red invoice) — append-only. */
 
 import { apiPost } from "@/lib/api"
-import { getErrorMessage } from "@/lib/api/errors"
+import { getErrorCode, getErrorMessage } from "@/lib/api/errors"
 import { classifyFormalCommandError } from "@/lib/formal-command"
 
 import type {
@@ -22,10 +22,7 @@ function correctionError(
     idempotencyKey: string,
 ): Extract<ReverseFactResult, { status: "failed" | "unknown" }> {
     const message = getErrorMessage(error, "纠错提交失败，请稍后重试。")
-    const code =
-        error && typeof error === "object" && "code" in error
-            ? String((error as { code?: string }).code ?? "HTTP_ERROR")
-            : "HTTP_ERROR"
+    const code = getErrorCode(error) ?? "HTTP_ERROR"
     if (
         code === "OUTCOME_UNKNOWN" ||
         classifyFormalCommandError(error) === "unknown"

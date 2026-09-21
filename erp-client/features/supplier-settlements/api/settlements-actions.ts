@@ -3,7 +3,7 @@
  * 从 api/settlements.ts 拆出；请求体与结果映射保持不变。
  */
 
-import { apiPost, getErrorMessage } from "@/lib/api"
+import { apiPost, getErrorCode, getErrorMessage } from "@/lib/api"
 import type {
     AppendEvidenceInput,
     CreateDraftInput,
@@ -56,10 +56,7 @@ export async function createSettlementDraft(
             ],
         }
     } catch (err) {
-        const code =
-            err && typeof err === "object" && "code" in err
-                ? (err as { code?: string }).code
-                : undefined
+        const code = getErrorCode(err)
         if (code === "SOURCE_EVIDENCE_MISSING") {
             return {
                 status: "blocked",

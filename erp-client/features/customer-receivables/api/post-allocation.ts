@@ -1,7 +1,7 @@
 /** Post allocation (draft session → formal receipt/invoice allocations). */
 
 import { apiPost } from "@/lib/api"
-import { getErrorMessage } from "@/lib/api/errors"
+import { getErrorCode, getErrorMessage, isApiError } from "@/lib/api/errors"
 import { classifyFormalCommandError } from "@/lib/formal-command"
 import { compareDecimal } from "@/lib/fixed-decimal"
 
@@ -205,13 +205,10 @@ export async function postAllocation(
         return result
     } catch (err) {
         const message = getErrorMessage(err, "提交失败，请稍后重试。")
-        const errorCode =
-            err && typeof err === "object" && "code" in err
-                ? String((err as { code?: string }).code ?? "HTTP_ERROR")
-                : "HTTP_ERROR"
+        const errorCode = getErrorCode(err) ?? "HTTP_ERROR"
         const code =
-            err && typeof err === "object" && "status" in err
-                ? String((err as { status?: number }).status ?? "HTTP_ERROR")
+            isApiError(err) && err.status != null
+                ? String(err.status)
                 : errorCode
         if (
             errorCode === "OUTCOME_UNKNOWN" ||

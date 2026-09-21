@@ -69,12 +69,5 @@ export async function login(input: LoginInput): Promise<LoginResult> {
  * 侧栏、顶栏与工作台身份均应基于本接口，禁止本地硬编码角色菜单。
  */
 export async function fetchAccountProfile(): Promise<AccountProfile> {
-    const profile = await apiGet<AccountProfile>("/account/profile")
-    return {
-        ...profile,
-        permissions: Array.isArray(profile.permissions)
-            ? profile.permissions
-            : [],
-        role_ids: Array.isArray(profile.role_ids) ? profile.role_ids : [],
-    }
+    return apiGet<AccountProfile>("/account/profile")
 }

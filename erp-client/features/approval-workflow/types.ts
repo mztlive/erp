@@ -226,9 +226,9 @@ export type ApprovalHistoryItemDto = Readonly<{
 
 /** 历史分页。 */
 export type ApprovalHistoryPageDto = Readonly<{
-    items?: readonly ApprovalHistoryItemDto[]
+    items: readonly ApprovalHistoryItemDto[]
     next_cursor?: string | null
-    has_more?: boolean
+    has_more: boolean
 }>
 
 /** 单据详情返回的统一只读审批结构。 */
@@ -473,10 +473,6 @@ const KNOWN_RECOVERY_OPTIONS = new Set<RecoveryOption>([
     "RESUME_CURRENT_APPROVER",
     "CANCEL_BLOCKED",
 ])
-
-/** 判断未知值是否为可安全读取的对象。 */
-export const isRecord = (value: unknown): value is Record<string, unknown> =>
-    typeof value === "object" && value !== null
 
 /**
  * 只保留合同白名单动作；未知码丢弃，禁止前端补默认动作。

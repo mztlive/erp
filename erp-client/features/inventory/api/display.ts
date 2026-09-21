@@ -3,7 +3,6 @@
  * 只做后端 code → 前端 code/中文文案的映射，不发请求、不碰视图对象。
  */
 
-import type { ApiError } from "@/lib/api/errors"
 import type {
     AdjustmentReasonType,
     InventoryQuery,
@@ -29,15 +28,6 @@ export const SEGREGATION_NOTE =
 export function secsToIso(secs: number | null | undefined): string {
     if (secs == null || secs === 0) return ""
     return new Date(secs * 1000).toISOString()
-}
-
-export function isApiError(error: unknown): error is ApiError {
-    return (
-        typeof error === "object" &&
-        error !== null &&
-        "kind" in error &&
-        "message" in error
-    )
 }
 
 export function movementTypeLabel(code: string): string {

@@ -3,8 +3,8 @@
  */
 
 import { apiGet } from "@/lib/api"
+import { isApiError } from "@/lib/api/errors"
 import type { BalanceDetailView } from "@/features/inventory/types"
-import { isApiError } from "@/features/inventory/api/display"
 import {
     mapAdjustment,
     mapBalance,

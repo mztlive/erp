@@ -1,9 +1,8 @@
 /**
- * W09 客户端投影的纯工具：时间换算、API 错误判定、单据 → 工作单的公共组装。
+ * W09 客户端投影的纯工具：时间换算、单据 → 工作单的公共组装。
  * 无 React、无 HTTP 调用，只做纯转换，供 api/ 映射与队列投影复用。
  */
 
-import type { ApiError } from "@/lib/api/errors"
 import type {
     FulfillmentOperation,
     FulfillmentOperationType,
@@ -30,15 +29,6 @@ export function isoToUnixSecs(value: string): number | null {
     const ms = Date.parse(trimmed)
     if (!Number.isFinite(ms)) return null
     return Math.floor(ms / 1000)
-}
-
-export function isApiError(error: unknown): error is ApiError {
-    return (
-        typeof error === "object" &&
-        error !== null &&
-        "kind" in error &&
-        "message" in error
-    )
 }
 
 export function nowIso(): string {

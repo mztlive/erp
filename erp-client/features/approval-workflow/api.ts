@@ -1,4 +1,5 @@
 import { apiGet, apiPost, getErrorMessage } from "@/lib/api"
+import { isApiError } from "@/lib/api/errors"
 
 import {
     mapCommandViewDto,
@@ -9,7 +10,6 @@ import {
     type ApprovalCommandView,
     type ApprovalCommandViewDto,
     type ApprovalHistoryItem,
-    type ApprovalHistoryItemDto,
     type ApprovalHistoryPageDto,
     type ApprovalInstanceListItemDto,
     type ApprovalInstanceListPage,
@@ -53,20 +53,14 @@ export type UpgradeDocumentBindingParams = Readonly<{
     request: UpgradeBindingRequest
 }>
 
-/** 判断未知值是否为可安全读取的对象。 */
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-    typeof value === "object" && value !== null
-
 /**
  * 从统一 API 异常中识别 409 责任或版本冲突。
  *
  * @param error 未知异常
  * @returns 是否为 409
  */
-export const isApprovalConflict = (error: unknown): boolean => {
-    if (!isRecord(error)) return false
-    return error.status === 409
-}
+export const isApprovalConflict = (error: unknown): boolean =>
+    isApiError(error) && error.status === 409
 
 /**
  * 读取冲突后的用户提示。409 不得自动重放决定。
@@ -110,7 +104,7 @@ export const listApprovalInstances = async (
         },
     )
     return {
-        items: (page.items ?? []).map(mapInstanceListItemDto),
+        items: page.items.map(mapInstanceListItemDto),
         nextCursor: page.next_cursor ?? undefined,
         total: page.total ?? undefined,
     }
@@ -136,26 +130,17 @@ export const listApprovalHistory = async (
     nextCursor?: string
     hasMore: boolean
 }> => {
-    const page = await apiGet<
-        ApprovalHistoryPageDto | readonly ApprovalHistoryItemDto[]
-    >(
+    const page = await apiGet<ApprovalHistoryPageDto>(
         `/admin/approval-instances/${encodeURIComponent(params.instanceId)}/history`,
         {
             cursor: params.cursor,
             limit: params.limit ?? 50,
         },
     )
-    if (Array.isArray(page)) {
-        return {
-            items: page.map(mapHistoryItemDto),
-            hasMore: false,
-        }
-    }
-    const historyPage = page as ApprovalHistoryPageDto
     return {
-        items: (historyPage.items ?? []).map(mapHistoryItemDto),
-        nextCursor: historyPage.next_cursor ?? undefined,
-        hasMore: Boolean(historyPage.has_more),
+        items: page.items.map(mapHistoryItemDto),
+        nextCursor: page.next_cursor ?? undefined,
+        hasMore: page.has_more,
     }
 }
 

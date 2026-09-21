@@ -1,19 +1,8 @@
 "use client"
 
-import * as React from "react"
-import { SearchIcon } from "lucide-react"
+import { SearchIcon, ShieldAlertIcon } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table"
 import {
     InputGroup,
     InputGroupAddon,
@@ -24,481 +13,413 @@ import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 import { usePermissionPanel } from "@/features/admin/hooks/use-permission-panel"
 import {
-    PERMISSION_PANEL_TAB_LABEL,
     actionLabel,
-    isDangerousAction,
+    permissionLabel,
     permissionGroupSegment,
-    type PermissionItemOption,
     type PermissionMatrixGroup,
 } from "@/features/admin/lib/permission-catalog"
+import {
+    PERMISSION_VIEWS,
+    permissionArea,
+    type PermissionView,
+} from "@/features/admin/lib/permission-editor"
 
 export type { PermissionPanelTab } from "@/features/admin/lib/permission-catalog"
 
 type PermissionOptionsPanelProps = {
     selected: readonly string[]
-    /**
-     * 变更回调：一次传入完整的新选中列表（组件内已按行/列/组批量计算，
-     * 调用方只需落状态；不要在循环中逐项回调，否则会基于过期快照互相覆盖）。
-     */
+    initial: readonly string[]
+    preservedCodes?: readonly string[]
     onChange: (next: string[]) => void
+    view: PermissionView
+    onViewChange: (view: PermissionView) => void
+    disabled?: boolean
     className?: string
     id?: string
 }
 
-/**
- * 权限点选面板：业务 / 系统维度 + 左侧分组目录 + 右侧「对象 × 动作」矩阵。
- *
- * 一个权限组的动作不超过 9 个、对象不超过 6 个，矩阵一屏可比对多行；
- * 行首、列头、组标题分别支持整行 / 整列 / 整组勾选。
- */
+/** 模块目录只切换当前编辑区域；筛选与切换均不改动表单内的授权。 */
 export function PermissionOptionsPanel({
     selected,
+    initial,
+    preservedCodes = [],
     onChange,
+    view,
+    onViewChange,
+    disabled = false,
     className,
     id = "governance-admin-permission-panel",
 }: PermissionOptionsPanelProps) {
-    const {
-        keyword,
-        setKeyword,
-        tab,
-        setTab,
-        activeGroup,
-        setActiveGroup,
-        visibleGroups,
-        progressByGroup,
-        selectedCountByTab,
-        selectedSet,
-    } = usePermissionPanel(selected)
-
-    const scrollRef = React.useRef<HTMLDivElement | null>(null)
-    const groupRefs = React.useRef(new Map<string, HTMLElement | null>())
-
-    const toggleCodes = React.useCallback(
-        (codes: readonly string[], next: boolean) => {
-            if (next) {
-                onChange([...new Set([...selected, ...codes])])
-                return
-            }
-            const drop = new Set(codes)
-            onChange(selected.filter((code) => !drop.has(code)))
-        },
-        [onChange, selected],
-    )
-
-    /** 点击左侧目录：滚动到该组并立即点亮，不等滚动监听。 */
-    const jumpToGroup = (name: string) => {
-        setActiveGroup(name)
-        const target = groupRefs.current.get(name)
-        const container = scrollRef.current
-        if (!target || !container) return
-        container.scrollTo({
-            top: target.offsetTop - container.offsetTop,
-            behavior: "smooth",
-        })
+    const panel = usePermissionPanel(selected, initial, view)
+    const toggleCodes = (codes: readonly string[], next: boolean) => {
+        if (disabled) return
+        const drop = new Set(codes)
+        onChange(
+            next
+                ? [...new Set([...selected, ...codes])]
+                : selected.filter((code) => !drop.has(code)),
+        )
     }
-
-    /** 滚动定位：以容器顶部为准，点亮最后一个已越过顶部的组。 */
-    const handleScroll = () => {
-        const container = scrollRef.current
-        if (!container) return
-        let current: string | null = null
-        for (const group of visibleGroups) {
-            const node = groupRefs.current.get(group.name)
-            if (!node) continue
-            if (
-                node.offsetTop - container.offsetTop - container.scrollTop <=
-                8
-            ) {
-                current = group.name
-            }
-        }
-        if (current && current !== activeGroup) setActiveGroup(current)
-    }
-
-    const progressLookup = React.useMemo(
-        () => new Map(progressByGroup.map((item) => [item.name, item])),
-        [progressByGroup],
-    )
-
-    return (
-        <div className={cn("flex flex-col gap-3", className)}>
-            <div className="flex flex-wrap items-center gap-2">
-                <Tabs
-                    value={tab}
-                    onValueChange={(next) => {
-                        if (next === "business" || next === "system")
-                            setTab(next)
-                    }}
-                >
-                    <TabsList variant="line" className="justify-start">
-                        <TabsTrigger
-                            id={`${id}-tab-business`}
-                            value="business"
-                            className="flex-none"
-                        >
-                            {PERMISSION_PANEL_TAB_LABEL.business}
-                            {selectedCountByTab.business > 0 ? (
-                                <span className="num text-muted-foreground">
-                                    {selectedCountByTab.business}
-                                </span>
-                            ) : null}
-                        </TabsTrigger>
-                        <TabsTrigger
-                            id={`${id}-tab-system`}
-                            value="system"
-                            className="flex-none"
-                        >
-                            {PERMISSION_PANEL_TAB_LABEL.system}
-                            {selectedCountByTab.system > 0 ? (
-                                <span className="num text-muted-foreground">
-                                    {selectedCountByTab.system}
-                                </span>
-                            ) : null}
-                        </TabsTrigger>
-                    </TabsList>
-                </Tabs>
-                <InputGroup className="w-full sm:ml-auto sm:max-w-sm">
-                    <InputGroupAddon>
-                        <SearchIcon aria-hidden="true" />
-                    </InputGroupAddon>
-                    <InputGroupInput
-                        id={`${id}-search`}
-                        type="search"
-                        value={keyword}
-                        onChange={(e) => setKeyword(e.target.value)}
-                        placeholder="搜索模块、对象或动作"
-                        aria-label="搜索权限"
-                    />
-                </InputGroup>
-            </div>
-
-            <div className="grid min-h-0 gap-5 border-t border-border pt-4 md:grid-cols-[11rem_minmax(0,1fr)]">
-                <nav
-                    aria-label="权限分组目录"
-                    className="hidden max-h-[32rem] flex-col overflow-y-auto border-r border-border pr-3 md:flex"
-                >
-                    {visibleGroups.map((group) => {
-                        const progress = progressLookup.get(group.name)
-                        const isActive = group.name === activeGroup
-                        return (
-                            <button
-                                id={`${id}-group-${permissionGroupSegment(group.name)}-nav`}
-                                key={group.name}
-                                type="button"
-                                aria-current={isActive ? "true" : undefined}
-                                onClick={() => jumpToGroup(group.name)}
-                                className={cn(
-                                    "flex shrink-0 items-baseline justify-between gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2",
-                                    isActive
-                                        ? "bg-muted font-medium text-foreground"
-                                        : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
-                                )}
-                            >
-                                <span className="min-w-0 truncate">
-                                    {group.name}
-                                </span>
-                                {progress && progress.selected > 0 ? (
-                                    <span className="num shrink-0 text-xs text-muted-foreground">
-                                        {progress.selected}
-                                    </span>
-                                ) : null}
-                            </button>
-                        )
-                    })}
-                    {visibleGroups.length === 0 ? (
-                        <p className="px-2 py-3 text-xs text-muted-foreground">
-                            无匹配分组
-                        </p>
-                    ) : null}
-                </nav>
-
-                <div
-                    ref={scrollRef}
-                    onScroll={handleScroll}
-                    className="relative flex max-h-[32rem] min-w-0 flex-col gap-5 overflow-y-auto pl-0 pr-3"
-                >
-                    {visibleGroups.length === 0 ? (
-                        <p className="py-6 text-center text-xs text-muted-foreground">
-                            无匹配权限，换个关键词试试
-                        </p>
-                    ) : (
-                        visibleGroups.map((group) => (
-                            <PermissionMatrixSection
-                                id={`${id}-group-${permissionGroupSegment(group.name)}`}
-                                key={group.name}
-                                ref={(node) => {
-                                    groupRefs.current.set(group.name, node)
-                                }}
-                                group={group}
-                                selectedSet={selectedSet}
-                                progress={progressLookup.get(group.name)}
-                                onToggle={toggleCodes}
-                            />
-                        ))
-                    )}
-                </div>
-            </div>
-        </div>
-    )
-}
-
-type PermissionMatrixSectionProps = {
-    ref: React.Ref<HTMLElement>
-    group: PermissionMatrixGroup
-    selectedSet: ReadonlySet<string>
-    progress?: { selected: number; total: number }
-    onToggle: (codes: readonly string[], next: boolean) => void
-    id?: string
-}
-
-/** 单个权限组的矩阵：列为动作，行为业务对象。 */
-function PermissionMatrixSection({
-    ref,
-    group,
-    selectedSet,
-    progress,
-    onToggle,
-    id,
-}: PermissionMatrixSectionProps) {
-    const baseId =
-        id ??
-        `governance-admin-permission-group-${permissionGroupSegment(group.name)}`
-    const groupState = checkedState(group.codes, selectedSet)
+    const areas = [
+        ...new Set(
+            panel.visibleGroups.map((group) => permissionArea(group.name)),
+        ),
+    ]
 
     return (
         <section
-            ref={ref}
-            aria-label={group.name}
-            className="shrink-0 overflow-hidden border-b border-border pb-4"
+            aria-label="操作权限"
+            className={cn("flex min-h-0 flex-1 flex-col", className)}
         >
-            <div className="flex items-center justify-between gap-2 border-b border-grid bg-card px-0 py-3">
-                <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium">
-                            {group.name}
-                        </span>
-                        {progress && progress.selected > 0 ? (
-                            <Badge variant="outline">
-                                <span className="num">{progress.selected}</span>
-                                /<span className="num">{progress.total}</span>
-                            </Badge>
-                        ) : null}
-                    </div>
-                    <div className="truncate text-xs text-muted-foreground">
-                        {group.description}
-                    </div>
-                </div>
-                <label
-                    htmlFor={`${baseId}-all`}
-                    className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-muted-foreground"
+            <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-border pb-3">
+                <Tabs
+                    value={panel.tab}
+                    onValueChange={(next) => {
+                        if (next === "business" || next === "system")
+                            panel.setTab(next)
+                    }}
                 >
-                    <Checkbox
-                        id={`${baseId}-all`}
-                        checked={groupState === "all"}
-                        indeterminate={groupState === "some"}
-                        onCheckedChange={(next) =>
-                            onToggle(group.codes, next === true)
+                    <TabsList variant="line">
+                        <TabsTrigger id={`${id}-tab-business`} value="business">
+                            业务权限
+                        </TabsTrigger>
+                        <TabsTrigger id={`${id}-tab-system`} value="system">
+                            系统权限
+                        </TabsTrigger>
+                    </TabsList>
+                </Tabs>
+                <div className="flex w-full min-w-0 items-center gap-2 sm:ml-auto sm:w-auto">
+                    <select
+                        id={`${id}-view`}
+                        aria-label="权限显示范围"
+                        className="h-9 rounded-lg border border-input bg-background px-2 text-sm focus-visible:outline-2 focus-visible:outline-ring"
+                        value={view}
+                        onChange={(event) =>
+                            onViewChange(event.target.value as PermissionView)
                         }
-                        aria-label={`全选 ${group.name}`}
-                    />
-                    全选
-                </label>
+                    >
+                        {Object.entries(PERMISSION_VIEWS).map(
+                            ([value, label]) => (
+                                <option
+                                    id={`${id}-view-${value}`}
+                                    key={value}
+                                    value={value}
+                                >
+                                    {label}
+                                </option>
+                            ),
+                        )}
+                    </select>
+                    <InputGroup className="min-w-0 flex-1 sm:w-64 sm:flex-none">
+                        <InputGroupAddon>
+                            <SearchIcon aria-hidden="true" />
+                        </InputGroupAddon>
+                        <InputGroupInput
+                            id={`${id}-search`}
+                            type="search"
+                            value={panel.keyword}
+                            onChange={(event) =>
+                                panel.setKeyword(event.target.value)
+                            }
+                            onKeyDown={(event) => {
+                                if (event.key === "Enter")
+                                    event.preventDefault()
+                            }}
+                            placeholder="搜索模块或权限"
+                            aria-label="搜索权限"
+                        />
+                    </InputGroup>
+                </div>
             </div>
-            <Table
-                className="table-fixed"
-                style={{
-                    width: `${12 + group.actions.length * 6}rem`,
-                    minWidth: "100%",
-                }}
-                data-density="compact"
-            >
-                <TableHeader>
-                    <TableRow>
-                        <TableHead className="sticky left-0 z-30 w-48">
-                            对象
-                        </TableHead>
-                        {group.actions.map((action, columnIndex) => {
-                            const codes = columnCodes(group, columnIndex)
-                            const state = checkedState(codes, selectedSet)
-                            const dangerous = isDangerousAction(action)
-                            return (
-                                <TableHead
-                                    key={action}
-                                    data-align="center"
-                                    className="w-24 align-bottom"
-                                >
-                                    <button
-                                        id={`${baseId}-action-${toAutomationIdSegment(action)}-toggle`}
-                                        type="button"
-                                        onClick={() =>
-                                            onToggle(codes, state !== "all")
-                                        }
-                                        title={`勾选或取消整列：${actionLabel(action)}`}
-                                        className={cn(
-                                            "whitespace-nowrap rounded px-1 text-xs font-medium transition-colors hover:text-foreground",
-                                            dangerous
-                                                ? "text-destructive"
-                                                : "text-muted-foreground",
-                                        )}
-                                    >
-                                        {actionLabel(action)}
-                                    </button>
-                                </TableHead>
-                            )
-                        })}
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {group.rows.map((row) => {
-                        const rowState = checkedState(row.codes, selectedSet)
-                        return (
-                            <TableRow key={row.resource}>
-                                <TableHead
-                                    scope="row"
-                                    className="sticky left-0 z-10 w-48 bg-card font-normal text-foreground"
-                                >
-                                    <label
-                                        htmlFor={`${baseId}-${row.resource}`}
-                                        className="flex cursor-pointer items-center gap-2"
-                                    >
-                                        <Checkbox
-                                            id={`${baseId}-${row.resource}`}
-                                            checked={rowState === "all"}
-                                            indeterminate={rowState === "some"}
-                                            onCheckedChange={(next) =>
-                                                onToggle(
-                                                    row.codes,
-                                                    next === true,
-                                                )
+
+            <div className="grid min-h-0 flex-1 md:grid-cols-[12rem_minmax(0,1fr)]">
+                <nav
+                    aria-label="权限模块"
+                    className="hidden overflow-y-auto overscroll-contain border-r border-border py-4 pr-3 md:block"
+                >
+                    {areas.map((area) => (
+                        <div key={area} className="mb-5 last:mb-0">
+                            <p className="mb-1 px-2 text-xs font-medium text-muted-foreground">
+                                {area}
+                            </p>
+                            {panel.visibleGroups
+                                .filter(
+                                    (group) =>
+                                        permissionArea(group.name) === area,
+                                )
+                                .map((group) => {
+                                    const progress = panel.progressByGroup.find(
+                                        (item) => item.name === group.name,
+                                    )
+                                    return (
+                                        <button
+                                            key={group.name}
+                                            id={`${id}-group-${permissionGroupSegment(group.name)}-nav`}
+                                            type="button"
+                                            aria-current={
+                                                panel.activeGroup?.name ===
+                                                group.name
+                                                    ? "true"
+                                                    : undefined
                                             }
-                                            aria-label={`全选 ${row.label}`}
-                                        />
-                                        <span className="whitespace-nowrap">
-                                            {row.label}
-                                        </span>
-                                    </label>
-                                </TableHead>
-                                {row.cells.map((cell, index) => (
-                                    <TableCell
-                                        key={group.actions[index]}
-                                        data-align="center"
-                                    >
-                                        {cell ? (
-                                            <PermissionCell
-                                                id={`${baseId}-cell-${toAutomationIdSegment(row.resource)}-${toAutomationIdSegment(String(group.actions[index]))}`}
-                                                item={cell}
-                                                rowLabel={row.label}
-                                                checked={selectedSet.has(
-                                                    cell.code,
-                                                )}
-                                                onCheckedChange={(next) =>
-                                                    onToggle([cell.code], next)
-                                                }
-                                            />
-                                        ) : (
+                                            aria-controls={`${id}-content`}
+                                            onClick={() =>
+                                                panel.setActiveGroup(group.name)
+                                            }
+                                            className={cn(
+                                                "flex min-h-10 w-full items-center justify-between gap-2 rounded-md px-2 py-2 text-left text-sm focus-visible:outline-2 focus-visible:-outline-offset-2",
+                                                panel.activeGroup?.name ===
+                                                    group.name
+                                                    ? "bg-muted font-medium"
+                                                    : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                                            )}
+                                        >
+                                            <span>{group.name}</span>
                                             <span
-                                                aria-hidden="true"
-                                                className="text-muted-foreground/40"
+                                                className="num shrink-0 text-xs text-muted-foreground"
+                                                aria-label={`已勾选 ${progress?.selected ?? 0} 项`}
                                             >
-                                                —
+                                                {progress?.selected ?? 0}
                                             </span>
-                                        )}
-                                    </TableCell>
-                                ))}
-                            </TableRow>
-                        )
-                    })}
-                </TableBody>
-            </Table>
+                                        </button>
+                                    )
+                                })}
+                        </div>
+                    ))}
+                    {areas.length === 0 && (
+                        <p className="px-2 text-sm text-muted-foreground">
+                            没有匹配模块
+                        </p>
+                    )}
+                </nav>
+                <div
+                    key={panel.activeGroup?.name}
+                    className="min-h-0 overflow-y-auto overscroll-contain py-4 md:pl-6"
+                    id={`${id}-content`}
+                >
+                    {panel.visibleGroups.length > 0 && (
+                        <select
+                            id={`${id}-module`}
+                            aria-label="当前权限模块"
+                            value={panel.activeGroup?.name ?? ""}
+                            onChange={(event) =>
+                                panel.setActiveGroup(event.target.value)
+                            }
+                            className="mb-4 h-10 w-full rounded-lg border border-input bg-background px-3 text-sm md:hidden"
+                        >
+                            {panel.visibleGroups.map((group) => (
+                                <option
+                                    key={group.name}
+                                    id={`${id}-module-${permissionGroupSegment(group.name)}`}
+                                    value={group.name}
+                                >
+                                    {group.name}
+                                </option>
+                            ))}
+                        </select>
+                    )}
+                    {panel.activeGroup ? (
+                        <PermissionSection
+                            key={panel.activeGroup.name}
+                            id={`${id}-group-${permissionGroupSegment(panel.activeGroup.name)}`}
+                            group={panel.activeGroup}
+                            selectedSet={panel.selectedSet}
+                            initial={initial}
+                            preservedCodes={preservedCodes}
+                            filtered={
+                                view !== "all" ||
+                                panel.keyword.trim().length > 0
+                            }
+                            disabled={disabled}
+                            onToggle={toggleCodes}
+                        />
+                    ) : (
+                        <div
+                            className="flex min-h-48 flex-col items-center justify-center gap-3 text-sm text-muted-foreground"
+                            role="status"
+                        >
+                            <p>
+                                {view === "changed"
+                                    ? "当前分类暂无匹配的权限变更"
+                                    : "当前分类没有匹配权限"}
+                            </p>
+                            <Button
+                                id={`${id}-reset-filters`}
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                    panel.setKeyword("")
+                                    onViewChange("all")
+                                }}
+                            >
+                                显示全部权限
+                            </Button>
+                        </div>
+                    )}
+                </div>
+            </div>
         </section>
     )
 }
 
-function PermissionCell({
-    item,
-    rowLabel,
-    checked,
-    onCheckedChange,
+function PermissionSection({
+    group,
+    selectedSet,
+    initial,
+    preservedCodes,
+    filtered,
+    disabled,
+    onToggle,
     id,
 }: {
-    item: PermissionItemOption
-    rowLabel: string
-    checked: boolean
-    onCheckedChange: (next: boolean) => void
-    id?: string
+    group: PermissionMatrixGroup
+    selectedSet: ReadonlySet<string>
+    initial: readonly string[]
+    preservedCodes: readonly string[]
+    filtered: boolean
+    disabled: boolean
+    onToggle: (codes: readonly string[], next: boolean) => void
+    id: string
 }) {
-    const endpoints = item.endpoints
-        .map((endpoint) => `${endpoint.method} ${endpoint.path}`)
-        .join("\n")
-    return (
-        <span
-            className="inline-flex cursor-pointer items-center justify-center"
-            title={`${item.description}\n${endpoints}`}
-        >
-            <Checkbox
-                id={id}
-                checked={checked}
-                onCheckedChange={(next) => onCheckedChange(next === true)}
-                aria-label={`${rowLabel} · ${actionLabel(item.action)}`}
-            />
-        </span>
+    const specialPermissions = preservedCodes.filter(
+        (code) =>
+            code === "*:*" ||
+            group.rows.some((row) => code.startsWith(`${row.resource}:`)),
     )
-}
-
-/** 一组编码在当前选中集合里的状态。 */
-function checkedState(
-    codes: readonly string[],
-    selectedSet: ReadonlySet<string>,
-): "none" | "some" | "all" {
-    if (codes.length === 0) return "none"
-    let hit = 0
-    for (const code of codes) if (selectedSet.has(code)) hit += 1
-    if (hit === 0) return "none"
-    return hit === codes.length ? "all" : "some"
-}
-
-function columnCodes(
-    group: PermissionMatrixGroup,
-    columnIndex: number,
-): readonly string[] {
-    const codes: string[] = []
-    for (const row of group.rows) {
-        const cell = row.cells[columnIndex]
-        if (cell) codes.push(cell.code)
-    }
-    return codes
-}
-
-/** 「全选」按钮组：整个维度一键勾选 / 清空，供表单顶部快捷操作使用。 */
-export function PermissionBulkActions({
-    codes,
-    selected,
-    onChange,
-    id = "governance-admin-permission-bulk",
-}: {
-    codes: readonly string[]
-    selected: readonly string[]
-    onChange: (next: string[]) => void
-    id?: string
-}) {
-    const selectedSet = new Set(selected)
-    const state = checkedState(codes, selectedSet)
+    const initialSet = new Set(initial)
+    const selectedCount = group.codes.filter((code) =>
+        selectedSet.has(code),
+    ).length
     return (
-        <Button
-            id={id}
-            type="button"
-            size="xs"
-            variant="ghost"
-            onClick={() => {
-                if (state === "all") {
-                    const drop = new Set(codes)
-                    onChange(selected.filter((code) => !drop.has(code)))
-                    return
-                }
-                onChange([...new Set([...selected, ...codes])])
-            }}
-        >
-            {state === "all" ? "取消全选" : "全选"}
-        </Button>
+        <section aria-label={`${group.name}权限`}>
+            <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                <div>
+                    <h2 className="text-base font-semibold">{group.name}</h2>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                        {group.description}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                        {filtered ? "匹配项" : "本模块"}已勾选{" "}
+                        <span className="num">
+                            {selectedCount} / {group.codes.length}
+                        </span>{" "}
+                        项
+                    </p>
+                </div>
+                <div className="flex gap-1">
+                    <Button
+                        id={`${id}-select-all`}
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        disabled={
+                            disabled || selectedCount === group.codes.length
+                        }
+                        onClick={() => onToggle(group.codes, true)}
+                    >
+                        {filtered ? "选择匹配项" : "选择本模块全部"}
+                    </Button>
+                    <Button
+                        id={`${id}-clear`}
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        disabled={disabled || selectedCount === 0}
+                        onClick={() => onToggle(group.codes, false)}
+                    >
+                        {filtered ? "清除匹配项" : "清除本模块"}
+                    </Button>
+                </div>
+            </div>
+            {specialPermissions.length > 0 && (
+                <p className="mb-3 rounded-md bg-muted px-3 py-2 text-xs leading-5 text-muted-foreground">
+                    另有特殊授权：
+                    {specialPermissions.map(permissionLabel).join("、")}
+                    。调整下方单项勾选不会撤销这些授权。
+                </p>
+            )}
+            <div className="divide-y divide-border border-y border-border">
+                {group.rows.map((row) => (
+                    <fieldset key={row.resource} className="min-w-0 py-4">
+                        <legend
+                            className={cn(
+                                "float-left w-full pb-2 text-sm font-medium",
+                                group.rows.length === 1 &&
+                                    row.label === group.name &&
+                                    "sr-only",
+                            )}
+                        >
+                            {row.label}
+                        </legend>
+                        <div className="clear-both grid gap-x-3 gap-y-1 sm:grid-cols-2 xl:grid-cols-3">
+                            {row.cells.flatMap((item) => {
+                                if (!item) return []
+                                const checked = selectedSet.has(item.code)
+                                const changed =
+                                    checked !== initialSet.has(item.code)
+                                const checkboxId = `${id}-cell-${toAutomationIdSegment(item.code)}`
+                                return [
+                                    <label
+                                        key={item.code}
+                                        htmlFor={checkboxId}
+                                        title={[
+                                            item.description,
+                                            ...(item.relatedGroups ?? []).map(
+                                                (name) => `同时用于${name}`,
+                                            ),
+                                        ].join("；")}
+                                        className={cn(
+                                            "flex min-h-10 cursor-pointer items-center gap-2.5 rounded-md border px-3 py-2 text-sm hover:bg-muted/60",
+                                            checked
+                                                ? "border-border bg-muted/40"
+                                                : "border-transparent",
+                                            disabled &&
+                                                "cursor-default opacity-60",
+                                        )}
+                                    >
+                                        <input
+                                            id={checkboxId}
+                                            type="checkbox"
+                                            checked={checked}
+                                            disabled={disabled}
+                                            aria-label={`${row.label} · ${actionLabel(item.action)}`}
+                                            className="size-4 shrink-0 accent-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                                            onChange={(event) =>
+                                                onToggle(
+                                                    [item.code],
+                                                    event.target.checked,
+                                                )
+                                            }
+                                        />
+                                        <span className="min-w-0 flex-1">
+                                            {actionLabel(item.action)}
+                                        </span>
+                                        {item.dangerous && (
+                                            <ShieldAlertIcon
+                                                className="size-3.5 shrink-0 text-destructive"
+                                                aria-label="高风险权限"
+                                            />
+                                        )}
+                                        {changed && (
+                                            <span
+                                                className={cn(
+                                                    "shrink-0 text-xs",
+                                                    checked
+                                                        ? "text-success"
+                                                        : "text-destructive",
+                                                )}
+                                            >
+                                                {checked ? "新增" : "移除"}
+                                            </span>
+                                        )}
+                                    </label>,
+                                ]
+                            })}
+                        </div>
+                    </fieldset>
+                ))}
+            </div>
+        </section>
     )
 }

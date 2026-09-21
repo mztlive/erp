@@ -2,6 +2,7 @@ import { supplierTaxPercentages } from "@/lib/supplier-tax-rates"
 /** 供应商对象中心：聚合 Party / 联系人 / 银行 / 税号 / 能力 / 资质 / 评分。 */
 
 import { apiGet } from "@/lib/api"
+import { isApiError } from "@/lib/api/errors"
 import type {
     SupplierDetailDto,
     SupplierQualificationDto,
@@ -14,7 +15,6 @@ import {
     fact,
     factsOf,
     invoiceLabel,
-    isApiError,
     parseBusinessCategoryFromSnapshot,
     pickDefaultOrFirst,
     ratingLabel,

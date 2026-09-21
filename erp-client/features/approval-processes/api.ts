@@ -1,12 +1,7 @@
 import { apiGet, apiPost, apiPut } from "@/lib/api"
 import { createApiError } from "@/lib/api/errors"
 
-import {
-    parseCatalog,
-    parseDefinitionDetail,
-    parseEligibleAssignees,
-    parseVersions,
-} from "./parse"
+import { parseCatalog, parseDefinitionDetail, parseVersions } from "./parse"
 import { fromPromise, type ResultAsync } from "./result"
 import type {
     CreateDefinitionDraftRequest,
@@ -21,7 +16,7 @@ import type {
 import { assertWritePayloadSafe } from "./write-payload"
 import type { ApiError } from "./result"
 
-const requireDetail = (value: unknown): DefinitionDetailView => {
+const requireDetail = (value: DefinitionDetailView): DefinitionDetailView => {
     const detail = parseDefinitionDetail(value)
     if (!detail) {
         throw createApiError({
@@ -44,7 +39,9 @@ export const fetchDefinitionCatalog = (): ResultAsync<
 > =>
     fromPromise(async () =>
         parseCatalog(
-            await apiGet<unknown>("/admin/approval-processes/catalog"),
+            await apiGet<DefinitionCatalogItem[]>(
+                "/admin/approval-processes/catalog",
+            ),
         ),
     )
 
@@ -58,7 +55,7 @@ export const fetchDefinitionVersions = (
 ): ResultAsync<DefinitionVersionItem[], ApiError> =>
     fromPromise(async () =>
         parseVersions(
-            await apiGet<unknown>(
+            await apiGet<DefinitionVersionItem[]>(
                 `/admin/approval-processes/${encodeURIComponent(documentType)}/versions`,
             ),
         ),
@@ -74,7 +71,7 @@ export const fetchDefinitionDetail = (
 ): ResultAsync<DefinitionDetailView, ApiError> =>
     fromPromise(async () =>
         requireDetail(
-            await apiGet<unknown>(
+            await apiGet<DefinitionDetailView>(
                 `/admin/approval-process-definitions/${encodeURIComponent(definitionId)}`,
             ),
         ),
@@ -91,14 +88,12 @@ export const fetchEligibleAssignees = (
     search: string,
 ): ResultAsync<EligibleAssignee[], ApiError> =>
     fromPromise(async () =>
-        parseEligibleAssignees(
-            await apiGet<unknown>(
-                `/admin/approval-processes/${encodeURIComponent(documentType)}/eligible-assignees`,
-                {
-                    search: search.trim() || undefined,
-                    limit: 20,
-                },
-            ),
+        apiGet<EligibleAssignee[]>(
+            `/admin/approval-processes/${encodeURIComponent(documentType)}/eligible-assignees`,
+            {
+                search: search.trim() || undefined,
+                limit: 20,
+            },
         ),
     )
 
@@ -113,7 +108,7 @@ export const createDefinitionDraft = (
     fromPromise(async () => {
         assertWritePayloadSafe(request)
         return requireDetail(
-            await apiPost<unknown>(
+            await apiPost<DefinitionDetailView>(
                 "/admin/approval-process-definitions/drafts",
                 request,
             ),
@@ -133,7 +128,7 @@ export const replaceDefinitionNodes = (
     fromPromise(async () => {
         assertWritePayloadSafe(request)
         return requireDetail(
-            await apiPut<unknown>(
+            await apiPut<DefinitionDetailView>(
                 `/admin/approval-process-definitions/${encodeURIComponent(definitionId)}/nodes`,
                 request,
             ),
@@ -153,7 +148,7 @@ export const publishDefinition = (
     fromPromise(async () => {
         assertWritePayloadSafe(request)
         return requireDetail(
-            await apiPost<unknown>(
+            await apiPost<DefinitionDetailView>(
                 `/admin/approval-process-definitions/${encodeURIComponent(definitionId)}/publish`,
                 request,
             ),
@@ -173,7 +168,7 @@ export const retireDefinition = (
     fromPromise(async () => {
         assertWritePayloadSafe(request)
         return requireDetail(
-            await apiPost<unknown>(
+            await apiPost<DefinitionDetailView>(
                 `/admin/approval-process-definitions/${encodeURIComponent(definitionId)}/retire`,
                 request,
             ),

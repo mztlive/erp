@@ -1,4 +1,4 @@
-import type { ApiError } from "./api/errors"
+import { isApiError } from "./api/errors"
 
 export type FormalCommandSettlement = "succeeded" | "failed" | "unknown"
 
@@ -8,12 +8,6 @@ export type FormalCommandIdentity<T> = Readonly<{
 }>
 
 type KeyFactory = (prefix: string) => string
-
-const isApiError = (error: unknown): error is ApiError =>
-    typeof error === "object" &&
-    error !== null &&
-    "kind" in error &&
-    "message" in error
 
 /**
  * 网络中断或成功响应无法解析时，客户端无法证明服务端没有执行命令。

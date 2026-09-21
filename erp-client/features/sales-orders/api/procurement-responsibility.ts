@@ -23,12 +23,7 @@ export async function resolveSalesLineProcurementResponsibilities(
             "/admin/procurement-responsibility/resolve",
             payload,
         )
-    const rows = Array.isArray(response)
-        ? response
-        : Array.isArray(response?.lines)
-          ? response.lines
-          : []
-    return rows.map((line) => {
+    return response.lines.map((line) => {
         const ownerUserId = line.owner_user_id?.trim() || undefined
         const ownerName = line.owner_name?.trim() || undefined
         return {

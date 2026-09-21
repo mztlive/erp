@@ -30,11 +30,8 @@ export const SALES_RETURN_CASE_ROW_HAS_NO_APPROVAL: ForbidKey<
 
 /** 仓储/采购/财务待处理是履约分工态，不是审批复核。 */
 export const SALES_RETURN_CASE_FULFILLMENT_DIVISION_STATUSES = [
-    "PENDING_WAREHOUSE_ACCEPTANCE",
     "pending_warehouse_acceptance",
-    "PENDING_PROCUREMENT",
     "pending_procurement",
-    "PENDING_FINANCE",
     "pending_finance",
 ] as const
 
@@ -65,10 +62,10 @@ export const isSalesReturnCaseWorkItem = (workItem?: {
 /**
  * 判断处理单状态是否为履约与执行分工态。
  *
- * `PENDING_WAREHOUSE_ACCEPTANCE` / `PENDING_PROCUREMENT` / `PENDING_FINANCE`
+ * `pending_warehouse_acceptance` / `pending_procurement` / `pending_finance`
  * 只表示仓储验收、采购处理或财务处理，不是审批复核。
  *
- * @param status 服务端状态码，兼容 snake_case 与 SCREAMING_SNAKE。
+ * @param status 服务端状态码。
  * @returns 属于履约分工态时为 true。
  */
 export const isSalesReturnCaseFulfillmentDivisionStatus = (
@@ -105,7 +102,7 @@ export const salesReturnCaseTypeLabel = (caseType?: string): string => {
         case "service_failed":
             return "服务不通过"
         default:
-            return "退货"
+            return "未知类型"
     }
 }
 
@@ -123,7 +120,7 @@ export const salesReturnRouteLabel = (route?: string): string => {
         case "no_physical_return":
             return "不发生实物退回"
         default:
-            return "不发生实物退回"
+            return "未知路线"
     }
 }
 
@@ -132,33 +129,26 @@ export const salesReturnRouteLabel = (route?: string): string => {
  *
  * 待仓储验收 / 待采购处理 / 待财务处理是履约分工，不得写成审批复核。
  *
- * @param status 服务端状态码；兼容 snake_case 与 SCREAMING_SNAKE。
+ * @param status 服务端状态码。
  */
 export const salesReturnCaseStatusLabel = (status?: string): string => {
     switch (status) {
-        case "DRAFT":
         case "draft":
             return "草稿"
-        case "PENDING_WAREHOUSE_ACCEPTANCE":
         case "pending_warehouse_acceptance":
             return "待仓储验收"
-        case "PENDING_PROCUREMENT":
         case "pending_procurement":
             return "待采购处理"
-        case "PENDING_FINANCE":
         case "pending_finance":
             return "待财务处理"
-        case "PROCESSING":
         case "processing":
             return "处理中"
-        case "COMPLETED":
         case "completed":
             return "已完成"
-        case "VOIDED":
         case "voided":
             return "作废"
         default:
-            return "处理中"
+            return "未知状态"
     }
 }
 

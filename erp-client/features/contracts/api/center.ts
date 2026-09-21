@@ -1,10 +1,9 @@
 import { apiGet } from "@/lib/api"
+import { isApiError } from "@/lib/api/errors"
 import { paymentTermLabel } from "@/lib/business-options"
 
 import {
-    asContractStatus,
     baseActions,
-    isApiError,
     loadCustomerBrief,
     loadFileAsset,
     mapScanStatus,
@@ -45,7 +44,7 @@ export async function fetchContractCenter(
         throw error
     }
 
-    const status = asContractStatus(String(detail.status))
+    const status = detail.status
     const actions = baseActions(status)
     const current =
         detail.revisions.find((r) => r.id === detail.current_revision_id) ??

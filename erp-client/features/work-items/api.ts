@@ -1,4 +1,5 @@
-import { apiGet, apiPost, type ApiError, type Page } from "@/lib/api"
+import { apiGet, apiPost, type Page } from "@/lib/api"
+import { isApiError } from "@/lib/api/errors"
 
 import type {
     WorkItemDto,
@@ -83,44 +84,17 @@ const WORK_ITEM_CONFLICT_CODES = new Set<WorkItemConflictCode>([
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === "object" && value !== null
 
-/** 校验冲突信封内的最新任务满足详情缓存的最小稳定合同。 */
-const isWorkItemDto = (value: unknown): value is WorkItemDto => {
-    if (!isRecord(value)) return false
-    return (
-        typeof value.id === "string" &&
-        typeof value.work_item_type === "string" &&
-        typeof value.handler_key === "string" &&
-        (value.status === "OPEN" ||
-            value.status === "COMPLETED" ||
-            value.status === "CLOSED") &&
-        typeof value.assignment_source === "string" &&
-        typeof value.owner_role === "string" &&
-        typeof value.owner_organization_id === "string" &&
-        (value.processing_state === "READY" ||
-            value.processing_state === "APPROVAL_BLOCKED" ||
-            value.processing_state === "EXECUTION_BLOCKED") &&
-        typeof value.business_object_type === "string" &&
-        typeof value.business_object_id === "string" &&
-        typeof value.root_business_object_id === "string" &&
-        typeof value.subject_version === "string" &&
-        (typeof value.task_version === "string" ||
-            typeof value.task_version === "number") &&
-        (typeof value.priority === "string" ||
-            typeof value.priority === "number") &&
-        typeof value.created_at === "number"
-    )
-}
-
 /** 从统一 API 异常中读取责任命令的结构化 409 数据。 */
 export const parseWorkItemConflict = (
     error: unknown,
 ): WorkItemConflict | undefined => {
-    if (!isRecord(error) || error.status !== 409) return undefined
-    const apiError = error as Partial<ApiError>
-    const envelope = isRecord(apiError.responseData)
-        ? apiError.responseData
+    if (!isApiError(error) || error.status !== 409) return undefined
+    const envelope = isRecord(error.responseData)
+        ? error.responseData
         : undefined
-    const rawCode = apiError.code ?? envelope?.code
+    const rawCode =
+        error.code ??
+        (typeof envelope?.code === "string" ? envelope.code : undefined)
     if (
         typeof rawCode !== "string" ||
         !WORK_ITEM_CONFLICT_CODES.has(rawCode as WorkItemConflictCode)
@@ -130,12 +104,10 @@ export const parseWorkItemConflict = (
     const data = isRecord(envelope?.data)
         ? (envelope.data as WorkItemConflictDataDto)
         : undefined
-    const currentWorkItem = isWorkItemDto(data?.current_work_item)
-        ? data.current_work_item
-        : null
+    const current = data?.current_work_item
     return {
         code: rawCode as WorkItemConflictCode,
-        currentWorkItem,
+        currentWorkItem: isRecord(current) ? (current as WorkItemDto) : null,
     }
 }
 

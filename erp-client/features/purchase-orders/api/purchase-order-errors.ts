@@ -1,16 +1,6 @@
-import type { ApiError } from "@/lib/api"
-import { getErrorMessage } from "@/lib/api/errors"
+import { getErrorMessage, isApiError } from "@/lib/api/errors"
 import { classifyFormalCommandError } from "@/lib/formal-command"
 import type { FormalActionResponse } from "@/features/purchase-orders/types"
-
-export function isApiError(error: unknown): error is ApiError {
-    return (
-        typeof error === "object" &&
-        error !== null &&
-        "kind" in error &&
-        "message" in error
-    )
-}
 
 export function apiErrorMessage(error: unknown): string {
     return getErrorMessage(error, "请求未完成，请稍后重试。")

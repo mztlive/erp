@@ -24,7 +24,7 @@ import { useBooks } from "@/features/sales-selection/hooks/queries"
 import { BOOK_STATUS_VIEWS } from "@/features/sales-selection/lib/presentation"
 import type { BookListQuery } from "@/features/sales-selection/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import type { ApiError } from "@/lib/api"
+import { isDataScopeChanged } from "@/features/data-scope/cache"
 import { booksListStyles as listStyles } from "./books-list-styles"
 
 const DEFAULT_PAGE_SIZE = 20
@@ -71,13 +71,7 @@ function filtersActive(query: BookListQuery): boolean {
 
 /** 跨页范围版本变化：回第一页刷新，不拼接新旧权限结果。 */
 function isScopeConflict(error: unknown): boolean {
-    if (typeof error !== "object" || error === null) return false
-    const apiError = error as Partial<ApiError>
-    return (
-        apiError.status === 409 &&
-        typeof apiError.message === "string" &&
-        apiError.message.includes("DATA_SCOPE_CHANGED")
-    )
+    return isDataScopeChanged(error)
 }
 
 /**

@@ -23,9 +23,6 @@ export async function fetchProcurementResponsibilityRules(): Promise<
             `${RULES_PATH}?page=${page}&page_size=${pageSize}`,
         )
     const first = await fetchPage(1)
-    if (Array.isArray(first)) {
-        return first.map(mapProcurementResponsibilityRule)
-    }
     const pageCount = Math.ceil(first.total / first.page_size)
     const rest =
         pageCount > 1
@@ -35,10 +32,7 @@ export async function fetchProcurementResponsibilityRules(): Promise<
                   ),
               )
             : []
-    const rows = [
-        ...first.items,
-        ...rest.flatMap((page) => (Array.isArray(page) ? page : page.items)),
-    ]
+    const rows = [...first.items, ...rest.flatMap((page) => page.items)]
     return rows.map(mapProcurementResponsibilityRule)
 }
 

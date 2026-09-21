@@ -4,7 +4,7 @@
  */
 
 import { apiGet, apiPost } from "@/lib/api"
-import { getErrorMessage } from "@/lib/api/errors"
+import { getErrorCode, getErrorMessage } from "@/lib/api/errors"
 import type { BackendSupplierRefund } from "@/features/supplier-payables/api/mappers"
 import { projectSupplierRefund } from "@/features/supplier-payables/api/mappers"
 import { isOutcomeUnknown } from "@/features/supplier-payables/api/shared"
@@ -24,11 +24,11 @@ function refundError(
     if (isOutcomeUnknown(error)) {
         return { status: "unknown", message, idempotencyKey }
     }
-    const code =
-        error && typeof error === "object" && "code" in error
-            ? String((error as { code?: unknown }).code ?? "HTTP_ERROR")
-            : "HTTP_ERROR"
-    return { status: "failed", code, message }
+    return {
+        status: "failed",
+        code: getErrorCode(error) ?? "HTTP_ERROR",
+        message,
+    }
 }
 
 /**

@@ -64,12 +64,18 @@ export const createApiError = (input: ApiErrorInput): ApiErrorException =>
     new ApiErrorException(input)
 
 /** 判断未知异常是否满足统一 API 错误合同。 */
-const isApiError = (error: unknown): error is ApiError =>
+export const isApiError = (error: unknown): error is ApiError =>
     typeof error === "object" &&
     error !== null &&
     "kind" in error &&
     "message" in error &&
     typeof error.message === "string"
+
+/** 读取统一 API 错误上的稳定错误码。 */
+export const getErrorCode = (error: unknown): string | undefined => {
+    if (!isApiError(error) || typeof error.code !== "string") return undefined
+    return error.code || undefined
+}
 
 type ErrorEnvelope = {
     status?: unknown

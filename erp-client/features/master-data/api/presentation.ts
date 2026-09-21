@@ -12,22 +12,13 @@ import type {
     ProductKind,
 } from "@/features/master-data/types"
 import { PRODUCT_KIND_LABELS } from "@/features/master-data/types"
-import type { ApiError } from "@/lib/api/errors"
 import { paymentTermCode } from "@/lib/business-options"
 import { compareDecimal, multiplyFixed } from "@/lib/fixed-decimal"
 
 export const LIST_PAGE_SIZE = 100
 
-export const isApiError = (error: unknown): error is ApiError =>
-    typeof error === "object" &&
-    error !== null &&
-    "kind" in error &&
-    "message" in error
-
-export const asLifecycle = (status: EnableStatus | string): LifecycleStatus =>
-    status === "active" || status === "ACTIVE" || status === "ENABLED"
-        ? "ENABLED"
-        : "DISABLED"
+export const asLifecycle = (status: EnableStatus): LifecycleStatus =>
+    status === "active" ? "ENABLED" : "DISABLED"
 
 export const lifecycleLabel = (status: LifecycleStatus): string =>
     status === "ENABLED" ? "当前启用" : "当前停用"

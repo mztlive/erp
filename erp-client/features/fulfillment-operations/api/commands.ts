@@ -4,7 +4,7 @@
  */
 
 import { apiGet, apiPost, apiPostForm, apiPut } from "@/lib/api"
-import { getErrorMessage } from "@/lib/api/errors"
+import { getErrorMessage, isApiError } from "@/lib/api/errors"
 import type {
     FormalActionResponse,
     PostFulfillmentOperationCommand,
@@ -12,7 +12,6 @@ import type {
     SaveFulfillmentOperationCommand,
 } from "@/features/fulfillment-operations/types"
 import {
-    isApiError,
     isoToUnixSecs,
     nowIso,
     secsToIso,

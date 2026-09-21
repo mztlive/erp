@@ -1,7 +1,6 @@
 import { apiGet, type Page } from "@/lib/api"
 
 import {
-    asContractStatus,
     baseActions,
     isExpiringWithin30Days,
     tsToIso,
@@ -19,7 +18,7 @@ import {
 function mapListRow(row: BackendContractView): ContractListRow {
     const revision: BackendContractRevision | null =
         row.current_revision ?? null
-    const status = asContractStatus(String(row.status))
+    const status = row.status
     const actions = baseActions(status)
     const validFrom =
         revision?.valid_from ?? tsToIso(row.created_at).slice(0, 10)

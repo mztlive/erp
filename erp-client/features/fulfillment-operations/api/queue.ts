@@ -4,6 +4,7 @@
  */
 
 import { apiGet } from "@/lib/api"
+import { isApiError } from "@/lib/api/errors"
 import type {
     FulfillmentOperation,
     FulfillmentOperationType,
@@ -15,7 +16,6 @@ import {
     type FulfillmentRole,
 } from "@/features/fulfillment-operations/lib/fulfillment-roles"
 import {
-    isApiError,
     nowIso,
     secsToIso,
 } from "@/features/fulfillment-operations/lib/projection"

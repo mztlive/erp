@@ -5,6 +5,7 @@
  */
 
 import { apiGet } from "@/lib/api"
+import { isApiError } from "@/lib/api/errors"
 import type {
     InventoryListView,
     InventoryQuery,
@@ -18,7 +19,6 @@ import {
     OPENING_STOCK_NOTE,
     backendMovementTypeFilter,
     filterSummary,
-    isApiError,
 } from "@/features/inventory/api/display"
 import {
     mapAdjustment,

@@ -4,8 +4,7 @@ import {
     WAREHOUSE_WRITE_CODE,
     WAREHOUSE_WRITE_MESSAGE,
 } from "@/features/master-data/lib/data"
-import { isApiError } from "@/features/master-data/api/presentation"
-import { getErrorMessage } from "@/lib/api/errors"
+import { getErrorMessage, isApiError } from "@/lib/api/errors"
 import type {
     MasterDataMutationResult,
     ProductKind,

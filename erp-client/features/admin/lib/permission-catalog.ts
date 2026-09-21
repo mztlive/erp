@@ -27,6 +27,8 @@ export type PermissionItemOption = {
     endpoints: readonly PermissionEndpoint[]
     /** 高风险动作：删除、作废、冲销、撤权、退款、查看敏感信息。 */
     dangerous: boolean
+    /** 同一授权还会用于这些功能，搜索时仍可找到。 */
+    relatedGroups?: readonly string[]
 }
 
 export type PermissionGroupOption = {
@@ -78,6 +80,15 @@ export function isDangerousAction(action: string): boolean {
 /** 动作中文名；界面一律用这里的措辞，不展示英文动作名。 */
 const ACTION_LABEL: Record<string, string> = {
     list: "查看列表",
+    get: "查看详情",
+    copy_link: "复制链接",
+    rotate_link: "更换链接",
+    maintain: "维护陈列",
+    prepare: "生成选品册",
+    commit: "登记付款并核销",
+    handover: "交接跟进人",
+    resolve_supply_exception: "完成供货异常核对",
+    cancel_all: "停止全部后台任务",
     detail: "查看详情",
     read: "查看",
     preview: "预览",
@@ -129,12 +140,17 @@ const ACTION_LABEL: Record<string, string> = {
 const ACTION_ORDER: readonly string[] = [
     "list",
     "detail",
+    "get",
     "read",
     "preview",
+    "copy_link",
     "assignable_list",
     "create",
     "update",
     "edit",
+    "maintain",
+    "prepare",
+    "rotate_link",
     "update_role",
     "register",
     "submit",
@@ -149,6 +165,7 @@ const ACTION_ORDER: readonly string[] = [
     "retire",
     "expire",
     "post",
+    "commit",
     "process",
     "process_pending",
     "operate",
@@ -159,10 +176,13 @@ const ACTION_ORDER: readonly string[] = [
     "close",
     "resume",
     "reassign",
+    "handover",
     "resolve",
+    "resolve_supply_exception",
     "investigate",
     "request_source_fix",
     "cancel",
+    "cancel_all",
     "cancel_approval",
     "cancel_blocked",
     "reject",
@@ -319,13 +339,45 @@ const RAW_GROUPS = PERMISSION_GROUPS.map((group) => ({
     })),
 }))
 
-/** 权限目录：按编码去重后的分组清单。 */
-export const PERMISSION_CATALOG: readonly PermissionGroupOption[] =
-    RAW_GROUPS.map((group) => ({
+/** 同一个授权编码只有一个展示归属；合并所有接口说明，不改变授权编码。 */
+export const PERMISSION_CATALOG: readonly PermissionGroupOption[] = (() => {
+    const items = new Map(
+        dedupeGroupItems(RAW_GROUPS.flatMap((group) => group.permissions)).map(
+            (item) => [item.code, item],
+        ),
+    )
+    const owners = new Map<string, string>()
+    const related = new Map<string, Set<string>>()
+    for (const group of RAW_GROUPS) {
+        for (const permission of group.permissions) {
+            const code = `${permission.resource}:${permission.action}`
+            if (!owners.has(code)) owners.set(code, group.name)
+            const names = related.get(code) ?? new Set<string>()
+            names.add(group.name)
+            related.set(code, names)
+        }
+    }
+    // 报表复用对象读取权限时，归属仍留在业务对象，不能被报表分组截走。
+    owners.set("sales_order:list", "销售单")
+    const assigned = new Set<string>()
+    return RAW_GROUPS.map((group) => ({
         name: group.name,
         description: group.description,
-        items: dedupeGroupItems(group.permissions),
-    }))
+        items: group.permissions.flatMap((permission) => {
+            const code = `${permission.resource}:${permission.action}`
+            if (assigned.has(code) || owners.get(code) !== group.name) return []
+            assigned.add(code)
+            return [
+                {
+                    ...items.get(code)!,
+                    relatedGroups: [...(related.get(code) ?? [])].filter(
+                        (name) => name !== group.name,
+                    ),
+                },
+            ]
+        }),
+    })).filter((group) => group.items.length > 0)
+})()
 
 export const BUSINESS_GROUPS: readonly PermissionGroupOption[] =
     PERMISSION_CATALOG.filter((group) => !isSystemGroup(group.name))
@@ -333,12 +385,12 @@ export const SYSTEM_GROUPS: readonly PermissionGroupOption[] =
     PERMISSION_CATALOG.filter((group) => isSystemGroup(group.name))
 
 /**
- * 权限组稳定自动化 id 片段：以目录中首个权限的 resource 为稳定英文键，
+ * 权限组稳定自动化 id 片段：以目录中首个唯一权限编码为稳定英文键，
  * 避免中文组名经 toAutomationIdSegment 清洗后全部坍缩为 item 导致重复。
  */
 export function permissionGroupSegment(name: string): string {
     const group = PERMISSION_CATALOG.find((entry) => entry.name === name)
-    const raw = group?.items[0]?.resource ?? group?.items[0]?.code ?? name
+    const raw = group?.items[0]?.code ?? name
     return toAutomationIdSegment(raw)
 }
 
@@ -469,6 +521,7 @@ export function matchesKeyword(item: PermissionItemOption, q: string): boolean {
     return [
         item.code,
         item.description,
+        ...(item.relatedGroups ?? []),
         resourceLabel(item.resource),
         actionLabel(item.action),
         ...item.endpoints.map((endpoint) => endpoint.path),
@@ -521,9 +574,10 @@ export function filterMatrixByKeyword(
             const hitCodes = new Set(hitCells.map((cell) => cell.code))
             const rows = group.rows
                 .map((row) => {
-                    const cells = group.actions
-                        .map((action, index) =>
-                            actions.includes(action) ? row.cells[index]! : null,
+                    const cells = actions
+                        .map(
+                            (action) =>
+                                row.cells[group.actions.indexOf(action)]!,
                         )
                         .map((cell) =>
                             cell && hitCodes.has(cell.code) ? cell : null,
@@ -559,7 +613,7 @@ export function countSelectedByTab(
         business: 0,
         system: 0,
     }
-    for (const code of selected) {
+    for (const code of new Set(selected)) {
         const groupName = GROUP_NAME_BY_CODE.get(code)
         if (!groupName) continue
         counts[isSystemGroup(groupName) ? "system" : "business"] += 1
@@ -591,7 +645,7 @@ export function summarizePermissions(
     const counts = new Map<string, number>()
     let total = 0
     let unknown = 0
-    for (const code of codes) {
+    for (const code of new Set(codes)) {
         if (code === "*:*") continue
         const groupName = GROUP_NAME_BY_CODE.get(code)
         if (!groupName) {
@@ -612,7 +666,7 @@ export function selectedItemsByGroup(
     selected: readonly string[],
 ): readonly { name: string; items: readonly PermissionItemOption[] }[] {
     const byGroup = new Map<string, PermissionItemOption[]>()
-    for (const code of selected) {
+    for (const code of new Set(selected)) {
         const groupName = GROUP_NAME_BY_CODE.get(code)
         const item = PERMISSION_BY_CODE.get(code)
         if (!groupName || !item) continue

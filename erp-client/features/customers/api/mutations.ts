@@ -1,12 +1,12 @@
-import { apiGet, apiPost, apiPut } from "@/lib/api"
-import type { ApiError } from "@/lib/api"
+import { apiGet, apiPost, apiPut, type ApiError } from "@/lib/api"
+import { isApiError } from "@/lib/api/errors"
 import type {
     CreateCustomerInput,
     CustomerMutationResult,
     CustomerStatus,
     SaveCustomerDetailsInput,
 } from "@/features/customers/types"
-import { apiErrorMessage, isApiError } from "./errors"
+import { apiErrorMessage } from "./errors"
 import {
     mapAddressInput,
     mapBankInput,

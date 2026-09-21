@@ -1,4 +1,5 @@
 import { apiGet } from "@/lib/api"
+import { isApiError } from "@/lib/api/errors"
 import {
     fetchCustomerQuality,
     fetchCustomerQualityPeriodPolicy,
@@ -9,7 +10,6 @@ import {
     decodeCustomerCenterReceivable,
     decodeCustomerCenterRelated,
 } from "./center-read-model"
-import { isApiError } from "./errors"
 import {
     mapAddress,
     mapAssignment,

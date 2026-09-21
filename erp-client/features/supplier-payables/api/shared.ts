@@ -1,5 +1,6 @@
 /** W12 供应商往来 · 无状态 API 工具（不属于公开导出面）。 */
 
+import { getErrorCode, getErrorMessage } from "@/lib/api/errors"
 import { classifyFormalCommandError } from "@/lib/formal-command"
 
 export const LIST_PAGE_SIZE = 100
@@ -22,17 +23,13 @@ export function beginFreshAllocationAttempt(
 }
 
 export function errorMessage(err: unknown, fallback: string): string {
-    return err && typeof err === "object" && "message" in err
-        ? String((err as { message: unknown }).message)
-        : fallback
+    return getErrorMessage(err, fallback)
 }
 
 /** 判断正式命令是否处于无法证明成功或失败的结果未知状态。 */
 export function isOutcomeUnknown(err: unknown): boolean {
-    const backendMarkedUnknown =
-        err !== null &&
-        typeof err === "object" &&
-        "code" in err &&
-        (err as { code?: unknown }).code === "OUTCOME_UNKNOWN"
-    return backendMarkedUnknown || classifyFormalCommandError(err) === "unknown"
+    return (
+        getErrorCode(err) === "OUTCOME_UNKNOWN" ||
+        classifyFormalCommandError(err) === "unknown"
+    )
 }
