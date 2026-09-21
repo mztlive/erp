@@ -36,6 +36,7 @@ type AccessViewTableProps = {
     errorState?: ReactNode
     /** 整行点击打开的详情（有效权限 / 审计事件）。 */
     onRowPreview?: (row: RoleRow | UserRow | AuditEventRow) => void
+    highlightedRowId?: string
 }
 
 function AccessViewTable({
@@ -52,6 +53,7 @@ function AccessViewTable({
     onClearFilters,
     errorState,
     onRowPreview,
+    highlightedRowId,
 }: AccessViewTableProps) {
     const pagedRows = rows.slice(
         pagination.pageIndex * pagination.pageSize,
@@ -91,6 +93,7 @@ function AccessViewTable({
                 data={pagedRows as RoleRow[]}
                 getRowId={(row) => row.id}
                 onRowPreview={onRowPreview}
+                highlightedRowId={highlightedRowId}
                 defaultColumnPinning={{
                     left: ["identity"],
                     right: ["actions"],
@@ -108,6 +111,7 @@ function AccessViewTable({
                 data={pagedRows as UserRow[]}
                 getRowId={(row) => row.id}
                 onRowPreview={onRowPreview}
+                highlightedRowId={highlightedRowId}
                 defaultColumnPinning={{
                     left: ["identity"],
                     right: ["actions"],

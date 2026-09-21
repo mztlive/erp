@@ -214,6 +214,7 @@ export function AccessAuditPage() {
                         userColumns={page.userColumns}
                         auditColumns={page.auditColumns}
                         onClearFilters={page.clearFilters}
+                        highlightedRowId={page.explainSubject?.id}
                         onRowPreview={(row) =>
                             page.openExplain("ROLE", (row as RoleRow).id)
                         }
@@ -243,6 +244,13 @@ export function AccessAuditPage() {
 
             <AccessPreviewSheets
                 explainSubject={page.explainSubject}
+                previewRole={
+                    page.explainSubject?.type === "ROLE"
+                        ? (rows.find(
+                              (row) => row.id === page.explainSubject?.id,
+                          ) ?? null)
+                        : null
+                }
                 eventOpenId={page.eventOpenId}
                 effectiveQuery={page.effectiveQuery}
                 eventQuery={page.eventQuery}

@@ -4,119 +4,176 @@ import { BusinessEmptyState, BusinessFailureState } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-    GROUP_NAME_BY_CODE,
-    PERMISSION_CATALOG,
-} from "@/features/admin/lib/permission-catalog"
 import { useEffectiveAccessQuery } from "@/features/access-audit/hooks/queries"
-import { formatDateTime } from "@/lib/datetime"
-import { cn } from "@/lib/utils"
+import {
+    groupDataScopes,
+    permissionPreview,
+    type DataScopePreviewGroup,
+} from "@/features/access-audit/lib/effective-access-preview"
+import type { RoleRow } from "@/features/access-audit/types"
 
 type EffectiveAccessBodyProps = {
     query: ReturnType<typeof useEffectiveAccessQuery>
+    previewRole?: RoleRow | null
 }
 
-type GrantRow = {
-    id: string
-    title: string
-    detail: string
-    /** 权限编码等技术标识：次要展示，供排查时对照。 */
-    code?: string
-}
-
-/** 授权来源主体类型文案。 */
-function sourceTypeLabel(sourceType: string): string {
-    if (sourceType === "ROLE") return "角色"
-    if (sourceType === "USER") return "用户"
-    return sourceType
-}
-
-function GrantList({
-    items,
-    empty,
-    tone = "default",
+function PermissionLead({
+    preview,
 }: {
-    items: readonly GrantRow[]
-    empty?: string
-    tone?: "default" | "warning"
+    preview: ReturnType<typeof permissionPreview>
 }) {
-    if (items.length === 0) {
-        return empty ? (
-            <p className="text-sm text-muted-foreground">{empty}</p>
-        ) : null
+    return (
+        <section className="border-b border-border pb-6">
+            <h3 className="text-xs font-medium text-muted-foreground">
+                操作权限
+            </h3>
+            <p className="mt-2 text-[32px] font-semibold leading-10 tracking-tight">
+                {preview.allPermissions ? (
+                    "全部操作权限"
+                ) : (
+                    <>
+                        <span className="num">{preview.count}</span>
+                        <span className="ml-2 text-sm font-normal text-muted-foreground">
+                            项
+                        </span>
+                    </>
+                )}
+            </p>
+            <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                {preview.allPermissions
+                    ? "可进入全部模块。实际能看哪些单据仍受数据范围限制。"
+                    : preview.groups.length > 0
+                      ? `覆盖 ${preview.groups
+                            .slice(0, 3)
+                            .map((group) => group.name)
+                            .join("、")}${
+                            preview.groups.length > 3
+                                ? ` 等 ${preview.groups.length} 个模块`
+                                : ""
+                        }。具体动作在角色资料中调整。`
+                      : "尚未配置操作权限。"}
+            </p>
+        </section>
+    )
+}
+
+function ScopeResources({ group }: { group: DataScopePreviewGroup }) {
+    if (group.resources.length === 0) return null
+    if (group.scopeType === "company" && group.resources.length > 8) {
+        return (
+            <p className="text-[13px] leading-6">
+                适用于已接入的业务对象（
+                <strong className="num text-foreground">
+                    {group.resources.length}
+                </strong>{" "}
+                类）。
+            </p>
+        )
     }
     return (
-        <ul
-            className={cn(
-                "divide-y overflow-hidden rounded-lg border",
-                tone === "warning"
-                    ? "divide-warning/20 border-warning/40 bg-warning/5"
-                    : "divide-grid border-border",
-            )}
-        >
-            {items.map((item) => (
-                <li
-                    key={item.id}
-                    className="flex items-baseline justify-between gap-3 px-3 py-2.5"
-                >
-                    <div className="min-w-0">
-                        <div className="text-sm font-medium">{item.title}</div>
-                        <div className="text-xs text-muted-foreground">
-                            {item.detail}
-                        </div>
-                    </div>
-                    {item.code ? (
-                        <span className="shrink-0 font-mono text-xs text-muted-foreground">
-                            {item.code}
-                        </span>
-                    ) : null}
-                </li>
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-[13px] leading-6">
+            {group.resources.map((resource) => (
+                <span key={resource}>{resource}</span>
             ))}
-        </ul>
+        </div>
     )
 }
 
-/** 权限来源按模块分组，便于逐模块核对，而不是读一长串条目。 */
-function groupGrants(
-    grants: readonly {
-        id: string
-        targetLabel: string
-        capability: string
-        sourceType: string
-        sourceLabel: string
-    }[],
-): readonly { name: string; items: GrantRow[] }[] {
-    const sections = new Map<string, GrantRow[]>()
-    for (const grant of grants) {
-        const name = GROUP_NAME_BY_CODE.get(grant.capability) ?? "其它"
-        const row: GrantRow = {
-            id: grant.id,
-            title: grant.targetLabel,
-            detail: `允许 · 来源${sourceTypeLabel(grant.sourceType)} ${grant.sourceLabel}`,
-            code: grant.capability,
-        }
-        const bucket = sections.get(name)
-        if (bucket) bucket.push(row)
-        else sections.set(name, [row])
-    }
-    // 按权限目录顺序输出，目录外的编码（通配等）归到末尾的「其它」
-    const order = new Map(
-        PERMISSION_CATALOG.map((group, index) => [group.name, index] as const),
-    )
-    return [...sections.entries()]
-        .map(([name, items]) => ({ name, items }))
-        .sort(
-            (a, b) =>
-                (order.get(a.name) ?? Number.MAX_SAFE_INTEGER) -
-                (order.get(b.name) ?? Number.MAX_SAFE_INTEGER),
-        )
-}
-
-function EffectiveAccessBody({ query }: EffectiveAccessBodyProps) {
+function DataScopeSection({
+    query,
+    subjectLabel,
+}: {
+    query: EffectiveAccessBodyProps["query"]
+    subjectLabel: string
+}) {
     if (query.isPending) {
-        return <div className="h-40 animate-pulse rounded-lg bg-muted" />
+        return (
+            <section className="space-y-3">
+                <h3 className="font-medium">数据范围</h3>
+                <p role="status" className="text-xs text-muted-foreground">
+                    正在读取数据范围…
+                </p>
+            </section>
+        )
     }
     if (query.isError) {
+        return (
+            <section className="space-y-3">
+                <h3 className="font-medium">数据范围</h3>
+                <BusinessFailureState
+                    error={query.error}
+                    action={
+                        <Button
+                            id="operations-access-effective-access-retry"
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void query.refetch()}
+                        >
+                            重试
+                        </Button>
+                    }
+                />
+            </section>
+        )
+    }
+    const groups = groupDataScopes(query.data?.dataScopes ?? [])
+    return (
+        <section className="space-y-3">
+            <h3 className="font-medium">数据范围</h3>
+            <p className="text-xs leading-5 text-muted-foreground">
+                在已有操作权限的前提下，限制能看到哪些单据。
+            </p>
+            {groups.length === 0 ? (
+                <p className="text-xs leading-5 text-muted-foreground">
+                    尚未配置数据范围，不代表可访问全部数据。
+                </p>
+            ) : (
+                <div className="space-y-5">
+                    {groups.map((group) => {
+                        const showSource =
+                            group.sources.length > 0 &&
+                            (group.sources.length > 1 ||
+                                group.sources[0] !== subjectLabel)
+                        return (
+                            <div key={group.scopeType} className="space-y-1.5">
+                                <p className="font-medium">{group.label}</p>
+                                <p className="text-xs leading-5 text-muted-foreground">
+                                    {group.explanation}
+                                </p>
+                                <ScopeResources group={group} />
+                                {group.specifiedTargetCount > 0 ? (
+                                    <p className="text-xs leading-5 text-muted-foreground">
+                                        已指定{" "}
+                                        <strong className="num text-foreground">
+                                            {group.specifiedTargetCount}
+                                        </strong>{" "}
+                                        个组织或团队
+                                    </p>
+                                ) : null}
+                                {showSource ? (
+                                    <p className="text-xs leading-5 text-muted-foreground">
+                                        来自{group.sources.join("、")}
+                                    </p>
+                                ) : null}
+                            </div>
+                        )
+                    })}
+                </div>
+            )}
+        </section>
+    )
+}
+
+function EffectiveAccessBody({ query, previewRole }: EffectiveAccessBodyProps) {
+    if (!previewRole && query.isPending) {
+        return (
+            <p role="status" className="text-sm text-muted-foreground">
+                正在读取角色权限…
+            </p>
+        )
+    }
+    if (!previewRole && query.isError) {
         return (
             <BusinessFailureState
                 error={query.error}
@@ -133,193 +190,66 @@ function EffectiveAccessBody({ query }: EffectiveAccessBodyProps) {
             />
         )
     }
-    if (!query.data) {
+    if (!previewRole && !query.data) {
         return (
             <BusinessEmptyState
                 kind="no-data"
-                title="主体不存在或无权解释"
-                description="仅解释当前用户有权管理的主体。"
+                title="主体不存在或无权查看"
+                description="仅展示当前账号有权管理的角色。"
             />
         )
     }
+
+    const preview = permissionPreview({
+        previewRole,
+        grants: query.data?.moduleAndActionGrants ?? [],
+    })
+    const subjectLabel = previewRole?.name ?? query.data?.subject.label ?? ""
+    const denied = query.data?.deniedOrBlocked ?? []
+    const blockers = query.data?.actionBlockers ?? []
+
     return (
-        <div className="flex flex-col gap-5">
-            <div className="flex flex-wrap items-center gap-2 rounded-lg bg-muted/50 px-3 py-2.5">
-                <Badge variant="secondary">
-                    {query.data.subject.type === "ROLE" ? "角色" : "用户"}
-                </Badge>
-                <span className="text-sm font-medium">
-                    {query.data.subject.label}
-                </span>
-                <span className="ml-auto text-xs text-muted-foreground">
-                    计算于 {formatDateTime(query.data.calculatedAt, "full")}
-                </span>
-            </div>
+        <div className="space-y-6 text-sm">
+            <PermissionLead preview={preview} />
+            <DataScopeSection query={query} subjectLabel={subjectLabel} />
 
-            <section className="flex flex-col gap-3">
-                <h3 className="text-sm font-medium">
-                    模块与动作权限来源
-                    <span className="ml-2 text-xs font-normal text-muted-foreground">
-                        共{" "}
-                        <span className="num">
-                            {query.data.moduleAndActionGrants.length}
-                        </span>{" "}
-                        项
-                    </span>
-                </h3>
-                {query.data.moduleAndActionGrants.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                        无有效模块授权
-                    </p>
-                ) : (
-                    (() => {
-                        const sections = groupGrants(
-                            query.data.moduleAndActionGrants,
-                        )
-                        const visible = sections.slice(0, 2)
-                        const rest = sections.slice(2)
-                        const restCount = rest.reduce(
-                            (sum, section) => sum + section.items.length,
-                            0,
-                        )
-                        return (
-                            <>
-                                {visible.map((section) => (
-                                    <div
-                                        key={section.name}
-                                        className="flex flex-col gap-1.5"
-                                    >
-                                        <div className="flex items-baseline gap-2 text-xs text-muted-foreground">
-                                            <span className="font-medium text-foreground">
-                                                {section.name}
-                                            </span>
-                                            <span className="num">
-                                                {section.items.length}
-                                            </span>
-                                        </div>
-                                        <GrantList items={section.items} />
-                                    </div>
-                                ))}
-                                {rest.length > 0 ? (
-                                    <details className="group rounded-lg border border-border">
-                                        <summary className="cursor-pointer px-3 py-2 text-xs text-muted-foreground hover:text-foreground">
-                                            展开其余 {rest.length} 个模块（共{" "}
-                                            {restCount} 项）
-                                        </summary>
-                                        <div className="flex flex-col gap-3 border-t border-border px-3 py-3">
-                                            {rest.map((section) => (
-                                                <div
-                                                    key={section.name}
-                                                    className="flex flex-col gap-1.5"
-                                                >
-                                                    <div className="flex items-baseline gap-2 text-xs text-muted-foreground">
-                                                        <span className="font-medium text-foreground">
-                                                            {section.name}
-                                                        </span>
-                                                        <span className="num">
-                                                            {
-                                                                section.items
-                                                                    .length
-                                                            }
-                                                        </span>
-                                                    </div>
-                                                    <GrantList
-                                                        items={section.items}
-                                                    />
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </details>
-                                ) : null}
-                            </>
-                        )
-                    })()
-                )}
-            </section>
-
-            <section className="flex flex-col gap-2">
-                <h3 className="text-sm font-medium">数据范围来源</h3>
-                <GrantList
-                    empty="无数据范围记录"
-                    items={query.data.dataScopes.map((g) => ({
-                        id: g.id,
-                        title: g.targetLabel,
-                        detail: `来源 ${g.sourceLabel}`,
-                    }))}
-                />
-            </section>
-
-            <section className="flex flex-col gap-2">
-                <h3 className="text-sm font-medium">字段策略来源</h3>
-                <GrantList
-                    empty="无字段策略记录"
-                    items={query.data.fieldPolicies.map((g) => ({
-                        id: g.id,
-                        title: g.targetLabel,
-                        detail: `${g.capability} · ${g.sourceLabel}`,
-                    }))}
-                />
-            </section>
-
-            <section className="flex flex-col gap-2">
-                <h3 className="text-sm font-medium">历史参与者</h3>
-                <GrantList
-                    empty="无历史参与者规则"
-                    items={query.data.historicalParticipantRules.map((e) => ({
-                        id: e.id,
-                        title: e.sourceLabel,
-                        detail: e.message,
-                    }))}
-                />
-            </section>
-
-            {(query.data.deniedOrBlocked.length > 0 ||
-                query.data.actionBlockers.length > 0) && (
-                <section className="flex flex-col gap-2 rounded-lg border border-warning/40 bg-warning/5 px-3 py-3">
-                    <h3 className="text-sm font-medium">
-                        拒绝 / 阻塞
-                        <span className="ml-2 text-xs font-normal text-muted-foreground">
-                            对象状态与业务阻断，不混淆为配置缺失
-                        </span>
-                    </h3>
-                    {query.data.deniedOrBlocked.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">
-                            当前无拒绝或阻塞项
-                        </p>
-                    ) : (
-                        <ul className="flex flex-col gap-2">
-                            {query.data.deniedOrBlocked.map((e) => (
-                                <li
-                                    key={e.id}
-                                    className="flex flex-col gap-1 rounded-md bg-background/60 px-2.5 py-2"
-                                >
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <Badge variant="warning">
-                                            {e.layerLabel}
-                                        </Badge>
-                                        <span className="font-mono text-xs text-muted-foreground">
-                                            {e.code}
-                                        </span>
-                                    </div>
-                                    <p className="text-sm text-muted-foreground">
-                                        {e.message}
-                                    </p>
-                                    <p className="text-xs text-muted-foreground">
-                                        来源{sourceTypeLabel(e.sourceType)}{" "}
-                                        {e.sourceLabel}
-                                    </p>
-                                </li>
-                            ))}
-                        </ul>
-                    )}
-                    {query.data.actionBlockers.map((b) => (
-                        <Alert key={`${b.action}-${b.code}`} variant="warning">
-                            <AlertTitle>{b.message}</AlertTitle>
-                            <AlertDescription>{b.code}</AlertDescription>
+            {denied.length > 0 || blockers.length > 0 ? (
+                <section className="space-y-3 border-t border-border pt-6">
+                    <h3 className="font-medium">当前限制</h3>
+                    {denied.map((item) => (
+                        <div key={item.id} className="space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <Badge variant="warning">
+                                    {item.layerLabel}
+                                </Badge>
+                            </div>
+                            <p className="text-xs leading-5 text-muted-foreground">
+                                {item.message}
+                            </p>
+                        </div>
+                    ))}
+                    {blockers.map((blocker) => (
+                        <Alert
+                            key={`${blocker.action}-${blocker.code}`}
+                            variant="warning"
+                        >
+                            <AlertTitle>{blocker.message}</AlertTitle>
+                            <AlertDescription>{blocker.code}</AlertDescription>
                         </Alert>
                     ))}
                 </section>
-            )}
+            ) : null}
+
+            {query.data ? (
+                <section className="border-t border-border pt-6">
+                    <h3 className="text-xs font-medium text-muted-foreground">
+                        查询范围
+                    </h3>
+                    <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                        以上为当前角色的操作权限与数据范围配置。具体业务操作是否允许，以执行时的权限校验为准。
+                    </p>
+                </section>
+            ) : null}
         </div>
     )
 }

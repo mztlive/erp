@@ -2,7 +2,10 @@ import {
     resourceLabel,
     summarizePermissions,
 } from "@/features/admin/lib/permission-catalog"
-import type { EffectiveAccessView, RoleRow } from "@/features/access-audit/types"
+import type {
+    EffectiveAccessView,
+    RoleRow,
+} from "@/features/access-audit/types"
 
 const SCOPE_TYPE_ORDER = [
     "company",
@@ -92,27 +95,23 @@ export function groupDataScopes(
         if (scope.sourceLabel) bucket.sources.push(scope.sourceLabel)
         buckets.set(scopeType, bucket)
     }
-    const rank = new Map(
-        SCOPE_TYPE_ORDER.map((type, index) => [type, index] as const),
-    )
+    const rankOf = (type: string) => {
+        const index = (SCOPE_TYPE_ORDER as readonly string[]).indexOf(type)
+        return index < 0 ? Number.MAX_SAFE_INTEGER : index
+    }
     return [...buckets.entries()]
         .map(([scopeType, bucket]) => ({
             scopeType,
             label: bucket.label,
             explanation:
-                SCOPE_TYPE_EXPLAIN[scopeType] ??
-                "按配置限制可查看的单据。",
-            resources: unique(bucket.resources.map((code) => resourceLabel(code))),
+                SCOPE_TYPE_EXPLAIN[scopeType] ?? "按配置限制可查看的单据。",
+            resources: unique(
+                bucket.resources.map((code) => resourceLabel(code)),
+            ).sort((a, b) => a.localeCompare(b, "zh-CN")),
             specifiedTargetCount: bucket.specifiedTargetCount,
             sources: unique(bucket.sources),
         }))
-        .sort(
-            (a, b) =>
-                (rank.get(a.scopeType as (typeof SCOPE_TYPE_ORDER)[number]) ??
-                    Number.MAX_SAFE_INTEGER) -
-                (rank.get(b.scopeType as (typeof SCOPE_TYPE_ORDER)[number]) ??
-                    Number.MAX_SAFE_INTEGER),
-        )
+        .sort((a, b) => rankOf(a.scopeType) - rankOf(b.scopeType))
 }
 
 export function formatResourceList(resources: readonly string[]): string {
