@@ -61,6 +61,7 @@ impl FundsAccess {
         sales_access.scope_version.hash(&mut authorization.fingerprint);
         purchase_resolved.scope_version.hash(&mut authorization.fingerprint);
         authorization.context.scope_version.hash(&mut authorization.fingerprint);
+        authorization.restrict_links();
         authorization.no_scope = authorization.empty();
         Ok((access, authorization))
     }

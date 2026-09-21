@@ -169,6 +169,9 @@ pub async fn register_created_customer_acceptance_document(
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
+    erp_read_models::sales_center::access::SalesAccess::new(db.clone(), rbac.clone())
+        .require_object(actor, "detail", acceptance.sales_order_id.as_ref(), &[], executor)
+        .await?;
     let bind_command = customer_acceptance_bind_command(acceptance, actor.id())?;
     let document = new_registered_document(
         &acceptance.base.id,

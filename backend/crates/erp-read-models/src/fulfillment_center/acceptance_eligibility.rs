@@ -8,7 +8,7 @@ use erp_fulfillment::entity::fulfillment::{
 use erp_fulfillment::repository::FulfillmentExt;
 use erp_sales::repository::SalesOrderExt;
 use erp_sales::repository::prelude::*;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, NoTransaction};
 
 use super::FulfillmentReadService;
 use super::dto::{AcceptanceEligibilityView, AcceptanceSalesLineGroupView, EligibleFulfillmentFactView};
@@ -38,11 +38,20 @@ impl FulfillmentReadService {
         fields(layer = "service", domain = "fulfillment", operation = "acceptance_eligibility")
     )]
     pub async fn acceptance_eligibility(&self, sales_order_id: &str) -> Result<AcceptanceEligibilityView> {
+        self.load_acceptance_eligibility(sales_order_id, &mut NoTransaction).await
+    }
+
+    /// 沿用调用方授权事务读取剩余验收事实。
+    pub(super) async fn load_acceptance_eligibility(
+        &self,
+        sales_order_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<AcceptanceEligibilityView> {
         let so_id = SalesOrderId::new(sales_order_id.to_string());
         let so = self
             .db
             .sales_orders()
-            .find_by_id(sales_order_id, &mut NoTransaction)
+            .find_by_id(sales_order_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
         let revision_id = so
@@ -53,37 +62,36 @@ impl FulfillmentReadService {
         let revision = self
             .db
             .sales_order_revisions()
-            .find_by_id(&revision_id, &mut NoTransaction)
+            .find_by_id(&revision_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("销售生效版本不存在".to_string()))?;
         let revision_lines = self
             .db
             .sales_order_revision_lines()
-            .list_lines_by_revision(&revision.base.id.clone().into(), &mut NoTransaction)
+            .list_lines_by_revision(&revision.base.id.clone().into(), executor)
             .await?;
         let revision_line_ids: Vec<SalesOrderRevisionLineId> =
             revision_lines.iter().map(|line| line.base.id.clone().into()).collect();
         let goods_service_lines = self
             .db
             .sales_order_goods_service_line_revisions()
-            .list_by_revision_line_ids(&revision_line_ids, &mut NoTransaction)
+            .list_by_revision_line_ids(&revision_line_ids, executor)
             .await?;
-        let deliveries =
-            self.db.fulfillment().list_acceptance_eligible_deliveries(&so_id, &mut NoTransaction).await?;
+        let deliveries = self.db.fulfillment().list_acceptance_eligible_deliveries(&so_id, executor).await?;
         let delivery_ids: Vec<DeliveryId> =
             deliveries.iter().map(|delivery| delivery.base.id.clone().into()).collect();
         let delivery_lines =
-            self.db.fulfillment().delivery_lines_by_delivery_ids(&delivery_ids, &mut NoTransaction).await?;
+            self.db.fulfillment().delivery_lines_by_delivery_ids(&delivery_ids, executor).await?;
         let sales_order_line_ids = so_line_ids(&revision_lines);
         let electronic = self
             .db
             .fulfillment()
-            .list_confirmed_electronic_deliveries(&sales_order_line_ids, &mut NoTransaction)
+            .list_confirmed_electronic_deliveries(&sales_order_line_ids, executor)
             .await?;
         let service = self
             .db
             .fulfillment()
-            .list_confirmed_service_fulfillments(&sales_order_line_ids, &mut NoTransaction)
+            .list_confirmed_service_fulfillments(&sales_order_line_ids, executor)
             .await?
             .into_iter()
             .filter(ServiceFulfillment::is_acceptance_eligible)
@@ -95,11 +103,7 @@ impl FulfillmentReadService {
         let delivery_allocations = self
             .db
             .fulfillment()
-            .allocations_by_fulfillment_fact(
-                FulfillmentFactType::Delivery,
-                &delivery_fact_ids,
-                &mut NoTransaction,
-            )
+            .allocations_by_fulfillment_fact(FulfillmentFactType::Delivery, &delivery_fact_ids, executor)
             .await?;
         let electronic_allocations = self
             .db
@@ -107,7 +111,7 @@ impl FulfillmentReadService {
             .allocations_by_fulfillment_fact(
                 FulfillmentFactType::ElectronicDelivery,
                 &electronic_fact_ids,
-                &mut NoTransaction,
+                executor,
             )
             .await?;
         let service_allocations = self
@@ -116,11 +120,10 @@ impl FulfillmentReadService {
             .allocations_by_fulfillment_fact(
                 FulfillmentFactType::ServiceFulfillment,
                 &service_fact_ids,
-                &mut NoTransaction,
+                executor,
             )
             .await?;
-        let history =
-            self.db.fulfillment().list_customer_acceptance_history(&so_id, &mut NoTransaction).await?;
+        let history = self.db.fulfillment().list_customer_acceptance_history(&so_id, executor).await?;
         let sources = EligibilityGroupSources {
             revision_lines: &revision_lines,
             goods_service_lines: &goods_service_lines,

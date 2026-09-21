@@ -6,8 +6,6 @@ use async_trait::async_trait;
 use erp_identity::ports::OrganizationBusinessPort;
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_procurement::repository::prelude::*;
-use erp_sales::repository::SalesOrderExt;
-use erp_sales::repository::prelude::*;
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -22,14 +20,22 @@ impl OrganizationBusinessPort for OrganizationBusinessFacts {
         org: &str,
         executor: &mut dyn Executor,
     ) -> erp_identity::Result<bool> {
-        if self.db.sales_orders().has_unsettled_business_org(org, executor).await? {
+        if erp_sales::repository::organization::has_unsettled_business_org(&self.db, org, executor).await? {
             return Ok(true);
         }
-        Ok(self.db.purchase_orders().has_unsettled_business_org(org, executor).await?)
+        if self.db.purchase_orders().has_unsettled_business_org(org, executor).await?
+            || erp_supply::repository::organization::has_unsettled_business_org(&self.db, org, executor)
+                .await?
+            || erp_integration::repository::organization::has_unsettled_business_org(&self.db, org, executor)
+                .await?
+        {
+            return Ok(true);
+        }
+        Ok(false)
     }
 }
 
-/// 装配组织管理与销售、采购未结业务检查。
+/// 装配组织管理与销售、采购、供应及集成未结业务检查。
 ///
 /// # 返回
 /// 返回必须通过真实业务事实核验才可停用组织的服务。

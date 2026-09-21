@@ -1,6 +1,7 @@
 //! 供应链拥有仓储及窄访问器。
 
 mod extensions;
+pub mod organization;
 pub mod owned;
 pub mod prelude;
 pub mod supplier_api;

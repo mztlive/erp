@@ -39,6 +39,26 @@ pub struct FundsAuthorization {
 }
 
 impl FundsAuthorization {
+    /// 关联单据与资金动作分别授权，份额、候选及命令必须同时满足两者。
+    pub(super) fn restrict_links(&mut self) {
+        self.sales.required_scopes.push(self.funds.clone());
+        if let Some(purchase) = &mut self.purchase_scope {
+            let clause = |scope: &erp_sales::repository::sales_order::scope::SalesScopeClause| {
+                erp_procurement::repository::purchase_order::scope::PurchaseScopeClause {
+                    company: scope.company,
+                    owner_user_id: scope.owner_user_id.clone(),
+                    business_org_unit_ids: scope.business_org_unit_ids.clone(),
+                }
+            };
+            purchase.required_scopes.push(PurchaseReadScope {
+                required_scopes: Vec::new(),
+                roles: self.funds.roles.iter().map(clause).collect(),
+                user_limit: self.funds.user_limit.as_ref().map(clause),
+                historical_order_ids: Vec::new(),
+            });
+        }
+    }
+
     /// 两组独立范围同时为公司范围时才有整单读取资格。
     pub fn whole(&self) -> bool {
         self.sales.is_company() && self.funds.is_company()
@@ -169,6 +189,7 @@ impl FundsAccess {
         };
         sales_access.scope_version.hash(&mut authorization.fingerprint);
         authorization.context.scope_version.hash(&mut authorization.fingerprint);
+        authorization.restrict_links();
         authorization.no_scope = authorization.empty();
         Ok((access, authorization))
     }
@@ -229,6 +250,7 @@ impl FundsAccess {
         };
         purchase_resolved.scope_version.hash(&mut authorization.fingerprint);
         authorization.context.scope_version.hash(&mut authorization.fingerprint);
+        authorization.restrict_links();
         authorization.no_scope = authorization.empty();
         Ok((access, authorization))
     }
@@ -798,5 +820,65 @@ mod tests {
         };
         assert!(authorization.whole());
         assert!(!authorization.empty());
+    }
+    #[test]
+    fn funds_scope_intersects_each_sales_and_purchase_share_including_history() {
+        use erp_procurement::repository::purchase_order::scope::PurchaseScopeClause;
+        use erp_sales::repository::sales_order::scope::SalesScopeClause;
+        use serde_json::json;
+        use test_support::matches_filter;
+        let company = SalesScopeClause { company: true, ..Default::default() };
+        let mut auth = FundsAuthorization {
+            sales: SalesReadScope {
+                historical_order_ids: vec!["so-b".into()],
+                roles: vec![company.clone()],
+                ..Default::default()
+            },
+            funds: SalesReadScope {
+                roles: vec![company],
+                user_limit: Some(SalesScopeClause { owner_user_id: Some("a".into()), ..Default::default() }),
+                ..Default::default()
+            },
+            purchase_scope: Some(PurchaseReadScope {
+                roles: vec![PurchaseScopeClause { company: true, ..Default::default() }],
+                historical_order_ids: vec!["po-b".into()],
+                ..Default::default()
+            }),
+            context: AuthorizedDataScope {
+                user_id: "a".into(),
+                resource: "invoice".into(),
+                action: "list".into(),
+                scope: ResolvedScope { role_clauses: vec![], user_limit: None },
+                role_scopes: Default::default(),
+                organizations: Default::default(),
+                policy_version: 1,
+                scope_version: "v1".into(),
+                as_of: erp_core::common::time::Instant::from_unix_secs(1),
+            },
+            fingerprint: Default::default(),
+            no_scope: false,
+        };
+        auth.restrict_links();
+        for (owner, expected) in [("a", true), ("b", false)] {
+            assert_eq!(
+                matches_filter(
+                    &auth.sales.document(),
+                    &json!({"id":"so-b", "sales_owner_user_id":owner,"business_org_unit_id":"org"})
+                ),
+                expected
+            );
+            assert_eq!(
+                matches_filter(
+                    &auth.purchase_scope.as_ref().unwrap().document(),
+                    &json!({"id":"po-b", "owner_user_id":owner,"business_org_unit_id":"org"})
+                ),
+                expected
+            );
+        }
+        assert!(!auth.whole());
+        auth.funds = SalesReadScope::default();
+        auth.restrict_links();
+        assert!(auth.empty());
+        assert!(!matches_filter(&auth.sales.document(), &json!({"id":"so-b", "sales_owner_user_id":"a"})));
     }
 }

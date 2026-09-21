@@ -69,6 +69,25 @@ pub(super) fn matched_orders(tuples: &[OrderTuple], allowed: &Option<BTreeSet<St
         .collect()
 }
 
+/// 归属筛选逐份额收窄，不能仅以单据内另一条关联命中作为份额依据。
+pub(super) fn filter_matched_orders(
+    tuples: &[OrderTuple],
+    matched: Vec<String>,
+    owners: Option<&[String]>,
+    orgs: Option<&[String]>,
+) -> Vec<String> {
+    matched
+        .into_iter()
+        .filter(|id| {
+            tuples.iter().any(|(order, owner, org, _, _)| {
+                order.as_ref() == Some(id)
+                    && owners.is_none_or(|ids| owner.as_ref().is_some_and(|value| ids.contains(value)))
+                    && orgs.is_none_or(|ids| org.as_ref().is_some_and(|value| ids.contains(value)))
+            })
+        })
+        .collect()
+}
+
 /// 整单口径求和；仅整单读取资格持有者可见的结果使用，不得用于部分授权。
 pub(super) fn sum_all(links: &[ReceiptLink]) -> Amount {
     let mut total = zero_amount();
@@ -314,6 +333,16 @@ impl FundsAccess {
             let row_links = links.get(&row.id).unwrap_or(&empty_links);
             let tuples = receipt_tuples(&row, row_links, &facts);
             let matched = matched_orders(&tuples, &allowed);
+            let matched = filter_matched_orders(
+                &tuples,
+                matched,
+                condition.owner_user_ids.as_deref(),
+                condition.org_unit_ids.as_deref(),
+            );
+            if (condition.owner_user_ids.is_some() || condition.org_unit_ids.is_some()) && matched.is_empty()
+            {
+                continue;
+            }
             let visible = row_visible(&access, &tuples, &[], &[])?;
             let unlinked = row_links.iter().all(|link| link.order.is_none());
             if !keep_row(visible, whole, !matched.is_empty(), row_links.is_empty() || unlinked) {
@@ -477,5 +506,82 @@ impl FundsAccess {
             scope_summary: "回款按核销关联销售当前负责人与登记/核销经办人授权；部分授权仅返获授权份额",
             ownership_basis: "linked_sales_owner_and_receipt_operator",
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_core::common::time::Instant;
+    use erp_finance::dto::receivable::ReceiptAllocationView;
+    use erp_finance::entity::receivable::AllocationAction;
+
+    use super::*;
+
+    fn link(id: &str, order: Option<&str>, signed: &str) -> ReceiptLink {
+        let amount: Amount = signed.parse().unwrap();
+        ReceiptLink {
+            id: id.into(),
+            order: order.map(str::to_string),
+            signed: amount,
+            view: ReceiptAllocationView {
+                id: id.into(),
+                allocation_seq: 1,
+                allocation_action: AllocationAction::Apply,
+                receivable_entry_id: id.into(),
+                allocated_amount: amount,
+                allocated_at: Instant::from_unix_secs(1),
+                reverses_allocation_id: None,
+            },
+        }
+    }
+
+    #[test]
+    fn owner_and_org_filters_reduce_actual_shares_and_summary_with_reversals() {
+        let tuples = vec![
+            (Some("so-a".into()), Some("a".into()), Some("org-a".into()), "r".into(), 1),
+            (Some("so-b".into()), Some("b".into()), Some("org-b".into()), "r".into(), 1),
+        ];
+        let links = vec![
+            link("1", Some("so-a"), "60"),
+            link("2", Some("so-b"), "40"),
+            link("3", Some("so-a"), "-10"),
+            link("4", None, "5"),
+        ];
+        let owners = HashMap::from([("so-a".into(), "a".into()), ("so-b".into(), "b".into())]);
+        for (people, orgs) in [(Some(vec!["a".into()]), None), (None, Some(vec!["org-a".into()]))] {
+            let matched = filter_matched_orders(
+                &tuples,
+                matched_orders(&tuples, &None),
+                people.as_deref(),
+                orgs.as_deref(),
+            );
+            assert_eq!(matched, vec!["so-a"]);
+            assert_eq!(sum_signed(&links, &matched), "50".parse().unwrap());
+            let summary = build_summary(&summary_inputs(&links, &matched), &owners, None, "v", true).unwrap();
+            assert_eq!(summary.grouped.len(), 1);
+            assert_eq!(summary.grouped[0].visible_share, "50".parse().unwrap());
+            assert_eq!(summary.unassigned, zero_amount());
+            let whole = build_summary(
+                &summary_inputs(&links, &matched),
+                &owners,
+                Some("95".parse().unwrap()),
+                "v",
+                false,
+            )
+            .unwrap();
+            assert_eq!(whole.unassigned, "5".parse().unwrap());
+        }
+        // 不允许负责人命中 A、组织命中 B 后把整单作为同时匹配。
+        assert!(
+            filter_matched_orders(
+                &tuples,
+                matched_orders(&tuples, &None),
+                Some(&["a".into()]),
+                Some(&["org-b".into()])
+            )
+            .is_empty()
+        );
+        assert!(!keep_row(true, false, false, true));
+        assert!(keep_row(true, true, false, true));
     }
 }

@@ -623,9 +623,13 @@ fn validate_evidence_upload(reference: &str, files: &[PendingAssetFile]) -> std:
 /// 返回契约形状的分页视图。
 pub async fn customer_acceptance_list(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<CustomerAcceptanceListParams>,
 ) -> Result<PageView<CustomerAcceptanceView>> {
-    let page = service(&state).customer_acceptance_list(&params).await?;
+    let page =
+        erp_read_models::fulfillment_center::access::AcceptanceReadService::new(state.db(), state.rbac())
+            .list(&params, &actor)
+            .await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -647,9 +651,13 @@ pub async fn customer_acceptance_list(
 /// 返回验收单详情视图。
 pub async fn customer_acceptance_detail(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<CustomerAcceptanceDetailView> {
-    let view = service(&state).customer_acceptance_detail(&id).await?;
+    let view =
+        erp_read_models::fulfillment_center::access::AcceptanceReadService::new(state.db(), state.rbac())
+            .detail(&id, &actor)
+            .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -779,15 +787,17 @@ pub async fn customer_acceptance_reverse(
 /// 返回验收工作台视图。
 pub async fn customer_acceptance_eligible(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<CustomerAcceptanceListParams>,
 ) -> Result<AcceptanceEligibilityView> {
     let sales_order_id = params
         .sales_order_id
         .clone()
         .ok_or_else(|| erp_processes::Error::ValidationError("sales_order_id 不能为空".to_string()))?;
-    let view = erp_read_models::fulfillment_center::FulfillmentReadService::new(state.db())
-        .acceptance_eligibility(sales_order_id.as_ref())
-        .await?;
+    let view =
+        erp_read_models::fulfillment_center::access::AcceptanceReadService::new(state.db(), state.rbac())
+            .eligibility(sales_order_id.as_ref(), &actor)
+            .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }

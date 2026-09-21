@@ -3,6 +3,7 @@
 pub mod extensions;
 pub(crate) mod filter;
 mod fulfillment_facts;
+pub mod organization;
 pub mod owned;
 pub mod prelude;
 pub mod sales_order;

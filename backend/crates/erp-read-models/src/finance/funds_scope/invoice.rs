@@ -14,7 +14,7 @@ use validator::Validate;
 
 use super::allocation::*;
 use super::authorization::*;
-use super::receipt::matched_orders;
+use super::receipt::{filter_matched_orders, matched_orders};
 use super::rows::*;
 use crate::{Error, Result};
 
@@ -240,6 +240,26 @@ impl FundsAccess {
             let purchase_tuples = invoice_purchase_tuples(&row, purchase, &purchase_facts);
             let sales_matched = matched_orders(&sales_tuples, &sales_allowed);
             let purchase_matched = matched_orders(&purchase_tuples, &purchase_allowed);
+            let sales_matched = filter_matched_orders(
+                &sales_tuples,
+                sales_matched,
+                condition.owner_user_ids.as_deref(),
+                condition.org_unit_ids.as_deref(),
+            );
+            let purchase_matched = filter_matched_orders(
+                &purchase_tuples,
+                purchase_matched,
+                condition.secondary_operator_user_ids.as_deref(),
+                condition.org_unit_ids.as_deref(),
+            );
+            if (condition.owner_user_ids.is_some() && sales_matched.is_empty())
+                || (condition.secondary_operator_user_ids.is_some() && purchase_matched.is_empty())
+                || (condition.org_unit_ids.is_some()
+                    && sales_matched.is_empty()
+                    && purchase_matched.is_empty())
+            {
+                continue;
+            }
             let whole = match row.invoice_direction {
                 InvoiceDirection::Sales => authorization.whole(),
                 InvoiceDirection::Purchase => purchase_whole(authorization),
@@ -671,12 +691,12 @@ pub(super) fn sum_invoice_matched(
 ) -> Amount {
     let mut total = zero_amount();
     for link in sales {
-        if link.order.as_ref().is_none_or(|order| sales_matched.iter().any(|id| id == order)) {
+        if link.order.as_ref().is_some_and(|order| sales_matched.iter().any(|id| id == order)) {
             total = total.checked_add(link.signed);
         }
     }
     for link in purchase {
-        if link.order.as_ref().is_none_or(|order| purchase_matched.iter().any(|id| id == order)) {
+        if link.order.as_ref().is_some_and(|order| purchase_matched.iter().any(|id| id == order)) {
             total = total.checked_add(link.signed);
         }
     }
@@ -710,5 +730,54 @@ pub(super) fn invoice_unallocated(row: &InvoiceRow, allocated: Amount) -> Amount
     match row.invoice_kind {
         InvoiceKind::Blue => row.gross_amount.checked_sub(allocated),
         InvoiceKind::Red => row.gross_amount.checked_add(allocated),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_finance::dto::receivable::SalesInvoiceAllocationView;
+    use erp_finance::entity::receivable::AllocationAction;
+
+    use super::*;
+
+    fn sales_link(id: &str, order: Option<&str>, amount: &str) -> SalesInvoiceLink {
+        let amount = amount.parse().unwrap();
+        SalesInvoiceLink {
+            id: id.into(),
+            order: order.map(str::to_string),
+            signed: amount,
+            view: SalesInvoiceAllocationView {
+                id: id.into(),
+                allocation_seq: 1,
+                allocation_action: AllocationAction::Apply,
+                receivable_account_id: id.into(),
+                allocated_gross_amount: amount,
+                allocated_net_amount: amount,
+                allocated_tax_amount: zero_amount(),
+                reverses_allocation_id: None,
+            },
+        }
+    }
+
+    #[test]
+    fn invoice_share_and_partial_summary_exclude_other_orders_and_unknown_ownership() {
+        let sales = vec![
+            sales_link("a", Some("so-a"), "60"),
+            sales_link("b", Some("so-b"), "40"),
+            sales_link("unknown", None, "10"),
+        ];
+        let matched = vec!["so-a".into()];
+        assert_eq!(sum_invoice_matched(&sales, &[], &matched, &[]), "60".parse().unwrap());
+        let summary = build_summary(
+            &invoice_summary_inputs(&sales, &[], &matched, &[]),
+            &HashMap::from([("so-a".into(), "a".into())]),
+            None,
+            "v",
+            true,
+        )
+        .unwrap();
+        assert_eq!(summary.grouped.len(), 1);
+        assert_eq!(summary.grouped[0].visible_share, "60".parse().unwrap());
+        assert_eq!(summary.unassigned, zero_amount());
     }
 }

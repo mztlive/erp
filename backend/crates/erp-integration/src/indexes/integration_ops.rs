@@ -130,6 +130,10 @@ fn reconciliation_difference_indexes() -> Vec<IndexModel> {
             "idx_reconciliation_differences_handler",
             doc! { "owner_user_id": 1, "created_at": -1, "id": -1 },
         ),
+        named_index(
+            "idx_reconciliation_differences_org",
+            doc! { "owner_org_unit_id": 1, "created_at": -1, "id": -1 },
+        ),
     ]
 }
 

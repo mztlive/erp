@@ -90,7 +90,16 @@ impl PostingSteps for MongoPosting<'_> {
             Step::Authorize => {
                 crate::adapters::workflow::work_item_service(input.db.clone(), input.rbac.clone())
                     .ensure_domain_decision_access(input.actor, input.work_item, ex)
-                    .await?
+                    .await?;
+                let auth = crate::adapters::workflow::workflow_auth(input.db.clone(), input.rbac.clone());
+                super::reviewers::ensure_reviewer(
+                    &auth,
+                    input.actor_id,
+                    &input.statement.prepared_by,
+                    &input.statement.business_org_unit_id,
+                    ex,
+                )
+                .await?;
             },
             Step::Separation => ensure_reviewer_separation(input.statement, input.actor_id)?,
             Step::Items => self.items = load_statement_items(input.db, &input.statement.base.id, ex).await?,

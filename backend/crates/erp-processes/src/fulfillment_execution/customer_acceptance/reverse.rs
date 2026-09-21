@@ -45,6 +45,12 @@ impl CustomerAcceptanceProcess {
         actor: &AuditActor,
     ) -> Result<CustomerAcceptanceView> {
         req.validate()?;
+        erp_read_models::fulfillment_center::access::AcceptanceReadService::new(
+            self.db.clone(),
+            self.rbac.clone(),
+        )
+        .detail(id, actor)
+        .await?;
         let command_receipt = CommandReceipt::from_resource_parts(
             "customer-acceptance-reverse-",
             actor.id(),
@@ -59,12 +65,19 @@ impl CustomerAcceptanceProcess {
         }
         let original_id = CustomerAcceptanceId::new(id.to_string());
         let actor = actor.clone();
+        let rbac = self.rbac.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let command_receipt_for_tx = command_receipt.clone();
         let transaction_result = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    let original = FulfillmentService::new(db.clone())
+                        .load_customer_acceptance(original_id.as_ref(), executor)
+                        .await?;
+                    erp_read_models::sales_center::access::SalesAccess::new(db.clone(), rbac)
+                        .require_object(&actor, "detail", &original.acceptance.sales_order_id, &[], executor)
+                        .await?;
                     let (original, reverse_acceptance) =
                         FulfillmentService::persist_customer_acceptance_reverse(
                             &db,

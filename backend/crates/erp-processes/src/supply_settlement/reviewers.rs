@@ -3,7 +3,7 @@ use application_core::AuditActor;
 use erp_core::AccountKind;
 use erp_workflow::entity::work_item::AvailableWorkItemAccount;
 use erp_workflow::ports::{WorkflowAccountFact, WorkflowAuthorizationPort, permission_covers};
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, NoTransaction};
 use serde::Serialize;
 
 use super::{SETTLEMENT_REVIEW_OWNER_ROLE, SupplierSettlementProcess};
@@ -39,22 +39,31 @@ fn eligible(
         && scopes.iter().any(|(role, _)| role == SETTLEMENT_REVIEW_OWNER_ROLE)
 }
 
-/// 岗位资格保留原财务角色；范围由 confirm 动作及经办人的当前部门独立证明。
+/// 岗位资格保留原财务角色；范围由 confirm 动作及结算单业务组织独立证明。
 async fn reviewer_scopes(
     auth: &impl WorkflowAuthorizationPort,
     account: &WorkflowAccountFact,
     preparer: &str,
+    org: &str,
+    executor: &mut dyn Executor,
 ) -> Result<Vec<(String, Option<String>)>> {
     let actor = AuditActor::new(account.id.clone(), account.login_account.clone(), account.kind);
-    let Some(scope) = auth
-        .resolve_workflow_scope(&actor, "supplier_settlement_statement:confirm", &mut NoTransaction)
-        .await?
+    let Some(scope) =
+        auth.resolve_workflow_scope(&actor, "supplier_settlement_statement:confirm", executor).await?
     else {
         return Ok(Vec::new());
     };
-    let object =
-        erp_workflow::ports::WorkflowScopeObject { owner_user_id: preparer.into(), ..Default::default() };
-    if !scope.allows_role(SETTLEMENT_REVIEW_OWNER_ROLE, &object) {
+    let object = erp_workflow::ports::WorkflowScopeObject {
+        owner_user_id: preparer.into(),
+        business_org_unit_id: Some(org.into()),
+        ..Default::default()
+    };
+    let Some(detail) =
+        auth.resolve_workflow_scope(&actor, "supplier_settlement_statement:detail", executor).await?
+    else {
+        return Ok(Vec::new());
+    };
+    if !detail.allows(&object) || !scope.allows_role(SETTLEMENT_REVIEW_OWNER_ROLE, &object) {
         return Ok(Vec::new());
     }
     Ok(scope.granting_role_ids.into_iter().map(|role| (role, None)).collect())
@@ -85,7 +94,14 @@ impl SupplierSettlementProcess {
                 continue;
             }
             let permissions = auth.permission_codes(account.kind, &account.id).await?;
-            let scopes = reviewer_scopes(&auth, &account, actor.id()).await?;
+            let scopes = reviewer_scopes(
+                &auth,
+                &account,
+                &statement.prepared_by,
+                &statement.business_org_unit_id,
+                &mut NoTransaction,
+            )
+            .await?;
             if eligible(&account, actor.id(), &permissions, &scopes) {
                 options.push(SettlementReviewerOption {
                     user_id: account.id,
@@ -104,24 +120,37 @@ impl SupplierSettlementProcess {
         auth: &impl WorkflowAuthorizationPort,
         reviewer_id: &str,
         preparer_id: &str,
+        org: &str,
     ) -> Result<u64> {
         for _ in 0..3 {
             let revision = auth.current_policy_revision().await?;
-            let account = auth
-                .load_account(reviewer_id, &mut NoTransaction)
-                .await?
-                .ok_or_else(|| Error::ValidationError("复核人不存在，请重新选择".into()))?;
-            let permissions = auth.permission_codes(account.kind, reviewer_id).await?;
-            let scopes = reviewer_scopes(auth, &account, preparer_id).await?;
-            if !eligible(&account, preparer_id, &permissions, &scopes) {
-                return Err(Error::ValidationError("所选人员不能复核本单，请重新选择".into()));
-            }
+            ensure_reviewer(auth, reviewer_id, preparer_id, org, &mut NoTransaction).await?;
             if revision == auth.current_policy_revision().await? {
                 return Ok(revision);
             }
         }
         Err(Error::ConflictError("复核人权限已变化，请刷新后重试".into()))
     }
+}
+
+/// 在调用方事务内重验岗位分离、账号、动作权限和单据读取/复核范围。
+pub(super) async fn ensure_reviewer(
+    auth: &impl WorkflowAuthorizationPort,
+    reviewer_id: &str,
+    preparer_id: &str,
+    org: &str,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let account = auth
+        .load_account(reviewer_id, executor)
+        .await?
+        .ok_or_else(|| Error::ValidationError("复核人不存在，请重新选择".into()))?;
+    let permissions = auth.permission_codes(account.kind, reviewer_id).await?;
+    let scopes = reviewer_scopes(auth, &account, preparer_id, org, executor).await?;
+    if !eligible(&account, preparer_id, &permissions, &scopes) {
+        return Err(Error::Forbidden("所选人员不能复核本单，请重新选择".into()));
+    }
+    Ok(())
 }
 
 #[cfg(test)]

@@ -2,6 +2,7 @@
 
 mod extensions;
 pub mod integration_ops;
+pub mod organization;
 pub mod owned;
 pub mod prelude;
 pub mod scope;

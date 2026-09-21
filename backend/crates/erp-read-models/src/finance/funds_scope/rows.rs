@@ -724,7 +724,12 @@ pub(super) fn build_summary(
     scope_version: &str,
     permission_limited: bool,
 ) -> Result<FundsSummaryView> {
-    let (grouped, unassigned) = summarize_matched_shares(matched, |order| owner_of.get(order).cloned())?;
+    let visible = matched
+        .iter()
+        .filter(|(_, _, order)| !permission_limited || order.is_some())
+        .cloned()
+        .collect::<Vec<_>>();
+    let (grouped, unassigned) = summarize_matched_shares(&visible, |order| owner_of.get(order).cloned())?;
     let mut grouped = grouped
         .into_iter()
         .map(|(owner_user_id, visible_share)| FundsPersonShare { owner_user_id, visible_share })
@@ -739,9 +744,9 @@ pub(super) fn build_summary(
     })
 }
 
-/// M07 回款与 M09 付款共用的单据可见性：整单、有匹配份额或仅有未分配份额时可见。
-pub(super) fn keep_row(visible: bool, whole: bool, matched_any: bool, all_unlinked_or_empty: bool) -> bool {
-    visible && (whole || matched_any || all_unlinked_or_empty)
+/// M07 回款与 M09 付款共用的单据可见性：整单可见或至少含一条获授权的匹配份额。
+pub(super) fn keep_row(visible: bool, whole: bool, matched_any: bool, _all_unlinked_or_empty: bool) -> bool {
+    visible && (whole || matched_any)
 }
 /// 单据行关联责任元组：关联单据、负责人、组织、事实主键与版本。
 pub(super) type OrderTuple = (LinkedOrderId, Option<String>, Option<String>, String, u64);

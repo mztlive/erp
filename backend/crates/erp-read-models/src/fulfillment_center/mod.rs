@@ -1,5 +1,6 @@
 //! 客户验收跨域工作台与登记结果；本域详情由履约服务持有。
 mod acceptance_eligibility;
+pub mod access;
 pub mod dto;
 pub mod repository;
 use dto::CommitCustomerAcceptanceView;

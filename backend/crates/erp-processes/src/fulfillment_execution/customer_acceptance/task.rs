@@ -234,6 +234,19 @@ async fn ensure_current_owner_execution_access(
 ) -> Result<()> {
     let rbac = crate::adapters::identity::shared_rbac_service(db.clone());
     ensure_customer_acceptance_owner_eligible(db, &rbac, actor_id, executor).await?;
+    let account = db
+        .accounts()
+        .find_by_id(actor_id, executor)
+        .await?
+        .ok_or_else(|| Error::Forbidden("验收操作人已失效".into()))?;
+    let actor = application_core::AuditActor::new(
+        account.base.id.clone(),
+        account.secret.account().to_string(),
+        account.kind,
+    );
+    erp_read_models::sales_center::access::SalesAccess::new(db.clone(), rbac)
+        .require_object(&actor, "detail", &task.business_object_id, &[], executor)
+        .await?;
     if task.owner_user_id.as_deref() == Some(actor_id) {
         return Ok(());
     }

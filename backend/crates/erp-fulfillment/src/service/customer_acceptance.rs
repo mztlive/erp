@@ -1,6 +1,6 @@
 //! 客户验收单域列表、详情和视图映射。
 use erp_core::ids::CustomerAcceptanceLineId;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
 
 use super::FulfillmentService;
@@ -40,10 +40,13 @@ impl FulfillmentService {
     pub async fn customer_acceptance_list(
         &self,
         params: &CustomerAcceptanceListParams,
+        authorized_sales_order_ids: Option<Vec<String>>,
+        executor: &mut dyn Executor,
     ) -> Result<crate::dto::PageView<CustomerAcceptanceView>> {
         params.validate()?;
         let query = params.normalized()?;
         let filter = CustomerAcceptanceFilter {
+            authorized_sales_order_ids,
             sales_order_id: query.sales_order_id,
             status: query.status,
             page: query.paging.page,
@@ -52,7 +55,7 @@ impl FulfillmentService {
             sort_ascending: super::sort_ascending(query.paging.sort_dir),
         };
         super::map_search_page(
-            self.db.customer_acceptances().search_customer_acceptances(&filter, &mut NoTransaction),
+            self.db.customer_acceptances().search_customer_acceptances(&filter, executor),
             |row| CustomerAcceptanceView {
                 id: row.id,
                 acceptance_no: row.acceptance_no,
@@ -87,20 +90,34 @@ impl FulfillmentService {
         fields(layer = "service", domain = "fulfillment", operation = "customer_acceptance_detail")
     )]
     pub async fn customer_acceptance_detail(&self, id: &str) -> Result<CustomerAcceptanceDetailView> {
+        self.load_customer_acceptance(id, &mut NoTransaction).await
+    }
+
+    /// 在调用方已授权的事务内读取验收详情。
+    /// # 参数
+    /// `id` 为验收身份，`executor` 为调用方执行器。
+    /// # 返回
+    /// 表头、行与分配。
+    /// # 错误
+    /// 对象不存在或读取失败时拒绝。
+    pub async fn load_customer_acceptance(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<CustomerAcceptanceDetailView> {
         let acceptance = super::find_header_or_not_found(
-            self.db.customer_acceptances().find_by_id(id, &mut NoTransaction),
+            self.db.customer_acceptances().find_by_id(id, executor),
             "客户验收单不存在",
         )
         .await?;
         let lines = self
             .db
             .fulfillment()
-            .acceptance_lines_by_acceptance_ids(&[acceptance.base.id.clone().into()], &mut NoTransaction)
+            .acceptance_lines_by_acceptance_ids(&[acceptance.base.id.clone().into()], executor)
             .await?;
         let line_ids: Vec<CustomerAcceptanceLineId> =
             lines.iter().map(|line| line.base.id.clone().into()).collect();
-        let allocations =
-            self.db.fulfillment().allocations_by_acceptance_lines(&line_ids, &mut NoTransaction).await?;
+        let allocations = self.db.fulfillment().allocations_by_acceptance_lines(&line_ids, executor).await?;
         Ok(CustomerAcceptanceDetailView {
             acceptance: acceptance.into(),
             lines: lines.into_iter().map(Into::into).collect(),

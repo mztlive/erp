@@ -38,6 +38,8 @@ pub struct CustomerAcceptanceRow {
 /// 客户验收单列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct CustomerAcceptanceFilter {
+    /// 已授权来源销售单；空集合不匹配任何记录。
+    pub authorized_sales_order_ids: Option<Vec<String>>,
     /// 销售单；`None` 表示不筛选。
     pub sales_order_id: Option<SalesOrderId>,
     /// 单据状态；`None` 表示不筛选。
@@ -61,6 +63,9 @@ impl QueryFilter for CustomerAcceptanceFilter {
         let mut filter = super::active_filter();
         if let Some(sales_order_id) = &self.sales_order_id {
             filter.insert("sales_order_id", sales_order_id.to_string());
+        }
+        if let Some(ids) = &self.authorized_sales_order_ids {
+            filter.insert("$and", vec![doc! { "sales_order_id": { "$in": ids } }]);
         }
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());

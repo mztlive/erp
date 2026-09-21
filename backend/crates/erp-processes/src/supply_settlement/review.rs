@@ -46,6 +46,7 @@ impl SupplierSettlementProcess {
     ) -> Result<SubmitSettlementReviewResult> {
         req.validate()?;
         ensure_same_id(id, &req.statement_id, "结算单")?;
+        self.domain().access().require_statement(actor, "submit", id, &mut NoTransaction).await?;
         let fingerprint = submit_review_fingerprint(&req);
         let audit_id =
             command_audit_id(actor.id(), "supplier_settlement.submit_review", id, &req.idempotency_key);
@@ -65,7 +66,9 @@ impl SupplierSettlementProcess {
             self.db.clone(),
             crate::adapters::identity::shared_rbac_service(self.db.clone()),
         );
-        let policy_revision = self.authorize_reviewer(&auth, &req.reviewer_user_id, actor.id()).await?;
+        let policy_revision = self
+            .authorize_reviewer(&auth, &req.reviewer_user_id, actor.id(), &statement.business_org_unit_id)
+            .await?;
         let work_item =
             create_review_work_item(WorkItemId::new(next_id()), &statement, &req.reviewer_user_id)?;
         let db = self.db.clone();
@@ -77,6 +80,7 @@ impl SupplierSettlementProcess {
         let operation_id_for_tx = operation_id.clone();
         let fingerprint_for_tx = fingerprint.clone();
         let audit_id_for_tx = audit_id.clone();
+        let auth_for_tx = auth.clone();
         let transaction_result = auth
             .run_authorized_policy_transaction(policy_revision, move |executor| {
                 Box::pin(async move {
@@ -89,6 +93,14 @@ impl SupplierSettlementProcess {
                         return Err(Error::ConflictError("结算单版本或主题已变化，请刷新后重试".to_string()));
                     }
                     ensure_review_submission_ready(&db, &current, &actor_id, executor).await?;
+                    super::reviewers::ensure_reviewer(
+                        &auth_for_tx,
+                        &req.reviewer_user_id,
+                        &current.prepared_by,
+                        &current.business_org_unit_id,
+                        executor,
+                    )
+                    .await?;
                     current.submit_review()?;
                     SupplierSettlementService::new(db.clone())
                         .persist_statement(&mut current, executor)
@@ -146,6 +158,8 @@ impl SupplierSettlementProcess {
     ) -> Result<SettlementReviewDecisionResult> {
         req.validate()?;
         ensure_same_id(id, &req.decision.statement_id, "结算单")?;
+        self.domain().access().require_statement(actor, "detail", id, &mut NoTransaction).await?;
+        self.domain().access().require_statement(actor, "confirm", id, &mut NoTransaction).await?;
         let reject_reason = req.decision.parsed_reject_reason()?;
         let expected_task_version = parse_expected_version(&req.expected_task_version, "待办版本")?;
         let action = match req.decision.action {

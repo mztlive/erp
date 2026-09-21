@@ -14,7 +14,7 @@ use validator::Validate;
 
 use super::allocation::purchase_whole;
 use super::authorization::*;
-use super::receipt::matched_orders;
+use super::receipt::{filter_matched_orders, matched_orders};
 use super::rows::*;
 use crate::{Error, Result};
 
@@ -243,6 +243,16 @@ impl FundsAccess {
             let row_links = links.get(&row.id).unwrap_or(&empty_links);
             let tuples = payment_tuples(&row, row_links, &facts);
             let matched = matched_orders(&tuples, &allowed);
+            let matched = filter_matched_orders(
+                &tuples,
+                matched,
+                condition.owner_user_ids.as_deref(),
+                condition.org_unit_ids.as_deref(),
+            );
+            if (condition.owner_user_ids.is_some() || condition.org_unit_ids.is_some()) && matched.is_empty()
+            {
+                continue;
+            }
             let doc_operators = operators.get(&row.id).cloned().unwrap_or_default();
             let visible = row_visible(access, &tuples, &doc_operators, &[])?;
             let unlinked = row_links.iter().all(|link| link.order.is_none());
@@ -423,7 +433,7 @@ pub(super) fn payment_sum_all(links: &[PaymentLink]) -> Amount {
 pub(super) fn payment_sum_signed(links: &[PaymentLink], matched: &[String]) -> Amount {
     let mut total = zero_amount();
     for link in links {
-        if link.order.as_ref().is_none_or(|order| matched.iter().any(|id| id == order)) {
+        if link.order.as_ref().is_some_and(|order| matched.iter().any(|id| id == order)) {
             total = total.checked_add(link.signed);
         }
     }
@@ -454,7 +464,7 @@ pub(super) fn cut_payment_row(
     } else {
         links
             .iter()
-            .filter(|link| link.order.as_ref().is_none_or(|order| matched.iter().any(|id| id == order)))
+            .filter(|link| link.order.as_ref().is_some_and(|order| matched.iter().any(|id| id == order)))
             .map(|link| link.view.clone())
             .collect()
     };
@@ -473,5 +483,68 @@ pub(super) fn cut_payment_row(
         unallocated_amount: whole_amount(whole, row.amount.checked_sub(net)),
         allocations: Some(views),
         permission_limited: !whole,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_core::common::time::Instant;
+    use erp_finance::dto::payable::PaymentAllocationView;
+    use erp_finance::entity::payable::{AllocationAction, SupplierPaymentStatus};
+
+    use super::*;
+
+    fn link(id: &str, order: Option<&str>, amount: &str) -> PaymentLink {
+        let amount = amount.parse().unwrap();
+        PaymentLink {
+            id: id.into(),
+            order: order.map(str::to_string),
+            signed: amount,
+            view: PaymentAllocationView {
+                id: id.into(),
+                allocation_seq: 1,
+                allocation_action: AllocationAction::Apply,
+                payable_entry_id: id.into(),
+                payable_account_id: None,
+                source_type: None,
+                source_document_id: None,
+                source_document_no: None,
+                allocated_amount: amount,
+                allocated_at: Instant::from_unix_secs(1),
+                reverses_allocation_id: None,
+            },
+        }
+    }
+
+    #[test]
+    fn partial_payment_hides_other_and_unknown_allocations_and_all_whole_amounts() {
+        let row = SupplierPaymentRow {
+            id: "p".into(),
+            payment_no: "P".into(),
+            status: SupplierPaymentStatus::Draft,
+            supplier_id: "supplier".into(),
+            paid_at: 1,
+            amount: "120".parse().unwrap(),
+            bank_reference: None,
+            version: 1,
+            created_at: 1,
+        };
+        let links =
+            vec![link("a", Some("po-a"), "60"), link("b", Some("po-b"), "40"), link("unknown", None, "10")];
+        let matched = vec!["po-a".into()];
+        let partial = cut_payment_row(&row, &links, &matched, false);
+        assert_eq!(partial.visible_allocated_share, "60".parse().unwrap());
+        assert!(partial.amount.is_none());
+        assert!(partial.allocated_total.is_none());
+        assert!(partial.unallocated_amount.is_none());
+        assert_eq!(
+            partial.allocations.unwrap().iter().map(|item| item.id.as_str()).collect::<Vec<_>>(),
+            vec!["a"]
+        );
+        let whole = cut_payment_row(&row, &links, &matched, true);
+        assert_eq!(whole.visible_allocated_share, "60".parse().unwrap());
+        assert_eq!(whole.amount, Some("120".parse().unwrap()));
+        assert_eq!(whole.allocations.unwrap().len(), 3);
+        assert_eq!(whole.unallocated_amount, Some("10".parse().unwrap()));
     }
 }

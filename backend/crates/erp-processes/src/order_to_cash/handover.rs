@@ -157,6 +157,12 @@ impl SalesOrderCommandProcess {
             {
                 continue;
             }
+            let mut planned = order.clone();
+            planned.sales_owner_user_id = account.base.id.clone();
+            if !target_can_read_order(&self.db, &rbac, &account.base.id, &planned, &mut NoTransaction).await?
+            {
+                continue;
+            }
             candidates.push(HandoverCandidateView {
                 user_id: account.base.id.clone(),
                 display_name: account.name.clone(),
@@ -286,6 +292,9 @@ async fn apply_handover(
         .filter(|value| !value.is_empty())
         .map(str::to_string);
     order.handover(target.to_string(), next_org, actor.id())?;
+    if !target_can_read_order(db, &rbac, target, &order, executor).await? {
+        return Err(Error::Forbidden("接收人无权读取交接后的销售单，请核对数据范围和个人上限".into()));
+    }
     let mut acceptance_tasks = open_acceptance_tasks(db, id, executor).await?;
     let at = erp_core::common::time::Instant::now();
     let mut transferred = Vec::new();
@@ -392,6 +401,27 @@ async fn account_qualified_for_acceptance(
         required.push(permission);
     }
     Ok(granted.covers(&PermissionSet::new(required)))
+}
+
+/// 用拟交接后的责任事实判断接收人的详情范围，不能使用旧负责人或旧组织。
+async fn target_can_read_order(
+    db: &mongodb::Database,
+    rbac: &SharedRbacService,
+    target: &str,
+    planned: &erp_sales::entity::sales_order::SalesOrder,
+    executor: &mut dyn persistence_core::Executor,
+) -> Result<bool> {
+    let Some(account) = db.accounts().find_by_id(target, executor).await? else {
+        return Ok(false);
+    };
+    let actor = AuditActor::new(account.base.id.clone(), account.secret.account().to_string(), account.kind);
+    let access = erp_read_models::sales_center::access::SalesAccess::new(db.clone(), rbac.clone());
+    let (context, scope) = match access.resolve(&actor, "detail", &[], executor).await {
+        Ok(value) => value,
+        Err(erp_read_models::Error::Forbidden(_)) => return Ok(false),
+        Err(error) => return Err(error.into()),
+    };
+    Ok(erp_read_models::sales_center::access::SalesAccess::allows(&context, &scope, planned)?)
 }
 
 /// 列出该销售单全部开放验收任务。
@@ -585,5 +615,37 @@ mod tests {
             )
             .is_err()
         );
+    }
+    #[test]
+    fn recipient_scope_is_checked_on_new_owner_and_explicit_business_org() {
+        use erp_core::common::time::Instant;
+        use erp_identity::access_control::{ResolvedScope, ScopeClause};
+        use erp_identity::service::access_control::resolve::AuthorizedDataScope;
+        use erp_read_models::sales_center::access::SalesAccess;
+        use erp_sales::repository::sales_order::scope::SalesReadScope;
+        let mut access = AuthorizedDataScope {
+            user_id: "recipient".into(),
+            resource: "sales_order".into(),
+            action: "detail".into(),
+            scope: ResolvedScope {
+                role_clauses: vec![ScopeClause { self_owned: true, ..Default::default() }],
+                user_limit: None,
+            },
+            role_scopes: Default::default(),
+            organizations: Default::default(),
+            policy_version: 1,
+            scope_version: "v".into(),
+            as_of: Instant::from_unix_secs(1),
+        };
+        let scope = SalesReadScope::default();
+        let mut order = sales_order_owned_by("old-owner", "org-a");
+        assert!(!SalesAccess::allows(&access, &scope, &order).unwrap());
+        order.handover("recipient".into(), None, "operator").unwrap();
+        assert!(SalesAccess::allows(&access, &scope, &order).unwrap());
+        access.scope.user_limit =
+            Some(ScopeClause { org_unit_ids: ["org-b".into()].into(), ..Default::default() });
+        assert!(!SalesAccess::allows(&access, &scope, &order).unwrap());
+        order.handover("recipient".into(), Some("org-b".into()), "operator").unwrap();
+        assert!(SalesAccess::allows(&access, &scope, &order).unwrap());
     }
 }

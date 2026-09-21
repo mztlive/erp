@@ -47,6 +47,9 @@ impl CustomerAcceptanceProcess {
         actor: &AuditActor,
     ) -> Result<CommitCustomerAcceptanceView> {
         req.validate()?;
+        erp_read_models::sales_center::access::SalesAccess::new(self.db.clone(), self.rbac.clone())
+            .detail(actor, req.sales_order_id.as_ref())
+            .await?;
         FulfillmentService::validate_customer_acceptance_task_context(
             req.work_item_id.as_deref(),
             req.expected_task_version,

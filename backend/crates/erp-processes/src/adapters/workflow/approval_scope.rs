@@ -19,20 +19,7 @@ struct Predicate(AuthorizedDataScope);
 
 impl WorkflowScopePredicate for Predicate {
     fn allows(&self, object: &WorkflowScopeObject) -> bool {
-        let org = if self.0.resource == "supplier_settlement_statement" {
-            self.0
-                .organizations
-                .memberships
-                .iter()
-                .find(|membership| {
-                    !membership.base.is_deleted()
-                        && membership.user_id == object.owner_user_id
-                        && membership.validity.contains(self.0.as_of)
-                })
-                .map(|membership| membership.org_unit_id.as_str())
-        } else {
-            object.business_org_unit_id.as_deref()
-        };
+        let org = object.business_org_unit_id.as_deref();
         self.0.scope.allows(
             &ScopedObject {
                 owned: object.owner_user_id == self.0.user_id,
@@ -49,20 +36,7 @@ impl WorkflowScopePredicate for Predicate {
         let Some(clause) = self.0.role_scopes.get(role) else {
             return false;
         };
-        let org = if self.0.resource == "supplier_settlement_statement" {
-            self.0
-                .organizations
-                .memberships
-                .iter()
-                .find(|m| {
-                    !m.base.is_deleted()
-                        && m.user_id == object.owner_user_id
-                        && m.validity.contains(self.0.as_of)
-                })
-                .map(|m| m.org_unit_id.as_str())
-        } else {
-            object.business_org_unit_id.as_deref()
-        };
+        let org = object.business_org_unit_id.as_deref();
         let target = ScopedObject {
             owned: object.owner_user_id == self.0.user_id,
             collaborating: false,
@@ -173,5 +147,34 @@ mod tests {
         predicate.0.scope.role_clauses.clear();
         predicate.0.scope.user_limit = Some(ScopeClause { company: true, ..Default::default() });
         assert!(!predicate.allows(&warehouse));
+    }
+    #[test]
+    fn settlement_review_uses_saved_business_org_without_preparer_membership() {
+        let clause = ScopeClause { org_unit_ids: BTreeSet::from(["saved-org".into()]), ..Default::default() };
+        let mut predicate = Predicate(AuthorizedDataScope {
+            user_id: "reviewer".into(),
+            resource: "supplier_settlement_statement".into(),
+            action: "confirm".into(),
+            role_scopes: [("finance".into(), clause.clone())].into(),
+            scope: ResolvedScope { role_clauses: vec![clause], user_limit: None },
+            organizations: Default::default(),
+            policy_version: 1,
+            scope_version: "v1".into(),
+            as_of: Instant::from_unix_secs(10),
+        });
+        // 经办人已无有效成员关系，保存的业务组织仍是判断依据。
+        let mut statement = WorkflowScopeObject {
+            owner_user_id: "former-preparer".into(),
+            business_org_unit_id: Some("saved-org".into()),
+            ..Default::default()
+        };
+        assert!(predicate.allows(&statement));
+        assert!(predicate.allows_role("finance", &statement));
+        statement.business_org_unit_id = Some("other-org".into());
+        assert!(!predicate.allows(&statement));
+        assert!(!predicate.allows_role("finance", &statement));
+        statement.business_org_unit_id = Some("saved-org".into());
+        predicate.0.scope.user_limit = Some(ScopeClause::default());
+        assert!(!predicate.allows_role("finance", &statement));
     }
 }
