@@ -9,8 +9,8 @@ use mongodb::Collection;
 use mongodb::bson::{Document, doc};
 use mongodb::options::{FindOptions, ReturnDocument};
 use mongodb::results::{DeleteResult, UpdateResult};
-use serde::Serialize;
 use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 
 use crate::Executor;
 use crate::errors::Result;
@@ -259,6 +259,7 @@ where
 /// 按执行器语义判断是否存在符合条件的文档。
 ///
 /// 查询只投影 MongoDB `_id` 并在首条命中后停止，避免为存在性判断加载完整文档。
+/// 投影使用独立结果类型，不能按缺少业务必填字段的完整实体反序列化。
 ///
 /// # 参数
 /// * `collection` - 目标集合
@@ -276,12 +277,17 @@ pub async fn exists<T>(
     executor: &mut dyn Executor,
 ) -> Result<bool>
 where
-    T: DeserializeOwned + Send + Sync,
+    T: Send + Sync,
 {
+    let collection = collection.clone_with_type::<ExistsDocument>();
     let projection = doc! { "_id": 1 };
     let document = exec_with_session!(executor, collection.find_one(filter).projection(projection));
     Ok(document.is_some())
 }
+
+/// 存在性查询只关心是否命中；忽略 `_id` 的存储类型及所有业务字段。
+#[derive(Debug, Deserialize)]
+struct ExistsDocument {}
 
 /// 按执行器语义统计符合条件的文档数量。
 ///
@@ -305,4 +311,34 @@ where
 {
     let count = exec_with_session!(executor, collection.count_documents(filter));
     Ok(count)
+}
+
+#[cfg(test)]
+mod tests {
+    use mongodb::bson::oid::ObjectId;
+    use mongodb::bson::{Bson, deserialize_from_document};
+
+    use super::*;
+
+    #[derive(Debug, Deserialize)]
+    struct NamedEntity {
+        #[serde(rename = "name")]
+        _name: String,
+    }
+
+    #[test]
+    fn existence_projection_does_not_require_business_fields() {
+        let projected = doc! { "_id": ObjectId::new() };
+        let error = deserialize_from_document::<NamedEntity>(projected.clone()).unwrap_err();
+        assert!(error.to_string().contains("missing field `name`"));
+        // 使用生产 exists 查询的实际解码类型，命中记录不再要求 name 等业务字段。
+        deserialize_from_document::<ExistsDocument>(projected).unwrap();
+    }
+
+    #[test]
+    fn existence_projection_accepts_different_mongodb_id_types() {
+        for id in [Bson::ObjectId(ObjectId::new()), Bson::String("role-root".into()), Bson::Int64(7)] {
+            deserialize_from_document::<ExistsDocument>(doc! { "_id": id }).unwrap();
+        }
+    }
 }

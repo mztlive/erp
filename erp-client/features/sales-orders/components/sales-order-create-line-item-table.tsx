@@ -79,13 +79,12 @@ export function SalesOrderCreateLineItemTable({
                             {values.nature === "physical_service" &&
                             values.lineItems.some((line) => line.sku.trim()) &&
                             !procurementFetching &&
-                            (procurementError ||
-                                values.lineItems.some(
-                                    (line) =>
-                                        line.sku.trim() &&
-                                        !procurementOwners?.get(line.rowKey)
-                                            ?.resolved,
-                                )) ? (
+                            values.lineItems.some(
+                                (line) =>
+                                    line.sku.trim() &&
+                                    !procurementOwners?.get(line.rowKey)
+                                        ?.resolved,
+                            ) ? (
                                 <p
                                     role="status"
                                     className="mt-3 text-sm text-destructive"

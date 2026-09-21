@@ -112,7 +112,7 @@ export function SalesOrderCreateForm({
         (value: { nature: SalesOrderNature }) => {
             if (value.nature !== "physical_service") return false
             const responsibility = procurementResponsibilityRef.current
-            if (responsibility.error) {
+            if (responsibility.error && !responsibility.allResolved) {
                 toast.add({
                     title: "无法核对采购负责人",
                     description: getErrorMessage(
@@ -367,7 +367,8 @@ export function SalesOrderCreateForm({
                             procurementResponsibilityQuery.isFetching
                         }
                         procurementError={
-                            procurementResponsibilityQuery.isError
+                            procurementResponsibilityQuery.isError &&
+                            !procurementResponsibilityQuery.data
                         }
                     />
                     <SalesOrderCreateTotalBar

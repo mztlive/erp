@@ -30,21 +30,33 @@ import { fileURLToPath } from "node:url";
 import {
     test,
     expect,
-    type Browser,
     type BrowserContext,
-    type Locator,
     type Page,
 } from "@playwright/test";
 
-import { ACCOUNTS } from "../helpers/accounts";
+import { createCustomerViaUi } from "../helpers/customers";
 import { submitSalesInvoiceRequest } from "../helpers/invoices";
-import { loginViaUi, newLoggedInContext } from "../helpers/login";
+import { openLoggedInWorkspace } from "../helpers/login";
+import {
+    ensureDefaultProcurementOwner,
+    submitCreatedSalesOrder,
+} from "../helpers/procurement";
 import {
     expectReceiptPreview,
     registerCustomerReceiptForOrder,
     submitCustomerRefundRequest,
 } from "../helpers/receipts";
-import { openFulfillmentWorkspaceForm, readHeaderDocumentNumber, selectWorkspaceFamily } from "../helpers/ui";
+import { confirmSupplyAllocation, expandSourcingEditor } from "../helpers/sourcing";
+import {
+    approveCurrentDocument,
+    chooseOption,
+    expectToast,
+    openFulfillmentWorkspaceForm,
+    openWorkspaceTask,
+    pickCalendarDay,
+    readHeaderDocumentNumber,
+    selectWorkspaceFamily,
+} from "../helpers/ui";
 
 test.describe.configure({ mode: "serial" });
 
@@ -85,64 +97,6 @@ type LoginName =
 
 type Session = { context: BrowserContext; page: Page };
 
-function accountCred(login: LoginName): { account: string; password: string } {
-    const bag = ACCOUNTS as Record<
-        string,
-        { account?: string; password?: string } | undefined
-    >;
-    const aliases: Record<LoginName, string[]> = {
-        xiaoshou: ["xiaoshou", "sales"],
-        lisiyong: ["lisiyong", "salesLeader", "sales_leader"],
-        caigou: ["caigou", "procurement"],
-        cangchu: ["cangchu", "warehouse"],
-        caiwu: ["caiwu", "finance"],
-        fukuan: ["fukuan", "payment"],
-        kaipiao: ["kaipiao", "invoice"],
-        admin: ["admin"],
-    };
-    for (const key of aliases[login]) {
-        const row = bag[key];
-        if (row?.password) {
-            return { account: row.account ?? login, password: row.password };
-        }
-    }
-    for (const row of Object.values(bag)) {
-        if (row?.account === login && row.password) {
-            return { account: row.account, password: row.password };
-        }
-    }
-    return { account: login, password: "123456" };
-}
-
-function asSession(raw: unknown): Session {
-    if (raw && typeof raw === "object" && "page" in raw && "context" in raw) {
-        const session = raw as Session;
-        if (session.page && session.context) return session;
-    }
-    if (raw && typeof raw === "object" && "goto" in raw) {
-        const page = raw as Page;
-        return { context: page.context(), page };
-    }
-    throw new Error("newLoggedInContext 必须返回 { context, page } 或 Page");
-}
-
-async function openSession(browser: Browser, login: LoginName): Promise<Session> {
-    const cred = accountCred(login);
-    const raw = await newLoggedInContext(browser, cred);
-    const session = asSession(raw);
-    if (session.page.url().includes("/login")) {
-        await loginViaUi(session.page, cred);
-    }
-    if (await session.page.locator("#governance-auth-login-account").isVisible().catch(() => false)) {
-        await loginViaUi(session.page, cred);
-    }
-    await session.page.goto("/workspace");
-    await expect(session.page.getByRole("heading", { name: "我的工作台" })).toBeVisible({
-        timeout: UI_TIMEOUT,
-    });
-    return session;
-}
-
 function plusDaysIso(days: number): string {
     const date = new Date();
     date.setDate(date.getDate() + days);
@@ -155,166 +109,8 @@ function uniqueCreditCode(stamp: string): string {
     return raw.slice(0, 18).padEnd(18, "0");
 }
 
-function escapeRe(value: string): string {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 function orderTitleRow(page: Page, customerName: string) {
     return page.getByRole("heading", { name: customerName }).locator("xpath=..");
-}
-
-async function expectToast(page: Page, title: string | RegExp) {
-    const toast = page.locator('[data-slot="toast-title"]').filter({ hasText: title });
-    await expect(toast.first()).toBeVisible({ timeout: UI_TIMEOUT });
-    // 关闭已确认的悬浮提示，避免其遮挡后续按钮造成偶发点击失败。
-    for (let i = 0; i < 5; i += 1) {
-        const dismiss = page
-            .locator('[data-slot="toast"]')
-            .getByRole("button", { name: "关闭提示", includeHidden: true })
-            .first();
-        if (!(await dismiss.count())) break;
-        await dismiss.click({ timeout: 5_000 }).catch(() => undefined);
-    }
-}
-
-async function chooseOption(page: Page, input: Locator, option: string | RegExp) {
-    await input.click();
-    if (typeof option === "string") {
-        await input.fill(option);
-    }
-    const listed = page.getByRole("option", { name: option }).first();
-    if (await listed.count()) {
-        await listed.click();
-        return;
-    }
-    await page
-        .locator('[data-slot="combobox-item"]')
-        .filter({ hasText: option })
-        .first()
-        .click();
-}
-
-async function pickCalendarDay(page: Page, trigger: Locator, isoDate: string) {
-    await trigger.click();
-    const calendar = page.locator('[data-slot="calendar"]:visible');
-    await expect(calendar).toBeVisible({ timeout: UI_TIMEOUT });
-    const byId = calendar.locator(`[id$="-day-${isoDate}"]`);
-    if (await byId.count()) {
-        await expect(byId.first()).toBeVisible({ timeout: UI_TIMEOUT });
-        await byId.first().click();
-        return;
-    }
-    const target = new Date(`${isoDate}T00:00:00`);
-    const year = target.getFullYear();
-    const month = target.getMonth();
-    const day = String(target.getDate());
-    const monthTokens = [
-        `${month + 1}月`,
-        [
-            "January",
-            "February",
-            "March",
-            "April",
-            "May",
-            "June",
-            "July",
-            "August",
-            "September",
-            "October",
-            "November",
-            "December",
-        ][month]!,
-        ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][
-            month
-        ]!,
-    ];
-    for (let i = 0; i < 18; i += 1) {
-        const caption = await calendar.innerText();
-        const yearOk = caption.includes(String(year));
-        const monthOk = monthTokens.some((token) => caption.includes(token));
-        if (yearOk && monthOk) break;
-        const next = calendar.getByRole("button", {
-            name: /next month|go to the next month|下个月|下一月/i,
-        });
-        if (await next.count()) {
-            await next.first().click();
-        } else {
-            await calendar.locator("button").last().click();
-        }
-    }
-    // 日期按钮无障碍名为完整日期，子串匹配后由下方循环跳过禁选日期。
-    const dayButtons = calendar.getByRole("button", { name: day });
-    const total = await dayButtons.count();
-    for (let i = 0; i < total; i += 1) {
-        const button = dayButtons.nth(i);
-        const disabled = await button.getAttribute("aria-disabled");
-        const outside = await button.getAttribute("data-outside");
-        if (disabled === "true" || outside === "true") continue;
-        await button.click();
-        return;
-    }
-    await dayButtons.first().click();
-}
-
-async function openWorkspaceTask(
-    page: Page,
-    typeLabel: string,
-    hint?: string,
-    family?: "approval" | "procurement" | "fulfillment" | "finance",
-) {
-    await page.goto("/workspace");
-    await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible({
-        timeout: UI_TIMEOUT,
-    });
-    if (family) {
-        await selectWorkspaceFamily(page, family);
-    }
-    // 工作台后端搜索只匹配单据 ID、类型码等字段，不匹配单号与往来方，
-    // 在搜索框填写 hint 会把列表滤空；改为在待办列表中匹配任务。
-    // 单号可能只出现在无障碍名中，客户名只出现在可见文本中，两处取并集后点选。
-    const list = page.getByRole("list", { name: "待办列表" });
-    await expect(list).toBeVisible({ timeout: UI_TIMEOUT });
-    const label = `(?:${typeLabel})`;
-    const union = hint
-        ? list
-              .getByRole("button", {
-                  name: new RegExp(
-                      `${label}[\\s\\S]*${escapeRe(hint)}|${escapeRe(hint)}[\\s\\S]*${label}`,
-                  ),
-              })
-              .or(
-                  list
-                      .getByRole("button", { name: new RegExp(label) })
-                      .filter({ hasText: hint }),
-              )
-              .first()
-        : list.getByRole("button", { name: new RegExp(label) }).first();
-    try {
-        await expect(union).toBeVisible({ timeout: hint ? 8_000 : UI_TIMEOUT });
-        await union.click();
-        return;
-    } catch {
-        if (!hint) throw new Error(`工作台未找到任务: ${typeLabel}`);
-    }
-    // 兜底：履约任务按钮仅显示采购单号，不含销售单号与客户名，hint 无法匹配；
-    // 同类型仅有一项时直接点选，多项时显式失败避免点错任务。
-    const sameType = list.getByRole("button", { name: new RegExp(label) });
-    await expect(sameType).toHaveCount(1, { timeout: UI_TIMEOUT });
-    await sameType.first().click();
-}
-
-async function approveCurrentDocument(page: Page) {
-    const approve = page.getByRole("button", { name: /^(通过|同意审批)$/ });
-    await expect(approve).toBeVisible({ timeout: UI_TIMEOUT });
-    await expect(page.getByRole("button", { name: "驳回", exact: true })).toBeVisible();
-    await expect(page.getByLabel("供给来源 / 履约责任")).toHaveCount(0);
-    await expect(page.getByLabel("含税成本")).toHaveCount(0);
-    await expect(page.getByLabel("预计交付日")).toHaveCount(0);
-    await approve.click();
-    const dialog = page.getByRole("dialog", { name: "确认通过" });
-    await expect(dialog).toBeVisible({ timeout: UI_TIMEOUT });
-    await dialog.getByRole("button", { name: "确认通过" }).click();
-    await expect(dialog).toBeHidden({ timeout: UI_TIMEOUT });
 }
 
 async function confirmFormal(page: Page, title: string | RegExp, confirmName: string | RegExp) {
@@ -330,51 +126,6 @@ async function factValue(page: Page, label: string) {
     const dt = page.locator('[data-slot="formal-action-result"] dt', { hasText: label });
     await expect(dt.first()).toBeVisible({ timeout: UI_TIMEOUT });
     return (await dt.first().locator("xpath=following-sibling::dd[1]").innerText()).trim();
-}
-
-async function ensureDefaultProcurementOwner(page: Page) {
-    await page.goto("/master-data/procurement-responsibilities");
-    await expect(page.getByRole("heading", { name: "采购责任规则" })).toBeVisible({
-        timeout: UI_TIMEOUT,
-    });
-    // 规则列表在标题之后加载，先等列表接口返回再判断是否已存在。
-    await page
-        .waitForResponse(
-            (response) =>
-                response.request().method() === "GET" &&
-                response.url().includes("procurement-responsibility-rules"),
-            { timeout: UI_TIMEOUT },
-        )
-        .catch(() => undefined);
-    if (await page.getByText("默认调度人").count()) {
-        return;
-    }
-    const byId = page.locator("#procurement-responsibility-rules-create");
-    if (await byId.count()) {
-        await byId.click();
-    } else {
-        await page.getByRole("button", { name: "新增规则" }).click();
-    }
-    const dialog = page.getByRole("dialog", { name: "新增采购责任规则" });
-    await expect(dialog).toBeVisible({ timeout: UI_TIMEOUT });
-    await chooseOption(
-        page,
-        dialog.locator("#procurement-responsibility-rules-dialog-rule-type"),
-        "默认调度人",
-    );
-    await chooseOption(
-        page,
-        dialog.locator("#procurement-responsibility-rules-dialog-owner"),
-        /采购/,
-    );
-    const save = dialog.locator("#procurement-responsibility-rules-dialog-save");
-    if (await save.count()) {
-        await save.click();
-    } else {
-        await dialog.getByRole("button", { name: "保存规则" }).click();
-    }
-    await expectToast(page, /采购责任规则已新增|采购责任规则已更新/);
-    await expect(dialog).toBeHidden({ timeout: UI_TIMEOUT });
 }
 
 async function assertNoReturnApprovalTasks(page: Page) {
@@ -479,7 +230,7 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
 
     const switchTo = async (login: LoginName) => {
         await session?.context.close();
-        session = await openSession(browser, login);
+        session = await openLoggedInWorkspace(browser, login);
         return session.page;
     };
 
@@ -490,36 +241,14 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
 
         // 1) W03 客户
         page = await switchTo("xiaoshou");
-        await page.goto("/sales/customers");
-        await expect(page.getByRole("heading", { name: "客户中心" })).toBeVisible({
-            timeout: UI_TIMEOUT,
+        await createCustomerViaUi(page, {
+            legalName: customerName,
+            shortName: `拒收${stamp}`,
+            creditCode,
+            paymentTermLabel: "货到 15 天",
+            contact: { name: "拒收联系人", phone: "13800138015" },
+            address: "北京市朝阳区拒收路 15 号",
         });
-        await page.locator("#customers-directory-create").click();
-        const customerDialog = page.getByRole("dialog", { name: "新建客户" });
-        await expect(customerDialog).toBeVisible({ timeout: UI_TIMEOUT });
-        await customerDialog.locator("#customers-form-legal-name").fill(customerName);
-        await customerDialog.locator("#customers-form-short-name").fill(`拒收${stamp}`);
-        await customerDialog.locator("#customers-form-credit-code").fill(creditCode);
-        await chooseOption(
-            page,
-            customerDialog.locator("#customers-form-payment-term"),
-            "货到 15 天",
-        );
-        if (await customerDialog.getByRole("button", { name: "添加联系人" }).count()) {
-            await customerDialog.getByRole("button", { name: "添加联系人" }).click();
-            await customerDialog.getByLabel("姓名").fill("拒收联系人");
-            await customerDialog.getByPlaceholder("11 位手机号").fill("13800138015");
-        }
-        if (await customerDialog.getByRole("button", { name: "添加地址" }).count()) {
-            await customerDialog.getByRole("button", { name: "添加地址" }).click();
-            // 地址输入的无障碍名称含必填星号，且“地址类型/地址联系人”都会命中文本匹配，改用 id 前后缀定位该行输入。
-            await customerDialog
-                .locator('input[id^="customers-form-addresses-"][id$="-address"]')
-                .fill("北京市朝阳区拒收路 15 号");
-        }
-        await customerDialog.locator("#customers-form-submit").click();
-        await expectToast(page, "客户已创建");
-        await expect(customerDialog).toBeHidden({ timeout: UI_TIMEOUT });
 
         // 2) W04 合同 PDF
         await page.goto("/sales/contracts");
@@ -582,10 +311,8 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
         await pickCalendarDay(page, page.locator("#sales-orders-create-batch-due-date"), dueDate);
         await page.locator("#sales-orders-create-batch-due-date-apply").click();
         await expectToast(page, "已批量设置交期");
-        await expect(page.getByText("暂未确定采购负责人")).toHaveCount(0, { timeout: UI_TIMEOUT });
-        await page.locator("#sales-orders-create-submit").click();
+        await submitCreatedSalesOrder(page);
         const submitDialog = page.getByRole("dialog", { name: "提交销售单" });
-        await expect(submitDialog).toBeVisible({ timeout: UI_TIMEOUT });
         await expect(submitDialog.getByText("审批中")).toBeVisible();
         await submitDialog.locator("#sales-orders-submit-confirm-confirm").click();
         await expect(page).toHaveURL(/\/sales\/orders\/[^/?]+/, { timeout: UI_TIMEOUT });
@@ -629,10 +356,7 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
         await expect(page.getByRole("heading", { name: "供给分配" })).toBeVisible({
             timeout: UI_TIMEOUT,
         });
-        const expandSourcing = page.getByRole("button", { name: "调整方案" }).first();
-        if (await expandSourcing.isVisible().catch(() => false)) {
-            await expandSourcing.click();
-        }
+        await expandSourcingEditor(page);
         const sourcingOption = page
             .locator('[id^="procurement-orders-create-row-"][id$="-sourcing-option"]')
             .first();
@@ -644,8 +368,7 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
         await expect(previewDialog).toBeVisible({ timeout: UI_TIMEOUT });
         await expect(previewDialog.getByText("现有库存分配")).toHaveCount(0);
         await expect(previewDialog.getByText(/确认提交 1 张采购单/)).toBeVisible();
-        await previewDialog.locator("#procurement-orders-create-preview-confirm").click();
-        await expectToast(page, /供给分配已完成|已创建 1 张采购单并提交审批/);
+        await confirmSupplyAllocation(page, /供给分配已完成|本次供给分配已保存/);
 
         page = await switchTo("xiaoshou");
         await page.goto(`/sales/orders/${salesOrderId}`);

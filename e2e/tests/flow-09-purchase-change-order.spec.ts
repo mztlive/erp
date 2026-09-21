@@ -12,17 +12,19 @@
  */
 import path from "node:path"
 
-import {
-    test,
-    expect,
-    type Browser,
-    type Locator,
-    type Page,
-} from "@playwright/test"
+import { test, expect, type Page } from "@playwright/test"
 
-import { ACCOUNTS } from "../helpers/accounts"
-import { loginViaUi, newLoggedInContext } from "../helpers/login"
-import { selectWorkspaceFamily } from "../helpers/ui"
+import { createCustomerViaUi } from "../helpers/customers"
+import { openLoggedInWorkspace } from "../helpers/login"
+import { ensureDefaultProcurementOwner } from "../helpers/procurement"
+import {
+    approveCurrentDocument,
+    chooseOption,
+    expectToast,
+    openWorkspaceTask,
+    pickCalendarDay,
+    selectWorkspaceFamily,
+} from "../helpers/ui"
 
 const SAMPLE_CONTRACT_PDF = path.join(
     process.cwd(),
@@ -33,113 +35,23 @@ const WAREHOUSE_NAME = "北京通州仓"
 const WAREHOUSE_CODE = "BJ-TZ-01"
 const VISIBLE = { timeout: 20_000 } as const
 
-type LoginName = "xiaoshou" | "caigou" | "cangchu" | "caiwu" | "admin"
-
 test.describe.configure({ mode: "serial" })
 test.setTimeout(8 * 60 * 1000)
 
-function helperAccount(
-    loginName: LoginName,
-): Parameters<typeof loginViaUi>[1] {
-    const catalog = ACCOUNTS as Record<string, unknown>
-    if (loginName in catalog) {
-        return loginName as Parameters<typeof loginViaUi>[1]
-    }
-    for (const [key, value] of Object.entries(catalog)) {
-        if (value === loginName) {
-            return key as Parameters<typeof loginViaUi>[1]
-        }
-        if (value && typeof value === "object") {
-            const rec = value as {
-                account?: string
-                username?: string
-                login?: string
-            }
-            if (
-                rec.account === loginName ||
-                rec.username === loginName ||
-                rec.login === loginName
-            ) {
-                return key as Parameters<typeof loginViaUi>[1]
-            }
-        }
-    }
-    return loginName as Parameters<typeof loginViaUi>[1]
+function todayIso(): string {
+    const date = new Date()
+    const pad = (value: number) => String(value).padStart(2, "0")
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
 
-async function openSession(browser: Browser, loginName: LoginName) {
-    const account = helperAccount(loginName)
-    const session = await newLoggedInContext(browser, account)
-    const page = session.page
-    const context = session.context
-    if (!page || !context) {
-        throw new Error("newLoggedInContext 必须返回 { page, context }")
-    }
-    if (page.url().includes("/login")) {
-        await loginViaUi(page, account)
-    }
-    await expect(page.getByRole("button", { name: "登录" })).toHaveCount(
-        0,
-        VISIBLE,
-    )
-    return { page, context, account }
-}
-
-async function expectToast(page: Page, title: string | RegExp) {
-    await expect(
-        page.locator("[data-slot=toast-title]").filter({ hasText: title }),
-    ).toBeVisible(VISIBLE)
-    // 关闭已确认的悬浮提示，避免其遮挡后续按钮造成偶发点击失败。
-    for (let i = 0; i < 5; i += 1) {
-        const dismiss = page
-            .locator("[data-slot=toast]")
-            .getByRole("button", { name: "关闭提示", includeHidden: true })
-            .first()
-        if ((await dismiss.count()) === 0) break
-        await dismiss.click({ timeout: 5_000 }).catch(() => undefined)
-    }
-}
-
-async function chooseComboboxOption(
-    page: Page,
-    input: Locator,
-    query: string,
-    option: string | RegExp,
-) {
-    await input.click()
-    await input.fill(query)
-    await expect(page.getByRole("option", { name: option }).first()).toBeVisible(
-        VISIBLE,
-    )
-    await page.getByRole("option", { name: option }).first().click()
-}
-
-async function pickVisibleCalendarDay(page: Page) {
-    const popover = page.locator("[data-slot=popover-content]").last()
-    await expect(popover).toBeVisible(VISIBLE)
-    const day = String(Math.min(28, Math.max(1, new Date().getDate())))
-    const cell = popover
-        .locator("button[data-day]:not([disabled])")
-        .filter({ hasText: new RegExp(`^${day}$`) })
-        .first()
-    await expect(cell).toBeVisible(VISIBLE)
-    await cell.click()
-}
-
-async function pickDateById(page: Page, id: string) {
-    await page.locator(`#${id}`).click()
-    await pickVisibleCalendarDay(page)
-}
-
-async function fillEmptyDatePickers(page: Page, scope?: Page) {
-    const root = scope ?? page
-    const empty = root.getByRole("button", { name: "选择日期" })
+async function fillEmptyDatePickers(page: Page) {
+    const iso = todayIso()
+    const empty = page.getByRole("button", { name: "选择日期" })
     const total = await empty.count()
     for (let index = 0; index < total; index += 1) {
-        const remaining = root.getByRole("button", { name: "选择日期" })
+        const remaining = page.getByRole("button", { name: "选择日期" })
         if ((await remaining.count()) === 0) break
-        await remaining.first().click()
-        await pickVisibleCalendarDay(page)
+        await pickCalendarDay(page, remaining.first(), iso)
     }
 }
 
@@ -148,30 +60,22 @@ async function approveWorkspaceTask(
     taskName: RegExp,
     currentNode?: string | RegExp,
 ) {
-    await page.goto("/workspace")
-    await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible(
-        VISIBLE,
-    )
-    await selectWorkspaceFamily(page, "approval")
-    const list = page.getByRole("list", { name: "待办列表" })
-    const task = list.getByRole("button", { name: taskName })
-    await expect(task).toBeVisible(VISIBLE)
-    await task.click()
-    const pane = page.getByRole("region", { name: "当前任务" })
-    await expect(pane).toBeVisible(VISIBLE)
+    await openWorkspaceTask(page, taskName, undefined, "approval")
     if (currentNode) {
-        await expect(pane.getByText(currentNode)).toBeVisible(VISIBLE)
+        await expect(page.getByText(currentNode).first()).toBeVisible(VISIBLE)
     }
-    await expect(page.getByRole("button", { name: /^(通过|同意审批)$/ })).toBeVisible(VISIBLE)
-    await page.getByRole("button", { name: /^(通过|同意审批)$/ }).click()
-    await expect(page.getByRole("heading", { name: "确认通过" })).toBeVisible(
+    await expect(page.getByRole("button", { name: /^(通过|同意审批)$/ })).toBeVisible(
         VISIBLE,
     )
-    const decided = page.waitForResponse(response => response.request().method() === "POST" && response.url().endsWith("/admin/approval-decisions"), { timeout: 40_000 })
-    await page.getByRole("button", { name: "确认通过" }).click()
+    const decided = page.waitForResponse(
+        (response) =>
+            response.request().method() === "POST" &&
+            response.url().endsWith("/admin/approval-decisions"),
+        { timeout: 40_000 },
+    )
+    await approveCurrentDocument(page)
     expect((await decided).ok()).toBeTruthy()
-    await expect(page.getByRole("heading", { name: "确认通过" })).toBeHidden(VISIBLE)
-    await expect(task).toHaveCount(0, VISIBLE)
+    await expect(page.getByRole("button", { name: taskName })).toHaveCount(0, VISIBLE)
 }
 
 test("[flow-09] 采购单未入库未付款时走采购变更单并生效", async ({
@@ -184,72 +88,25 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
 
     // 1. 主数据：若无采购责任规则则由 admin 补默认调度人 caigou（否则销售提交被拦）
     {
-        const admin = await openSession(browser, "admin")
+        const admin = await openLoggedInWorkspace(browser, "admin")
         try {
-            const rulesLoaded = admin.page.waitForResponse((response) =>
-                response.request().method() === "GET" &&
-                response.url().includes("/admin/procurement-responsibility-rules"),
-            )
-            await admin.page.goto("/master-data/procurement-responsibilities")
-            await rulesLoaded
-            await expect(
-                admin.page.getByRole("heading", { name: "采购责任规则" }),
-            ).toBeVisible(VISIBLE)
-            const hasDispatcher = await admin.page
-                .getByText("默认调度人")
-                .count()
-            if (hasDispatcher === 0) {
-                await admin.page
-                    .getByTestId("procurement-responsibility-create")
-                    .click()
-                await expect(
-                    admin.page.getByRole("heading", { name: "新增采购责任规则" }),
-                ).toBeVisible(VISIBLE)
-                await chooseComboboxOption(
-                    admin.page,
-                    admin.page.locator(
-                        "#procurement-responsibility-rules-dialog-rule-type",
-                    ),
-                    "默认调度人",
-                    "默认调度人",
-                )
-                await chooseComboboxOption(
-                    admin.page,
-                    admin.page.locator(
-                        "#procurement-responsibility-rules-dialog-owner",
-                    ),
-                    "caigou",
-                    /采购.*caigou|caigou/,
-                )
-                await admin.page
-                    .getByTestId("procurement-responsibility-save")
-                    .click()
-                await expectToast(admin.page, "采购责任规则已新增")
-            }
+            await ensureDefaultProcurementOwner(admin.page)
         } finally {
             await admin.context.close()
         }
     }
 
     // 2. 销售：客户 + 合同 PDF + 实物销售单提交
-    const sales = await openSession(browser, "xiaoshou")
+    const sales = await openLoggedInWorkspace(browser, "xiaoshou")
     try {
-        await sales.page.goto("/sales/customers")
-        await expect(
-            sales.page.getByRole("heading", { name: "客户中心" }),
-        ).toBeVisible(VISIBLE)
-        await sales.page.locator("#customers-directory-create").click()
-        await expect(
-            sales.page.getByRole("heading", { name: "新建客户" }),
-        ).toBeVisible(VISIBLE)
-        await sales.page.getByLabel("法定名称").fill(legalName)
-        await sales.page.getByLabel("客户简称").fill(`测试客户${stamp.slice(-6)}`)
-        await sales.page.getByLabel("统一社会信用代码").fill(creditCode)
-        await sales.page.locator("#customers-form-submit").click()
-        await expectToast(sales.page, "客户已创建")
-        await expect(
-            sales.page.getByRole("heading", { name: "新建客户" }),
-        ).toHaveCount(0, VISIBLE)
+        await createCustomerViaUi(sales.page, {
+            legalName,
+            shortName: `测试客户${stamp.slice(-6)}`,
+            creditCode,
+            paymentTermLabel: "货到 15 天",
+            contact: { name: "李测", phone: "13800138001" },
+            address: "北京市朝阳区测试路 1 号",
+        })
 
         await sales.page.goto("/sales/contracts")
         await expect(sales.page.getByRole("heading", { name: "合同" })).toBeVisible(
@@ -263,11 +120,11 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
             .locator("#card-contracts-upload-pdf-input")
             .setInputFiles(SAMPLE_CONTRACT_PDF)
         await sales.page.locator("#card-contracts-upload-contract-no").fill(contractNo)
-        await chooseComboboxOption(
+        await chooseOption(
             sales.page,
             sales.page.locator("#card-contracts-upload-customer"),
-            legalName,
             new RegExp(legalName),
+            legalName,
         )
         await expect(
             sales.page.locator("#card-contracts-upload-settlement-party"),
@@ -276,18 +133,21 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
         await expectToast(sales.page, "合同 PDF 已归档")
 
         await sales.page.goto("/sales/orders?mode=create")
-        await expect(sales.page.getByText("单据头")).toBeVisible(VISIBLE)
-        await chooseComboboxOption(
+        await expect(
+            sales.page
+                .getByRole("heading", { name: "新建销售单" })
+                .or(sales.page.getByRole("heading", { name: "业务信息" })),
+        ).toBeVisible(VISIBLE)
+        await chooseOption(
             sales.page,
             sales.page.locator("#sales-orders-create-contract"),
-            contractNo,
             new RegExp(contractNo),
+            contractNo,
         )
         await expect(sales.page.getByText(legalName, { exact: true }).first()).toBeVisible(VISIBLE)
-        await chooseComboboxOption(
+        await chooseOption(
             sales.page,
             sales.page.locator("#sales-orders-create-header-welfare-scene"),
-            "年节礼包",
             "年节礼包",
         )
         await sales.page.locator("#sales-orders-create-line-items-add").click()
@@ -309,7 +169,11 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
             .locator('input[id^="sales-orders-create-line-"][id$="-quantity"]')
             .fill("2")
         await sales.page.locator("#sales-orders-create-batch-due-date-open").click()
-        await pickDateById(sales.page, "sales-orders-create-batch-due-date")
+        await pickCalendarDay(
+            sales.page,
+            sales.page.locator("#sales-orders-create-batch-due-date"),
+            todayIso(),
+        )
         await sales.page
             .locator("#sales-orders-create-batch-due-date-apply")
             .click()
@@ -332,7 +196,7 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
 
     // 3. 采购确认销售单（采购确认节点不选供给）
     {
-        const procurement = await openSession(browser, "caigou")
+        const procurement = await openLoggedInWorkspace(browser, "caigou")
         try {
             await approveWorkspaceTask(
                 procurement.page,
@@ -346,18 +210,9 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
 
     // 4. 供给分配：库存为空必须生成采购单并立即提交审批
     {
-        const procurement = await openSession(browser, "caigou")
+        const procurement = await openLoggedInWorkspace(browser, "caigou")
         try {
-            await procurement.page.goto("/workspace")
-            await expect(
-                procurement.page.getByRole("heading", { name: "我的工作台" }),
-            ).toBeVisible(VISIBLE)
-            await selectWorkspaceFamily(procurement.page, "procurement")
-            const task = procurement.page
-                .getByRole("list", { name: "待办列表" })
-                .getByRole("button", { name: /待供给分配/ })
-            await expect(task).toBeVisible(VISIBLE)
-            await task.click()
+            await openWorkspaceTask(procurement.page, /待供给分配/, undefined, "procurement")
             await expect(
                 procurement.page.getByRole("region", { name: "当前供给分配任务" }),
             ).toBeVisible(VISIBLE)
@@ -378,11 +233,11 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
             const warehouseInput = procurement.page.getByRole("combobox", { name: "仓库", exact: true })
             if ((await warehouseInput.count()) > 0) {
                 // 仓库下拉按仓库代码精确筛选，填代码后按名称选择选项。
-                await chooseComboboxOption(
+                await chooseOption(
                     procurement.page,
                     warehouseInput,
-                    WAREHOUSE_CODE,
                     new RegExp(`${WAREHOUSE_CODE}|${WAREHOUSE_NAME}`),
+                    WAREHOUSE_CODE,
                 )
             }
             await fillEmptyDatePickers(procurement.page)
@@ -412,7 +267,7 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
 
     // 5. 财务审批采购单 → 采购单生效、形成应付；本流程不付款、不入库
     {
-        const finance = await openSession(browser, "caiwu")
+        const finance = await openLoggedInWorkspace(browser, "caiwu")
         try {
             await approveWorkspaceTask(
                 finance.page,
@@ -424,7 +279,7 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
         }
     }
 
-    const procurement = await openSession(browser, "caigou")
+    const procurement = await openLoggedInWorkspace(browser, "caigou")
     let purchaseHref = ""
     try {
         await procurement.page.goto("/procurement/orders")
@@ -497,7 +352,7 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
 
     // 8. 仓储确认库存发货影响（统一审批第一节点，W01 原地处理）
     {
-        const warehouse = await openSession(browser, "cangchu")
+        const warehouse = await openLoggedInWorkspace(browser, "cangchu")
         try {
             await warehouse.page.goto("/workspace")
             await expect(
@@ -522,7 +377,7 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
 
     // 9. 财务复核金额与应付；末节点通过即生效
     {
-        const finance = await openSession(browser, "caiwu")
+        const finance = await openLoggedInWorkspace(browser, "caiwu")
         try {
             await approveWorkspaceTask(
                 finance.page,
@@ -536,7 +391,7 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
 
     // 10. 断言：变更已生效，采购单/应付按变更更新；仍未付款未履约
     {
-        const procurement = await openSession(browser, "caigou")
+        const procurement = await openLoggedInWorkspace(browser, "caigou")
         try {
             await procurement.page.goto(purchaseHref)
             await expect(procurement.page.locator("header").getByText("已生效", { exact: true })).toBeVisible(VISIBLE)
@@ -571,7 +426,7 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
 
     // 仓储工作台：未执行本流程不得把履约任务当变更完成
     {
-        const warehouse = await openSession(browser, "cangchu")
+        const warehouse = await openLoggedInWorkspace(browser, "cangchu")
         try {
             await warehouse.page.goto("/workspace")
             await expect(

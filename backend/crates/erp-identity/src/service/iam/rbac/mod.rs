@@ -186,6 +186,20 @@ impl RbacService {
         }
     }
 
+    /// 返回身份数据库，供启动期组织引导复用同一连接。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回 RBAC 持有的 MongoDB 数据库句柄。
+    ///
+    /// # 错误
+    /// 无。
+    pub(crate) fn database(&self) -> &Database {
+        &self.db
+    }
+
     /// 通过审计端口在事务前构造成功资源审计。
     pub fn prepare_resource_log(
         &self,

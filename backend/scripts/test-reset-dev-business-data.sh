@@ -65,7 +65,17 @@ for collection in \
     approval_subject_snapshots \
     approval_notification_outbox \
     work_items \
-    sales_invoice_requests; do
+    sales_invoice_requests \
+    sales_selection_booklets \
+    sales_selection_prepare_tasks \
+    sales_selection_display_items \
+    sales_selection_pool_members \
+    sales_selection_sessions \
+    sales_selection_proposals \
+    sales_selection_proposal_display_lines \
+    sales_selection_proposal_sku_lines \
+    sales_selection_idempotency \
+    sales_selection_rate_windows; do
     grep -q "\"${collection}\"" "${MONGOSH_SCRIPT}" ||
         fail "审批或业务重置集合未纳入合同: ${collection}"
 done

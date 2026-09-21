@@ -178,9 +178,11 @@ export function CustomerForm({
 
     return (
         <form
+            noValidate
             className={grouped ? "space-y-4" : "flex flex-col gap-4"}
             onSubmit={(e) => {
                 e.preventDefault()
+                e.stopPropagation()
                 void form.handleSubmit()
             }}
         >

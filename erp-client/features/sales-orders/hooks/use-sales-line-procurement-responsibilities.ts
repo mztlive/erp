@@ -47,7 +47,6 @@ export function useSalesLineProcurementResponsibilities(input: {
         input.nature !== "physical_service" ||
         (input.lines.length > 0 &&
             !query.isFetching &&
-            !query.error &&
             input.lines.every((line) => {
                 const responsibility = byRowKey.get(line.rowKey)
                 return Boolean(

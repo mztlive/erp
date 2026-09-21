@@ -124,3 +124,26 @@ export async function newLoggedInContext(
     pool.set(cred.account, session)
     return session
 }
+
+/**
+ * 按登录名或角色键打开已登录工作台。基于 `newLoggedInContext` + `ACCOUNTS`，
+ * 同一 Browser 内同账号只登录一次。
+ *
+ * spec 不要再复制 accountCred / asSession / openSession：
+ *   import { openLoggedInWorkspace } from "../helpers/login"
+ *   const { page, context } = await openLoggedInWorkspace(browser, "xiaoshou")
+ *
+ * 登录页 id：`#governance-auth-login-account` / `#governance-auth-login-password` /
+ * `#governance-auth-login-submit`；成功后 heading「我的工作台」。
+ */
+export async function openLoggedInWorkspace(
+    browser: Browser,
+    loginName: LoginIdentity,
+): Promise<LoggedInSession> {
+    const session = await newLoggedInContext(browser, loginName)
+    if (/\/login(?:\?|$)/.test(session.page.url())) {
+        await loginViaUi(session.page, loginName)
+    }
+    await openWorkspace(session.page)
+    return session
+}

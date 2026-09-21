@@ -18,56 +18,23 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test"
+import { expect, test, type BrowserContext, type Page } from "@playwright/test"
 
-import { ACCOUNTS } from "../helpers/accounts"
-import { loginViaUi, newLoggedInContext } from "../helpers/login"
-import { dismissToasts, selectWorkspaceFamily } from "../helpers/ui"
+import { createCustomerViaUi } from "../helpers/customers"
+import { openLoggedInWorkspace } from "../helpers/login"
+import {
+    approveCurrentDocument,
+    chooseOption,
+    dismissToasts,
+    expectToast,
+    openWorkspaceTask,
+    pickCalendarDay,
+} from "../helpers/ui"
 
 const TIMEOUT = 20_000
 const SKU_KEYWORD = "龙井"
 const LINE_QTY = "2"
 const GROSS_RE = /2,576\.00|2576\.00/
-
-type AccountCreds = { account: string; password: string }
-
-function credsFor(login: string): AccountCreds {
-    const bag = ACCOUNTS as Record<
-        string,
-        { account?: string; username?: string; password?: string }
-    >
-    const hit =
-        bag[login] ??
-        Object.values(bag).find(
-            (item) => item.account === login || item.username === login,
-        )
-    return {
-        account: hit?.account ?? hit?.username ?? login,
-        password: hit?.password ?? "123456",
-    }
-}
-
-async function openLoggedIn(browser: Browser, login: string) {
-    const creds = credsFor(login)
-    const opened = (await newLoggedInContext(browser, creds)) as
-        | { context: BrowserContext; page: Page }
-        | BrowserContext
-    if ("newPage" in opened) {
-        const context = opened
-        const page = context.pages()[0] ?? (await context.newPage())
-        if (!/\/workspace/.test(page.url())) {
-            await loginViaUi(page, creds)
-        }
-        await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible({
-            timeout: TIMEOUT,
-        })
-        return { context, page }
-    }
-    await expect(opened.page.getByRole("heading", { name: "我的工作台" })).toBeVisible({
-        timeout: TIMEOUT,
-    })
-    return opened
-}
 
 function contractPdfPath() {
     const here = path.dirname(fileURLToPath(import.meta.url))
@@ -90,18 +57,6 @@ function uniqueCreditCode() {
     return `91110108MA${Date.now().toString().slice(-7)}X`
 }
 
-async function chooseComboboxOption(
-    page: Page,
-    field: ReturnType<Page["getByLabel"]> | ReturnType<Page["locator"]>,
-    optionName: string,
-) {
-    await field.click()
-    await field.fill(optionName)
-    const option = page.getByRole("option", { name: optionName })
-    await expect(option).toBeVisible({ timeout: TIMEOUT })
-    await option.click()
-}
-
 async function gotoNav(page: Page, name: string, hrefId: string) {
     const link = page.getByRole("link", { name })
     if (await link.count()) {
@@ -109,34 +64,6 @@ async function gotoNav(page: Page, name: string, hrefId: string) {
         return
     }
     await page.locator(`#${hrefId}`).click()
-}
-
-async function openWorkspaceApprovals(page: Page) {
-    await gotoNav(page, "我的工作台", "workspace-sidebar-nav-workspace")
-    await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible({
-        timeout: TIMEOUT,
-    })
-    await selectWorkspaceFamily(page, "approval")
-    // 其他账号刚提交的任务不在本浏览器缓存中，使用工作台刷新入口重新读取队列。
-    await page.getByRole("button", { name: "刷新", exact: true }).click()
-}
-
-async function selectApprovalTask(page: Page, title: RegExp) {
-    // 等待当前队列加载，禁止不停刷新取消尚未完成的任务查询。
-    const task = page.getByRole("button", { name: title }).first()
-    await expect(task).toBeVisible({ timeout: 40_000 })
-    await task.click()
-    await expect(
-        page.getByRole("button", { name: /^(通过|同意审批)$/ }).or(page.getByRole("button", { name: "驳回" })).first(),
-    ).toBeVisible({ timeout: TIMEOUT })
-}
-
-async function approveOpenTask(page: Page) {
-    await page.getByRole("button", { name: /^(通过|同意审批)$/ }).click()
-    const dialog = page.getByRole("dialog", { name: "确认通过" })
-    await expect(dialog).toBeVisible({ timeout: TIMEOUT })
-    await dialog.getByRole("button", { name: "确认通过" }).click()
-    await expect(dialog).toHaveCount(0, { timeout: TIMEOUT })
 }
 
 async function rejectOpenTask(page: Page, reason: string) {
@@ -148,19 +75,11 @@ async function rejectOpenTask(page: Page, reason: string) {
     await expect(dialog).toHaveCount(0, { timeout: TIMEOUT })
 }
 
-async function createCustomer(page: Page, legalName: string, creditCode: string) {
-    await gotoNav(page, "客户中心", "workspace-sidebar-nav-sales-customers")
-    await expect(page.getByRole("heading", { name: "客户中心" })).toBeVisible({
-        timeout: TIMEOUT,
-    })
-    await page.locator("#customers-directory-create").click()
-    const dialog = page.getByRole("dialog", { name: "新建客户" })
-    await expect(dialog).toBeVisible({ timeout: TIMEOUT })
-    await dialog.getByLabel("法定名称").fill(legalName)
-    await dialog.getByLabel("统一社会信用代码").fill(creditCode)
-    await dialog.locator("#customers-form-submit").click()
-    await expect(page.getByText("客户已创建")).toBeVisible({ timeout: TIMEOUT })
-    await expect(dialog).toHaveCount(0, { timeout: TIMEOUT })
+function plusDaysIso(days: number): string {
+    const date = new Date()
+    date.setDate(date.getDate() + days)
+    const pad = (value: number) => String(value).padStart(2, "0")
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
 
 async function createPhysicalSalesOrder(page: Page, customerName: string, contractNo: string) {
@@ -169,7 +88,14 @@ async function createPhysicalSalesOrder(page: Page, customerName: string, contra
         timeout: TIMEOUT,
     })
     await page.locator("#sales-orders-list-header-create").click()
-    await expect(page.getByRole("heading", { name: "单据头" })).toBeVisible({
+    await expect(
+        page
+            .getByRole("heading", { name: "新建销售单" })
+            .or(page.getByRole("heading", { name: "业务信息" })),
+    ).toBeVisible({
+        timeout: TIMEOUT,
+    })
+    await expect(page.locator("#sales-orders-create-contract")).toBeVisible({
         timeout: TIMEOUT,
     })
 
@@ -178,35 +104,19 @@ async function createPhysicalSalesOrder(page: Page, customerName: string, contra
     await expect(upload).toBeVisible({ timeout: TIMEOUT })
     await upload.locator("#card-contracts-upload-pdf-input").setInputFiles(contractPdfPath())
     await upload.getByLabel("合同编号").fill(contractNo)
-    await chooseComboboxOption(
-        page,
-        upload.locator("#card-contracts-upload-customer"),
-        customerName,
-    )
+    await chooseOption(page, upload.locator("#card-contracts-upload-customer"), customerName)
     await expect
         .poll(async () => upload.locator("#card-contracts-upload-settlement-party").inputValue(), {
             timeout: TIMEOUT,
         })
         .not.toEqual("")
-    await chooseComboboxOption(
-        page,
-        upload.locator("#card-contracts-upload-payment-terms"),
-        "货到 30 天",
-    )
+    await chooseOption(page, upload.locator("#card-contracts-upload-payment-terms"), "货到 30 天")
     await upload.locator("#card-contracts-upload-submit").click()
     await expect(upload).toHaveCount(0, { timeout: TIMEOUT })
     await expect(page.getByText(customerName).first()).toBeVisible({ timeout: TIMEOUT })
 
-    await chooseComboboxOption(
-        page,
-        page.locator("#sales-orders-create-header-welfare-scene"),
-        "年节礼包",
-    )
-    await chooseComboboxOption(
-        page,
-        page.locator("#sales-orders-create-header-payment-terms"),
-        "货到 30 天",
-    )
+    await chooseOption(page, page.locator("#sales-orders-create-header-welfare-scene"), "年节礼包")
+    await chooseOption(page, page.locator("#sales-orders-create-header-payment-terms"), "货到 30 天")
 
     await page.locator("#sales-orders-create-line-items-add").click()
     const skuDialog = page.getByRole("dialog", { name: "添加商品" })
@@ -226,16 +136,9 @@ async function createPhysicalSalesOrder(page: Page, customerName: string, contra
 
     await page.getByLabel("数量").fill(LINE_QTY)
     await page.locator("#sales-orders-create-batch-due-date-open").click()
-    await page.locator("#sales-orders-create-batch-due-date").click()
-    const nextMonth = page.locator("#sales-orders-create-batch-due-date-calendar-next-month")
-    if (await nextMonth.count()) await nextMonth.click()
-    await page
-        .locator('[id^="sales-orders-create-batch-due-date-calendar-"][id*="-day-"]')
-        .filter({ hasText: /^15$/ })
-        .first()
-        .click()
+    await pickCalendarDay(page, page.locator("#sales-orders-create-batch-due-date"), plusDaysIso(21))
     await page.locator("#sales-orders-create-batch-due-date-apply").click()
-    await expect(page.getByText("已批量设置交期")).toBeVisible({ timeout: TIMEOUT })
+    await expectToast(page, "已批量设置交期")
 
     await expect(
         page.getByText("暂未确定采购负责人，请联系管理员维护采购责任规则"),
@@ -280,14 +183,21 @@ test.describe("flow-08 销售变更单（未履约）", () => {
         const contractNo = `HT-E2E-08-${stamp}`
         const sessions: BrowserContext[] = []
 
-        const sales = await openLoggedIn(browser, "xiaoshou")
-        const procurement = await openLoggedIn(browser, "caigou")
-        const finance = await openLoggedIn(browser, "caiwu")
+        const sales = await openLoggedInWorkspace(browser, "xiaoshou")
+        const procurement = await openLoggedInWorkspace(browser, "caigou")
+        const finance = await openLoggedInWorkspace(browser, "caiwu")
         sessions.push(sales.context, procurement.context, finance.context)
 
         try {
             // 1. 客户 + 合同 + 实物销售单提交（未履约、未出入库）
-            await createCustomer(sales.page, customerName, uniqueCreditCode())
+            await createCustomerViaUi(sales.page, {
+                legalName: customerName,
+                shortName: `流08客户${stamp}`,
+                creditCode: uniqueCreditCode(),
+                paymentTermLabel: "货到 15 天",
+                contact: { name: "李测", phone: "13800138001" },
+                address: "北京市朝阳区测试路 1 号",
+            })
             const salesOrderId = await createPhysicalSalesOrder(
                 sales.page,
                 customerName,
@@ -299,8 +209,7 @@ test.describe("flow-08 销售变更单（未履约）", () => {
             await expectChangeBlocked(sales.page)
 
             // 2. 负向：审批中不得发起改单
-            await openWorkspaceApprovals(procurement.page)
-            await selectApprovalTask(procurement.page, /销售单审批/)
+            await openWorkspaceTask(procurement.page, /销售单审批/, undefined, "approval")
             await expect(procurement.page.getByText("采购确认").first()).toBeVisible({
                 timeout: TIMEOUT,
             })
@@ -317,9 +226,8 @@ test.describe("flow-08 销售变更单（未履约）", () => {
             await expectChangeBlocked(sales.page)
 
             // 3. 采购再通过，销售单生效；不得出现已建采购单/已履约
-            await openWorkspaceApprovals(procurement.page)
-            await selectApprovalTask(procurement.page, /销售单审批/)
-            await approveOpenTask(procurement.page)
+            await openWorkspaceTask(procurement.page, /销售单审批/, undefined, "approval")
+            await approveCurrentDocument(procurement.page)
 
             await openSalesOrder(sales.page, salesOrderId)
             await expect(sales.page.getByText("已生效", { exact: true }).first()).toBeVisible({
@@ -371,22 +279,20 @@ test.describe("flow-08 销售变更单（未履约）", () => {
             })
 
             // 5. 采购确认履约影响 → 财务复核金额与应收 → 自动生效
-            await openWorkspaceApprovals(procurement.page)
-            await selectApprovalTask(procurement.page, /销售变更单审批/)
+            await openWorkspaceTask(procurement.page, /销售变更单审批/, undefined, "approval")
             await expect(
                 procurement.page.getByText("采购确认履约影响").first(),
             ).toBeVisible({ timeout: TIMEOUT })
-            await approveOpenTask(procurement.page)
+            await approveCurrentDocument(procurement.page)
             await expect(
                 procurement.page.getByRole("button", { name: /销售变更单审批/ }),
             ).toHaveCount(0, { timeout: TIMEOUT })
 
-            await openWorkspaceApprovals(finance.page)
-            await selectApprovalTask(finance.page, /销售变更单审批/)
+            await openWorkspaceTask(finance.page, /销售变更单审批/, undefined, "approval")
             await expect(
                 finance.page.getByText("财务复核金额与应收").first(),
             ).toBeVisible({ timeout: TIMEOUT })
-            await approveOpenTask(finance.page)
+            await approveCurrentDocument(finance.page)
             await expect(
                 finance.page.getByRole("button", { name: /销售变更单审批/ }),
             ).toHaveCount(0, { timeout: TIMEOUT })

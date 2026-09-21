@@ -52,8 +52,12 @@ pub struct SalesSelectionBooklet {
     /// 客户展示名称快照。
     pub customer_name: String,
     /// 显式销售负责人；创建后不随提交人或编辑人变化，改派走 S3-07。
+    /// 组织范围落地前的历史文档可能缺此字段，读取时默认为空并由准备队列跳过。
+    #[serde(default)]
     pub sales_owner_user_id: String,
     /// 业务组织；当前单据团队口径，调岗不自动改写。
+    /// 组织范围落地前的历史文档可能缺此字段，读取时默认为空并由准备队列跳过。
+    #[serde(default)]
     pub business_org_unit_id: String,
     /// 选品形态。
     pub form: SelectionForm,
@@ -454,6 +458,23 @@ impl SalesSelectionBooklet {
         self.link_expires_at.is_some_and(|expires| now >= expires)
     }
 
+    /// 判断持久化文档是否带齐组织范围字段。
+    ///
+    /// 清库漏集合时，组织范围落地前的选品册可能没有销售负责人或业务组织；
+    /// 反序列化后为空，后台准备不得当作有效单据继续执行或写回。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 两个字段都非空时返回 `true`。
+    ///
+    /// # 错误
+    /// 无。
+    pub(crate) fn has_persisted_scope(&self) -> bool {
+        !self.sales_owner_user_id.is_empty() && !self.business_org_unit_id.is_empty()
+    }
+
     /// 公开写操作前校验令牌、状态与到期。
     ///
     /// # 参数
@@ -705,6 +726,21 @@ mod tests {
         booklet.link_expires_at = Some(Instant::from_unix_secs(1));
         assert!(booklet.is_expired(Instant::now()));
         assert!(booklet.ensure_public_write("hash", Instant::now()).is_err());
+    }
+
+    #[test]
+    fn legacy_document_defaults_missing_owner_and_org() {
+        let booklet = draft();
+        let mut value = serde_json::to_value(&booklet).expect("serialize booklet");
+        let object = value.as_object_mut().expect("booklet object");
+        object.remove("sales_owner_user_id");
+        object.remove("business_org_unit_id");
+        let restored: SalesSelectionBooklet =
+            serde_json::from_value(value).expect("legacy booklet deserializes");
+        assert!(!restored.has_persisted_scope());
+        assert!(restored.sales_owner_user_id.is_empty());
+        assert!(restored.business_org_unit_id.is_empty());
+        assert!(draft().has_persisted_scope());
     }
 
     #[test]

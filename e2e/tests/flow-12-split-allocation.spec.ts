@@ -15,16 +15,24 @@
  */
 import fs from "node:fs"
 import path from "node:path"
-import { expect, test, type Browser, type BrowserContext, type Locator, type Page } from "@playwright/test"
+import { expect, test, type BrowserContext, type Locator, type Page } from "@playwright/test"
 
+import { createCustomerViaUi } from "../helpers/customers"
 import { ensureZeroBalanceDimension, singleSalesLineId } from "../helpers/inventory"
+import { openLoggedInWorkspace } from "../helpers/login"
 import { payOnlySupplierTask } from "../helpers/payments"
-import { ACCOUNTS } from "../helpers/accounts"
-import { headedContextOptions } from "../helpers/headed"
-import { loginViaUi, newLoggedInContext } from "../helpers/login"
-import { openFulfillmentWorkspaceForm, readHeaderDocumentNumber, selectWorkspaceFamily } from "../helpers/ui"
+import { confirmSupplyAllocation, expandSourcingEditor } from "../helpers/sourcing"
+import {
+    approveCurrentDocument,
+    chooseOption,
+    expectToast,
+    openFulfillmentWorkspaceForm,
+    openWorkspaceTask,
+    pickCalendarDay,
+    readHeaderDocumentNumber,
+    selectWorkspaceFamily,
+} from "../helpers/ui"
 
-const API_BASE = process.env.API_BASE ?? "http://127.0.0.1:10001"
 const FRONTEND_BASE = process.env.E2E_BASE_URL ?? "http://localhost:3000"
 const TIMEOUT = 20_000
 
@@ -41,69 +49,9 @@ const MINIMAL_PDF = Buffer.from(
     "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n",
 )
 
-type AccountCred = {
-    account: string
-    password: string
-    name?: string
-}
-
 type Session = {
     context: BrowserContext
     page: Page
-}
-
-function resolveAccount(loginName: string): AccountCred {
-    const bag = ACCOUNTS as unknown as Record<string, unknown>
-    const direct = bag[loginName]
-    if (isCred(direct)) return direct
-    for (const value of Object.values(bag)) {
-        if (isCred(value) && value.account === loginName) return value
-        if (value && typeof value === "object") {
-            const nested = Object.values(value as Record<string, unknown>).find(
-                (item) => isCred(item) && item.account === loginName,
-            )
-            if (isCred(nested)) return nested
-        }
-    }
-    return { account: loginName, password: "123456" }
-}
-
-function isCred(value: unknown): value is AccountCred {
-    return Boolean(
-        value &&
-            typeof value === "object" &&
-            typeof (value as AccountCred).account === "string" &&
-            typeof (value as AccountCred).password === "string",
-    )
-}
-
-async function waitWorkspaceHome(page: Page) {
-    if (!(await page.getByRole("heading", { name: "我的工作台" }).isVisible().catch(() => false))) {
-        await page.goto(`${FRONTEND_BASE}/workspace`)
-    }
-    await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible({
-        timeout: TIMEOUT,
-    })
-}
-
-async function openSession(browser: Browser, loginName: string): Promise<Session> {
-    const cred = resolveAccount(loginName)
-    try {
-        const result = await newLoggedInContext(browser, cred as never)
-        if (result && typeof result === "object" && "page" in result && "context" in result) {
-            const session = result as Session
-            await waitWorkspaceHome(session.page)
-            return session
-        }
-    } catch {
-        // 回退到 loginViaUi，兼容 helper 尚未封装独立 context 的情况。
-    }
-    const context = await browser.newContext(headedContextOptions())
-    const page = await context.newPage()
-    await page.goto(`${FRONTEND_BASE}/login`)
-    await loginViaUi(page, cred as never)
-    await waitWorkspaceHome(page)
-    return { context, page }
 }
 
 async function closeSession(session: Session | undefined) {
@@ -111,106 +59,9 @@ async function closeSession(session: Session | undefined) {
     await session.context.close()
 }
 
-async function expectToast(page: Page, title: string | RegExp) {
-    const toast = page.locator('[data-slot="toast"]').filter({ hasText: title }).first()
-    await expect(toast).toBeVisible({ timeout: TIMEOUT })
-    // 关闭已确认的悬浮提示，避免其遮挡后续按钮造成偶发点击失败。
-    for (let i = 0; i < 5; i += 1) {
-        const dismiss = page
-            .locator('[data-slot="toast"]')
-            .getByRole("button", { name: "关闭提示", includeHidden: true })
-            .first()
-        if (!(await dismiss.count())) break
-        await dismiss.click({ timeout: 5_000 }).catch(() => undefined)
-    }
-}
-
-async function chooseOption(page: Page, input: Locator, optionName: string | RegExp) {
-    await input.click()
-    const option = page.getByRole("option", { name: optionName })
-    await expect(option).toBeVisible({ timeout: TIMEOUT })
-    await option.click()
-}
-
 async function searchAndSubmit(input: Locator, query: string) {
     await input.fill(query)
     await input.press("Enter")
-}
-
-async function pickVisibleDay(page: Page, trigger: Locator, dayOfMonth: number) {
-    await trigger.click()
-    // 日期按钮无障碍名为完整日期，子串匹配后由下方循环跳过禁选日期。
-    const calendar = page.locator('[data-slot="calendar"]:visible')
-    await expect(calendar).toBeVisible({ timeout: TIMEOUT })
-    const dayButtons = calendar.getByRole("button", { name: String(dayOfMonth) })
-    const total = await dayButtons.count()
-    for (let i = 0; i < total; i += 1) {
-        const button = dayButtons.nth(i)
-        const disabled = await button.getAttribute("aria-disabled")
-        const outside = await button.getAttribute("data-outside")
-        if (disabled === "true" || outside === "true") continue
-        await button.click()
-        return
-    }
-    await dayButtons.first().click()
-}
-
-async function openWorkspaceTask(
-    page: Page,
-    options: {
-        name: string | RegExp
-        family?: "审批" | "采购" | "履约"
-        query?: string
-    },
-) {
-    await page.goto(`${FRONTEND_BASE}/workspace`)
-    await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible({
-        timeout: TIMEOUT,
-    })
-    if (options.family) {
-        const familyId =
-            options.family === "审批"
-                ? "approval"
-                : options.family === "采购"
-                  ? "procurement"
-                  : "fulfillment"
-        await selectWorkspaceFamily(page, familyId)
-    }
-    // 后端工作台搜索不匹配单号，填单号会把列表滤空；任务名正则已包含单号，直接匹配。
-    // 单号也可能只出现在无障碍名或可见文本一侧，取并集兜底。
-    const list = page.getByRole("list", { name: "待办列表" })
-    await expect(list).toBeVisible({ timeout: TIMEOUT })
-    const union = options.query
-        ? list
-              .getByRole("button", { name: options.name })
-              .or(
-                  list
-                      .getByRole("button", { name: /审批|待供给分配|供给分配|客户验收|履约/ })
-                      .filter({ hasText: options.query }),
-              )
-              .first()
-        : list.getByRole("button", { name: options.name }).first()
-    try {
-        await expect(union).toBeVisible({ timeout: TIMEOUT })
-        await union.click()
-    } catch {
-        if (!options.query) throw new Error(`工作台未找到任务: ${options.name}`)
-        // 兜底：hint 无法匹配时，同类型仅有一项则直接点选，否则显式失败避免点错任务。
-        const sameType = list.getByRole("button", { name: options.name })
-        await expect(sameType).toHaveCount(1, { timeout: TIMEOUT })
-        await sameType.first().click()
-    }
-    await expect(list.locator('button[aria-current="true"]').first()).toBeVisible({
-        timeout: TIMEOUT,
-    })
-}
-
-async function approveOpenTask(page: Page) {
-    await page.getByRole("button", { name: /^(通过|同意审批)$/ }).click()
-    const dialog = page.getByRole("dialog", { name: "确认通过" })
-    await expect(dialog).toBeVisible({ timeout: TIMEOUT })
-    await dialog.getByRole("button", { name: "确认通过" }).click()
-    await expect(dialog).toBeHidden({ timeout: TIMEOUT })
 }
 
 function uniqueCreditCode(): string {
@@ -218,10 +69,11 @@ function uniqueCreditCode(): string {
     return `91E2E${stamp}`.replace(/[^0-9A-Za-z]/g, "0").padEnd(18, "0").slice(0, 18)
 }
 
-function futureDayOfMonth(): number {
+function plusDaysIso(days: number): string {
     const date = new Date()
-    date.setDate(date.getDate() + 21)
-    return date.getDate()
+    date.setDate(date.getDate() + days)
+    const pad = (value: number) => String(value).padStart(2, "0")
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
 
 function pdfUpload(): { name: string; mimeType: string; buffer: Buffer } | string {
@@ -231,40 +83,6 @@ function pdfUpload(): { name: string; mimeType: string; buffer: Buffer } | strin
         mimeType: "application/pdf",
         buffer: MINIMAL_PDF,
     }
-}
-
-type ApiEnvelope<T> = {
-    success?: boolean
-    data?: T
-}
-
-async function apiLogin(account: AccountCred): Promise<string> {
-    const response = await fetch(`${API_BASE}/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            account: account.account,
-            password: account.password,
-            account_kind: "admin",
-        }),
-    })
-    const payload = (await response.json()) as ApiEnvelope<{ token?: string }>
-    const token = payload.data?.token
-    if (!response.ok || !token) {
-        throw new Error(`API 登录失败: ${account.account}`)
-    }
-    return token
-}
-
-async function apiGet<T>(token: string, pathName: string): Promise<T> {
-    const response = await fetch(`${API_BASE}${pathName}`, {
-        headers: { Authorization: `Bearer ${token}` },
-    })
-    const payload = (await response.json()) as ApiEnvelope<T>
-    if (!response.ok || payload.success === false) {
-        throw new Error(`API GET ${pathName} 失败`)
-    }
-    return payload.data as T
 }
 
 async function submitInventoryCountGain(page: Page) {
@@ -297,25 +115,6 @@ async function assertAvailableQuantity(page: Page, quantity: string) {
         new RegExp(`^${quantity}(?:\\s*盒)?$`), { timeout: TIMEOUT },
     )
     await expect(row.getByText("零可用", { exact: true })).toHaveCount(0)
-}
-
-async function createCustomer(page: Page, customerName: string, creditCode: string) {
-    await page.goto(`${FRONTEND_BASE}/sales/customers`)
-    await expect(page.getByRole("heading", { name: "客户中心" })).toBeVisible({
-        timeout: TIMEOUT,
-    })
-    await page.locator("#customers-directory-create").click()
-    const dialog = page.getByRole("dialog", { name: "新建客户" })
-    await expect(dialog).toBeVisible({ timeout: TIMEOUT })
-    await dialog.getByLabel("法定名称").fill(customerName)
-    await dialog.getByLabel("客户简称").fill("拆分配客户")
-    await dialog.getByLabel("统一社会信用代码").fill(creditCode)
-    await chooseOption(page, dialog.getByLabel("默认付款条件"), "按合同约定")
-    await dialog.getByRole("button", { name: "创建客户" }).click()
-    await expectToast(page, "客户已创建")
-    await expect(dialog).toBeHidden({ timeout: TIMEOUT })
-    await searchAndSubmit(page.getByLabel("搜索客户"), customerName)
-    await expect(page.getByRole("link", { name: "拆分配客户", exact: true })).toBeVisible({ timeout: TIMEOUT })
 }
 
 async function createSalesOrderWithContract(
@@ -355,7 +154,7 @@ async function createSalesOrderWithContract(
 
     await page.getByLabel("数量").fill(SALES_QTY)
     await page.locator("#sales-orders-create-batch-due-date-open").click()
-    await pickVisibleDay(page, page.locator("#sales-orders-create-batch-due-date"), futureDayOfMonth())
+    await pickCalendarDay(page, page.locator("#sales-orders-create-batch-due-date"), plusDaysIso(21))
     await page.getByRole("button", { name: "应用到全部明细" }).click()
     await expectToast(page, "已批量设置交期")
 
@@ -395,17 +194,11 @@ async function sourcingEditorControl(
 }
 
 async function confirmSplitAllocation(page: Page, salesOrderNo: string) {
-    await openWorkspaceTask(page, {
-        family: "采购",
-        query: salesOrderNo,
-        name: new RegExp(`待供给分配.*${salesOrderNo}|${salesOrderNo}`),
-    })
+    await openWorkspaceTask(page, "待供给分配", salesOrderNo, "procurement")
     await expect(page.getByRole("heading", { name: "供给分配", exact: true })).toBeVisible({ timeout: TIMEOUT })
     await page.getByRole("button", { name: "重新自动分配" }).click()
     await expectToast(page, /已重新分配供给|没有可匹配的供给方案/)
-    for (const expand of await page.getByRole("button", { name: "调整方案" }).all()) {
-        if (await expand.isVisible().catch(() => false)) await expand.click()
-    }
+    await expandSourcingEditor(page)
     const stockQty = await sourcingEditorControl(page, /可用/, "quantity")
     const purchaseQty = await sourcingEditorControl(page, /入仓/, "quantity")
     const warehouseInput = await sourcingEditorControl(page, /入仓/, "warehouse")
@@ -430,7 +223,6 @@ async function confirmSplitAllocation(page: Page, salesOrderNo: string) {
     await stockQty.fill(STOCK_QTY)
     await purchaseQty.fill(PURCHASE_QTY)
 
-
     await page.getByRole("button", { name: "预览供给分配" }).click()
     const preview = page.getByRole("dialog", { name: "预览供给分配" })
     await expect(preview).toBeVisible({ timeout: TIMEOUT })
@@ -438,7 +230,7 @@ async function confirmSplitAllocation(page: Page, salesOrderNo: string) {
     await expect(preview.getByRole("listitem").filter({ hasText: WAREHOUSE_NAME })).toContainText(new RegExp(`·\\s*${STOCK_QTY}\\s*盒$`))
     await expect(preview.getByRole("heading", { name: "采购单", exact: true })).toBeVisible({ timeout: TIMEOUT })
     const committed = page.waitForResponse(response => response.request().method() === "POST" && response.url().endsWith("/admin/purchase-orders/from-sourcing"), { timeout: 60_000 })
-    await preview.getByRole("button", { name: /确认库存分配并提交 1 张采购单/ }).click()
+    await confirmSupplyAllocation(page, /供给分配已完成|本次供给分配已保存/)
     const response = await committed
     expect(response.ok(), await response.text()).toBe(true)
     const result = (await response.json()).data
@@ -446,7 +238,6 @@ async function confirmSplitAllocation(page: Page, salesOrderNo: string) {
     expect(result.stock_reservations).toHaveLength(1)
     expect(Number(result.stock_reservations[0].quantity)).toBe(Number(STOCK_QTY))
     expect(result.work_item_status).toBe("COMPLETED")
-    await expectToast(page, "供给分配已完成")
 }
 
 async function assertReservationAndPurchase(page: Page, salesOrderNo: string, salesLineId: string) {
@@ -479,9 +270,9 @@ async function completeFulfillment(
         timeout: TIMEOUT,
     })
     await selectWorkspaceFamily(page, "fulfillment")
-    const queue = page.getByRole("list", { name: "待办列表" })
-    const tasks = queue.getByRole("button", { name: /履约处理/ })
-    await expect(tasks.first()).toBeVisible({ timeout: TIMEOUT })
+    const tasks = page.getByRole("button", { name: /履约处理/ })
+    const empty = page.getByText(/当前没有待处理事项|当前筛选没有待办|范围内没有待办/)
+    await expect(tasks.first().or(empty).first()).toBeVisible({ timeout: TIMEOUT })
     const wanted = kind === "入库" ? "入库表单" : "公司仓发表单"
     const dialog = page.getByRole("dialog", { name: "处理履约" })
     const total = await tasks.count()
@@ -548,11 +339,7 @@ async function completeFulfillment(
 }
 
 async function registerAcceptance(page: Page, salesOrderNo: string) {
-    await openWorkspaceTask(page, {
-        family: "履约",
-        query: salesOrderNo,
-        name: new RegExp(`客户验收登记.*${salesOrderNo}|${salesOrderNo}`),
-    })
+    await openWorkspaceTask(page, "客户验收登记", salesOrderNo, "fulfillment")
     const open = page
         .locator("#sales-orders-acceptance-register-open")
         .or(page.getByRole("button", { name: "登记客户验收" }))
@@ -579,16 +366,25 @@ test("同一销售明细拆分：库存直配 + 采购缺口", async ({ browser 
     let salesOrderId = ""
 
     // 1. 销售创建客户（合同在建单时上传）
-    const sales = await openSession(browser, "xiaoshou")
+    const sales = await openLoggedInWorkspace(browser, "xiaoshou")
     try {
-        await createCustomer(sales.page, customerName, creditCode)
+        await createCustomerViaUi(sales.page, {
+            legalName: customerName,
+            shortName: "拆分配客户",
+            creditCode,
+            paymentTermLabel: "按合同约定",
+        })
+        await searchAndSubmit(sales.page.getByLabel("搜索客户"), customerName)
+        await expect(sales.page.getByRole("link", { name: "拆分配客户", exact: true })).toBeVisible({
+            timeout: TIMEOUT,
+        })
     } finally {
         await closeSession(sales)
     }
 
     // 2. 仓储盘盈少于销售数量的库存
     await ensureZeroBalanceDimension(WAREHOUSE_CODE, SKU_NO)
-    const warehouse = await openSession(browser, "cangchu")
+    const warehouse = await openLoggedInWorkspace(browser, "cangchu")
     try {
         await submitInventoryCountGain(warehouse.page)
     } finally {
@@ -596,18 +392,15 @@ test("同一销售明细拆分：库存直配 + 采购缺口", async ({ browser 
     }
 
     // 3. 财务审批库存调整，可用量生效
-    const financeAdj = await openSession(browser, "caiwu")
+    const financeAdj = await openLoggedInWorkspace(browser, "caiwu")
     try {
-        await openWorkspaceTask(financeAdj.page, {
-            family: "审批",
-            name: /库存调整单审批/,
-        })
-        await approveOpenTask(financeAdj.page)
+        await openWorkspaceTask(financeAdj.page, "库存调整单审批", undefined, "approval")
+        await approveCurrentDocument(financeAdj.page)
     } finally {
         await closeSession(financeAdj)
     }
 
-    const warehouseCheck = await openSession(browser, "cangchu")
+    const warehouseCheck = await openLoggedInWorkspace(browser, "cangchu")
     try {
         await assertAvailableQuantity(warehouseCheck.page, STOCK_QTY)
     } finally {
@@ -615,7 +408,7 @@ test("同一销售明细拆分：库存直配 + 采购缺口", async ({ browser 
     }
 
     // 4. 销售开单：数量大于现有库存
-    const salesOrder = await openSession(browser, "xiaoshou")
+    const salesOrder = await openLoggedInWorkspace(browser, "xiaoshou")
     try {
         const created = await createSalesOrderWithContract(salesOrder.page, customerName, contractNo)
         salesOrderId = created.salesOrderId
@@ -626,18 +419,14 @@ test("同一销售明细拆分：库存直配 + 采购缺口", async ({ browser 
     }
 
     // 5. 采购审批销售单（选源不在本节点）
-    const procurement = await openSession(browser, "caigou")
+    const procurement = await openLoggedInWorkspace(browser, "caigou")
     try {
-        await openWorkspaceTask(procurement.page, {
-            family: "审批",
-            query: salesOrderNo,
-            name: new RegExp(`销售单审批.*${salesOrderNo}`),
-        })
+        await openWorkspaceTask(procurement.page, "销售单审批", salesOrderNo, "approval")
         const approvalPane = procurement.page.getByRole("region", { name: "当前工作台任务" })
         await expect(approvalPane.getByRole("combobox", { name: /履约方案|供给/ })).toHaveCount(0)
         await expect(approvalPane.getByRole("button", { name: /预览供给分配|确认供给分配/ })).toHaveCount(0)
         await expect(approvalPane.getByLabel(/采购成本|本次分配数量/)).toHaveCount(0)
-        await approveOpenTask(procurement.page)
+        await approveCurrentDocument(procurement.page)
 
         // 6. 供给分配：同一明细拆成现有库存 + 采购缺口；负向超分配必须被拦住
         await confirmSplitAllocation(procurement.page, salesOrderNo)
@@ -647,20 +436,16 @@ test("同一销售明细拆分：库存直配 + 采购缺口", async ({ browser 
     }
 
     // 7. 财务审批采购单（创建时已提交，不得再走草稿送审）
-    const financePo = await openSession(browser, "caiwu")
+    const financePo = await openLoggedInWorkspace(browser, "caiwu")
     try {
-        await openWorkspaceTask(financePo.page, {
-            family: "审批",
-            query: salesOrderNo,
-            name: /采购单审批/,
-        })
-        await approveOpenTask(financePo.page)
+        await openWorkspaceTask(financePo.page, "采购单审批", salesOrderNo, "approval")
+        await approveCurrentDocument(financePo.page)
     } finally {
         await closeSession(financePo)
     }
 
     // 采购供应商为先款 50%，入库前由出纳完成正式付款。
-    const payment = await openSession(browser, "fukuan")
+    const payment = await openLoggedInWorkspace(browser, "fukuan")
     try {
         await payOnlySupplierTask(payment.page)
     } finally {
@@ -668,7 +453,7 @@ test("同一销售明细拆分：库存直配 + 采购缺口", async ({ browser 
     }
 
     // 8. 仓发第一段（库存直配预占）+ 采购入库沿销售分配预占 + 仓发第二段
-    const fulfillment = await openSession(browser, "cangchu")
+    const fulfillment = await openLoggedInWorkspace(browser, "cangchu")
     try {
         await completeFulfillment(fulfillment.page, salesOrderNo, "仓发", {
             quantity: STOCK_QTY,
@@ -692,7 +477,7 @@ test("同一销售明细拆分：库存直配 + 采购缺口", async ({ browser 
     }
 
     // 9. 销售验收：两段履约待验合计等于销售明细
-    const acceptance = await openSession(browser, "xiaoshou")
+    const acceptance = await openLoggedInWorkspace(browser, "xiaoshou")
     try {
         await registerAcceptance(acceptance.page, salesOrderNo)
         await acceptance.page.goto(`${FRONTEND_BASE}/sales/orders/${salesOrderId}`)

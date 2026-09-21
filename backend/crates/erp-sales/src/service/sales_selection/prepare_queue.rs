@@ -194,6 +194,9 @@ impl SalesSelectionService {
         let req: PrepareSalesSelectionRequest = serde_json::from_str(&task.request_json)
             .map_err(|_| Error::selection_prepare_failed("准备任务缺少有效命令，请重新准备"))?;
         let mut book = self.load_booklet(task.booklet_id.as_ref(), &mut NoTransaction).await?;
+        if !book.has_persisted_scope() {
+            return Err(Error::selection_prepare_failed("历史选品册缺少销售负责人，请重新准备"));
+        }
         ensure_task_book(task, &book)?;
         if matches!(req.kind, PrepareKind::FirstPrepare | PrepareKind::RePrepare) {
             super::prepare::apply_reprepare_request(&mut book, &req)?;
@@ -293,7 +296,7 @@ impl SalesSelectionService {
             return Ok(());
         }
         let mut book = self.load_booklet(task.booklet_id.as_ref(), tx).await?;
-        if ensure_task_book(&task, &book).is_ok() {
+        if ensure_task_book(&task, &book).is_ok() && book.has_persisted_scope() {
             let actor = task.actor_id.as_str();
             book.fail_prepare(&reason, if actor.is_empty() { "system" } else { actor })?;
             self.db.sales_selection_booklets().update(&mut book, tx).await?;

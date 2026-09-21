@@ -22,16 +22,21 @@ import {
     test,
     expect,
     type Browser,
-    type BrowserContext,
-    type Locator,
     type Page,
 } from "@playwright/test";
 
-import { ACCOUNTS } from "../helpers/accounts";
+import { createCustomerViaUi } from "../helpers/customers";
 import { headedAwareViewport } from "../helpers/headed";
-import { loginViaUi, newLoggedInContext } from "../helpers/login";
+import { loginViaUi, openLoggedInWorkspace } from "../helpers/login";
 import { expandSourcingEditor } from "../helpers/sourcing"
-import { selectWorkspaceFamily } from "../helpers/ui"
+import {
+    approveCurrentDocument,
+    chooseOption,
+    expectToast,
+    openWorkspaceTask,
+    pickCalendarDay,
+    selectWorkspaceFamily,
+} from "../helpers/ui"
 
 test.use(headedAwareViewport({ width: 1440, height: 960 }));
 test.setTimeout(12 * 60 * 1000);
@@ -42,13 +47,6 @@ const RECEIPT_PNG = Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
     "base64",
 );
-
-type LoginTarget = string | { account?: string; username?: string; password?: string };
-
-function accountLogin(role: string): LoginTarget {
-    const table = (ACCOUNTS ?? {}) as Record<string, LoginTarget>;
-    return table[role] ?? role;
-}
 
 function isoDate(offsetDays = 0): string {
     const date = new Date();
@@ -98,36 +96,6 @@ function contractPdfPath(): string {
     return fallback;
 }
 
-async function expectToast(page: Page, title: string | RegExp): Promise<void> {
-    await expect(page.getByText(title).first()).toBeVisible({ timeout: 20_000 });
-    // 关闭已确认的悬浮提示，避免其遮挡后续按钮造成偶发点击失败。
-    for (let i = 0; i < 5; i += 1) {
-        const dismiss = page
-            .locator('[data-slot="toast"]')
-            .getByRole("button", { name: "关闭提示", includeHidden: true })
-            .first();
-        if ((await dismiss.count()) === 0) break;
-        await dismiss.click({ timeout: 5_000 }).catch(() => undefined);
-    }
-}
-
-async function chooseOption(
-    page: Page,
-    input: Locator,
-    optionName: string | RegExp,
-    query?: string,
-): Promise<void> {
-    await input.click();
-    if (query) {
-        await input.fill(query);
-    }
-    await page.getByRole("option", { name: optionName }).first().click({ timeout: 20_000 });
-}
-
-async function pickCalendarDay(page: Page, date = isoDate()): Promise<void> {
-    await page.locator(`[id$="-day-${date}"]`).first().click();
-}
-
 async function gotoWorkspace(page: Page): Promise<void> {
     await page.goto("/workspace");
     await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible({
@@ -135,24 +103,11 @@ async function gotoWorkspace(page: Page): Promise<void> {
     });
 }
 
-async function openWorkspaceTask(page: Page, name: RegExp | string): Promise<void> {
-    const list = page.getByRole("list", { name: "待办列表" });
-    await expect(list).toBeVisible({ timeout: 20_000 });
-    await list.getByRole("button", { name }).first().click();
-}
-
 async function approveOpenTask(page: Page, nodeName?: string | RegExp): Promise<void> {
-    await expect(page.getByRole("button", { name: /^(通过|同意审批)$/ })).toBeVisible({
-        timeout: 20_000,
-    });
-    await page.getByRole("button", { name: /^(通过|同意审批)$/ }).click();
-    const dialog = page.getByRole("dialog").filter({ hasText: "确认通过" });
-    await expect(dialog).toBeVisible({ timeout: 20_000 });
     if (nodeName) {
-        await expect(dialog.getByText(nodeName)).toBeVisible();
+        await expect(page.getByText(nodeName).first()).toBeVisible({ timeout: 20_000 });
     }
-    await dialog.getByRole("button", { name: "确认通过" }).click();
-    await expect(dialog).toBeHidden({ timeout: 20_000 });
+    await approveCurrentDocument(page);
 }
 
 async function assertNoSupplierPaymentApproval(page: Page): Promise<void> {
@@ -170,24 +125,12 @@ async function uploadReceipt(page: Page, label: string): Promise<void> {
     });
 }
 
-async function waitLoggedIn(page: Page): Promise<void> {
-    await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible({
-        timeout: 20_000,
-    });
-}
-
 async function openRole(
     browser: Browser,
     role: string,
 ): Promise<{ page: Page; close: () => Promise<void> }> {
-    const result = await newLoggedInContext(browser, accountLogin(role) as never);
-    if (result && typeof result === "object" && "page" in result) {
-        const wrapped = result as { page: Page; context?: BrowserContext };
-        const context = wrapped.context ?? wrapped.page.context();
-        return { page: wrapped.page, close: () => context.close() };
-    }
-    const page = result as Page;
-    return { page, close: () => page.context().close() };
+    const session = await openLoggedInWorkspace(browser, role);
+    return { page: session.page, close: () => session.context.close() };
 }
 
 async function switchSupplierView(page: Page, view: "payable" | "payment" | "purchase_invoice") {
@@ -212,27 +155,26 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
     };
 
     // ── 1. 销售：客户 + 合同 + 销售单提交 ────────────────────────────────
-    await loginViaUi(page, accountLogin("xiaoshou") as never);
-    await waitLoggedIn(page);
-
-    await page.goto("/sales/customers");
-    await expect(page.getByRole("heading", { name: "客户中心" })).toBeVisible({
+    await loginViaUi(page, "xiaoshou");
+    await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible({
         timeout: 20_000,
     });
-    await page.locator("#customers-directory-create").click();
-    const createCustomer = page.getByRole("dialog", { name: "新建客户" });
-    await expect(createCustomer).toBeVisible({ timeout: 20_000 });
-    await createCustomer.locator("#customers-form-legal-name").fill(customerLegal);
-    await createCustomer.locator("#customers-form-short-name").fill(customerShort);
-    await createCustomer.locator("#customers-form-credit-code").fill(creditCode);
-    await createCustomer.locator("#customers-form-submit").click();
-    await expectToast(page, "客户已创建");
-    await expect(createCustomer).toBeHidden({ timeout: 20_000 });
+
+    await createCustomerViaUi(page, {
+        legalName: customerLegal,
+        shortName: customerShort,
+        creditCode,
+        paymentTermLabel: "货到 30 天",
+    });
+    await page.locator("#customers-directory-search").fill(customerShort);
+    await page.locator("#customers-directory-search").press("Enter");
     // 客户目录行内仅展示简称与编号（法定名称只在详情页标题展示）。
     await expect(page.getByText(customerShort).first()).toBeVisible({ timeout: 20_000 });
 
     await page.goto("/sales/orders?mode=create");
-    await expect(page.getByText("单据头")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("heading", { name: /新建销售单|业务信息/ })).toBeVisible({
+        timeout: 20_000,
+    });
     // 上传合同按钮与占位 div 重复 id：按角色点击避开严格模式。
     await page.getByRole("button", { name: "上传合同 PDF", exact: true }).click();
     const uploadContract = page.getByRole("dialog", { name: "上传合同 PDF" });
@@ -287,8 +229,7 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
     );
 
     await page.locator("#sales-orders-create-batch-due-date-open").click()
-    await page.locator("#sales-orders-create-batch-due-date").click();
-    await pickCalendarDay(page);
+    await pickCalendarDay(page, page.locator("#sales-orders-create-batch-due-date"), isoDate());
     await page.locator("#sales-orders-create-batch-due-date-apply").click();
     await expectToast(page, "已批量设置交期");
 
@@ -303,16 +244,13 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
     // ── 2. 采购：销售单通过 → 供给分配创建采购单并立即提交审批 ──────────
     const caigou = await openRole(browser, "caigou");
     const caigouPage = caigou.page;
-    await waitLoggedIn(caigouPage);
-    await openWorkspaceTask(caigouPage, /销售单审批/);
+    await openWorkspaceTask(caigouPage, /销售单审批/, undefined, "approval");
     await expect(caigouPage.getByRole("button", { name: /^(通过|同意审批)$/ })).toBeVisible({
         timeout: 20_000,
     });
     await approveOpenTask(caigouPage);
 
-    await gotoWorkspace(caigouPage);
-    await selectWorkspaceFamily(caigouPage, "procurement");
-    await openWorkspaceTask(caigouPage, /待供给分配/);
+    await openWorkspaceTask(caigouPage, /待供给分配/, undefined, "procurement");
     await expect(caigouPage.getByRole("heading", { name: "供给分配" })).toBeVisible({
         timeout: 20_000,
     });
@@ -341,9 +279,7 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
                 .isVisible()
                 .catch(() => false))
         ) {
-            await gotoWorkspace(caigouPage)
-            await selectWorkspaceFamily(caigouPage, "procurement")
-            await openWorkspaceTask(caigouPage, /待供给分配/)
+            await openWorkspaceTask(caigouPage, /待供给分配/, undefined, "procurement")
             await expect(caigouPage.getByRole("heading", { name: "供给分配" })).toBeVisible({
                 timeout: 20_000,
             })
@@ -383,9 +319,7 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
     // ── 3. 财务总监：采购单审批通过，形成应付；不得出现付款审批 ────────
     const caiwu = await openRole(browser, "caiwu");
     const caiwuPage = caiwu.page;
-    await waitLoggedIn(caiwuPage);
-    await selectWorkspaceFamily(caiwuPage, "approval");
-    await openWorkspaceTask(caiwuPage, /采购单审批/);
+    await openWorkspaceTask(caiwuPage, /采购单审批/, undefined, "approval");
     await approveOpenTask(caiwuPage);
 
     await gotoWorkspace(caiwuPage);
@@ -406,13 +340,12 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
     // ── 4. 出纳：W01 付款任务核对收款账户，分两次确认入账 ──────────────
     const fukuan = await openRole(browser, "fukuan");
     const fukuanPage = fukuan.page;
-    await waitLoggedIn(fukuanPage);
+    await gotoWorkspace(fukuanPage);
     await selectWorkspaceFamily(fukuanPage, "approval");
     await assertNoSupplierPaymentApproval(fukuanPage);
     await expect(fukuanPage.getByRole("button", { name: /单据审批|付款冲正审批/ })).toHaveCount(0);
 
-    await selectWorkspaceFamily(fukuanPage, "finance");
-    await openWorkspaceTask(fukuanPage, /供应商付款处理/);
+    await openWorkspaceTask(fukuanPage, /供应商付款处理/, undefined, "finance");
     await expect(fukuanPage.getByRole("heading", { name: /向.+付款/ })).toBeVisible({
         timeout: 20_000,
     });
@@ -461,7 +394,7 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
     const firstResponse = await commit1;
     expect(firstResponse.ok()).toBeTruthy();
     expect((await firstResponse.json()).data).toMatchObject({ status: "posted", amount: flow.firstAmount, allocated_total: flow.firstAmount, unallocated_amount: "0.00" });
-    await expectToast(fukuanPage, "付款已登记");
+    await expectToast(fukuanPage, /付款已登记/);
 
     await expect(fukuanPage.getByRole("heading", { name: /向.+付款/ })).toBeVisible({
         timeout: 20_000,
@@ -492,7 +425,7 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
     const secondResponse = await commit2;
     expect(secondResponse.ok()).toBeTruthy();
     expect((await secondResponse.json()).data).toMatchObject({ status: "posted", amount: flow.restAmount, allocated_total: flow.restAmount, unallocated_amount: "0.00" });
-    await expectToast(fukuanPage, "付款已登记");
+    await expectToast(fukuanPage, /付款已登记/);
 
     await gotoWorkspace(fukuanPage);
     await selectWorkspaceFamily(fukuanPage, "finance");
@@ -651,14 +584,10 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
         timeout: 20_000,
     });
 
-    await gotoWorkspace(caigouPage);
-    await selectWorkspaceFamily(caigouPage, "approval");
-    await openWorkspaceTask(caigouPage, /付款冲正审批/);
+    await openWorkspaceTask(caigouPage, /付款冲正审批/, undefined, "approval");
     await approveOpenTask(caigouPage, "采购确认冲正依据");
 
-    await gotoWorkspace(caiwuPage);
-    await selectWorkspaceFamily(caiwuPage, "approval");
-    await openWorkspaceTask(caiwuPage, /付款冲正审批/);
+    await openWorkspaceTask(caiwuPage, /付款冲正审批/, undefined, "approval");
     await approveOpenTask(caiwuPage, "财务总监审批");
 
     await fukuanPage.goto("/finance/supplier-accounts?view=payment");

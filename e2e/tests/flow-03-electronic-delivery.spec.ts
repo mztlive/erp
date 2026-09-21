@@ -8,18 +8,27 @@
  *       销售登记客户验收。交付不走审批，不影响自有库存。
  * 目录种子无 VIRTUAL SKU 时，通过 UI 补齐本流程使用的商品。
  */
-import { test, expect, type Browser, type BrowserContext, type Locator, type Page } from '@playwright/test'
+import { test, expect, type Locator, type Page } from '@playwright/test'
 import fs from 'node:fs'
 import path from 'node:path'
 
+import { createCustomerViaUi } from '../helpers/customers'
+import { openLoggedInWorkspace } from '../helpers/login'
 import { payOnlySupplierTask } from '../helpers/payments'
-import { ACCOUNTS } from '../helpers/accounts'
-import { loginViaUi, newLoggedInContext } from '../helpers/login'
-import { openFulfillmentWorkspaceForm, readHeaderDocumentNumber } from "../helpers/ui"
+import { ensureDefaultProcurementOwner } from '../helpers/procurement'
+import {
+    approveCurrentDocument,
+    chooseOption,
+    dismissToasts,
+    expectToast,
+    openFulfillmentWorkspaceForm,
+    openWorkspaceTask,
+    pickCalendarDay,
+    readHeaderDocumentNumber,
+} from '../helpers/ui'
 
 test.describe.configure({ mode: 'serial' })
 
-const PASSWORD = '123456'
 const VIRTUAL_PRODUCT_NO = 'E2E-VIRT-ED-001'
 const VIRTUAL_SKU_NO = 'E2E-VIRT-ED-001'
 const VIRTUAL_PRODUCT_NAME = 'E2E 电子卡密（虚拟）'
@@ -29,72 +38,6 @@ const PNG_1X1 = Buffer.from(
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=',
     'base64',
 )
-
-type AccountCred = { account: string; password: string }
-
-function resolveAccount(login: string): AccountCred {
-    const bag = ACCOUNTS as Record<string, unknown>
-    const direct = bag[login]
-    if (direct && typeof direct === 'object' && 'account' in direct) {
-        const row = direct as { account: string; password?: string }
-        return { account: row.account, password: row.password ?? PASSWORD }
-    }
-    for (const value of Object.values(bag)) {
-        if (value && typeof value === 'object' && 'account' in value) {
-            const row = value as { account: string; password?: string }
-            if (row.account === login) {
-                return { account: row.account, password: row.password ?? PASSWORD }
-            }
-        }
-    }
-    return { account: login, password: PASSWORD }
-}
-
-function isPage(value: unknown): value is Page {
-    return Boolean(value && typeof value === 'object' && 'goto' in value && 'locator' in value)
-}
-
-function isContext(value: unknown): value is BrowserContext {
-    return Boolean(value && typeof value === 'object' && 'newPage' in value && 'close' in value)
-}
-
-async function openSession(
-    browser: Browser,
-    login: string,
-): Promise<{ context: BrowserContext; page: Page }> {
-    const cred = resolveAccount(login)
-    const opened: unknown = await newLoggedInContext(browser, cred as never)
-    if (isPage(opened)) {
-        return { context: opened.context(), page: opened }
-    }
-    if (opened && typeof opened === 'object') {
-        const record = opened as Record<string, unknown>
-        if (isPage(record.page) && isContext(record.context)) {
-            return { context: record.context, page: record.page }
-        }
-        if (isContext(opened)) {
-            const page = await opened.newPage()
-            await loginViaUi(page, cred as never)
-            await expect(page.getByRole('heading', { name: '我的工作台' })).toBeVisible({
-                timeout: 20000,
-            })
-            return { context: opened, page }
-        }
-    }
-    throw new Error('newLoggedInContext 返回值无法识别，请核对 helpers/login.ts')
-}
-
-async function dismissToasts(page: Page) {
-    // 悬浮提示会遮挡对话框按钮且悬停时暂停自动消失，操作前全部关闭。
-    for (let i = 0; i < 5; i += 1) {
-        const dismiss = page
-            .locator('[data-slot="toast"]')
-            .getByRole("button", { name: "关闭提示", includeHidden: true })
-            .first()
-        if ((await dismiss.count()) === 0) break
-        await dismiss.click({ timeout: 5_000 }).catch(() => undefined)
-    }
-}
 
 async function clickWithoutToastOverlay(page: Page, target: Locator) {
     // Toast 可能在关闭后再次出现导致遮挡：循环关闭后短超时点按，成功即返回。
@@ -111,21 +54,6 @@ async function clickWithoutToastOverlay(page: Page, target: Locator) {
     await target.dispatchEvent('click')
 }
 
-async function expectToast(page: Page, title: string | RegExp) {
-    await expect(page.getByText(title).first()).toBeVisible({ timeout: 20000 })
-    // 关闭已确认的悬浮提示，避免其遮挡后续按钮造成偶发点击失败。
-    await dismissToasts(page)
-}
-
-async function chooseOption(page: Page, input: Locator, optionLabel: string | RegExp) {
-    await input.click()
-    const query = typeof optionLabel === 'string' ? optionLabel : ''
-    if (query) await input.fill(query)
-    const option = page.getByRole('option', { name: optionLabel }).first()
-    await expect(option).toBeVisible({ timeout: 20000 })
-    await option.click()
-}
-
 async function chooseComboboxById(page: Page, id: string, optionLabel: string | RegExp) {
     await chooseOption(page, page.locator(`#${id}`), optionLabel)
 }
@@ -135,37 +63,6 @@ function isoDate(offsetDays = 0): string {
     date.setDate(date.getDate() + offsetDays)
     const pad = (n: number) => String(n).padStart(2, '0')
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
-}
-
-async function pickIsoDate(page: Page, trigger: Locator, iso: string) {
-    await trigger.click()
-    const popover = page.locator('[data-slot="popover-content"]').last()
-    await expect(popover).toBeVisible({ timeout: 10000 })
-    const target = new Date(`${iso}T00:00:00`)
-    let picked = false
-    for (let i = 0; i < 14; i += 1) {
-        const byId = popover.locator(`[id$="-day-${iso}"]`)
-        if (await byId.count()) {
-            await byId.first().click()
-            picked = true
-            break
-        }
-        const locales = [target.toLocaleDateString('zh-CN'), target.toLocaleDateString('en-US')]
-        for (const label of locales) {
-            const byData = popover.locator(`[data-day="${label}"]`)
-            if (await byData.count()) {
-                await byData.first().click()
-                picked = true
-                break
-            }
-        }
-        if (picked) break
-        await popover.locator('button').nth(1).click()
-    }
-    if (!picked) throw new Error(`无法在日期选择器中点选 ${iso}`)
-    await expect(trigger).toHaveAttribute('aria-label', `已选日期 ${iso}`, {
-        timeout: 10000,
-    })
 }
 
 function contractPdfPath(): { name: string; mimeType: string; buffer: Buffer } {
@@ -187,66 +84,6 @@ function contractPdfPath(): { name: string; mimeType: string; buffer: Buffer } {
         mimeType: 'application/pdf',
         buffer: Buffer.from('%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n'),
     }
-}
-
-async function gotoWorkspace(page: Page, query = '') {
-    await page.goto(query ? `/workspace?${query}` : '/workspace')
-    await expect(page.getByRole('heading', { name: '我的工作台' })).toBeVisible({
-        timeout: 20000,
-    })
-}
-
-async function openWorkspaceTask(page: Page, name: RegExp) {
-    const task = page.getByRole('button', { name }).first()
-    await expect(task).toBeVisible({ timeout: 30000 })
-    await task.click()
-    await expect(page.getByRole('region', { name: '当前工作台任务' })).toBeVisible({ timeout: 20000 })
-}
-
-async function approveCurrentTask(page: Page) {
-    const approve = page.getByRole('button', { name: /^(通过|同意审批)$/ }).first()
-    await expect(approve).toBeVisible({ timeout: 20000 })
-    await approve.click()
-    const dialog = page.getByRole('dialog', { name: '确认通过' })
-    await expect(dialog).toBeVisible({ timeout: 20000 })
-    await dialog.getByRole('button', { name: '确认通过' }).click()
-    await expect(dialog).toBeHidden({ timeout: 20000 })
-}
-
-async function ensureProcurementDispatcher(page: Page) {
-    await page.goto('/master-data/procurement-responsibilities')
-    await expect(page.getByRole('heading', { name: '采购责任规则' })).toBeVisible({
-        timeout: 20000,
-    })
-    // 规则列表在标题之后加载，先等列表接口返回再判断是否已存在，避免重复创建触发 409。
-    await page
-        .waitForResponse(
-            (response) =>
-                response.request().method() === 'GET' &&
-                response.url().includes('procurement-responsibility-rules'),
-            { timeout: 20000 },
-        )
-        .catch(() => undefined)
-    // count() 不等待渲染，数据到达后轮询等待行渲染，避免误判为不存在。
-    const dispatcher = page.getByText('默认调度人')
-    await expect(dispatcher.first()).toBeVisible({ timeout: 8000 }).catch(() => undefined)
-    if (await dispatcher.count()) return
-    await page.getByTestId('procurement-responsibility-create').click()
-    const dialog = page.getByRole('dialog', { name: '新增采购责任规则' })
-    await expect(dialog).toBeVisible({ timeout: 20000 })
-    await chooseComboboxById(page, 'procurement-responsibility-rules-dialog-rule-type', '默认调度人')
-    await chooseComboboxById(page, 'procurement-responsibility-rules-dialog-owner', /采购.*caigou/)
-    await dialog.getByTestId('procurement-responsibility-save').click()
-    // 规则已存在时保存返回 409，对话框保持打开：此时直接关闭复用已有规则。
-    const saved = page.getByText(/采购责任规则已新增|采购责任规则已更新/).first()
-    await expect(saved).toBeVisible({ timeout: 10000 }).catch(() => undefined)
-    if (await saved.count()) {
-        await expectToast(page, /采购责任规则已新增|采购责任规则已更新/)
-    } else if (await dialog.isVisible().catch(() => false)) {
-        await dialog.getByRole('button', { name: '取消' }).click()
-    }
-    await expect(dialog).toBeHidden({ timeout: 20000 })
-    await expect(page.getByText('默认调度人')).toBeVisible({ timeout: 20000 })
 }
 
 async function ensureVirtualCategory(page: Page) {
@@ -389,7 +226,7 @@ async function ensureVirtualOfferingAndListing(page: Page) {
         await dialog.locator('#supplier-offerings-dialog-register-supply-region').fill('全国')
         await dialog.locator('#supplier-offerings-dialog-register-supply-region').press('ArrowDown')
         await page.getByRole('option', { name: '全国', exact: true }).click()
-        await pickIsoDate(page, page.locator('#supplier-offerings-dialog-register-valid-from'), isoDate(0))
+        await pickCalendarDay(page, page.locator('#supplier-offerings-dialog-register-valid-from'), isoDate(0))
         await dialog.locator('#supplier-offerings-dialog-register-available-quantity').fill('1000')
         await dialog.locator('#supplier-offerings-dialog-register-submit').click()
         // 主数据在重置间保留，供给可能已登记：成功与重复均为合法结果。
@@ -419,23 +256,6 @@ async function ensureVirtualOfferingAndListing(page: Page) {
         await listing.click()
         await expect(listing).toBeChecked({ timeout: 20000 })
     }
-}
-
-async function createCustomer(page: Page, legalName: string, creditCode: string) {
-    await page.goto('/sales/customers')
-    await expect(page.getByRole('heading', { name: '客户中心' })).toBeVisible({ timeout: 20000 })
-    await page.locator('#customers-directory-create').click()
-    const dialog = page.getByRole('dialog', { name: '新建客户' })
-    await expect(dialog).toBeVisible({ timeout: 20000 })
-    await dialog.locator('#customers-form-legal-name').fill(legalName)
-    await dialog.locator('#customers-form-short-name').fill('E2E虚拟客户')
-    await dialog.locator('#customers-form-credit-code').fill(creditCode)
-    await chooseComboboxById(page, 'customers-form-payment-term', '货到 30 天')
-    await dialog.locator('#customers-form-submit').click()
-    await expectToast(page, '客户已创建')
-    await expect(dialog).toBeHidden({ timeout: 20000 })
-    // 列表行链接展示客户简称，非法定全称。
-    await expect(page.getByRole('link', { name: 'E2E虚拟客户' })).toBeVisible({ timeout: 20000 })
 }
 
 async function uploadContractOnSalesOrder(page: Page, legalName: string, contractNo: string) {
@@ -489,9 +309,9 @@ test('虚拟商品电子交付全流程：销售单生效后只能采购、登�
     let salesOrderNo = ''
 
     {
-        const { context, page } = await openSession(browser, 'admin')
+        const { context, page } = await openLoggedInWorkspace(browser, 'admin')
         try {
-            await ensureProcurementDispatcher(page)
+            await ensureDefaultProcurementOwner(page)
             await ensureVirtualCategory(page)
             await ensureVirtualProduct(page)
             await ensureVirtualOfferingAndListing(page)
@@ -501,9 +321,18 @@ test('虚拟商品电子交付全流程：销售单生效后只能采购、登�
     }
 
     {
-        const { context, page } = await openSession(browser, 'xiaoshou')
+        const { context, page } = await openLoggedInWorkspace(browser, 'xiaoshou')
         try {
-            await createCustomer(page, customerName, creditCode)
+            await createCustomerViaUi(page, {
+                legalName: customerName,
+                shortName: 'E2E虚拟客户',
+                creditCode,
+                paymentTermLabel: '货到 15 天',
+                contact: { name: '李测', phone: '13800138001' },
+                address: '北京市朝阳区测试路 1 号',
+            })
+            // 列表行链接展示客户简称，非法定全称。
+            await expect(page.getByRole('link', { name: 'E2E虚拟客户' })).toBeVisible({ timeout: 20000 })
             await page.goto('/sales/orders?mode=create')
             await expect(page.locator('#sales-orders-create-header-nature')).toBeVisible({
                 timeout: 20000,
@@ -514,7 +343,7 @@ test('虚拟商品电子交付全流程：销售单生效后只能采购、登�
             await pickVirtualSku(page)
             await page.locator('[id^="sales-orders-create-line-"][id$="-quantity"]').first().fill('10')
             await page.locator("#sales-orders-create-batch-due-date-open").click()
-            await pickIsoDate(page, page.locator('#sales-orders-create-batch-due-date'), due)
+            await pickCalendarDay(page, page.locator('#sales-orders-create-batch-due-date'), due)
             await page.locator('#sales-orders-create-batch-due-date-apply').click()
             await expectToast(page, '已批量设置交期')
             await expect(page.getByTestId(/sales-line-procurement-owner-/)).not.toHaveText(
@@ -543,15 +372,13 @@ test('虚拟商品电子交付全流程：销售单生效后只能采购、登�
     }
 
     {
-        const { context, page } = await openSession(browser, 'caigou')
+        const { context, page } = await openLoggedInWorkspace(browser, 'caigou')
         try {
-            await gotoWorkspace(page, 'family=approval')
-            await openWorkspaceTask(page, /销售单审批/)
+            await openWorkspaceTask(page, /销售单审批/, salesOrderNo, 'approval')
             await expect(page.getByRole('button', { name: /^(通过|同意审批)$/ })).toBeVisible({ timeout: 20000 })
             await expect(page.getByText('采购确认').first()).toBeVisible({ timeout: 20000 })
-            await approveCurrentTask(page)
-            await gotoWorkspace(page, 'family=procurement&type=PROCUREMENT_ORDER_CREATION')
-            await openWorkspaceTask(page, /待供给分配|供给分配/)
+            await approveCurrentDocument(page)
+            await openWorkspaceTask(page, /待供给分配|供给分配/, salesOrderNo, 'procurement')
             await expect(page.getByRole('heading', { name: '供给分配' })).toBeVisible({
                 timeout: 20000,
             })
@@ -577,7 +404,7 @@ test('虚拟商品电子交付全流程：销售单生效后只能采购、登�
     }
 
     {
-        const { context, page } = await openSession(browser, 'xiaoshou')
+        const { context, page } = await openLoggedInWorkspace(browser, 'xiaoshou')
         try {
             await page.goto(`/sales/orders/${salesOrderId}`)
             await expect(page.getByText(/已生效/).first()).toBeVisible({ timeout: 20000 })
@@ -596,30 +423,29 @@ test('虚拟商品电子交付全流程：销售单生效后只能采购、登�
     }
 
     {
-        const { context, page } = await openSession(browser, 'caiwu')
+        const { context, page } = await openLoggedInWorkspace(browser, 'caiwu')
         try {
-            await gotoWorkspace(page, 'family=approval')
-            await openWorkspaceTask(page, /采购单审批/)
+            await openWorkspaceTask(page, /采购单审批/, salesOrderNo, 'approval')
             await expect(
                 page.getByRole('heading', { name: /采购单/ }).or(page.getByText(/PO-/)).first(),
             ).toBeVisible({
                 timeout: 20000,
             })
-            await approveCurrentTask(page)
+            await approveCurrentDocument(page)
         } finally {
             await context.close()
         }
     }
 
     {
-        const { context, page } = await openSession(browser, 'fukuan')
+        const { context, page } = await openLoggedInWorkspace(browser, 'fukuan')
         try {
             await payOnlySupplierTask(page)
         } finally { await context.close() }
     }
 
     {
-        const { context, page } = await openSession(browser, 'caigou')
+        const { context, page } = await openLoggedInWorkspace(browser, 'caigou')
         try {
             await page.goto('/procurement/orders')
             await expect(page.getByRole('heading', { name: '采购单', exact: true })).toBeVisible({ timeout: 20000 })
@@ -630,8 +456,7 @@ test('虚拟商品电子交付全流程：销售单生效后只能采购、登�
             await expect(page.getByRole('button', { name: /^(通过|同意审批)$/ })).toHaveCount(0)
             await expect(page.getByText('选择流程')).toHaveCount(0)
 
-            await gotoWorkspace(page, 'family=fulfillment&type=FULFILLMENT_OPERATION')
-            await openWorkspaceTask(page, /履约处理/)
+            await openWorkspaceTask(page, /履约处理/, customerName, 'fulfillment')
             await openFulfillmentWorkspaceForm(page)
             await expect(page.locator('[aria-label="电子交付表单"]')).toBeVisible({ timeout: 30000 })
             await expect(page.getByRole('button', { name: /^(通过|同意审批)$/ })).toHaveCount(0)
@@ -657,10 +482,9 @@ test('虚拟商品电子交付全流程：销售单生效后只能采购、登�
     }
 
     {
-        const { context, page } = await openSession(browser, 'xiaoshou')
+        const { context, page } = await openLoggedInWorkspace(browser, 'xiaoshou')
         try {
-            await gotoWorkspace(page, 'family=fulfillment&type=CUSTOMER_ACCEPTANCE_REGISTRATION')
-            await openWorkspaceTask(page, /客户验收登记/)
+            await openWorkspaceTask(page, /客户验收登记/, salesOrderNo, 'fulfillment')
             await page.locator('#sales-orders-acceptance-register-open').click()
             await expect(page.getByRole('dialog', { name: '登记客户验收' })).toBeVisible({ timeout: 20000 })
             await expect(page.getByText('电子交付').first()).toBeVisible()

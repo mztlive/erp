@@ -46,13 +46,21 @@ impl SalesSelectionService {
             .list_filtered(None, None, Some("PUBLISHED"), None, &mut executor)
             .await?;
         let mut handled = 0_u32;
+        let mut skipped_legacy = 0_u32;
         for mut booklet in published {
+            if !booklet.has_persisted_scope() {
+                skipped_legacy = skipped_legacy.saturating_add(1);
+                continue;
+            }
             if !booklet.is_expired(now) {
                 continue;
             }
             booklet.close(now, "system")?;
             self.db.sales_selection_booklets().update(&mut booklet, &mut executor).await?;
             handled = handled.saturating_add(1);
+        }
+        if skipped_legacy > 0 {
+            tracing::warn!(skipped_legacy, "跳过缺少销售负责人或业务组织的历史选品册");
         }
         Ok(handled)
     }

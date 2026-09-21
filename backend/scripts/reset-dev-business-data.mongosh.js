@@ -256,6 +256,21 @@ const DROP_GROUPS = [
     ],
   },
   {
+    name: "选品册、方案与准备任务",
+    collections: [
+      "sales_selection_proposal_display_lines",
+      "sales_selection_proposal_sku_lines",
+      "sales_selection_proposals",
+      "sales_selection_display_items",
+      "sales_selection_pool_members",
+      "sales_selection_prepare_tasks",
+      "sales_selection_sessions",
+      "sales_selection_idempotency",
+      "sales_selection_rate_windows",
+      "sales_selection_booklets",
+    ],
+  },
+  {
     name: "合同与客户角色",
     collections: [
       "contract_revisions",

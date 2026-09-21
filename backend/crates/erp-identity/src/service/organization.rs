@@ -1,10 +1,12 @@
 //! 内部组织查询、影响预览及事务变更。
 
 mod access;
+mod bootstrap;
 
 use std::sync::Arc;
 
 use application_core::AuditActor;
+pub(crate) use bootstrap::ensure_home_department;
 use erp_core::common::time::Instant;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};

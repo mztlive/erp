@@ -320,3 +320,7 @@ export type CustomerMutationResult =
           message: string
           idempotencyKey: string
       }
+    | {
+          outcome: "rejected"
+          message: string
+      }

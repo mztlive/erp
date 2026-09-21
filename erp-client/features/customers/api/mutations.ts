@@ -95,22 +95,35 @@ export async function createCustomer(
         )
     } catch (error) {
         if (isApiError(error)) {
-            const unknown = unknownFromError(error, input.idempotencyKey)
-            if (unknown) return unknown
-            if (error.status === 409) {
-                return {
-                    outcome: "conflict",
-                    message: apiErrorMessage(error),
-                    serverLockVersion: 0,
-                    serverRevisionNo: 0,
-                    serverLegalName: input.legalName,
-                    actor: "系统",
-                    changedAt: new Date().toISOString(),
-                }
-            }
+            const mapped = mapCreateFailure(error, input)
+            if (mapped) return mapped
         }
         throw error
     }
+}
+
+/** 将创建失败映射为页面可展示的冲突、未知或拒绝结果。 */
+function mapCreateFailure(
+    error: ApiError,
+    input: CreateCustomerInput,
+): CustomerMutationResult | null {
+    const unknown = unknownFromError(error, input.idempotencyKey)
+    if (unknown) return unknown
+    if (error.status === 409) {
+        return {
+            outcome: "conflict",
+            message: apiErrorMessage(error),
+            serverLockVersion: 0,
+            serverRevisionNo: 0,
+            serverLegalName: input.legalName,
+            actor: "系统",
+            changedAt: new Date().toISOString(),
+        }
+    }
+    if (error.status === 400 || error.status === 403 || error.status === 422) {
+        return { outcome: "rejected", message: apiErrorMessage(error) }
+    }
+    return null
 }
 
 /** 原子保存客户身份、客户角色和显式提交的从属事实集合。 */
@@ -145,6 +158,16 @@ export async function saveCustomerDetails(
             if (unknown) return unknown
             if (error.status === 409) {
                 return conflictResult(error, input)
+            }
+            if (
+                error.status === 400 ||
+                error.status === 403 ||
+                error.status === 422
+            ) {
+                return {
+                    outcome: "rejected",
+                    message: apiErrorMessage(error),
+                }
             }
         }
         throw error

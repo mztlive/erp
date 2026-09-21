@@ -39,12 +39,12 @@ function ProcurementOwnerPreview({
                 </span>
             ) : status.fetching ? (
                 <span className="text-muted-foreground">正在匹配…</span>
-            ) : status.error ? (
-                <span className="text-destructive">匹配失败，暂不能提交</span>
             ) : responsibility?.resolved && responsibility.ownerName ? (
                 <span className="font-medium text-foreground">
                     {responsibility.ownerName}
                 </span>
+            ) : status.error ? (
+                <span className="text-destructive">匹配失败，暂不能提交</span>
             ) : (
                 <span className="text-destructive">待配置 · 暂不能提交</span>
             )}

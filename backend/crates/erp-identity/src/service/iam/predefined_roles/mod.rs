@@ -134,6 +134,7 @@ pub async fn ensure_predefined_roles(rbac: &SharedRbacService) -> Result<()> {
     upgrade_approval_http_permissions(rbac).await?;
     ensure_missing_permissions(rbac).await?;
     super::predefined_data_scopes::ensure_predefined_role_data_scopes(rbac).await?;
+    crate::service::organization::ensure_home_department(rbac.database().clone()).await?;
     Ok(())
 }
 

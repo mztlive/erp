@@ -14,26 +14,16 @@
  * 4. 流水类型后端有盘盈/盘亏/损坏；前端全部映射为「库存调整」。
  * 5. 调整单列表 `postedAt` 未从 DTO 映射，列「确认入账」可能一直是「—」，入账以状态「已过账」和流水为准。
  *
- * helpers 约定（loginViaUi / newLoggedInContext / apiLogin / apiGet / ACCOUNTS）：
- *   newLoggedInContext(browser, 登录名) => { context, page }
- *   loginViaUi(page, 登录名)
- *   apiLogin(登录名) => JWT
- *   apiGet(token, path, query?) => 已解包 data
- *   ACCOUNTS.cangchu.account 等（缺省回落到登录名）
+ * helpers：openLoggedInWorkspace / openWorkspaceTask / approveCurrentDocument /
+ *   ensureZeroBalanceDimension；工作台 h2 是「库存调整单审批」，单号在任务卡。
  */
-import { execFileSync } from "node:child_process"
-import { randomUUID } from "node:crypto"
-import { readFileSync } from "node:fs"
-import path from "node:path"
-import { fileURLToPath } from "node:url"
-
 import { expect, test, type Browser, type Locator, type Page } from "@playwright/test"
 
-import { ACCOUNTS } from "../helpers/accounts"
 import { apiGet, apiLogin } from "../helpers/api"
 import { headedContextOptions } from "../helpers/headed"
-import { loginViaUi, newLoggedInContext } from "../helpers/login"
-import "../helpers/ui"
+import { ensureZeroBalanceDimension } from "../helpers/inventory"
+import { loginViaUi, openLoggedInWorkspace } from "../helpers/login"
+import { approveCurrentDocument, openWorkspaceTask } from "../helpers/ui"
 
 test.describe.configure({ mode: "serial" })
 
@@ -84,38 +74,9 @@ type StockAdjustment = {
 
 type Session = { context: { close(): Promise<void> }; page: Page }
 
-function loginName(kind: "cangchu" | "caiwu" | "caigou" | "admin"): string {
-    const bag = ACCOUNTS as Record<
-        string,
-        { account?: string; username?: string } | string
-    >
-    const aliases: Record<string, string[]> = {
-        cangchu: ["cangchu", "warehouse"],
-        caiwu: ["caiwu", "finance"],
-        caigou: ["caigou", "procurement"],
-        admin: ["admin"],
-    }
-    for (const key of aliases[kind] ?? [kind]) {
-        const row = bag[key]
-        if (typeof row === "string" && row.trim()) return row
-        if (row && typeof row === "object") {
-            const name = row.account ?? row.username
-            if (name?.trim()) return name
-        }
-    }
-    return kind
-}
-
 function qtyOf(value: string | number | undefined | null): number {
     const parsed = Number.parseFloat(String(value ?? "0"))
     return Number.isFinite(parsed) ? parsed : 0
-}
-
-async function openSession(
-    browser: Browser,
-    kind: "cangchu" | "caiwu" | "caigou" | "admin",
-): Promise<Session> {
-    return newLoggedInContext(browser, loginName(kind))
 }
 
 async function closeSession(session: Session | undefined): Promise<void> {
@@ -135,11 +96,6 @@ async function gotoInventory(page: Page): Promise<void> {
         await page.goto("/inventory")
     }
     await expectHeading(page, "库存台账")
-}
-
-async function gotoWorkspace(page: Page): Promise<void> {
-    await page.goto("/workspace")
-    await expectHeading(page, "我的工作台")
 }
 
 async function searchInventorySku(page: Page): Promise<void> {
@@ -203,65 +159,19 @@ async function startAdjustmentFromBalance(page: Page): Promise<void> {
     await expectHeading(page, "发起库存调整")
 }
 
-function escapeRe(value: string): string {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+async function openStockAdjustmentApproval(page: Page, documentNo: string): Promise<void> {
+    await openWorkspaceTask(page, "库存调整单审批", documentNo, "approval")
+    await expect(page.getByRole("heading", { name: "库存调整单审批" })).toBeVisible(VISIBLE)
+    await expect(
+        page.getByRole("button", { name: new RegExp(documentNo) }).or(page.getByText(documentNo)).first(),
+    ).toBeVisible(VISIBLE)
 }
 
-async function searchWorkspaceTask(page: Page, documentNo: string): Promise<void> {
-    await gotoWorkspace(page)
-    // 后端工作台搜索不匹配单号，填单号会把列表滤空；直接在待办列表中匹配任务。
-    // 空队列不渲染待办列表，短暂延迟后硬刷新一次再等任务出现。
-    const list = page.getByRole("list", { name: "待办列表" })
-    try {
-        await expect(list).toBeVisible({ timeout: 8_000 })
-    } catch {
-        await page.reload()
-        await expectHeading(page, "我的工作台")
-        await expect(list).toBeVisible(VISIBLE)
-    }
-    const task = list
-        .getByRole("button", {
-            name: new RegExp(
-                `库存调整单审批[\\s\\S]*${escapeRe(documentNo)}|${escapeRe(documentNo)}[\\s\\S]*库存调整单审批|${escapeRe(documentNo)}`,
-            ),
-        })
-        .or(
-            list
-                .getByRole("button", { name: /库存调整单审批/ })
-                .filter({ hasText: documentNo }),
-        )
-        .first()
-    try {
-        await expect(task).toBeVisible(VISIBLE)
-        await task.click()
-    } catch {
-        // 兜底：hint 无法匹配时，同类型仅有一项则直接点选，否则显式失败避免点错任务。
-        const sameType = list.getByRole("button", { name: /库存调整单审批/ })
-        await expect(sameType).toHaveCount(1, VISIBLE)
-        await sameType.first().click()
-    }
-    await expect(page.getByRole("heading", { name: `库存调整单 ${documentNo}`, exact: true })).toBeVisible(VISIBLE)
-}
-
-async function decideCurrentTask(
-    page: Page,
-    decision: "approve" | "reject",
-    reason: string,
-): Promise<void> {
-    if (decision === "approve") {
-        await page.getByRole("button", { name: /^(通过|同意审批)$/ }).click()
-        await expectHeading(page, "确认通过")
-        const reasonBox = page.getByLabel("原因（可选）")
-        if (await reasonBox.isVisible().catch(() => false)) {
-            await reasonBox.fill(reason)
-        }
-        await page.getByRole("button", { name: "确认通过" }).click()
-    } else {
-        await page.getByRole("button", { name: "驳回", exact: true }).click()
-        await expectHeading(page, "确认驳回")
-        await page.getByLabel("驳回原因").fill(reason)
-        await page.getByRole("button", { name: "确认驳回" }).click()
-    }
+async function rejectCurrentDocument(page: Page, reason: string): Promise<void> {
+    await page.getByRole("button", { name: "驳回", exact: true }).click()
+    await expectHeading(page, "确认驳回")
+    await page.getByLabel("驳回原因").fill(reason)
+    await page.getByRole("button", { name: "确认驳回" }).click()
     await expect(page.getByRole("heading", { name: /确认通过|确认驳回/ })).toHaveCount(
         0,
         VISIBLE,
@@ -292,7 +202,7 @@ const apiTokens = new Map<string, Promise<string>>()
 async function tokenOf(kind: "cangchu" | "caiwu" | "caigou" | "admin"): Promise<string> {
     let token = apiTokens.get(kind)
     if (!token) {
-        token = apiLogin(loginName(kind))
+        token = apiLogin(kind)
         apiTokens.set(kind, token)
     }
     return token
@@ -340,87 +250,6 @@ function findTargetBalance(rows: StockBalance[]): StockBalance | undefined {
     )
 }
 
-function parseTomlString(text: string, key: string): string {
-    const matched = text.match(new RegExp(`^${key}\\s*=\\s*"(.*)"`, "m"))
-    return matched?.[1] ?? ""
-}
-
-function seedZeroBalanceViaMongosh(warehouseId: string, skuId: string): void {
-    const configPath = path.resolve(
-        path.dirname(fileURLToPath(import.meta.url)),
-        "../../backend/config.toml",
-    )
-    const toml = readFileSync(configPath, "utf8")
-    const uri = parseTomlString(toml, "uri")
-    const dbName = parseTomlString(toml, "db_name") || "erp"
-    if (!uri) {
-        throw new Error("backend/config.toml 缺少 database.uri，无法写入 0 数量占位余额")
-    }
-    const id = randomUUID().replace(/-/g, "")
-    const now = Math.floor(Date.now() / 1000)
-    const script = `
-      const dbx = db.getSiblingDB(${JSON.stringify(dbName)});
-      const existing = dbx.stock_balances.findOne({
-        warehouse_id: ${JSON.stringify(warehouseId)},
-        sku_id: ${JSON.stringify(skuId)},
-        deleted_at: 0
-      });
-      if (!existing) {
-        dbx.stock_balances.insertOne({
-          id: ${JSON.stringify(id)},
-          version: NumberLong("1"),
-          created_at: NumberLong(${JSON.stringify(String(now))}),
-          updated_at: NumberLong(${JSON.stringify(String(now))}),
-          deleted_at: NumberLong("0"),
-          warehouse_id: ${JSON.stringify(warehouseId)},
-          sku_id: ${JSON.stringify(skuId)},
-          on_hand_quantity: NumberDecimal("0"),
-          reserved_quantity: NumberDecimal("0"),
-          available_quantity: NumberDecimal("0"),
-          last_movement_id: null
-        });
-      }
-    `
-    execFileSync("mongosh", [uri, "--quiet", "--eval", script], {
-        stdio: ["ignore", "pipe", "pipe"],
-        timeout: 30_000,
-    })
-}
-
-async function ensurePhysicalBalanceRow(): Promise<StockBalance> {
-    const token = await tokenOf("cangchu")
-    const existing = findTargetBalance(await listBalances(token))
-    if (existing) return existing
-
-    const warehouses = await apiGet<ApiPage<{ id: string; warehouse_code?: string }>>(
-        token,
-        "/admin/warehouses",
-        { page: 1, page_size: 50, sort_by: "warehouse_code", sort_dir: "asc" },
-    )
-    const warehouse = (warehouses.items ?? []).find(
-        (row) => row.warehouse_code === WAREHOUSE_CODE,
-    )
-    const skus = await apiGet<ApiPage<{ id: string; sku_no?: string; name?: string }>>(
-        token,
-        "/admin/skus",
-        { q: SKU_NO, page: 1, page_size: 20, sort_by: "sku_no", sort_dir: "asc" },
-    )
-    const sku = (skus.items ?? []).find((row) => row.sku_no === SKU_NO)
-    expect(warehouse, `未找到仓库 ${WAREHOUSE_CODE}`).toBeTruthy()
-    expect(sku, `未找到 SKU ${SKU_NO}`).toBeTruthy()
-    seedZeroBalanceViaMongosh(warehouse!.id, sku!.id)
-
-    let created: StockBalance | undefined
-    await expect
-        .poll(async () => {
-            created = findTargetBalance(await listBalances(token))
-            return created
-        }, VISIBLE)
-        .toBeTruthy()
-    expect(created, "写入 0 数量占位余额后仍未出现库存行").toBeTruthy()
-    return created as StockBalance
-}
-
 async function expectEmptyPurchaseAndFulfillment(): Promise<void> {
     const warehouseToken = await tokenOf("cangchu")
     const procurementToken = await tokenOf("caigou")
@@ -450,7 +279,7 @@ async function expectCaiwuCannotSubmit(browser: Browser): Promise<void> {
     const context = await browser.newContext(headedContextOptions())
     const page = await context.newPage()
     try {
-        await loginViaUi(page, loginName("caiwu"))
+        await loginViaUi(page, "caiwu")
         await expectHeading(page, "我的工作台")
         await expect(page.getByRole("link", { name: "库存台账" })).toHaveCount(0)
         await page.goto("/inventory")
@@ -489,10 +318,10 @@ test("库存调整：盘盈、盘亏、损坏入账与驳回", async ({ browser 
     await expectCaiwuCannotSubmit(browser)
     await expectEmptyPurchaseAndFulfillment()
 
-    await ensurePhysicalBalanceRow()
+    await ensureZeroBalanceDimension(WAREHOUSE_CODE, SKU_NO)
 
     // 1. 仓储盘盈 100 → 提交审批（库存尚未变化）
-    let warehouse = await openSession(browser, "cangchu")
+    let warehouse = await openLoggedInWorkspace(browser, "cangchu")
     await gotoInventory(warehouse.page)
     const openingOnHand = await readOnHand()
     await expectOnHandUi(warehouse.page, openingOnHand)
@@ -509,14 +338,14 @@ test("库存调整：盘盈、盘亏、损坏入账与驳回", async ({ browser 
     await closeSession(warehouse)
 
     // 2. 财务通过 → 系统确认入账（无独立入账按钮）
-    let finance = await openSession(browser, "caiwu")
-    await searchWorkspaceTask(finance.page, gainNo)
+    let finance = await openLoggedInWorkspace(browser, "caiwu")
+    await openStockAdjustmentApproval(finance.page, gainNo)
     await expect(finance.page.getByText(APPROVAL_NODE)).toBeVisible(VISIBLE)
     await expect(finance.page.getByText("第 1 轮")).toBeVisible(VISIBLE)
-    await decideCurrentTask(finance.page, "approve", "核对盘盈数量无误")
+    await approveCurrentDocument(finance.page)
     await closeSession(finance)
 
-    warehouse = await openSession(browser, "cangchu")
+    warehouse = await openLoggedInWorkspace(browser, "cangchu")
     await gotoInventory(warehouse.page)
     const afterGain = openingOnHand + qtyOf(GAIN_QTY)
     await expect.poll(async () => readOnHand(), VISIBLE).toBe(afterGain)
@@ -541,7 +370,7 @@ test("库存调整：盘盈、盘亏、损坏入账与驳回", async ({ browser 
     )
 
     // 3. 盘亏 10 → 审批通过 → 库存减少，原盘盈流水保留
-    warehouse = await openSession(browser, "cangchu")
+    warehouse = await openLoggedInWorkspace(browser, "cangchu")
     await gotoInventory(warehouse.page)
     await startAdjustmentFromBalance(warehouse.page)
     const lossNo = await submitStockAdjustment(warehouse.page, {
@@ -551,12 +380,12 @@ test("库存调整：盘盈、盘亏、损坏入账与驳回", async ({ browser 
     })
     await closeSession(warehouse)
 
-    finance = await openSession(browser, "caiwu")
-    await searchWorkspaceTask(finance.page, lossNo)
-    await decideCurrentTask(finance.page, "approve", "核对盘亏数量")
+    finance = await openLoggedInWorkspace(browser, "caiwu")
+    await openStockAdjustmentApproval(finance.page, lossNo)
+    await approveCurrentDocument(finance.page)
     await closeSession(finance)
 
-    warehouse = await openSession(browser, "cangchu")
+    warehouse = await openLoggedInWorkspace(browser, "cangchu")
     await gotoInventory(warehouse.page)
     const afterLoss = afterGain - qtyOf(LOSS_QTY)
     await expect.poll(async () => readOnHand(), VISIBLE).toBe(afterLoss)
@@ -584,7 +413,7 @@ test("库存调整：盘盈、盘亏、损坏入账与驳回", async ({ browser 
     )
 
     // 4. 损坏 5 → 审批通过 → 库存再减，原出入库记录仍在
-    warehouse = await openSession(browser, "cangchu")
+    warehouse = await openLoggedInWorkspace(browser, "cangchu")
     await gotoInventory(warehouse.page)
     await startAdjustmentFromBalance(warehouse.page)
     const damageNo = await submitStockAdjustment(warehouse.page, {
@@ -594,12 +423,12 @@ test("库存调整：盘盈、盘亏、损坏入账与驳回", async ({ browser 
     })
     await closeSession(warehouse)
 
-    finance = await openSession(browser, "caiwu")
-    await searchWorkspaceTask(finance.page, damageNo)
-    await decideCurrentTask(finance.page, "approve", "核对损坏报损")
+    finance = await openLoggedInWorkspace(browser, "caiwu")
+    await openStockAdjustmentApproval(finance.page, damageNo)
+    await approveCurrentDocument(finance.page)
     await closeSession(finance)
 
-    warehouse = await openSession(browser, "cangchu")
+    warehouse = await openLoggedInWorkspace(browser, "cangchu")
     await gotoInventory(warehouse.page)
     const afterDamage = afterLoss - qtyOf(DAMAGE_QTY)
     await expect.poll(async () => readOnHand(), VISIBLE).toBe(afterDamage)
@@ -621,7 +450,7 @@ test("库存调整：盘盈、盘亏、损坏入账与驳回", async ({ browser 
     )
 
     // 5. 再开一张盘盈并驳回：轮次加一回到首节点，库存与流水不变
-    warehouse = await openSession(browser, "cangchu")
+    warehouse = await openLoggedInWorkspace(browser, "cangchu")
     await gotoInventory(warehouse.page)
     await startAdjustmentFromBalance(warehouse.page)
     const rejectNo = await submitStockAdjustment(warehouse.page, {
@@ -631,17 +460,17 @@ test("库存调整：盘盈、盘亏、损坏入账与驳回", async ({ browser 
     })
     await closeSession(warehouse)
 
-    finance = await openSession(browser, "caiwu")
-    await searchWorkspaceTask(finance.page, rejectNo)
-    await decideCurrentTask(finance.page, "reject", "数量依据不足，驳回重报")
-    await searchWorkspaceTask(finance.page, rejectNo)
+    finance = await openLoggedInWorkspace(browser, "caiwu")
+    await openStockAdjustmentApproval(finance.page, rejectNo)
+    await rejectCurrentDocument(finance.page, "数量依据不足，驳回重报")
+    await openStockAdjustmentApproval(finance.page, rejectNo)
     await expect(finance.page.getByText("第 2 轮")).toBeVisible(VISIBLE)
     await expect(finance.page.getByText(APPROVAL_NODE)).toBeVisible(VISIBLE)
     await expect(finance.page.getByText(/最近驳回/)).toBeVisible(VISIBLE)
     await expect(finance.page.getByText("数量依据不足，驳回重报")).toBeVisible(VISIBLE)
     await closeSession(finance)
 
-    warehouse = await openSession(browser, "cangchu")
+    warehouse = await openLoggedInWorkspace(browser, "cangchu")
     await gotoInventory(warehouse.page)
     expect(await readOnHand()).toBe(afterDamage)
     await expectOnHandUi(warehouse.page, afterDamage)

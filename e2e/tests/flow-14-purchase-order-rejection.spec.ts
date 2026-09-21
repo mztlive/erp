@@ -25,22 +25,31 @@ import path from "node:path"
 import {
     test,
     expect,
-    type Browser,
     type BrowserContext,
     type Locator,
     type Page,
 } from "@playwright/test"
 
-import { ACCOUNTS } from "../helpers/accounts"
 import { apiGet, apiLogin } from "../helpers/api"
-import { headedContextOptions } from "../helpers/headed"
-import { loginViaUi, newLoggedInContext } from "../helpers/login"
+import { createCustomerViaUi } from "../helpers/customers"
+import { openLoggedInWorkspace } from "../helpers/login"
+import {
+    ensureDefaultProcurementOwner,
+    submitCreatedSalesOrder,
+} from "../helpers/procurement"
 import { expandSourcingEditor } from "../helpers/sourcing"
-import { readHeaderDocumentNumber, selectWorkspaceFamily } from "../helpers/ui"
+import {
+    approveCurrentDocument,
+    chooseOption,
+    expectToast,
+    openWorkspaceTask,
+    pickCalendarDay,
+    readHeaderDocumentNumber,
+    selectWorkspaceFamily,
+} from "../helpers/ui"
 
 const VISIBLE = { timeout: 20_000 } as const
 const FLOW_TIMEOUT = 12 * 60 * 1000
-const API_BASE = process.env.API_BASE ?? "http://127.0.0.1:10001"
 const SKU_KEYWORD = "龙井"
 const SKU_NAME = "狮峰明前龙井礼盒"
 const WAREHOUSE_NAME = "北京通州仓"
@@ -110,68 +119,6 @@ type PurchaseSnapshot = {
 
 test.describe.configure({ mode: "serial" })
 
-function accountCred(login: LoginName): { account: string; password: string } {
-    const bag = ACCOUNTS as Record<
-        string,
-        { account?: string; password?: string } | undefined
-    >
-    const aliases: Record<LoginName, string[]> = {
-        xiaoshou: ["xiaoshou", "sales"],
-        caigou: ["caigou", "procurement"],
-        cangchu: ["cangchu", "warehouse"],
-        caiwu: ["caiwu", "finance"],
-        fukuan: ["fukuan", "payment"],
-        admin: ["admin"],
-    }
-    for (const key of aliases[login]) {
-        const row = bag[key]
-        if (row?.password) {
-            return { account: row.account ?? login, password: row.password }
-        }
-    }
-    for (const row of Object.values(bag)) {
-        if (row?.account === login && row.password) {
-            return { account: row.account, password: row.password }
-        }
-    }
-    return { account: login, password: "123456" }
-}
-
-function asSession(raw: unknown): Session {
-    if (raw && typeof raw === "object" && "page" in raw && "context" in raw) {
-        const session = raw as Session
-        if (session.page && session.context) return session
-    }
-    if (raw && typeof raw === "object" && "goto" in raw) {
-        const page = raw as Page
-        return { context: page.context(), page }
-    }
-    throw new Error("newLoggedInContext 必须返回 { context, page } 或 Page")
-}
-
-async function openSession(browser: Browser, login: LoginName): Promise<Session> {
-    const cred = accountCred(login)
-    try {
-        const raw = await newLoggedInContext(browser, cred as never)
-        const session = asSession(raw)
-        if (session.page.url().includes("/login")) {
-            await loginViaUi(session.page, cred as never)
-        }
-        await session.page.goto("/workspace")
-        await expect(session.page.getByRole("heading", { name: "我的工作台" })).toBeVisible(
-            VISIBLE,
-        )
-        return session
-    } catch {
-        const context = await browser.newContext(headedContextOptions())
-        const page = await context.newPage()
-        await loginViaUi(page, cred as never)
-        await page.goto("/workspace")
-        await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible(VISIBLE)
-        return { context, page }
-    }
-}
-
 async function closeSession(session: Session | undefined): Promise<void> {
     if (!session) return
     await session.context.close()
@@ -198,62 +145,12 @@ function uniqueCreditCode(stamp: string): string {
     return raw.slice(0, 18).padEnd(18, "0")
 }
 
-function unwrapData<T>(raw: unknown): T {
-    if (raw && typeof raw === "object" && "data" in raw) {
-        const data = (raw as { data?: T | null }).data
-        if (data != null) return data
-    }
-    return raw as T
-}
-
 async function helperToken(login: LoginName): Promise<string> {
-    const cred = accountCred(login)
-    const attempts: unknown[] = [cred.account, cred, login]
-    for (const input of attempts) {
-        try {
-            const raw = await (apiLogin as (value: unknown) => Promise<unknown>)(input)
-            if (typeof raw === "string" && raw.trim()) return raw
-            if (raw && typeof raw === "object" && "token" in raw) {
-                const token = String((raw as { token?: string }).token ?? "")
-                if (token) return token
-            }
-        } catch {
-            // 兼容 helpers/api 入参是登录名或凭据对象
-        }
-    }
-    const response = await fetch(`${API_BASE}/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            account: cred.account,
-            password: cred.password,
-            account_kind: "admin",
-        }),
-    })
-    const payload = (await response.json()) as { data?: { token?: string } }
-    const token = payload.data?.token
-    if (!response.ok || !token) {
-        throw new Error(`API 登录失败: ${cred.account}`)
-    }
-    return token
+    return apiLogin(login)
 }
 
 async function helperGet<T>(token: string, apiPath: string): Promise<T> {
-    try {
-        const raw = await (
-            apiGet as (auth: string, pathName: string, query?: unknown) => Promise<unknown>
-        )(token, apiPath)
-        return unwrapData<T>(raw)
-    } catch {
-        const response = await fetch(`${API_BASE}${apiPath}`, {
-            headers: { Authorization: `Bearer ${token}` },
-        })
-        const payload = (await response.json()) as { data?: T; success?: boolean }
-        if (!response.ok || payload.success === false) {
-            throw new Error(`API GET ${apiPath} 失败 HTTP ${response.status}`)
-        }
-        return unwrapData<T>(payload)
-    }
+    return apiGet<T>(token, apiPath)
 }
 
 async function fetchPurchaseCenter(token: string, purchaseOrderId: string): Promise<PurchaseCenter> {
@@ -278,63 +175,6 @@ async function listPurchasesBySalesOrder(
     return raw.items ?? []
 }
 
-async function expectToast(page: Page, title: string | RegExp): Promise<void> {
-    const toast = page.locator('[data-slot="toast"]').filter({ hasText: title })
-    await expect(toast.first()).toBeVisible(VISIBLE)
-    // 关闭已确认的悬浮提示，避免其遮挡后续按钮造成偶发点击失败。
-    for (let i = 0; i < 5; i += 1) {
-        const dismiss = page
-            .locator('[data-slot="toast"]')
-            .getByRole("button", { name: "关闭提示", includeHidden: true })
-            .first()
-        if (!(await dismiss.count())) break
-        await dismiss.click({ timeout: 5_000 }).catch(() => undefined)
-    }
-}
-
-async function chooseOption(
-    page: Page,
-    input: Locator,
-    option: string | RegExp,
-): Promise<void> {
-    await input.click()
-    if (typeof option === "string") {
-        await input.fill(option)
-    }
-    const listed = page.getByRole("option", { name: option }).first()
-    await expect(listed).toBeVisible(VISIBLE)
-    await listed.click()
-}
-
-async function pickCalendarDay(page: Page, trigger: Locator, isoDate: string): Promise<void> {
-    await trigger.click()
-    const calendar = page.locator('[data-slot="calendar"]:visible')
-    await expect(calendar).toBeVisible(VISIBLE)
-    const dayId = calendar.locator(`[id$="-day-${isoDate}"]`).first()
-    if ((await dayId.count()) === 0) {
-        const next = calendar.getByRole("button", {
-            name: /next month|go to the next month|下个月|下一月/i,
-        })
-        if (await next.count()) {
-            await next.first().click()
-        } else {
-            const fieldId = await trigger.getAttribute("id")
-            if (fieldId) {
-                const nextById = page.locator(`#${fieldId}-next-month`)
-                if (await nextById.count()) await nextById.click()
-            }
-        }
-    }
-    const target = page.locator(`[id$="-day-${isoDate}"]`).first()
-    if (await target.count()) {
-        await expect(target).toBeVisible(VISIBLE)
-        await target.click()
-        return
-    }
-    const day = String(new Date(`${isoDate}T00:00:00`).getDate())
-    await calendar.getByRole("button", { name: day, exact: true }).first().click()
-}
-
 async function fillEmptyDatePickers(page: Page, isoDate: string): Promise<void> {
     const empty = page.getByRole("button", { name: "选择日期" })
     const total = await empty.count()
@@ -353,49 +193,8 @@ async function readDocumentNumber(page: Page): Promise<string> {
     return readHeaderDocumentNumber(page)
 }
 
-async function openWorkspaceTask(
-    page: Page,
-    family: "审批" | "采购" | "履约" | "财务",
-    name: RegExp,
-    query?: string,
-): Promise<void> {
-    await page.goto("/workspace")
-    await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible(VISIBLE)
-    const familyId =
-        family === "审批"
-            ? "approval"
-            : family === "采购"
-              ? "procurement"
-              : family === "履约"
-                ? "fulfillment"
-                : "finance"
-    await selectWorkspaceFamily(page, familyId)
-    // 后端工作台搜索不匹配单号，填单号会把列表滤空；调用方已用任务名正则匹配，不再使用搜索框。
-    void query
-    const list = page.getByRole("list", { name: "待办列表" })
-    const task = list.getByRole("button", { name })
-    await expect(task).toBeVisible(VISIBLE)
-    await task.click()
-    await expect(
-        page
-            .getByRole("region", { name: "当前供给分配任务", exact: true })
-            .or(page.getByRole("region", { name: "当前任务", exact: true })),
-    ).toBeVisible(VISIBLE)
-}
-
 function approvalPane(page: Page): Locator {
     return page.getByRole("region", { name: "当前任务", exact: true })
-}
-
-async function approveCurrentDocument(page: Page): Promise<void> {
-    const pane = approvalPane(page)
-    await expect(pane.getByRole("button", { name: /^(通过|同意审批)$/ })).toBeVisible(VISIBLE)
-    await expect(pane.getByRole("button", { name: "驳回", exact: true })).toBeVisible()
-    await pane.getByRole("button", { name: /^(通过|同意审批)$/ }).click()
-    const dialog = page.getByRole("dialog", { name: "确认通过" })
-    await expect(dialog).toBeVisible(VISIBLE)
-    await dialog.getByRole("button", { name: "确认通过" }).click()
-    await expect(dialog).toBeHidden(VISIBLE)
 }
 
 async function rejectCurrentDocument(page: Page, reason: string): Promise<void> {
@@ -407,29 +206,6 @@ async function rejectCurrentDocument(page: Page, reason: string): Promise<void> 
     await expect(dialog.getByText(/驳回后.*首节点|下一轮审批/)).toBeVisible()
     await dialog.getByLabel("驳回原因").fill(reason)
     await dialog.getByRole("button", { name: "确认驳回" }).click()
-    await expect(dialog).toBeHidden(VISIBLE)
-}
-
-async function ensureDefaultProcurementOwner(page: Page): Promise<void> {
-    await page.goto("/master-data/procurement-responsibilities")
-    await expect(page.getByRole("heading", { name: "采购责任规则" })).toBeVisible(VISIBLE)
-    // 规则列表在标题之后加载，先等列表接口返回再判断是否已存在。
-    await page
-        .waitForResponse(
-            (response) =>
-                response.request().method() === "GET" &&
-                response.url().includes("procurement-responsibility-rules"),
-            { timeout: VISIBLE.timeout },
-        )
-        .catch(() => undefined)
-    if (await page.getByText("默认调度人").count()) return
-    await page.locator("#procurement-responsibility-rules-create").click()
-    const dialog = page.getByRole("dialog", { name: "新增采购责任规则" })
-    await expect(dialog).toBeVisible(VISIBLE)
-    await chooseOption(page, dialog.getByLabel("规则类型"), "默认调度人")
-    await chooseOption(page, dialog.getByLabel("采购负责人"), /采购|caigou/)
-    await dialog.getByRole("button", { name: "保存规则" }).click()
-    await expectToast(page, /采购责任规则已新增|采购责任规则已更新/)
     await expect(dialog).toBeHidden(VISIBLE)
 }
 
@@ -488,7 +264,7 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
 
     const switchTo = async (login: LoginName) => {
         await closeSession(session)
-        session = await openSession(browser, login)
+        session = await openLoggedInWorkspace(browser, login)
         return session.page
     }
 
@@ -499,24 +275,22 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
 
         // 1) 客户 + 合同 PDF + 实物销售单提交（付款条件用货到，避免本流程走先款履约）
         page = await switchTo("xiaoshou")
-        await page.goto("/sales/customers")
-        await expect(page.getByRole("heading", { name: "客户中心" })).toBeVisible(VISIBLE)
-        await page.locator("#customers-directory-create").click()
-        const customerDialog = page.getByRole("dialog", { name: "新建客户" })
-        await expect(customerDialog).toBeVisible(VISIBLE)
-        await customerDialog.getByLabel("法定名称").fill(customerName)
-        await customerDialog.getByLabel("客户简称").fill(`驳回${stamp.slice(-6)}`)
-        await customerDialog.getByLabel("统一社会信用代码").fill(uniqueCreditCode(stamp))
-        const paymentTerm = customerDialog.getByLabel("默认付款条件")
-        if (await paymentTerm.count()) {
-            await chooseOption(page, paymentTerm, /货到 15 天|按合同约定/)
-        }
-        await customerDialog.locator("#customers-form-submit").click()
-        await expectToast(page, "客户已创建")
-        await expect(customerDialog).toBeHidden(VISIBLE)
+        await createCustomerViaUi(page, {
+            legalName: customerName,
+            shortName: `驳回${stamp.slice(-6)}`,
+            creditCode: uniqueCreditCode(stamp),
+            paymentTermLabel: "货到 15 天",
+            contact: { name: "李测", phone: "13800138001" },
+            address: "北京市朝阳区测试路 1 号",
+        })
 
         await page.goto("/sales/orders?mode=create")
-        await expect(page.getByText("单据头")).toBeVisible(VISIBLE)
+        await expect(
+            page
+                .getByRole("heading", { name: "新建销售单" })
+                .or(page.getByRole("heading", { name: "业务信息" })),
+        ).toBeVisible(VISIBLE)
+        await expect(page.locator("#sales-orders-create-contract")).toBeVisible(VISIBLE)
         await page.getByRole("button", { name: "上传合同 PDF", exact: true }).click()
         const contractDialog = page.getByRole("dialog", { name: "上传合同 PDF" })
         await expect(contractDialog).toBeVisible(VISIBLE)
@@ -526,6 +300,7 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
             page,
             contractDialog.locator("#card-contracts-upload-customer"),
             new RegExp(customerName),
+            customerName,
         )
         const settlement = contractDialog.locator("#card-contracts-upload-settlement-party")
         if (await settlement.count()) {
@@ -533,7 +308,7 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
         }
         const contractPayment = contractDialog.getByLabel("付款条件")
         if (await contractPayment.count()) {
-            await chooseOption(page, contractPayment, /货到 15 天|按合同约定/)
+            await chooseOption(page, contractPayment, /货到 15 天|按合同约定/, "货到 15 天")
         }
         await contractDialog.locator("#card-contracts-upload-submit").click()
         await expect(contractDialog).toBeHidden(VISIBLE)
@@ -543,7 +318,7 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
         await chooseOption(page, page.getByLabel("福利场景"), "年节礼包")
         const salesPayment = page.locator("#sales-orders-create-header-payment-terms")
         if (!(await salesPayment.inputValue().catch(() => "")).trim()) {
-            await chooseOption(page, salesPayment, /货到 15 天|按合同约定/)
+            await chooseOption(page, salesPayment, /货到 15 天|按合同约定/, "货到 15 天")
         }
         await expect(page.getByLabel("供应商")).toHaveCount(0)
         await expect(page.getByLabel("履约责任")).toHaveCount(0)
@@ -566,11 +341,8 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
         await pickCalendarDay(page, page.locator("#sales-orders-create-batch-due-date"), dueDate)
         await page.locator("#sales-orders-create-batch-due-date-apply").click()
         await expectToast(page, "已批量设置交期")
-        await expect(page.getByText("暂未确定采购负责人")).toHaveCount(0)
-
-        await page.locator("#sales-orders-create-submit").click()
+        await submitCreatedSalesOrder(page)
         const submitDialog = page.getByRole("dialog", { name: "提交销售单" })
-        await expect(submitDialog).toBeVisible(VISIBLE)
         await expect(submitDialog.getByText("审批中")).toBeVisible()
         await submitDialog.locator("#sales-orders-submit-confirm-confirm").click()
         await expect(page).toHaveURL(/\/sales\/orders\/[^/?]+/, VISIBLE)
@@ -584,23 +356,19 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
 
         // 2) 采购确认节点：只通过/驳回，不选源
         page = await switchTo("caigou")
-        await openWorkspaceTask(page, "审批", new RegExp(`销售单审批[\\s\\S]*${salesOrderNo}`), salesOrderNo)
+        await openWorkspaceTask(page, "销售单审批", salesOrderNo, "approval")
         await expect(page.getByRole("heading", { name: /销售单/ })).toBeVisible(VISIBLE)
         await expect(page.getByText("第 1 轮").first()).toBeVisible(VISIBLE)
         await expect(page.getByText("采购确认").first()).toBeVisible(VISIBLE)
         await expect(page.getByLabel("供给来源 / 履约责任")).toHaveCount(0)
         await expect(page.getByLabel("含税成本")).toHaveCount(0)
         await expect(page.getByLabel("预计交付日")).toHaveCount(0)
+        await expect(approvalPane(page).getByRole("button", { name: "驳回", exact: true })).toBeVisible()
         await approveCurrentDocument(page)
 
         // 3) 供给分配：创建采购单并立即提交审批
         await page.locator("#workspace-home-refresh").click()
-        await openWorkspaceTask(
-            page,
-            "采购",
-            new RegExp(`待供给分配[\\s\\S]*${salesOrderNo}`),
-            salesOrderNo,
-        )
+        await openWorkspaceTask(page, "待供给分配", salesOrderNo, "procurement")
         await expect(page.getByRole("heading", { name: "供给分配" })).toBeVisible(VISIBLE)
         await expect(page.getByRole("heading", { name: "销售明细与供给方案" })).toBeVisible(VISIBLE)
         await page.getByTestId("purchase-create-match-best").click()
@@ -608,13 +376,10 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
 
         await expandSourcingEditor(page)
         const sourcing = page.getByRole("combobox", { name: /^履约方案，/ })
-        await sourcing.click()
-        const inbound = page.getByRole("option", { name: /入仓/ }).first()
-        await expect(inbound).toBeVisible(VISIBLE)
-        await inbound.click()
+        await chooseOption(page, sourcing, /入仓/)
         const warehouseField = page.getByRole("combobox", { name: "仓库", exact: true })
         await expect(warehouseField).toBeVisible(VISIBLE)
-        await chooseOption(page, warehouseField, WAREHOUSE_CODE)
+        await chooseOption(page, warehouseField, WAREHOUSE_CODE, WAREHOUSE_CODE)
         await fillEmptyDatePickers(page, dueDate)
         await expect(page.getByText("将创建采购单").locator("xpath=..")).toContainText("1 张")
         await expect(page.getByText("将建立库存预留").locator("xpath=..")).toContainText("0 条")
@@ -679,12 +444,7 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
 
         // 4) 财务在采购单审批首节点驳回
         page = await switchTo("caiwu")
-        await openWorkspaceTask(
-            page,
-            "审批",
-            new RegExp(`采购单审批[\\s\\S]*${snap.purchaseNo}|采购单审批[\\s\\S]*${salesOrderNo}`),
-            snap.purchaseNo,
-        )
+        await openWorkspaceTask(page, "采购单审批", snap.purchaseNo, "approval")
         const roundOne = approvalPane(page)
         await expect(roundOne.getByText("第 1 轮")).toBeVisible(VISIBLE)
         await expect(roundOne.getByText("财务总监审批")).toBeVisible(VISIBLE)
@@ -692,12 +452,7 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
         await rejectCurrentDocument(page, REJECT_REASON)
 
         await page.locator("#workspace-home-refresh").click()
-        await openWorkspaceTask(
-            page,
-            "审批",
-            new RegExp(`采购单审批[\\s\\S]*${snap.purchaseNo}|采购单审批[\\s\\S]*${salesOrderNo}`),
-            snap.purchaseNo,
-        )
+        await openWorkspaceTask(page, "采购单审批", snap.purchaseNo, "approval")
         const roundTwo = approvalPane(page)
         await expect(roundTwo.getByText("第 2 轮")).toBeVisible(VISIBLE)
         await expect(roundTwo.getByText("财务总监审批").first()).toBeVisible(VISIBLE)
@@ -770,32 +525,22 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
         await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible(VISIBLE)
         await selectWorkspaceFamily(page, "fulfillment")
         // 后端工作台搜索不匹配单号，填单号会把列表滤空导致断言恒成立；直接断言无履约任务。
-        await expect(
-            page.getByRole("list", { name: "待办列表" }).getByRole("button", { name: /履约处理/ }),
-        ).toHaveCount(0)
+        await expect(page.getByRole("button", { name: /履约处理/ })).toHaveCount(0)
 
         page = await switchTo("fukuan")
         await page.goto("/workspace")
         await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible(VISIBLE)
         await selectWorkspaceFamily(page, "finance")
         // 后端工作台搜索不匹配单号，填单号会把列表滤空导致断言恒成立；直接断言无付款任务。
-        await expect(
-            page
-                .getByRole("list", { name: "待办列表" })
-                .getByRole("button", { name: /供应商付款处理/ }),
-        ).toHaveCount(0)
+        await expect(page.getByRole("button", { name: /供应商付款处理/ })).toHaveCount(0)
         await selectWorkspaceFamily(page, "approval")
         await expect(page.getByText("供应商付款单审批")).toHaveCount(0)
 
         // 6) 不改单、不撤回：财务在下一轮首节点通过 → 采购单生效并形成应付
         page = await switchTo("caiwu")
-        await openWorkspaceTask(
-            page,
-            "审批",
-            new RegExp(`采购单审批[\\s\\S]*${snap.purchaseNo}|采购单审批[\\s\\S]*${salesOrderNo}`),
-            snap.purchaseNo,
-        )
+        await openWorkspaceTask(page, "采购单审批", snap.purchaseNo, "approval")
         await expect(approvalPane(page).getByText("第 2 轮")).toBeVisible(VISIBLE)
+        await expect(approvalPane(page).getByRole("button", { name: "驳回", exact: true })).toBeVisible()
         await approveCurrentDocument(page)
 
         page = await switchTo("caigou")
@@ -813,11 +558,7 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
         await page.goto("/workspace")
         await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible(VISIBLE)
         await selectWorkspaceFamily(page, "finance")
-        await expect(
-            page
-                .getByRole("list", { name: "待办列表" })
-                .getByRole("button", { name: /供应商付款处理/ }),
-        ).toBeVisible(VISIBLE)
+        await expect(page.getByRole("button", { name: /供应商付款处理/ })).toBeVisible(VISIBLE)
 
         const effective = await fetchPurchaseCenter(caigouToken, snap.id)
         expect(String(effective.status)).toBe("EFFECTIVE")

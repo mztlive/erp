@@ -23,11 +23,24 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { test, expect, type Browser, type BrowserContext, type Locator, type Page } from "@playwright/test";
+import { test, expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
 
-import { ACCOUNTS } from "../helpers/accounts";
-import { loginViaUi, newLoggedInContext } from "../helpers/login";
-import { openFulfillmentWorkspaceForm, readHeaderDocumentNumber } from "../helpers/ui";
+import { createCustomerViaUi } from "../helpers/customers";
+import { openLoggedInWorkspace } from "../helpers/login";
+import {
+    ensureDefaultProcurementOwner,
+    submitCreatedSalesOrder,
+} from "../helpers/procurement";
+import {
+    approveCurrentDocument,
+    chooseOption,
+    expectToast,
+    openFulfillmentWorkspaceForm,
+    openWorkspaceTask,
+    pickCalendarDay,
+    readHeaderDocumentNumber,
+    selectWorkspaceFamily,
+} from "../helpers/ui";
 
 test.describe.configure({ mode: "serial" });
 
@@ -56,42 +69,6 @@ type LoginName = "xiaoshou" | "caigou" | "cangchu" | "caiwu" | "fukuan" | "admin
 type Session = { context: BrowserContext; page: Page };
 type PurchaseRef = { no: string; responsibility: "入仓" | "供应商直发" };
 
-function accountCred(login: LoginName): { account: string; password: string } {
-    const bag = ACCOUNTS as Record<string, { account?: string; password?: string } | undefined>;
-    const aliases: Record<LoginName, string[]> = {
-        xiaoshou: ["xiaoshou", "sales"],
-        caigou: ["caigou", "procurement"],
-        cangchu: ["cangchu", "warehouse"],
-        caiwu: ["caiwu", "finance"],
-        fukuan: ["fukuan", "payment"],
-        admin: ["admin"],
-    };
-    for (const key of aliases[login]) {
-        const row = bag[key];
-        if (row?.password) {
-            return { account: row.account ?? login, password: row.password };
-        }
-    }
-    for (const row of Object.values(bag)) {
-        if (row?.account === login && row.password) {
-            return { account: row.account, password: row.password };
-        }
-    }
-    return { account: login, password: "123456" };
-}
-
-function asSession(raw: unknown): Session {
-    if (raw && typeof raw === "object" && "page" in raw && "context" in raw) {
-        const session = raw as Session;
-        if (session.page && session.context) return session;
-    }
-    if (raw && typeof raw === "object" && "goto" in raw) {
-        const page = raw as Page;
-        return { context: page.context(), page };
-    }
-    throw new Error("newLoggedInContext 必须返回 { context, page } 或 Page");
-}
-
 function plusDaysIso(days: number): string {
     const date = new Date();
     date.setDate(date.getDate() + days);
@@ -109,135 +86,9 @@ function contractPdf(): string | { name: string; mimeType: string; buffer: Buffe
     return { name: "sample-contract.pdf", mimeType: "application/pdf", buffer: MINIMAL_PDF };
 }
 
-async function openSession(browser: Browser, login: LoginName): Promise<Session> {
-    const cred = accountCred(login);
-    const raw = await newLoggedInContext(browser, cred);
-    const session = asSession(raw);
-    if (session.page.url().includes("/login")) {
-        await loginViaUi(session.page, cred);
-    }
-    await session.page.goto("/workspace");
-    await expect(session.page.getByRole("heading", { name: "我的工作台" })).toBeVisible({
-        timeout: UI_TIMEOUT,
-    });
-    return session;
-}
-
-async function expectToast(page: Page, title: string | RegExp) {
-    const toast = page.locator('[data-slot="toast"]').filter({ hasText: title });
-    await expect(toast.first()).toBeVisible({ timeout: UI_TIMEOUT });
-    // 关闭已确认的悬浮提示，避免其遮挡后续按钮造成偶发点击失败。
-    for (let i = 0; i < 5; i += 1) {
-        const dismiss = page
-            .locator('[data-slot="toast"]')
-            .getByRole("button", { name: "关闭提示", includeHidden: true })
-            .first();
-        if (!(await dismiss.count())) break;
-        await dismiss.click({ timeout: 5_000 }).catch(() => undefined);
-    }
-}
-
-async function chooseOption(page: Page, input: Locator, option: string | RegExp, typed?: string) {
-    await input.click();
-    const query = typed ?? (typeof option === "string" ? option : "");
-    if (query) {
-        await input.fill("");
-        await input.fill(query);
-    }
-    const listed = page.getByRole("option", { name: option }).first();
-    await expect(listed).toBeVisible({ timeout: UI_TIMEOUT });
-    await listed.click();
-}
-
-async function pickCalendarDay(page: Page, trigger: Locator, isoDate: string) {
-    await trigger.click();
-    const calendar = page.locator('[data-slot="calendar"]:visible');
-    await expect(calendar).toBeVisible({ timeout: UI_TIMEOUT });
-    const byId = calendar.locator(`[id$="-day-${isoDate}"]`);
-    if (await byId.count()) {
-        await byId.first().click();
-        return;
-    }
-    const target = new Date(`${isoDate}T00:00:00`);
-    const year = target.getFullYear();
-    const month = target.getMonth();
-    const day = String(target.getDate());
-    const monthTokens = [
-        `${month + 1}月`,
-        ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"][month]!,
-        ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][month]!,
-    ];
-    for (let i = 0; i < 18; i += 1) {
-        const caption = await calendar.innerText();
-        const yearOk = caption.includes(String(year));
-        const monthOk = monthTokens.some((token) => caption.includes(token));
-        if (yearOk && monthOk) break;
-        const next = calendar.getByRole("button", {
-            name: /next month|go to the next month|下个月|下一月/i,
-        });
-        if (await next.count()) {
-            await next.first().click();
-        } else {
-            await calendar.locator("button").last().click();
-        }
-    }
-    // 日期按钮无障碍名为完整日期，子串匹配后由下方循环跳过禁选日期。
-    const dayButtons = calendar.getByRole("button", { name: day });
-    const total = await dayButtons.count();
-    for (let i = 0; i < total; i += 1) {
-        const button = dayButtons.nth(i);
-        const disabled = await button.getAttribute("aria-disabled");
-        const outside = await button.getAttribute("data-outside");
-        if (disabled === "true" || outside === "true") continue;
-        await button.click();
-        return;
-    }
-    await dayButtons.first().click();
-}
-
 async function gotoHeading(page: Page, href: string, heading: string | RegExp) {
     await page.goto(href);
     await expect(page.getByRole("heading", { name: heading })).toBeVisible({ timeout: UI_TIMEOUT });
-}
-
-async function searchWorkspace(page: Page, hint?: string) {
-    await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible({
-        timeout: UI_TIMEOUT,
-    });
-    const refresh = page.locator("#workspace-home-refresh");
-    if (await refresh.count()) await refresh.click();
-    // 后端工作台搜索不匹配单号与往来方，填 hint 会把列表滤空；
-    // 调用方已用任务名正则（含单号）匹配，不再使用搜索框。
-}
-
-async function openWorkspaceTask(
-    page: Page,
-    family: "approval" | "procurement" | "fulfillment" | "finance",
-    name: RegExp,
-    hint?: string,
-) {
-    await page.goto(`/workspace?family=${family}`);
-    await searchWorkspace(page, hint);
-    const list = page.getByRole("list", { name: "待办列表" });
-    await expect(list).toBeVisible({ timeout: UI_TIMEOUT });
-    const task = list.getByRole("button", { name }).first();
-    await expect(task).toBeVisible({ timeout: UI_TIMEOUT });
-    await task.click();
-    await expect(page.getByRole("region", { name: "当前工作台任务", exact: true })).toBeVisible({ timeout: UI_TIMEOUT });
-}
-
-async function approveCurrentDocument(page: Page) {
-    const approve = page.getByRole("button", { name: /^(通过|同意审批)$/ });
-    await expect(approve).toBeVisible({ timeout: UI_TIMEOUT });
-    await expect(page.getByRole("button", { name: "驳回", exact: true })).toBeVisible();
-    await expect(page.getByLabel("供给来源 / 履约责任")).toHaveCount(0);
-    await expect(page.getByLabel("含税成本")).toHaveCount(0);
-    await expect(page.getByLabel("预计交付日")).toHaveCount(0);
-    await approve.click();
-    const dialog = page.getByRole("dialog", { name: "确认通过" });
-    await expect(dialog).toBeVisible({ timeout: UI_TIMEOUT });
-    await dialog.getByRole("button", { name: "确认通过" }).click();
-    await expect(dialog).toBeHidden({ timeout: UI_TIMEOUT });
 }
 
 async function approveMatchingTasks(
@@ -248,19 +99,19 @@ async function approveMatchingTasks(
     expected: number,
 ) {
     for (let i = 0; i < expected; i += 1) {
-        await openWorkspaceTask(page, family, name, hint);
+        await openWorkspaceTask(page, name, hint, family);
         await approveCurrentDocument(page);
     }
     await page.goto(`/workspace?family=${family}`);
-    await searchWorkspace(page, hint);
-    const list = page.getByRole("list", { name: "待办列表" });
-    if (await list.count()) {
-        await expect(list.getByRole("button", { name })).toHaveCount(0, { timeout: UI_TIMEOUT });
-        return;
-    }
-    await expect(page.getByText(/当前没有待处理事项|当前筛选没有待办/)).toBeVisible({
+    await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible({
         timeout: UI_TIMEOUT,
     });
+    const list = page.getByRole("list", { name: "待办列表" });
+    const empty = page.getByText(/当前没有待处理事项|当前筛选没有待办|范围内没有待办/);
+    await expect(list.or(empty).first()).toBeVisible({ timeout: UI_TIMEOUT });
+    if (await list.count()) {
+        await expect(list.getByRole("button", { name })).toHaveCount(0, { timeout: UI_TIMEOUT });
+    }
 }
 
 async function confirmFormal(page: Page, title: string | RegExp, confirmName: string | RegExp) {
@@ -268,48 +119,6 @@ async function confirmFormal(page: Page, title: string | RegExp, confirmName: st
     await expect(dialog.first()).toBeVisible({ timeout: UI_TIMEOUT });
     await dialog.getByRole("button", { name: confirmName }).click();
     await expect(dialog.first()).toBeHidden({ timeout: UI_TIMEOUT });
-}
-
-async function ensureDefaultProcurementOwner(page: Page) {
-    await gotoHeading(page, "/master-data/procurement-responsibilities", "采购责任规则");
-    // 规则列表在标题之后加载，先等列表接口返回再判断是否已存在。
-    await page
-        .waitForResponse(
-            (response) =>
-                response.request().method() === "GET" &&
-                response.url().includes("procurement-responsibility-rules"),
-            { timeout: UI_TIMEOUT },
-        )
-        .catch(() => undefined);
-    if (await page.getByText("默认调度人").count()) return;
-    const create = page.locator("#procurement-responsibility-rules-create");
-    if (await create.count()) {
-        await create.click();
-    } else {
-        await page.getByRole("button", { name: "新增规则" }).click();
-    }
-    const dialog = page.getByRole("dialog", { name: "新增采购责任规则" });
-    await expect(dialog).toBeVisible({ timeout: UI_TIMEOUT });
-    await chooseOption(
-        page,
-        dialog.locator("#procurement-responsibility-rules-dialog-rule-type"),
-        "默认调度人",
-        "默认",
-    );
-    await chooseOption(
-        page,
-        dialog.locator("#procurement-responsibility-rules-dialog-owner"),
-        /采购 · caigou|caigou/,
-        "caigou",
-    );
-    const save = dialog.locator("#procurement-responsibility-rules-dialog-save");
-    if (await save.count()) {
-        await save.click();
-    } else {
-        await dialog.getByRole("button", { name: "保存规则" }).click();
-    }
-    await expectToast(page, /采购责任规则已新增|采购责任规则已更新/);
-    await expect(dialog).toBeHidden({ timeout: UI_TIMEOUT });
 }
 
 async function pickSku(page: Page, keyword: string, name: string) {
@@ -422,11 +231,7 @@ async function readPurchaseOrders(page: Page, salesOrderNo: string): Promise<Pur
 }
 
 async function openFulfillmentTask(page: Page, salesOrderNo: string) {
-    await page.goto("/workspace?family=fulfillment");
-    await searchWorkspace(page, salesOrderNo);
-    const list = page.getByRole("list", { name: "待办列表" });
-    await expect(list.getByRole("button", { name: /履约处理/ })).toBeVisible({ timeout: UI_TIMEOUT });
-    await list.getByRole("button", { name: /履约处理/ }).first().click();
+    await openWorkspaceTask(page, /履约处理/, salesOrderNo, "fulfillment");
     await openFulfillmentWorkspaceForm(page);
 }
 
@@ -475,14 +280,7 @@ async function fillDirectDraft(page: Page, trackingNo: string) {
 }
 
 async function payPurchaseOrder(page: Page, purchaseNo: string) {
-    await page.goto("/workspace?family=finance");
-    await searchWorkspace(page, purchaseNo);
-    const list = page.getByRole("list", { name: "待办列表" });
-    const task = list.getByRole("button", { name: new RegExp(`供应商付款处理.*${purchaseNo.slice(0, 10)}.*${purchaseNo.slice(-6)}`) });
-    await expect(task).toHaveCount(1, {
-        timeout: UI_TIMEOUT,
-    });
-    await task.click();
+    await openWorkspaceTask(page, /供应商付款处理/, purchaseNo, "finance");
     await expect(page.getByLabel("当前付款任务")).toBeVisible({ timeout: UI_TIMEOUT });
     await expect(page.getByRole("heading", { name: /向.+付款/ })).toBeVisible({
         timeout: UI_TIMEOUT,
@@ -530,7 +328,7 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
 
     const switchTo = async (login: LoginName) => {
         await session?.context.close();
-        session = await openSession(browser, login);
+        session = await openLoggedInWorkspace(browser, login);
         return session.page;
     };
 
@@ -541,22 +339,14 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
 
         // 1) 销售：客户（货到付款，对照供应商先款）
         page = await switchTo("xiaoshou");
-        await gotoHeading(page, "/sales/customers", "客户中心");
-        await page.locator("#customers-directory-create").click();
-        const customerDialog = page.getByRole("dialog", { name: "新建客户" });
-        await expect(customerDialog).toBeVisible({ timeout: UI_TIMEOUT });
-        await customerDialog.locator("#customers-form-legal-name").fill(customerName);
-        await customerDialog.locator("#customers-form-short-name").fill(`先款${stamp}`);
-        await customerDialog.locator("#customers-form-credit-code").fill(uniqueCreditCode(stamp));
-        await chooseOption(
-            page,
-            customerDialog.locator("#customers-form-payment-term"),
-            PAYMENT_TERM_CUSTOMER,
-            "货到",
-        );
-        await customerDialog.locator("#customers-form-submit").click();
-        await expectToast(page, "客户已创建");
-        await expect(customerDialog).toBeHidden({ timeout: UI_TIMEOUT });
+        await createCustomerViaUi(page, {
+            legalName: customerName,
+            shortName: `先款${stamp}`,
+            creditCode: uniqueCreditCode(stamp),
+            paymentTermLabel: PAYMENT_TERM_CUSTOMER,
+        });
+        await page.locator("#customers-directory-search").fill(`先款${stamp}`);
+        await page.locator("#customers-directory-search").press("Enter");
         await expect(page.getByRole("link", { name: `先款${stamp}`, exact: true })).toBeVisible({ timeout: UI_TIMEOUT });
 
         // 2) 上传合同 PDF
@@ -590,7 +380,9 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
 
         // 3) 销售单：龙井入仓 + 普洱直发，客户付款条件仍为货到
         await page.goto("/sales/orders?mode=create");
-        await expect(page.getByText("单据头")).toBeVisible({ timeout: UI_TIMEOUT });
+        await expect(page.getByRole("heading", { name: /新建销售单|业务信息/ })).toBeVisible({
+            timeout: UI_TIMEOUT,
+        });
         await expect(page.getByLabel("供应商")).toHaveCount(0);
         await expect(page.getByLabel("履约责任")).toHaveCount(0);
         await chooseOption(page, page.locator("#sales-orders-create-contract"), contractNo, contractNo);
@@ -614,10 +406,8 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
         await pickCalendarDay(page, page.locator("#sales-orders-create-batch-due-date"), dueDate);
         await page.locator("#sales-orders-create-batch-due-date-apply").click();
         await expectToast(page, "已批量设置交期");
-        await expect(page.getByText("暂未确定采购负责人")).toHaveCount(0, { timeout: UI_TIMEOUT });
-        await page.locator("#sales-orders-create-submit").click();
+        await submitCreatedSalesOrder(page);
         const submitDialog = page.getByRole("dialog", { name: "提交销售单" });
-        await expect(submitDialog).toBeVisible({ timeout: UI_TIMEOUT });
         await expect(submitDialog.getByText("审批中")).toBeVisible();
         await submitDialog.locator("#sales-orders-submit-confirm-confirm").click();
         await expect(page).toHaveURL(/\/sales\/orders\/[^/?]+/, { timeout: UI_TIMEOUT });
@@ -643,14 +433,13 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
         await expect(page.getByText(/0 条|当前没有/)).toBeVisible({ timeout: UI_TIMEOUT });
         await expect(page.getByText(salesOrderNo)).toHaveCount(0);
 
-        await openWorkspaceTask(page, "approval", /销售单审批/, salesOrderNo);
+        await openWorkspaceTask(page, /销售单审批/, salesOrderNo, "approval");
         await expect(page.getByRole("button", { name: "预览供给分配" })).toHaveCount(0);
         await expect(page.getByText("供给来源 / 履约责任")).toHaveCount(0);
         await approveCurrentDocument(page);
 
         // 5) 供给分配：付款条件先款 50%；龙井入仓、普洱直发；立即提交两张采购单
-        await page.goto("/workspace?family=procurement");
-        await openWorkspaceTask(page, "procurement", /待供给分配/, salesOrderNo);
+        await openWorkspaceTask(page, /待供给分配/, salesOrderNo, "procurement");
         await expect(page.getByRole("heading", { name: "供给分配" })).toBeVisible({
             timeout: UI_TIMEOUT,
         });
@@ -708,7 +497,10 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
         // 7) 付款完成前：入库 / 代发不得确认；电子交付与服务任务不出现
         page = await switchTo("cangchu");
         await page.goto("/workspace?family=fulfillment");
-        await searchWorkspace(page, salesOrderNo);
+        await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible({
+            timeout: UI_TIMEOUT,
+        });
+        await selectWorkspaceFamily(page, "fulfillment");
         await expect(page.getByRole("button", { name: /电子交付|线下服务/ })).toHaveCount(0);
         await openFulfillmentTask(page, salesOrderNo);
         await expect(page.getByText(salesOrderNo).first()).toBeVisible();
@@ -716,7 +508,10 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
 
         page = await switchTo("caigou");
         await page.goto("/workspace?family=fulfillment");
-        await searchWorkspace(page, salesOrderNo);
+        await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible({
+            timeout: UI_TIMEOUT,
+        });
+        await selectWorkspaceFamily(page, "fulfillment");
         await expect(page.getByRole("button", { name: /电子交付|线下服务/ })).toHaveCount(0);
         await openFulfillmentTask(page, salesOrderNo);
         await expect(page.getByText(salesOrderNo).first()).toBeVisible();
@@ -728,10 +523,15 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
         await assertNoPaymentApproval(page);
         await payPurchaseOrder(page, inboundPo);
         await page.goto("/workspace?family=finance");
-        await searchWorkspace(page, inboundPo);
-        await expect(page.getByRole("list", { name: "待办列表" }).getByRole("button", { name: new RegExp(`供应商付款处理.*${inboundPo.slice(0, 10)}.*${inboundPo.slice(-6)}`) })).toHaveCount(0, {
+        await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible({
             timeout: UI_TIMEOUT,
         });
+        await selectWorkspaceFamily(page, "finance");
+        await expect(
+            page.getByRole("button", {
+                name: new RegExp(`供应商付款处理[\\s\\S]*${inboundPo.slice(0, 10)}`),
+            }),
+        ).toHaveCount(0, { timeout: UI_TIMEOUT });
 
         page = await switchTo("cangchu");
         await openFulfillmentTask(page, salesOrderNo);
@@ -751,7 +551,10 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
         page = await switchTo("fukuan");
         await payPurchaseOrder(page, directPo);
         await page.goto("/workspace?family=finance");
-        await searchWorkspace(page, salesOrderNo);
+        await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible({
+            timeout: UI_TIMEOUT,
+        });
+        await selectWorkspaceFamily(page, "finance");
         await expect(page.getByRole("button", { name: /供应商付款处理/ })).toHaveCount(0, {
             timeout: UI_TIMEOUT,
         });

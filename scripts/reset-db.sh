@@ -176,7 +176,7 @@ if [[ "${ERP_RESET_INCLUDE_CATALOG:-0}" == "1" ]]; then
     echo "清理项: 业务单据及供应商/商品/SKU/供给/仓库/分类/品牌/单位"
 else
     echo "保留项: 账号/RBAC、供应商/商品/仓库主数据、source_systems、file_assets、审计、计数器"
-    echo "清理项: 客户/合同/销售单/采购单/票款/库存/审批实例/待办等业务数据"
+    echo "清理项: 客户/合同/销售单/选品/采购单/票款/库存/审批实例/待办等业务数据"
 fi
 
 if [[ "${RESET_ONLY}" == "1" ]]; then

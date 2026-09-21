@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import type { CustomerMutationResult } from "@/features/customers/types"
 import type { CustomerFormApi } from "@/features/customers/components/customer-form-values"
 
-/** 仅保留需要继续核对的未知结果；成功反馈由调用容器用 Toast 承载。 */
+/** 拒绝原因留在表单内；未知结果继续核对；成功由调用容器用 Toast 承载。 */
 export function CustomerFormResultPanel({
     result,
     mode,
@@ -17,6 +17,17 @@ export function CustomerFormResultPanel({
     isQueryingIdempotency: boolean
     onQueryFinalResult: (idempotencyKey: string) => void
 }) {
+    if (result?.outcome === "rejected") {
+        return (
+            <div id={`customers-form-${mode}-rejected`}>
+                <FormalActionResult
+                    status="rejected"
+                    title={mode === "create" ? "无法创建客户" : "无法保存修订"}
+                    description={result.message}
+                />
+            </div>
+        )
+    }
     if (result?.outcome !== "unknown") return null
 
     return (
