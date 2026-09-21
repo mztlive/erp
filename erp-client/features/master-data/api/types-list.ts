@@ -186,6 +186,8 @@ export type ProductFilterCategoryOption = Readonly<{
 
 /** 商品列表筛选使用的归属与有效供给供应商选项。 */
 export type ProductFilterOptions = Readonly<{
+    /** 未授权的辅助查询只影响对应筛选项。 */
+    unavailable?: readonly ("categories" | "brands" | "suppliers")[]
     categories: readonly ProductFilterCategoryOption[]
     brands: readonly Readonly<{
         value: string

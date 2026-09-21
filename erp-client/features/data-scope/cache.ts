@@ -41,7 +41,7 @@ const isProfile = (query: Query) =>
 
 /**
  * 绑定 QueryClient 的范围失效订阅。
- * 撤权错误立即清除跨功能旧数据并保留可识别错误；用户刷新后重新授权读取。
+ * 普通 403/404 只清除失败查询并重验权限；确认全局授权变化后才清除跨功能数据。
  * 成功的业务变更清除其他缓存并重读活动查询，覆盖责任交接与配置变更。
  */
 export function subscribeScopeCache(client: QueryClient): () => void {
@@ -103,6 +103,16 @@ export function subscribeScopeCache(client: QueryClient): () => void {
             pendingClear = undefined
             if (pending) void clear(pending.source, pending.error)
         }
+    }
+
+    const handleFailure = (error: unknown, source?: Query) => {
+        const status = (error as { status?: number }).status
+        if (status === 401 || isDataScopeChanged(error)) {
+            void clear(source, error)
+            return
+        }
+        // 某个资源不可读，不代表其他资源也不可读。重验账号版本来识别真正撤权。
+        void client.refetchQueries({ predicate: isProfile, type: "active" })
     }
 
     const unsubscribeQueries = client.getQueryCache().subscribe((event) => {
@@ -175,7 +185,7 @@ export function subscribeScopeCache(client: QueryClient): () => void {
             rejected.add(query.queryHash)
             const error = query.state.error
             query.setState({ data: undefined, dataUpdatedAt: 0 })
-            void clear(query, error)
+            handleFailure(error, query)
         }
     })
     const unsubscribeMutations = client
@@ -193,7 +203,7 @@ export function subscribeScopeCache(client: QueryClient): () => void {
                 event.action.type === "error" &&
                 scopeFailure(event.mutation.state.error)
             ) {
-                void clear(undefined, event.mutation.state.error)
+                handleFailure(event.mutation.state.error)
             }
         })
     return () => {

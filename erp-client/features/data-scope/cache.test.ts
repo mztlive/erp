@@ -106,7 +106,7 @@ describe("scope cache across features", () => {
         client.clear()
     })
     it.each([403, 404])(
-        "clears active previous data on %s and removes cross-feature data",
+        "clears only the rejected query on %s and keeps unrelated data",
         async (status) => {
             const client = makeClient()
             const stop = subscribeScopeCache(client)
@@ -126,14 +126,113 @@ describe("scope cache across features", () => {
             await observer.refetch()
             expect(observer.getCurrentResult().data).toBeUndefined()
             expect(observer.getCurrentResult().error).toBe(error)
-            expect(
-                client.getQueryData(["actual-profit-loss", "view"]),
-            ).toBeUndefined()
+            expect(client.getQueryData(["actual-profit-loss", "view"])).toEqual(
+                { secret: "old totals" },
+            )
             unobserve()
             stop()
             client.clear()
         },
     )
+    it("a late category rejection cannot replace loaded products or contracts with a permission error", async () => {
+        const client = makeClient()
+        const stop = subscribeScopeCache(client)
+        const observers = [
+            new QueryObserver(client, {
+                queryKey: [
+                    "master-data",
+                    "list",
+                    { resource: "sellable-items" },
+                ],
+                queryFn: async () => ["商品"],
+            }),
+            new QueryObserver(client, {
+                queryKey: ["contracts", "list"],
+                queryFn: async () => ["合同"],
+            }),
+        ]
+        const cleanups = observers.map((observer) =>
+            observer.subscribe(() => {}),
+        )
+        await Promise.all(observers.map((observer) => observer.refetch()))
+        await client
+            .fetchQuery({
+                queryKey: ["master-data", "product-filter-options"],
+                queryFn: async () => {
+                    throw Object.assign(new Error("没有分类权限"), {
+                        status: 403,
+                    })
+                },
+            })
+            .catch(() => {})
+        expect(observers[0].getCurrentResult()).toMatchObject({
+            status: "success",
+            data: ["商品"],
+            error: null,
+        })
+        expect(observers[1].getCurrentResult()).toMatchObject({
+            status: "success",
+            data: ["合同"],
+            error: null,
+        })
+        cleanups.forEach((cleanup) => cleanup())
+        stop()
+        client.clear()
+    })
+
+    it("rechecks the profile on 403 and clears other data when revocation is confirmed", async () => {
+        const client = makeClient()
+        const stop = subscribeScopeCache(client)
+        client.setQueryData(["account", "profile"], profile(1))
+        client.setQueryData(["contracts", "list"], ["旧合同"])
+        const fetchProfile = vi.fn(async () => profile(2))
+        const observer = new QueryObserver(client, {
+            queryKey: ["account", "profile"],
+            queryFn: fetchProfile,
+            staleTime: Infinity,
+        })
+        const unobserve = observer.subscribe(() => {})
+        await client
+            .fetchQuery({
+                queryKey: ["sales", "detail"],
+                queryFn: async () => {
+                    throw Object.assign(new Error("撤权"), { status: 403 })
+                },
+            })
+            .catch(() => {})
+        await vi.waitFor(() =>
+            expect(client.getQueryData(["contracts", "list"])).toBeUndefined(),
+        )
+        expect(fetchProfile).toHaveBeenCalledTimes(1)
+        expect(client.getQueryData(["account", "profile"])).toEqual(profile(2))
+        unobserve()
+        stop()
+        client.clear()
+    })
+
+    it.each([403, 404])(
+        "a rejected mutation (%s) does not poison unrelated reads",
+        async (status) => {
+            const client = makeClient()
+            const stop = subscribeScopeCache(client)
+            client.setQueryData(["contracts", "list"], ["可读合同"])
+            await client
+                .getMutationCache()
+                .build(client, {
+                    mutationFn: async () => {
+                        throw Object.assign(new Error("操作不可用"), { status })
+                    },
+                })
+                .execute(undefined)
+                .catch(() => {})
+            expect(client.getQueryData(["contracts", "list"])).toEqual([
+                "可读合同",
+            ])
+            stop()
+            client.clear()
+        },
+    )
+
     it("cancels an outstanding old response so it cannot repopulate removed cache", async () => {
         const client = makeClient()
         const stop = subscribeScopeCache(client)

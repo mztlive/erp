@@ -1,6 +1,7 @@
 /** 商品列表查询、筛选选项、SKU 摘要与整组上/下架适配。 */
 
 import { apiPut } from "@/lib/api"
+import { hasPermission } from "@/lib/permissions"
 import type {
     ProductBrandDto,
     ProductCategoryDto,
@@ -60,21 +61,29 @@ export async function listProducts(query: MasterDataListQuery): Promise<{
 }
 
 /** 读取商品筛选使用的启用分类、品牌与供应商选项。 */
-export async function fetchProductFilterOptions(): Promise<ProductFilterOptions> {
+export async function fetchProductFilterOptions(
+    permissions: readonly string[],
+): Promise<ProductFilterOptions> {
     const [categories, brands, suppliers] = await Promise.all([
-        fetchAllPages<ProductCategoryDto>("/admin/product-categories", {
-            status: "active",
-            sort_by: "name",
-            sort_dir: "asc",
-        }),
-        fetchAllPages<ProductBrandDto>("/admin/product-brands", {
-            status: "active",
-            sort_by: "name",
-            sort_dir: "asc",
-        }),
-        fetchAllPages<SupplierDto>("/admin/suppliers", {
-            status: "active",
-        }),
+        hasPermission(permissions, "product_category:list")
+            ? fetchAllPages<ProductCategoryDto>("/admin/product-categories", {
+                  status: "active",
+                  sort_by: "name",
+                  sort_dir: "asc",
+              })
+            : [],
+        hasPermission(permissions, "product_brand:list")
+            ? fetchAllPages<ProductBrandDto>("/admin/product-brands", {
+                  status: "active",
+                  sort_by: "name",
+                  sort_dir: "asc",
+              })
+            : [],
+        hasPermission(permissions, "supplier:list")
+            ? fetchAllPages<SupplierDto>("/admin/suppliers", {
+                  status: "active",
+              })
+            : [],
     ])
     const supplierOptions = suppliers
         .map((supplier) => ({
@@ -93,7 +102,15 @@ export async function fetchProductFilterOptions(): Promise<ProductFilterOptions>
                 .join(" "),
         }))
         .sort((left, right) => left.label.localeCompare(right.label, "zh-CN"))
+    const unavailable: ("categories" | "brands" | "suppliers")[] = []
+    if (!hasPermission(permissions, "product_category:list"))
+        unavailable.push("categories")
+    if (!hasPermission(permissions, "product_brand:list"))
+        unavailable.push("brands")
+    if (!hasPermission(permissions, "supplier:list"))
+        unavailable.push("suppliers")
     return {
+        unavailable,
         categories: categories.map((category) => ({
             categoryId: category.id,
             categoryCode: category.category_code,

@@ -36,6 +36,7 @@ import type {
     MasterDataResource,
     ProductListingStatus,
 } from "@/features/master-data/types"
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import { optionKeys } from "@/hooks/use-options"
 import { updateVoucherCategoryRevision } from "@/features/master-data/api/mutations/voucher"
 import { queryKeyRoots } from "@/lib/query-key-roots"
@@ -102,10 +103,17 @@ export function useProductListSkusQuery(productIds: readonly string[]) {
 
 /** 商品列表筛选的启用分类、品牌与供应商选项。 */
 export function useProductFilterOptionsQuery(enabled: boolean) {
+    const account = useAccountProfileQuery()
+    const permissions = account.data?.permissions ?? []
     return useQuery({
-        queryKey: [...masterDataKeys.all, "product-filter-options"],
-        queryFn: fetchProductFilterOptions,
-        enabled,
+        queryKey: [
+            ...masterDataKeys.all,
+            "product-filter-options",
+            account.data?.userid,
+            permissions,
+        ],
+        queryFn: () => fetchProductFilterOptions(permissions),
+        enabled: enabled && account.isSuccess,
     })
 }
 

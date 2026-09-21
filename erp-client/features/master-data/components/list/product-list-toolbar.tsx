@@ -128,6 +128,13 @@ export function ProductListToolbar({
                             }
                             loading={productFilterOptionsQuery.isPending}
                             placeholder="全部分类"
+                            emptyLabel={
+                                productFilterOptionsQuery.data?.unavailable?.includes(
+                                    "categories",
+                                )
+                                    ? "当前账号无分类查询权限"
+                                    : "没有符合条件的分类"
+                            }
                         />
                     </ListWorkspaceInlineFilter>
                 </>
@@ -227,6 +234,13 @@ export function ProductListToolbar({
                                             productFilterOptionsQuery.isPending
                                         }
                                         placeholder="全部品牌"
+                                        emptyLabel={
+                                            productFilterOptionsQuery.data?.unavailable?.includes(
+                                                "brands",
+                                            )
+                                                ? "当前账号无品牌查询权限"
+                                                : "没有符合条件的品牌"
+                                        }
                                         searchPlaceholder="搜索品牌名称或代码"
                                     />
                                 </ListWorkspaceFilterField>
@@ -250,6 +264,13 @@ export function ProductListToolbar({
                                             productFilterOptionsQuery.isPending
                                         }
                                         placeholder="全部供应商"
+                                        emptyLabel={
+                                            productFilterOptionsQuery.data?.unavailable?.includes(
+                                                "suppliers",
+                                            )
+                                                ? "当前账号无供应商查询权限"
+                                                : "没有符合条件的供应商"
+                                        }
                                         searchPlaceholder="搜索供应商名称或代码"
                                     />
                                 </ListWorkspaceFilterField>

@@ -1,16 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const fetchCompleteList = vi.fn()
+const fetchAllPages = vi.hoisted(() => vi.fn())
 
 vi.mock("@/lib/collect-pages", () => ({
     fetchCompleteList: (...args: unknown[]) => fetchCompleteList(...args),
 }))
 
 vi.mock("./fetch-all", () => ({
-    fetchAllPages: vi.fn(),
+    fetchAllPages,
 }))
 
-import { listProducts } from "./products"
+import { listProducts, fetchProductFilterOptions } from "./products"
 
 describe("listProducts", () => {
     beforeEach(() => {
@@ -62,5 +63,58 @@ describe("listProducts", () => {
         ])
         expect(result.procurementOwnerOptions[0]?.value).toBe("buyer-1")
         expect(result.emptyReason).toBeNull()
+    })
+})
+
+describe("product filter permissions", () => {
+    beforeEach(() => {
+        fetchAllPages.mockReset()
+        fetchAllPages.mockResolvedValue([])
+    })
+    it("sales can load the product pool without reading category, brand or supplier administration", async () => {
+        expect(
+            await fetchProductFilterOptions([
+                "sellable_sku:list",
+                "product:detail",
+                "contract:*",
+            ]),
+        ).toEqual({
+            categories: [],
+            brands: [],
+            suppliers: [],
+            unavailable: ["categories", "brands", "suppliers"],
+        })
+        expect(fetchAllPages).not.toHaveBeenCalled()
+    })
+    it("requests only granted option resources", async () => {
+        fetchAllPages.mockResolvedValue([
+            { id: "cat-1", category_code: "C1", name: "食品" },
+        ])
+        const result = await fetchProductFilterOptions([
+            "product_category:list",
+        ])
+        expect(fetchAllPages).toHaveBeenCalledTimes(1)
+        expect(fetchAllPages).toHaveBeenCalledWith(
+            "/admin/product-categories",
+            expect.any(Object),
+        )
+        expect(result.categories[0]?.categoryName).toBe("食品")
+        expect(result.brands).toEqual([])
+        expect(result.suppliers).toEqual([])
+    })
+    it("retains all option queries for wildcard administrators", async () => {
+        await fetchProductFilterOptions(["*:*"])
+        expect(fetchAllPages.mock.calls.map(([path]) => path)).toEqual([
+            "/admin/product-categories",
+            "/admin/product-brands",
+            "/admin/suppliers",
+        ])
+    })
+    it("does not conceal a server rejection of a granted resource", async () => {
+        const error = Object.assign(new Error("权限已变化"), { status: 403 })
+        fetchAllPages.mockRejectedValue(error)
+        await expect(
+            fetchProductFilterOptions(["product_brand:list"]),
+        ).rejects.toBe(error)
     })
 })
