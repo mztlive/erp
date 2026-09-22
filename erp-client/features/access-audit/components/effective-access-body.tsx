@@ -4,11 +4,11 @@ import { BusinessEmptyState, BusinessFailureState } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { DataScopeGroupList } from "@/features/admin/components/data-scope-group-list"
 import { useEffectiveAccessQuery } from "@/features/access-audit/hooks/queries"
 import {
     groupDataScopes,
     permissionPreview,
-    type DataScopePreviewGroup,
 } from "@/features/access-audit/lib/effective-access-preview"
 import type { RoleRow } from "@/features/access-audit/types"
 
@@ -54,28 +54,6 @@ function PermissionLead({
                       : "尚未配置操作权限。"}
             </p>
         </section>
-    )
-}
-
-function ScopeResources({ group }: { group: DataScopePreviewGroup }) {
-    if (group.resources.length === 0) return null
-    if (group.scopeType === "company" && group.resources.length > 8) {
-        return (
-            <p className="text-[13px] leading-6">
-                适用于已接入的业务对象（
-                <strong className="num text-foreground">
-                    {group.resources.length}
-                </strong>{" "}
-                类）。
-            </p>
-        )
-    }
-    return (
-        <div className="flex flex-wrap gap-x-3 gap-y-1 text-[13px] leading-6">
-            {group.resources.map((resource) => (
-                <span key={resource}>{resource}</span>
-            ))}
-        </div>
     )
 }
 
@@ -129,37 +107,10 @@ function DataScopeSection({
                     尚未配置数据范围，不代表可访问全部数据。
                 </p>
             ) : (
-                <div className="space-y-5">
-                    {groups.map((group) => {
-                        const showSource =
-                            group.sources.length > 0 &&
-                            (group.sources.length > 1 ||
-                                group.sources[0] !== subjectLabel)
-                        return (
-                            <div key={group.scopeType} className="space-y-1.5">
-                                <p className="font-medium">{group.label}</p>
-                                <p className="text-xs leading-5 text-muted-foreground">
-                                    {group.explanation}
-                                </p>
-                                <ScopeResources group={group} />
-                                {group.specifiedTargetCount > 0 ? (
-                                    <p className="text-xs leading-5 text-muted-foreground">
-                                        已指定{" "}
-                                        <strong className="num text-foreground">
-                                            {group.specifiedTargetCount}
-                                        </strong>{" "}
-                                        个组织或团队
-                                    </p>
-                                ) : null}
-                                {showSource ? (
-                                    <p className="text-xs leading-5 text-muted-foreground">
-                                        来自{group.sources.join("、")}
-                                    </p>
-                                ) : null}
-                            </div>
-                        )
-                    })}
-                </div>
+                <DataScopeGroupList
+                    groups={groups}
+                    subjectLabel={subjectLabel}
+                />
             )}
         </section>
     )

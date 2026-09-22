@@ -7,6 +7,7 @@ export type AccountPermissionScope = {
     subject_id: string
     scope_type: string
     scope_targets: string[]
+    resource: string
 }
 
 /** 分别读取账号与角色的数据范围配置，保留来源，不把多份配置合并成鉴权结果。 */

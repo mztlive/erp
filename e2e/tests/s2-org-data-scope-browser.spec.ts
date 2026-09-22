@@ -446,9 +446,10 @@ test("S2 浏览器验收：组织变更跨页可见、维度隔离、任务受�
 
     // 5. 组织页跨页可见：刷新后新部门可见。
     await adminPage.goto("/system/organization")
-    await expect(adminPage.getByRole("heading", { name: "组织架构" })).toBeVisible(VISIBLE)
-    await adminPage.locator("#organization-search").fill(FINANCE_ORG)
-    await expect(adminPage.getByText(FINANCE_ORG).first()).toBeVisible(VISIBLE)
+    await expect(adminPage.getByRole("heading", { name: "组织与人员" })).toBeVisible(VISIBLE)
+    const financeOrg = adminPage.getByRole("button", { name: FINANCE_ORG })
+    await financeOrg.scrollIntoViewIfNeeded()
+    await expect(financeOrg).toBeVisible(VISIBLE)
     await adminPage.screenshot({
         path: test.info().outputPath("s2-org-units.png"),
     })
@@ -584,8 +585,8 @@ test("S2 浏览器验收（窄屏）：组织与工作台可读可用", async ({
     const page = await loginAs(browser, "admin", { width: 390, height: 844 })
     await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible(VISIBLE)
     await page.goto("/system/organization")
-    await expect(page.getByRole("heading", { name: "组织架构" })).toBeVisible(VISIBLE)
-    await expect(page.locator("#organization-search")).toBeVisible(VISIBLE)
+    await expect(page.getByRole("heading", { name: "组织与人员" })).toBeVisible(VISIBLE)
+    await expect(page.getByRole("navigation", { name: "组织树" })).toBeVisible(VISIBLE)
     await page.screenshot({
         path: test.info().outputPath("s2-org-units-mobile.png"),
     })

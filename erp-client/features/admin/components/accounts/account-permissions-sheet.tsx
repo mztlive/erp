@@ -13,13 +13,15 @@ import {
     InputGroupInput,
 } from "@/components/ui/input-group"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { accountPermissionGroups } from "../../lib/account-permission-preview"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
 import { useOrganizationStateQuery } from "@/features/organization/hooks/queries"
 import { isRelationActive, unitLabel } from "@/features/organization/lib/tree"
+import { DataScopeGroupList } from "../data-scope-group-list"
 import { useRolesQuery } from "../../hooks/queries"
 import { useAccountPermissionScopes } from "../../hooks/use-account-permission-scopes"
+import { accountPermissionGroups } from "../../lib/account-permission-preview"
+import { groupDataScopes } from "../../lib/data-scope-preview"
 import type { AdminAccount } from "../../types"
 
 const SCOPE_LABEL: Record<string, string> = {
@@ -361,31 +363,23 @@ export function AccountPermissionsSheet({
                             正在读取数据范围…
                         </p>
                     ) : scopesQuery.data.length ? (
-                        <dl className="space-y-4">
-                            {scopesQuery.data.map((scope) => (
-                                <div
-                                    key={scope.id}
-                                    className="flex items-baseline justify-between gap-5"
-                                >
-                                    <dt className="min-w-0 text-xs leading-5 text-muted-foreground">
-                                        {scope.subject_type === "user"
+                        <DataScopeGroupList
+                            groups={groupDataScopes(
+                                scopesQuery.data.map((scope) => ({
+                                    scopeType: scope.scope_type,
+                                    targetLabel:
+                                        SCOPE_LABEL[scope.scope_type] ??
+                                        "其它范围",
+                                    resource: scope.resource,
+                                    scopeTargets: scope.scope_targets,
+                                    sourceLabel:
+                                        scope.subject_type === "user"
                                             ? "账号直接配置"
-                                            : `角色 · ${roleName(scope.subject_id)}`}
-                                    </dt>
-                                    <dd className="min-w-0 text-right text-[13px]">
-                                        {SCOPE_LABEL[scope.scope_type] ??
-                                            "其它范围"}
-                                        {scope.scope_targets.length ? (
-                                            <span className="mt-1 block text-xs text-muted-foreground">
-                                                已指定{" "}
-                                                {scope.scope_targets.length}{" "}
-                                                个对象
-                                            </span>
-                                        ) : null}
-                                    </dd>
-                                </div>
-                            ))}
-                        </dl>
+                                            : roleName(scope.subject_id),
+                                })),
+                            )}
+                            alwaysShowSource
+                        />
                     ) : (
                         <p className="text-xs leading-5 text-muted-foreground">
                             未查询到账号或角色的数据范围配置，不代表可访问全部数据。

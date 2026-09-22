@@ -4,17 +4,10 @@ import * as React from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { PlusIcon } from "lucide-react"
 
+import { BusinessFailureState, PageScaffold } from "@/components/business"
 import {
-    BusinessFailureState,
-    OptionCombobox,
-    PageScaffold,
-} from "@/components/business"
-import {
-    ListSearchField,
     ListWorkSurface,
-    ListWorkspaceFilterBar,
     ListWorkspaceHeader,
-    listWorkspaceFilterStatusText,
     listWorkspaceStyles as styles,
 } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
@@ -34,14 +27,12 @@ import {
 } from "@/features/organization/lib/change-payload"
 import { organizationEmptyReason } from "@/features/organization/lib/empty-reason"
 import {
-    KIND_LABEL,
     ORGANIZATION_BOUNDARY_NOTICE,
     PAGE_NARROW_CLASS,
 } from "@/features/organization/lib/labels"
 import {
     buildOrganizationForest,
     flattenTree,
-    matchesOrganizationFilters,
 } from "@/features/organization/lib/tree"
 import {
     mergeOrganizationSearchParams,
@@ -77,24 +68,25 @@ export function OrganizationPage() {
     const stateQuery = useOrganizationStateQuery()
     const previewMutation = usePreviewOrganizationChangeMutation()
     const submitMutation = useSubmitOrganizationChangeMutation()
-    const [searchDraft, setSearchDraft] = React.useState(url.q ?? "")
     const [changeOpen, setChangeOpen] = React.useState(false)
     const [changeDraft, setChangeDraft] =
         React.useState<OrganizationChangeDraft>(EMPTY_CHANGE_DRAFT)
 
-    React.useEffect(() => {
-        setSearchDraft(url.q ?? "")
-    }, [url.q])
-
     const view = stateQuery.data
-    const forest = view ? buildOrganizationForest(view, url) : []
+    const forest = view
+        ? buildOrganizationForest(view, {
+              unitId: url.unitId,
+              kind: "all",
+              status: "all",
+          })
+        : []
     const selected =
         flattenTree(forest).find((node) => node.unit.id === url.unitId) ??
         forest[0]
     const emptyReason = organizationEmptyReason({
         error: stateQuery.error,
         noScope: view?.emptyReason === "no_scope",
-        filtered: Boolean(url.q || url.kind !== "all" || url.status !== "all"),
+        filtered: false,
         empty: forest.length === 0,
         permissionPending: profileQuery.isPending,
     })
@@ -160,114 +152,6 @@ export function OrganizationPage() {
                 ariaLabel="组织树"
                 className="min-h-0 overflow-hidden"
                 tableClassName="flex flex-col overflow-hidden p-0"
-                toolbar={
-                    <ListWorkspaceFilterBar
-                        idPrefix="organization"
-                        formAriaLabel="组织查询"
-                        onSubmit={() =>
-                            pushUrl({ q: searchDraft.trim() || undefined })
-                        }
-                        search={
-                            <ListSearchField
-                                id="organization-search"
-                                value={searchDraft}
-                                onChange={setSearchDraft}
-                                placeholder="按组织名称筛选"
-                                aria-label="搜索组织"
-                            />
-                        }
-                        primaryFilters={
-                            <div className="flex min-w-0 flex-wrap gap-3">
-                                <OptionCombobox
-                                    id="organization-filter-kind"
-                                    aria-label="类型"
-                                    value={url.kind}
-                                    options={[
-                                        { value: "all", label: "全部类型" },
-                                        ...Object.entries(KIND_LABEL).map(
-                                            ([value, label]) => ({
-                                                value,
-                                                label,
-                                            }),
-                                        ),
-                                    ]}
-                                    onValueChange={(value) =>
-                                        pushUrl({
-                                            kind: (value ??
-                                                "all") as typeof url.kind,
-                                        })
-                                    }
-                                    allowClear={false}
-                                />
-                                <OptionCombobox
-                                    id="organization-filter-status"
-                                    aria-label="状态"
-                                    value={url.status}
-                                    options={[
-                                        { value: "all", label: "全部状态" },
-                                        { value: "enabled", label: "启用" },
-                                        { value: "disabled", label: "停用" },
-                                    ]}
-                                    onValueChange={(value) =>
-                                        pushUrl({
-                                            status: (value ??
-                                                "all") as typeof url.status,
-                                        })
-                                    }
-                                    allowClear={false}
-                                />
-                            </div>
-                        }
-                        resultStatus={listWorkspaceFilterStatusText({
-                            loading: stateQuery.isFetching,
-                            failed: stateQuery.isError,
-                            resultCount: view
-                                ? view.units.filter((unit) =>
-                                      matchesOrganizationFilters(unit, url),
-                                  ).length
-                                : undefined,
-                            noun: "个组织",
-                        })}
-                        chips={[
-                            url.q
-                                ? { key: "q", label: `名称：${url.q}` }
-                                : null,
-                            url.kind !== "all"
-                                ? {
-                                      key: "kind",
-                                      label: KIND_LABEL[url.kind],
-                                  }
-                                : null,
-                            url.status !== "all"
-                                ? {
-                                      key: "status",
-                                      label:
-                                          url.status === "enabled"
-                                              ? "启用"
-                                              : "停用",
-                                  }
-                                : null,
-                        ].filter(
-                            (chip): chip is { key: string; label: string } =>
-                                chip != null,
-                        )}
-                        onClearChip={(key) => {
-                            if (key === "q") pushUrl({ q: undefined })
-                            if (key === "kind") pushUrl({ kind: "all" })
-                            if (key === "status") pushUrl({ status: "all" })
-                        }}
-                        onClearAll={() =>
-                            pushUrl({
-                                q: undefined,
-                                kind: "all",
-                                status: "all",
-                            })
-                        }
-                        hasPendingChanges={
-                            (searchDraft.trim() || undefined) !== url.q
-                        }
-                    />
-                }
                 table={
                     emptyReason === "NO_MODULE_PERMISSION" ? (
                         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
@@ -292,13 +176,6 @@ export function OrganizationPage() {
                             <OrganizationEmptyByReason
                                 idPrefix="organization"
                                 reason={emptyReason}
-                                onClearFilters={() =>
-                                    pushUrl({
-                                        q: undefined,
-                                        kind: "all",
-                                        status: "all",
-                                    })
-                                }
                             />
                         </div>
                     ) : (
