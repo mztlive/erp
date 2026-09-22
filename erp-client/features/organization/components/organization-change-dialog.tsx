@@ -213,6 +213,31 @@ export function OrganizationChangeDialog({
             <DialogContent
                 className="max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-2xl overflow-x-hidden overflow-y-auto sm:max-w-2xl"
                 closeButtonId="organization-change-dialog-close"
+                onKeyDownCapture={(event) => {
+                    if (
+                        event.key !== "Escape" ||
+                        event.nativeEvent.isComposing ||
+                        event.defaultPrevented
+                    ) {
+                        return
+                    }
+                    const target = event.target
+                    if (
+                        !(target instanceof Element) ||
+                        !event.currentTarget.contains(target) ||
+                        target.closest('[role="dialog"]') !==
+                            event.currentTarget ||
+                        event.currentTarget.querySelector(
+                            '[aria-expanded="true"]',
+                        )
+                    ) {
+                        return
+                    }
+                    // 收起状态的选择框会消费 Esc 清空选项；此时应关闭弹窗。
+                    event.preventDefault()
+                    event.stopPropagation()
+                    onOpenChange(false)
+                }}
             >
                 <DialogHeader>
                     <DialogTitle>

@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
 
@@ -12,38 +13,44 @@ export function PeopleNavigation({
 }) {
     const { data } = useAccountProfileQuery()
     return (
-        <nav
-            aria-label="组织与人员"
-            className="flex shrink-0 flex-wrap gap-2 border-b pb-3"
-        >
-            {[
-                {
-                    key: "departments",
-                    label: "部门与成员",
-                    href: "/system/organization",
-                    permission: "org_unit:list",
-                },
-                {
-                    key: "accounts",
-                    label: "人员账号",
-                    href: "/system/accounts",
-                    permission: "admin:list",
-                },
-            ]
-                .filter((item) =>
-                    hasPermission(data?.permissions, item.permission),
-                )
-                .map((item) => (
-                    <Link
-                        key={item.key}
-                        id={`people-navigation-${item.key}`}
-                        href={item.href}
-                        aria-current={current === item.key ? "page" : undefined}
-                        className={`rounded-md px-3 py-2 text-sm ${current === item.key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}
-                    >
-                        {item.label}
-                    </Link>
-                ))}
-        </nav>
+        <Tabs value={current} className="min-w-0 shrink-0">
+            <TabsList
+                variant="line"
+                aria-label="组织与人员"
+                className="w-full overflow-x-auto border-b border-border"
+            >
+                {[
+                    {
+                        key: "departments",
+                        label: "部门与成员",
+                        href: "/system/organization",
+                        permission: "org_unit:list",
+                    },
+                    {
+                        key: "accounts",
+                        label: "人员账号",
+                        href: "/system/accounts",
+                        permission: "admin:list",
+                    },
+                ]
+                    .filter((item) =>
+                        hasPermission(data?.permissions, item.permission),
+                    )
+                    .map((item) => (
+                        <TabsTrigger
+                            key={item.key}
+                            id={`people-navigation-${item.key}`}
+                            value={item.key}
+                            nativeButton={false}
+                            render={<Link href={item.href} />}
+                            aria-current={
+                                current === item.key ? "page" : undefined
+                            }
+                        >
+                            {item.label}
+                        </TabsTrigger>
+                    ))}
+            </TabsList>
+        </Tabs>
     )
 }

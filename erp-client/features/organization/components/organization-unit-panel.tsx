@@ -2,7 +2,18 @@
 
 import Link from "next/link"
 
-import { PlusIcon, ShieldCheckIcon, UsersIcon } from "lucide-react"
+import {
+    ArrowRightLeftIcon,
+    BanIcon,
+    FolderInputIcon,
+    PencilIcon,
+    PlusIcon,
+    ShieldCheckIcon,
+    ShieldMinusIcon,
+    UserMinusIcon,
+    UserPlusIcon,
+    UsersIcon,
+} from "lucide-react"
 
 import { BusinessStatusBadge } from "@/components/business"
 import { Button } from "@/components/ui/button"
@@ -114,6 +125,10 @@ export function OrganizationUnitPanel({
                                 })
                             }
                         >
+                            <PencilIcon
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                            />
                             重命名
                         </Button>
                         <Button
@@ -126,6 +141,10 @@ export function OrganizationUnitPanel({
                                 onChange("move_unit", { orgUnitId: unit.id })
                             }
                         >
+                            <FolderInputIcon
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                            />
                             移动
                         </Button>
                         <Button
@@ -138,6 +157,10 @@ export function OrganizationUnitPanel({
                                 onChange("disable_unit", { orgUnitId: unit.id })
                             }
                         >
+                            <BanIcon
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                            />
                             停用
                         </Button>
                     </div>
@@ -169,6 +192,10 @@ export function OrganizationUnitPanel({
                                     })
                                 }
                             >
+                                <UserPlusIcon
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                />
                                 添加成员
                             </Button>
                         ) : null}
@@ -182,13 +209,13 @@ export function OrganizationUnitPanel({
                             {node.members.map((member) => (
                                 <li
                                     key={member.id}
-                                    className="flex min-w-0 items-center justify-between gap-2 px-1 py-1 text-sm"
+                                    className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 px-1 py-3 text-sm"
                                 >
                                     <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
                                         {canViewAccounts ? (
                                             <Link
                                                 id={`organization-member-${toAutomationIdSegment(member.id)}-account`}
-                                                className="wrap-anywhere underline underline-offset-4"
+                                                className="wrap-anywhere hover:text-primary"
                                                 href={`/system/accounts?q=${encodeURIComponent(view.people.find((person) => person.id === member.user_id)?.account ?? "")}`}
                                             >
                                                 {personLabel(
@@ -233,6 +260,10 @@ export function OrganizationUnitPanel({
                                                     )
                                                 }
                                             >
+                                                <ArrowRightLeftIcon
+                                                    data-icon="inline-start"
+                                                    aria-hidden="true"
+                                                />
                                                 调整部门
                                             </Button>
                                             <Button
@@ -246,6 +277,10 @@ export function OrganizationUnitPanel({
                                                     })
                                                 }
                                             >
+                                                <UserMinusIcon
+                                                    data-icon="inline-start"
+                                                    aria-hidden="true"
+                                                />
                                                 移出部门
                                             </Button>
                                         </div>
@@ -281,6 +316,10 @@ export function OrganizationUnitPanel({
                                     })
                                 }
                             >
+                                <ShieldCheckIcon
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                />
                                 设置管理部门
                             </Button>
                         ) : null}
@@ -330,6 +369,10 @@ export function OrganizationUnitPanel({
                                                 })
                                             }
                                         >
+                                            <ShieldMinusIcon
+                                                data-icon="inline-start"
+                                                aria-hidden="true"
+                                            />
                                             撤销
                                         </Button>
                                     ) : null}
