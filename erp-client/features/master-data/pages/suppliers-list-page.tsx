@@ -105,7 +105,6 @@ export function SuppliersListPage() {
                         : masterDataCopy.actionExport,
                     icon: DownloadIcon,
                     variant: "outline",
-                    mobileVisibility: "hide",
                     disabled: exportPending || state.rows.length === 0,
                     onClick: state.onExport,
                 },
@@ -113,7 +112,6 @@ export function SuppliersListPage() {
                     id: "master-data-suppliers-list-create",
                     actionKey: "create",
                     label: masterDataCopy.actionCreate,
-                    mobileVisibility: "hide",
                     icon: PlusIcon,
                     disabled: !state.canCreate,
                     title: !state.canCreate

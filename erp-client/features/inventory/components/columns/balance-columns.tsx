@@ -13,7 +13,6 @@ import { toAutomationIdSegment } from "@/lib/automation-id"
 import { formatDateTime } from "@/lib/datetime"
 
 export type BalanceColumnsInput = {
-    isPhoneNarrow: boolean
     rowFocusRef: { current: Map<string, HTMLButtonElement | null> }
     openDetail: (balanceId: string) => void
     startAdjustment: (row: StockBalanceRow) => Promise<void>
@@ -21,7 +20,6 @@ export type BalanceColumnsInput = {
 }
 
 export function buildBalanceColumns({
-    isPhoneNarrow,
     rowFocusRef,
     openDetail,
     startAdjustment,
@@ -134,15 +132,9 @@ export function buildBalanceColumns({
             cell: ({ row }) => {
                 const hasCreateAction =
                     row.original.allowedActions.includes("CREATE_ADJUSTMENT")
-                const blocker = isPhoneNarrow
-                    ? {
-                          action: "CREATE_ADJUSTMENT",
-                          code: "MOBILE_READONLY",
-                          message: "窄屏仅只读，请在桌面发起库存调整",
-                      }
-                    : row.original.actionBlockers.find(
-                          (b) => b.action === "CREATE_ADJUSTMENT",
-                      )
+                const blocker = row.original.actionBlockers.find(
+                    (b) => b.action === "CREATE_ADJUSTMENT",
+                )
                 return (
                     <div className="flex justify-end gap-1">
                         <Button
@@ -166,7 +158,7 @@ export function buildBalanceColumns({
                                 type="button"
                                 variant="outline"
                                 size="xs"
-                                disabled={isPhoneNarrow || isCreating}
+                                disabled={isCreating}
                                 title={blocker?.message}
                                 onClick={() =>
                                     void startAdjustment(row.original)

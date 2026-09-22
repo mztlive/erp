@@ -71,8 +71,6 @@ export function DataTableHeader<TData>({
                                 }
                                 className={cn(
                                     "sticky top-0 z-20 h-11 py-2 text-[13px]",
-                                    header.column.id === "actions" &&
-                                        "max-sm:hidden",
                                     alignmentClass(meta?.align),
                                     columnWidthClass(meta?.width, meta?.role),
                                     pinningClass(

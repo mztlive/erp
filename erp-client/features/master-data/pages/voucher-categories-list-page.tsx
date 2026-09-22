@@ -67,7 +67,6 @@ export function VoucherCategoriesListPage() {
                         : masterDataCopy.actionExport,
                     icon: DownloadIcon,
                     variant: "outline",
-                    mobileVisibility: "hide",
                     disabled: exportPending || state.rows.length === 0,
                     onClick: state.onExport,
                 },
@@ -75,7 +74,6 @@ export function VoucherCategoriesListPage() {
                     id: "master-data-voucher-categories-list-create",
                     actionKey: "create",
                     label: masterDataCopy.actionCreate,
-                    mobileVisibility: "hide",
                     icon: PlusIcon,
                     disabled: !state.canCreate,
                     title: !state.canCreate

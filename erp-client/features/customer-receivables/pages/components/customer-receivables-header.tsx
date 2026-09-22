@@ -61,7 +61,6 @@ export function CustomerReceivablesHeader({
                     label: "导出",
                     icon: DownloadIcon,
                     variant: "outline",
-                    mobileVisibility: "hide",
                     disabled: !canExport || !data || data.total === 0,
                     title: canExport
                         ? "导出与当前查询结果一致"
@@ -76,7 +75,6 @@ export function CustomerReceivablesHeader({
                     label: startSessionPending ? "创建中…" : "新建开票申请",
                     icon: startSessionPending ? LoaderCircleIcon : FileTextIcon,
                     variant: "outline",
-                    mobileVisibility: embedded ? "show" : "hide",
                     disabled: !canRegisterInvoice || startSessionPending,
                     title: canRegisterInvoice
                         ? undefined
@@ -92,7 +90,6 @@ export function CustomerReceivablesHeader({
                         : "customer-receivables-header-register-receipt",
                     label: startSessionPending ? "创建中…" : "登记回款",
                     icon: startSessionPending ? LoaderCircleIcon : WalletIcon,
-                    mobileVisibility: embedded ? "show" : "hide",
                     disabled: !canRegisterReceipt || startSessionPending,
                     title: canRegisterReceipt
                         ? undefined

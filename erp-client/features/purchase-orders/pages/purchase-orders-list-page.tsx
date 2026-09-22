@@ -99,7 +99,6 @@ export function PurchaseOrdersListPage() {
                             ),
                             icon: exportPending ? undefined : DownloadIcon,
                             variant: "outline",
-                            mobileVisibility: "hide",
                             disabled: exportPending || ctrl.total === 0,
                             onClick: () => void ctrl.exportCsv(),
                             id: "procurement-orders-list-export",

@@ -203,8 +203,6 @@ export function DataTableBody<TData>({
                                     }
                                     className={cn(
                                         alignmentClass(meta?.align),
-                                        cell.column.id === "actions" &&
-                                            "max-sm:hidden",
                                         meta?.numeric &&
                                             meta?.align !== "end" &&
                                             "num",

@@ -49,8 +49,6 @@ export type PageAction = Omit<ButtonProps, "children" | "size"> & {
     label: React.ReactNode
     icon?: LucideIcon
     iconPosition?: "start" | "end"
-    /** 手机端只保留安全的查看/刷新入口，写操作和全量导出应隐藏。 */
-    mobileVisibility?: "show" | "hide"
 }
 
 type LabeledButtonSize = Extract<
@@ -91,7 +89,6 @@ function PageActions({
                     label,
                     icon: Icon,
                     iconPosition = "start",
-                    mobileVisibility = "show",
                     className: actionClassName,
                     id: actionId,
                     ...buttonProps
@@ -107,10 +104,7 @@ function PageActions({
                         id={derivedId}
                         {...buttonProps}
                         size={size}
-                        className={cn(
-                            mobileVisibility === "hide" && "max-sm:hidden",
-                            actionClassName,
-                        )}
+                        className={actionClassName}
                     >
                         {Icon && iconPosition === "start" ? (
                             <Icon data-icon="inline-start" aria-hidden="true" />

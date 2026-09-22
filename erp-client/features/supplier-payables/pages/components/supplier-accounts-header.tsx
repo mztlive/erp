@@ -72,7 +72,6 @@ export function SupplierAccountsHeader({
                         label: "登记进项发票",
                         icon: FilePlus2Icon,
                         variant: "outline",
-                        mobileVisibility: "hide",
                         disabled: !data?.canRegisterInvoice,
                         title: data?.canRegisterInvoice
                             ? undefined
@@ -84,7 +83,6 @@ export function SupplierAccountsHeader({
                         id: "supplier-payables-header-register-payment",
                         label: "登记付款",
                         icon: WalletCardsIcon,
-                        mobileVisibility: "hide",
                         disabled:
                             !data?.canRegisterPayment || !canRegisterPayment,
                         title:
@@ -99,7 +97,6 @@ export function SupplierAccountsHeader({
                         id: "supplier-payables-header-settle",
                         label: "去对账结算",
                         variant: "outline",
-                        mobileVisibility: "hide",
                         onClick: onSettle,
                     },
                 ]}

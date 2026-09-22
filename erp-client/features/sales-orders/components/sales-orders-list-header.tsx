@@ -70,7 +70,6 @@ export function SalesOrdersListHeader(props: {
                                     ? LoaderCircleIcon
                                     : DownloadIcon,
                                 variant: "outline",
-                                mobileVisibility: "hide",
                                 disabled: exportDisabled,
                                 onClick: onExport,
                             },

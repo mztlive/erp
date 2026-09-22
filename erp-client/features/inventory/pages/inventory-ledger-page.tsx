@@ -40,7 +40,6 @@ import { useLedgerFilterActions } from "./hooks/use-ledger-filter-actions"
 import type { LedgerAppliedChip } from "./hooks/use-ledger-filters"
 import { useLedgerFilters } from "./hooks/use-ledger-filters"
 import { useLedgerSearch } from "./hooks/use-ledger-search"
-import { usePhoneNarrow } from "./hooks/use-phone-narrow"
 import { bindAdjustmentDecisionWorkItem } from "./lib/adjustment-work-item-binding"
 import {
     closeAdjustmentPreviewPatch,
@@ -72,7 +71,6 @@ export function InventoryLedgerPage() {
         hasActiveFilters,
         patchUrl,
     } = useInventoryLedgerUrlState()
-    const isPhoneNarrow = usePhoneNarrow()
     const { searchDraft, setSearchDraft, searchInputRef } = useLedgerSearch({
         qParam,
     })
@@ -198,7 +196,6 @@ export function InventoryLedgerPage() {
     }, [])
 
     const adjustment = useAdjustmentWorkflow({
-        isPhoneNarrow,
         onFocusRestore: handleFocusRestore,
         onPreviewClose: handlePreviewClose,
     })
@@ -249,7 +246,6 @@ export function InventoryLedgerPage() {
         movementColumns,
         reservationColumns,
     } = useInventoryColumns({
-        isPhoneNarrow,
         rowFocusRef,
         openDetail,
         startAdjustment: adjustment.startAdjustment,
@@ -393,7 +389,6 @@ export function InventoryLedgerPage() {
     return (
         <PageScaffold density="compact" className={listWorkspaceStyles.page}>
             <LedgerHeader
-                isPhoneNarrow={isPhoneNarrow}
                 queriedAt={data?.queriedAt ?? ""}
                 excludedKindsNote={data?.excludedKindsNote}
                 openingStockNote={data?.openingStockNote}

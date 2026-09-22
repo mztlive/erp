@@ -58,7 +58,6 @@ const balance: StockBalanceRow = {
 
 function renderBalanceActions(row: StockBalanceRow) {
     const actionColumn = buildBalanceColumns({
-        isPhoneNarrow: false,
         rowFocusRef: { current: new Map() },
         openDetail: vi.fn(),
         startAdjustment: vi.fn(),

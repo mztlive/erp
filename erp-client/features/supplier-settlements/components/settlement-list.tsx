@@ -163,26 +163,21 @@ function SettlementList({
                         />
                         刷新
                     </Button>
-                    <div className="max-sm:hidden">
-                        <GuardedBusinessAction
-                            id="supplier-settlements-list-create"
-                            type="button"
-                            size="sm"
-                            disabled={!canCreate}
-                            reason={
-                                canCreate
-                                    ? undefined
-                                    : "当前账号无模块权限或数据范围"
-                            }
-                            onClick={() => setCreateOpen(true)}
-                        >
-                            <PlusIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                            新建结算草稿
-                        </GuardedBusinessAction>
-                    </div>
+                    <GuardedBusinessAction
+                        id="supplier-settlements-list-create"
+                        type="button"
+                        size="sm"
+                        disabled={!canCreate}
+                        reason={
+                            canCreate
+                                ? undefined
+                                : "当前账号无模块权限或数据范围"
+                        }
+                        onClick={() => setCreateOpen(true)}
+                    >
+                        <PlusIcon data-icon="inline-start" aria-hidden="true" />
+                        新建结算草稿
+                    </GuardedBusinessAction>
                 </div>
             </ListWorkspaceHeader>
 

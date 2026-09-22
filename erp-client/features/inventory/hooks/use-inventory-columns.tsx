@@ -13,7 +13,6 @@ import { buildReservationColumns } from "@/features/inventory/components/columns
 export type InventoryColumnsInput = BalanceColumnsInput
 
 function useInventoryColumns({
-    isPhoneNarrow,
     rowFocusRef,
     openDetail,
     startAdjustment,
@@ -22,13 +21,12 @@ function useInventoryColumns({
     const balanceColumns = React.useMemo(
         () =>
             buildBalanceColumns({
-                isPhoneNarrow,
                 rowFocusRef,
                 openDetail,
                 startAdjustment,
                 isCreating,
             }),
-        [openDetail, startAdjustment, isCreating, isPhoneNarrow, rowFocusRef],
+        [openDetail, startAdjustment, isCreating, rowFocusRef],
     )
 
     const movementColumns = React.useMemo(() => buildMovementColumns(), [])

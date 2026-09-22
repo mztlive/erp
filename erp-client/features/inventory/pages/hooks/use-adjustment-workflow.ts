@@ -77,7 +77,6 @@ export const formatSubmittedResult = (
 }
 
 export interface AdjustmentWorkflowInput {
-    isPhoneNarrow: boolean
     /** 发起前记录焦点行（详情/调整关闭后恢复）。 */
     onFocusRestore: (balanceId: string) => void
     /** 创建草稿成功后关闭余额预览。 */
@@ -85,7 +84,6 @@ export interface AdjustmentWorkflowInput {
 }
 
 export function useAdjustmentWorkflow({
-    isPhoneNarrow,
     onFocusRestore,
     onPreviewClose,
 }: AdjustmentWorkflowInput) {
@@ -133,12 +131,6 @@ export function useAdjustmentWorkflow({
 
     const startAdjustment = React.useCallback(
         async (row: StockBalanceRow) => {
-            if (isPhoneNarrow) {
-                setActionError(
-                    "窄屏（移动端）仅支持只读查询；库存调整请在桌面完成。",
-                )
-                return
-            }
             if (!row.allowedActions.includes("CREATE_ADJUSTMENT")) {
                 setActionError(
                     row.actionBlockers.find(
@@ -194,13 +186,7 @@ export function useAdjustmentWorkflow({
                 )
             }
         },
-        [
-            createDraftMutation,
-            form,
-            isPhoneNarrow,
-            onFocusRestore,
-            onPreviewClose,
-        ],
+        [createDraftMutation, form, onFocusRestore, onPreviewClose],
     )
 
     const doSubmit = React.useCallback(async (): Promise<void> => {

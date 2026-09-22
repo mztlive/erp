@@ -173,7 +173,6 @@ export function CategoryTreePage() {
                             label: "导出",
                             icon: DownloadIcon,
                             variant: "outline",
-                            mobileVisibility: "hide",
                             disabled:
                                 failed ||
                                 state.listQuery.isFetching ||

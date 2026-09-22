@@ -12,7 +12,6 @@ import { listWorkspaceStyles } from "@/components/business/list-workspace"
 import { formatDateTime } from "@/lib/datetime"
 
 interface LedgerHeaderProps {
-    isPhoneNarrow: boolean
     queriedAt: string
     excludedKindsNote?: string
     openingStockNote?: string
@@ -24,7 +23,6 @@ interface LedgerHeaderProps {
 }
 
 export function LedgerHeader({
-    isPhoneNarrow,
     queriedAt,
     excludedKindsNote,
     openingStockNote,
@@ -62,11 +60,6 @@ export function LedgerHeader({
                         </details>
                     ) : null}
                 </div>
-                {isPhoneNarrow ? (
-                    <p className="mt-1 text-xs text-muted-foreground">
-                        移动端只读：可查看余额与流水。库存调整、列设置与全量导出请在桌面完成。
-                    </p>
-                ) : null}
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 md:pt-1">
                 <span className="text-xs text-muted-foreground" role="status">
@@ -95,12 +88,7 @@ export function LedgerHeader({
                             label: isExporting ? "导出中…" : "导出",
                             icon: isExporting ? LoaderCircleIcon : DownloadIcon,
                             variant: "outline",
-                            mobileVisibility: "hide",
-                            disabled:
-                                isExporting ||
-                                !canExport ||
-                                total === 0 ||
-                                isPhoneNarrow,
+                            disabled: isExporting || !canExport || total === 0,
                             onClick: onExport,
                         },
                     ]}

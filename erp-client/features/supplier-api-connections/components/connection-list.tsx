@@ -114,23 +114,21 @@ export function ConnectionList({
                         />
                         刷新
                     </Button>
-                    <div className="max-sm:hidden">
-                        <GuardedBusinessAction
-                            id="supplier-api-connections-list-create"
-                            type="button"
-                            size="sm"
-                            disabled={!data?.hasModulePermission}
-                            reason={
-                                data?.hasModulePermission
-                                    ? undefined
-                                    : "当前账号无模块权限"
-                            }
-                            onClick={() => setCreateOpen(true)}
-                        >
-                            <PlusIcon className="size-3.5" aria-hidden="true" />
-                            新建连接
-                        </GuardedBusinessAction>
-                    </div>
+                    <GuardedBusinessAction
+                        id="supplier-api-connections-list-create"
+                        type="button"
+                        size="sm"
+                        disabled={!data?.hasModulePermission}
+                        reason={
+                            data?.hasModulePermission
+                                ? undefined
+                                : "当前账号无模块权限"
+                        }
+                        onClick={() => setCreateOpen(true)}
+                    >
+                        <PlusIcon className="size-3.5" aria-hidden="true" />
+                        新建连接
+                    </GuardedBusinessAction>
                 </div>
             </ListWorkspaceHeader>
 
