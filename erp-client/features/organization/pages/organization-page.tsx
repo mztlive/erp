@@ -115,9 +115,12 @@ export function OrganizationPage() {
 
     if (profileQuery.isPending || stateQuery.isPending) {
         return (
-            <PageScaffold density="compact" className={styles.page}>
-                <div className="h-9 w-40 animate-pulse rounded-lg bg-muted" />
-                <div className="h-[32rem] animate-pulse rounded-lg bg-muted" />
+            <PageScaffold
+                density="compact"
+                className={`${styles.page} min-h-0 overflow-hidden`}
+            >
+                <div className="h-9 w-40 shrink-0 animate-pulse rounded-lg bg-muted" />
+                <div className="min-h-0 flex-1 animate-pulse rounded-lg bg-muted" />
             </PageScaffold>
         )
     }
@@ -125,9 +128,10 @@ export function OrganizationPage() {
     return (
         <PageScaffold
             density="compact"
-            className={`${styles.page} ${PAGE_NARROW_CLASS}`}
+            className={`${styles.page} ${PAGE_NARROW_CLASS} min-h-0 overflow-hidden`}
         >
             <ListWorkspaceHeader
+                className="shrink-0"
                 eyebrow="系统"
                 title="组织架构"
                 description="维护部门与团队，管理成员归属和组织管理范围。"
@@ -152,7 +156,8 @@ export function OrganizationPage() {
 
             <ListWorkSurface
                 ariaLabel="组织树"
-                tableClassName="p-0"
+                className="min-h-0 overflow-hidden"
+                tableClassName="flex flex-col overflow-hidden p-0"
                 toolbar={
                     <ListWorkspaceFilterBar
                         idPrefix="organization"
@@ -263,35 +268,41 @@ export function OrganizationPage() {
                 }
                 table={
                     emptyReason === "NO_MODULE_PERMISSION" ? (
-                        <OrganizationEmptyByReason
-                            idPrefix="organization"
-                            reason={emptyReason}
-                        />
+                        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                            <OrganizationEmptyByReason
+                                idPrefix="organization"
+                                reason={emptyReason}
+                            />
+                        </div>
                     ) : stateQuery.isError && !view ? (
-                        <BusinessFailureState
-                            id="organization-retry"
-                            title="组织列表加载失败"
-                            error={stateQuery.error}
-                            onRetry={() => {
-                                void stateQuery.refetch()
-                            }}
-                        />
+                        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                            <BusinessFailureState
+                                id="organization-retry"
+                                title="组织列表加载失败"
+                                error={stateQuery.error}
+                                onRetry={() => {
+                                    void stateQuery.refetch()
+                                }}
+                            />
+                        </div>
                     ) : emptyReason ? (
-                        <OrganizationEmptyByReason
-                            idPrefix="organization"
-                            reason={emptyReason}
-                            onClearFilters={() =>
-                                pushUrl({
-                                    q: undefined,
-                                    kind: "all",
-                                    status: "all",
-                                })
-                            }
-                        />
+                        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                            <OrganizationEmptyByReason
+                                idPrefix="organization"
+                                reason={emptyReason}
+                                onClearFilters={() =>
+                                    pushUrl({
+                                        q: undefined,
+                                        kind: "all",
+                                        status: "all",
+                                    })
+                                }
+                            />
+                        </div>
                     ) : (
-                        <div className="grid min-h-[32rem] min-w-0 overflow-x-hidden lg:grid-cols-[288px_minmax(0,1fr)]">
-                            <aside className="min-w-0 border-b border-border bg-muted/20 p-4 lg:border-r lg:border-b-0 lg:p-5">
-                                <div className="mb-4 flex items-center justify-between gap-3">
+                        <div className="grid min-h-0 min-w-0 flex-1 overflow-hidden grid-rows-[minmax(0,40%)_minmax(0,1fr)] lg:grid-cols-[288px_minmax(0,1fr)] lg:grid-rows-1">
+                            <aside className="flex min-h-0 min-w-0 flex-col overflow-hidden border-b border-border bg-muted/20 lg:border-r lg:border-b-0">
+                                <div className="flex shrink-0 items-center justify-between gap-3 px-4 pt-4 pb-4 lg:px-5 lg:pt-5">
                                     <h2 className="text-sm font-medium">
                                         组织目录
                                     </h2>
@@ -305,25 +316,27 @@ export function OrganizationPage() {
                                     onSelect={(unitId) => pushUrl({ unitId })}
                                 />
                             </aside>
-                            {selected && view ? (
-                                <OrganizationUnitPanel
-                                    node={selected}
-                                    view={view}
-                                    canManage={canManage}
-                                    onChange={(operation, extras) =>
-                                        openChange(
-                                            operation as OrganizationChangeDraft["operation"],
-                                            extras,
-                                        )
-                                    }
-                                />
-                            ) : null}
+                            <div className="min-h-0 min-w-0 overflow-x-hidden overflow-y-auto overscroll-contain">
+                                {selected && view ? (
+                                    <OrganizationUnitPanel
+                                        node={selected}
+                                        view={view}
+                                        canManage={canManage}
+                                        onChange={(operation, extras) =>
+                                            openChange(
+                                                operation as OrganizationChangeDraft["operation"],
+                                                extras,
+                                            )
+                                        }
+                                    />
+                                ) : null}
+                            </div>
                         </div>
                     )
                 }
             />
 
-            <div className="space-y-1 text-xs leading-5 text-muted-foreground">
+            <div className="shrink-0 space-y-1 text-xs leading-5 text-muted-foreground">
                 <p>{ORGANIZATION_BOUNDARY_NOTICE}</p>
                 {view ? <p>当前范围：{view.scopeSummary}</p> : null}
             </div>

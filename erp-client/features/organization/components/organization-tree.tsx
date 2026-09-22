@@ -85,7 +85,7 @@ export function OrganizationTree({
     return (
         <nav
             aria-label="组织树"
-            className="max-h-64 min-w-0 overflow-x-hidden overflow-y-auto lg:max-h-[36rem]"
+            className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pb-4 lg:px-5 lg:pb-5"
         >
             <TreeItems
                 nodes={nodes}

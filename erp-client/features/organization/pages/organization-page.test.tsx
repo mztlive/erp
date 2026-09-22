@@ -2,6 +2,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { cleanup, render, screen } from "@testing-library/react"
 import { afterEach, expect, it, vi } from "vitest"
 
+import type { OrganizationStateView } from "@/features/organization/types"
+
 const navigation = vi.hoisted(() => ({
     params: new URLSearchParams(),
     router: { replace: vi.fn(), push: vi.fn() },
@@ -15,23 +17,7 @@ const queries = vi.hoisted(() => ({
         isPending: false,
         isError: false,
         isFetching: false,
-        data: undefined as
-            | {
-                  version: number
-                  organizationVersion: number
-                  policyVersion: number
-                  scopeVersion: string
-                  asOf: string
-                  emptyReason: "no_scope" | null
-                  scopeSummary: string
-                  ownershipBasis: string
-                  people: never[]
-                  roles: never[]
-                  units: never[]
-                  memberships: never[]
-                  management: never[]
-              }
-            | undefined,
+        data: undefined as OrganizationStateView | undefined,
         error: undefined as { status?: number; message?: string } | undefined,
         refetch: vi.fn(),
     },
@@ -136,4 +122,50 @@ it("后端 empty_reason=no_scope 呈现无数据范围", () => {
     renderPage()
     expect(screen.getByText("无数据范围")).toBeTruthy()
     expect(screen.queryByText("范围内无记录")).toBeNull()
+})
+
+it("组织树和资料在视口内各自滚动，不把整页撑高", () => {
+    queries.state = {
+        ...queries.state,
+        data: {
+            version: 1,
+            organizationVersion: 1,
+            policyVersion: 1,
+            scopeVersion: "v",
+            asOf: "2026-09-15T00:00:00Z",
+            emptyReason: null,
+            scopeSummary: "组织配置",
+            ownershipBasis: "org_unit_configuration",
+            people: [],
+            roles: [],
+            units: [
+                {
+                    id: "sales",
+                    name: "销售部",
+                    parent_id: null,
+                    kind: "department",
+                    enabled: true,
+                    version: 1,
+                    reason: "初始化",
+                },
+            ],
+            memberships: [],
+            management: [],
+        },
+    }
+    renderPage()
+    const scaffold = document.querySelector("[data-slot=page-scaffold]")
+    expect(scaffold?.className).toContain("min-h-0")
+    expect(scaffold?.className).toContain("overflow-hidden")
+    const tree = screen.getByRole("navigation", { name: "组织树" })
+    expect(tree.className).toContain("overflow-y-auto")
+    expect(tree.className).not.toMatch(/max-h-/)
+    const split = tree.closest("aside")?.parentElement
+    expect(split?.className).toContain("overflow-hidden")
+    expect(split?.className).toContain("min-h-0")
+    const detail = screen.getByRole("region", {
+        name: "组织资料",
+    }).parentElement
+    expect(detail?.className).toContain("overflow-y-auto")
+    expect(detail?.className).toContain("min-h-0")
 })

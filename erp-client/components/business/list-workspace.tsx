@@ -140,6 +140,7 @@ export function ListWorkSurface({
     views,
     toolbar,
     table,
+    className,
     tableClassName,
     toolbarClassName,
     selectionBar,
@@ -149,6 +150,7 @@ export function ListWorkSurface({
     views?: React.ReactNode
     toolbar?: React.ReactNode
     table: React.ReactNode
+    className?: string
     tableClassName?: string
     toolbarClassName?: string
     selectionBar?: React.ReactNode
@@ -157,7 +159,7 @@ export function ListWorkSurface({
     return (
         <TableToolbarScope>
             <section
-                className={styles.workSurface}
+                className={cn(styles.workSurface, className)}
                 data-business-component="table-frame"
                 aria-label={ariaLabel}
             >
