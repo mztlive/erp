@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { MoreHorizontalIcon } from "lucide-react"
+import { MoreHorizontalIcon, type LucideIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -13,12 +13,18 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
+import { tableActionText } from "@/lib/ui-text"
+
+const actionButtonClassName =
+    "gap-1.5 rounded-md px-2 text-[13px] leading-5 text-foreground/85 hover:text-foreground [&_svg]:size-3.5 [&_svg]:text-muted-foreground hover:[&_svg]:text-foreground focus-visible:[&_svg]:text-foreground"
 
 /** 列表操作列的一个动作。页面声明权限、文案和回调，不自己拼按钮尺寸和菜单。 */
 export type TableRowAction = {
     /** 落在最终按钮或菜单项上的原生 id。 */
     id: string
     label: React.ReactNode
+    /** 由业务动作指定语义图标；共享组件统一图标尺寸与颜色。 */
+    icon?: LucideIcon
     onClick?: (event: React.MouseEvent) => void
     /** 有 href 且未禁用时，控件渲染为链接。 */
     href?: string
@@ -33,8 +39,24 @@ export type TableRowAction = {
     emphasis?: "outline"
     /** 只挂到非链接的露出按钮，供关闭浮层后还焦。 */
     buttonRef?: React.Ref<HTMLButtonElement>
-    /** 进行中状态的指示，不要用来给普通文字按钮加装饰图标。 */
+    /** 进行中状态指示，存在时替换普通动作图标。 */
     leading?: React.ReactNode
+}
+
+function ActionLabel({ action }: { action: TableRowAction }) {
+    const Icon = action.icon
+    return (
+        <>
+            {action.leading ? (
+                <span aria-hidden="true" className="inline-flex shrink-0">
+                    {action.leading}
+                </span>
+            ) : Icon ? (
+                <Icon aria-hidden="true" className="size-3.5" />
+            ) : null}
+            {action.label}
+        </>
+    )
 }
 
 function isMenuBound(action: TableRowAction, soleVisible: boolean) {
@@ -56,8 +78,9 @@ function ActionControl({
             <Button
                 id={action.id}
                 type="button"
-                size="xs"
+                size="sm"
                 variant={variant}
+                className={actionButtonClassName}
                 title={action.disabledReason}
                 render={<Link href={action.href} />}
                 onClick={(event) => {
@@ -65,15 +88,15 @@ function ActionControl({
                     action.onClick?.(event)
                 }}
             >
-                {action.leading}
-                {action.label}
+                <ActionLabel action={action} />
             </Button>
         ) : (
             <Button
                 id={action.id}
                 type="button"
-                size="xs"
+                size="sm"
                 variant={variant}
+                className={actionButtonClassName}
                 ref={action.buttonRef}
                 disabled={action.disabled}
                 title={action.disabledReason}
@@ -82,8 +105,7 @@ function ActionControl({
                     action.onClick?.(event)
                 }}
             >
-                {action.leading}
-                {action.label}
+                <ActionLabel action={action} />
             </Button>
         )
     if (!action.disabled || !action.disabledReason) return button
@@ -101,6 +123,7 @@ function MenuAction({ action }: { action: TableRowAction }) {
             variant={action.destructive ? "destructive" : "default"}
             disabled={action.disabled}
             title={action.disabledReason}
+            className="min-h-8 gap-2 rounded-md text-[13px] [&_svg]:text-muted-foreground data-[variant=destructive]:[&_svg]:text-destructive"
             render={
                 action.href && !action.disabled ? (
                     <Link href={action.href} />
@@ -111,7 +134,7 @@ function MenuAction({ action }: { action: TableRowAction }) {
                 action.onClick?.(event)
             }}
         >
-            {action.label}
+            <ActionLabel action={action} />
         </DropdownMenuItem>
     )
     if (!action.disabled || !action.disabledReason) return item
@@ -123,7 +146,7 @@ function MenuAction({ action }: { action: TableRowAction }) {
 }
 
 /**
- * 列表行操作：轻量文字按钮，默认露出 1 个、最多 2 个，其余进横向三点菜单。
+ * 列表行操作：图标文字按钮，最多露出 2 个，其余进带文字的更多菜单。
  * 破坏性动作在还有其它动作时放到菜单底部，并用分隔线隔开。
  */
 export function TableRowActions({
@@ -159,7 +182,7 @@ export function TableRowActions({
         <div
             data-slot="table-row-actions"
             className={cn(
-                "flex flex-nowrap items-center justify-end gap-1",
+                "flex flex-nowrap items-center justify-end gap-2",
                 className,
             )}
         >
@@ -177,16 +200,24 @@ export function TableRowActions({
                         render={
                             <Button
                                 type="button"
-                                size="icon-xs"
+                                size="sm"
                                 variant="ghost"
+                                className={actionButtonClassName}
                                 aria-label={moreLabel}
                                 onClick={(event) => event.stopPropagation()}
                             />
                         }
                     >
-                        <MoreHorizontalIcon aria-hidden="true" />
+                        <MoreHorizontalIcon
+                            aria-hidden="true"
+                            className="size-3.5"
+                        />
+                        {tableActionText.more}
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
+                    <DropdownMenuContent
+                        align="end"
+                        className="min-w-44 rounded-lg"
+                    >
                         {menuRegular.map((action) => (
                             <MenuAction key={action.id} action={action} />
                         ))}

@@ -1,5 +1,7 @@
 "use client"
 
+import { PencilIcon, Trash2Icon } from "lucide-react"
+
 import * as React from "react"
 import type { ColumnDef } from "@tanstack/react-table"
 
@@ -108,8 +110,10 @@ function useRoleColumns({
             },
             {
                 id: "actions",
+                meta: { align: "end" },
+                size: 168,
+                minSize: 168,
                 header: () => <span className="block text-right">操作</span>,
-                size: 110,
                 cell: ({ row }) => {
                     const role = row.original
                     const segment = toAutomationIdSegment(role.id)
@@ -121,6 +125,7 @@ function useRoleColumns({
                                 {
                                     id: `operations-access-roles-row-${segment}-edit`,
                                     label: "编辑",
+                                    icon: PencilIcon,
                                     buttonRef: (element) => {
                                         rowFocusRef.current.set(
                                             role.id,
@@ -135,6 +140,7 @@ function useRoleColumns({
                                 {
                                     id: `operations-access-roles-row-${segment}-delete`,
                                     label: "删除角色",
+                                    icon: Trash2Icon,
                                     destructive: true,
                                     disabled: role.system === true,
                                     disabledReason: role.system

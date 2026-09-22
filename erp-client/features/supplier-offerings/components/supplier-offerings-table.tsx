@@ -132,7 +132,9 @@ export function SupplierOfferingsTable({
                     <TableHead>起订量 / 区域</TableHead>
                     <TableHead>当前可供</TableHead>
                     <TableHead>关系状态</TableHead>
-                    <TableHead>{taskMode ? "任务关联" : "操作"}</TableHead>
+                    <TableHead className="text-right">
+                        {taskMode ? "任务关联" : "操作"}
+                    </TableHead>
                 </TableRow>
             </TableHeader>
             <TableBody>
@@ -176,7 +178,8 @@ export function SupplierOfferingsTable({
                             <span className="text-sm">
                                 {ownerOptions.find(
                                     (option) =>
-                                        option.value === item.maintainer_user_id,
+                                        option.value ===
+                                        item.maintainer_user_id,
                                 )?.label ??
                                     item.maintainer_user_id ??
                                     "—"}

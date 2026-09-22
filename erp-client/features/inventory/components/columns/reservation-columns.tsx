@@ -1,5 +1,7 @@
 "use client"
 
+import { ArrowUpRightIcon } from "lucide-react"
+
 import type { ColumnDef } from "@tanstack/react-table"
 
 import { BusinessStatusBadge, TableRowActions } from "@/components/business"
@@ -87,6 +89,8 @@ export function buildReservationColumns(): ColumnDef<StockReservationRow>[] {
         },
         {
             id: "actions",
+            size: 152,
+            minSize: 152,
             header: "操作",
             meta: { label: "操作", width: "default", align: "end" },
             cell: ({ row }) => {
@@ -105,6 +109,7 @@ export function buildReservationColumns(): ColumnDef<StockReservationRow>[] {
                             {
                                 id: `inventory-ledger-reservation-row-${segment}-fulfillment`,
                                 label: "履约上下文",
+                                icon: ArrowUpRightIcon,
                                 href,
                             },
                         ]}

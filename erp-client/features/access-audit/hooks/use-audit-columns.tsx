@@ -1,5 +1,7 @@
 "use client"
 
+import { EyeIcon } from "lucide-react"
+
 import * as React from "react"
 import type { ColumnDef } from "@tanstack/react-table"
 
@@ -92,7 +94,9 @@ function useAuditColumns({ rowFocusRef, openEvent }: UseAuditColumnsInput) {
             },
             {
                 id: "actions",
-                size: 85,
+                meta: { align: "end" },
+                size: 104,
+                minSize: 104,
                 header: () => <span className="block text-right">查看</span>,
                 cell: ({ row }) => {
                     const segment = toAutomationIdSegment(
@@ -106,6 +110,7 @@ function useAuditColumns({ rowFocusRef, openEvent }: UseAuditColumnsInput) {
                                 {
                                     id: `operations-audit-events-row-${segment}-detail`,
                                     label: "详情",
+                                    icon: EyeIcon,
                                     buttonRef: (element) => {
                                         rowFocusRef.current.set(
                                             row.original.auditEventId,

@@ -1,5 +1,7 @@
 "use client"
 
+import { EyeIcon } from "lucide-react"
+
 import * as React from "react"
 import type { ColumnDef } from "@tanstack/react-table"
 
@@ -314,8 +316,10 @@ export function BackgroundJobsWorkspace() {
             },
             {
                 id: "actions",
+                size: 104,
+                minSize: 104,
                 header: "操作",
-                meta: { label: "操作", role: "preview" },
+                meta: { label: "操作", align: "end" },
                 enableSorting: false,
                 cell: ({ row }) => (
                     <TableRowActions
@@ -325,6 +329,7 @@ export function BackgroundJobsWorkspace() {
                             {
                                 id: `${ID_PREFIX}-row-${row.original.id}-preview`,
                                 label: "查看",
+                                icon: EyeIcon,
                                 onClick: () => {
                                     lastFocusedRowId.current = row.original.id
                                     openPreview(row.original)

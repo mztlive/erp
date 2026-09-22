@@ -1,4 +1,6 @@
 "use client"
+
+import { BanIcon, CircleCheckIcon, PencilIcon } from "lucide-react"
 import { useState } from "react"
 import type { ColumnDef } from "@tanstack/react-table"
 import {
@@ -72,6 +74,9 @@ export const CompaniesPage = () => {
         },
         {
             id: "actions",
+            meta: { align: "end" },
+            size: 168,
+            minSize: 168,
             header: "操作",
             cell: ({ row }) => {
                 const segment = toAutomationIdSegment(row.original.id)
@@ -83,11 +88,16 @@ export const CompaniesPage = () => {
                             {
                                 id: `company-edit-${segment}`,
                                 label: "编辑",
+                                icon: PencilIcon,
                                 disabled: !canUpdate,
                                 onClick: () => setEditing(row.original),
                             },
                             {
                                 id: `company-status-${segment}`,
+                                icon:
+                                    row.original.status === "active"
+                                        ? BanIcon
+                                        : CircleCheckIcon,
                                 label:
                                     row.original.status === "active"
                                         ? "停用"

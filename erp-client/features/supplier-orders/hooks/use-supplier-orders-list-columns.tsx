@@ -3,7 +3,12 @@
 import * as React from "react"
 import Link from "next/link"
 import type { ColumnDef } from "@tanstack/react-table"
-import { Loader2Icon } from "lucide-react"
+import {
+    ArrowUpRightIcon,
+    EyeIcon,
+    Loader2Icon,
+    SearchIcon,
+} from "lucide-react"
 
 import { StatusTrackSummary, TableRowActions } from "@/components/business"
 import { Button } from "@/components/ui/button"
@@ -189,8 +194,10 @@ export function useSupplierOrdersListColumns({
             },
             {
                 id: "actions",
+                size: 284,
+                minSize: 284,
                 header: "操作",
-                meta: { label: "操作", width: "default" },
+                meta: { label: "操作", width: "default", align: "end" },
                 enableSorting: false,
                 cell: ({ row }) => {
                     const r = row.original
@@ -203,7 +210,7 @@ export function useSupplierOrdersListColumns({
                     const resultUnknown =
                         r.fulfillmentStatus === "RESULT_UNKNOWN"
                     return (
-                        <div className="flex flex-wrap items-center gap-1">
+                        <div className="flex flex-col items-end gap-1">
                             <TableRowActions
                                 moreId={`supplier-orders-list-row-${segment}-more`}
                                 moreLabel={`${r.orderNo} 更多操作`}
@@ -211,6 +218,7 @@ export function useSupplierOrdersListColumns({
                                     {
                                         id: `supplier-orders-list-row-${segment}-preview-action`,
                                         label: "预览",
+                                        icon: EyeIcon,
                                         onClick: () => onPreview(r.orderId),
                                         ...(resultUnknown
                                             ? { placement: "menu" as const }
@@ -219,12 +227,14 @@ export function useSupplierOrdersListColumns({
                                     {
                                         id: `supplier-orders-list-row-${segment}-open`,
                                         label: "详情",
+                                        icon: ArrowUpRightIcon,
                                         href: `/supplier-api/orders/${r.orderId}`,
                                     },
                                     ...(resultUnknown
                                         ? [
                                               {
                                                   id: `supplier-orders-list-row-${segment}-query`,
+                                                  icon: SearchIcon,
                                                   label: queryPending
                                                       ? "查询中…"
                                                       : "查询原结果",

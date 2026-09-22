@@ -1,5 +1,7 @@
 "use client"
 
+import { ShieldOffIcon, UserRoundCogIcon } from "lucide-react"
+
 import * as React from "react"
 import type { ColumnDef } from "@tanstack/react-table"
 
@@ -109,6 +111,9 @@ function useUserColumns({
             },
             {
                 id: "actions",
+                meta: { align: "end" },
+                size: 196,
+                minSize: 196,
                 header: "操作",
                 cell: ({ row }) => {
                     const user = row.original
@@ -122,6 +127,7 @@ function useUserColumns({
                                 {
                                     id: `operations-access-users-row-${segment}-adjust-role`,
                                     label: "调整角色",
+                                    icon: UserRoundCogIcon,
                                     emphasis: "outline",
                                     buttonRef: (element) => {
                                         rowFocusRef.current.set(
@@ -142,6 +148,7 @@ function useUserColumns({
                                           {
                                               id: `operations-access-users-row-${segment}-emergency-revoke`,
                                               label: "紧急撤权",
+                                              icon: ShieldOffIcon,
                                               destructive: true,
                                               onClick: () =>
                                                   void startChange({

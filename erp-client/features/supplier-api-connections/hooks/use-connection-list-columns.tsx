@@ -1,5 +1,7 @@
 "use client"
 
+import { ArrowUpRightIcon } from "lucide-react"
+
 import * as React from "react"
 import type { ColumnDef } from "@tanstack/react-table"
 
@@ -159,8 +161,10 @@ export function useConnectionListColumns(
             },
             {
                 id: "actions",
+                size: 104,
+                minSize: 104,
                 header: "操作",
-                meta: { label: "操作", width: "status" },
+                meta: { label: "操作", width: "status", align: "end" },
                 enableSorting: false,
                 cell: ({ row }) => {
                     const segment = toAutomationIdSegment(
@@ -174,6 +178,7 @@ export function useConnectionListColumns(
                                 {
                                     id: `supplier-api-connections-list-row-${segment}-open`,
                                     label: "打开",
+                                    icon: ArrowUpRightIcon,
                                     onClick: () =>
                                         onOpen(row.original.connectionId),
                                 },

@@ -1,5 +1,7 @@
 "use client"
 
+import { ArrowUpRightIcon, EyeIcon } from "lucide-react"
+
 import * as React from "react"
 import type { ColumnDef } from "@tanstack/react-table"
 
@@ -158,8 +160,10 @@ export function useSettlementListColumns(
             },
             {
                 id: "actions",
+                size: 168,
+                minSize: 168,
                 header: "操作",
-                meta: { label: "操作", width: "status" },
+                meta: { label: "操作", width: "status", align: "end" },
                 enableSorting: false,
                 cell: ({ row }) => {
                     const segment = toAutomationIdSegment(
@@ -173,6 +177,7 @@ export function useSettlementListColumns(
                                 {
                                     id: `supplier-settlements-list-row-${segment}-preview`,
                                     label: "预览",
+                                    icon: EyeIcon,
                                     onClick: () =>
                                         patchUrl({
                                             preview: row.original.statementId,
@@ -181,6 +186,7 @@ export function useSettlementListColumns(
                                 {
                                     id: `supplier-settlements-list-row-${segment}-open`,
                                     label: "打开",
+                                    icon: ArrowUpRightIcon,
                                     onClick: () =>
                                         onOpen(row.original.statementId),
                                 },

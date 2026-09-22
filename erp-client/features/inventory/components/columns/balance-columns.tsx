@@ -2,7 +2,7 @@
 
 import type { ColumnDef } from "@tanstack/react-table"
 
-import { LoaderCircleIcon } from "lucide-react"
+import { EyeIcon, LoaderCircleIcon, SlidersHorizontalIcon } from "lucide-react"
 
 import {
     BusinessStatusBadge,
@@ -130,6 +130,8 @@ export function buildBalanceColumns({
         },
         {
             id: "actions",
+            size: 208,
+            minSize: 208,
             header: "操作",
             meta: { label: "操作", width: "default", align: "end" },
             cell: ({ row }) => {
@@ -145,6 +147,7 @@ export function buildBalanceColumns({
                     {
                         id: `inventory-ledger-balance-row-${segment}-view`,
                         label: "查看",
+                        icon: EyeIcon,
                         buttonRef: (el) => {
                             rowFocusRef.current.set(row.original.balanceId, el)
                         },
@@ -155,6 +158,7 @@ export function buildBalanceColumns({
                     actions.push({
                         id: `inventory-ledger-balance-row-${segment}-adjust`,
                         label: isCreating ? "创建中…" : "库存调整",
+                        icon: SlidersHorizontalIcon,
                         emphasis: "outline",
                         disabled: isCreating,
                         onClick: () => {
@@ -169,7 +173,7 @@ export function buildBalanceColumns({
                                       <LoaderCircleIcon
                                           data-icon="inline-start"
                                           aria-hidden="true"
-                                          className="animate-spin"
+                                          className="size-3.5 animate-spin"
                                       />
                                   ),
                               }

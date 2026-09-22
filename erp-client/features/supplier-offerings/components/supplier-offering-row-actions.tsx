@@ -3,20 +3,12 @@
 import {
     BanIcon,
     FilePenLineIcon,
-    MoreHorizontalIcon,
     PackageCheckIcon,
     PauseIcon,
     PlayIcon,
 } from "lucide-react"
 
-import { Button } from "@/components/ui/button"
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+import { TableRowActions } from "@/components/business/table-row-actions"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
     statusIntentsFor,
@@ -25,18 +17,14 @@ import {
 } from "@/features/supplier-offerings/lib/offering-status"
 import type { SupplierOfferingView } from "@/features/supplier-offerings/types"
 
-function StatusIntentIcon({
-    nextStatus,
-}: {
-    nextStatus: OfferingStatusIntent["nextStatus"]
-}) {
+function statusIntentIcon(nextStatus: OfferingStatusIntent["nextStatus"]) {
     if (nextStatus === "PAUSED") {
-        return <PauseIcon aria-hidden="true" />
+        return PauseIcon
     }
     if (nextStatus === "STOPPED") {
-        return <BanIcon aria-hidden="true" />
+        return BanIcon
     }
-    return <PlayIcon aria-hidden="true" />
+    return PlayIcon
 }
 
 export function SupplierOfferingRowActions({
@@ -60,50 +48,33 @@ export function SupplierOfferingRowActions({
         offering.sku_no ||
         offering.supplier_sku_code
     return (
-        <DropdownMenu>
-            <DropdownMenuTrigger
-                id={`supplier-offerings-table-row-${rowId}-actions`}
-                render={
-                    <Button
-                        type="button"
-                        size="icon-xs"
-                        variant="ghost"
-                        aria-label={`${label} 操作`}
-                    />
-                }
-            >
-                <MoreHorizontalIcon aria-hidden="true" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-44">
-                <DropdownMenuItem
-                    id={`supplier-offerings-table-row-${rowId}-update-availability`}
-                    onClick={() => onUpdateAvailability(offering)}
-                >
-                    <PackageCheckIcon aria-hidden="true" />
-                    更新可供
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                    id={`supplier-offerings-table-row-${rowId}-revise`}
-                    onClick={() => onReviseOffering(offering)}
-                >
-                    <FilePenLineIcon aria-hidden="true" />
-                    修订条款
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                {statusIntentsFor(offering.status).map((intent) => (
-                    <DropdownMenuItem
-                        key={intent.actionId}
-                        id={`supplier-offerings-table-row-${rowId}-${intent.actionId}`}
-                        variant={intent.destructive ? "destructive" : "default"}
-                        disabled={blocker != null}
-                        title={blocker ?? undefined}
-                        onClick={() => onChangeStatus(offering, intent)}
-                    >
-                        <StatusIntentIcon nextStatus={intent.nextStatus} />
-                        {intent.label}
-                    </DropdownMenuItem>
-                ))}
-            </DropdownMenuContent>
-        </DropdownMenu>
+        <TableRowActions
+            moreId={`supplier-offerings-table-row-${rowId}-actions`}
+            moreLabel={`${label} 操作`}
+            maxInline={0}
+            actions={[
+                {
+                    id: `supplier-offerings-table-row-${rowId}-update-availability`,
+                    label: "更新可供",
+                    icon: PackageCheckIcon,
+                    onClick: () => onUpdateAvailability(offering),
+                },
+                {
+                    id: `supplier-offerings-table-row-${rowId}-revise`,
+                    label: "修订条款",
+                    icon: FilePenLineIcon,
+                    onClick: () => onReviseOffering(offering),
+                },
+                ...statusIntentsFor(offering.status).map((intent) => ({
+                    id: `supplier-offerings-table-row-${rowId}-${intent.actionId}`,
+                    label: intent.label,
+                    icon: statusIntentIcon(intent.nextStatus),
+                    destructive: intent.destructive,
+                    disabled: blocker != null,
+                    disabledReason: blocker ?? undefined,
+                    onClick: () => onChangeStatus(offering, intent),
+                })),
+            ]}
+        />
     )
 }

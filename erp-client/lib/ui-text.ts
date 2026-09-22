@@ -9,6 +9,10 @@
 
 import { WORKSPACE_ROUTES, type WorkspaceId } from "@/lib/workspace-registry"
 
+export const tableActionText = {
+    more: "更多",
+} as const
+
 // ─── 当前责任 ───────────────────────────────────────────────────────────────
 
 export const responsibilityText = {

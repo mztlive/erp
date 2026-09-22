@@ -3,7 +3,14 @@
 import * as React from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import type { ColumnDef } from "@tanstack/react-table"
-import { PlusIcon, ShieldCheckIcon } from "lucide-react"
+import {
+    ArrowRightLeftIcon,
+    NetworkIcon,
+    PencilIcon,
+    PlusIcon,
+    ShieldCheckIcon,
+    Trash2Icon,
+} from "lucide-react"
 
 import {
     BusinessEmptyState,
@@ -193,8 +200,9 @@ export function AccountsPage() {
             },
             {
                 id: "actions",
-                size: 200,
-                minSize: 176,
+                meta: { align: "end" },
+                size: 264,
+                minSize: 264,
                 header: () => <span className="block text-right">操作</span>,
                 cell: ({ row }) => {
                     const account = row.original
@@ -215,6 +223,7 @@ export function AccountsPage() {
                                 {
                                     id: `governance-admin-accounts-row-${segment}-edit`,
                                     label: "编辑",
+                                    icon: PencilIcon,
                                     onClick: () =>
                                         setAccountForm({
                                             mode: "edit",
@@ -229,6 +238,7 @@ export function AccountsPage() {
                                 {
                                     id: `governance-admin-accounts-row-${segment}-permissions`,
                                     label: "查看权限",
+                                    icon: ShieldCheckIcon,
                                     onClick: () => {
                                         permissionReturnId.current = `governance-admin-accounts-row-${segment}-permissions`
                                         setPermissionAccount(account)
@@ -240,6 +250,7 @@ export function AccountsPage() {
                                           {
                                               id: `governance-admin-accounts-row-${segment}-department`,
                                               label: "调整部门",
+                                              icon: ArrowRightLeftIcon,
                                               placement: "menu" as const,
                                               onClick: () =>
                                                   setDepartmentDraft({
@@ -255,6 +266,7 @@ export function AccountsPage() {
                                           {
                                               id: `governance-admin-accounts-row-${segment}-management`,
                                               label: "设置管理部门",
+                                              icon: NetworkIcon,
                                               placement: "menu" as const,
                                               onClick: () =>
                                                   setDepartmentDraft({
@@ -275,6 +287,7 @@ export function AccountsPage() {
                                 {
                                     id: `governance-admin-accounts-row-${segment}-delete`,
                                     label: "删除",
+                                    icon: Trash2Icon,
                                     destructive: true,
                                     disabled: protectedAccount,
                                     disabledReason: protectedAccount

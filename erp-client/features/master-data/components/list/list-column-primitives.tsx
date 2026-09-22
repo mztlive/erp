@@ -1,5 +1,12 @@
 "use client"
 
+import {
+    BanIcon,
+    EyeIcon,
+    FilePenLineIcon,
+    UserRoundCogIcon,
+} from "lucide-react"
+
 import * as React from "react"
 import type { ColumnDef } from "@tanstack/react-table"
 
@@ -174,8 +181,10 @@ export function disableOnlyActionsColumn({
 }: ActionColumnInput): ColumnDef<MasterDataListItem> {
     return {
         id: "actions",
+        size: 104,
+        minSize: 104,
         header: masterDataCopy.colActions,
-        meta: { label: masterDataCopy.colActions },
+        meta: { label: masterDataCopy.colActions, align: "end" },
         cell: ({ row }) => {
             const item = row.original
             const segment = toAutomationIdSegment(item.stableId)
@@ -191,6 +200,7 @@ export function disableOnlyActionsColumn({
                         {
                             id: `master-data-list-row-${segment}-disable`,
                             label: masterDataCopy.actionDisable,
+                            icon: BanIcon,
                             disabled: !canDisable,
                             disabledReason: disableBlocker?.message,
                             destructive: true,
@@ -212,8 +222,10 @@ export function updateOnlyActionsColumn({
 }: ActionColumnInput): ColumnDef<MasterDataListItem> {
     return {
         id: "actions",
+        size: 104,
+        minSize: 104,
         header: masterDataCopy.colActions,
-        meta: { label: masterDataCopy.colActions },
+        meta: { label: masterDataCopy.colActions, align: "end" },
         cell: ({ row }) => {
             const item = row.original
             const segment = toAutomationIdSegment(item.stableId)
@@ -229,6 +241,7 @@ export function updateOnlyActionsColumn({
                         {
                             id: `master-data-list-row-${segment}-revise`,
                             label: masterDataCopy.actionUpdate,
+                            icon: FilePenLineIcon,
                             disabled: !canRevise,
                             disabledReason: reviseBlocker?.message,
                             onClick: () => {
@@ -252,8 +265,10 @@ export function fullActionsColumn({
 }: ActionColumnInput): ColumnDef<MasterDataListItem> {
     return {
         id: "actions",
+        size: 240,
+        minSize: 240,
         header: masterDataCopy.colActions,
-        meta: { label: masterDataCopy.colActions },
+        meta: { label: masterDataCopy.colActions, align: "end" },
         cell: ({ row }) => {
             const item = row.original
             const segment = toAutomationIdSegment(item.stableId)
@@ -273,6 +288,7 @@ export function fullActionsColumn({
                         {
                             id: `master-data-list-row-${segment}-view`,
                             label: masterDataCopy.actionView,
+                            icon: EyeIcon,
                             onClick: () => {
                                 markFocused(lastFocusedRowId, item)
                                 if (onOpen) onOpen(item)
@@ -282,6 +298,7 @@ export function fullActionsColumn({
                         {
                             id: `master-data-list-row-${segment}-revise`,
                             label: masterDataCopy.actionUpdate,
+                            icon: FilePenLineIcon,
                             disabled: !canRevise,
                             disabledReason: reviseBlocker?.message,
                             onClick: () => {
@@ -293,6 +310,7 @@ export function fullActionsColumn({
                         {
                             id: `master-data-list-row-${segment}-disable`,
                             label: masterDataCopy.actionDisable,
+                            icon: BanIcon,
                             disabled: !canDisable,
                             disabledReason: disableBlocker?.message,
                             destructive: true,
@@ -319,8 +337,10 @@ export function warehouseActionsColumn({
 }): ColumnDef<MasterDataListItem> {
     return {
         id: "actions",
+        size: 232,
+        minSize: 232,
         header: masterDataCopy.colActions,
-        meta: { label: masterDataCopy.colActions },
+        meta: { label: masterDataCopy.colActions, align: "end" },
         cell: ({ row }) => {
             const item = row.original
             const segment = toAutomationIdSegment(item.stableId)
@@ -338,6 +358,7 @@ export function warehouseActionsColumn({
                         {
                             id: `master-data-list-row-${segment}-view`,
                             label: masterDataCopy.actionView,
+                            icon: EyeIcon,
                             onClick: () => {
                                 markFocused(lastFocusedRowId, item)
                                 onPreview?.(item.stableId)
@@ -346,6 +367,7 @@ export function warehouseActionsColumn({
                         {
                             id: `master-data-warehouse-row-${segment}-handlers`,
                             label: "配置收发责任",
+                            icon: UserRoundCogIcon,
                             disabled: !allowed,
                             disabledReason: message,
                             onClick: () => {
