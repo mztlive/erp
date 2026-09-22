@@ -4,8 +4,7 @@ import * as React from "react"
 import type { ColumnDef } from "@tanstack/react-table"
 
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { BusinessStatusBadge } from "@/components/business"
-import { Button } from "@/components/ui/button"
+import { BusinessStatusBadge, TableRowActions } from "@/components/business"
 import type { AuditEventRow } from "@/features/access-audit/types"
 import { formatDateTime } from "@/lib/datetime"
 
@@ -95,25 +94,31 @@ function useAuditColumns({ rowFocusRef, openEvent }: UseAuditColumnsInput) {
                 id: "actions",
                 size: 85,
                 header: () => <span className="block text-right">查看</span>,
-                cell: ({ row }) => (
-                    <div className="flex justify-end">
-                        <Button
-                            id={`operations-audit-events-row-${toAutomationIdSegment(row.original.auditEventId)}-detail`}
-                            type="button"
-                            size="xs"
-                            variant="ghost"
-                            ref={(el) => {
-                                rowFocusRef.current.set(
-                                    row.original.auditEventId,
-                                    el,
-                                )
-                            }}
-                            onClick={() => openEvent(row.original.auditEventId)}
-                        >
-                            详情
-                        </Button>
-                    </div>
-                ),
+                cell: ({ row }) => {
+                    const segment = toAutomationIdSegment(
+                        row.original.auditEventId,
+                    )
+                    return (
+                        <TableRowActions
+                            moreId={`operations-audit-events-row-${segment}-more`}
+                            moreLabel={`${row.original.objectLabel} 更多操作`}
+                            actions={[
+                                {
+                                    id: `operations-audit-events-row-${segment}-detail`,
+                                    label: "详情",
+                                    buttonRef: (element) => {
+                                        rowFocusRef.current.set(
+                                            row.original.auditEventId,
+                                            element,
+                                        )
+                                    },
+                                    onClick: () =>
+                                        openEvent(row.original.auditEventId),
+                                },
+                            ]}
+                        />
+                    )
+                },
             },
         ],
         [openEvent, rowFocusRef],

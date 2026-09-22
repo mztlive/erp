@@ -4,9 +4,12 @@ import type { ColumnDef } from "@tanstack/react-table"
 
 import { LoaderCircleIcon } from "lucide-react"
 
-import { BusinessStatusBadge } from "@/components/business"
+import {
+    BusinessStatusBadge,
+    TableRowActions,
+    type TableRowAction,
+} from "@/components/business"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { formatQty } from "@/features/inventory/components/presentation"
 import type { StockBalanceRow } from "@/features/inventory/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
@@ -130,51 +133,59 @@ export function buildBalanceColumns({
             header: "操作",
             meta: { label: "操作", width: "default", align: "end" },
             cell: ({ row }) => {
+                const segment = toAutomationIdSegment(row.original.balanceId)
                 const hasCreateAction =
                     row.original.allowedActions.includes("CREATE_ADJUSTMENT")
-                const blocker = row.original.actionBlockers.find(
-                    (b) => b.action === "CREATE_ADJUSTMENT",
-                )
+                const blockerMessage = row.original.actionBlockers.find(
+                    (blocker) => blocker.action === "CREATE_ADJUSTMENT",
+                )?.message
+                const shownProduct =
+                    row.original.skuName.trim() || row.original.skuCode.trim()
+                const actions: TableRowAction[] = [
+                    {
+                        id: `inventory-ledger-balance-row-${segment}-view`,
+                        label: "查看",
+                        buttonRef: (el) => {
+                            rowFocusRef.current.set(row.original.balanceId, el)
+                        },
+                        onClick: () => openDetail(row.original.balanceId),
+                    },
+                ]
+                if (hasCreateAction) {
+                    actions.push({
+                        id: `inventory-ledger-balance-row-${segment}-adjust`,
+                        label: isCreating ? "创建中…" : "库存调整",
+                        emphasis: "outline",
+                        disabled: isCreating,
+                        onClick: () => {
+                            void startAdjustment(row.original)
+                        },
+                        ...(blockerMessage
+                            ? { disabledReason: blockerMessage }
+                            : {}),
+                        ...(isCreating
+                            ? {
+                                  leading: (
+                                      <LoaderCircleIcon
+                                          data-icon="inline-start"
+                                          aria-hidden="true"
+                                          className="animate-spin"
+                                      />
+                                  ),
+                              }
+                            : {}),
+                    })
+                }
                 return (
-                    <div className="flex justify-end gap-1">
-                        <Button
-                            id={`inventory-ledger-balance-row-${toAutomationIdSegment(row.original.balanceId)}-view`}
-                            type="button"
-                            variant="ghost"
-                            size="xs"
-                            ref={(el) => {
-                                rowFocusRef.current.set(
-                                    row.original.balanceId,
-                                    el,
-                                )
-                            }}
-                            onClick={() => openDetail(row.original.balanceId)}
-                        >
-                            查看
-                        </Button>
-                        {hasCreateAction ? (
-                            <Button
-                                id={`inventory-ledger-balance-row-${toAutomationIdSegment(row.original.balanceId)}-adjust`}
-                                type="button"
-                                variant="outline"
-                                size="xs"
-                                disabled={isCreating}
-                                title={blocker?.message}
-                                onClick={() =>
-                                    void startAdjustment(row.original)
-                                }
-                            >
-                                {isCreating ? (
-                                    <LoaderCircleIcon
-                                        data-icon="inline-start"
-                                        aria-hidden="true"
-                                        className="animate-spin"
-                                    />
-                                ) : null}
-                                {isCreating ? "创建中…" : "库存调整"}
-                            </Button>
-                        ) : null}
-                    </div>
+                    <TableRowActions
+                        actions={actions}
+                        moreId={`inventory-ledger-balance-row-${segment}-more`}
+                        moreLabel={
+                            shownProduct
+                                ? `${shownProduct} 更多操作`
+                                : "库存 更多操作"
+                        }
+                    />
                 )
             },
         },

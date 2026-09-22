@@ -1,10 +1,8 @@
 "use client"
 
-import Link from "next/link"
 import type { ColumnDef } from "@tanstack/react-table"
 
-import { BusinessStatusBadge } from "@/components/business"
-import { Button } from "@/components/ui/button"
+import { BusinessStatusBadge, TableRowActions } from "@/components/business"
 import type { StockReservationRow } from "@/features/inventory/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 
@@ -91,24 +89,34 @@ export function buildReservationColumns(): ColumnDef<StockReservationRow>[] {
             id: "actions",
             header: "操作",
             meta: { label: "操作", width: "default", align: "end" },
-            cell: ({ row }) => (
-                <div className="flex justify-end gap-1">
-                    {row.original.fulfillmentHref ? (
-                        <Button
-                            id={`inventory-ledger-reservation-row-${toAutomationIdSegment(row.original.reservationId)}-fulfillment`}
-                            type="button"
-                            variant="outline"
-                            size="xs"
-                            render={
-                                <Link href={row.original.fulfillmentHref} />
-                            }
-                        >
-                            履约上下文
-                        </Button>
-                    ) : null}
-                    {/* 明确不提供释放预占入口 */}
-                </div>
-            ),
+            cell: ({ row }) => {
+                // 明确不提供释放预占入口
+                const href = row.original.fulfillmentHref
+                if (!href) return null
+                const segment = toAutomationIdSegment(
+                    row.original.reservationId,
+                )
+                const documentNo =
+                    row.original.salesOrderNo.trim() ||
+                    row.original.inboundSourceDocumentNo?.trim()
+                return (
+                    <TableRowActions
+                        actions={[
+                            {
+                                id: `inventory-ledger-reservation-row-${segment}-fulfillment`,
+                                label: "履约上下文",
+                                href,
+                            },
+                        ]}
+                        moreId={`inventory-ledger-reservation-row-${segment}-more`}
+                        moreLabel={
+                            documentNo
+                                ? `${documentNo} 更多操作`
+                                : "预占 更多操作"
+                        }
+                    />
+                )
+            },
         },
     ]
 }

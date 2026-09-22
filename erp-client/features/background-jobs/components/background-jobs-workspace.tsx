@@ -11,6 +11,7 @@ import {
     OptionCombobox,
     PageScaffold,
     QuickPreviewSheet,
+    TableRowActions,
 } from "@/components/business"
 import {
     ListSearchField,
@@ -317,18 +318,20 @@ export function BackgroundJobsWorkspace() {
                 meta: { label: "操作", role: "preview" },
                 enableSorting: false,
                 cell: ({ row }) => (
-                    <Button
-                        id={`${ID_PREFIX}-row-${row.original.id}-preview`}
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                            lastFocusedRowId.current = row.original.id
-                            openPreview(row.original)
-                        }}
-                    >
-                        查看
-                    </Button>
+                    <TableRowActions
+                        moreId={`${ID_PREFIX}-row-${row.original.id}-more`}
+                        moreLabel={`${jobLabel(row.original)} 更多操作`}
+                        actions={[
+                            {
+                                id: `${ID_PREFIX}-row-${row.original.id}-preview`,
+                                label: "查看",
+                                onClick: () => {
+                                    lastFocusedRowId.current = row.original.id
+                                    openPreview(row.original)
+                                },
+                            },
+                        ]}
+                    />
                 ),
             },
         ],

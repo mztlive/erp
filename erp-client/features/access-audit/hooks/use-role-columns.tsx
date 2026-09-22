@@ -2,16 +2,10 @@
 
 import * as React from "react"
 import type { ColumnDef } from "@tanstack/react-table"
-import { MoreHorizontalIcon, Trash2Icon } from "lucide-react"
 
+import { TableRowActions } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { AccessColumnsInput } from "@/features/access-audit/hooks/access-columns-input"
 import type { RoleRow } from "@/features/access-audit/types"
@@ -120,58 +114,40 @@ function useRoleColumns({
                     const role = row.original
                     const segment = toAutomationIdSegment(role.id)
                     return (
-                        <div className="flex items-center justify-end gap-1">
-                            <Button
-                                id={`operations-access-roles-row-${segment}-edit`}
-                                type="button"
-                                size="xs"
-                                variant="ghost"
-                                ref={(el) => {
-                                    rowFocusRef.current.set(role.id, el)
-                                }}
-                                onClick={() =>
-                                    router.push(`/system/roles/${role.id}/edit`)
-                                }
-                            >
-                                编辑
-                            </Button>
-                            <DropdownMenu>
-                                <DropdownMenuTrigger
-                                    id={`operations-access-roles-row-${segment}-more`}
-                                    render={
-                                        <Button
-                                            type="button"
-                                            size="icon-xs"
-                                            variant="ghost"
-                                            aria-label={`${role.name} 更多操作`}
-                                        />
-                                    }
-                                >
-                                    <MoreHorizontalIcon aria-hidden="true" />
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                    <DropdownMenuItem
-                                        id={`operations-access-roles-row-${segment}-delete`}
-                                        disabled={role.system === true}
-                                        title={
-                                            role.system
-                                                ? "系统内置角色不可删除"
-                                                : undefined
-                                        }
-                                        variant="destructive"
-                                        onClick={() =>
-                                            setDeletingRole({
-                                                id: role.id,
-                                                name: role.name,
-                                            })
-                                        }
-                                    >
-                                        <Trash2Icon aria-hidden="true" />
-                                        删除角色
-                                    </DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                        </div>
+                        <TableRowActions
+                            moreId={`operations-access-roles-row-${segment}-more`}
+                            moreLabel={`${role.name} 更多操作`}
+                            actions={[
+                                {
+                                    id: `operations-access-roles-row-${segment}-edit`,
+                                    label: "编辑",
+                                    buttonRef: (element) => {
+                                        rowFocusRef.current.set(
+                                            role.id,
+                                            element,
+                                        )
+                                    },
+                                    onClick: () =>
+                                        router.push(
+                                            `/system/roles/${role.id}/edit`,
+                                        ),
+                                },
+                                {
+                                    id: `operations-access-roles-row-${segment}-delete`,
+                                    label: "删除角色",
+                                    destructive: true,
+                                    disabled: role.system === true,
+                                    disabledReason: role.system
+                                        ? "系统内置角色不可删除"
+                                        : undefined,
+                                    onClick: () =>
+                                        setDeletingRole({
+                                            id: role.id,
+                                            name: role.name,
+                                        }),
+                                },
+                            ]}
+                        />
                     )
                 },
             },

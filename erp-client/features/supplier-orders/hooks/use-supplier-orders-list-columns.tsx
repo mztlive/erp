@@ -5,7 +5,7 @@ import Link from "next/link"
 import type { ColumnDef } from "@tanstack/react-table"
 import { Loader2Icon } from "lucide-react"
 
-import { StatusTrackSummary } from "@/components/business"
+import { StatusTrackSummary, TableRowActions } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import type { SupplierOrderListRow } from "@/features/supplier-orders/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
@@ -194,75 +194,79 @@ export function useSupplierOrdersListColumns({
                 enableSorting: false,
                 cell: ({ row }) => {
                     const r = row.original
+                    const segment = toAutomationIdSegment(r.orderId)
                     const canQuery = r.allowedActions.includes("QUERY_RESULT")
                     const canReplay = r.allowedActions.includes("REPLAY")
                     const queryBlocker = r.actionBlockers.find(
                         (b) => b.action === "QUERY_RESULT",
                     )
+                    const resultUnknown =
+                        r.fulfillmentStatus === "RESULT_UNKNOWN"
                     return (
                         <div className="flex flex-wrap items-center gap-1">
-                            <Button
-                                id={`supplier-orders-list-row-${toAutomationIdSegment(r.orderId)}-preview-action`}
-                                type="button"
-                                size="xs"
-                                variant="outline"
-                                onClick={() => onPreview(r.orderId)}
-                            >
-                                预览
-                            </Button>
-                            <Button
-                                id={`supplier-orders-list-row-${toAutomationIdSegment(r.orderId)}-open`}
-                                type="button"
-                                size="xs"
-                                variant="outline"
-                                render={
-                                    <Link
-                                        href={`/supplier-api/orders/${r.orderId}`}
-                                    />
-                                }
-                            >
-                                详情
-                            </Button>
-                            {r.fulfillmentStatus === "RESULT_UNKNOWN" ? (
-                                <>
-                                    <Button
-                                        id={`supplier-orders-list-row-${toAutomationIdSegment(r.orderId)}-query`}
-                                        type="button"
-                                        size="xs"
-                                        disabled={!canQuery || queryPending}
-                                        onClick={() => void onQueryResult(r)}
-                                    >
-                                        {queryPending ? (
-                                            <Loader2Icon
-                                                className="size-3.5 animate-spin"
-                                                aria-hidden="true"
-                                            />
-                                        ) : null}
-                                        {queryPending
-                                            ? "查询中…"
-                                            : "查询原结果"}
-                                    </Button>
-                                    {!canQuery && queryBlocker ? (
-                                        <span className="max-w-[14rem] text-xs leading-tight text-muted-foreground">
-                                            {queryBlocker.message}
-                                            {queryBlocker.destinationWorkspaceId ? (
-                                                <>
-                                                    ，可
-                                                    <Link
-                                                        id={`supplier-orders-list-row-${toAutomationIdSegment(r.orderId)}-integration-errors`}
-                                                        href="/governance/integration-errors"
-                                                        className="text-primary underline-offset-2 hover:underline"
-                                                    >
-                                                        前往接口错误中心
-                                                    </Link>
-                                                </>
-                                            ) : null}
-                                        </span>
+                            <TableRowActions
+                                moreId={`supplier-orders-list-row-${segment}-more`}
+                                moreLabel={`${r.orderNo} 更多操作`}
+                                actions={[
+                                    {
+                                        id: `supplier-orders-list-row-${segment}-preview-action`,
+                                        label: "预览",
+                                        onClick: () => onPreview(r.orderId),
+                                        ...(resultUnknown
+                                            ? { placement: "menu" as const }
+                                            : {}),
+                                    },
+                                    {
+                                        id: `supplier-orders-list-row-${segment}-open`,
+                                        label: "详情",
+                                        href: `/supplier-api/orders/${r.orderId}`,
+                                    },
+                                    ...(resultUnknown
+                                        ? [
+                                              {
+                                                  id: `supplier-orders-list-row-${segment}-query`,
+                                                  label: queryPending
+                                                      ? "查询中…"
+                                                      : "查询原结果",
+                                                  disabled:
+                                                      !canQuery || queryPending,
+                                                  emphasis: "outline" as const,
+                                                  onClick: () => {
+                                                      void onQueryResult(r)
+                                                  },
+                                                  ...(queryPending
+                                                      ? {
+                                                            leading: (
+                                                                <Loader2Icon
+                                                                    className="size-3.5 animate-spin"
+                                                                    aria-hidden="true"
+                                                                />
+                                                            ),
+                                                        }
+                                                      : {}),
+                                              },
+                                          ]
+                                        : []),
+                                ]}
+                            />
+                            {resultUnknown && !canQuery && queryBlocker ? (
+                                <span className="max-w-[14rem] text-xs leading-tight text-muted-foreground">
+                                    {queryBlocker.message}
+                                    {queryBlocker.destinationWorkspaceId ? (
+                                        <>
+                                            ，可
+                                            <Link
+                                                id={`supplier-orders-list-row-${segment}-integration-errors`}
+                                                href="/governance/integration-errors"
+                                                className="text-primary underline-offset-2 hover:underline"
+                                            >
+                                                前往接口错误中心
+                                            </Link>
+                                        </>
                                     ) : null}
-                                </>
+                                </span>
                             ) : null}
-                            {r.fulfillmentStatus === "RESULT_UNKNOWN" &&
-                            !canReplay ? (
+                            {resultUnknown && !canReplay ? (
                                 <span className="sr-only">
                                     重发需先查询确认无结果且系统允许重试
                                 </span>

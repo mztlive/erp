@@ -2,17 +2,10 @@
 
 import * as React from "react"
 import type { ColumnDef } from "@tanstack/react-table"
-import { MoreHorizontalIcon, ShieldOffIcon } from "lucide-react"
 
-import { toAutomationIdSegment } from "@/lib/automation-id"
+import { TableRowActions } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { RoleAssignmentTarget } from "@/features/access-audit/components/role-assignment-dialog"
 import type {
     AccessChangeCommand,
@@ -119,72 +112,55 @@ function useUserColumns({
                 header: "操作",
                 cell: ({ row }) => {
                     const user = row.original
+                    const segment = toAutomationIdSegment(user.id)
+                    const roleAssignmentId = user.roleAssignmentId
                     return (
-                        <div className="flex items-center justify-end gap-1">
-                            <Button
-                                id={`operations-access-users-row-${toAutomationIdSegment(user.id)}-adjust-role`}
-                                type="button"
-                                size="xs"
-                                variant="outline"
-                                ref={(el) => {
-                                    rowFocusRef.current.set(user.id, el)
-                                }}
-                                onClick={() =>
-                                    setRoleAssignment({
-                                        userId: user.userId,
-                                        displayName: user.displayName,
-                                        accountName: user.accountName,
-                                        roleIds: user.roleIds,
-                                    })
-                                }
-                            >
-                                调整角色
-                            </Button>
-                            {user.roleAssignmentId ? (
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger
-                                        id={`operations-access-users-row-${toAutomationIdSegment(user.id)}-menu-trigger`}
-                                        render={
-                                            <Button
-                                                type="button"
-                                                size="icon-xs"
-                                                variant="ghost"
-                                                aria-label={`${user.displayName} 更多操作`}
-                                            />
-                                        }
-                                    >
-                                        <MoreHorizontalIcon aria-hidden="true" />
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent
-                                        align="end"
-                                        className="min-w-40"
-                                    >
-                                        <DropdownMenuItem
-                                            id={`operations-access-users-row-${toAutomationIdSegment(user.id)}-emergency-revoke`}
-                                            variant="destructive"
-                                            onClick={() =>
-                                                void startChange({
-                                                    subjectType: "USER",
-                                                    subjectId: user.userId,
-                                                    action: "EMERGENCY_REVOKE_USER_ROLE",
-                                                    roleAssignmentId:
-                                                        user.roleAssignmentId!,
-                                                    expectedPermissionVersion:
-                                                        data?.permissionVersion ??
-                                                        user.permissionVersion,
-                                                    reasonCode:
-                                                        "EMERGENCY_STOP_LOSS",
-                                                    idempotencyKey: "pending",
-                                                })
-                                            }
-                                        >
-                                            <ShieldOffIcon aria-hidden="true" />
-                                            紧急撤权
-                                        </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                            ) : null}
-                        </div>
+                        <TableRowActions
+                            moreId={`operations-access-users-row-${segment}-menu-trigger`}
+                            moreLabel={`${user.displayName} 更多操作`}
+                            actions={[
+                                {
+                                    id: `operations-access-users-row-${segment}-adjust-role`,
+                                    label: "调整角色",
+                                    emphasis: "outline",
+                                    buttonRef: (element) => {
+                                        rowFocusRef.current.set(
+                                            user.id,
+                                            element,
+                                        )
+                                    },
+                                    onClick: () =>
+                                        setRoleAssignment({
+                                            userId: user.userId,
+                                            displayName: user.displayName,
+                                            accountName: user.accountName,
+                                            roleIds: user.roleIds,
+                                        }),
+                                },
+                                ...(roleAssignmentId
+                                    ? [
+                                          {
+                                              id: `operations-access-users-row-${segment}-emergency-revoke`,
+                                              label: "紧急撤权",
+                                              destructive: true,
+                                              onClick: () =>
+                                                  void startChange({
+                                                      subjectType: "USER",
+                                                      subjectId: user.userId,
+                                                      action: "EMERGENCY_REVOKE_USER_ROLE",
+                                                      roleAssignmentId,
+                                                      expectedPermissionVersion:
+                                                          data?.permissionVersion ??
+                                                          user.permissionVersion,
+                                                      reasonCode:
+                                                          "EMERGENCY_STOP_LOSS",
+                                                      idempotencyKey: "pending",
+                                                  }),
+                                          },
+                                      ]
+                                    : []),
+                            ]}
+                        />
                     )
                 },
             },

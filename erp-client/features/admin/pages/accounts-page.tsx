@@ -10,6 +10,7 @@ import {
     BusinessFailureState,
     DataTable,
     PageScaffold,
+    TableRowActions,
 } from "@/components/business"
 import {
     ListSearchField,
@@ -192,8 +193,8 @@ export function AccountsPage() {
             },
             {
                 id: "actions",
-                size: 320,
-                minSize: 280,
+                size: 200,
+                minSize: 176,
                 header: () => <span className="block text-right">操作</span>,
                 cell: ({ row }) => {
                     const account = row.original
@@ -203,112 +204,90 @@ export function AccountsPage() {
                         ),
                     )
                     const segment = toAutomationIdSegment(account.id)
+                    const member = organizationQuery.data?.people.find(
+                        (person) => person.id === account.id,
+                    )
                     return (
-                        <div className="flex flex-wrap items-center justify-end gap-1">
-                            {canManageOrganization &&
-                            organizationQuery.data?.people.some(
-                                (person) => person.id === account.id,
-                            ) ? (
-                                <Button
-                                    id={`governance-admin-accounts-row-${segment}-department`}
-                                    type="button"
-                                    size="xs"
-                                    variant="ghost"
-                                    onClick={() =>
-                                        setDepartmentDraft({
-                                            ...EMPTY_CHANGE_DRAFT,
-                                            operation: "transfer_member",
-                                            userId: account.id,
-                                            orgUnitId:
-                                                organizationQuery.data?.people.find(
-                                                    (person) =>
-                                                        person.id ===
-                                                        account.id,
-                                                )?.own_org_unit_id ?? "",
-                                        })
-                                    }
-                                >
-                                    调整部门
-                                </Button>
-                            ) : null}
-                            {canManageOrganization &&
-                            organizationQuery.data?.people.some(
-                                (person) => person.id === account.id,
-                            ) ? (
-                                <Button
-                                    id={`governance-admin-accounts-row-${segment}-management`}
-                                    type="button"
-                                    size="xs"
-                                    variant="ghost"
-                                    onClick={() =>
-                                        setDepartmentDraft({
-                                            ...EMPTY_CHANGE_DRAFT,
-                                            operation: "grant_management",
-                                            userId: account.id,
-                                            roleId:
-                                                account.role_ids.length === 1
-                                                    ? account.role_ids[0]!
-                                                    : "",
-                                        })
-                                    }
-                                >
-                                    管理部门
-                                </Button>
-                            ) : null}
-                            <Button
-                                id={`governance-admin-accounts-row-${segment}-edit`}
-                                type="button"
-                                size="xs"
-                                variant="ghost"
-                                onClick={() =>
-                                    setAccountForm({
-                                        mode: "edit",
-                                        account: {
+                        <TableRowActions
+                            moreId={`governance-admin-accounts-row-${segment}-more`}
+                            moreLabel={`${account.name} 更多操作`}
+                            actions={[
+                                {
+                                    id: `governance-admin-accounts-row-${segment}-edit`,
+                                    label: "编辑",
+                                    onClick: () =>
+                                        setAccountForm({
+                                            mode: "edit",
+                                            account: {
+                                                id: account.id,
+                                                account: account.account,
+                                                name: account.name,
+                                                role_ids: [...account.role_ids],
+                                            },
+                                        }),
+                                },
+                                {
+                                    id: `governance-admin-accounts-row-${segment}-permissions`,
+                                    label: "查看权限",
+                                    onClick: () => {
+                                        permissionReturnId.current = `governance-admin-accounts-row-${segment}-permissions`
+                                        setPermissionAccount(account)
+                                        setPermissionsOpen(true)
+                                    },
+                                },
+                                ...(canManageOrganization && member
+                                    ? [
+                                          {
+                                              id: `governance-admin-accounts-row-${segment}-department`,
+                                              label: "调整部门",
+                                              placement: "menu" as const,
+                                              onClick: () =>
+                                                  setDepartmentDraft({
+                                                      ...EMPTY_CHANGE_DRAFT,
+                                                      operation:
+                                                          "transfer_member",
+                                                      userId: account.id,
+                                                      orgUnitId:
+                                                          member.own_org_unit_id ??
+                                                          "",
+                                                  }),
+                                          },
+                                          {
+                                              id: `governance-admin-accounts-row-${segment}-management`,
+                                              label: "设置管理部门",
+                                              placement: "menu" as const,
+                                              onClick: () =>
+                                                  setDepartmentDraft({
+                                                      ...EMPTY_CHANGE_DRAFT,
+                                                      operation:
+                                                          "grant_management",
+                                                      userId: account.id,
+                                                      roleId:
+                                                          account.role_ids
+                                                              .length === 1
+                                                              ? account
+                                                                    .role_ids[0]!
+                                                              : "",
+                                                  }),
+                                          },
+                                      ]
+                                    : []),
+                                {
+                                    id: `governance-admin-accounts-row-${segment}-delete`,
+                                    label: "删除",
+                                    destructive: true,
+                                    disabled: protectedAccount,
+                                    disabledReason: protectedAccount
+                                        ? "绑定系统角色的账号不可删除"
+                                        : undefined,
+                                    onClick: () =>
+                                        setDeletingAccount({
                                             id: account.id,
                                             account: account.account,
-                                            name: account.name,
-                                            role_ids: [...account.role_ids],
-                                        },
-                                    })
-                                }
-                            >
-                                编辑
-                            </Button>
-                            <Button
-                                id={`governance-admin-accounts-row-${segment}-permissions`}
-                                type="button"
-                                size="xs"
-                                variant="ghost"
-                                onClick={() => {
-                                    permissionReturnId.current = `governance-admin-accounts-row-${segment}-permissions`
-                                    setPermissionAccount(account)
-                                    setPermissionsOpen(true)
-                                }}
-                            >
-                                查看权限
-                            </Button>
-                            <Button
-                                id={`governance-admin-accounts-row-${segment}-delete`}
-                                disabled={protectedAccount}
-                                title={
-                                    protectedAccount
-                                        ? "绑定系统角色的账号不可删除"
-                                        : undefined
-                                }
-                                type="button"
-                                size="xs"
-                                variant="ghost"
-                                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                                onClick={() =>
-                                    setDeletingAccount({
-                                        id: account.id,
-                                        account: account.account,
-                                    })
-                                }
-                            >
-                                删除
-                            </Button>
-                        </div>
+                                        }),
+                                },
+                            ]}
+                        />
                     )
                 },
             },

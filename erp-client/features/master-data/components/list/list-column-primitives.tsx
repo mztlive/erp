@@ -1,13 +1,10 @@
 "use client"
 
 import * as React from "react"
-import { BanIcon, HistoryIcon, UsersIcon } from "lucide-react"
 import type { ColumnDef } from "@tanstack/react-table"
 
-import { BusinessStatusBadge } from "@/components/business"
+import { BusinessStatusBadge, TableRowActions } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { DisabledActionHint } from "@/features/master-data/components/list/list-chrome"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { formatEffectiveRange } from "@/features/master-data/lib/filter"
 import type { MasterDataListItem } from "@/features/master-data/types"
@@ -181,31 +178,29 @@ export function disableOnlyActionsColumn({
         meta: { label: masterDataCopy.colActions },
         cell: ({ row }) => {
             const item = row.original
+            const segment = toAutomationIdSegment(item.stableId)
             const canDisable = item.allowedActions.includes("DISABLE")
             const disableBlocker = item.actionBlockers.find(
                 (blocker) => blocker.action === "DISABLE",
             )
             return (
-                <div className="flex flex-wrap gap-1">
-                    <DisabledActionHint message={disableBlocker?.message}>
-                        <Button
-                            id={`master-data-list-row-${toAutomationIdSegment(item.stableId)}-disable`}
-                            type="button"
-                            size="xs"
-                            variant="ghost"
-                            disabled={!canDisable}
-                            title={disableBlocker?.message}
-                            onClick={(event) => {
-                                event.stopPropagation()
+                <TableRowActions
+                    moreId={`master-data-list-row-${segment}-more`}
+                    moreLabel={`${item.name} 更多操作`}
+                    actions={[
+                        {
+                            id: `master-data-list-row-${segment}-disable`,
+                            label: masterDataCopy.actionDisable,
+                            disabled: !canDisable,
+                            disabledReason: disableBlocker?.message,
+                            destructive: true,
+                            onClick: () => {
                                 markFocused(lastFocusedRowId, item)
                                 onDisableTarget?.(item)
-                            }}
-                        >
-                            <BanIcon data-icon="inline-start" aria-hidden />
-                            {masterDataCopy.actionDisable}
-                        </Button>
-                    </DisabledActionHint>
-                </div>
+                            },
+                        },
+                    ]}
+                />
             )
         },
     }
@@ -221,31 +216,28 @@ export function updateOnlyActionsColumn({
         meta: { label: masterDataCopy.colActions },
         cell: ({ row }) => {
             const item = row.original
+            const segment = toAutomationIdSegment(item.stableId)
             const canRevise = item.allowedActions.includes("CREATE_REVISION")
             const reviseBlocker = item.actionBlockers.find(
                 (blocker) => blocker.action === "CREATE_REVISION",
             )
             return (
-                <div className="flex flex-wrap gap-1">
-                    <DisabledActionHint message={reviseBlocker?.message}>
-                        <Button
-                            id={`master-data-list-row-${toAutomationIdSegment(item.stableId)}-revise`}
-                            type="button"
-                            size="xs"
-                            variant="ghost"
-                            disabled={!canRevise}
-                            title={reviseBlocker?.message}
-                            onClick={(event) => {
-                                event.stopPropagation()
+                <TableRowActions
+                    moreId={`master-data-list-row-${segment}-more`}
+                    moreLabel={`${item.name} 更多操作`}
+                    actions={[
+                        {
+                            id: `master-data-list-row-${segment}-revise`,
+                            label: masterDataCopy.actionUpdate,
+                            disabled: !canRevise,
+                            disabledReason: reviseBlocker?.message,
+                            onClick: () => {
                                 markFocused(lastFocusedRowId, item)
                                 onReviseTarget?.(item)
-                            }}
-                        >
-                            <HistoryIcon data-icon="inline-start" aria-hidden />
-                            {masterDataCopy.actionUpdate}
-                        </Button>
-                    </DisabledActionHint>
-                </div>
+                            },
+                        },
+                    ]}
+                />
             )
         },
     }
@@ -264,6 +256,7 @@ export function fullActionsColumn({
         meta: { label: masterDataCopy.colActions },
         cell: ({ row }) => {
             const item = row.original
+            const segment = toAutomationIdSegment(item.stableId)
             const canRevise = item.allowedActions.includes("CREATE_REVISION")
             const canDisable = item.allowedActions.includes("DISABLE")
             const reviseBlocker = item.actionBlockers.find(
@@ -273,59 +266,43 @@ export function fullActionsColumn({
                 (blocker) => blocker.action === "DISABLE",
             )
             return (
-                <div className="flex flex-wrap gap-1">
-                    <Button
-                        id={`master-data-list-row-${toAutomationIdSegment(item.stableId)}-view`}
-                        type="button"
-                        size="xs"
-                        variant="ghost"
-                        onClick={(event) => {
-                            event.stopPropagation()
-                            markFocused(lastFocusedRowId, item)
-                            if (onOpen) onOpen(item)
-                            else onPreview?.(item.stableId)
-                        }}
-                    >
-                        {masterDataCopy.actionView}
-                    </Button>
-                    <DisabledActionHint message={reviseBlocker?.message}>
-                        <Button
-                            id={`master-data-list-row-${toAutomationIdSegment(item.stableId)}-revise`}
-                            type="button"
-                            size="xs"
-                            variant="ghost"
-                            disabled={!canRevise}
-                            title={reviseBlocker?.message}
-                            onClick={(event) => {
-                                event.stopPropagation()
+                <TableRowActions
+                    moreId={`master-data-list-row-${segment}-more`}
+                    moreLabel={`${item.name} 更多操作`}
+                    actions={[
+                        {
+                            id: `master-data-list-row-${segment}-view`,
+                            label: masterDataCopy.actionView,
+                            onClick: () => {
+                                markFocused(lastFocusedRowId, item)
+                                if (onOpen) onOpen(item)
+                                else onPreview?.(item.stableId)
+                            },
+                        },
+                        {
+                            id: `master-data-list-row-${segment}-revise`,
+                            label: masterDataCopy.actionUpdate,
+                            disabled: !canRevise,
+                            disabledReason: reviseBlocker?.message,
+                            onClick: () => {
                                 markFocused(lastFocusedRowId, item)
                                 if (onOpen) onOpen(item)
                                 else onReviseTarget?.(item)
-                            }}
-                        >
-                            <HistoryIcon data-icon="inline-start" aria-hidden />
-                            {masterDataCopy.actionUpdate}
-                        </Button>
-                    </DisabledActionHint>
-                    <DisabledActionHint message={disableBlocker?.message}>
-                        <Button
-                            id={`master-data-list-row-${toAutomationIdSegment(item.stableId)}-disable`}
-                            type="button"
-                            size="xs"
-                            variant="ghost"
-                            disabled={!canDisable}
-                            title={disableBlocker?.message}
-                            onClick={(event) => {
-                                event.stopPropagation()
+                            },
+                        },
+                        {
+                            id: `master-data-list-row-${segment}-disable`,
+                            label: masterDataCopy.actionDisable,
+                            disabled: !canDisable,
+                            disabledReason: disableBlocker?.message,
+                            destructive: true,
+                            onClick: () => {
                                 markFocused(lastFocusedRowId, item)
                                 onDisableTarget?.(item)
-                            }}
-                        >
-                            <BanIcon data-icon="inline-start" aria-hidden />
-                            {masterDataCopy.actionDisable}
-                        </Button>
-                    </DisabledActionHint>
-                </div>
+                            },
+                        },
+                    ]}
+                />
             )
         },
     }
@@ -346,6 +323,7 @@ export function warehouseActionsColumn({
         meta: { label: masterDataCopy.colActions },
         cell: ({ row }) => {
             const item = row.original
+            const segment = toAutomationIdSegment(item.stableId)
             const allowed =
                 canMaintainHandlers &&
                 item.allowedActions.includes("MAINTAIN_FULFILLMENT_HANDLERS")
@@ -353,39 +331,30 @@ export function warehouseActionsColumn({
                 ? undefined
                 : "当前账号没有仓库更新权限"
             return (
-                <div className="flex flex-wrap gap-1">
-                    <Button
-                        id={`master-data-list-row-${toAutomationIdSegment(item.stableId)}-view`}
-                        type="button"
-                        size="xs"
-                        variant="ghost"
-                        onClick={(event) => {
-                            event.stopPropagation()
-                            markFocused(lastFocusedRowId, item)
-                            onPreview?.(item.stableId)
-                        }}
-                    >
-                        {masterDataCopy.actionView}
-                    </Button>
-                    <DisabledActionHint message={message}>
-                        <Button
-                            id={`master-data-warehouse-row-${toAutomationIdSegment(item.stableId)}-handlers`}
-                            type="button"
-                            size="xs"
-                            variant="ghost"
-                            disabled={!allowed}
-                            title={message}
-                            onClick={(event) => {
-                                event.stopPropagation()
+                <TableRowActions
+                    moreId={`master-data-warehouse-row-${segment}-more`}
+                    moreLabel={`${item.name} 更多操作`}
+                    actions={[
+                        {
+                            id: `master-data-list-row-${segment}-view`,
+                            label: masterDataCopy.actionView,
+                            onClick: () => {
+                                markFocused(lastFocusedRowId, item)
+                                onPreview?.(item.stableId)
+                            },
+                        },
+                        {
+                            id: `master-data-warehouse-row-${segment}-handlers`,
+                            label: "配置收发责任",
+                            disabled: !allowed,
+                            disabledReason: message,
+                            onClick: () => {
                                 markFocused(lastFocusedRowId, item)
                                 onReviseTarget?.(item)
-                            }}
-                        >
-                            <UsersIcon data-icon="inline-start" aria-hidden />
-                            配置收发责任
-                        </Button>
-                    </DisabledActionHint>
-                </div>
+                            },
+                        },
+                    ]}
+                />
             )
         },
     }

@@ -3,9 +3,12 @@
 import * as React from "react"
 import type { ColumnDef } from "@tanstack/react-table"
 
-import { BusinessStatusBadge, MoneyValue } from "@/components/business"
+import {
+    BusinessStatusBadge,
+    MoneyValue,
+    TableRowActions,
+} from "@/components/business"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { SettlementsUrlState } from "@/features/supplier-settlements/lib/url-state"
 import type { SettlementListRow } from "@/features/supplier-settlements/types"
@@ -158,29 +161,33 @@ export function useSettlementListColumns(
                 header: "操作",
                 meta: { label: "操作", width: "status" },
                 enableSorting: false,
-                cell: ({ row }) => (
-                    <div className="flex flex-wrap gap-1">
-                        <Button
-                            id={`supplier-settlements-list-row-${toAutomationIdSegment(row.original.statementId)}-preview`}
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() =>
-                                patchUrl({ preview: row.original.statementId })
-                            }
-                        >
-                            预览
-                        </Button>
-                        <Button
-                            id={`supplier-settlements-list-row-${toAutomationIdSegment(row.original.statementId)}-open`}
-                            type="button"
-                            size="sm"
-                            onClick={() => onOpen(row.original.statementId)}
-                        >
-                            打开
-                        </Button>
-                    </div>
-                ),
+                cell: ({ row }) => {
+                    const segment = toAutomationIdSegment(
+                        row.original.statementId,
+                    )
+                    return (
+                        <TableRowActions
+                            moreId={`supplier-settlements-list-row-${segment}-more`}
+                            moreLabel={`${row.original.statementNo} 更多操作`}
+                            actions={[
+                                {
+                                    id: `supplier-settlements-list-row-${segment}-preview`,
+                                    label: "预览",
+                                    onClick: () =>
+                                        patchUrl({
+                                            preview: row.original.statementId,
+                                        }),
+                                },
+                                {
+                                    id: `supplier-settlements-list-row-${segment}-open`,
+                                    label: "打开",
+                                    onClick: () =>
+                                        onOpen(row.original.statementId),
+                                },
+                            ]}
+                        />
+                    )
+                },
             },
         ],
         [onOpen, patchUrl],

@@ -3,7 +3,7 @@
 import * as React from "react"
 import type { ColumnDef } from "@tanstack/react-table"
 
-import { BusinessStatusBadge } from "@/components/business"
+import { BusinessStatusBadge, TableRowActions } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import type { ConnectionListItem } from "@/features/supplier-api-connections/types"
 import { formatDateTime } from "@/lib/datetime"
@@ -162,17 +162,25 @@ export function useConnectionListColumns(
                 header: "操作",
                 meta: { label: "操作", width: "status" },
                 enableSorting: false,
-                cell: ({ row }) => (
-                    <Button
-                        id={`supplier-api-connections-list-row-${toAutomationIdSegment(row.original.connectionId)}-open`}
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => onOpen(row.original.connectionId)}
-                    >
-                        打开
-                    </Button>
-                ),
+                cell: ({ row }) => {
+                    const segment = toAutomationIdSegment(
+                        row.original.connectionId,
+                    )
+                    return (
+                        <TableRowActions
+                            moreId={`supplier-api-connections-list-row-${segment}-more`}
+                            moreLabel={`${row.original.connectionCode} 更多操作`}
+                            actions={[
+                                {
+                                    id: `supplier-api-connections-list-row-${segment}-open`,
+                                    label: "打开",
+                                    onClick: () =>
+                                        onOpen(row.original.connectionId),
+                                },
+                            ]}
+                        />
+                    )
+                },
             },
         ],
         [onOpen],

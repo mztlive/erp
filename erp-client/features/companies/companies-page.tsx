@@ -1,7 +1,12 @@
 "use client"
 import { useState } from "react"
 import type { ColumnDef } from "@tanstack/react-table"
-import { DataTable, PageHeader, PageScaffold } from "@/components/business"
+import {
+    DataTable,
+    PageHeader,
+    PageScaffold,
+    TableRowActions,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useAccountProfileQuery } from "@/features/auth/queries"
@@ -68,28 +73,32 @@ export const CompaniesPage = () => {
         {
             id: "actions",
             header: "操作",
-            cell: ({ row }) => (
-                <div className="flex gap-2">
-                    <Button
-                        id={`company-edit-${toAutomationIdSegment(row.original.id)}`}
-                        size="sm"
-                        variant="ghost"
-                        disabled={!canUpdate}
-                        onClick={() => setEditing(row.original)}
-                    >
-                        编辑
-                    </Button>
-                    <Button
-                        id={`company-status-${toAutomationIdSegment(row.original.id)}`}
-                        size="sm"
-                        variant="ghost"
-                        disabled={!canUpdate || mutation.isPending}
-                        onClick={() => void changeStatus(row.original)}
-                    >
-                        {row.original.status === "active" ? "停用" : "启用"}
-                    </Button>
-                </div>
-            ),
+            cell: ({ row }) => {
+                const segment = toAutomationIdSegment(row.original.id)
+                return (
+                    <TableRowActions
+                        moreId={`company-more-${segment}`}
+                        moreLabel={`${row.original.legal_name} 更多操作`}
+                        actions={[
+                            {
+                                id: `company-edit-${segment}`,
+                                label: "编辑",
+                                disabled: !canUpdate,
+                                onClick: () => setEditing(row.original),
+                            },
+                            {
+                                id: `company-status-${segment}`,
+                                label:
+                                    row.original.status === "active"
+                                        ? "停用"
+                                        : "启用",
+                                disabled: !canUpdate || mutation.isPending,
+                                onClick: () => void changeStatus(row.original),
+                            },
+                        ]}
+                    />
+                )
+            },
         },
     ]
     return (

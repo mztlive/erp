@@ -111,7 +111,8 @@ it("未分配人员可从账号行直接打开固定人员的部门表单", () =
     state.org = organization()
     show()
     expect(screen.getByText("未分配部门")).toBeTruthy()
-    fireEvent.click(screen.getByRole("button", { name: "调整部门" }))
+    fireEvent.click(screen.getByRole("button", { name: "销售员 更多操作" }))
+    fireEvent.click(screen.getByRole("menuitem", { name: "调整部门" }))
     expect(screen.getByRole("heading", { name: "调整所属部门" })).toBeTruthy()
     expect(screen.getByText(/销售员：未分配部门 → 请选择部门/)).toBeTruthy()
 })
@@ -121,13 +122,15 @@ it("无组织读取权不请求部门，也不误报未分配", () => {
     expect(state.enabled).toHaveBeenCalledWith(false)
     expect(screen.getByText("无部门查看权限")).toBeTruthy()
     expect(screen.queryByText("未分配部门")).toBeNull()
-    expect(screen.queryByRole("button", { name: "调整部门" })).toBeNull()
+    fireEvent.click(screen.getByRole("button", { name: "销售员 更多操作" }))
+    expect(screen.queryByRole("menuitem", { name: "调整部门" })).toBeNull()
 })
 it("组织范围不含该人员时不展示写入口", () => {
     state.org = { ...organization(), people: [] }
     show()
     expect(screen.getByText("不在可查看范围")).toBeTruthy()
-    expect(screen.queryByRole("button", { name: "调整部门" })).toBeNull()
+    fireEvent.click(screen.getByRole("button", { name: "销售员 更多操作" }))
+    expect(screen.queryByRole("menuitem", { name: "调整部门" })).toBeNull()
 })
 it("部门加载失败保留账号列表并提供重试", () => {
     state.error = true
