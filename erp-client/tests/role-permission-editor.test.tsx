@@ -18,6 +18,11 @@ const mocks = vi.hoisted(() => ({
     push: vi.fn(),
     wildcard: false,
 }))
+vi.mock("@/features/auth/queries", () => ({
+    useAccountProfileQuery: () => ({
+        data: { permissions: ["role:update", "data_scope:list"] },
+    }),
+}))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }) }))
 vi.mock("@/features/admin/hooks/queries", () => ({
     useRolesQuery: () => ({

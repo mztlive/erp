@@ -154,3 +154,65 @@ it("预览后改字段会作废回执并要求重新预览", async () => {
         expect(screen.getByRole("button", { name: "预览影响" })).toBeTruthy(),
     )
 })
+
+it("从账号调整部门时固定人员并展示原部门到目标部门，确认才提交", async () => {
+    const onSubmit = vi.fn(async () => undefined)
+    const onPreview = vi.fn(async (request: OrganizationChangeRequest) => ({
+        id: "receipt",
+        actor_id: "admin",
+        request,
+        before: view,
+        after: view,
+        as_of: 1,
+    }))
+    render(
+        <OrganizationChangeDialog
+            open
+            onOpenChange={vi.fn()}
+            view={{
+                ...view,
+                people: [
+                    {
+                        id: "sales-user",
+                        label: "销售员",
+                        account: "xiaoshou",
+                        active: true,
+                        own_org_unit_id: null,
+                    },
+                ],
+            }}
+            draft={{
+                ...EMPTY_CHANGE_DRAFT,
+                operation: "transfer_member",
+                userId: "sales-user",
+                orgUnitId: "sales",
+                reason: "入职分配",
+            }}
+            expectedVersion={3}
+            previewing={false}
+            submitting={false}
+            onPreview={onPreview}
+            onSubmit={onSubmit}
+        />,
+    )
+    expect(screen.getByRole("heading", { name: "调整所属部门" })).toBeTruthy()
+    expect(screen.queryByLabelText("变更类型")).toBeNull()
+    expect(screen.getByText(/销售员：未分配部门 → 销售部/)).toBeTruthy()
+    expect(
+        screen
+            .getByRole("combobox", { name: "人员" })
+            .getAttribute("aria-disabled") === "true" ||
+            (screen.getByRole("combobox", { name: "人员" }) as HTMLInputElement)
+                .disabled,
+    ).toBe(true)
+    fireEvent.click(screen.getByRole("button", { name: "预览影响" }))
+    await screen.findByRole("button", { name: "确认提交" })
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(onPreview.mock.calls[0]?.[0].change).toEqual({
+        operation: "transfer_member",
+        user_id: "sales-user",
+        org_unit_id: "sales",
+    })
+    fireEvent.click(screen.getByRole("button", { name: "确认提交" }))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+})

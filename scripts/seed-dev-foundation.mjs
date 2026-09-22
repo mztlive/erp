@@ -19,6 +19,7 @@
  * 用法: node scripts/seed-dev-foundation.mjs
  * 环境变量: API_BASE（默认 http://127.0.0.1:10001）
  */
+import { ensureDevOrganization } from "./dev-organization-seed.mjs";
 import {
   ACCOUNTS,
   ADMIN,
@@ -418,6 +419,8 @@ async function main() {
   const adminToken = await login(ADMIN.account, ADMIN.password);
   console.log("admin 登录成功，开始补齐岗位账号");
   const seeded = await ensureDevAccounts(adminToken);
+  await ensureDevOrganization(adminToken);
+  console.log("岗位部门、人员归属与销售领导管理部门已补齐");
 
   const salesToken = await login(ACCOUNTS.sales.account, ACCOUNTS.sales.password);
   const salesUserId = seeded.sales.id;

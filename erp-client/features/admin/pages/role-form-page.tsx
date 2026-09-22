@@ -24,6 +24,9 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
+import { SubjectScopesPanel } from "@/features/organization/components/subject-scopes-panel"
 import { PermissionOptionsPanel } from "@/features/admin/components/roles/permission-panel"
 import {
     CopyRolePermissions,
@@ -178,6 +181,8 @@ function RoleForm({
     const router = useRouter()
     const { createRole, updateRole, isCreating, isUpdating } =
         useRoleMutations()
+    const { data: profile } = useAccountProfileQuery()
+    const [scopesOpen, setScopesOpen] = React.useState(false)
     const [submitError, setSubmitError] = React.useState<string | null>(null)
     const [editingName, setEditingName] = React.useState(role === null)
     const [review, setReview] = React.useState<PermissionReviewMode | null>(
@@ -287,6 +292,39 @@ function RoleForm({
                                 : "设置名称与操作权限"}
                         </span>
                     </div>
+                    {role &&
+                    hasPermission(profile?.permissions, "data_scope:list") ? (
+                        <form.Subscribe selector={(state) => state.values}>
+                            {(values) => {
+                                const changes = diffPermissions(
+                                    values.permissions,
+                                    initialSelected,
+                                )
+                                const dirty =
+                                    changes.added.length > 0 ||
+                                    changes.removed.length > 0 ||
+                                    values.name.trim() !== role.name
+                                return (
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        {dirty ? (
+                                            <span className="text-xs text-muted-foreground">
+                                                保存角色后可配置数据范围
+                                            </span>
+                                        ) : null}
+                                        <Button
+                                            id="role-form-data-scopes"
+                                            type="button"
+                                            variant="outline"
+                                            disabled={dirty || pending}
+                                            onClick={() => setScopesOpen(true)}
+                                        >
+                                            数据范围 · 能看哪些数据
+                                        </Button>
+                                    </div>
+                                )
+                            }}
+                        </form.Subscribe>
+                    ) : null}
                     <form.Subscribe
                         selector={(state) => state.values.permissions}
                     >
@@ -525,6 +563,27 @@ function RoleForm({
                     }}
                 </form.Subscribe>
             </form>
+            {role ? (
+                <Dialog open={scopesOpen} onOpenChange={setScopesOpen}>
+                    <DialogContent
+                        className="max-h-[88vh] overflow-y-auto sm:max-w-2xl"
+                        closeButtonId="role-scopes-close"
+                    >
+                        <DialogHeader>
+                            <DialogTitle>{role.name} · 数据范围</DialogTitle>
+                            <DialogDescription>
+                                为该角色配置业务数据范围，保存后对关联账号生效。
+                            </DialogDescription>
+                        </DialogHeader>
+                        {scopesOpen ? (
+                            <SubjectScopesPanel
+                                roleId={role.id}
+                                roleName={role.name}
+                            />
+                        ) : null}
+                    </DialogContent>
+                </Dialog>
+            ) : null}
             <Dialog open={confirmLeave} onOpenChange={setConfirmLeave}>
                 <DialogContent closeButtonId="governance-admin-role-form-leave-close">
                     <DialogHeader>

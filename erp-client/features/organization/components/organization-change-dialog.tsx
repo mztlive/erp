@@ -41,28 +41,57 @@ import type {
     OrganizationStateView,
 } from "@/features/organization/types"
 
-const schema = z.object({
-    operation: z.enum([
-        "create_unit",
-        "move_unit",
-        "rename_unit",
-        "disable_unit",
-        "transfer_member",
-        "end_membership",
-        "grant_management",
-        "revoke_management",
-    ]),
-    name: z.string(),
-    parentId: z.string(),
-    kind: z.enum(["department", "team"]),
-    orgUnitId: z.string(),
-    userId: z.string(),
-    roleId: z.string(),
-    includeDescendants: z.enum(["true", "false"]),
-    validTo: z.string(),
-    assignmentId: z.string(),
-    reason: z.string().trim().min(1, "必须填写变更原因").max(1000),
-})
+const schema = z
+    .object({
+        operation: z.enum([
+            "create_unit",
+            "move_unit",
+            "rename_unit",
+            "disable_unit",
+            "transfer_member",
+            "end_membership",
+            "grant_management",
+            "revoke_management",
+        ]),
+        name: z.string(),
+        parentId: z.string(),
+        kind: z.enum(["department", "team"]),
+        orgUnitId: z.string(),
+        userId: z.string(),
+        roleId: z.string(),
+        includeDescendants: z.enum(["true", "false"]),
+        validTo: z.string(),
+        assignmentId: z.string(),
+        reason: z.string().trim().min(1, "必须填写变更原因").max(1000),
+    })
+    .superRefine((draft, context) => {
+        if (
+            ["transfer_member", "grant_management", "end_membership"].includes(
+                draft.operation,
+            ) &&
+            !draft.userId
+        )
+            context.addIssue({
+                code: "custom",
+                path: ["userId"],
+                message: "请选择人员",
+            })
+        if (
+            ["transfer_member", "grant_management"].includes(draft.operation) &&
+            !draft.orgUnitId
+        )
+            context.addIssue({
+                code: "custom",
+                path: ["orgUnitId"],
+                message: "请选择部门",
+            })
+        if (draft.operation === "grant_management" && !draft.roleId)
+            context.addIssue({
+                code: "custom",
+                path: ["roleId"],
+                message: "请选择人员持有的角色",
+            })
+    })
 
 function PreviewReceiptGuard({
     values,
@@ -163,7 +192,7 @@ export function OrganizationChangeDialog({
         .filter((person) => person.active)
         .map((person) => ({
             value: person.id,
-            label: `${person.label}（${person.account}）`,
+            label: `${person.label}（${person.account}） · ${person.own_org_unit_id ? unitLabel(view.units, person.own_org_unit_id) : "未分配部门"}`,
         }))
     const roleOptions = view.roles
         .filter((role) => role.enabled)
@@ -186,7 +215,13 @@ export function OrganizationChangeDialog({
                 closeButtonId="organization-change-dialog-close"
             >
                 <DialogHeader>
-                    <DialogTitle>组织变更影响预览</DialogTitle>
+                    <DialogTitle>
+                        {draft.operation === "transfer_member"
+                            ? draft.userId
+                                ? "调整所属部门"
+                                : "添加部门成员"
+                            : OPERATION_LABEL[draft.operation]}
+                    </DialogTitle>
                     <DialogDescription>
                         {ORGANIZATION_BOUNDARY_NOTICE}
                     </DialogDescription>
@@ -198,18 +233,6 @@ export function OrganizationChangeDialog({
                         void form.handleSubmit()
                     }}
                 >
-                    <form.AppField
-                        name="operation"
-                        children={(field) => (
-                            <field.SelectField
-                                id="organization-change-operation"
-                                label="变更类型"
-                                options={Object.entries(OPERATION_LABEL).map(
-                                    ([value, label]) => ({ value, label }),
-                                )}
-                            />
-                        )}
-                    />
                     <form.Subscribe
                         selector={(state) => state.values.operation}
                         children={(operation) => (
@@ -267,7 +290,12 @@ export function OrganizationChangeDialog({
                                         children={(field) => (
                                             <field.SelectField
                                                 id="organization-change-unit"
-                                                label="目标组织"
+                                                label={
+                                                    operation ===
+                                                    "transfer_member"
+                                                        ? "所属部门（调整后）"
+                                                        : "目标组织"
+                                                }
                                                 options={unitOptions}
                                             />
                                         )}
@@ -282,6 +310,7 @@ export function OrganizationChangeDialog({
                                             <field.SelectField
                                                 id="organization-change-user"
                                                 label="人员"
+                                                disabled={Boolean(draft.userId)}
                                                 options={peopleOptions}
                                             />
                                         )}
@@ -347,6 +376,28 @@ export function OrganizationChangeDialog({
                             </>
                         )}
                     />
+                    {draft.operation === "transfer_member" ? (
+                        <form.Subscribe selector={(state) => state.values}>
+                            {(values) => {
+                                const person = view.people.find(
+                                    (item) => item.id === values.userId,
+                                )
+                                return (
+                                    <p
+                                        className="rounded-lg bg-muted/40 p-3 text-sm"
+                                        role="status"
+                                    >
+                                        {person
+                                            ? `${person.label}：${person.own_org_unit_id ? unitLabel(view.units, person.own_org_unit_id) : "未分配部门"} → ${values.orgUnitId ? unitLabel(view.units, values.orgUnitId) : "请选择部门"}`
+                                            : "选择账号后，将显示当前部门与调整后的部门。"}
+                                        <span className="mt-1 block text-xs text-muted-foreground">
+                                            部门调整不会自动分配角色，也不会交接客户、单据或待办。
+                                        </span>
+                                    </p>
+                                )
+                            }}
+                        </form.Subscribe>
+                    ) : null}
                     <form.AppField
                         name="reason"
                         children={(field) => (
@@ -385,7 +436,7 @@ export function OrganizationChangeDialog({
                                     ]
                                 }
                                 description={ORGANIZATION_BOUNDARY_NOTICE}
-                                filterSummary={`期望版本 ${receipt.request.expected_version}`}
+                                filterSummary="本次配置变更"
                                 selectionScope="当前组织配置边界"
                                 estimated={counts.estimated}
                                 processable={counts.processable}
@@ -394,7 +445,7 @@ export function OrganizationChangeDialog({
                             />
                             <BusinessDiffPanel
                                 title="变更前后"
-                                caption="提交时会再次核对版本、权限和未结业务"
+                                caption="请核对调整内容，确认后生效"
                                 changes={changes}
                             />
                         </div>

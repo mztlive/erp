@@ -30,8 +30,9 @@ export const dataScopeKeys = {
         [...dataScopeKeys.all, "list", query] as const,
 }
 
-export function useOrganizationStateQuery() {
+export function useOrganizationStateQuery(enabled = true) {
     return useQuery({
+        enabled,
         queryKey: organizationKeys.state(),
         queryFn: fetchOrganizationState,
     })

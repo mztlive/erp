@@ -27,8 +27,8 @@ export const DIMENSION_LABEL: Record<ScopeDimension, string> = {
 
 export const TARGET_MODE_LABEL: Record<ScopeTargetMode, string> = {
     explicit: "指定目标",
-    own_org: "本人组织",
-    managed_orgs: "管理的组织",
+    own_org: "本人所属部门",
+    managed_orgs: "本人管理的部门",
 }
 
 export const OPERATION_LABEL: Record<
@@ -39,9 +39,9 @@ export const OPERATION_LABEL: Record<
     move_unit: "移动组织",
     rename_unit: "重命名组织",
     disable_unit: "停用组织",
-    transfer_member: "成员调岗",
-    end_membership: "结束成员关系",
-    grant_management: "授予管理范围",
+    transfer_member: "调整所属部门",
+    end_membership: "移出部门",
+    grant_management: "设置管理部门",
     revoke_management: "撤销管理范围",
 }
 

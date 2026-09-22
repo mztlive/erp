@@ -18,6 +18,8 @@ import {
     listWorkspaceStyles as styles,
 } from "@/components/business/list-workspace"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import { Button } from "@/components/ui/button"
 import { AccessListToolbar } from "@/features/access-audit/components/access-list-toolbar"
 import { AccessPreviewSheets } from "@/features/access-audit/components/access-preview-sheets"
@@ -35,6 +37,7 @@ import type { RoleRow } from "@/features/access-audit/types"
  * 用户授权不在这里：账号的角色绑定在账号管理中维护。
  */
 export function AccessAuditPage() {
+    const profile = useAccountProfileQuery()
     const page = useAccessAuditPage("access")
 
     if (page.rejectedWorkItemId) {
@@ -42,7 +45,7 @@ export function AccessAuditPage() {
             <PageScaffold density="compact" className={styles.page}>
                 <ListWorkspaceHeader
                     eyebrow="系统"
-                    title="权限配置"
+                    title="角色与权限"
                     description="管理角色的操作权限、数据范围与绑定账号。"
                 />
                 <FormalActionResult
@@ -96,10 +99,26 @@ export function AccessAuditPage() {
         <PageScaffold density="compact" className={styles.page}>
             <ListWorkspaceHeader
                 eyebrow="系统"
-                title="权限配置"
+                title="角色与权限"
                 description="管理角色的操作权限、数据范围与绑定账号。"
             >
                 <div className="flex flex-wrap items-center gap-2">
+                    {hasPermission(
+                        profile.data?.permissions,
+                        "data_scope:list",
+                    ) ? (
+                        <Button
+                            id="operations-access-advanced-scopes"
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() =>
+                                page.routerPush("/system/organization/scopes")
+                            }
+                        >
+                            高级范围配置
+                        </Button>
+                    ) : null}
                     <Button
                         id="operations-access-export"
                         type="button"
@@ -124,7 +143,7 @@ export function AccessAuditPage() {
                         onClick={() => page.routerPush("/system/accounts")}
                     >
                         <UsersIcon className="size-3.5" aria-hidden="true" />
-                        账号管理
+                        组织与人员
                     </Button>
                     <Button
                         id="operations-access-config-create-role"

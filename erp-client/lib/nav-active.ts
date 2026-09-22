@@ -39,6 +39,19 @@ export function isNavItemActive(
     allHrefs: readonly string[],
     search: string = "",
 ): boolean {
+    // 系统工作面中的子视图沿用主入口高亮；显式独立入口仍优先。
+    if (!allHrefs.some((item) => splitHref(item).path === pathname)) {
+        if (
+            pathname === "/system/organization" &&
+            allHrefs.includes("/system/accounts")
+        )
+            pathname = "/system/accounts"
+        if (
+            pathname === "/system/organization/scopes" ||
+            pathname.startsWith("/system/roles/")
+        )
+            pathname = "/system/access-audit"
+    }
     const { path: hrefPath, params: hrefParams } = splitHref(href)
     if (!pathMatches(pathname, hrefPath)) return false
 

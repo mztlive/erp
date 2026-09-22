@@ -14,6 +14,10 @@ import {
 } from "@/components/ui/input-group"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { accountPermissionGroups } from "../../lib/account-permission-preview"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
+import { useOrganizationStateQuery } from "@/features/organization/hooks/queries"
+import { isRelationActive, unitLabel } from "@/features/organization/lib/tree"
 import { useRolesQuery } from "../../hooks/queries"
 import { useAccountPermissionScopes } from "../../hooks/use-account-permission-scopes"
 import type { AdminAccount } from "../../types"
@@ -42,6 +46,26 @@ export function AccountPermissionsSheet({
     onAdjustRoles: () => void
 }) {
     const rolesQuery = useRolesQuery()
+    const profile = useAccountProfileQuery()
+    const canReadOrganization = hasPermission(
+        profile.data?.permissions,
+        "org_unit:list",
+    )
+    const organization = useOrganizationStateQuery(open && canReadOrganization)
+    const person = organization.data?.people.find(
+        (item) => item.id === account?.id,
+    )
+    const management =
+        organization.data?.management.filter(
+            (item) =>
+                item.user_id === account?.id &&
+                account?.role_ids.includes(item.role_id) &&
+                isRelationActive(
+                    item.valid_from,
+                    item.valid_to,
+                    organization.data!.asOf,
+                ),
+        ) ?? []
     const scopesQuery = useAccountPermissionScopes(account, open)
     const [keyword, setKeyword] = React.useState("")
     React.useEffect(() => {
@@ -111,6 +135,51 @@ export function AccountPermissionsSheet({
             }
         >
             <div className="space-y-6 text-sm">
+                <section className="space-y-2 border-b pb-6">
+                    <h3 className="font-medium">部门与管理职责</h3>
+                    {!canReadOrganization ? (
+                        <p>没有查看部门的权限。</p>
+                    ) : organization.isError ? (
+                        <BusinessFailureState
+                            id="account-permissions-organization-retry"
+                            title="部门信息加载失败"
+                            error={organization.error}
+                            onRetry={() => {
+                                void organization.refetch()
+                            }}
+                        />
+                    ) : !organization.data ? (
+                        <p>正在加载部门…</p>
+                    ) : (
+                        <>
+                            <p>
+                                所属部门：
+                                {!person
+                                    ? "不在可查看范围"
+                                    : person.own_org_unit_id
+                                      ? unitLabel(
+                                            organization.data.units,
+                                            person.own_org_unit_id,
+                                        )
+                                      : "未分配部门"}
+                            </p>
+                            <p>
+                                管理部门：
+                                {management.length
+                                    ? management
+                                          .map(
+                                              (item) =>
+                                                  `${unitLabel(organization.data!.units, item.org_unit_id)}${item.include_descendants ? "（含下级）" : ""}`,
+                                          )
+                                          .join("、")
+                                    : "当前可查看范围内未配置"}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                                下方按业务查看角色范围与个人限制。部门成员身份本身不授予业务权限。
+                            </p>
+                        </>
+                    )}
+                </section>
                 {rolesQuery.isError ? (
                     <BusinessFailureState
                         error={rolesQuery.error}

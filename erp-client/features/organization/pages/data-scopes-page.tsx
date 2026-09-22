@@ -19,10 +19,7 @@ import {
 } from "@/components/business/list-workspace"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import {
-    actionLabel,
-    resourceLabel,
-} from "@/features/admin/lib/permission-catalog"
+import { actionLabel, resourceLabel } from "@/lib/permission-catalog"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { DataScopeFormDialog } from "@/features/organization/components/data-scope-form-dialog"
 import { OrganizationEmptyByReason } from "@/features/organization/components/empty-by-reason"
@@ -129,9 +126,18 @@ export function DataScopesPage() {
         >
             <ListWorkspaceHeader
                 eyebrow="系统"
-                title="范围配置"
-                description="按资源与动作配置可见范围。组织配置权不会变成业务执行权。"
+                title="高级范围配置"
+                description="跨角色核对范围与个人限制。日常授权请在「角色与权限」中选择角色后配置。"
             >
+                <Button
+                    id="organization-scopes-back-roles"
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => router.push("/system/access-audit")}
+                >
+                    返回角色与权限
+                </Button>
                 {canCreate ? (
                     <Button
                         id="organization-scope-create"

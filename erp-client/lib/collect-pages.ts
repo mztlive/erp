@@ -46,6 +46,14 @@ function takeEnvelope(
     for (const key of ENVELOPE_KEYS) {
         const value = page[key]
         if (value === undefined) continue
+        // as_of 是每页查询的解析时点，不是授权版本；保留首页时点。
+        if (
+            key === "as_of" &&
+            next.as_of !== undefined &&
+            typeof seen.scope_version === "string" &&
+            seen.scope_version === page.scope_version
+        )
+            continue
         const previous = next[key]
         if (previous !== undefined && previous !== value)
             throw scopeChangedError()

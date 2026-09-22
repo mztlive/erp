@@ -47,6 +47,7 @@ import {
     mergeOrganizationSearchParams,
     parseOrganizationSearchParams,
 } from "@/features/organization/lib/url-state"
+import { PeopleNavigation } from "@/features/organization/components/people-navigation"
 import { hasPermission } from "@/lib/permissions"
 
 export function OrganizationPage() {
@@ -133,8 +134,8 @@ export function OrganizationPage() {
             <ListWorkspaceHeader
                 className="shrink-0"
                 eyebrow="系统"
-                title="组织架构"
-                description="维护部门与团队，管理成员归属和组织管理范围。"
+                title="组织与人员"
+                description="先选择部门添加成员；人员账号中可创建账号、调整部门和分配角色。"
             >
                 {canManage ? (
                     <Button
@@ -154,6 +155,7 @@ export function OrganizationPage() {
                 ) : null}
             </ListWorkspaceHeader>
 
+            <PeopleNavigation current="departments" />
             <ListWorkSurface
                 ariaLabel="组织树"
                 className="min-h-0 overflow-hidden"
@@ -322,6 +324,10 @@ export function OrganizationPage() {
                                         node={selected}
                                         view={view}
                                         canManage={canManage}
+                                        canViewAccounts={hasPermission(
+                                            profileQuery.data?.permissions,
+                                            "admin:list",
+                                        )}
                                         onChange={(operation, extras) =>
                                             openChange(
                                                 operation as OrganizationChangeDraft["operation"],

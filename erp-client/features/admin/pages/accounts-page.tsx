@@ -32,6 +32,20 @@ import {
 } from "@/features/admin/hooks/queries"
 import type { AdminAccount } from "@/features/admin/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
+import { PeopleNavigation } from "@/features/organization/components/people-navigation"
+import { OrganizationChangeDialog } from "@/features/organization/components/organization-change-dialog"
+import {
+    useOrganizationStateQuery,
+    usePreviewOrganizationChangeMutation,
+    useSubmitOrganizationChangeMutation,
+} from "@/features/organization/hooks/queries"
+import {
+    EMPTY_CHANGE_DRAFT,
+    type OrganizationChangeDraft,
+} from "@/features/organization/lib/change-payload"
+import { unitLabel } from "@/features/organization/lib/tree"
 import { formatDateTime } from "@/lib/datetime"
 
 type AccountFormState = {
@@ -48,6 +62,19 @@ type AccountFormState = {
 export function AccountsPage() {
     const router = useRouter()
     const searchParams = useSearchParams()
+    const profileQuery = useAccountProfileQuery()
+    const canReadOrganization = hasPermission(
+        profileQuery.data?.permissions,
+        "org_unit:list",
+    )
+    const canManageOrganization =
+        canReadOrganization &&
+        hasPermission(profileQuery.data?.permissions, "org_unit:manage")
+    const organizationQuery = useOrganizationStateQuery(canReadOrganization)
+    const previewChange = usePreviewOrganizationChangeMutation()
+    const submitChange = useSubmitOrganizationChangeMutation()
+    const [departmentDraft, setDepartmentDraft] =
+        React.useState<OrganizationChangeDraft | null>(null)
     const adminsQuery = useAdminsQuery()
     const rolesQuery = useRolesQuery()
     const assignableRolesQuery = useAssignableRolesQuery()
@@ -57,6 +84,11 @@ export function AccountsPage() {
         () => searchParams.get("q") ?? "",
     )
     const [searchDraft, setSearchDraft] = React.useState(keyword)
+    React.useEffect(() => {
+        const next = searchParams.get("q") ?? ""
+        setKeyword(next)
+        setSearchDraft(next)
+    }, [searchParams])
     const [accountForm, setAccountForm] =
         React.useState<AccountFormState | null>(null)
     const [permissionAccount, setPermissionAccount] =
@@ -65,6 +97,7 @@ export function AccountsPage() {
     const permissionReturnId = React.useRef<string | null>(null)
     const editAfterPermissionsClose = React.useRef(false)
 
+    const [setupMessage, setSetupMessage] = React.useState<string | null>(null)
     const [deletingAccount, setDeletingAccount] = React.useState<{
         id: string
         account: string
@@ -112,6 +145,28 @@ export function AccountsPage() {
                 ),
             },
             {
+                id: "department",
+                size: 190,
+                header: "所属部门",
+                cell: ({ row }) => {
+                    if (!canReadOrganization) return "无部门查看权限"
+                    if (organizationQuery.isError) return "部门加载失败"
+                    if (!organizationQuery.data) return "正在加载…"
+                    const person = organizationQuery.data.people.find(
+                        (item) => item.id === row.original.id,
+                    )
+                    if (!person) return "不在可查看范围"
+                    return person.own_org_unit_id ? (
+                        unitLabel(
+                            organizationQuery.data.units,
+                            person.own_org_unit_id,
+                        )
+                    ) : (
+                        <span className="text-amber-700">未分配部门</span>
+                    )
+                },
+            },
+            {
                 id: "roles",
                 size: 300,
                 header: "角色",
@@ -137,8 +192,8 @@ export function AccountsPage() {
             },
             {
                 id: "actions",
-                size: 220,
-                minSize: 220,
+                size: 320,
+                minSize: 280,
                 header: () => <span className="block text-right">操作</span>,
                 cell: ({ row }) => {
                     const account = row.original
@@ -149,7 +204,57 @@ export function AccountsPage() {
                     )
                     const segment = toAutomationIdSegment(account.id)
                     return (
-                        <div className="flex items-center justify-end gap-1">
+                        <div className="flex flex-wrap items-center justify-end gap-1">
+                            {canManageOrganization &&
+                            organizationQuery.data?.people.some(
+                                (person) => person.id === account.id,
+                            ) ? (
+                                <Button
+                                    id={`governance-admin-accounts-row-${segment}-department`}
+                                    type="button"
+                                    size="xs"
+                                    variant="ghost"
+                                    onClick={() =>
+                                        setDepartmentDraft({
+                                            ...EMPTY_CHANGE_DRAFT,
+                                            operation: "transfer_member",
+                                            userId: account.id,
+                                            orgUnitId:
+                                                organizationQuery.data?.people.find(
+                                                    (person) =>
+                                                        person.id ===
+                                                        account.id,
+                                                )?.own_org_unit_id ?? "",
+                                        })
+                                    }
+                                >
+                                    调整部门
+                                </Button>
+                            ) : null}
+                            {canManageOrganization &&
+                            organizationQuery.data?.people.some(
+                                (person) => person.id === account.id,
+                            ) ? (
+                                <Button
+                                    id={`governance-admin-accounts-row-${segment}-management`}
+                                    type="button"
+                                    size="xs"
+                                    variant="ghost"
+                                    onClick={() =>
+                                        setDepartmentDraft({
+                                            ...EMPTY_CHANGE_DRAFT,
+                                            operation: "grant_management",
+                                            userId: account.id,
+                                            roleId:
+                                                account.role_ids.length === 1
+                                                    ? account.role_ids[0]!
+                                                    : "",
+                                        })
+                                    }
+                                >
+                                    管理部门
+                                </Button>
+                            ) : null}
                             <Button
                                 id={`governance-admin-accounts-row-${segment}-edit`}
                                 type="button"
@@ -208,7 +313,14 @@ export function AccountsPage() {
                 },
             },
         ],
-        [roleNameById, rolesQuery.data],
+        [
+            roleNameById,
+            rolesQuery.data,
+            canReadOrganization,
+            canManageOrganization,
+            organizationQuery.data,
+            organizationQuery.isError,
+        ],
     )
 
     const hasSearch = keyword.trim().length > 0
@@ -221,19 +333,24 @@ export function AccountsPage() {
         const next = searchDraft.trim()
         setSearchDraft(next)
         setKeyword(next)
-    }, [searchDraft])
+        router.replace(
+            `/system/accounts${next ? `?q=${encodeURIComponent(next)}` : ""}`,
+            { scroll: false },
+        )
+    }, [searchDraft, router])
 
     const clearAllFilters = React.useCallback(() => {
         setSearchDraft("")
         setKeyword("")
-    }, [])
+        router.replace("/system/accounts", { scroll: false })
+    }, [router])
 
     return (
         <PageScaffold density="compact" className={styles.page}>
             <ListWorkspaceHeader
                 eyebrow="系统"
-                title="账号管理"
-                description="管理成员登录账号与角色分配。"
+                title="组织与人员"
+                description="创建人员账号，分配所属部门与角色，并查看权限配置。"
             >
                 <div className="flex flex-wrap items-center gap-2">
                     <Button
@@ -247,7 +364,7 @@ export function AccountsPage() {
                             className="size-3.5"
                             aria-hidden="true"
                         />
-                        权限配置
+                        角色与权限
                     </Button>
                     <Button
                         id="governance-admin-accounts-create"
@@ -266,6 +383,22 @@ export function AccountsPage() {
                 </div>
             </ListWorkspaceHeader>
 
+            <PeopleNavigation current="accounts" />
+            {setupMessage ? (
+                <p role="status" className="rounded-lg bg-muted p-3 text-sm">
+                    {setupMessage}
+                </p>
+            ) : null}
+            {canReadOrganization && organizationQuery.isError ? (
+                <BusinessFailureState
+                    id="accounts-organization-retry"
+                    title="部门信息加载失败"
+                    error={organizationQuery.error}
+                    onRetry={() => {
+                        void organizationQuery.refetch()
+                    }}
+                />
+            ) : null}
             <ListWorkSurface
                 ariaLabel="账号列表"
                 toolbar={
@@ -353,6 +486,25 @@ export function AccountsPage() {
                 }
             />
 
+            {departmentDraft &&
+            organizationQuery.data &&
+            canManageOrganization ? (
+                <OrganizationChangeDialog
+                    open
+                    onOpenChange={(open) => {
+                        if (!open) setDepartmentDraft(null)
+                    }}
+                    view={organizationQuery.data}
+                    draft={departmentDraft}
+                    expectedVersion={organizationQuery.data.organizationVersion}
+                    previewing={previewChange.isPending}
+                    submitting={submitChange.isPending}
+                    onPreview={(request) => previewChange.mutateAsync(request)}
+                    onSubmit={async (request) => {
+                        await submitChange.mutateAsync(request)
+                    }}
+                />
+            ) : null}
             <AccountPermissionsSheet
                 account={permissionAccount}
                 open={permissionsOpen}
@@ -388,6 +540,94 @@ export function AccountsPage() {
                         accountForm.mode === "edit"
                             ? (accountForm.account?.id ?? "edit")
                             : "create"
+                    }
+                    onCreated={
+                        canManageOrganization
+                            ? (accountName) => {
+                                  setSetupMessage(
+                                      "账号已创建，正在准备分配部门。",
+                                  )
+                                  void Promise.all([
+                                      adminsQuery.refetch(),
+                                      organizationQuery.refetch(),
+                                  ])
+                                      .then(([accounts, organization]) => {
+                                          const created = accounts.data?.find(
+                                              (account) =>
+                                                  account.account ===
+                                                  accountName,
+                                          )
+                                          if (
+                                              !created ||
+                                              !organization.data?.people.some(
+                                                  (person) =>
+                                                      person.id === created.id,
+                                              ) ||
+                                              organization.isError
+                                          ) {
+                                              setSetupMessage(
+                                                  "账号已创建，部门信息暂不可用。请刷新后点击该账号的「调整部门」完成分配，无需重复创建账号。",
+                                              )
+                                              return
+                                          }
+                                          setSetupMessage(
+                                              "账号已创建。请分配所属部门；取消后也可在列表中继续调整。",
+                                          )
+                                          setDepartmentDraft({
+                                              ...EMPTY_CHANGE_DRAFT,
+                                              operation: "transfer_member",
+                                              userId: created.id,
+                                          })
+                                      })
+                                      .catch(() =>
+                                          setSetupMessage(
+                                              "账号已创建，请在列表中点击「调整部门」完成分配。",
+                                          ),
+                                      )
+                              }
+                            : undefined
+                    }
+                    departmentLabel={
+                        accountForm.account && organizationQuery.data
+                            ? (() => {
+                                  const person =
+                                      organizationQuery.data.people.find(
+                                          (item) =>
+                                              item.id ===
+                                              accountForm.account?.id,
+                                      )
+                                  return !person
+                                      ? "不在可查看范围"
+                                      : person.own_org_unit_id
+                                        ? unitLabel(
+                                              organizationQuery.data.units,
+                                              person.own_org_unit_id,
+                                          )
+                                        : "未分配部门"
+                              })()
+                            : undefined
+                    }
+                    onAdjustDepartment={
+                        canManageOrganization &&
+                        accountForm.account &&
+                        organizationQuery.data?.people.some(
+                            (person) => person.id === accountForm.account?.id,
+                        )
+                            ? () => {
+                                  const account = accountForm.account!
+                                  setAccountForm(null)
+                                  setDepartmentDraft({
+                                      ...EMPTY_CHANGE_DRAFT,
+                                      operation: "transfer_member",
+                                      userId: account.id,
+                                      orgUnitId:
+                                          organizationQuery.data?.people.find(
+                                              (person) =>
+                                                  person.id === account.id,
+                                          )?.own_org_unit_id ?? "",
+                                  })
+                              }
+                            : undefined
                     }
                     mode={accountForm.mode}
                     account={accountForm.account}

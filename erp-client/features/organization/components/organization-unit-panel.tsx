@@ -1,5 +1,7 @@
 "use client"
 
+import Link from "next/link"
+
 import { PlusIcon, ShieldCheckIcon, UsersIcon } from "lucide-react"
 
 import { BusinessStatusBadge } from "@/components/business"
@@ -24,10 +26,12 @@ export function OrganizationUnitPanel({
     node,
     view,
     canManage,
+    canViewAccounts = false,
     onChange,
 }: {
     node: OrgTreeNode
     view: OrganizationStateView
+    canViewAccounts?: boolean
     canManage: boolean
     onChange: (operation: string, extras?: Record<string, string>) => void
 }) {
@@ -70,7 +74,7 @@ export function OrganizationUnitPanel({
                 </p>
                 {!unit.enabled ? (
                     <p className="text-xs text-muted-foreground">
-                        该组织已停用，不能新增下级、调入成员或授予管理范围。
+                        该组织已停用，不能新增下级、调入成员或设置管理部门。
                     </p>
                 ) : null}
             </div>
@@ -155,13 +159,13 @@ export function OrganizationUnitPanel({
                                 })
                             }
                         >
-                            成员调岗
+                            添加成员
                         </Button>
                     ) : null}
                 </div>
                 {node.members.length === 0 ? (
                     <p className="rounded-lg bg-muted/30 px-4 py-8 text-center text-sm leading-6 text-muted-foreground">
-                        当前没有主属成员。
+                        当前部门还没有成员，请点击「添加成员」选择已有账号。
                     </p>
                 ) : (
                     <ul className="min-w-0 divide-y divide-border">
@@ -171,7 +175,20 @@ export function OrganizationUnitPanel({
                                 className="flex min-w-0 flex-wrap items-center justify-between gap-3 px-1 py-4 text-sm"
                             >
                                 <span className="min-w-0 wrap-anywhere">
-                                    {personLabel(view.people, member.user_id)}
+                                    {canViewAccounts ? (
+                                        <Link
+                                            id={`organization-member-${toAutomationIdSegment(member.id)}-account`}
+                                            className="underline underline-offset-4"
+                                            href={`/system/accounts?q=${encodeURIComponent(view.people.find((person) => person.id === member.user_id)?.account ?? "")}`}
+                                        >
+                                            {personLabel(
+                                                view.people,
+                                                member.user_id,
+                                            )}
+                                        </Link>
+                                    ) : (
+                                        personLabel(view.people, member.user_id)
+                                    )}
                                     <span className="mt-1 block text-xs text-muted-foreground">
                                         {instantLabel(member.valid_from)} 起 ·{" "}
                                         {instantLabel(member.valid_to)}
@@ -183,19 +200,35 @@ export function OrganizationUnitPanel({
                                     member.valid_to,
                                     view.asOf,
                                 ) ? (
-                                    <Button
-                                        id={`organization-member-${toAutomationIdSegment(member.id)}-end`}
-                                        type="button"
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={() =>
-                                            onChange("end_membership", {
-                                                userId: member.user_id,
-                                            })
-                                        }
-                                    >
-                                        结束关系
-                                    </Button>
+                                    <div className="flex flex-wrap gap-1">
+                                        <Button
+                                            id={`organization-member-${toAutomationIdSegment(member.id)}-transfer`}
+                                            type="button"
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={() =>
+                                                onChange("transfer_member", {
+                                                    userId: member.user_id,
+                                                    orgUnitId: unit.id,
+                                                })
+                                            }
+                                        >
+                                            调整部门
+                                        </Button>
+                                        <Button
+                                            id={`organization-member-${toAutomationIdSegment(member.id)}-end`}
+                                            type="button"
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={() =>
+                                                onChange("end_membership", {
+                                                    userId: member.user_id,
+                                                })
+                                            }
+                                        >
+                                            移出部门
+                                        </Button>
+                                    </div>
                                 ) : null}
                             </li>
                         ))}
@@ -228,7 +261,7 @@ export function OrganizationUnitPanel({
                                 })
                             }
                         >
-                            授予管理范围
+                            设置管理部门
                         </Button>
                     ) : null}
                 </div>

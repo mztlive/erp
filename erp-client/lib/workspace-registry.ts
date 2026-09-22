@@ -260,9 +260,22 @@ export function filterNavGroupsByPermissions(
     return groups
         .map((group) => ({
             label: group.label,
-            items: group.items.filter((item) =>
-                hasAnyPermission(permissions, item.requiredPermissions),
-            ),
+            items: group.items
+                .filter((item) =>
+                    hasAnyPermission(permissions, item.requiredPermissions),
+                )
+                .map((item) =>
+                    item.href === "/system/access-audit" &&
+                    !hasAnyPermission(permissions, [
+                        "role:list",
+                        "permission:list",
+                    ])
+                        ? { ...item, href: "/system/organization/scopes" }
+                        : item.href === "/system/accounts" &&
+                            !hasAnyPermission(permissions, ["admin:list"])
+                          ? { ...item, href: "/system/organization" }
+                          : item,
+                ),
         }))
         .filter((group) => group.items.length > 0)
 }
@@ -648,9 +661,13 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                     // 权限配置与审计查询的查询口径、时间语义与导出策略都不同，
                     // 拆成两个入口；两者同属 W19 工作面。
                     routeId: "W19",
-                    label: "权限配置",
+                    label: "角色与权限",
                     icon: ShieldCheckIcon,
-                    requiredPermissions: ["role:list", "permission:list"],
+                    requiredPermissions: [
+                        "role:list",
+                        "permission:list",
+                        "data_scope:list",
+                    ],
                 },
                 {
                     routeId: "W19",
@@ -662,23 +679,9 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                 {
                     routeId: "W19",
                     href: "/system/accounts",
-                    label: "账号管理",
+                    label: "组织与人员",
                     icon: UsersIcon,
-                    requiredPermissions: ["admin:list"],
-                },
-                {
-                    routeId: "W19",
-                    href: "/system/organization",
-                    label: "组织架构",
-                    icon: FolderTreeIcon,
-                    requiredPermissions: ["org_unit:list"],
-                },
-                {
-                    routeId: "W19",
-                    href: "/system/organization/scopes",
-                    label: "范围配置",
-                    icon: ScaleIcon,
-                    requiredPermissions: ["data_scope:list"],
+                    requiredPermissions: ["admin:list", "org_unit:list"],
                 },
                 {
                     routeId: "W24",

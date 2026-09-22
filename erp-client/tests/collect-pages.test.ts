@@ -123,3 +123,44 @@ it("完整收集从信封保留版本字段", async () => {
         organization_version: 8,
     })
 })
+
+it("范围版本一致时允许每页解析时间变化，保留首页时点", async () => {
+    vi.mocked(apiGet)
+        .mockResolvedValueOnce({
+            items: [{ id: "a" }],
+            total: 2,
+            scope_version: "v1",
+            policy_version: 3,
+            organization_version: 2,
+            as_of: "2026-09-22T00:00:00Z",
+        })
+        .mockResolvedValueOnce({
+            items: [{ id: "b" }],
+            total: 2,
+            scope_version: "v1",
+            policy_version: 3,
+            organization_version: 2,
+            as_of: "2026-09-22T00:00:01Z",
+        })
+    expect(await fetchCompleteList("/admin/data-scopes")).toMatchObject({
+        items: [{ id: "a" }, { id: "b" }],
+        as_of: "2026-09-22T00:00:00Z",
+    })
+})
+
+it("没有范围版本保护时仍拒绝混合不同时点", async () => {
+    vi.mocked(apiGet)
+        .mockResolvedValueOnce({
+            items: [{ id: "a" }],
+            total: 2,
+            as_of: "first",
+        })
+        .mockResolvedValueOnce({
+            items: [{ id: "b" }],
+            total: 2,
+            as_of: "second",
+        })
+    await expect(fetchCompleteList("/list")).rejects.toMatchObject({
+        code: "DATA_SCOPE_CHANGED",
+    })
+})

@@ -80,7 +80,13 @@ export function AccountFormDialog({
     roleOptions,
     onOpenChange,
     id = "governance-admin-account-dialog",
+    onCreated,
+    departmentLabel,
+    onAdjustDepartment,
 }: {
+    onCreated?: (account: string) => void
+    departmentLabel?: string
+    onAdjustDepartment?: () => void
     mode: "create" | "edit"
     account: AccountDraft | null
     roleOptions: readonly { id: string; name: string }[]
@@ -124,6 +130,7 @@ export function AccountFormDialog({
                     })
                 }
                 onOpenChange(false)
+                if (!isEdit) onCreated?.(value.account.trim())
             } catch (error) {
                 setSubmitError(getErrorMessage(error, "操作失败，请重试。"))
             }
@@ -153,6 +160,42 @@ export function AccountFormDialog({
                         void form.handleSubmit()
                     }}
                 >
+                    {isEdit && departmentLabel ? (
+                        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/30 p-3 text-sm">
+                            <span>所属部门：{departmentLabel}</span>
+                            {onAdjustDepartment ? (
+                                <form.Subscribe
+                                    selector={(state) => state.isDirty}
+                                >
+                                    {(dirty) => (
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            {dirty ? (
+                                                <span className="text-xs text-muted-foreground">
+                                                    先保存账号修改，再调整部门
+                                                </span>
+                                            ) : null}
+                                            <Button
+                                                id={`${id}-department`}
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                disabled={dirty || pending}
+                                                onClick={onAdjustDepartment}
+                                            >
+                                                调整部门
+                                            </Button>
+                                        </div>
+                                    )}
+                                </form.Subscribe>
+                            ) : null}
+                        </div>
+                    ) : null}
+                    {!isEdit && onCreated ? (
+                        <p className="text-sm text-muted-foreground">
+                            第 1
+                            步：创建账号并选择角色。创建成功后，继续分配所属部门。
+                        </p>
+                    ) : null}
                     <FieldGroup className="gap-4">
                         {isEdit ? (
                             <Field data-disabled>
