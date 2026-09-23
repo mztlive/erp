@@ -56,23 +56,41 @@ export function OrganizationUnitFilter({
                 : undefined
 
     return (
-        <div className="space-y-2">
+        <div className="min-w-0 space-y-1.5">
             <label htmlFor={id} className="text-xs text-muted-foreground">
                 {label}
             </label>
-            <MultiOptionCombobox
-                id={id}
-                aria-label={label}
-                aria-describedby={message ? `${id}-hint` : undefined}
-                value={selected}
-                options={options}
-                placeholder="搜索组织名称"
-                emptyLabel={message ?? "没有符合条件的组织"}
-                onValueChange={(ids) => {
-                    onChange([...new Set(ids)].sort().join(","))
-                    if (!ids.length) onDescendantsChange(false)
-                }}
-            />
+            <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
+                <MultiOptionCombobox
+                    id={id}
+                    aria-label={label}
+                    aria-describedby={message ? `${id}-hint` : undefined}
+                    className="min-w-0 [&_[data-slot=combobox-chips]]:min-h-control [&_[data-slot=combobox-chips]]:rounded-lg [&_[data-slot=combobox-chip]]:max-w-full [&_[data-slot=combobox-chip-remove]]:shrink-0"
+                    value={selected}
+                    options={options}
+                    placeholder="搜索组织名称"
+                    emptyLabel={message ?? "没有符合条件的组织"}
+                    onValueChange={(ids) => {
+                        onChange([...new Set(ids)].sort().join(","))
+                        if (!ids.length) onDescendantsChange(false)
+                    }}
+                />
+                <label
+                    htmlFor={`${id}-descendants`}
+                    className="flex h-control items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground has-[:disabled]:cursor-not-allowed"
+                >
+                    <Checkbox
+                        id={`${id}-descendants`}
+                        checked={includeDescendants}
+                        disabled={!selected.length}
+                        className="rounded-sm"
+                        onCheckedChange={(checked) =>
+                            onDescendantsChange(checked === true)
+                        }
+                    />
+                    包含下级
+                </label>
+            </div>
             {message && (
                 <div
                     id={`${id}-hint`}
@@ -93,20 +111,6 @@ export function OrganizationUnitFilter({
                     )}
                 </div>
             )}
-            <label
-                htmlFor={`${id}-descendants`}
-                className="flex items-center gap-2 text-xs text-muted-foreground"
-            >
-                <Checkbox
-                    id={`${id}-descendants`}
-                    checked={includeDescendants}
-                    disabled={!selected.length}
-                    onCheckedChange={(checked) =>
-                        onDescendantsChange(checked === true)
-                    }
-                />
-                包含下级
-            </label>
         </div>
     )
 }

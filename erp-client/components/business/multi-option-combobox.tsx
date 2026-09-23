@@ -142,7 +142,9 @@ export function MultiOptionCombobox({
                                         }
                                         aria-label={item.label}
                                     >
-                                        {item.label}
+                                        <span className="min-w-0 truncate">
+                                            {item.label}
+                                        </span>
                                     </ComboboxChip>
                                 ))
                             }
