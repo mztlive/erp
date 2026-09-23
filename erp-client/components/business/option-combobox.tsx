@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/combobox"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
+import { InputGroupAddon } from "@/components/ui/input-group"
 
 /** 通用可搜索选项；用于枚举、筛选与轻量业务列表。 */
 export type ComboboxOption = Readonly<{
@@ -31,6 +32,8 @@ export type OptionComboboxProps = {
     value?: string | null
     onValueChange: (value: string | null) => void
     placeholder?: string
+    /** 查询栏常驻名称，与选中值分开显示，不随选择或输入消失。 */
+    filterLabel?: string
     emptyLabel?: string
     searchPlaceholder?: string
     /** 服务端已完成搜索时关闭本地二次过滤。 */
@@ -73,6 +76,7 @@ export function OptionCombobox({
     value,
     onValueChange,
     placeholder = "请选择",
+    filterLabel,
     searchPlaceholder,
     emptyLabel = "没有符合条件的选项",
     disabled = false,
@@ -146,7 +150,13 @@ export function OptionCombobox({
                             "h-7 min-h-7 *:data-[slot=input-group-control]:h-7 *:data-[slot=input-group-control]:text-xs",
                         inputClassName,
                     )}
-                />
+                >
+                    {filterLabel && (
+                        <InputGroupAddon className="shrink-0 whitespace-nowrap font-normal">
+                            {filterLabel}：
+                        </InputGroupAddon>
+                    )}
+                </ComboboxInput>
                 <ComboboxContent>
                     <ComboboxEmpty>
                         {loading ? "正在加载…" : emptyLabel}

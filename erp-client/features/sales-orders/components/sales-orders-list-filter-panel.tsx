@@ -1,193 +1,140 @@
 "use client"
 
-import {
-    ResponsibleUserFilter,
-    type ResponsibleUserOption,
-} from "@/features/entity-selectors/components/responsible-user-filter"
-
-import * as React from "react"
-
-import {
-    FixedOptionRadioFilter,
-    OptionCombobox,
-    OwnerCombobox,
-} from "@/components/business"
+import type { Dispatch, SetStateAction } from "react"
+import { OptionCombobox, OwnerCombobox } from "@/components/business"
 import { ListWorkspaceFilterField } from "@/components/business/list-workspace"
-import { Checkbox } from "@/components/ui/checkbox"
-import { DateRangePicker } from "@/components/ui/date-picker"
-import { Input } from "@/components/ui/input"
 import {
     ContractSearchCombobox,
     CustomerSearchCombobox,
 } from "@/features/entity-selectors"
+import { OrganizationUnitFilter } from "@/features/organization/components/organization-unit-filter"
 import {
     SALES_ORDER_CLOSE_OPTIONS,
     SALES_ORDER_COLLECTION_OPTIONS,
-    SALES_ORDER_COMMERCIAL_STATUS_OPTIONS,
     SALES_ORDER_FULFILLMENT_OPTIONS,
     SALES_ORDER_INVOICE_OPTIONS,
     SALES_ORDER_REVIEW_STATUS_OPTIONS,
-    type SalesOrderReviewStatusFilter,
 } from "@/features/sales-orders/lib/filter-orders"
 import type { SalesOrdersListFilterDraft } from "@/features/sales-orders/lib/sales-orders-list-filters"
 import { useOwnerOptionsQuery } from "@/hooks/use-options"
 
-export function SalesOrdersListFilterPanel(props: {
-    ownerOptions: readonly ResponsibleUserOption[]
-    draft: SalesOrdersListFilterDraft
-    onDraftChange: React.Dispatch<
-        React.SetStateAction<SalesOrdersListFilterDraft>
-    >
-}) {
-    const { draft: filterDraft, onDraftChange: setFilterDraft } = props
-    const ownerOptionsQuery = useOwnerOptionsQuery()
+const progressFields = [
+    {
+        key: "fulfillment",
+        id: "fulfillment",
+        label: "履约进度",
+        options: SALES_ORDER_FULFILLMENT_OPTIONS,
+    },
+    {
+        key: "collection",
+        id: "collection",
+        label: "回款进度",
+        options: SALES_ORDER_COLLECTION_OPTIONS,
+    },
+    {
+        key: "invoice",
+        id: "invoice",
+        label: "开票进度",
+        options: SALES_ORDER_INVOICE_OPTIONS,
+    },
+    {
+        key: "closeStatus",
+        id: "close-status",
+        label: "关闭状态",
+        options: SALES_ORDER_CLOSE_OPTIONS,
+    },
+] as const
+const sourceFields = [
+    {
+        key: "origin",
+        id: "origin",
+        label: "创建来源",
+        options: [
+            { value: "erp", label: "ERP" },
+            { value: "mall", label: "商城" },
+        ],
+    },
+    {
+        key: "reviewStatus",
+        id: "review-status",
+        label: "审核状态",
+        options: SALES_ORDER_REVIEW_STATUS_OPTIONS,
+    },
+] as const
 
-    return (
-        <div className="grid min-w-0 gap-5">
-            <ResponsibleUserFilter
-                id="sales-orders-list-owner"
-                label="负责销售"
-                value={filterDraft.ownerUserIds}
-                onChange={(ownerUserIds) =>
-                    setFilterDraft((draft) => ({ ...draft, ownerUserIds }))
-                }
-                options={props.ownerOptions}
+/** 低频条件按用途分组；高频条件由外部查询栏承载。 */
+export function SalesOrdersListFilterPanel({
+    draft,
+    onDraftChange,
+}: {
+    draft: SalesOrdersListFilterDraft
+    onDraftChange: Dispatch<SetStateAction<SalesOrdersListFilterDraft>>
+}) {
+    const owners = useOwnerOptionsQuery()
+    const renderEnum = ({
+        key,
+        id,
+        label,
+        options,
+    }: {
+        key:
+            | "fulfillment"
+            | "collection"
+            | "invoice"
+            | "closeStatus"
+            | "origin"
+            | "reviewStatus"
+        id: string
+        label: string
+        options: readonly { value: string; label: string }[]
+    }) => (
+        <ListWorkspaceFilterField
+            key={key}
+            htmlFor={`sales-orders-list-filter-${id}`}
+            label={label}
+        >
+            <OptionCombobox
+                id={`sales-orders-list-filter-${id}`}
+                className="w-full"
+                value={draft[key] === "all" ? null : draft[key]}
+                aria-label={label}
+                onValueChange={(value) => {
+                    if (
+                        value !== null &&
+                        !options.some((option) => option.value === value)
+                    )
+                        return
+                    onDraftChange((current) => ({
+                        ...current,
+                        [key]: value ?? "all",
+                    }))
+                }}
+                options={options}
+                placeholder="全部"
+                searchPlaceholder={`搜索${label}`}
             />
-            <ListWorkspaceFilterField
-                htmlFor="sales-orders-list-filter-org"
-                label="业务组织"
-            >
-                <Input
+        </ListWorkspaceFilterField>
+    )
+    return (
+        <div className="space-y-5">
+            <fieldset className="min-w-0 space-y-3">
+                <legend className="mb-1 text-sm font-medium">组织与关联</legend>
+                <OrganizationUnitFilter
                     id="sales-orders-list-filter-org"
-                    value={filterDraft.orgUnitIds}
-                    onChange={(event) =>
-                        setFilterDraft((draft) => ({
-                            ...draft,
-                            orgUnitIds: event.target.value,
+                    label="业务组织"
+                    value={draft.orgUnitIds}
+                    onChange={(orgUnitIds) =>
+                        onDraftChange((current) => ({ ...current, orgUnitIds }))
+                    }
+                    includeDescendants={draft.includeDescendants}
+                    onDescendantsChange={(includeDescendants) =>
+                        onDraftChange((current) => ({
+                            ...current,
+                            includeDescendants,
                         }))
                     }
-                    placeholder="组织 ID，逗号分隔"
-                    aria-label="按单据业务组织筛选"
                 />
-                <label
-                    htmlFor="sales-orders-list-filter-org-descendants"
-                    className="mt-2 flex items-center gap-2 text-xs text-muted-foreground"
-                >
-                    <Checkbox
-                        id="sales-orders-list-filter-org-descendants"
-                        checked={filterDraft.includeDescendants}
-                        onCheckedChange={(checked) =>
-                            setFilterDraft((draft) => ({
-                                ...draft,
-                                includeDescendants: checked === true,
-                            }))
-                        }
-                    />
-                    包含下级
-                </label>
-            </ListWorkspaceFilterField>
-            <fieldset className="min-w-0">
-                <legend className="mb-3 text-xs font-medium">来源与状态</legend>
-                <div className="grid min-w-0 gap-3">
-                    <FixedOptionRadioFilter
-                        id="sales-orders-list-filter-origin"
-                        label="创建来源"
-                        value={filterDraft.origin}
-                        onValueChange={(origin) => {
-                            setFilterDraft((draft) => ({
-                                ...draft,
-                                origin,
-                            }))
-                        }}
-                        options={[
-                            { value: "all", label: "全部" },
-                            { value: "erp", label: "ERP" },
-                            {
-                                value: "mall",
-                                label: "商城",
-                            },
-                        ]}
-                    />
-                    <FixedOptionRadioFilter
-                        id="sales-orders-list-filter-commercial-status"
-                        label="商业状态"
-                        value={filterDraft.commercialStatus}
-                        onValueChange={(commercialStatus) => {
-                            setFilterDraft((draft) => ({
-                                ...draft,
-                                commercialStatus,
-                            }))
-                        }}
-                        options={[
-                            { value: "all", label: "全部" },
-                            ...SALES_ORDER_COMMERCIAL_STATUS_OPTIONS,
-                        ]}
-                    />
-                    <FixedOptionRadioFilter
-                        id="sales-orders-list-filter-fulfillment"
-                        label="履约进度"
-                        value={filterDraft.fulfillment}
-                        onValueChange={(fulfillment) => {
-                            setFilterDraft((draft) => ({
-                                ...draft,
-                                fulfillment,
-                            }))
-                        }}
-                        options={[
-                            { value: "all", label: "全部" },
-                            ...SALES_ORDER_FULFILLMENT_OPTIONS,
-                        ]}
-                    />
-                    <FixedOptionRadioFilter
-                        id="sales-orders-list-filter-collection"
-                        label="回款进度"
-                        value={filterDraft.collection}
-                        onValueChange={(collection) => {
-                            setFilterDraft((draft) => ({
-                                ...draft,
-                                collection,
-                            }))
-                        }}
-                        options={[
-                            { value: "all", label: "全部" },
-                            ...SALES_ORDER_COLLECTION_OPTIONS,
-                        ]}
-                    />
-                    <FixedOptionRadioFilter
-                        id="sales-orders-list-filter-invoice"
-                        label="开票进度"
-                        value={filterDraft.invoice}
-                        onValueChange={(invoice) => {
-                            setFilterDraft((draft) => ({
-                                ...draft,
-                                invoice,
-                            }))
-                        }}
-                        options={[
-                            { value: "all", label: "全部" },
-                            ...SALES_ORDER_INVOICE_OPTIONS,
-                        ]}
-                    />
-                    <FixedOptionRadioFilter
-                        id="sales-orders-list-filter-close-status"
-                        label="关闭状态"
-                        value={filterDraft.closeStatus}
-                        onValueChange={(closeStatus) => {
-                            setFilterDraft((draft) => ({
-                                ...draft,
-                                closeStatus,
-                            }))
-                        }}
-                        options={[
-                            { value: "all", label: "全部" },
-                            ...SALES_ORDER_CLOSE_OPTIONS,
-                        ]}
-                    />
-                </div>
-            </fieldset>
-            <fieldset className="min-w-0">
-                <legend className="mb-3 text-xs font-medium">关联与日期</legend>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="grid min-w-0 gap-3 sm:grid-cols-2">
                     <ListWorkspaceFilterField
                         htmlFor="sales-orders-list-filter-customer"
                         label="客户"
@@ -196,17 +143,17 @@ export function SalesOrdersListFilterPanel(props: {
                             id="sales-orders-list-filter-customer"
                             purpose="filter"
                             scope="all_authorized"
-                            value={filterDraft.customerId || undefined}
-                            onValueChange={(customerId) => {
-                                setFilterDraft((draft) => ({
-                                    ...draft,
+                            value={draft.customerId || undefined}
+                            onValueChange={(customerId) =>
+                                onDraftChange((current) => ({
+                                    ...current,
                                     customerId: customerId ?? "",
                                     contractId:
-                                        customerId === draft.customerId
-                                            ? draft.contractId
+                                        customerId === current.customerId
+                                            ? current.contractId
                                             : "",
                                 }))
-                            }}
+                            }
                             placeholder="全部客户"
                         />
                     </ListWorkspaceFilterField>
@@ -217,87 +164,45 @@ export function SalesOrdersListFilterPanel(props: {
                         <ContractSearchCombobox
                             id="sales-orders-list-filter-contract"
                             purpose="filter"
-                            customerId={filterDraft.customerId || undefined}
-                            value={filterDraft.contractId || undefined}
-                            onValueChange={(contractId) => {
-                                setFilterDraft((draft) => ({
-                                    ...draft,
+                            customerId={draft.customerId || undefined}
+                            value={draft.contractId || undefined}
+                            onValueChange={(contractId) =>
+                                onDraftChange((current) => ({
+                                    ...current,
                                     contractId: contractId ?? "",
                                 }))
-                            }}
+                            }
                             placeholder="全部合同"
                         />
                     </ListWorkspaceFilterField>
+                </div>
+            </fieldset>
+            <fieldset className="min-w-0 border-t pt-4">
+                <legend className="pr-2 text-sm font-medium">业务进度</legend>
+                <div className="grid gap-3 sm:grid-cols-2">
+                    {progressFields.map(renderEnum)}
+                </div>
+            </fieldset>
+            <fieldset className="min-w-0 border-t pt-4">
+                <legend className="pr-2 text-sm font-medium">来源与审批</legend>
+                <div className="grid gap-3 sm:grid-cols-2">
+                    {sourceFields.map(renderEnum)}
                     <ListWorkspaceFilterField
                         htmlFor="sales-orders-list-filter-created-by"
                         label="创建人"
                     >
                         <OwnerCombobox
                             id="sales-orders-list-filter-created-by"
-                            owners={ownerOptionsQuery.data ?? []}
-                            loading={ownerOptionsQuery.isFetching}
-                            value={filterDraft.createdBy || undefined}
-                            onValueChange={(createdBy) => {
-                                setFilterDraft((draft) => ({
-                                    ...draft,
+                            owners={owners.data ?? []}
+                            loading={owners.isFetching}
+                            value={draft.createdBy || undefined}
+                            onValueChange={(createdBy) =>
+                                onDraftChange((current) => ({
+                                    ...current,
                                     createdBy: createdBy ?? "",
                                 }))
-                            }}
+                            }
                             placeholder="全部创建人"
-                        />
-                    </ListWorkspaceFilterField>
-                    <ListWorkspaceFilterField
-                        htmlFor="sales-orders-list-filter-created-date"
-                        label="创建日期"
-                    >
-                        <DateRangePicker
-                            id="sales-orders-list-filter-created-date"
-                            className="w-full"
-                            value={
-                                filterDraft.createdFrom || filterDraft.createdTo
-                                    ? {
-                                          from:
-                                              filterDraft.createdFrom ||
-                                              undefined,
-                                          to:
-                                              filterDraft.createdTo ||
-                                              undefined,
-                                      }
-                                    : undefined
-                            }
-                            onValueChange={(range) => {
-                                setFilterDraft((draft) => ({
-                                    ...draft,
-                                    createdFrom: range?.from ?? "",
-                                    createdTo: range?.to ?? "",
-                                }))
-                            }}
-                            placeholder="全部日期"
-                        />
-                    </ListWorkspaceFilterField>
-                    <ListWorkspaceFilterField
-                        htmlFor="sales-orders-list-filter-review-status"
-                        label="审核状态"
-                    >
-                        <OptionCombobox
-                            id="sales-orders-list-filter-review-status"
-                            className="w-full"
-                            value={
-                                filterDraft.reviewStatus === "all"
-                                    ? null
-                                    : filterDraft.reviewStatus
-                            }
-                            aria-label="审核状态"
-                            onValueChange={(reviewStatus) => {
-                                setFilterDraft((draft) => ({
-                                    ...draft,
-                                    reviewStatus: (reviewStatus ??
-                                        "all") as SalesOrderReviewStatusFilter,
-                                }))
-                            }}
-                            options={SALES_ORDER_REVIEW_STATUS_OPTIONS}
-                            placeholder="全部审核状态"
-                            searchPlaceholder="搜索审核状态"
                         />
                     </ListWorkspaceFilterField>
                 </div>

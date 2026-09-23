@@ -11,12 +11,14 @@ export const ResponsibleUserFilter = ({
     onChange,
     options,
     label = "负责人",
+    hideLabel = false,
 }: {
     id: string
     value: string
     onChange: (value: string) => void
     options: readonly ResponsibleUserOption[]
     label?: string
+    hideLabel?: boolean
 }) => {
     const selected = value.split(",").filter(Boolean)
     const available = new Set(options.map((option) => option.value))
@@ -27,13 +29,19 @@ export const ResponsibleUserFilter = ({
             .map((key) => ({ value: key, label: "已选人员（当前不可用）" })),
     ]
     return (
-        <div className="min-w-0 space-y-1.5">
-            <label className="text-xs text-muted-foreground" htmlFor={id}>
+        <div className={hideLabel ? "min-w-0" : "min-w-0 space-y-1.5"}>
+            <label
+                className={
+                    hideLabel ? "sr-only" : "text-xs text-muted-foreground"
+                }
+                htmlFor={id}
+            >
                 {label}
             </label>
             <MultiOptionCombobox
                 id={id}
                 aria-label={label}
+                filterLabel={hideLabel ? label : undefined}
                 value={selected}
                 options={items}
                 onValueChange={(ids) =>

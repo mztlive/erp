@@ -14,13 +14,11 @@ import {
     ListSearchField,
     ListWorkSurface,
     ListWorkspaceFilterBar,
-    ListWorkspaceFilterField,
     listWorkspaceEmptyStateClassName,
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Input } from "@/components/ui/input"
+import { OrganizationUnitFilter } from "@/features/organization/components/organization-unit-filter"
 import {
     useContractsList,
     type ContractFilterKey,
@@ -67,6 +65,7 @@ export function ContractsTablePanel({
         setDescendantsDraft,
         applyFilters,
         resetMoreFilters,
+        cancelMoreFilters,
         hasPendingChanges,
         removeFilter,
         clearAllFilters,
@@ -82,8 +81,8 @@ export function ContractsTablePanel({
         handlePaginationChange,
     } = list
 
-    const moreCount = appliedChips.filter(({ key }) =>
-        ["settlementPartyId", "ownerUserIds", "orgUnitIds"].includes(key),
+    const moreCount = appliedChips.filter(
+        ({ key }) => key === "orgUnitIds",
     ).length
 
     return (
@@ -91,6 +90,9 @@ export function ContractsTablePanel({
             ariaLabel="合同列表"
             toolbar={
                 <ListWorkspaceFilterBar
+                    morePresentation="popover"
+                    moreSize="compact"
+                    className="[&_[data-slot=list-toolbar-search]]:lg:w-80 [&_[data-slot=list-toolbar-filters]]:min-w-0 [&_[data-slot=list-toolbar-filters]]:shrink [&_[data-slot=list-toolbar-filters]]:self-center"
                     idPrefix="card-contracts-list"
                     formAriaLabel="合同查询"
                     onSubmit={applyFilters}
@@ -109,64 +111,44 @@ export function ContractsTablePanel({
                     }
                     moreCount={moreCount}
                     moreOpen={panelOpen}
-                    onToggleMore={() => setPanelOpen((open) => !open)}
+                    onToggleMore={() =>
+                        panelOpen ? cancelMoreFilters() : setPanelOpen(true)
+                    }
                     morePanelId="card-contracts-list-more-panel"
                     morePanelAriaLabel="合同更多筛选条件"
                     onResetMore={resetMoreFilters}
-                    morePanel={
-                        <div className="grid min-w-0 gap-5 sm:grid-cols-2">
-                            <ListWorkspaceFilterField
-                                htmlFor="card-contracts-list-filter-settlement-party"
-                                label="结算主体"
-                            >
-                                <OptionCombobox
-                                    id="card-contracts-list-filter-settlement-party"
-                                    className="w-full"
-                                    value={settlementPartyIdDraft}
-                                    aria-label="结算主体"
-                                    onValueChange={setSettlementPartyIdDraft}
-                                    options={settlementPartyOptions}
-                                    placeholder="全部结算主体"
-                                    searchPlaceholder="搜索结算主体名称"
-                                />
-                            </ListWorkspaceFilterField>
-                            <ResponsibleUserFilter
-                                id="card-contracts-list-filter-owner"
-                                label="当前跟进负责人"
-                                value={ownerDraft ?? ""}
-                                onChange={setOwnerDraft}
-                                options={ownerOptions}
+                    primaryFilters={
+                        <>
+                            <OptionCombobox
+                                id="card-contracts-list-filter-settlement-party"
+                                className="w-48 max-w-full"
+                                value={settlementPartyIdDraft}
+                                aria-label="结算主体"
+                                filterLabel="结算主体"
+                                onValueChange={setSettlementPartyIdDraft}
+                                options={settlementPartyOptions}
+                                placeholder="全部"
                             />
-                            <ListWorkspaceFilterField
-                                htmlFor="card-contracts-list-filter-org"
-                                label="组织"
-                            >
-                                <Input
-                                    id="card-contracts-list-filter-org"
-                                    value={orgDraft}
-                                    onChange={(event) =>
-                                        setOrgDraft(event.target.value)
-                                    }
-                                    placeholder="组织 ID，逗号分隔"
-                                    aria-label="按当前主负责人所属组织筛选"
+                            <div className="w-56 max-w-full">
+                                <ResponsibleUserFilter
+                                    id="card-contracts-list-filter-owner"
+                                    label="当前跟进负责人"
+                                    hideLabel
+                                    value={ownerDraft ?? ""}
+                                    onChange={setOwnerDraft}
+                                    options={ownerOptions}
                                 />
-                                <label
-                                    htmlFor="card-contracts-list-filter-org-descendants"
-                                    className="mt-2 flex items-center gap-2 text-xs text-muted-foreground"
-                                >
-                                    <Checkbox
-                                        id="card-contracts-list-filter-org-descendants"
-                                        checked={descendantsDraft}
-                                        onCheckedChange={(checked) =>
-                                            setDescendantsDraft(
-                                                checked === true,
-                                            )
-                                        }
-                                    />
-                                    包含下级
-                                </label>
-                            </ListWorkspaceFilterField>
-                        </div>
+                            </div>
+                        </>
+                    }
+                    morePanel={
+                        <OrganizationUnitFilter
+                            id="card-contracts-list-filter-org"
+                            value={orgDraft}
+                            onChange={setOrgDraft}
+                            includeDescendants={descendantsDraft}
+                            onDescendantsChange={setDescendantsDraft}
+                        />
                     }
                     resultStatus={listWorkspaceFilterStatusText({
                         loading: isPending,

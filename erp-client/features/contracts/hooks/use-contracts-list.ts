@@ -84,8 +84,8 @@ export function useContractsList() {
         settlementPartyId || ownerUserIds || orgUnitIds,
     )
 
-    // UI 态：初始深链带结构化条件时展开；URL 回填不重置展开态
-    const [panelOpen, setPanelOpen] = React.useState(hasStructuredFilters)
+    // UI 态：条件由标签展示，深链不自动打开浮层。
+    const [panelOpen, setPanelOpen] = React.useState(false)
 
     const pushUrl = React.useCallback(
         (patch: Partial<ContractsUrlState>) => {
@@ -104,7 +104,7 @@ export function useContractsList() {
             settlementPartyId: settlementPartyIdDraft ?? undefined,
             ownerUserIds: ownerDraft ?? undefined,
             orgUnitIds: orgDraft.trim() || undefined,
-            includeDescendants: descendantsDraft,
+            includeDescendants: Boolean(orgDraft.trim()) && descendantsDraft,
             page: 1,
         })
         setPanelOpen(false)
@@ -119,11 +119,16 @@ export function useContractsList() {
 
     /** 只清「更多筛选」草稿；保留关键词、快捷筛选、客户锁定和当前结果。 */
     const resetMoreFilters = React.useCallback(() => {
-        setSettlementPartyIdDraft(null)
-        setOwnerDraft(null)
         setOrgDraft("")
         setDescendantsDraft(false)
     }, [])
+
+    /** 关闭面板时仅撤销组织草稿；保留外部常驻条件。 */
+    const cancelMoreFilters = React.useCallback(() => {
+        setOrgDraft(orgUnitIds ?? "")
+        setDescendantsDraft(includeDescendants)
+        setPanelOpen(false)
+    }, [orgUnitIds, includeDescendants])
 
     const hasPendingChanges =
         searchDraft.trim() !== (q ?? "").trim() ||
@@ -174,6 +179,8 @@ export function useContractsList() {
         setSettlementPartyIdDraft(null)
         setOwnerDraft(null)
         setPanelOpen(false)
+        setOrgDraft("")
+        setDescendantsDraft(false)
         pushUrl({
             q: undefined,
             metric: "all",
@@ -436,6 +443,7 @@ export function useContractsList() {
         isFiltered,
         applyFilters,
         resetMoreFilters,
+        cancelMoreFilters,
         hasPendingChanges,
         removeFilter,
         handleMetricChange,

@@ -10,13 +10,16 @@ import {
     ComboboxContent,
     ComboboxEmpty,
     ComboboxItem,
+    ComboboxInput,
     ComboboxList,
+    ComboboxTrigger,
     ComboboxValue,
     useComboboxAnchor,
 } from "@/components/ui/combobox"
 import type { ComboboxOption } from "@/components/business/option-combobox"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
 
 type InternalOption = ComboboxOption & { __search: string }
 
@@ -35,6 +38,8 @@ export type MultiOptionComboboxProps = {
     value: readonly string[]
     onValueChange: (value: string[]) => void
     placeholder?: string
+    /** 查询栏使用固定高度的名称与选择摘要，避免多选标签撑高控件。 */
+    filterLabel?: string
     emptyLabel?: string
     disabled?: boolean
     id?: string
@@ -53,6 +58,7 @@ export function MultiOptionCombobox({
     value,
     onValueChange,
     placeholder = "请选择",
+    filterLabel,
     emptyLabel = "没有符合条件的选项",
     disabled = false,
     id,
@@ -92,40 +98,75 @@ export function MultiOptionCombobox({
                 data-size={size}
                 className={cn("min-w-0", className)}
             >
-                <ComboboxChips
-                    className={cn(
-                        size === "sm" &&
-                            "min-h-7 py-0.5 *:data-[slot=combobox-chip]:h-5",
-                    )}
-                >
-                    <ComboboxValue>
-                        {(valueItems: InternalOption[]) =>
-                            valueItems.map((item) => (
-                                <ComboboxChip
-                                    key={item.value}
-                                    removeId={
-                                        id
-                                            ? `${id}-chip-${toAutomationIdSegment(item.value)}-remove`
-                                            : undefined
-                                    }
-                                    aria-label={item.label}
-                                >
-                                    {item.label}
-                                </ComboboxChip>
-                            ))
-                        }
-                    </ComboboxValue>
-                    <ComboboxChipsInput
+                {filterLabel ? (
+                    <ComboboxTrigger
                         id={id}
                         aria-label={ariaLabel}
                         aria-describedby={ariaDescribedBy}
-                        placeholder={selected.length > 0 ? "" : placeholder}
                         disabled={disabled}
-                        className={cn(size === "sm" && "text-xs")}
-                    />
-                </ComboboxChips>
+                        render={
+                            <Button
+                                type="button"
+                                variant="outline"
+                                className="h-control w-full min-w-0 justify-start gap-1 rounded-lg bg-surface-control px-2.5 font-normal shadow-none"
+                            />
+                        }
+                    >
+                        <span className="shrink-0 text-muted-foreground">
+                            {filterLabel}：
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-left">
+                            {selected.length === 0
+                                ? "全部"
+                                : selected.length === 1
+                                  ? selected[0].label
+                                  : `已选 ${selected.length} 项`}
+                        </span>
+                    </ComboboxTrigger>
+                ) : (
+                    <ComboboxChips
+                        className={cn(
+                            size === "sm" &&
+                                "min-h-7 py-0.5 *:data-[slot=combobox-chip]:h-5",
+                        )}
+                    >
+                        <ComboboxValue>
+                            {(valueItems: InternalOption[]) =>
+                                valueItems.map((item) => (
+                                    <ComboboxChip
+                                        key={item.value}
+                                        removeId={
+                                            id
+                                                ? `${id}-chip-${toAutomationIdSegment(item.value)}-remove`
+                                                : undefined
+                                        }
+                                        aria-label={item.label}
+                                    >
+                                        {item.label}
+                                    </ComboboxChip>
+                                ))
+                            }
+                        </ComboboxValue>
+                        <ComboboxChipsInput
+                            id={id}
+                            aria-label={ariaLabel}
+                            aria-describedby={ariaDescribedBy}
+                            placeholder={selected.length > 0 ? "" : placeholder}
+                            disabled={disabled}
+                            className={cn(size === "sm" && "text-xs")}
+                        />
+                    </ComboboxChips>
+                )}
             </div>
             <ComboboxContent anchor={anchorRef}>
+                {filterLabel && (
+                    <ComboboxInput
+                        id={id ? `${id}-search` : undefined}
+                        aria-label={`搜索${filterLabel}`}
+                        placeholder={`搜索${filterLabel}`}
+                        showTrigger={false}
+                    />
+                )}
                 <ComboboxEmpty>{emptyLabel}</ComboboxEmpty>
                 <ComboboxList>
                     {items.map((item) => (

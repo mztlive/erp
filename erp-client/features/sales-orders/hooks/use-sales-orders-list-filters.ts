@@ -3,7 +3,6 @@ import * as React from "react"
 import {
     EMPTY_SALES_ORDERS_LIST_FILTER_DRAFT,
     filterDraftFromUrl,
-    hasMoreSalesOrdersFilters,
     hasStructuredSalesOrdersFilters,
     resolveSalesOrdersListFilterPatch,
     salesOrdersListFilterDraftsEqual,
@@ -35,9 +34,7 @@ export function useSalesOrdersListFilters(
     pushUrl: (patch: Partial<SalesOrdersUrlState>) => void,
 ) {
     const [searchDraft, setSearchDraft] = React.useState(url.search ?? "")
-    const [filterPanelOpen, setFilterPanelOpen] = React.useState(
-        hasMoreSalesOrdersFilters(url),
-    )
+    const [filterPanelOpen, setFilterPanelOpen] = React.useState(false)
     const [filterDraft, setFilterDraft] = React.useState(() =>
         filterDraftFromUrl(url),
     )
@@ -64,7 +61,7 @@ export function useSalesOrdersListFilters(
         createdTo,
     } = url
 
-    // URL 回填只同步草稿；面板展开态由用户控制，初始深链展开见 useState 初值。
+    // URL 回填只同步草稿；深链条件显示为已生效标签，不自动打开浮层。
     React.useEffect(() => {
         setSearchDraft(search ?? "")
         setFilterDraft(
@@ -187,13 +184,30 @@ export function useSalesOrdersListFilters(
         [pushUrl],
     )
 
-    /** 仅清除「更多筛选」草稿；保留关键词、业务性质、工作视图与当前结果。 */
+    /** 仅清除面板草稿；保留常驻条件与当前结果。 */
     const resetMoreFilters = React.useCallback(() => {
         setFilterDraft((draft) => ({
             ...EMPTY_SALES_ORDERS_LIST_FILTER_DRAFT,
             nature: draft.nature,
+            ownerUserIds: draft.ownerUserIds,
+            commercialStatus: draft.commercialStatus,
+            createdFrom: draft.createdFrom,
+            createdTo: draft.createdTo,
         }))
     }, [])
+
+    /** 取消、外点和 Esc 均撤销未应用的面板条件，保留外部查询栏草稿。 */
+    const cancelMoreFilters = React.useCallback(() => {
+        setFilterDraft((draft) => ({
+            ...filterDraftFromUrl(url),
+            nature: draft.nature,
+            ownerUserIds: draft.ownerUserIds,
+            commercialStatus: draft.commercialStatus,
+            createdFrom: draft.createdFrom,
+            createdTo: draft.createdTo,
+        }))
+        setFilterPanelOpen(false)
+    }, [url])
 
     const hasPendingChanges =
         searchDraft.trim() !== (search ?? "").trim() ||
@@ -238,6 +252,7 @@ export function useSalesOrdersListFilters(
         applyFilters,
         removeFilter,
         resetMoreFilters,
+        cancelMoreFilters,
         clearFilters,
     }
 }

@@ -197,6 +197,7 @@ function DateRangePicker({
     value,
     onValueChange,
     placeholder = "选择日期范围",
+    filterLabel,
     disabled,
     disabledDates,
     className,
@@ -207,6 +208,7 @@ function DateRangePicker({
     value?: DateRangeValue
     onValueChange?: (value?: DateRangeValue) => void
     placeholder?: string
+    filterLabel?: string
     disabled?: boolean
     disabledDates?: Matcher | Matcher[]
     className?: string
@@ -240,7 +242,9 @@ function DateRangePicker({
                             disabled={disabled}
                             aria-invalid={ariaInvalid}
                             aria-describedby={ariaDescribedby}
-                            aria-label={label}
+                            aria-label={
+                                filterLabel ? `${filterLabel}：${label}` : label
+                            }
                         />
                     }
                 >
@@ -248,6 +252,11 @@ function DateRangePicker({
                         data-icon="inline-start"
                         aria-hidden="true"
                     />
+                    {filterLabel && (
+                        <span className="shrink-0 font-normal text-muted-foreground">
+                            {filterLabel}：
+                        </span>
+                    )}
                     <span
                         className={cn(
                             "truncate",

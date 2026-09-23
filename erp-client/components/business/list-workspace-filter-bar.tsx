@@ -5,11 +5,13 @@ import { createPortal } from "react-dom"
 import { ChevronDownIcon, FilterIcon, SearchIcon } from "lucide-react"
 
 import { FilterChip } from "@/components/business/filter-chip"
+import { ListFilterPopover } from "@/components/business/list-filter-popover"
 import { ListToolbar } from "@/components/business/list"
 import { useTableFilterStatusHost } from "@/components/business/table-toolbar"
 import { Button } from "@/components/ui/button"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
+import { listFilterText } from "@/lib/ui-text"
 
 export const listWorkspaceFilterBarClassName =
     "gap-4 [&_[data-slot=list-toolbar-filters]]:self-start [&_[data-slot=list-toolbar-secondary]]:w-full [&_[data-slot=list-toolbar-secondary]]:flex-col [&_[data-slot=list-toolbar-secondary]]:items-stretch [&_[data-slot=list-toolbar-secondary]]:gap-0 max-sm:[&_[data-slot=list-toolbar-primary]]:sticky max-sm:[&_[data-slot=list-toolbar-primary]]:top-0 max-sm:[&_[data-slot=list-toolbar-primary]]:z-10 max-sm:[&_[data-slot=list-toolbar-primary]]:bg-card max-sm:[&_[data-slot=list-toolbar-primary]]:pb-2 [&_[data-slot=list-toolbar-query-tools]]:sm:flex-wrap [&_[data-slot=list-toolbar-search]]:lg:w-96"
@@ -109,6 +111,8 @@ export function ListWorkspaceFilterBar({
     morePanelId,
     morePanel,
     morePanelAriaLabel = "更多筛选条件",
+    morePresentation = "inline",
+    moreSize = "wide",
     commonFilters,
     primaryFilters,
     resultStatus,
@@ -140,6 +144,9 @@ export function ListWorkspaceFilterBar({
     morePanelId?: string
     morePanel?: React.ReactNode
     morePanelAriaLabel?: string
+    /** 浮动筛选按页面启用，保留其余列表的既有展开形式。 */
+    morePresentation?: "inline" | "popover"
+    moreSize?: "compact" | "wide"
     commonFilters?: React.ReactNode
     /** 常用条件置于搜索之后、查询按钮之前；不影响默认的次行布局。 */
     primaryFilters?: React.ReactNode
@@ -165,6 +172,45 @@ export function ListWorkspaceFilterBar({
     const panelId = morePanelId ?? `${idPrefix}-more-panel`
     const showMore = morePanel != null && onToggleMore != null
     const statusHost = useTableFilterStatusHost()
+    const appliedChips = chips.length ? (
+        <>
+            <span className="shrink-0 text-muted-foreground">
+                {morePresentation === "popover"
+                    ? listFilterText.selected
+                    : "已生效"}
+            </span>
+            {chips.map((chip) => (
+                <FilterChip
+                    key={chip.key}
+                    id={`${idPrefix}-chip-${toAutomationIdSegment(chip.key)}`}
+                    label={chip.label}
+                    clearLabel={chip.clearLabel ?? `移除${chip.label}`}
+                    onClear={() => {
+                        if (chip.onClear) chip.onClear()
+                        else onClearChip?.(chip.key)
+                    }}
+                />
+            ))}
+            {onClearAll ? (
+                <Button
+                    id={clearButtonId ?? `${idPrefix}-clear`}
+                    type="button"
+                    variant="ghost"
+                    size="xs"
+                    className={
+                        morePresentation === "popover"
+                            ? "font-normal text-muted-foreground hover:text-foreground"
+                            : undefined
+                    }
+                    onClick={onClearAll}
+                >
+                    {morePresentation === "popover"
+                        ? listFilterText.clear
+                        : "清除全部"}
+                </Button>
+            ) : null}
+        </>
+    ) : null
     const statusRow = (
         <div
             className={cn(
@@ -179,34 +225,7 @@ export function ListWorkspaceFilterBar({
             <span role="status" className="shrink-0 text-muted-foreground">
                 {resultStatus}
             </span>
-            {chips.length ? (
-                <>
-                    <span className="text-muted-foreground">已生效</span>
-                    {chips.map((chip) => (
-                        <FilterChip
-                            key={chip.key}
-                            id={`${idPrefix}-chip-${toAutomationIdSegment(chip.key)}`}
-                            label={chip.label}
-                            clearLabel={chip.clearLabel ?? `移除${chip.label}`}
-                            onClear={() => {
-                                if (chip.onClear) chip.onClear()
-                                else onClearChip?.(chip.key)
-                            }}
-                        />
-                    ))}
-                    {onClearAll ? (
-                        <Button
-                            id={clearButtonId ?? `${idPrefix}-clear`}
-                            type="button"
-                            variant="ghost"
-                            size="xs"
-                            onClick={onClearAll}
-                        >
-                            清除全部
-                        </Button>
-                    ) : null}
-                </>
-            ) : null}
+            {morePresentation !== "popover" ? appliedChips : null}
             {idleHint || hasPendingChanges || statusActions ? (
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1 sm:ml-auto">
                     {idleHint || hasPendingChanges ? (
@@ -254,7 +273,26 @@ export function ListWorkspaceFilterBar({
                             查询
                         </Button>
                         {extraPrimary}
-                        {showMore ? (
+                        {showMore && morePresentation === "popover" ? (
+                            <ListFilterPopover
+                                idPrefix={idPrefix}
+                                triggerId={moreButtonId ?? `${idPrefix}-more`}
+                                queryId={queryButtonId ?? `${idPrefix}-query`}
+                                panelId={panelId}
+                                label={morePanelAriaLabel}
+                                open={moreOpen}
+                                onOpenChange={(open) => {
+                                    if (open !== moreOpen) onToggleMore?.()
+                                }}
+                                count={moreCount}
+                                size={moreSize}
+                                onApply={onSubmit}
+                                onReset={onResetMore}
+                                resetId={resetMoreButtonId}
+                            >
+                                {morePanel}
+                            </ListFilterPopover>
+                        ) : showMore ? (
                             <Button
                                 id={moreButtonId ?? `${idPrefix}-more`}
                                 type="button"
@@ -286,7 +324,10 @@ export function ListWorkspaceFilterBar({
                 }
                 actions={actions}
                 secondary={
-                    commonFilters || (showMore && moreOpen) || !statusHost ? (
+                    commonFilters ||
+                    (morePresentation === "popover" && chips.length > 0) ||
+                    (showMore && moreOpen && morePresentation === "inline") ||
+                    !statusHost ? (
                         <div
                             className={cn(
                                 "w-full min-w-0",
@@ -300,7 +341,17 @@ export function ListWorkspaceFilterBar({
                                     {commonFilters}
                                 </div>
                             ) : null}
-                            {showMore && moreOpen ? (
+                            {morePresentation === "popover" && appliedChips ? (
+                                <div
+                                    data-slot="list-filter-applied"
+                                    className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-2 border-b border-border/60 pb-4 text-xs"
+                                >
+                                    {appliedChips}
+                                </div>
+                            ) : null}
+                            {showMore &&
+                            moreOpen &&
+                            morePresentation === "inline" ? (
                                 <section
                                     id={panelId}
                                     aria-label={morePanelAriaLabel}

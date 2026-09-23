@@ -13,6 +13,16 @@ export const tableActionText = {
     more: "更多",
 } as const
 
+export const listFilterText = {
+    selected: "已选条件：",
+    clear: "清空",
+    more: "更多筛选",
+    close: "关闭更多筛选",
+    reset: "重置",
+    cancel: "取消",
+    apply: "应用筛选",
+} as const
+
 // ─── 当前责任 ───────────────────────────────────────────────────────────────
 
 export const responsibilityText = {
