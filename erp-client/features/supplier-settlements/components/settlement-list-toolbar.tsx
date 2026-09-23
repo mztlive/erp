@@ -2,11 +2,7 @@
 
 import * as React from "react"
 
-import {
-    FixedOptionRadioFilter,
-    MultiOptionCombobox,
-    OptionCombobox,
-} from "@/components/business"
+import { MultiOptionCombobox, OptionCombobox } from "@/components/business"
 import { ResponsibleUserFilter } from "@/features/entity-selectors/components/responsible-user-filter"
 import { useRemoteSearchCombobox } from "@/features/entity-selectors/hooks/use-remote-search-combobox"
 import { useSearchInput } from "@/features/entity-selectors/hooks/use-search-input"
@@ -22,7 +18,7 @@ import { OrganizationUnitFilter } from "@/features/organization/components/organ
 import type { SettlementsUrlState } from "@/features/supplier-settlements/lib/url-state"
 import {
     buildSettlementFilterChips,
-    DIFF_TYPE_RADIO_OPTIONS,
+    DIFF_TYPE_FILTER_OPTIONS,
     SETTLEMENT_STATUS_VALUES,
     type SettlementFilterKey,
 } from "@/features/supplier-settlements/lib/settlement-list-filters"
@@ -234,17 +230,29 @@ export function SettlementListToolbar({
                         options={STATUS_FILTER_OPTIONS}
                         placeholder="全部"
                     />
+                    <OptionCombobox
+                        id={`${prefix}-filter-difference-type`}
+                        className="w-52 max-w-full min-w-0"
+                        filterLabel="差异类型"
+                        aria-label="差异类型"
+                        value={
+                            differenceTypeDraft === "all"
+                                ? null
+                                : differenceTypeDraft
+                        }
+                        options={DIFF_TYPE_FILTER_OPTIONS}
+                        placeholder="全部"
+                        onValueChange={(value) =>
+                            setDifferenceTypeDraft(
+                                DIFF_TYPE_FILTER_OPTIONS.some(
+                                    (option) => option.value === value,
+                                )
+                                    ? (value as DifferenceType)
+                                    : "all",
+                            )
+                        }
+                    />
                 </>
-            }
-            commonFilters={
-                <FixedOptionRadioFilter
-                    idPrefix={`${prefix}-filter-difference-type`}
-                    label="差异类型"
-                    variant="quiet"
-                    value={differenceTypeDraft}
-                    onValueChange={setDifferenceTypeDraft}
-                    options={DIFF_TYPE_RADIO_OPTIONS}
-                />
             }
             morePanel={
                 <div className="space-y-5">

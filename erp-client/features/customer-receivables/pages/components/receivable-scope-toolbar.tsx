@@ -2,10 +2,11 @@
 
 import * as React from "react"
 
-import { FixedOptionRadioFilter } from "@/components/business"
+import { OptionCombobox } from "@/components/business"
 import {
     ListSearchField,
     ListWorkspaceFilterBar,
+    ListWorkspaceFilterField,
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
 import { ResponsibleUserFilter } from "@/features/entity-selectors/components/responsible-user-filter"
@@ -143,23 +144,32 @@ export function ReceivableScopeToolbar({
                         options={ownerOptions}
                     />
                     {view === "receipt" ? (
-                        <FixedOptionRadioFilter
-                            idPrefix={`${prefix}-operator-kind`}
+                        <ListWorkspaceFilterField
+                            htmlFor={`${prefix}-operator-kind`}
                             label="经办人口径"
-                            value={
-                                operatorKindDraft === ""
-                                    ? "register"
-                                    : operatorKindDraft
-                            }
-                            onValueChange={(value) =>
-                                setOperatorKindDraft(
-                                    value as "register" | "settle",
-                                )
-                            }
-                            options={OPERATOR_KIND_OPTIONS.map((option) => ({
-                                ...option,
-                            }))}
-                        />
+                            className="max-w-56"
+                        >
+                            <OptionCombobox
+                                id={`${prefix}-operator-kind`}
+                                className="w-full min-w-0"
+                                aria-label="经办人口径"
+                                allowClear={false}
+                                value={
+                                    operatorKindDraft === ""
+                                        ? "register"
+                                        : operatorKindDraft
+                                }
+                                options={OPERATOR_KIND_OPTIONS}
+                                onValueChange={(value) => {
+                                    if (
+                                        value === "register" ||
+                                        value === "settle"
+                                    ) {
+                                        setOperatorKindDraft(value)
+                                    }
+                                }}
+                            />
+                        </ListWorkspaceFilterField>
                     ) : null}
                     <OrganizationUnitFilter
                         id={`${prefix}-org`}

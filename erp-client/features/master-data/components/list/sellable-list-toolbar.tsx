@@ -2,11 +2,7 @@
 
 import * as React from "react"
 
-import {
-    CategoryCombobox,
-    FixedOptionRadioFilter,
-    OptionCombobox,
-} from "@/components/business"
+import { CategoryCombobox, OptionCombobox } from "@/components/business"
 import {
     ListSearchField,
     ListWorkspaceFilterBar,
@@ -25,7 +21,7 @@ import {
     masterDataCopy,
     masterDataSearchPlaceholder,
 } from "@/features/master-data/lib/copy"
-import { PRODUCT_KIND_RADIO_FILTER_OPTIONS } from "@/features/master-data/lib/list-filters"
+import { PRODUCT_KIND_FILTER_OPTIONS } from "@/features/master-data/lib/list-filters"
 import type { ProductKind } from "@/features/master-data/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 
@@ -228,19 +224,35 @@ export function SellableListToolbar({
             actions={actions}
             commonFilters={
                 <>
-                    <FixedOptionRadioFilter
-                        variant="quiet"
+                    <ListWorkspaceInlineFilter
+                        htmlFor={`${prefix}-kind`}
                         label="商品类型"
-                        value={productKindDraft}
-                        onValueChange={setProductKindDraft}
-                        options={PRODUCT_KIND_RADIO_FILTER_OPTIONS.filter(
-                            (option) =>
-                                option.value === "all" ||
-                                !hiddenProductKinds?.includes(
-                                    option.value as ProductKind,
-                                ),
-                        )}
-                    />
+                    >
+                        <OptionCombobox
+                            id={`${prefix}-kind`}
+                            className="w-40 max-w-full min-w-0"
+                            aria-label="商品类型"
+                            value={
+                                productKindDraft === "all"
+                                    ? null
+                                    : productKindDraft
+                            }
+                            options={PRODUCT_KIND_FILTER_OPTIONS.filter(
+                                (option) =>
+                                    !hiddenProductKinds?.includes(option.value),
+                            )}
+                            placeholder="全部"
+                            onValueChange={(value) =>
+                                setProductKindDraft(
+                                    PRODUCT_KIND_FILTER_OPTIONS.some(
+                                        (option) => option.value === value,
+                                    )
+                                        ? (value as ProductKind)
+                                        : "all",
+                                )
+                            }
+                        />
+                    </ListWorkspaceInlineFilter>
                     <ListWorkspaceInlineFilter
                         htmlFor="master-data-list-sellable-list-toolbar-categorycombobox-1"
                         label="分类"

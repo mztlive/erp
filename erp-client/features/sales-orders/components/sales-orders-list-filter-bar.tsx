@@ -3,7 +3,7 @@
 import type { ResponsibleUserOption } from "@/features/entity-selectors/components/responsible-user-filter"
 import { ResponsibleUserFilter } from "@/features/entity-selectors/components/responsible-user-filter"
 
-import { FixedOptionRadioFilter, OptionCombobox } from "@/components/business"
+import { OptionCombobox } from "@/components/business"
 import { DateRangePicker } from "@/components/ui/date-picker"
 import {
     SALES_ORDER_COMMERCIAL_STATUS_OPTIONS,
@@ -149,28 +149,31 @@ export function SalesOrdersListFilterBar({
                 </>
             }
             commonFilters={
-                <FixedOptionRadioFilter
+                <OptionCombobox
                     id={`${prefix}-nature`}
-                    label="业务性质"
-                    variant="quiet"
-                    value={f.filterDraft.nature}
-                    onValueChange={(nature) => {
+                    className="w-56 max-w-full min-w-0"
+                    filterLabel="业务性质"
+                    aria-label="业务性质"
+                    value={
+                        f.filterDraft.nature === "all"
+                            ? null
+                            : f.filterDraft.nature
+                    }
+                    options={[
+                        { value: "physical_service", label: "实物与服务" },
+                        { value: "card_voucher", label: "卡券" },
+                    ]}
+                    placeholder="全部"
+                    onValueChange={(value) =>
                         f.setFilterDraft((draft) => ({
                             ...draft,
-                            nature,
+                            nature:
+                                value === "physical_service" ||
+                                value === "card_voucher"
+                                    ? value
+                                    : "all",
                         }))
-                    }}
-                    options={[
-                        { value: "all", label: "全部" },
-                        {
-                            value: "physical_service",
-                            label: "实物与服务",
-                        },
-                        {
-                            value: "card_voucher",
-                            label: "卡券",
-                        },
-                    ]}
+                    }
                 />
             }
             morePanel={

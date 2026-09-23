@@ -2,14 +2,14 @@
 
 import * as React from "react"
 
-import { FixedOptionRadioFilter } from "@/components/business"
+import { OptionCombobox } from "@/components/business"
 import {
     ListSearchField,
     ListWorkspaceFilterBar,
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
-import { REVISION_TIMING_RADIO_FILTER_OPTIONS } from "@/features/master-data/lib/list-filters"
+import { REVISION_TIMING_FILTER_OPTIONS } from "@/features/master-data/lib/list-filters"
 import type {
     DictionaryFilterKey,
     useLifecycleListFilters,
@@ -56,16 +56,27 @@ export function DictionaryListToolbar({
                 />
             }
             clearButtonId={`${prefix}-clear-filters`}
-            commonFilters={
+            primaryFilters={
                 showRevisionFilter ? (
-                    <FixedOptionRadioFilter
-                        idPrefix={`${prefix}-revision`}
-                        label="版本"
-                        variant="quiet"
-                        value={f.revisionTimingDraft}
-                        onValueChange={f.setRevisionTimingDraft}
-                        options={REVISION_TIMING_RADIO_FILTER_OPTIONS}
+                    <OptionCombobox
+                        id={`${prefix}-revision`}
+                        className="w-48 max-w-full min-w-0"
+                        filterLabel="版本"
                         aria-label={masterDataCopy.filterVersionAria}
+                        value={
+                            f.revisionTimingDraft === "all"
+                                ? null
+                                : f.revisionTimingDraft
+                        }
+                        options={REVISION_TIMING_FILTER_OPTIONS}
+                        placeholder="全部"
+                        onValueChange={(value) =>
+                            f.setRevisionTimingDraft(
+                                value === "current" || value === "future"
+                                    ? value
+                                    : "all",
+                            )
+                        }
                     />
                 ) : undefined
             }

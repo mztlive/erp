@@ -1,4 +1,3 @@
-import { masterDataCopy } from "@/features/master-data/lib/copy"
 import {
     PRODUCT_KIND_LABELS,
     PRODUCT_KIND_VALUES,
@@ -16,11 +15,6 @@ const PRODUCT_KIND_FILTER_OPTIONS = PRODUCT_KIND_VALUES.map((value) => ({
     label: PRODUCT_KIND_LABELS[value],
 }))
 
-const PRODUCT_KIND_RADIO_FILTER_OPTIONS = [
-    { value: "all", label: "全部" },
-    ...PRODUCT_KIND_FILTER_OPTIONS,
-] as const
-
 const PRODUCT_LISTING_FILTER_OPTIONS = [
     { value: "listed", label: "全部已上架" },
     { value: "partially_listed", label: "部分已上架" },
@@ -33,24 +27,7 @@ const PRODUCT_COVERAGE_FILTER_OPTIONS = [
     { value: "none", label: "所有 SKU 均无供给" },
 ] as const
 
-const PRODUCT_LISTING_RADIO_FILTER_OPTIONS = [
-    { value: "all", label: "全部" },
-    ...PRODUCT_LISTING_FILTER_OPTIONS,
-] as const
-
-const PRODUCT_COVERAGE_RADIO_FILTER_OPTIONS = [
-    { value: "all", label: "全部" },
-    ...PRODUCT_COVERAGE_FILTER_OPTIONS,
-] as const
-
-const LIFECYCLE_RADIO_FILTER_OPTIONS = [
-    { value: "all", label: "全部" },
-    { value: "enabled", label: masterDataCopy.lifecycleEnabled },
-    { value: "disabled", label: masterDataCopy.lifecycleDisabled },
-] as const
-
-const REVISION_TIMING_RADIO_FILTER_OPTIONS = [
-    { value: "all", label: "全部" },
+const REVISION_TIMING_FILTER_OPTIONS = [
     { value: "current", label: "当前生效" },
     { value: "future", label: "待生效" },
 ] as const
@@ -208,17 +185,13 @@ export {
     csvFilterValue,
     parseLifecycleStatus,
     parseRevisionTiming,
-    LIFECYCLE_RADIO_FILTER_OPTIONS,
     productSalesPriceRangeError,
     productSkuPriceRange,
     PRODUCT_COVERAGE_FILTER_OPTIONS,
-    PRODUCT_COVERAGE_RADIO_FILTER_OPTIONS,
     PRODUCT_KIND_FILTER_OPTIONS,
-    PRODUCT_KIND_RADIO_FILTER_OPTIONS,
     PRODUCT_LISTING_FILTER_OPTIONS,
-    PRODUCT_LISTING_RADIO_FILTER_OPTIONS,
     qualificationHealthLabel,
-    REVISION_TIMING_RADIO_FILTER_OPTIONS,
+    REVISION_TIMING_FILTER_OPTIONS,
     selectedCsvValues,
     selectedSupplierOptionLabels,
     selectedSupplierOptionValues,

@@ -42,16 +42,13 @@ export const SETTLEMENT_STATUS_VALUES = Object.keys(
     STATUS_LABEL,
 ) as SettlementStatus[]
 
-export const DIFF_TYPE_RADIO_OPTIONS: ReadonlyArray<{
-    value: DifferenceType | "all"
+export const DIFF_TYPE_FILTER_OPTIONS: ReadonlyArray<{
+    value: DifferenceType
     label: string
-}> = [
-    { value: "all", label: "全部" },
-    ...(Object.keys(DIFF_TYPE_LABEL) as DifferenceType[]).map((value) => ({
-        value,
-        label: DIFF_TYPE_LABEL[value],
-    })),
-]
+}> = (Object.keys(DIFF_TYPE_LABEL) as DifferenceType[]).map((value) => ({
+    value,
+    label: DIFF_TYPE_LABEL[value],
+}))
 
 /** URL 中逗号分隔的状态值解析为合法状态数组；非法枚举值降级丢弃。 */
 export function parseSettlementStatusParam(raw?: string): SettlementStatus[] {

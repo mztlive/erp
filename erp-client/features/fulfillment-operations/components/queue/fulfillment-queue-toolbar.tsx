@@ -2,10 +2,7 @@
 
 import * as React from "react"
 
-import {
-    FixedOptionRadioFilter,
-    type FixedOptionRadioFilterOption,
-} from "@/components/business"
+import { OptionCombobox } from "@/components/business"
 import {
     ListSearchField,
     ListWorkspaceFilterBar,
@@ -43,15 +40,7 @@ export type FulfillmentAppliedChip = Readonly<{
     label: string
 }>
 
-const DUE_RADIO_FILTER_OPTIONS: ReadonlyArray<
-    FixedOptionRadioFilterOption<DueFilter | "all">
-> = [{ value: "all", label: "全部" }, ...DUE_FILTER_OPTIONS]
-
-const GATE_RADIO_FILTER_OPTIONS: ReadonlyArray<
-    FixedOptionRadioFilterOption<GateFilter | "all">
-> = [{ value: "all", label: "全部" }, ...GATE_FILTER_OPTIONS]
-
-/** chip 与摘要使用短文案；完整说明见面板单选选项。 */
+/** chip 与摘要使用短文案；完整说明见面板下拉选项。 */
 const GATE_CHIP_LABELS: Record<GateFilter, string> = {
     satisfied: "货款已到",
     blocked: "先款未到",
@@ -306,22 +295,49 @@ export function FulfillmentQueueToolbar({
             onResetMore={resetMoreFilters}
             resetMoreButtonId="fulfillment-operations-queue-reset-more"
             morePanel={
-                <div className="grid min-w-0 gap-5">
-                    <FixedOptionRadioFilter
-                        id="fulfillment-operations-queue-due-filter"
-                        label="到期"
-                        value={dueDraft}
-                        onValueChange={setDueDraft}
-                        options={DUE_RADIO_FILTER_OPTIONS}
-                    />
-                    <FixedOptionRadioFilter
-                        id="fulfillment-operations-queue-gate-filter"
-                        label="货款情况"
-                        value={gateDraft}
-                        onValueChange={setGateDraft}
-                        options={GATE_RADIO_FILTER_OPTIONS}
-                    />
+                <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)]">
                     <ListWorkspaceFilterField
+                        htmlFor="fulfillment-operations-queue-due-filter"
+                        label="到期"
+                    >
+                        <OptionCombobox
+                            id="fulfillment-operations-queue-due-filter"
+                            className="w-full min-w-0"
+                            aria-label="到期"
+                            value={dueDraft === "all" ? null : dueDraft}
+                            options={DUE_FILTER_OPTIONS}
+                            placeholder="全部"
+                            onValueChange={(value) =>
+                                setDueDraft(
+                                    value === "today" || value === "overdue"
+                                        ? value
+                                        : "all",
+                                )
+                            }
+                        />
+                    </ListWorkspaceFilterField>
+                    <ListWorkspaceFilterField
+                        htmlFor="fulfillment-operations-queue-gate-filter"
+                        label="货款情况"
+                    >
+                        <OptionCombobox
+                            id="fulfillment-operations-queue-gate-filter"
+                            className="w-full min-w-0"
+                            aria-label="货款情况"
+                            value={gateDraft === "all" ? null : gateDraft}
+                            options={GATE_FILTER_OPTIONS}
+                            placeholder="全部"
+                            onValueChange={(value) =>
+                                setGateDraft(
+                                    value === "blocked" || value === "satisfied"
+                                        ? value
+                                        : "all",
+                                )
+                            }
+                        />
+                    </ListWorkspaceFilterField>
+                    <ListWorkspaceFilterField
+                        className="sm:col-span-2"
                         htmlFor="fulfillment-operations-queue-warehouse-filter"
                         label="仓库"
                     >

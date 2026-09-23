@@ -2,7 +2,7 @@
 
 import * as React from "react"
 
-import { FixedOptionRadioFilter } from "@/components/business"
+import { OptionCombobox } from "@/components/business"
 import {
     ListSearchField,
     ListWorkspaceFilterBar,
@@ -17,10 +17,9 @@ import type {
 type SetState<T> = React.Dispatch<React.SetStateAction<T>>
 
 const BUSINESS_TYPE_OPTIONS: ReadonlyArray<{
-    value: BusinessTypeFilter | "all"
+    value: BusinessTypeFilter
     label: string
 }> = [
-    { value: "all", label: "全部" },
     { value: "VOUCHER", label: "卡券" },
     { value: "GOODS_SERVICE", label: "非卡券" },
 ]
@@ -42,7 +41,7 @@ export type CustomerQualityFilterCardProps = {
 }
 
 /**
- * 客户经营质量明细筛选：业务性质单独成行。没有低频条件，不提供更多面板。
+ * 客户经营质量明细筛选：业务性质跟在搜索后面。没有低频条件，不提供更多面板。
  * 期间条不属于本表单。
  */
 export function CustomerQualityFilterCard({
@@ -77,14 +76,24 @@ export function CustomerQualityFilterCard({
                 />
             }
             clearButtonId="customers-quality-clear-all"
-            commonFilters={
-                <FixedOptionRadioFilter
+            primaryFilters={
+                <OptionCombobox
                     id="customers-quality-business-type"
-                    label="业务性质"
-                    variant="quiet"
-                    value={businessTypeDraft}
-                    onValueChange={setBusinessTypeDraft}
+                    className="w-48 max-w-full min-w-0"
+                    filterLabel="业务性质"
+                    aria-label="业务性质"
+                    value={
+                        businessTypeDraft === "all" ? null : businessTypeDraft
+                    }
                     options={BUSINESS_TYPE_OPTIONS}
+                    placeholder="全部"
+                    onValueChange={(value) =>
+                        setBusinessTypeDraft(
+                            value === "VOUCHER" || value === "GOODS_SERVICE"
+                                ? value
+                                : "all",
+                        )
+                    }
                 />
             }
             resultStatus={listWorkspaceFilterStatusText({

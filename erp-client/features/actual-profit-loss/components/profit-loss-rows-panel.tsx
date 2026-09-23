@@ -11,7 +11,6 @@ import {
     BusinessEmptyState,
     BusinessFailureState,
     DataTable,
-    FixedOptionRadioFilter,
     MultiOptionCombobox,
     OptionCombobox,
 } from "@/components/business"
@@ -200,14 +199,24 @@ export function ProfitLossRowsPanel({
                     morePanelId="actual-profit-loss-filter-more-panel"
                     morePanelAriaLabel="盈亏明细更多筛选条件"
                     onResetMore={onResetMoreFilters}
-                    commonFilters={
-                        <FixedOptionRadioFilter
-                            idPrefix="actual-profit-loss-coverage"
-                            label="成本覆盖"
-                            variant="quiet"
+                    primaryFilters={
+                        <OptionCombobox
+                            id="actual-profit-loss-coverage"
+                            className="w-64 max-w-full min-w-0"
+                            filterLabel="成本覆盖"
+                            aria-label="成本覆盖"
+                            allowClear={false}
                             value={coverage}
-                            onValueChange={onCoverageChange}
                             options={COVERAGE_OPTIONS}
+                            onValueChange={(value) => {
+                                if (
+                                    value === "covered" ||
+                                    value === "uncovered" ||
+                                    value === "all"
+                                ) {
+                                    onCoverageChange(value)
+                                }
+                            }}
                         />
                     }
                     morePanel={

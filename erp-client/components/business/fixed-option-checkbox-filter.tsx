@@ -28,8 +28,7 @@ export type FixedOptionCheckboxFilterProps<Value extends string = string> = {
 /**
  * 固定枚举多选筛选。
  *
- * 沿用 `FixedOptionRadioFilter` 的整行布局和选项视觉；每个选项改为独立复选框，
- * 适用于需要同时命中多个固定枚举值的筛选条件。
+ * 选项横向铺开，每个选项是独立复选框，适用于需要同时命中多个固定枚举值的筛选条件。
  */
 export function FixedOptionCheckboxFilter<Value extends string>({
     label,
