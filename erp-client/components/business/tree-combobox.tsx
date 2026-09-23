@@ -3,13 +3,19 @@
 import * as React from "react"
 import { ChevronRightIcon } from "lucide-react"
 
+import { remoteSearchFromInputChange } from "@/components/business/combobox-input-search"
 import {
     Combobox,
+    ComboboxChip,
+    ComboboxChips,
+    ComboboxChipsInput,
     ComboboxContent,
     ComboboxEmpty,
     ComboboxInput,
     ComboboxItem,
     ComboboxList,
+    ComboboxValue,
+    useComboboxAnchor,
 } from "@/components/ui/combobox"
 import { InputGroupAddon } from "@/components/ui/input-group"
 import { toAutomationIdSegment } from "@/lib/automation-id"
@@ -128,6 +134,102 @@ function collectAncestorIds(
     }
     walk(nodes, [])
     return ancestors
+}
+
+/** 搜索时保留命中节点；命中父级则保留其子树，仅子级命中则保留祖先路径。 */
+function filterMatchingBranches(
+    nodes: readonly TreeComboboxNode[],
+    query: string,
+): TreeComboboxNode[] {
+    const q = query.trim().toLowerCase()
+    const visit = (node: TreeComboboxNode): TreeComboboxNode | null => {
+        const haystack = [node.label, node.code]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase()
+        if (haystack.includes(q)) return node
+        const children = node.children
+            .map(visit)
+            .filter((child): child is TreeComboboxNode => child != null)
+        if (children.length === 0) return null
+        return { ...node, children }
+    }
+    return nodes
+        .map(visit)
+        .filter((node): node is TreeComboboxNode => node != null)
+}
+
+function TreeOption({
+    idPrefix,
+    node,
+    depth,
+    expanded,
+    onToggle,
+}: {
+    idPrefix?: string
+    node: TreeComboboxNode
+    depth: number
+    expanded: ReadonlySet<string>
+    onToggle: (id: string) => void
+}) {
+    const hasChildren = node.children.length > 0
+    const isOpen = expanded.has(node.id)
+    return (
+        <ComboboxItem
+            id={
+                idPrefix
+                    ? `${idPrefix}-option-${toAutomationIdSegment(node.id)}`
+                    : undefined
+            }
+            value={node}
+            style={{ paddingLeft: `${0.5 + depth * 1.1}rem` }}
+            onKeyDown={(event) => {
+                if (event.key === "ArrowRight" && hasChildren && !isOpen) {
+                    event.preventDefault()
+                    onToggle(node.id)
+                }
+                if (event.key === "ArrowLeft" && hasChildren && isOpen) {
+                    event.preventDefault()
+                    onToggle(node.id)
+                }
+            }}
+        >
+            <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                {hasChildren ? (
+                    <button
+                        id={
+                            idPrefix
+                                ? `${idPrefix}-node-${toAutomationIdSegment(node.id)}-toggle`
+                                : undefined
+                        }
+                        type="button"
+                        aria-label={isOpen ? "收起" : "展开"}
+                        aria-expanded={isOpen}
+                        className="pointer-events-auto inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-background hover:text-foreground"
+                        onClick={(event) => {
+                            event.stopPropagation()
+                            onToggle(node.id)
+                        }}
+                    >
+                        <ChevronRightIcon
+                            className={cn(
+                                "size-3.5 transition-transform",
+                                isOpen && "rotate-90",
+                            )}
+                        />
+                    </button>
+                ) : (
+                    <span className="inline-flex size-5 shrink-0" aria-hidden />
+                )}
+                <span className="truncate font-medium">{node.label}</span>
+                {node.code ? (
+                    <span className="num ml-auto shrink-0 text-xs text-muted-foreground">
+                        {node.code}
+                    </span>
+                ) : null}
+            </div>
+        </ComboboxItem>
+    )
 }
 
 /**
@@ -270,87 +372,232 @@ export function TreeCombobox({
                         {loading ? "正在加载…" : emptyLabel}
                     </ComboboxEmpty>
                     <ComboboxList>
-                        {displayEntries.map(({ node, depth }) => {
-                            const hasChildren = node.children.length > 0
-                            const isOpen = expanded.has(node.id)
-                            return (
-                                <ComboboxItem
-                                    key={node.id}
-                                    id={
-                                        id
-                                            ? `${id}-option-${toAutomationIdSegment(node.id)}`
-                                            : undefined
-                                    }
-                                    value={node}
-                                    style={{
-                                        paddingLeft: `${0.5 + depth * 1.1}rem`,
-                                    }}
-                                    onKeyDown={(event) => {
-                                        if (
-                                            event.key === "ArrowRight" &&
-                                            hasChildren &&
-                                            !isOpen
-                                        ) {
-                                            event.preventDefault()
-                                            toggle(node.id)
-                                        }
-                                        if (
-                                            event.key === "ArrowLeft" &&
-                                            hasChildren &&
-                                            isOpen
-                                        ) {
-                                            event.preventDefault()
-                                            toggle(node.id)
-                                        }
-                                    }}
-                                >
-                                    <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                                        {hasChildren ? (
-                                            <button
-                                                id={
-                                                    id
-                                                        ? `${id}-node-${toAutomationIdSegment(node.id)}-toggle`
-                                                        : undefined
-                                                }
-                                                type="button"
-                                                aria-label={
-                                                    isOpen ? "收起" : "展开"
-                                                }
-                                                aria-expanded={isOpen}
-                                                className="pointer-events-auto inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-background hover:text-foreground"
-                                                onClick={(event) => {
-                                                    event.stopPropagation()
-                                                    toggle(node.id)
-                                                }}
-                                            >
-                                                <ChevronRightIcon
-                                                    className={cn(
-                                                        "size-3.5 transition-transform",
-                                                        isOpen && "rotate-90",
-                                                    )}
-                                                />
-                                            </button>
-                                        ) : (
-                                            <span
-                                                className="inline-flex size-5 shrink-0"
-                                                aria-hidden
-                                            />
-                                        )}
-                                        <span className="truncate font-medium">
-                                            {node.label}
-                                        </span>
-                                        {node.code ? (
-                                            <span className="num ml-auto shrink-0 text-xs text-muted-foreground">
-                                                {node.code}
-                                            </span>
-                                        ) : null}
-                                    </div>
-                                </ComboboxItem>
-                            )
-                        })}
+                        {displayEntries.map(({ node, depth }) => (
+                            <TreeOption
+                                key={node.id}
+                                idPrefix={id}
+                                node={node}
+                                depth={depth}
+                                expanded={expanded}
+                                onToggle={toggle}
+                            />
+                        ))}
                     </ComboboxList>
                 </ComboboxContent>
             </div>
+        </Combobox>
+    )
+}
+
+export type MultiTreeComboboxProps = {
+    nodes: readonly TreeComboboxNode[]
+    value: readonly string[]
+    onValueChange: (ids: string[]) => void
+    label: string
+    placeholder?: string
+    emptyLabel?: string
+    disabled?: boolean
+    id?: string
+    "aria-describedby"?: string
+    className?: string
+}
+
+function indexNodes(nodes: readonly TreeComboboxNode[]) {
+    const byId = new Map<string, TreeComboboxNode>()
+    const pathLabel = new Map<string, string>()
+    const walk = (list: readonly TreeComboboxNode[], prefix: string[]) => {
+        for (const node of list) {
+            const path = [...prefix, node.label]
+            byId.set(node.id, node)
+            pathLabel.set(node.id, path.join(" / "))
+            walk(node.children, path)
+        }
+    }
+    walk(nodes, [])
+    return { byId, pathLabel }
+}
+
+/**
+ * 多选树形下拉：层级展开/收起；搜索保留命中节点和它的祖先路径。
+ * 已选项以标签展示，可逐个移除。
+ */
+export function MultiTreeCombobox({
+    nodes,
+    value,
+    onValueChange,
+    label,
+    placeholder = "搜索名称",
+    emptyLabel = "没有符合条件的对象",
+    disabled = false,
+    id,
+    "aria-describedby": ariaDescribedBy,
+    className,
+}: MultiTreeComboboxProps) {
+    const [query, setQuery] = React.useState("")
+    const [expandedIds, setExpandedIds] =
+        React.useState<ReadonlySet<string> | null>(null)
+    const [searchExpanded, setSearchExpanded] = React.useState<{
+        query: string
+        ids: ReadonlySet<string>
+    } | null>(null)
+    const anchorRef = useComboboxAnchor()
+    const searching = query.trim().length > 0
+    const { byId, pathLabel } = React.useMemo(() => indexNodes(nodes), [nodes])
+    const parentIds = React.useMemo(() => collectParentIds(nodes), [nodes])
+    const filteredNodes = React.useMemo(
+        () => (searching ? filterMatchingBranches(nodes, query) : nodes),
+        [nodes, searching, query],
+    )
+    const filteredParentIds = React.useMemo(
+        () => collectParentIds(filteredNodes),
+        [filteredNodes],
+    )
+    const expanded = searching
+        ? searchExpanded?.query === query
+            ? searchExpanded.ids
+            : filteredParentIds
+        : (expandedIds ?? parentIds)
+    const displayEntries = React.useMemo(
+        () => flattenVisible(filteredNodes, expanded),
+        [filteredNodes, expanded],
+    )
+    const selected = React.useMemo(
+        () =>
+            value.map(
+                (itemId) =>
+                    byId.get(itemId) ?? {
+                        id: itemId,
+                        label: "当前不可用",
+                        children: [],
+                    },
+            ),
+        [byId, value],
+    )
+
+    const toggle = React.useCallback(
+        (nodeId: string) => {
+            if (searching) {
+                setSearchExpanded((previous) => {
+                    const base =
+                        previous?.query === query
+                            ? previous.ids
+                            : filteredParentIds
+                    const next = new Set(base)
+                    if (next.has(nodeId)) next.delete(nodeId)
+                    else next.add(nodeId)
+                    return { query, ids: next }
+                })
+                return
+            }
+            setExpandedIds((previous) => {
+                const next = new Set(previous ?? parentIds)
+                if (next.has(nodeId)) next.delete(nodeId)
+                else next.add(nodeId)
+                return next
+            })
+        },
+        [filteredParentIds, parentIds, query, searching],
+    )
+
+    const handleOpenChange = React.useCallback(
+        (open: boolean) => {
+            if (open) {
+                setExpandedIds((previous) => {
+                    const next = new Set(previous ?? parentIds)
+                    for (const itemId of value) {
+                        for (const ancestorId of collectAncestorIds(
+                            nodes,
+                            itemId,
+                        )) {
+                            next.add(ancestorId)
+                        }
+                    }
+                    return next
+                })
+            } else {
+                setQuery("")
+                setSearchExpanded(null)
+            }
+        },
+        [nodes, parentIds, value],
+    )
+
+    return (
+        <Combobox
+            multiple
+            items={displayEntries.map(({ node }) => node)}
+            value={selected}
+            onValueChange={(next) => {
+                onValueChange(next.map((item) => item.id))
+            }}
+            onInputValueChange={(next, details) => {
+                const nextQuery = remoteSearchFromInputChange(
+                    next,
+                    details.reason,
+                )
+                if (nextQuery !== undefined) setQuery(nextQuery)
+            }}
+            itemToStringLabel={(item) => pathLabel.get(item.id) ?? item.label}
+            itemToStringValue={(item) => item.id}
+            isItemEqualToValue={(item, current) => item.id === current.id}
+            filter={() => true}
+            onOpenChange={handleOpenChange}
+            disabled={disabled}
+        >
+            <div
+                ref={anchorRef}
+                data-slot="multi-tree-combobox"
+                className={cn("min-w-0", className)}
+            >
+                <ComboboxChips>
+                    <ComboboxValue>
+                        {(items: TreeComboboxNode[]) =>
+                            items.map((item) => {
+                                const itemLabel =
+                                    pathLabel.get(item.id) ?? item.label
+                                return (
+                                    <ComboboxChip
+                                        key={item.id}
+                                        removeId={
+                                            id
+                                                ? `${id}-chip-${toAutomationIdSegment(item.id)}-remove`
+                                                : undefined
+                                        }
+                                        removeLabel={`移除${itemLabel}`}
+                                        aria-label={itemLabel}
+                                    >
+                                        <span className="min-w-0 truncate">
+                                            {itemLabel}
+                                        </span>
+                                    </ComboboxChip>
+                                )
+                            })
+                        }
+                    </ComboboxValue>
+                    <ComboboxChipsInput
+                        id={id}
+                        aria-label={label}
+                        aria-describedby={ariaDescribedBy}
+                        placeholder={selected.length > 0 ? "" : placeholder}
+                        disabled={disabled}
+                    />
+                </ComboboxChips>
+            </div>
+            <ComboboxContent anchor={anchorRef}>
+                <ComboboxEmpty>{emptyLabel}</ComboboxEmpty>
+                <ComboboxList>
+                    {displayEntries.map(({ node, depth }) => (
+                        <TreeOption
+                            key={node.id}
+                            idPrefix={id}
+                            node={node}
+                            depth={depth}
+                            expanded={expanded}
+                            onToggle={toggle}
+                        />
+                    ))}
+                </ComboboxList>
+            </ComboboxContent>
         </Combobox>
     )
 }

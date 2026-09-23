@@ -1,13 +1,53 @@
 "use client"
 
-import { MultiOptionCombobox } from "@/components/business/multi-option-combobox"
-import { Checkbox } from "@/components/ui/checkbox"
+import { useMemo } from "react"
+
+import {
+    MultiTreeCombobox,
+    type TreeComboboxNode,
+} from "@/components/business/tree-combobox"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { useOrganizationStateQuery } from "@/features/organization/hooks/queries"
+import type { OrgUnit } from "@/features/organization/types"
 import { hasPermission } from "@/lib/permissions"
 
-/** 组织查询条件使用授权候选名称；失效候选保留且可移除，不回退为全部。 */
+function buildUnitNodes(units: readonly OrgUnit[]): TreeComboboxNode[] {
+    const known = new Set(units.map((unit) => unit.id))
+    const childrenByParent = new Map<string | null, OrgUnit[]>()
+    for (const unit of units) {
+        const parentId =
+            unit.parent_id &&
+            known.has(unit.parent_id) &&
+            unit.parent_id !== unit.id
+                ? unit.parent_id
+                : null
+        const siblings = childrenByParent.get(parentId) ?? []
+        siblings.push(unit)
+        childrenByParent.set(parentId, siblings)
+    }
+    const build = (
+        unit: OrgUnit,
+        seen: ReadonlySet<string>,
+    ): TreeComboboxNode => {
+        const label = unit.enabled ? unit.name : `${unit.name}（已停用）`
+        if (seen.has(unit.id)) return { id: unit.id, label, children: [] }
+        const next = new Set(seen).add(unit.id)
+        return {
+            id: unit.id,
+            label,
+            children: (childrenByParent.get(unit.id) ?? []).map((child) =>
+                build(child, next),
+            ),
+        }
+    }
+    return (childrenByParent.get(null) ?? []).map((unit) =>
+        build(unit, new Set()),
+    )
+}
+
+/** 组织查询条件按组织树选择；失效候选保留且可移除，不回退为全部。 */
 export function OrganizationUnitFilter({
     id,
     label = "组织",
@@ -26,23 +66,22 @@ export function OrganizationUnitFilter({
     const profile = useAccountProfileQuery()
     const canRead = hasPermission(profile.data?.permissions, "org_unit:list")
     const query = useOrganizationStateQuery(canRead)
-    const units = canRead && !query.isError ? (query.data?.units ?? []) : []
-    const selected = value.split(",").filter(Boolean)
-    const available = new Set(units.map((unit) => unit.id))
-    const options = [
-        ...units.map((unit) => {
-            const parent = units.find(
-                (candidate) => candidate.id === unit.parent_id,
-            )
-            return {
-                value: unit.id,
-                label: `${parent ? `${parent.name} / ` : ""}${unit.name}${unit.enabled ? "" : "（已停用）"}`,
-            }
-        }),
-        ...selected
-            .filter((id) => !available.has(id))
-            .map((id) => ({ value: id, label: "已选组织（当前不可用）" })),
-    ]
+    const sourceUnits =
+        canRead && !query.isError ? query.data?.units : undefined
+    const units = useMemo(() => sourceUnits ?? [], [sourceUnits])
+    const selected = useMemo(() => value.split(",").filter(Boolean), [value])
+    const nodes = useMemo(() => {
+        const tree = buildUnitNodes(units)
+        const known = new Set(units.map((unit) => unit.id))
+        const unavailable = selected
+            .filter((unitId) => !known.has(unitId))
+            .map((unitId): TreeComboboxNode => ({
+                id: unitId,
+                label: "已选组织（当前不可用）",
+                children: [],
+            }))
+        return unavailable.length > 0 ? [...tree, ...unavailable] : tree
+    }, [selected, units])
     const message = profile.isPending
         ? "正在加载组织权限…"
         : !canRead
@@ -61,18 +100,19 @@ export function OrganizationUnitFilter({
                 {label}
             </label>
             <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
-                <MultiOptionCombobox
+                <MultiTreeCombobox
                     id={id}
-                    aria-label={label}
+                    label={label}
                     aria-describedby={message ? `${id}-hint` : undefined}
                     className="min-w-0 [&_[data-slot=combobox-chips]]:min-h-control [&_[data-slot=combobox-chips]]:rounded-lg [&_[data-slot=combobox-chip]]:max-w-full [&_[data-slot=combobox-chip-remove]]:shrink-0"
+                    nodes={nodes}
                     value={selected}
-                    options={options}
                     placeholder="搜索组织名称"
                     emptyLabel={message ?? "没有符合条件的组织"}
                     onValueChange={(ids) => {
-                        onChange([...new Set(ids)].sort().join(","))
-                        if (!ids.length) onDescendantsChange(false)
+                        const next = [...new Set(ids)].sort()
+                        onChange(next.join(","))
+                        if (!next.length) onDescendantsChange(false)
                     }}
                 />
                 <label
