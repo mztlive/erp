@@ -129,8 +129,8 @@ impl DataScopeService {
         if eligible.is_empty() {
             return Err(Error::Forbidden("没有该资源动作权限".into()));
         }
-        let state = OrganizationRepository::new(&self.db).state(executor).await?;
         let as_of = Instant::now();
+        let state = self.scope_organizations(actor.id(), resource, as_of, executor).await?;
         let (scope, role_scopes) =
             self.resolved(actor.id(), &eligible, (resource, action), &state, as_of, executor).await?;
         let fingerprint = format!(
@@ -156,6 +156,26 @@ impl DataScopeService {
         })
     }
 
+    /// 目录只装载有界组织树及操作人关系，其他资源保留既有组织事实合同。
+    async fn scope_organizations(
+        &self,
+        actor_id: &str,
+        resource: &str,
+        at: Instant,
+        executor: &mut dyn Executor,
+    ) -> Result<OrganizationState> {
+        let repository = OrganizationRepository::new(&self.db);
+        if matches!(
+            resource,
+            "sales_person" | "procurement_person" | "business_person"
+                | "person_query_qualification" | "settlement_party" | "warehouse"
+        ) {
+            repository.directory_state(actor_id, at, executor).await
+        } else {
+            Ok(repository.state(executor).await?)
+        }
+    }
+
     /// 批量取得主体规则，保留同角色证据；未来生效和到期关系按同一时点解释。
     async fn resolved(
         &self,
@@ -176,6 +196,7 @@ impl DataScopeService {
             .extend(self.db.data_scopes().list_by_subject(DataScopeSubjectType::User, user, executor).await?);
         for rule in rules.iter().filter(|rule| rule.binding.applies(resource, action)) {
             super::consumers::validate_binding(&rule.binding)?;
+            super::consumers::validate_scope_type(&rule.binding.resource, rule.scope_type)?;
         }
         state.own_org(user, at)?;
         let tree = OrgTree::new(&state.units)?;

@@ -86,12 +86,11 @@ pub struct FilterOption {
     pub value: String,
     pub label: String,
 }
-/// 分页查询附带完整可见范围内的负责人候选；候选不授予命令资格。
+/// 分页结果的归属口径；候选由独立目录查询。
 #[derive(Debug, Clone, Serialize)]
-pub struct FilteredPage<T> {
+pub struct OwnershipPage<T> {
     #[serde(flatten)]
     pub page: crate::PageView<T>,
-    pub owner_options: Vec<FilterOption>,
     /// 当前负责人权威来源，不代表组织隔离已生效。
     pub ownership_basis: &'static str,
 }

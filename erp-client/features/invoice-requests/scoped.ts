@@ -46,7 +46,6 @@ export type InvoiceRequestScopeListView = {
     requests: readonly ScopedInvoiceRequestWire[]
     total: number
     summary: FundsSummaryWire | undefined
-    ownerOptions: readonly { value: string; label: string }[]
     scopeVersion: string | undefined
     policyVersion: number | undefined
     organizationVersion: number | undefined

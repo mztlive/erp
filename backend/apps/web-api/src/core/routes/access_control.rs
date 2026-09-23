@@ -23,6 +23,22 @@ use crate::core::middleware::with_permission;
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
+            "/person-query-qualifications/{category}/{account_id}",
+            with_permission(
+                get(access_control::person_directory::get_qualification),
+                rbac,
+                access_control::person_directory::get_qualification_permission_key(),
+            ),
+        )
+        .route(
+            "/person-query-qualifications/{category}/{account_id}",
+            with_permission(
+                put(access_control::person_directory::change_qualification),
+                rbac,
+                access_control::person_directory::change_qualification_permission_key(),
+            ),
+        )
+        .route(
             "/org-units",
             with_permission(get(organization::list), rbac, organization::list_permission_key()),
         )
@@ -120,6 +136,54 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 get(access_control::audit_event_list),
                 rbac,
                 access_control::audit_event_list_permission_key(),
+            ),
+        )
+        .route(
+            "/salespeople",
+            with_permission(
+                get(access_control::person_directory::list_salespeople),
+                rbac,
+                access_control::person_directory::list_salespeople_permission_key(),
+            ),
+        )
+        .route(
+            "/salespeople/selected",
+            with_permission(
+                get(access_control::person_directory::list_selected_salespeople),
+                rbac,
+                access_control::person_directory::list_selected_salespeople_permission_key(),
+            ),
+        )
+        .route(
+            "/procurement-people",
+            with_permission(
+                get(access_control::person_directory::list_procurement_people),
+                rbac,
+                access_control::person_directory::list_procurement_people_permission_key(),
+            ),
+        )
+        .route(
+            "/procurement-people/selected",
+            with_permission(
+                get(access_control::person_directory::list_selected_procurement_people),
+                rbac,
+                access_control::person_directory::list_selected_procurement_people_permission_key(),
+            ),
+        )
+        .route(
+            "/business-people",
+            with_permission(
+                get(access_control::person_directory::list_business_people),
+                rbac,
+                access_control::person_directory::list_business_people_permission_key(),
+            ),
+        )
+        .route(
+            "/business-people/selected",
+            with_permission(
+                get(access_control::person_directory::list_selected_business_people),
+                rbac,
+                access_control::person_directory::list_selected_business_people_permission_key(),
             ),
         )
 }

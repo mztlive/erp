@@ -6,6 +6,8 @@ pub mod casbin_adapter;
 pub mod extensions;
 pub mod organization;
 pub mod owned;
+mod person_directory;
+pub(crate) mod person_directory_query;
 pub mod prelude;
 mod role;
 pub use access_control::{
@@ -18,7 +20,8 @@ pub use casbin_adapter::{CASBIN_RULES, MongoCasbinAdapter};
 pub use extensions::AccessControlExt;
 pub use organization::OrganizationRepository;
 pub use owned::{
-    AccountCoreRepository, AuditEventRepository, DataScopeRepository, PermissionRepository, RoleRepository,
-    UserRoleRepository,
+    AccountCoreRepository, AuditEventRepository, DataScopeRepository, PermissionRepository,
+    PersonQueryQualificationRepository, RoleRepository, UserRoleRepository,
 };
+pub use person_directory::PersonQueryQualificationRepositoryExt;
 pub use role::RoleRepositoryExt;

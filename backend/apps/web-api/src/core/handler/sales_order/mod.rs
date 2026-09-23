@@ -35,7 +35,11 @@ use crate::core::response::ApiResponse;
 /// * `query` - 分页与筛选参数（扁平传递）
 ///
 /// # 返回
-/// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+/// 返回带范围版本的分页视图，不附带负责销售候选。
+///
+/// # 关键业务约束
+/// 负责销售筛选只收窄销售单。行负责人姓名来自当前页单据事实，不由此接口产生候选。
+/// 创建人筛选保持独立，不并入负责销售候选。
 pub async fn sales_order_list(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,

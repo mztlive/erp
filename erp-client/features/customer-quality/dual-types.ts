@@ -134,8 +134,6 @@ export type CurrentQualityView = DualQualityViewBase &
             items: readonly CurrentQualityRow[]
             total: number
         }>
-        ownerOptions: readonly QualityFilterOption[]
-        orgOptions: readonly QualityFilterOption[]
     }>
 
 export type HistoryQualityView = DualQualityViewBase &
@@ -145,8 +143,6 @@ export type HistoryQualityView = DualQualityViewBase &
             items: readonly HistoryQualityRow[]
             total: number
         }>
-        attributionUserOptions: readonly QualityFilterOption[]
-        attributionOrgOptions: readonly QualityFilterOption[]
     }>
 
 export type QualityExport = Readonly<{

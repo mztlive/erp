@@ -12,7 +12,7 @@ import {
     ListWorkspaceFilterBar,
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
-import { ResponsibleUserFilter } from "@/features/entity-selectors/components/responsible-user-filter"
+import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
 import { masterDataSearchPlaceholder } from "@/features/master-data/lib/copy"
 import {
     SUPPLIER_CAPABILITY_OPTIONS,
@@ -45,8 +45,6 @@ export function SupplierListToolbar({
     resultCount,
     loading,
     failed,
-    ownerOptions = [],
-    capabilityOwnerOptions = [],
 }: {
     idPrefix?: string
     searchInputRef: React.RefObject<HTMLInputElement | null>
@@ -55,8 +53,6 @@ export function SupplierListToolbar({
     resultCount?: number
     loading: boolean
     failed: boolean
-    ownerOptions?: readonly { value: string; label: string }[]
-    capabilityOwnerOptions?: readonly { value: string; label: string }[]
 }) {
     const prefix = idPrefix ?? "master-data-list-supplier-list-toolbar"
     const panelId = `${prefix}-more-panel`
@@ -151,19 +147,19 @@ export function SupplierListToolbar({
                             人员
                         </legend>
                         <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-                            <ResponsibleUserFilter
+                            <PersonDirectoryFilter
                                 id={`${prefix}-filter-maintainer`}
                                 label="维护人"
                                 value={f.ownerUserIdsDraft}
                                 onChange={f.setOwnerUserIdsDraft}
-                                options={ownerOptions}
+                                category="business"
                             />
-                            <ResponsibleUserFilter
+                            <PersonDirectoryFilter
                                 id={`${prefix}-filter-capability-owner`}
                                 label="能力负责人"
                                 value={f.capabilityOwnerUserIdsDraft}
                                 onChange={f.setCapabilityOwnerUserIdsDraft}
-                                options={capabilityOwnerOptions}
+                                category="business"
                             />
                         </div>
                     </fieldset>

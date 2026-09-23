@@ -27,8 +27,6 @@ import { fetchAllPages } from "./fetch-all"
 export async function listProducts(query: MasterDataListQuery): Promise<{
     rows: MasterDataListItem[]
     emptyReason?: string | null
-    ownerOptions: ReadonlyArray<{ value: string; label: string }>
-    procurementOwnerOptions: ReadonlyArray<{ value: string; label: string }>
 }> {
     const status =
         query.lifecycleStatus === "enabled"
@@ -55,43 +53,38 @@ export async function listProducts(query: MasterDataListQuery): Promise<{
     return {
         rows: page.items.map((product) => mapProductRow(product)),
         emptyReason: page.empty_reason,
-        ownerOptions: page.owner_options ?? [],
-        procurementOwnerOptions: page.procurement_owner_options ?? [],
     }
 }
 
-/** 读取商品筛选使用的启用分类、品牌与供应商选项。 */
+/** 读取商品筛选使用的授权分类、品牌与供应商选项（含停用）。 */
 export async function fetchProductFilterOptions(
     permissions: readonly string[],
 ): Promise<ProductFilterOptions> {
     const [categories, brands, suppliers] = await Promise.all([
         hasPermission(permissions, "product_category:list")
             ? fetchAllPages<ProductCategoryDto>("/admin/product-categories", {
-                  status: "active",
                   sort_by: "name",
                   sort_dir: "asc",
               })
             : [],
         hasPermission(permissions, "product_brand:list")
             ? fetchAllPages<ProductBrandDto>("/admin/product-brands", {
-                  status: "active",
                   sort_by: "name",
                   sort_dir: "asc",
               })
             : [],
         hasPermission(permissions, "supplier:list")
-            ? fetchAllPages<SupplierDto>("/admin/suppliers", {
-                  status: "active",
-              })
+            ? fetchAllPages<SupplierDto>("/admin/suppliers", {})
             : [],
     ])
     const supplierOptions = suppliers
         .map((supplier) => ({
             value: supplier.id,
             label:
-                supplier.short_name ??
-                supplier.legal_name ??
-                supplier.supplier_no,
+                (supplier.short_name ??
+                    supplier.legal_name ??
+                    supplier.supplier_no) +
+                (supplier.status === "active" ? "" : "（停用）"),
             keywords: [
                 supplier.supplier_no,
                 supplier.party_no,
@@ -114,12 +107,14 @@ export async function fetchProductFilterOptions(
         categories: categories.map((category) => ({
             categoryId: category.id,
             categoryCode: category.category_code,
-            categoryName: category.name,
+            categoryName:
+                category.name +
+                (category.status === "active" ? "" : "（停用）"),
             parentId: category.parent_category_id ?? undefined,
         })),
         brands: brands.map((brand) => ({
             value: brand.id,
-            label: brand.name,
+            label: brand.name + (brand.status === "active" ? "" : "（停用）"),
             keywords: `${brand.brand_code} ${brand.name}`,
         })),
         suppliers: supplierOptions,

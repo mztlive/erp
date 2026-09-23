@@ -663,14 +663,7 @@ pub struct ContractMetrics {
     pub terminated: i64,
 }
 
-/// 当前可见合同范围的筛选候选值。
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ContractFilterOption {
-    pub value: String,
-    pub label: String,
-}
-
-/// 合同分页列表；保留 Page 字段并追加全范围指标和候选项。
+/// 合同分页列表；保留 Page 字段并追加全范围指标。
 #[derive(Debug, Clone, Serialize)]
 pub struct ContractListView {
     /// 当前客户主负责人构成合同跟进责任。
@@ -690,6 +683,4 @@ pub struct ContractListView {
     #[serde(flatten)]
     pub page: PageView<ContractView>,
     pub metrics: ContractMetrics,
-    pub settlement_options: Vec<ContractFilterOption>,
-    pub owner_options: Vec<ContractFilterOption>,
 }

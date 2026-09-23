@@ -50,6 +50,7 @@ impl InventoryService {
         let mut items = page.items.into_iter().map(movement_row_view).collect::<Vec<_>>();
         let source_document_nos =
             load_movement_source_document_nos(&self.db, self.fulfillment_facts.as_ref(), &items).await?;
+        self.hydrate_movement_warehouses(&mut items).await?;
         for item in &mut items {
             item.source_document_no = source_document_nos.get(&item.source_document_id).cloned();
         }
@@ -123,6 +124,7 @@ fn movement_filter(
 
 pub(super) fn movement_row_view(row: StockMovementRow) -> StockMovementView {
     StockMovementView {
+        warehouse_name: None,
         id: row.id,
         warehouse_id: row.warehouse_id.to_string(),
         sku_id: row.sku_id.to_string(),
@@ -205,5 +207,31 @@ impl From<StockMovement> for StockMovementView {
             recorded_at: movement.fact.recorded_at,
             recorded_by: movement.fact.recorded_by,
         })
+    }
+}
+
+impl InventoryService {
+    /// 补齐已授权结果页的仓库名称，不产生目录候选或扩大流水范围。
+    async fn hydrate_movement_warehouses(&self, items: &mut [StockMovementView]) -> Result<()> {
+        if items.is_empty() {
+            return Ok(());
+        }
+        let ids = items.iter().map(|row| row.warehouse_id.clone()).collect::<Vec<_>>();
+        let warehouses = self.warehouse_facts.warehouses_by_ids(&ids, &mut NoTransaction).await?;
+        let revision_ids =
+            warehouses.values().filter_map(|row| row.current_revision_id.clone()).collect::<Vec<_>>();
+        let revisions =
+            self.warehouse_facts.warehouse_revisions_by_ids(&revision_ids, &mut NoTransaction).await?;
+        for item in items {
+            item.warehouse_name = warehouses.get(&item.warehouse_id).map(|warehouse| {
+                warehouse
+                    .current_revision_id
+                    .as_ref()
+                    .and_then(|id| revisions.get(id))
+                    .map(|revision| revision.name.clone())
+                    .unwrap_or_else(|| warehouse.warehouse_code.clone())
+            });
+        }
+        Ok(())
     }
 }

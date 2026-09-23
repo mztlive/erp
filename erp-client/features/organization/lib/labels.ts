@@ -52,3 +52,14 @@ export const MANAGEMENT_GRANT_NOTICE =
     "管理授权必须显式指定角色和组织，不能因为对方是部门负责人就自动获得组织配置权。"
 
 export const PAGE_NARROW_CLASS = "min-w-0 max-w-full overflow-x-hidden"
+
+/** 非内部组织集合不能在界面被误读为部门范围。 */
+export function scopeTypeLabel(
+    scopeType: DataScopeType,
+    dimension: ScopeDimension,
+): string {
+    if (scopeType === "organization" && dimension !== "internal_org") {
+        return dimension === "settlement_party" ? "指定结算主体" : "指定仓库"
+    }
+    return SCOPE_TYPE_LABEL[scopeType]
+}

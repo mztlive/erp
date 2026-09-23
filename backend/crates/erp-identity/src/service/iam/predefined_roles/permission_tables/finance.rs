@@ -1,5 +1,8 @@
 /// 财务推荐权限。
 pub(crate) const FINANCE_PERMISSIONS: &[&str] = &[
+    "warehouse:list",
+    "business_person:list",
+    "settlement_party:list",
     "sales_invoice_request:list",
     "sales_invoice_request:detail",
     "sales_invoice_request:submit",
@@ -30,6 +33,8 @@ pub(crate) const FINANCE_PERMISSIONS: &[&str] = &[
     "party:list",
     "party:detail",
     "party_revision:list",
+    "sales_person:list",
+    "procurement_person:list",
     "customer:list",
     "customer:detail",
     "customer_scope:detail",

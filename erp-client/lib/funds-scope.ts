@@ -1,9 +1,4 @@
-/** 资金往来范围分页 wire 形态（M07/M08/M09 共用，后端 snake_case）。 */
-
-export type FundsOwnerOption = Readonly<{
-    value: string
-    label: string
-}>
+/** 资金往来范围分页 wire 形态（M07/M08/M09 共用，后端 snake_case）。负责人候选不在此响应。 */
 
 export type FundsPersonShareWire = Readonly<{
     owner_user_id: string
@@ -22,7 +17,6 @@ export type FundsScopedPageWire<T> = Readonly<{
     items: readonly T[]
     total: number
     summary: FundsSummaryWire
-    owner_options: readonly FundsOwnerOption[]
     page: number
     page_size: number
     scope_version: string

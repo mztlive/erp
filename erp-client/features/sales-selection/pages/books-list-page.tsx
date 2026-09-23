@@ -105,7 +105,6 @@ export const BooksListPage = () => {
     const listQuery = useBooks(query)
     const rows = listQuery.data?.rows ?? []
     const total = listQuery.data?.total ?? 0
-    const ownerOptions = listQuery.data?.ownerOptions ?? []
     const noScope = listQuery.data?.noScope ?? false
     const scopeConflict = listQuery.isError && isScopeConflict(listQuery.error)
     const queriedAt = listQuery.data
@@ -253,7 +252,6 @@ export const BooksListPage = () => {
                         resultCount={listQuery.data ? total : undefined}
                         loading={listQuery.isPending || listQuery.isFetching}
                         failed={listQuery.isError}
-                        ownerOptions={ownerOptions}
                     />
                 }
                 tableClassName={listStyles.table}
@@ -267,7 +265,6 @@ export const BooksListPage = () => {
                         onRetry={handleRetry}
                         filtersActive={filtersActive(query)}
                         noScope={noScope}
-                        ownerOptions={ownerOptions}
                         onClearFilters={handleReset}
                         page={query.page ?? 1}
                         pageSize={query.page_size ?? DEFAULT_PAGE_SIZE}

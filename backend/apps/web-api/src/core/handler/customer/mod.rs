@@ -236,7 +236,10 @@ pub async fn customer_sensitive_reveal(
 /// * `query` - 分页与筛选参数（`keyword`/`party_id`/`status` 扁平传递）
 ///
 /// # 返回
-/// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+/// 返回带范围版本的分页视图，不附带负责销售候选。
+///
+/// # 关键业务约束
+/// 负责销售筛选只收窄客户。行负责人姓名来自当前页归属，不由此接口产生候选。
 pub async fn customer_list(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -255,6 +258,9 @@ pub async fn customer_list(
     action = "detail"
 )]
 /// 查询不受个人归属限制的全部有权客户。
+///
+/// 与常规列表共用同一响应，不附带负责销售候选。
+/// `all_authorized` 只放宽客户归属收窄，不按客户归属定义销售人员全集。
 pub async fn customer_all_authorized_list(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,

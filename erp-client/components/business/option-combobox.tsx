@@ -95,11 +95,17 @@ export function OptionCombobox({
     onBlur,
 }: OptionComboboxProps) {
     const items = React.useMemo(() => toInternal(options), [options])
-    const selected = useStickySelected(
+    const resolved = useStickySelected(
         items,
         value ?? undefined,
         (item) => item.value,
+        filterMode !== "remote",
     )
+    const selected: InternalOption | null = resolved ?? (value ? {
+        value,
+        label: loading ? "已选项（正在核对）" : "已选项（当前不可用）",
+        __search: "",
+    } : null)
 
     return (
         <Combobox

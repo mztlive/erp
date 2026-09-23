@@ -21,10 +21,9 @@ import type {
 /** 列表行 wire 形态（后端 snake_case 直接透传）。 */
 type BookListWire = SelectionBook
 
-/** 列表视图 wire 形态：分页、候选、范围版本与无范围标记。 */
+/** 列表视图 wire 形态：分页、范围版本与无范围标记。 */
 type BookListViewWire = {
     page: Page<BookListWire>
-    owner_options: Array<{ value: string; label: string }>
     scope_version: string
     policy_version: number
     organization_version: number
@@ -66,7 +65,6 @@ export const fetchBooks = async (
     return {
         rows: view.page.items,
         total: view.page.total,
-        ownerOptions: view.owner_options ?? [],
         scopeVersion: view.scope_version,
         policyVersion: view.policy_version,
         organizationVersion: view.organization_version,

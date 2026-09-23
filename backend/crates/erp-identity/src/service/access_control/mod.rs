@@ -560,6 +560,12 @@ impl AccessControlService {
         object_id: Option<String>,
         changed_field_names: Vec<String>,
     ) -> Result<AuditEvent> {
+        if !crate::entity::access_control::audit_actions::AUDIT_ACTIONS
+            .iter()
+            .any(|(code, _)| *code == action_type)
+        {
+            return Err(Error::ValidationError("审计写入动作未登记".into()));
+        }
         let account = self.db.accounts().find_by_id(actor.id(), &mut NoTransaction).await?;
         let actor_label = account.map(|account| account.name).unwrap_or_else(|| "系统操作人".to_string());
         AuditEvent::new(
@@ -631,6 +637,7 @@ async fn ensure_scope_configuration(
         return Err(Error::Forbidden("范围配置要求公司边界的组织配置权限".into()));
     }
     consumers::validate_binding(&scope.binding)?;
+    consumers::validate_scope_type(&scope.binding.resource, scope.scope_type)?;
     if action == "delete" {
         return Ok(());
     }

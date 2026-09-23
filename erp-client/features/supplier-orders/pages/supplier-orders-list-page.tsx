@@ -301,8 +301,7 @@ export function SupplierOrdersListPage() {
                         filters={filters}
                         resultCount={listQuery.data ? total : undefined}
                         loading={listQuery.isFetching}
-                        ownerOptions={listQuery.data?.ownerOptions}
-                        handlerOptions={listQuery.data?.handlerOptions}
+
                         failed={listQuery.isError}
                     />
                 }

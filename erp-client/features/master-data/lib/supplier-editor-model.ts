@@ -171,8 +171,9 @@ export function hydrateSupplierEditor(
         currentScore: fields.currentScore ?? "",
         changeReason: "",
         maintainerUserId:
-            data.supplierList?.maintainerUserId ??
-            fields.maintainerUserId ??
+            labeledValue(data.currentRevision.fields, "维护人") ||
+            labeledValue(data.resourceFacts, "维护人") ||
+            fields.maintainerUserId ||
             "",
         capabilityOwnerUserId:
             labeledValue(data.currentRevision.fields, "能力负责人") ||

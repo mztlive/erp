@@ -100,7 +100,6 @@ export function makeQueueView(
             totalPages: 1,
             currentOperationId: overrides.currentOperationId,
             filterSummary: "入库 · 全部",
-            warehouseOptions: [{ value: "wh_1", label: "中心仓" }],
             visibleTypes: overrides.visibleTypes ?? (["RECEIPT"] as const),
             roleLabel: overrides.roleLabel ?? "仓储经办",
             viewerLabel: "周航",

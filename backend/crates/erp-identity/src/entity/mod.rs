@@ -5,6 +5,7 @@ pub mod account_core;
 pub mod auth;
 pub mod organization;
 pub mod organization_change;
+pub mod person_directory;
 pub mod rbac;
 pub mod role;
 

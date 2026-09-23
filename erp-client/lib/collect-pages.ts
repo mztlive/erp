@@ -12,9 +12,7 @@ const ENVELOPE_KEYS = [
     "ownership_basis",
 ] as const
 
-type FilterOption = { value: string; label: string }
-
-type ListEnvelope = {
+export type ListEnvelope = {
     empty_reason?: string | null
     scope_version?: string
     policy_version?: number
@@ -22,9 +20,6 @@ type ListEnvelope = {
     as_of?: string
     scope_summary?: string
     ownership_basis?: string
-    owner_options?: FilterOption[]
-    capability_owner_options?: FilterOption[]
-    procurement_owner_options?: FilterOption[]
 }
 
 type CompletePage<T> = Page<T> & ListEnvelope
@@ -59,29 +54,7 @@ function takeEnvelope(
             throw scopeChangedError()
         Object.assign(next, { [key]: value })
     }
-    next.owner_options = mergeOptions(seen.owner_options, page.owner_options)
-    next.capability_owner_options = mergeOptions(
-        seen.capability_owner_options,
-        page.capability_owner_options,
-    )
-    next.procurement_owner_options = mergeOptions(
-        seen.procurement_owner_options,
-        page.procurement_owner_options,
-    )
     return next
-}
-
-function mergeOptions(
-    seen: readonly { value: string; label: string }[] | undefined,
-    next: readonly { value: string; label: string }[] | undefined,
-): { value: string; label: string }[] | undefined {
-    if (!seen && !next) return undefined
-    const labels = new Map<string, string>()
-    for (const option of [...(seen ?? []), ...(next ?? [])]) {
-        if (!option.value) continue
-        labels.set(option.value, option.label)
-    }
-    return [...labels.entries()].map(([value, label]) => ({ value, label }))
 }
 
 /** 读取完整匹配集合；重复页、总数变化、空的中间页或范围版本变化使整次查询失败。 */
@@ -89,6 +62,7 @@ export async function fetchCompleteList<T>(
     path: string,
     query: Record<string, unknown> = {},
     keyOf: (item: T) => string = (item) => (item as { id: string }).id,
+    maxItems = Infinity,
 ): Promise<{ items: T[]; total: number } & ListEnvelope> {
     const items = new Map<string, T>()
     let expectedTotal: number | undefined
@@ -102,6 +76,11 @@ export async function fetchCompleteList<T>(
                 ? { scope_version: envelope.scope_version }
                 : {}),
         })
+        if (result.total > maxItems)
+            throw createApiError({
+                kind: "Validation",
+                message: "候选超过查询上限，请收窄搜索条件。",
+            })
         envelope = takeEnvelope(result, envelope)
         expectedTotal ??= result.total
         const before = items.size

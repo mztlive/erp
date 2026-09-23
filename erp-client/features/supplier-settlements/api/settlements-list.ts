@@ -150,8 +150,5 @@ export async function fetchSettlementList(
             ? filterParts.join(" · ")
             : "默认待处理视图",
         scopeVersion: pageRes.scope_version,
-        ownerOptions: pageRes.owner_options ?? [],
-        operatorOptions: pageRes.operator_options ?? [],
-        handlerOptions: pageRes.handler_options ?? [],
     }
 }

@@ -46,6 +46,7 @@ export type SupplierOfferingView = Readonly<{
     availability_version?: number | null
     version: number
     created_at: number
+    maintainer_user_name?: string | null
     maintainer_user_id?: string
     business_org_unit_id?: string
 }>
@@ -56,8 +57,7 @@ export type SupplierOfferingPage = Readonly<{
     page: number
     page_size: number
     empty_reason?: string | null
-    owner_options?: ReadonlyArray<{ value: string; label: string }>
-    procurement_owner_options?: ReadonlyArray<{ value: string; label: string }>
+
     scope_version?: string
     policy_version?: number
     organization_version?: number

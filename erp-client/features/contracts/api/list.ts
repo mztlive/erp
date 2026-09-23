@@ -57,13 +57,11 @@ function mapListRow(row: BackendContractView): ContractListRow {
     }
 }
 
-/** 服务端完整结果集分页，指标与候选项来自当前可见合同范围。 */
+/** 服务端完整结果集分页，指标来自当前可见合同范围。 */
 export type ContractListData = {
     items: ContractListRow[]
     total: number
     metrics: import("../lib/filter-contracts").ContractMetrics
-    settlementOptions: { value: string; label: string }[]
-    ownerOptions: { value: string; label: string }[]
     emptyReason?: string | null
     scopeVersion: string
     policyVersion: number
@@ -85,8 +83,6 @@ export async function fetchContracts(
                 expired: number
                 terminated: number
             }
-            settlement_options: { value: string; label: string }[]
-            owner_options: { value: string; label: string }[]
             empty_reason?: string | null
             scope_version: string
             policy_version: number
@@ -117,8 +113,6 @@ export async function fetchContracts(
         items: page.items.map(mapListRow),
         total: page.total,
         metrics: page.metrics,
-        settlementOptions: page.settlement_options,
-        ownerOptions: page.owner_options,
         emptyReason: page.empty_reason,
         scopeVersion: page.scope_version,
         policyVersion: page.policy_version,

@@ -174,7 +174,6 @@ export function SalesOrdersListPage() {
                 }
                 toolbar={
                     <SalesOrdersListFilterBar
-                        ownerOptions={ordersQuery.data?.ownerOptions ?? []}
                         filters={filters}
                         chips={chips}
                         resultCount={ordersQuery.data ? total : undefined}

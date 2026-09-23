@@ -242,7 +242,6 @@ export function CustomerCenterPage() {
                     <CustomerCenterDirectoryToolbar
                         ownerDraft={directoryState.ownerDraft}
                         setOwnerDraft={directoryState.setOwnerDraft}
-                        ownerOptions={data?.ownerOptions ?? []}
                         orgDraft={directoryState.orgDraft}
                         setOrgDraft={directoryState.setOrgDraft}
                         descendantsDraft={directoryState.descendantsDraft}

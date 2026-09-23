@@ -1,5 +1,7 @@
 //! 内部组织持久化。Service 提供事务，仓储不自行开启事务。
 
+mod directory;
+
 use entity_core::{BaseModel, HasBaseModel};
 use mongodb::Database;
 use persistence_core::{Executor, Repository, Result};

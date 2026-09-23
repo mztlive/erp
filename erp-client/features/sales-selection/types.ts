@@ -39,6 +39,8 @@ export type BookletListItem = {
     customer_name: string
     /** 显式销售负责人；方案沿所属册继承，客户提交人不成为负责人。 */
     sales_owner_user_id: string
+    /** 当前页负责人显示名；账号缺失时省略，不来自人员目录。 */
+    sales_owner_name?: string | null
     /** 单据业务组织；范围按该口径解释。 */
     business_org_unit_id: string
     form: SelectionForm
@@ -242,20 +244,10 @@ export type BookListQuery = {
     scope_version?: string
 }
 
-/**
- * 负责人候选：只含稳定 ID 与显示名（含账号状态后缀）。
- * 来自当页同一授权快照，不授予命令资格。
- */
-export type SelectionOwnerOption = {
-    value: string
-    label: string
-}
-
-/** 选品册列表结果：分页、候选、范围版本与无范围标记。 */
+/** 选品册列表结果：分页、范围版本与无范围标记。 */
 export type BookListResult = {
     rows: SelectionBook[]
     total: number
-    ownerOptions: SelectionOwnerOption[]
     scopeVersion: string
     policyVersion: number
     organizationVersion: number

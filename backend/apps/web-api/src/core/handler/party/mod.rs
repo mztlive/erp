@@ -481,3 +481,5 @@ pub async fn party_bank_account_update(
     let view = state.party_bank_account_service().update_party_bank_account(&id, req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
+
+pub mod directory;

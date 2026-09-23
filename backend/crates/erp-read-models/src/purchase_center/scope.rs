@@ -1,10 +1,9 @@
-//! 采购列表与候选的一致授权快照；范围与业务版本跨页携带。
+//! 采购列表的一致授权快照；范围与业务版本跨页携带。
+//! 采购负责人候选由采购人员目录提供，不从采购单集合生成。
 
 use std::hash::{Hash, Hasher};
 
-use application_core::{AuditActor, FilterOption, FilteredPage};
-use erp_identity::AccessControlExt;
-use erp_identity::repository::prelude::*;
+use application_core::{AuditActor, PageView};
 use erp_procurement::PurchaseResolvedScope;
 use erp_procurement::dto::purchase_order::{PurchaseOrderListParams, SortDir};
 use erp_procurement::repository::PurchaseOrderExt;
@@ -22,12 +21,14 @@ use crate::{Error, Result};
 /// 查询直接复用领域 DTO，scope_version 与原有数值参数均在 URL 边界解码。
 pub type PurchaseListParams = PurchaseOrderListParams;
 
-/// 列表响应保持现有字段并声明独立的授权时点及版本。
+/// 列表响应保持分页、归属口径与授权时点，不传输负责人候选。
 #[derive(Serialize)]
 pub struct PurchaseListView {
-    /// 分页结果、负责人候选与归属口径。
+    /// 分页结果。
     #[serde(flatten)]
-    pub data: FilteredPage<PurchaseOrderListItemView>,
+    pub data: PageView<PurchaseOrderListItemView>,
+    /// 当前采购责任口径，不代表组织隔离已生效。
+    pub ownership_basis: &'static str,
     /// 跨页与导出必须原样回传的范围版本。
     pub scope_version: String,
     /// RBAC 策略版本。
@@ -52,8 +53,6 @@ pub(super) struct PurchaseSnapshot {
     pub page_no: u64,
     /// 单页条数。
     pub page_size: u32,
-    /// 当前范围内的负责人候选。
-    pub owner_options: Vec<FilterOption>,
     /// 身份授权上下文。
     pub context: PurchaseResolvedScope,
     /// 授权集合本身为空。
@@ -61,20 +60,20 @@ pub(super) struct PurchaseSnapshot {
 }
 
 impl PurchaseOrderReadService {
-    /// 授权、总数、候选与业务身份版本全部在同一个事务读取。
+    /// 授权、总数与业务身份版本全部在同一个事务读取。
     ///
     /// # 参数
     /// * `params` - 原始查询
     /// * `actor` - 已认证操作人
     ///
     /// # 返回
-    /// 返回带范围版本的列表快照。
+    /// 返回带范围版本的列表快照，不含负责人候选。
     ///
     /// # 错误
     /// 缺范围版本的后续页、范围变化、筛选非法或仓储失败时拒绝。
     ///
     /// # 关键业务约束
-    /// 负责人筛选只收窄授权结果；候选不授予改派资格。
+    /// 负责人筛选只收窄授权结果，不生产人员候选，也不授予改派资格。
     pub(super) async fn list_snapshot(
         &self,
         params: &PurchaseOrderListParams,
@@ -122,11 +121,6 @@ impl PurchaseOrderReadService {
                     let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
                     versions.hash(&mut fingerprint);
                     context.scope_version = format!("{}:{:x}", context.scope_version, fingerprint.finish());
-                    let ids = db.purchase_orders().current_owner_ids(&scope, executor).await?;
-                    if ids.len() > 10_000 {
-                        return Err(Error::ValidationError("负责人候选超过查询上限".into()));
-                    }
-                    let owner_options = db.accounts().filter_options(&ids, executor).await?;
                     let no_scope = scope.is_empty();
                     Ok(PurchaseSnapshot {
                         no_scope,
@@ -134,7 +128,6 @@ impl PurchaseOrderReadService {
                         facts,
                         page_no: filter.page,
                         page_size: filter.page_size,
-                        owner_options,
                         context,
                     })
                 })
@@ -155,5 +148,63 @@ mod tests {
         .unwrap();
         assert_eq!(query.scope_version.as_deref(), Some("v1"));
         assert!(serde_json::from_value::<PurchaseListParams>(serde_json::json!({"owner": "张三"})).is_err());
+    }
+
+    /// 列表响应不携带负责人候选，已授权行仍返回采购负责人姓名。
+    #[test]
+    fn purchase_list_omits_owner_candidates_and_keeps_row_owner_name() {
+        use erp_procurement::entity::purchase_order::{
+            FulfillmentResponsibility, ProgressStatus, PurchaseOrderStatus, PurchaseReviewStatus,
+            PurchaseType,
+        };
+
+        let view = PurchaseListView {
+            data: PageView {
+                items: vec![PurchaseOrderListItemView {
+                    id: "po-1".to_string(),
+                    purchase_no: "PO-1".to_string(),
+                    sales_order_id: "so-1".to_string(),
+                    sales_order_no: "SO-1".to_string(),
+                    supplier_id: "sup-1".to_string(),
+                    supplier_name: "供应商".to_string(),
+                    purchase_type: PurchaseType::Physical,
+                    fulfillment_responsibility: FulfillmentResponsibility::Warehouse,
+                    payment_term_code: "NET-30".to_string(),
+                    owner_user_id: Some("buyer-1".to_string()),
+                    owner_name: "张三".to_string(),
+                    status: PurchaseOrderStatus::Draft,
+                    review_status: PurchaseReviewStatus::Pending,
+                    gross_amount: "1.00".to_string(),
+                    net_amount: "1.00".to_string(),
+                    tax_amount: "0.00".to_string(),
+                    payment_progress: ProgressStatus::None,
+                    invoice_progress: ProgressStatus::None,
+                    fulfillment_progress: ProgressStatus::None,
+                    current_submission_id: None,
+                    current_revision_id: None,
+                    version: 1,
+                    created_at: 1,
+                }],
+                total: 1,
+                page: 1,
+                page_size: 20,
+            },
+            ownership_basis: "current_procurement_owner",
+            scope_version: "scope-v1".to_string(),
+            policy_version: 3,
+            organization_version: 4,
+            as_of: "2026-09-23T00:00:00Z".to_string(),
+            empty_reason: None,
+            scope_summary: "采购单当前负责人及单据业务组织范围",
+        };
+        let json = serde_json::to_value(&view).unwrap();
+        assert!(json.get("owner_options").is_none());
+        assert_eq!(json["ownership_basis"], "current_procurement_owner");
+        assert_eq!(json["total"], 1);
+        assert_eq!(json["page"], 1);
+        assert_eq!(json["page_size"], 20);
+        assert_eq!(json["scope_version"], "scope-v1");
+        assert_eq!(json["items"][0]["owner_user_id"], "buyer-1");
+        assert_eq!(json["items"][0]["owner_name"], "张三");
     }
 }

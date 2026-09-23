@@ -4,7 +4,7 @@ use mongodb::bson::{Document, doc};
 
 use super::{FulfillmentQueueFilter, prepayment};
 
-/// 当前页切片、跨页计数、作业类型指标和仓库筛选项。
+/// 当前页切片、跨页计数、作业类型指标。
 ///
 /// # 参数
 /// * `offset` - 已检查的分页偏移
@@ -29,23 +29,6 @@ pub(super) fn page_facet(offset: i64, page_size: i64) -> Document {
                 { "$group": { "_id": "$operation.operation_type", "count": { "$sum": 1 } } },
                 { "$project": { "_id": 0, "operation_type": "$_id", "count": 1 } },
                 { "$sort": { "operation_type": 1 } },
-            ],
-            "warehouses": [
-                { "$match": { "operation.warehouse_id": { "$type": "string", "$ne": "" } } },
-                {
-                    "$group": {
-                        "_id": "$operation.warehouse_id",
-                        "label": { "$first": "$_warehouse.warehouse_code" },
-                    }
-                },
-                {
-                    "$project": {
-                        "_id": 0,
-                        "id": "$_id",
-                        "label": { "$ifNull": ["$label", "$_id"] },
-                    }
-                },
-                { "$sort": { "label": 1, "id": 1 } },
             ],
         }
     }

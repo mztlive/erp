@@ -5,7 +5,7 @@ mod scope_checks;
 
 use std::sync::Arc;
 
-use application_core::{AuditActor, FilterOption};
+use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_identity::SharedRbacService;
 use erp_sales::dto::sales_selection::{
@@ -156,7 +156,7 @@ impl SalesSelectionProcess {
     /// * `actor` - 已认证操作人
     ///
     /// # 返回
-    /// 返回分页与候选。
+    /// 返回分页与范围版本；当前页行带负责人显示名，不含筛选候选。
     ///
     /// # 错误
     /// 参数非法或范围变化。
@@ -404,7 +404,7 @@ impl SalesSelectionProcess {
     /// * `actor` - 已认证操作人
     ///
     /// # 返回
-    /// 返回分页与候选。
+    /// 返回分页与范围版本；当前页行带负责人显示名，不含筛选候选。
     ///
     /// # 错误
     /// 参数非法或范围变化。
@@ -684,13 +684,33 @@ impl SalesSelectionProcess {
     }
 }
 
-/// 选品册列表视图：分页、候选与范围版本。
+/// 选品册列表行：已授权业务行及其负责人显示名，不是筛选候选。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct SelectionBookletListRow {
+    /// 选品册列表行。
+    #[serde(flatten)]
+    item: erp_sales::dto::sales_selection::SalesSelectionBookletListItemView,
+    /// 当前页负责人显示名；账号缺失时省略，不回退人员目录。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sales_owner_name: Option<String>,
+}
+
+/// 方案列表行：已授权业务行及其负责人显示名，不是筛选候选。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct SelectionProposalListRow {
+    /// 方案列表行。
+    #[serde(flatten)]
+    item: erp_sales::dto::sales_selection::SalesSelectionProposalListItemView,
+    /// 当前页负责人显示名；账号缺失时省略，不回退人员目录。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sales_owner_name: Option<String>,
+}
+
+/// 选品册列表视图：分页与范围版本。
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SelectionBookletListView {
-    /// 当前页。
-    pub page: erp_sales::dto::sales_selection::SalesSelectionBookletPage,
-    /// 完整可见范围内的负责人候选；只含 ID 与显示名。
-    pub owner_options: Vec<FilterOption>,
+    /// 当前页；行上带负责人显示名。
+    pub page: application_core::PageView<SelectionBookletListRow>,
     /// 跨页必须原样回传的范围版本。
     pub scope_version: String,
     /// RBAC 策略版本。
@@ -701,13 +721,11 @@ pub struct SelectionBookletListView {
     pub no_scope: bool,
 }
 
-/// 方案列表视图：分页、候选与范围版本。
+/// 方案列表视图：分页与范围版本。
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SelectionProposalListView {
-    /// 当前页。
-    pub page: erp_sales::dto::sales_selection::SalesSelectionProposalPage,
-    /// 完整可见范围内的负责人候选；只含 ID 与显示名。
-    pub owner_options: Vec<FilterOption>,
+    /// 当前页；行上带负责人显示名。
+    pub page: application_core::PageView<SelectionProposalListRow>,
     /// 跨页必须原样回传的范围版本。
     pub scope_version: String,
     /// RBAC 策略版本。

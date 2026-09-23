@@ -276,9 +276,7 @@ export function IntegrationErrorsPage({
 
             {!focusMode ? (
                 <p className="text-xs text-muted-foreground">
-                    {view?.scopeSummary
-                        ? `${view.scopeSummary} · `
-                        : null}
+                    {view?.scopeSummary ? `${view.scopeSummary} · ` : null}
                     筛选：{view?.context.filterSummary}
                 </p>
             ) : null}

@@ -1,4 +1,5 @@
 "use client"
+import { useHistoricalDirectory } from "@/lib/historical-directory"
 
 import * as React from "react"
 import { useQueryClient } from "@tanstack/react-query"
@@ -39,6 +40,15 @@ export function useActualProfitLossPage() {
         urlState.query,
         urlState.analysisReady,
     )
+    const directoryQuery = useHistoricalDirectory(
+        "/admin/actual-profit-loss/history-directory",
+        urlState.query,
+        urlState.analysisReady,
+    )
+    const historyDirectory =
+        directoryQuery.isError || directoryQuery.isFetching
+            ? undefined
+            : directoryQuery.data
     const exportMutation = useStartProfitLossExportMutation()
     const { patchUrl } = urlState
     const setPagination = React.useCallback(
@@ -127,6 +137,7 @@ export function useActualProfitLossPage() {
 
     const filterPresentation = useProfitLossFilterPresentation({
         data,
+        historyDirectory,
         qParam: urlState.qParam,
         coverage: urlState.coverage,
         customerId: urlState.customerId,
@@ -253,6 +264,8 @@ export function useActualProfitLossPage() {
     }
 
     return {
+        historyDirectory,
+        directoryQuery,
         basisQuery,
         basisConfig,
         viewQuery,

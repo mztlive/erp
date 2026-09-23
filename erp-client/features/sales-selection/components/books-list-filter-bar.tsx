@@ -10,12 +10,9 @@ import {
     listWorkspaceFilterStatusText,
     type ListWorkspaceFilterChip,
 } from "@/components/business/list-workspace"
-import { ResponsibleUserFilter } from "@/features/entity-selectors/components/responsible-user-filter"
+import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
 import { OrganizationUnitFilter } from "@/features/organization/components/organization-unit-filter"
-import type {
-    BookListQuery,
-    SelectionOwnerOption,
-} from "@/features/sales-selection/types"
+import type { BookListQuery } from "@/features/sales-selection/types"
 import {
     SELECTION_FORM_LABEL,
     SUBMIT_MODE_LABEL,
@@ -61,6 +58,13 @@ function selectedCount(value: string | undefined): number {
     return value?.split(",").filter(Boolean).length ?? 0
 }
 
+function orgIdsOf(value: string): string[] {
+    return value
+        .split(",")
+        .map((part) => part.trim())
+        .filter(Boolean)
+}
+
 function selectionFormFromValue(value: string | null): SelectionFormDraft {
     return value === "SINGLE_SKU" || value === "PACKAGE" ? value : "ALL"
 }
@@ -79,7 +83,6 @@ export function BooksListFilterBar({
     resultCount,
     loading,
     failed,
-    ownerOptions = [],
 }: {
     query: BookListQuery
     onApply: (next: BookListQuery) => void
@@ -87,8 +90,6 @@ export function BooksListFilterBar({
     resultCount?: number
     loading: boolean
     failed: boolean
-    /** 同一授权快照内的负责人候选；只含 ID 与显示名。 */
-    ownerOptions?: readonly SelectionOwnerOption[]
 }) {
     const [draft, setDraft] = React.useState<FilterDraft>(() =>
         draftFromQuery(query),
@@ -148,6 +149,7 @@ export function BooksListFilterBar({
     }, [appliedDescendants])
 
     const applied = draftFromQuery(query)
+    const directoryOrgIds = orgIdsOf(draft.org_unit_ids)
     const hasPendingChanges = !draftsEqual(draft, applied)
     const moreCount =
         (applied.submit_mode !== "ALL" ? 1 : 0) + (applied.org_unit_ids ? 1 : 0)
@@ -298,8 +300,9 @@ export function BooksListFilterBar({
                         placeholder="全部"
                     />
                     <div className="w-56 min-w-0 max-w-full">
-                        <ResponsibleUserFilter
+                        <PersonDirectoryFilter
                             id={`${prefix}-owner`}
+                            category="sales"
                             label="负责销售"
                             hideLabel
                             value={draft.owner_user_ids}
@@ -309,7 +312,11 @@ export function BooksListFilterBar({
                                     owner_user_ids,
                                 }))
                             }
-                            options={ownerOptions}
+                            orgUnitIds={directoryOrgIds}
+                            includeDescendants={
+                                directoryOrgIds.length > 0 &&
+                                draft.include_descendants
+                            }
                         />
                     </div>
                 </>

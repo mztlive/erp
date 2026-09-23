@@ -1,6 +1,6 @@
 //! 已接线 DataScope v2 消费者登记；不得用初始化清单代替准入。
 
-use crate::access_control::{ScopeBinding, ScopeDimension};
+use crate::access_control::{DataScopeType, ScopeBinding, ScopeDimension};
 use crate::error::{Error, Result};
 
 /// 已由真实消费者接入公共解析的资源动作及必需维度。
@@ -76,6 +76,12 @@ const WIRED_CONSUMERS: &[(&str, &[&str], &[ScopeDimension])] = &[
         &["list", "detail", "investigate", "complete", "submit", "cancel", "refund", "reject", "handover"],
         &[ScopeDimension::InternalOrg],
     ),
+    ("person_query_qualification", &["manage"], &[ScopeDimension::InternalOrg]),
+    ("settlement_party", &["list"], &[ScopeDimension::SettlementParty]),
+    ("warehouse", &["list"], &[ScopeDimension::Warehouse]),
+    ("business_person", &["list"], &[ScopeDimension::InternalOrg]),
+    ("sales_person", &["list"], &[ScopeDimension::InternalOrg]),
+    ("procurement_person", &["list"], &[ScopeDimension::InternalOrg]),
 ];
 
 /// 已接线消费者的资源动作登记。
@@ -126,6 +132,33 @@ pub fn registration(resource: &str, action: &str) -> Result<ConsumerRegistration
 /// 全部动作及目标维度已接线时成功。
 /// # 错误
 /// 任一动作未接线或维度不支持时拒绝，停用规则也不能绕过准入。
+/// 拒绝人员目录未登记的范围类型。
+///
+/// # 参数
+/// * `resource` - 业务资源
+/// * `scope_type` - 待写入或已存储的范围类型
+///
+/// # 错误
+/// 人员目录配置协作参与时拒绝。其他资源保持原有范围类型。
+///
+/// # 关键业务约束
+/// 协作参与不能从业务单据扩张出人员读取权。配置入口和解析都必须拒绝。
+pub fn validate_scope_type(resource: &str, scope_type: DataScopeType) -> Result<()> {
+    if matches!(resource, "settlement_party" | "warehouse")
+        && !matches!(scope_type, DataScopeType::Company | DataScopeType::Organization)
+    {
+        return Err(Error::ValidationError("对象目录仅接受公司或显式对象集合范围".into()));
+    }
+    if matches!(
+        resource,
+        "sales_person" | "procurement_person" | "business_person" | "person_query_qualification"
+    ) && scope_type == DataScopeType::Collaborative
+    {
+        return Err(Error::ValidationError(format!("{resource} 不接受协作参与范围")));
+    }
+    Ok(())
+}
+
 pub fn validate_binding(binding: &ScopeBinding) -> Result<()> {
     for action in &binding.actions {
         let consumer = registration(&binding.resource, action)?;
@@ -177,6 +210,13 @@ mod tests {
         assert!(registration("purchase_order", "delete").is_ok());
         assert!(registration("purchase_order", "submit").is_ok());
         assert!(registration("purchase_order", "cancel_approval").is_ok());
+        assert!(registration("sales_person", "list").is_ok());
+        assert!(!registration("sales_person", "list").unwrap().allows_history);
+        assert!(registration("procurement_person", "list").is_ok());
+        assert!(registration("sales_person", "create").is_err());
+        assert!(validate_scope_type("sales_person", DataScopeType::Collaborative).is_err());
+        assert!(validate_scope_type("sales_person", DataScopeType::SelfOwned).is_ok());
+        assert!(validate_scope_type("customer", DataScopeType::Collaborative).is_ok());
         assert!(registration("sales_selection_booklet", "list").is_ok());
         assert!(registration("sales_selection_booklet", "create").is_ok());
         assert!(registration("sales_selection_proposal", "list").is_ok());

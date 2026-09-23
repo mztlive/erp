@@ -82,7 +82,7 @@ fn merge_costs(target: &mut ProfitLossAmounts, source: &ProfitLossAmounts) -> Re
     }
     Ok(())
 }
-/// 先应用对象筛选，覆盖率保留所选期间中完整和不完整订单的分母。
+/// 覆盖率保留期间订单的完整分母；历史候选由独立目录提供。
 pub(super) fn project(
     orders: Vec<OrderResult>,
     query: &ProfitLossQuery,
@@ -91,7 +91,6 @@ pub(super) fn project(
     scope_label: &str,
 ) -> Result<ProfitLossView> {
     let has_period_orders = !orders.is_empty();
-    let (user_options, org_options) = super::attribution::options(&orders);
     let matched: Vec<_> = orders.into_iter().filter(|o| matches_query(o, query)).collect();
     let coverage = summarize(&matched)?.coverage(matched.len());
     let selected: Vec<_> = matched.into_iter().filter(|o| coverage_matches(o, &query.coverage)).collect();
@@ -102,8 +101,6 @@ pub(super) fn project(
     if view.rows.total == 0 {
         view.empty_reason = Some(if has_period_orders { "filtered_empty" } else { "no_data" }.into());
     }
-    view.attribution_user_options = user_options;
-    view.attribution_org_options = org_options;
     Ok(view)
 }
 /// 从同一订单集合计算所有总额。
@@ -334,8 +331,6 @@ fn assemble(
         filter_summary: filter_summary(q),
         excluded_note: EXCLUDED.into(),
         ownership_basis: "sales_order_first_effective_attribution".into(),
-        attribution_user_options: vec![],
-        attribution_org_options: vec![],
     })
 }
 const FORMULA: &str = "实际经营盈亏 = 不含税销售收入 − 实际采购成本 − 实际履约费用 + 成本冲减。利润和利润率仅汇总成本完整订单；收入、已登记成本同时展示所选订单全量。";

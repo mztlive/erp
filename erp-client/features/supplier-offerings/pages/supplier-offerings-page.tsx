@@ -252,16 +252,14 @@ export const SupplierOfferingsPage = () => {
                             onOwnerUserIdsDraftChange={
                                 state.setOwnerUserIdsDraft
                             }
-                            ownerOptions={query.data?.owner_options ?? []}
+
                             procurementOwnerUserIdsDraft={
                                 state.procurementOwnerUserIdsDraft
                             }
                             onProcurementOwnerUserIdsDraftChange={
                                 state.setProcurementOwnerUserIdsDraft
                             }
-                            procurementOwnerOptions={
-                                query.data?.procurement_owner_options ?? []
-                            }
+
                             orgUnitIdsDraft={state.orgUnitIdsDraft}
                             onOrgUnitIdsDraftChange={state.setOrgUnitIdsDraft}
                             includeDescendantsDraft={
@@ -295,9 +293,7 @@ export const SupplierOfferingsPage = () => {
                                     error={query.error}
                                     hasFilters={state.hasFilters}
                                     noScope={noScope}
-                                    ownerOptions={
-                                        query.data?.owner_options ?? []
-                                    }
+
                                     taskMode={state.taskMode}
                                     taskBusinessObjectId={
                                         taskQuery.data?.businessObjectId

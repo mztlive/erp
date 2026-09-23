@@ -24,10 +24,14 @@ const integrationErrorKeys = {
         [...integrationErrorKeys.all, "item", itemType, id] as const,
 }
 
-export function useIntegrationQueueQuery(query: IntegrationResolutionQuery) {
+export function useIntegrationQueueQuery(
+    query: IntegrationResolutionQuery,
+    enabled = true,
+) {
     return useQuery({
         queryKey: integrationErrorKeys.queue(query),
         queryFn: () => fetchIntegrationQueue(query),
+        enabled,
     })
 }
 

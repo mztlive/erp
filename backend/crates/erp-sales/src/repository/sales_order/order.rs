@@ -287,22 +287,6 @@ impl Pagination for SalesOrderFilter {
 /// 销售单集合的域查询扩展。
 #[allow(async_fn_in_trait)]
 pub trait SalesOrderRepositoryExt {
-    /// 返回未删除单据的负责人集合。当前调用入口使用资源级列表权限；S2 必须传入 v2 对象边界。
-    ///
-    /// # 参数
-    /// * `executor` - 事务或无事务执行器
-    ///
-    /// # 返回值
-    /// 返回去重的负责人 ID；候选不按登录资格过滤，不能用于改派。
-    ///
-    /// # 错误
-    /// 数据库查询失败向上传播。
-    async fn current_owner_ids(
-        &self,
-        scope: &super::scope::SalesReadScope,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<String>>;
-
     /// 按销售单 ID 集合批量读取活跃销售单。
     ///
     /// # 参数
@@ -424,22 +408,6 @@ pub trait SalesOrderRepositoryExt {
 }
 
 impl SalesOrderRepositoryExt for Repository<'_, SalesOrder> {
-    async fn current_owner_ids(
-        &self,
-        scope: &super::scope::SalesReadScope,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<String>> {
-        let collection = self.collection();
-        let mut query = collection.distinct(
-            "sales_owner_user_id",
-            doc! { "deleted_at": entity_core::NOT_DELETED_TIMESTAMP_BSON, "$and": [scope.document()] },
-        );
-        if let Some(session) = executor.session() {
-            query = query.session(session);
-        }
-        Ok(query.await?.into_iter().filter_map(|v| v.as_str().map(str::to_owned)).collect())
-    }
-
     async fn find_orders_by_ids(
         &self,
         sales_order_ids: &[SalesOrderId],

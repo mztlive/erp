@@ -9,7 +9,7 @@ import {
     ListWorkspaceFilterField,
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
-import { ResponsibleUserFilter } from "@/features/entity-selectors/components/responsible-user-filter"
+import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
 import { OrganizationUnitFilter } from "@/features/organization/components/organization-unit-filter"
 import type { ReceivableScopeChip } from "@/features/customer-receivables/pages/hooks/use-receivable-scope-url-state"
 import type { ReceivableScopeQuery } from "@/features/customer-receivables/api/scoped"
@@ -18,6 +18,13 @@ type SetState<T> = React.Dispatch<React.SetStateAction<T>>
 
 const prefix = "customer-receivables-scope-toolbar"
 const panelId = `${prefix}-more-panel`
+
+function selectedOrgUnitIds(value: string): string[] {
+    return value
+        .split(",")
+        .map((part) => part.trim())
+        .filter(Boolean)
+}
 
 const OPERATOR_KIND_OPTIONS = [
     { value: "register", label: "登记" },
@@ -48,13 +55,12 @@ type Props = {
     cancelMoreFilters: () => void
     clearFilters: () => void
     hasPendingChanges: boolean
-    ownerOptions: readonly { value: string; label: string }[]
     resultCount?: number
     loading: boolean
     failed: boolean
 }
 
-/** 范围查询工具栏：负责销售/经办人/组织筛选，候选可区分离线停用人员。 */
+/** 范围查询工具栏：应收、回款、销项发票的人员筛选都走销售目录。 */
 export function ReceivableScopeToolbar({
     view,
     searchDraft,
@@ -79,7 +85,6 @@ export function ReceivableScopeToolbar({
     cancelMoreFilters,
     clearFilters,
     hasPendingChanges,
-    ownerOptions,
     resultCount,
     loading,
     failed,
@@ -87,6 +92,7 @@ export function ReceivableScopeToolbar({
     const moreCount = appliedChips.filter(({ key }) =>
         ["operatorUserIds", "orgUnitIds"].includes(key),
     ).length
+    const orgUnitIds = selectedOrgUnitIds(orgDraft)
 
     return (
         <ListWorkspaceFilterBar
@@ -120,20 +126,23 @@ export function ReceivableScopeToolbar({
             onResetMore={resetMoreFilters}
             primaryFilters={
                 <div className="w-56 max-w-full min-w-0">
-                    <ResponsibleUserFilter
+                    <PersonDirectoryFilter
                         id={`${prefix}-sales-owner`}
+                        category="sales"
                         label="负责销售"
                         hideLabel
                         value={salesOwnerDraft}
                         onChange={setSalesOwnerDraft}
-                        options={ownerOptions}
+                        orgUnitIds={orgUnitIds}
+                        includeDescendants={descendantsDraft}
                     />
                 </div>
             }
             morePanel={
                 <div className="grid min-w-0 gap-5">
-                    <ResponsibleUserFilter
+                    <PersonDirectoryFilter
                         id={`${prefix}-operator`}
+                        category="business"
                         label={
                             view === "receipt"
                                 ? "登记/核销经办人"
@@ -141,7 +150,8 @@ export function ReceivableScopeToolbar({
                         }
                         value={operatorDraft}
                         onChange={setOperatorDraft}
-                        options={ownerOptions}
+                        orgUnitIds={orgUnitIds}
+                        includeDescendants={descendantsDraft}
                     />
                     {view === "receipt" ? (
                         <ListWorkspaceFilterField

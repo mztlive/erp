@@ -3,11 +3,10 @@
 import * as React from "react"
 
 import { MultiOptionCombobox, OptionCombobox } from "@/components/business"
-import { ResponsibleUserFilter } from "@/features/entity-selectors/components/responsible-user-filter"
+import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
 import { useRemoteSearchCombobox } from "@/features/entity-selectors/hooks/use-remote-search-combobox"
 import { useSearchInput } from "@/features/entity-selectors/hooks/use-search-input"
 import { useSupplierSelectorQuery } from "@/features/entity-selectors/hooks/queries"
-import type { SettlementFilterOption } from "@/features/supplier-settlements/types"
 import {
     ListSearchField,
     ListWorkspaceFilterBar,
@@ -59,6 +58,7 @@ function ResidentSupplierFilter({
         value ?? undefined,
     )
     const { rows, loading, emptyLabel } = useRemoteSearchCombobox({
+        selectedId: value ?? undefined,
         list: query.list,
         selected: query.selected,
         idOf: (item) => item.supplierId,
@@ -90,9 +90,7 @@ function ResidentSupplierFilter({
 export function SettlementListToolbar({
     urlState,
     suppliers,
-    ownerOptions,
-    operatorOptions,
-    handlerOptions,
+
     searchInputRef,
     searchDraft,
     setSearchDraft,
@@ -132,9 +130,7 @@ export function SettlementListToolbar({
 }: {
     urlState: SettlementsUrlState
     suppliers: readonly { supplierId: string; supplierName: string }[]
-    ownerOptions: readonly SettlementFilterOption[]
-    operatorOptions: readonly SettlementFilterOption[]
-    handlerOptions: readonly SettlementFilterOption[]
+
     searchInputRef: React.RefObject<HTMLInputElement | null>
     searchDraft: string
     setSearchDraft: SetState<string>
@@ -261,26 +257,26 @@ export function SettlementListToolbar({
                             人员
                         </legend>
                         <div className="grid min-w-0 gap-3">
-                            <ResponsibleUserFilter
+                            <PersonDirectoryFilter
                                 id={`${prefix}-filter-owner`}
                                 label="对账负责人"
                                 value={ownerUserIdsDraft}
                                 onChange={setOwnerUserIdsDraft}
-                                options={ownerOptions}
+                                category="business"
                             />
-                            <ResponsibleUserFilter
+                            <PersonDirectoryFilter
                                 id={`${prefix}-filter-operator`}
                                 label="差异处理人"
                                 value={operatorUserIdsDraft}
                                 onChange={setOperatorUserIdsDraft}
-                                options={operatorOptions}
+                                category="business"
                             />
-                            <ResponsibleUserFilter
+                            <PersonDirectoryFilter
                                 id={`${prefix}-filter-handler`}
                                 label="当前复核人"
                                 value={handlerUserIdsDraft}
                                 onChange={setHandlerUserIdsDraft}
-                                options={handlerOptions}
+                                category="business"
                             />
                         </div>
                     </fieldset>

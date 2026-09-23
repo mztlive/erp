@@ -12,6 +12,13 @@ const state = vi.hoisted(() => ({
     client: { removeQueries: vi.fn() },
 }))
 vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => state.client }))
+vi.mock("@/lib/historical-directory", () => ({
+    useHistoricalDirectory: () => ({
+        data: undefined,
+        isError: false,
+        isFetching: false,
+    }),
+}))
 vi.mock("./queries", () => ({
     usePeriodBasisConfigQuery: () => ({ isSuccess: true }),
     useProfitLossViewQuery: () => state.view,

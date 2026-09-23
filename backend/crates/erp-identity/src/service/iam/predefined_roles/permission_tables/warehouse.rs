@@ -1,5 +1,6 @@
 /// 仓储推荐权限。
 pub(crate) const WAREHOUSE_PERMISSIONS: &[&str] = &[
+    "business_person:list",
     "work_item:list",
     "work_item:detail",
     "approval_instance:read",

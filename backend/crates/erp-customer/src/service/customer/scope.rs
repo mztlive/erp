@@ -1,8 +1,9 @@
-//! 客户列表与候选的一致授权快照；范围与业务版本跨页携带。
+//! 客户列表的一致授权快照；范围与业务版本跨页携带。
+//! 负责销售候选由销售人员目录提供，不从客户归属记录生成。
 
 use std::sync::Arc;
 
-use application_core::{AuditActor, FilterOption, FilteredPage};
+use application_core::{AuditActor, PageView};
 use erp_core::common::time::BusinessDate;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
@@ -18,12 +19,14 @@ use crate::repository::prelude::*;
 use crate::repository::scope::{CustomerReadScope, CustomerVersion};
 use crate::repository::{CustomerAccountFilter, CustomerExt};
 
-/// 列表响应保持现有字段并声明独立的授权时点及版本。
+/// 列表响应保持分页、归属口径与授权时点，不传输负责销售候选。
 #[derive(Serialize)]
 pub struct CustomerListView {
-    /// 分页结果、负责人候选与归属口径。
+    /// 分页结果。
     #[serde(flatten)]
-    pub data: FilteredPage<CustomerView>,
+    pub data: PageView<CustomerView>,
+    /// 当前客户主负责人口径，不代表组织隔离已生效。
+    pub ownership_basis: &'static str,
     /// 跨页与导出必须原样回传的范围版本。
     pub scope_version: String,
     /// RBAC 策略版本。
@@ -48,8 +51,6 @@ pub(super) struct CustomerSnapshot {
     pub page: u64,
     /// 单页条数。
     pub page_size: u32,
-    /// 当前范围内的负责人候选。
-    pub owner_options: Vec<FilterOption>,
     /// 身份授权上下文。
     pub context: CustomerResolvedScope,
     /// 授权集合本身为空。
@@ -59,7 +60,7 @@ pub(super) struct CustomerSnapshot {
 /// 列表事务共用的只读依赖（erp-customer-003）。
 ///
 /// 复核路径与首快照共用同一过滤与指纹逻辑，仅 `hydrate` 决定是否执行
-/// 分页查询、候选装配与行水合；指纹与总数口径保持一致。
+/// 分页查询与行水合；指纹与总数口径保持一致。
 struct ListTxDeps {
     db: Database,
     access: super::access::CustomerAccess,
@@ -71,20 +72,20 @@ struct ListTxDeps {
 }
 
 impl CustomerService {
-    /// 授权、总数、候选与业务身份版本全部在同一个事务读取。
+    /// 授权、总数与业务身份版本全部在同一个事务读取。
     ///
     /// # 参数
     /// * `query` - 已归一化查询
     /// * `actor` - 已认证操作人
     ///
     /// # 返回
-    /// 返回带范围版本的列表快照。
+    /// 返回带范围版本的列表快照，不含负责销售候选。
     ///
     /// # 错误
     /// 缺范围版本的后续页、范围变化、筛选非法或仓储失败时拒绝。
     ///
     /// # 关键业务约束
-    /// 组织筛选按当前主负责人所属组织收窄，不得扩大授权结果。
+    /// 组织筛选与负责人筛选只收窄授权客户，不从归属记录生成销售候选。
     pub(super) async fn list_snapshot(
         &self,
         query: CustomerListQuery,
@@ -102,7 +103,7 @@ impl CustomerService {
     /// 轻量版本复核快照（erp-customer-003）。
     ///
     /// 与 [`Self::list_snapshot`] 共用授权、过滤与版本指纹逻辑，
-    /// 跳过分页查询、候选装配与行水合；调用方仅用 `context.scope_version`
+    /// 跳过分页查询与行水合；调用方仅用 `context.scope_version`
     /// 做稳定性比对，丢弃的 `items` 不再付出水合成本。
     ///
     /// # 参数
@@ -151,11 +152,11 @@ impl CustomerService {
 
 /// 执行列表事务体（erp-customer-003）。
 ///
-/// `hydrate` 为假时跳过分页查询、候选与水合，仅重算版本指纹供复核使用。
+/// `hydrate` 为假时跳过分页查询与水合，仅重算版本指纹供复核使用。
 ///
 /// # 参数
 /// * `deps` - 列表事务只读依赖
-/// * `hydrate` - 是否装配分页行与候选
+/// * `hydrate` - 是否装配分页行
 /// * `executor` - 调用方执行器
 ///
 /// # 返回
@@ -168,7 +169,7 @@ async fn run_list_snapshot(
     hydrate: bool,
     executor: &mut dyn Executor,
 ) -> Result<CustomerSnapshot> {
-    let (mut context, scope, authorized, as_of, no_scope) = resolve_list_authorized(&deps, executor).await?;
+    let (mut context, authorized, as_of, no_scope) = resolve_list_authorized(&deps, executor).await?;
     let filter = build_account_filter(&deps, authorized).await?;
     let versions = deps.db.customer_accounts().query_versions(&filter, executor).await?;
     ensure_limit(versions.len(), "客户查询超过上限，请收窄组织或负责人条件")?;
@@ -179,13 +180,10 @@ async fn run_list_snapshot(
             total: 0,
             page: filter.page,
             page_size: filter.page_size,
-            owner_options: Vec::new(),
             context,
             no_scope,
         });
     }
-    let owner_options =
-        load_owner_options(&deps, scope.authorized_customer_ids.as_deref(), as_of, executor).await?;
     let page = deps.db.customer_accounts().search_customer_accounts(&filter, executor).await?;
     let items = hydrate_rows(
         &deps.db,
@@ -203,7 +201,6 @@ async fn run_list_snapshot(
         total: page.total,
         page: filter.page,
         page_size: filter.page_size,
-        owner_options,
         context,
     })
 }
@@ -215,21 +212,21 @@ async fn run_list_snapshot(
 /// * `executor` - 调用方执行器
 ///
 /// # 返回
-/// 返回授权上下文、仓储条件、授权客户集合、归属时点与空范围标记。
+/// 返回授权上下文、授权客户集合、归属时点与空范围标记。
 ///
 /// # 错误
 /// 授权或组织筛选失败时拒绝。
 async fn resolve_list_authorized(
     deps: &ListTxDeps,
     executor: &mut dyn Executor,
-) -> Result<(CustomerResolvedScope, CustomerReadScope, Option<Vec<String>>, BusinessDate, bool)> {
+) -> Result<(CustomerResolvedScope, Option<Vec<String>>, BusinessDate, bool)> {
     let (context, scope) = deps.access.resolve(&deps.actor, "list", executor).await?;
     let no_scope = !context.has_scope_rules();
     let authorized =
         apply_list_filters(&deps.db, deps.data_scope.as_ref(), &context, &scope, &deps.query, executor)
             .await?;
     let as_of = super::access::business_date(context.as_of)?;
-    Ok((context, scope, authorized, as_of, no_scope))
+    Ok((context, authorized, as_of, no_scope))
 }
 
 /// 装配关键词过滤后的仓储筛选（erp-customer-003）。
@@ -263,30 +260,6 @@ async fn build_account_filter(
         sort_by: Some(deps.query.paging.sort_by.to_string()),
         sort_ascending: matches!(deps.query.paging.sort_dir, SortDir::Asc),
     })
-}
-
-/// 加载当前范围内的负责人候选（erp-customer-003）。
-///
-/// # 参数
-/// * `deps` - 列表事务只读依赖
-/// * `authorized` - 已授权客户集合
-/// * `as_of` - 归属自然日
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回负责人候选显示项。
-///
-/// # 错误
-/// 归属或账号候选读取失败时拒绝。
-async fn load_owner_options(
-    deps: &ListTxDeps,
-    authorized: Option<&[String]>,
-    as_of: BusinessDate,
-    executor: &mut dyn Executor,
-) -> Result<Vec<FilterOption>> {
-    let owners = deps.db.customer_assignments().current_owners(authorized, None, as_of, executor).await?;
-    let owner_ids = owners.iter().map(|assignment| assignment.user_id.clone()).collect::<Vec<_>>();
-    deps.accounts.filter_options(&owner_ids).await
 }
 
 /// 将版本指纹拼接到基线范围版本（erp-customer-003）。

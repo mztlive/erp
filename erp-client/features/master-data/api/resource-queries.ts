@@ -43,13 +43,7 @@ import { isoNow } from "@/features/master-data/api/presentation"
 function wrapListResult(
     resource: MasterDataResource,
     rows: MasterDataListItem[],
-    extra: Pick<
-        MasterDataListResult,
-        | "emptyReason"
-        | "ownerOptions"
-        | "capabilityOwnerOptions"
-        | "procurementOwnerOptions"
-    > = {},
+    extra: Pick<MasterDataListResult, "emptyReason"> = {},
 ): MasterDataListResult {
     const now = isoNow()
     return {
@@ -72,13 +66,7 @@ export async function fetchMasterDataList(
     query: MasterDataListQuery,
 ): Promise<MasterDataListResult> {
     let rows: MasterDataListItem[]
-    let extra: Pick<
-        MasterDataListResult,
-        | "emptyReason"
-        | "ownerOptions"
-        | "capabilityOwnerOptions"
-        | "procurementOwnerOptions"
-    > = {}
+    let extra: Pick<MasterDataListResult, "emptyReason"> = {}
     switch (query.resource) {
         case "categories":
             rows = await listCategories(query)
@@ -94,8 +82,6 @@ export async function fetchMasterDataList(
             rows = page.rows
             extra = {
                 emptyReason: page.emptyReason,
-                ownerOptions: page.ownerOptions,
-                procurementOwnerOptions: page.procurementOwnerOptions,
             }
             break
         }
@@ -110,11 +96,9 @@ export async function fetchMasterDataList(
             break
         case "suppliers": {
             const listed = await listSuppliers(query)
-            rows = listed.rows
+            rows = [...listed.rows]
             extra = {
                 emptyReason: listed.emptyReason,
-                ownerOptions: listed.ownerOptions,
-                capabilityOwnerOptions: listed.capabilityOwnerOptions,
             }
             break
         }

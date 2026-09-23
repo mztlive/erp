@@ -46,7 +46,6 @@ describe("fetchFulfillmentQueue W01 exact object query", () => {
                     queue_context_id: "exact-1",
                     visible_types: ["RECEIPT"],
                     metrics: [],
-                    warehouse_options: [],
                     as_of: 1700000100,
                 }
             return {
@@ -175,7 +174,6 @@ describe("fetchFulfillmentQueue server pagination", () => {
                         { operation_type: "RECEIPT", count: 21 },
                         { operation_type: "WAREHOUSE_SHIP", count: 20 },
                     ],
-                    warehouse_options: [{ id: "warehouse-1", label: "WH-001" }],
                     as_of: 1_700_000_100,
                 }
             }

@@ -20,7 +20,7 @@ use super::*;
 /// DataScope v2：按关联销售当前负责人、申请人与当前开票处理人分别查询；
 /// 不改变正式开票准入，申请金额为行级事实始终返回。
 /// # 返回
-/// 返回范围分页视图（`items`/`total`/`summary`/`owner_options`/`scope_version`）。
+/// 返回范围分页视图（`items`/`total`/`summary`/`scope_version`）。负责销售候选不随列表返回。
 pub async fn invoice_request_list(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,

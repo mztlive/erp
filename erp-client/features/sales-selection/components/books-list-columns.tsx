@@ -19,9 +19,7 @@ import {
 import { toAutomationIdSegment } from "@/lib/automation-id"
 
 /** 选品册列表列：客户身份列可打开详情，已提交行链方案。 */
-export function buildBooksListColumns(
-    resolveOwnerLabel?: (ownerId: string) => string | undefined,
-): ColumnDef<SelectionBook>[] {
+export function buildBooksListColumns(): ColumnDef<SelectionBook>[] {
     return [
         {
             id: "customer",
@@ -59,10 +57,10 @@ export function buildBooksListColumns(
             enableSorting: false,
             meta: { label: "负责销售", width: "reference" },
             cell: ({ row }) => {
-                const ownerId = row.original.sales_owner_user_id
+                const name = row.original.sales_owner_name?.trim()
                 return (
                     <span className="block max-w-32 truncate text-sm">
-                        {resolveOwnerLabel?.(ownerId) ?? ownerId}
+                        {name || row.original.sales_owner_user_id}
                     </span>
                 )
             },

@@ -184,11 +184,6 @@ export type InventoryListView = Readonly<{
     emptyReason?: InventoryEmptyReason
     excludedKindsNote: string
     openingStockNote: string
-    warehouses: readonly {
-        id: string
-        code: string
-        name: string
-    }[]
 }>
 
 export type BalanceDetailView = Readonly<{

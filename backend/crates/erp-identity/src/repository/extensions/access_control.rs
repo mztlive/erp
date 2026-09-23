@@ -12,8 +12,8 @@ use crate::repository::access_control::{
     AccessControlRepository, AuditEventFilter, DataScopeFilter, PermissionFilter,
 };
 use crate::repository::owned::{
-    AccountCoreRepository, AuditEventRepository, DataScopeRepository, PermissionRepository, RoleRepository,
-    UserRoleRepository,
+    AccountCoreRepository, AuditEventRepository, DataScopeRepository, PermissionRepository,
+    PersonQueryQualificationRepository, RoleRepository, UserRoleRepository,
 };
 
 /// 访问控制域仓储访问器。
@@ -26,6 +26,8 @@ pub trait AccessControlExt {
     const DATA_SCOPES: &'static str = "data_scopes";
     /// `audit_event` 集合名。
     const AUDIT_EVENTS: &'static str = "audit_events";
+    /// 人员查询资格集合名。
+    const PERSON_QUERY_QUALIFICATIONS: &'static str = "person_query_qualifications";
 
     /// 权限定义列表筛选条件类型（定义见 `repository::access_control`）。
     type PermissionFilter;
@@ -77,6 +79,12 @@ pub trait AccessControlExt {
     /// # 返回
     /// 返回 `AccessControlRepository` 实例。
     fn access_control(&self) -> AccessControlRepository<'_>;
+
+    /// 获取人员查询资格仓储。
+    ///
+    /// # 返回
+    /// 返回 `PersonQueryQualificationRepository`。
+    fn person_query_qualifications(&self) -> PersonQueryQualificationRepository<'_>;
 }
 
 impl AccessControlExt for Database {
@@ -114,6 +122,10 @@ impl AccessControlExt for Database {
 
     fn audit_events(&self) -> AuditEventRepository<'_> {
         AuditEventRepository::new(self, Self::AUDIT_EVENTS)
+    }
+
+    fn person_query_qualifications(&self) -> PersonQueryQualificationRepository<'_> {
+        PersonQueryQualificationRepository::new(self, Self::PERSON_QUERY_QUALIFICATIONS)
     }
 
     fn access_control(&self) -> AccessControlRepository<'_> {

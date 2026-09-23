@@ -291,12 +291,10 @@ impl FundsAccess {
             .map(|(id, order)| (id.clone(), order.sales_owner_user_id.clone()))
             .collect::<HashMap<_, _>>();
         let summary = build_summary(&triples, &owner_of, whole_amount(whole, whole_sum), &version, !whole)?;
-        let owner_options = self.owner_options_sales(&authorization, executor).await?;
         Ok(FundsScopedPage {
             items,
             total,
             summary,
-            owner_options,
             page,
             page_size,
             scope_version: version.clone(),

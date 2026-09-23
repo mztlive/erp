@@ -34,6 +34,7 @@ export function SalesOrderSearchCombobox({
         loading,
         emptyLabel: resolvedEmptyLabel,
     } = useRemoteSearchCombobox({
+        selectedId: value,
         list: query.list,
         selected: query.selected,
         selectedItem,

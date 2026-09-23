@@ -3,7 +3,7 @@
 use std::collections::{BTreeSet, HashMap};
 use std::hash::{Hash, Hasher};
 
-use application_core::{AuditActor, FilterOption};
+use application_core::AuditActor;
 use erp_core::money::Amount;
 use erp_finance::ports::funds_scope::FundsResolvedScope;
 use erp_finance::repository::ReceivableExt;
@@ -324,7 +324,7 @@ impl FundsAccess {
         purchase_facts: HashMap<String, LinkedPurchaseFact>,
         authorization: FundsAuthorization,
         fingerprint: std::collections::hash_map::DefaultHasher,
-        executor: &mut dyn Executor,
+        _executor: &mut dyn Executor,
     ) -> Result<FundsScopedPage<ScopedInvoiceRow>> {
         use erp_finance::entity::receivable::InvoiceDirection;
         let total = decided.len() as u64;
@@ -382,12 +382,10 @@ impl FundsAccess {
         ensure_version(params.scope_version.as_deref(), &version).map_err(|_| changed())?;
         let summary =
             build_summary(&triples, &owner_of, whole_amount(all_whole, whole_sum), &version, !all_whole)?;
-        let owner_options = self.owner_options_merged(&authorization, executor).await?;
         Ok(FundsScopedPage {
             items,
             total,
             summary,
-            owner_options,
             page,
             page_size,
             scope_version: version.clone(),
@@ -398,19 +396,6 @@ impl FundsAccess {
             scope_summary: "发票按分配关联销售/采购当前负责人与登记经办人授权；部分授权仅返获授权份额",
             ownership_basis: "linked_sales_and_purchase_owner_and_register_operator",
         })
-    }
-
-    /// 销售与采购双边界的负责人候选合并；候选不授予命令资格。
-    pub(super) async fn owner_options_merged(
-        &self,
-        authorization: &FundsAuthorization,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<FilterOption>> {
-        let mut options = self.owner_options_sales(authorization, executor).await?;
-        options.extend(self.owner_options_purchase(authorization, executor).await?);
-        options.sort_by(|left, right| left.value.cmp(&right.value).then(left.label.cmp(&right.label)));
-        options.dedup_by(|next, prev| next.value == prev.value);
-        Ok(options)
     }
 
     /// 单行金额裁剪；整单金额与完整分配仅整单资格返回，否则为 null。

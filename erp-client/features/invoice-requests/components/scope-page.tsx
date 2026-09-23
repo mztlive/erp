@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/table"
 import { PageScaffold } from "@/components/business"
 import { ListWorkspaceHeader } from "@/components/business/list-workspace"
-import { ResponsibleUserFilter } from "@/features/entity-selectors/components/responsible-user-filter"
+import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
 import type { ColumnDef } from "@tanstack/react-table"
 import { downloadListCsv } from "@/lib/list-export"
 import { getErrorMessage } from "@/lib/api/errors"
@@ -43,6 +43,13 @@ import { useInvoiceRequestScopeUrlState } from "@/features/invoice-requests/hook
 import { scopeText } from "@/lib/ui-text"
 
 const toolbarPrefix = "invoice-request-scope-toolbar"
+
+function selectedOrgUnitIds(value: string): string[] {
+    return value
+        .split(",")
+        .map((part) => part.trim())
+        .filter(Boolean)
+}
 
 function ScopeColumns(): ColumnDef<ScopedInvoiceRequestWire>[] {
     return [
@@ -99,9 +106,10 @@ function ScopeColumns(): ColumnDef<ScopedInvoiceRequestWire>[] {
     ]
 }
 
-/** 开票申请范围页：负责销售/申请人/当前开票处理人分别查询，不改变开票准入。 */
+/** 开票申请范围页：负责销售、申请人与当前开票处理人分别查询，人员候选走销售目录。 */
 export function InvoiceRequestScopePage() {
     const urlState = useInvoiceRequestScopeUrlState()
+    const directoryOrgUnitIds = selectedOrgUnitIds(urlState.orgDraft)
     const listQuery = useInvoiceRequestScopeListQuery(urlState.query)
     const [detailId, setDetailId] = React.useState<string | null>(null)
     const detailQuery = useInvoiceRequestScopeDetailQuery(detailId)
@@ -276,31 +284,43 @@ export function InvoiceRequestScopePage() {
                         onResetMore={urlState.resetMoreFilters}
                         primaryFilters={
                             <div className="w-56 max-w-full min-w-0">
-                                <ResponsibleUserFilter
+                                <PersonDirectoryFilter
                                     id={`${toolbarPrefix}-sales-owner`}
+                                    category="sales"
                                     label="负责销售"
                                     hideLabel
                                     value={urlState.salesOwnerDraft}
                                     onChange={urlState.setSalesOwnerDraft}
-                                    options={data?.ownerOptions ?? []}
+                                    orgUnitIds={directoryOrgUnitIds}
+                                    includeDescendants={
+                                        urlState.descendantsDraft
+                                    }
                                 />
                             </div>
                         }
                         morePanel={
                             <div className="grid min-w-0 gap-5">
-                                <ResponsibleUserFilter
+                                <PersonDirectoryFilter
                                     id={`${toolbarPrefix}-applicant`}
+                                    category="business"
                                     label="申请人"
                                     value={urlState.applicantDraft}
                                     onChange={urlState.setApplicantDraft}
-                                    options={data?.ownerOptions ?? []}
+                                    orgUnitIds={directoryOrgUnitIds}
+                                    includeDescendants={
+                                        urlState.descendantsDraft
+                                    }
                                 />
-                                <ResponsibleUserFilter
+                                <PersonDirectoryFilter
                                     id={`${toolbarPrefix}-handler`}
+                                    category="business"
                                     label="当前开票处理人"
                                     value={urlState.handlerDraft}
                                     onChange={urlState.setHandlerDraft}
-                                    options={data?.ownerOptions ?? []}
+                                    orgUnitIds={directoryOrgUnitIds}
+                                    includeDescendants={
+                                        urlState.descendantsDraft
+                                    }
                                 />
                                 <OrganizationUnitFilter
                                     id={`${toolbarPrefix}-org`}

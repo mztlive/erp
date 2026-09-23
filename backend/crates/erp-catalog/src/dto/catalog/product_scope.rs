@@ -13,12 +13,9 @@ use crate::error::Result;
 /// 列表响应保持现有字段并声明独立的授权时点及版本。
 #[derive(Debug, Clone, Serialize)]
 pub struct ProductListView {
-    /// 分页结果、维护人候选与归属口径。
+    /// 分页结果与归属口径。
     #[serde(flatten)]
-    pub data: application_core::FilteredPage<ProductView>,
-    /// 采购负责人候选；不授予维护资格。
-    #[serde(default)]
-    pub procurement_owner_options: Vec<application_core::FilterOption>,
+    pub data: application_core::OwnershipPage<ProductView>,
     /// 跨页与导出必须原样回传的范围版本。
     pub scope_version: String,
     /// RBAC 策略版本。

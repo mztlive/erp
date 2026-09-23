@@ -59,13 +59,14 @@ fn purchase_reads(state: &AppState) -> PurchaseOrderReadService {
 /// * `query` - 分页与筛选参数（扁平传递，含跨页 `scope_version`）
 ///
 /// # 返回
-/// 返回带范围版本、候选与空集原因的分页视图。
+/// 返回带范围版本与空集原因的分页视图，不附带负责人候选。
 ///
 /// # 错误
 /// 无动作权限、范围变化、筛选非法或仓储失败时拒绝。
 ///
 /// # 关键业务约束
 /// 缺动作返回 403；缺范围返回空集并标记 `no_scope`，不得补公司范围。
+/// 负责人筛选只收窄采购单，不由此接口产生候选。
 pub async fn purchase_order_list(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,

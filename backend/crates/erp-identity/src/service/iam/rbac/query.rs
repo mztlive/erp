@@ -8,7 +8,7 @@ use persistence_core::NoTransaction;
 use super::authorize::role_is_assignable;
 use super::policy::{
     collect_role_ids, collect_role_permissions, implicit_permissions_for_role, parse_policy_permissions,
-    permissions_for_actor, role_ids_for_account,
+    permissions_for_actor, role_ids_for_account, role_key,
 };
 use super::{RbacService, subject};
 use crate::AccessControlExt;
@@ -105,6 +105,33 @@ impl RbacService {
     pub async fn role_ids(&self, account_kind: AccountKind, account_id: &str) -> Result<Vec<String>> {
         let enforcer = self.fresh_enforcer().await?.read().await;
         Ok(role_ids_for_account(&enforcer, account_kind, account_id))
+    }
+
+    /// 读取直接绑定某稳定角色的后台账号 ID。
+    ///
+    /// # 参数
+    /// * `role_id` - 稳定角色 ID，不含 `role:` 前缀
+    ///
+    /// # 返回
+    /// 返回排序后的后台账号 ID。非后台主体被忽略。
+    ///
+    /// # 错误
+    /// 策略加载失败时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 只反映当前 Casbin 绑定，不把角色撤销解释成查询资格终止。
+    pub async fn direct_admin_ids_for_role(&self, role_id: &str) -> Result<Vec<String>> {
+        let enforcer = self.fresh_enforcer().await?.read().await;
+        let mut ids = enforcer
+            .get_users_for_role(&role_key(role_id), None)
+            .into_iter()
+            .filter_map(|subject| {
+                subject.strip_prefix("user:admin:").filter(|id| !id.is_empty()).map(str::to_string)
+            })
+            .collect::<Vec<_>>();
+        ids.sort();
+        ids.dedup();
+        Ok(ids)
     }
 
     /// 批量查询同类账号直接绑定的角色 ID。

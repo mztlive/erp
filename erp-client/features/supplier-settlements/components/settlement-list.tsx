@@ -252,9 +252,7 @@ function SettlementList({
                     <SettlementListToolbar
                         urlState={urlState}
                         suppliers={data?.suppliers ?? []}
-                        ownerOptions={data?.ownerOptions ?? []}
-                        operatorOptions={data?.operatorOptions ?? []}
-                        handlerOptions={data?.handlerOptions ?? []}
+
                         searchInputRef={searchInputRef}
                         searchDraft={filters.searchDraft}
                         setSearchDraft={filters.setSearchDraft}

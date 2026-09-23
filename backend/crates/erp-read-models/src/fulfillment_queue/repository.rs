@@ -202,20 +202,12 @@ pub struct FulfillmentQueueMetricRow {
     pub count: i64,
 }
 
-/// 当前权限队列内可用的仓库筛选项。
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
-pub struct FulfillmentQueueWarehouseRow {
-    pub id: String,
-    pub label: String,
-}
-
 /// 履约责任队列仓储结果。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FulfillmentQueueRepositoryPage {
     pub items: Vec<FulfillmentQueueItemRow>,
     pub total: i64,
     pub metrics: Vec<FulfillmentQueueMetricRow>,
-    pub warehouses: Vec<FulfillmentQueueWarehouseRow>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -231,8 +223,6 @@ struct FulfillmentQueueFacetRow {
     total: Vec<CountRow>,
     #[serde(default)]
     metrics: Vec<FulfillmentQueueMetricRow>,
-    #[serde(default)]
-    warehouses: Vec<FulfillmentQueueWarehouseRow>,
 }
 
 /// Owned read repository for the fulfillment queue page projection.
@@ -309,7 +299,6 @@ impl<'a> FulfillmentQueueRepository<'a> {
             items: facet.items,
             total: facet.total.first().map_or(0, |row| row.count),
             metrics: facet.metrics,
-            warehouses: facet.warehouses,
         })
     }
 }

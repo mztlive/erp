@@ -1,4 +1,5 @@
 "use client"
+import type { HistoricalDirectory } from "@/lib/historical-directory"
 
 import * as React from "react"
 import type {
@@ -53,6 +54,9 @@ const COVERAGE_OPTIONS: ReadonlyArray<{
 export type ProfitLossRowsPanelProps = {
     /** 查询成功后的视图；加载/失败时为 undefined。 */
     data?: ProfitLossView
+    historyDirectory?: HistoricalDirectory
+    directoryError?: unknown
+    onRetryDirectory?: () => void
     dimension: ProfitLossDimension
     coverage: ProfitLossCoverage
     hasFilters: boolean
@@ -97,6 +101,9 @@ export type ProfitLossRowsPanelProps = {
  */
 export function ProfitLossRowsPanel({
     data,
+    historyDirectory,
+    directoryError,
+    onRetryDirectory,
     dimension,
     coverage,
     hasFilters,
@@ -221,6 +228,13 @@ export function ProfitLossRowsPanel({
                     }
                     morePanel={
                         <div className="space-y-5">
+                            {directoryError != null && (
+                                <BusinessFailureState
+                                    title="历史候选加载失败"
+                                    error={directoryError}
+                                    onRetry={onRetryDirectory}
+                                />
+                            )}
                             <fieldset className="min-w-0 space-y-3">
                                 <legend className="mb-1 text-sm font-medium">
                                     历史归属
@@ -238,7 +252,7 @@ export function ProfitLossRowsPanel({
                                                 onAttributionUsersChange
                                             }
                                             options={
-                                                data?.attributionUserOptions ??
+                                                historyDirectory?.attributionUserOptions ??
                                                 []
                                             }
                                             placeholder="全部历史归属销售"
@@ -257,7 +271,7 @@ export function ProfitLossRowsPanel({
                                                 onAttributionOrgsChange
                                             }
                                             options={
-                                                data?.attributionOrgOptions ??
+                                                historyDirectory?.attributionOrgOptions ??
                                                 []
                                             }
                                             placeholder="全部历史归属组织"

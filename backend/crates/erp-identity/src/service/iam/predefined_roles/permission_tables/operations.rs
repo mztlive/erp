@@ -1,5 +1,7 @@
 /// 运营推荐权限。
 pub(crate) const OPERATIONS_PERMISSIONS: &[&str] = &[
+    "warehouse:list",
+    "business_person:list",
     "work_item:list",
     "work_item:detail",
     "approval_instance:read",

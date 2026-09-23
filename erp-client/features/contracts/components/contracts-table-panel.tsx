@@ -1,5 +1,7 @@
 "use client"
-import { ResponsibleUserFilter } from "@/features/entity-selectors/components/responsible-user-filter"
+import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
+
+import { SettlementPartySearchCombobox } from "@/features/party-selector/settlement-party-search-combobox"
 
 import { FileUpIcon } from "lucide-react"
 import type { ColumnDef } from "@tanstack/react-table"
@@ -8,7 +10,6 @@ import {
     BusinessEmptyState,
     BusinessFailureState,
     DataTable,
-    OptionCombobox,
 } from "@/components/business"
 import {
     ListSearchField,
@@ -71,8 +72,7 @@ export function ContractsTablePanel({
         clearAllFilters,
         appliedChips,
         isFiltered,
-        settlementPartyOptions,
-        ownerOptions,
+
         pageRows,
         total,
         sorting,
@@ -119,24 +119,26 @@ export function ContractsTablePanel({
                     onResetMore={resetMoreFilters}
                     primaryFilters={
                         <>
-                            <OptionCombobox
+                            <SettlementPartySearchCombobox
+                                purpose="filter"
                                 id="card-contracts-list-filter-settlement-party"
                                 className="w-48 max-w-full"
-                                value={settlementPartyIdDraft}
+                                value={settlementPartyIdDraft ?? undefined}
                                 aria-label="结算主体"
                                 filterLabel="结算主体"
-                                onValueChange={setSettlementPartyIdDraft}
-                                options={settlementPartyOptions}
+                                onValueChange={(id) =>
+                                    setSettlementPartyIdDraft(id ?? null)
+                                }
                                 placeholder="全部"
                             />
                             <div className="w-56 max-w-full">
-                                <ResponsibleUserFilter
+                                <PersonDirectoryFilter
                                     id="card-contracts-list-filter-owner"
                                     label="当前跟进负责人"
                                     hideLabel
                                     value={ownerDraft ?? ""}
                                     onChange={setOwnerDraft}
-                                    options={ownerOptions}
+                                    category="sales"
                                 />
                             </div>
                         </>

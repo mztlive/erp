@@ -1,35 +1,8 @@
-/**
- * 审计事件的动作与对象文案。
- *
- * 后端 action_type 约定为 `<对象>.<动作>`（如 `user_role.assign`），
- * 界面不展示这种编码：对象名取自权限目录，动作名走下表。
- */
+/** 审计动作标签来自事件注册表；未知历史原值必须明确标记。 */
 
-import {
-    PERMISSION_BY_CODE,
-    resourceLabel,
-} from "@/features/admin/lib/permission-catalog"
-
-/** 审计动作动词中文名。 */
-const AUDIT_VERB_LABEL: Record<string, string> = {
-    create: "新建",
-    update: "修改",
-    delete: "删除",
-    assign: "授权",
-    revoke: "撤权",
-    submit: "提交",
-    approve: "通过",
-    reject: "驳回",
-    cancel: "取消",
-    close: "关闭",
-    post: "记账",
-    reverse: "冲销",
-    void: "作废",
-    export: "导出",
-    query: "查询",
-    login: "登录",
-    reveal: "查看敏感信息",
-}
+import { resourceLabel } from "@/features/admin/lib/permission-catalog"
+import { AUDIT_ACTION_OPTIONS } from "@/lib/audit-actions.generated"
+export { AUDIT_ACTION_OPTIONS }
 
 /** 审计动作是否为高风险（列表可据此加重强调）。 */
 const RISKY_VERBS = new Set(["delete", "revoke", "reverse", "void", "reveal"])
@@ -51,12 +24,18 @@ export function auditObjectTypeLabel(objectType: string): string {
     return resourceLabel(objectType)
 }
 
-/** 审计动作 → 「对象 · 动作」；不符合约定的取值原样展示。 */
+const AUDIT_ACTION_LABEL = new Map<string, string>(
+    AUDIT_ACTION_OPTIONS.map((option) => [option.value, option.label]),
+)
+
+/** 列表和详情与筛选回显使用同一注册口径。 */
 export function auditActionLabel(actionType: string): string {
-    const parts = splitActionType(actionType)
-    if (!parts) return actionType
-    const verb = AUDIT_VERB_LABEL[parts.verb] ?? parts.verb
-    return `${auditObjectTypeLabel(parts.object)} · ${verb}`
+    return registeredAuditActionLabel(actionType)
+}
+
+/** 未登记历史值只作明确标记的回显，不推导为合法事件。 */
+export function registeredAuditActionLabel(actionType: string): string {
+    return AUDIT_ACTION_LABEL.get(actionType) ?? `未知历史动作（${actionType}）`
 }
 
 /** 是否为高风险动作。 */
@@ -69,23 +48,11 @@ export function isRiskyAuditAction(actionType: string): boolean {
 export function auditKeywordActions(q: string | undefined): string | undefined {
     const needle = q?.trim().toLowerCase()
     if (!needle) return undefined
-    const resources = new Set(
-        [...PERMISSION_BY_CODE.values()].map((item) => item.resource),
-    )
-    const actions = new Set(
-        [...PERMISSION_BY_CODE.values()].map(
-            (item) => `${item.resource}.${item.action}`,
-        ),
-    )
-    for (const resource of resources) {
-        for (const verb of Object.keys(AUDIT_VERB_LABEL))
-            actions.add(`${resource}.${verb}`)
-    }
     return (
-        [...actions]
-            .filter((action) =>
-                auditActionLabel(action).toLowerCase().includes(needle),
-            )
+        AUDIT_ACTION_OPTIONS.filter((option) =>
+            option.label.toLowerCase().includes(needle),
+        )
+            .map((option) => option.value)
             .join(",") || undefined
     )
 }

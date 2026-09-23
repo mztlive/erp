@@ -121,29 +121,6 @@ impl WarehouseService {
         self
     }
 
-    /// 分页查询仓库列表。
-    ///
-    /// # 参数
-    /// * `params` - 查询参数（`warehouse_code`/`status` 扁平筛选）
-    ///
-    /// # 返回
-    /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
-    ///
-    /// # 错误
-    /// * `ValidationError` - 分页参数非法或排序字段不在白名单
-    /// * `RepositoryError` - 数据库查询失败
-    pub async fn warehouse_list(&self, params: &WarehouseListParams) -> Result<PageView<WarehouseView>> {
-        params.validate()?;
-        let filter = params.normalized()?.into_filter();
-        map_search_page(
-            self.db.warehouses().search_warehouses(&filter, &mut NoTransaction),
-            WarehouseView::from_row,
-            filter.page,
-            filter.page_size,
-        )
-        .await
-    }
-
     /// 创建仓库（仓库稳定身份 + 首个修订，跨集合事务）。
     ///
     /// 地址与联系人生成带密钥 HMAC 指纹的 `SensitiveText` 后落库
@@ -566,6 +543,7 @@ impl WarehouseListQuery {
     /// 返回与规范化查询字段一一对应的 [`WarehouseFilter`]。
     pub(crate) fn into_filter(self) -> WarehouseFilter {
         WarehouseFilter {
+            authorized_ids: None,
             warehouse_id: self.warehouse_id,
             require_inbound_handler: self.require_inbound_handler,
             q: self.q,

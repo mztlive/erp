@@ -77,12 +77,12 @@ describe("M07 金额口径：获授权份额与整单分离", () => {
     })
 
     test("60/40 例子：人员汇总只算匹配份额，未分配单列", () => {
-        const matched = Number(receivable().visible_settled_share)
-        const unassigned = Number(receipt().unallocated_amount ?? "0")
-        expect(matched).toBe(60)
-        expect(unassigned).toBe(40)
-        // 不重复记：匹配份额与未分配属于不同口径，不得相加当作整单。
-        expect(`${matched + unassigned}`).not.toBe(receivable().gross_total)
+        const matched = receivable().visible_settled_share
+        const unassigned = receipt().unallocated_amount
+        expect(matched).toBe("60.00")
+        expect(unassigned).toBe("40.00")
+        // 两种份额必须分别保留，不能由前端合成为同一整单金额。
+        expect(matched).not.toBe(receivable().gross_total)
     })
 
     test("销项发票整单受限时为空", () => {

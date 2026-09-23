@@ -1,9 +1,9 @@
-//! 选品授权快照：列表、候选、详情重验与写命令复用同一范围。
+//! 选品授权快照：列表、详情重验与写命令复用同一范围。
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use application_core::{AuditActor, FilterOption};
+use application_core::{AuditActor, PageView};
 use erp_identity::AccessControlExt;
 use erp_identity::repository::prelude::*;
 use erp_sales::dto::sales_selection::{
@@ -53,7 +53,7 @@ pub(crate) async fn check_create_scope(
     Ok(())
 }
 
-/// 选品册列表授权快照；同一事务内授权、计数与候选。
+/// 选品册列表授权快照；同一执行器内授权与计数。
 ///
 /// # 参数
 /// * `access` - 选品范围访问器
@@ -63,7 +63,7 @@ pub(crate) async fn check_create_scope(
 /// * `executor` - 调用方执行器
 ///
 /// # 返回
-/// 返回分页、候选与范围版本。
+/// 返回分页与范围版本；当前页行带负责人显示名。
 ///
 /// # 错误
 /// 参数非法、无动作权限或范围变化时拒绝。
@@ -84,11 +84,16 @@ pub(crate) async fn booklet_list_snapshot(
     effective.org_unit_ids = orgs;
     let service = SalesSelectionService::new(db.clone());
     let page = service.list_booklets_with(&effective, &scope, executor).await?;
-    let owners = distinct_owners(db, true, &scope, executor).await?;
-    let options = db.accounts().filter_options(&owners, executor).await?;
+    let page = named_owner_page(
+        db,
+        page,
+        |item| item.sales_owner_user_id.clone(),
+        |item, sales_owner_name| super::SelectionBookletListRow { item, sales_owner_name },
+        executor,
+    )
+    .await?;
     Ok(SelectionBookletListView {
         page,
-        owner_options: options,
         scope_version: resolved.scope_version,
         policy_version: resolved.policy_version,
         organization_version: resolved.organization_version,
@@ -106,7 +111,7 @@ pub(crate) async fn booklet_list_snapshot(
 /// * `executor` - 调用方执行器
 ///
 /// # 返回
-/// 返回分页、候选与范围版本。
+/// 返回分页与范围版本；当前页行带负责人显示名。
 ///
 /// # 错误
 /// 参数非法、无动作权限或范围变化时拒绝。
@@ -127,11 +132,16 @@ pub(crate) async fn proposal_list_snapshot(
     effective.org_unit_ids = orgs;
     let service = SalesSelectionService::new(db.clone());
     let page = service.proposal_list_with(&effective, &scope, executor).await?;
-    let owners = distinct_owners(db, false, &scope, executor).await?;
-    let options = db.accounts().filter_options(&owners, executor).await?;
+    let page = named_owner_page(
+        db,
+        page,
+        |item| item.sales_owner_user_id.clone(),
+        |item, sales_owner_name| super::SelectionProposalListRow { item, sales_owner_name },
+        executor,
+    )
+    .await?;
     Ok(SelectionProposalListView {
         page,
-        owner_options: options,
         scope_version: resolved.scope_version,
         policy_version: resolved.policy_version,
         organization_version: resolved.organization_version,
@@ -428,34 +438,38 @@ async fn expanded_orgs(
     Ok(Some(expanded.into_iter().collect()))
 }
 
-/// 同一快照内去重负责人；候选不授予命令资格。
+/// 给当前页行补负责人显示名；只读本页 ID，不生成筛选候选。
 ///
 /// # 参数
-/// * `db` - 选品数据库
-/// * `booklet` - 为 true 查册，否则查方案
-/// * `scope` - 已解析责任条件
+/// * `db` - 账号集合所在数据库
+/// * `page` - 已授权分页
+/// * `owner_id` - 行上负责人 ID
+/// * `map_row` - 组装带显示名的行
 /// * `executor` - 调用方执行器
 ///
 /// # 返回
-/// 返回排序去重后的负责人 ID。
+/// 返回原分页与总数，行上附带显示名。
 ///
 /// # 错误
-/// 去重查询失败时拒绝。
-async fn distinct_owners(
+/// 账号读取失败时拒绝。
+async fn named_owner_page<T, R>(
     db: &Database,
-    booklet: bool,
-    scope: &erp_sales::repository::sales_selection::SelectionReadScope,
+    page: PageView<T>,
+    owner_id: impl Fn(&T) -> String,
+    map_row: impl Fn(T, Option<String>) -> R,
     executor: &mut dyn Executor,
-) -> Result<Vec<String>> {
-    use erp_sales::repository::sales_selection::SalesSelectionDomainRepository;
-    let mut ids =
-        SalesSelectionDomainRepository::new(db).distinct_owner_ids(booklet, scope, executor).await?;
-    ids.sort();
-    ids.dedup();
-    if ids.len() > 10_000 {
-        return Err(Error::ValidationError("负责人候选超过查询上限".into()));
-    }
-    Ok(ids)
+) -> Result<PageView<R>> {
+    let ids: Vec<String> = page.items.iter().map(&owner_id).collect();
+    let names = db.accounts().names_by_ids(&ids, executor).await?;
+    let items = page
+        .items
+        .into_iter()
+        .map(|item| {
+            let sales_owner_name = names.get(&owner_id(&item)).cloned();
+            map_row(item, sales_owner_name)
+        })
+        .collect();
+    Ok(PageView { items, total: page.total, page: page.page, page_size: page.page_size })
 }
 
 /// 后续页必须携带当前范围版本。
@@ -512,28 +526,4 @@ fn ensure_create_request(
         return Err(Error::ValidationError("销售负责人与业务组织必填".into()));
     }
     Ok(req)
-}
-
-/// 构造候选显示标签；只含 ID 与显示名，不回全量身份。
-///
-/// # 参数
-/// * `ids` - 负责人 ID
-/// * `names` - 显示名映射
-///
-/// # 返回
-/// 返回稳定排序的候选。
-///
-/// # 错误
-/// 无。
-#[allow(dead_code)]
-fn filter_options(ids: &[String], names: &HashMap<String, String>) -> Vec<FilterOption> {
-    let mut options: Vec<FilterOption> = ids
-        .iter()
-        .map(|id| FilterOption {
-            value: id.clone(),
-            label: names.get(id).cloned().unwrap_or_else(|| id.clone()),
-        })
-        .collect();
-    options.sort_by(|a, b| a.label.cmp(&b.label).then_with(|| a.value.cmp(&b.value)));
-    options
 }

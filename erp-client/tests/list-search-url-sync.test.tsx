@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { act, renderHook, cleanup } from "@testing-library/react"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { useContractsList } from "@/features/contracts/hooks/use-contracts-list"
@@ -30,7 +31,19 @@ afterEach(() => {
 })
 
 it("合同草稿不触发新关键词请求，提交回第一页，历史导航回填聚焦中的输入", () => {
-    const { result, rerender } = renderHook(() => useContractsList())
+    const { result, rerender } = renderHook(() => useContractsList(), {
+        wrapper: ({ children }) => (
+            <QueryClientProvider
+                client={
+                    new QueryClient({
+                        defaultOptions: { queries: { retry: false } },
+                    })
+                }
+            >
+                {children}
+            </QueryClientProvider>
+        ),
+    })
     act(() => result.current.setSearchDraft(" new "))
     expect(navigation.fetch).toHaveBeenLastCalledWith(
         expect.objectContaining({ q: "old", page: 6 }),

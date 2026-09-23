@@ -2,17 +2,13 @@
 
 use std::collections::HashMap;
 
-use application_core::FilterOption;
 use erp_audit::AuditExt;
 use erp_audit::repository::prelude::*;
 use erp_core::money::Amount;
 use erp_finance::ports::funds_scope::FundsResolvedScope;
 use erp_finance::repository::prelude::*;
 use erp_finance::repository::{PayableExt, ReceivableExt};
-use erp_identity::AccessControlExt;
-use erp_identity::repository::prelude::*;
 use erp_procurement::repository::PurchaseOrderExt;
-use erp_procurement::repository::prelude::*;
 use erp_sales::repository::SalesOrderExt;
 use erp_sales::repository::prelude::*;
 use erp_workflow::WorkItemExt;
@@ -24,9 +20,11 @@ use serde::Serialize;
 use super::authorization::*;
 use super::invoice::sales_invoice_allocation_view;
 use super::receipt::receipt_allocation_view;
-use crate::{Error, Result};
+use crate::Result;
 
 /// M07/M08/M09 列表共用的范围分页视图；跨页必须原样回传 `scope_version`。
+///
+/// 负责人候选不在本视图返回，由销售或采购人员目录按自身权限单独查询。
 #[derive(Debug, Clone, Serialize)]
 pub struct FundsScopedPage<T> {
     /// 本页已按同一对象映射裁剪的业务行。
@@ -35,8 +33,6 @@ pub struct FundsScopedPage<T> {
     pub total: u64,
     /// 同一快照下按负责人分组的匹配份额汇总；与列表复用同一授权条件和金额口径。
     pub summary: FundsSummaryView,
-    /// 同一授权边界内的负责人候选；可区分离线停用人员，不得用于改派。
-    pub owner_options: Vec<FilterOption>,
     /// 当前页码。
     pub page: u64,
     /// 单页条数。
@@ -407,41 +403,6 @@ impl FundsAccess {
         }
         Ok(map)
     }
-
-    /// 同一授权边界内的负责销售候选；超过上限整体拒绝，不得截断。
-    pub(super) async fn owner_options_sales(
-        &self,
-        authorization: &FundsAuthorization,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<FilterOption>> {
-        if authorization.empty() {
-            return Ok(Vec::new());
-        }
-        let ids = self.db.sales_orders().current_owner_ids(&authorization.sales, executor).await?;
-        if ids.len() > 10_000 {
-            return Err(Error::ValidationError("负责人候选超过查询上限".into()));
-        }
-        Ok(self.db.accounts().filter_options(&ids, executor).await?)
-    }
-
-    /// 同一授权边界内的采购负责人候选；销售关联查询返回空候选。
-    pub(super) async fn owner_options_purchase(
-        &self,
-        authorization: &FundsAuthorization,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<FilterOption>> {
-        let Some(scope) = authorization.purchase_scope.as_ref() else {
-            return Ok(Vec::new());
-        };
-        if authorization.empty() {
-            return Ok(Vec::new());
-        }
-        let ids = self.db.purchase_orders().current_owner_ids(scope, executor).await?;
-        if ids.len() > 10_000 {
-            return Err(Error::ValidationError("负责人候选超过查询上限".into()));
-        }
-        Ok(self.db.accounts().filter_options(&ids, executor).await?)
-    }
 }
 
 /// 单据行关联的多个责任事实中任一通过公共判定即该行可见。
@@ -753,3 +714,168 @@ pub(super) type OrderTuple = (LinkedOrderId, Option<String>, Option<String>, Str
 
 /// 关联责任行：字段顺序与 [`OrderTuple`] 相同。
 pub(super) type LinkedOrderRow = OrderTuple;
+
+#[cfg(test)]
+mod tests {
+    use erp_core::common::time::BusinessDate;
+    use erp_finance::entity::payable::{PayableAccountStatus, PayableSourceType};
+    use erp_finance::entity::receivable::{
+        InvoiceDirection, InvoiceKind, InvoiceRequestStatus, InvoiceStatus, ReceivableAccountStatus,
+    };
+
+    use super::*;
+
+    fn summary(whole: bool) -> FundsSummaryView {
+        FundsSummaryView {
+            grouped: vec![FundsPersonShare { owner_user_id: "owner-1".into(), visible_share: zero_amount() }],
+            unassigned: zero_amount(),
+            whole_total: whole.then(zero_amount),
+            permission_limited: !whole,
+            scope_version: "scope-v1".into(),
+        }
+    }
+
+    fn page<T>(items: Vec<T>, basis: &'static str, whole: bool) -> FundsScopedPage<T> {
+        FundsScopedPage {
+            items,
+            total: 1,
+            summary: summary(whole),
+            page: 2,
+            page_size: 20,
+            scope_version: "scope-v1".into(),
+            policy_version: 3,
+            organization_version: 4,
+            as_of: "2026-09-23T00:00:00Z".into(),
+            empty_reason: None,
+            scope_summary: "范围摘要",
+            ownership_basis: basis,
+        }
+    }
+
+    fn assert_page_keeps_scope_without_candidates(json: &serde_json::Value, basis: &str, whole: bool) {
+        assert!(json.get("owner_options").is_none());
+        assert_eq!(json["total"], 1);
+        assert_eq!(json["page"], 2);
+        assert_eq!(json["page_size"], 20);
+        assert_eq!(json["scope_version"], "scope-v1");
+        assert_eq!(json["ownership_basis"], basis);
+        assert_eq!(json["summary"]["grouped"][0]["owner_user_id"], "owner-1");
+        assert_eq!(json["summary"]["permission_limited"], !whole);
+        assert_eq!(json["summary"]["whole_total"].is_null(), !whole);
+    }
+
+    /// 资金列表不携带负责人候选；行上的负责人、经办与发票方向仍是业务事实。
+    #[test]
+    fn funds_pages_omit_owner_candidates_and_keep_row_owner_facts() {
+        let receivable = page(
+            vec![ScopedReceivableAccountRow {
+                id: "ra-1".into(),
+                sales_order_id: "so-1".into(),
+                account_seq: 1,
+                status: ReceivableAccountStatus::Open,
+                created_at: 1,
+                visible_settled_share: zero_amount(),
+                gross_total: Some(zero_amount()),
+                settled_total: Some(zero_amount()),
+                open_total: Some(zero_amount()),
+                permission_limited: false,
+                sales_owner_user_id: Some("sales-1".into()),
+                business_org_unit_id: Some("org-1".into()),
+            }],
+            "current_sales_owner_and_register_operator",
+            true,
+        );
+        let receivable_json = serde_json::to_value(&receivable).unwrap();
+        assert_page_keeps_scope_without_candidates(
+            &receivable_json,
+            "current_sales_owner_and_register_operator",
+            true,
+        );
+        assert_eq!(receivable_json["items"][0]["sales_owner_user_id"], "sales-1");
+        assert!(receivable_json["items"][0].get("owner_user_name").is_none());
+
+        let payable = page(
+            vec![ScopedPayableAccountRow {
+                id: "pa-1".into(),
+                source_document_id: "po-1".into(),
+                source_type: PayableSourceType::PurchaseOrder,
+                supplier_id: "sup-1".into(),
+                status: PayableAccountStatus::Open,
+                created_at: 1,
+                visible_settled_share: zero_amount(),
+                gross_total: None,
+                settled_total: None,
+                open_total: None,
+                permission_limited: true,
+                procurement_owner_user_id: Some("buyer-1".into()),
+                business_org_unit_id: Some("org-2".into()),
+            }],
+            "linked_purchase_owner",
+            false,
+        );
+        let payable_json = serde_json::to_value(&payable).unwrap();
+        assert_page_keeps_scope_without_candidates(&payable_json, "linked_purchase_owner", false);
+        assert_eq!(payable_json["items"][0]["procurement_owner_user_id"], "buyer-1");
+        assert!(payable_json["items"][0]["gross_total"].is_null());
+
+        let request = page(
+            vec![ScopedInvoiceRequestRow {
+                id: "irq-1".into(),
+                request_no: "IRQ-1".into(),
+                sales_order_id: "so-1".into(),
+                sales_order_no: "SO-1".into(),
+                status: InvoiceRequestStatus::Draft,
+                created_at: 1,
+                applicant_user_id: "applicant-1".into(),
+                handler_user_id: Some("handler-1".into()),
+                amount: zero_amount(),
+                permission_limited: false,
+                sales_owner_user_id: Some("sales-1".into()),
+                business_org_unit_id: Some("org-1".into()),
+            }],
+            "linked_sales_owner_applicant_and_handler",
+            true,
+        );
+        let request_json = serde_json::to_value(&request).unwrap();
+        assert_page_keeps_scope_without_candidates(
+            &request_json,
+            "linked_sales_owner_applicant_and_handler",
+            true,
+        );
+        assert_eq!(request_json["items"][0]["sales_owner_user_id"], "sales-1");
+        assert_eq!(request_json["items"][0]["applicant_user_id"], "applicant-1");
+        assert_eq!(request_json["items"][0]["handler_user_id"], "handler-1");
+
+        for direction in [InvoiceDirection::Sales, InvoiceDirection::Purchase] {
+            let invoice = page(
+                vec![ScopedInvoiceRow {
+                    id: "inv-1".into(),
+                    invoice_no: "FP-1".into(),
+                    invoice_direction: direction,
+                    invoice_kind: InvoiceKind::Blue,
+                    status: InvoiceStatus::Registered,
+                    invoice_date: BusinessDate::from_ymd(2026, 9, 23).unwrap(),
+                    created_at: 1,
+                    visible_allocated_share: zero_amount(),
+                    gross_amount: Some(zero_amount()),
+                    allocated_total: Some(zero_amount()),
+                    unallocated_amount: Some(zero_amount()),
+                    allocations: Some(Vec::new()),
+                    purchase_allocations: Some(Vec::new()),
+                    permission_limited: false,
+                }],
+                "linked_sales_and_purchase_owner_and_register_operator",
+                true,
+            );
+            let invoice_json = serde_json::to_value(&invoice).unwrap();
+            assert_page_keeps_scope_without_candidates(
+                &invoice_json,
+                "linked_sales_and_purchase_owner_and_register_operator",
+                true,
+            );
+            assert_eq!(invoice_json["items"][0]["invoice_direction"], direction.as_str());
+            assert!(invoice_json["items"][0].get("sales_owner_user_id").is_none());
+            assert!(invoice_json["items"][0].get("procurement_owner_user_id").is_none());
+        }
+    }
+}

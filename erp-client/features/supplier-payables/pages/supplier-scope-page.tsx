@@ -27,7 +27,7 @@ import {
     PreviewNote,
     PreviewSection,
 } from "@/components/business/financial-preview"
-import { ResponsibleUserFilter } from "@/features/entity-selectors/components/responsible-user-filter"
+import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
 import type { SupplierScopeListView } from "@/features/supplier-payables/api/scoped"
 import { exportSupplierScopeCsv } from "@/features/supplier-payables/lib/scoped-export"
 import {
@@ -50,9 +50,17 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 const SCOPE_VIEWS = ["payable", "payment", "purchase_invoice"] as const
 const toolbarPrefix = "supplier-payables-scope-toolbar"
 
-/** 供应商往来范围页：采购负责人/付款/收票经办人分别查询，跨页绑定范围版本。 */
+function selectedOrgUnitIds(value: string): string[] {
+    return value
+        .split(",")
+        .map((part) => part.trim())
+        .filter(Boolean)
+}
+
+/** 供应商往来范围页：应付、付款、进项分配的人员筛选都走采购目录。 */
 export function SupplierScopePage() {
     const urlState = useSupplierScopeUrlState()
+    const directoryOrgUnitIds = selectedOrgUnitIds(urlState.orgDraft)
     const listQuery = useSupplierScopeListQuery(urlState.query)
     const [preview, setPreview] = React.useState<{
         kind: "payable" | "payment"
@@ -370,20 +378,25 @@ export function SupplierScopePage() {
                         onResetMore={urlState.resetMoreFilters}
                         primaryFilters={
                             <div className="w-56 max-w-full min-w-0">
-                                <ResponsibleUserFilter
+                                <PersonDirectoryFilter
                                     id={`${toolbarPrefix}-procurement-owner`}
+                                    category="procurement"
                                     label="采购负责人"
                                     hideLabel
                                     value={urlState.procurementOwnerDraft}
                                     onChange={urlState.setProcurementOwnerDraft}
-                                    options={data?.ownerOptions ?? []}
+                                    orgUnitIds={directoryOrgUnitIds}
+                                    includeDescendants={
+                                        urlState.descendantsDraft
+                                    }
                                 />
                             </div>
                         }
                         morePanel={
                             <div className="grid min-w-0 gap-5">
-                                <ResponsibleUserFilter
+                                <PersonDirectoryFilter
                                     id={`${toolbarPrefix}-operator`}
+                                    category="business"
                                     label={
                                         urlState.view === "payment"
                                             ? "付款经办人"
@@ -394,7 +407,10 @@ export function SupplierScopePage() {
                                     }
                                     value={urlState.operatorDraft}
                                     onChange={urlState.setOperatorDraft}
-                                    options={data?.ownerOptions ?? []}
+                                    orgUnitIds={directoryOrgUnitIds}
+                                    includeDescendants={
+                                        urlState.descendantsDraft
+                                    }
                                 />
                                 <OrganizationUnitFilter
                                     id={`${toolbarPrefix}-org`}

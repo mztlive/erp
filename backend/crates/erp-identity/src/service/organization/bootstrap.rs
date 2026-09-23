@@ -167,8 +167,7 @@ mod tests {
 
     #[test]
     fn existing_tree_is_left_untouched() {
-        let mut state = OrganizationState::default();
-        state.version = 1;
+        let mut state = OrganizationState { version: 1, ..OrganizationState::default() };
         state.units.push(
             crate::entity::organization::OrgUnit::new(
                 "sales-dept".into(),

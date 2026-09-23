@@ -1,5 +1,8 @@
 /// 管理层推荐权限。
 pub(crate) const MANAGEMENT_PERMISSIONS: &[&str] = &[
+    "warehouse:list",
+    "business_person:list",
+    "settlement_party:list",
     "procurement_responsibility:list",
     "finance_responsibility:list",
     "admin:list",
@@ -20,6 +23,8 @@ pub(crate) const MANAGEMENT_PERMISSIONS: &[&str] = &[
     "document_attachment:list",
     "business_document:list",
     "business_document:detail",
+    "sales_person:list",
+    "procurement_person:list",
     "customer:list",
     "customer:detail",
     "customer_scope:detail",

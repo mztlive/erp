@@ -35,8 +35,6 @@ describe("listProducts", () => {
             ],
             total: 1,
             empty_reason: null,
-            owner_options: [{ value: "user-1", label: "张三" }],
-            procurement_owner_options: [{ value: "buyer-1", label: "李四" }],
         })
     })
 
@@ -58,10 +56,7 @@ describe("listProducts", () => {
             }),
         )
         expect(result.rows[0]?.ownerUserId).toBe("user-1")
-        expect(result.ownerOptions).toEqual([
-            { value: "user-1", label: "张三" },
-        ])
-        expect(result.procurementOwnerOptions[0]?.value).toBe("buyer-1")
+        expect(fetchCompleteList).toHaveBeenCalledTimes(1)
         expect(result.emptyReason).toBeNull()
     })
 })
@@ -88,7 +83,12 @@ describe("product filter permissions", () => {
     })
     it("requests only granted option resources", async () => {
         fetchAllPages.mockResolvedValue([
-            { id: "cat-1", category_code: "C1", name: "食品" },
+            {
+                id: "cat-1",
+                category_code: "C1",
+                name: "食品",
+                status: "active",
+            },
         ])
         const result = await fetchProductFilterOptions([
             "product_category:list",

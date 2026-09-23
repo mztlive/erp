@@ -63,6 +63,12 @@ pub async fn ensure_authorization(db: &Database) -> Result<()> {
     create_indexes(db, DATA_SCOPES, data_scope_indexes()).await?;
     remove_obsolete_scope_index(db).await?;
     create_indexes(db, AUDIT_EVENTS, audit_event_indexes()).await?;
+    create_indexes(
+        db,
+        <mongodb::Database as AccessControlExt>::PERSON_QUERY_QUALIFICATIONS,
+        person_query_qualification_indexes(),
+    )
+    .await?;
     ensure_organizations(db).await?;
     Ok(())
 }
@@ -81,6 +87,24 @@ fn account_indexes() -> Vec<IndexModel> {
         named_index(
             "idx_accounts_kind_active_created",
             doc! { "kind": 1, "deleted_at": 1, "created_at": -1 },
+        ),
+        named_index("idx_accounts_kind_active_name", doc! { "kind": 1, "deleted_at": 1, "name": 1, "id": 1 }),
+    ]
+}
+
+/// 返回人员查询资格的身份唯一约束和按类别读取索引。
+///
+/// 同一账号同一类别只有一条资格。终止后保留该行，初始化不能再插入第二条。
+fn person_query_qualification_indexes() -> Vec<IndexModel> {
+    vec![
+        unique_index("uk_person_query_qualifications_id", doc! { "id": 1 }),
+        unique_index(
+            "uk_person_query_qualifications_account_category",
+            doc! { "account_id": 1, "category": 1 },
+        ),
+        named_index(
+            "idx_person_query_qualifications_category_status",
+            doc! { "category": 1, "status": 1, "account_id": 1 },
         ),
     ]
 }

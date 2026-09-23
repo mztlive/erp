@@ -3,7 +3,7 @@
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
-use application_core::{AuditActor, FilterOption, FilteredPage};
+use application_core::{AuditActor, OwnershipPage};
 use erp_catalog::ports::supply::CatalogSupplyQueryPort;
 use erp_catalog::repository::prelude::*;
 use erp_catalog::service::catalog::{prepare_product_list, product_page_view};
@@ -11,8 +11,6 @@ use erp_catalog::{
     CatalogAccess, CatalogDataScopePort, CatalogExt, CatalogReadScope, ProductFilter, ProductListParams,
     ProductListView, ProductView,
 };
-use erp_identity::AccessControlExt;
-use erp_identity::repository::prelude::*;
 use persistence_core::Transactional;
 
 use super::CatalogCenterReadService;
@@ -27,7 +25,7 @@ impl CatalogCenterReadService {
     /// * `actor` - 已认证操作人
     ///
     /// # 返回
-    /// 返回分页、维护人候选、采购负责人候选与范围元信息。
+    /// 返回分页与范围元信息；人员候选由独立目录提供。
     ///
     /// # 错误
     /// 缺范围版本的后续页、范围变化、筛选非法或仓储失败时拒绝。
@@ -42,12 +40,8 @@ impl CatalogCenterReadService {
             return Err(crate::support::data_scope_changed("数据范围已变化，请从第一页刷新"));
         }
         Ok(ProductListView {
-            data: FilteredPage {
-                owner_options: snapshot.owner_options,
-                ownership_basis: "product_maintainer",
-                page: snapshot.page,
-            },
-            procurement_owner_options: snapshot.procurement_owner_options,
+            data: OwnershipPage { ownership_basis: "product_maintainer", page: snapshot.page },
+
             scope_version: snapshot.scope_version,
             policy_version: snapshot.policy_version,
             organization_version: snapshot.organization_version,
@@ -104,8 +98,7 @@ impl CatalogCenterReadService {
 
 struct ProductSnapshot {
     page: application_core::PageView<ProductView>,
-    owner_options: Vec<FilterOption>,
-    procurement_owner_options: Vec<FilterOption>,
+
     scope_version: String,
     policy_version: u64,
     organization_version: u64,
@@ -133,18 +126,11 @@ async fn build_snapshot(
     let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
     page.total.hash(&mut fingerprint);
     context.scope_version = format!("{}:{:x}", context.scope_version, fingerprint.finish());
-    let owner_ids: Vec<String> =
-        crate::support::dedup_sorted(page.items.iter().map(|row| row.maintainer_user_id.clone()));
-    let owner_options = db.accounts().filter_options(&owner_ids, executor).await?;
-    let procurement_ids =
-        params.procurement_owner_user_ids.as_ref().map(|ids| ids.as_slice().to_vec()).unwrap_or_default();
-    let procurement_owner_options = db.accounts().filter_options(&procurement_ids, executor).await?;
     let view = product_page_view(page, &filter)?;
     Ok(ProductSnapshot {
         no_scope,
         page: view,
-        owner_options,
-        procurement_owner_options,
+
         scope_version: context.scope_version,
         policy_version: context.policy_version,
         organization_version: context.organization_version,

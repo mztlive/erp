@@ -1,5 +1,7 @@
 "use client"
 
+import { SelectorQueryFeedback } from "@/components/business/selector-query-feedback"
+
 import * as React from "react"
 import { useQuery } from "@tanstack/react-query"
 
@@ -33,8 +35,9 @@ async function searchEligibleCounterparties(
     purpose: "filter" | "form",
 ) {
     const parties = await searchParties({ query, purpose })
+    if (purpose === "filter") return parties
     const eligibility = await Promise.all(
-        parties.map(async (party) => {
+        parties.items.map(async (party) => {
             const page = await apiGet<Page<ReceivableAccountIdentity>>(
                 "/admin/receivable-accounts",
                 {
@@ -46,15 +49,18 @@ async function searchEligibleCounterparties(
             return page.total > 0 ? party : null
         }),
     )
-    return eligibility.filter(
-        (party): party is SettlementPartyComboboxItem => party != null,
-    )
+    return {
+        ...parties,
+        items: eligibility.filter(
+            (party): party is SettlementPartyComboboxItem => party != null,
+        ),
+    }
 }
 
 /** 只展示已有应收子账的往来主体，避免通用主体搜索扩大核销资格。 */
 export function ReceivableCounterpartySearchCombobox({
     purpose = "filter",
-    selectedItem,
+    selectedItem: _selectedItem,
     onItemChange,
     value,
     onValueChange,
@@ -70,18 +76,28 @@ export function ReceivableCounterpartySearchCombobox({
             { search, purpose },
         ],
         queryFn: () => searchEligibleCounterparties(search, purpose),
-        staleTime: 5 * 60 * 1000,
-        placeholderData: (previous) => previous,
+        staleTime: 0,
     })
     const selected = useQuery({
-        queryKey: ["entity-selectors", "party", "detail", value ?? ""],
-        queryFn: () => fetchPartyOption(value ?? ""),
+        queryKey: [
+            "customer-receivables",
+            "counterparty-selected",
+            purpose,
+            value ?? "",
+        ],
+        queryFn: async () => {
+            if (purpose === "filter")
+                return fetchPartyOption(value ?? "", purpose)
+            const options = await searchEligibleCounterparties("", purpose)
+            return options.items.find((item) => item.partyId === value) ?? null
+        },
         enabled: Boolean(value),
-        staleTime: 5 * 60 * 1000,
+        staleTime: 0,
     })
-    const selectedOption = selectedItem ?? selected.data
+    const selectedOption =
+        selected.isError || selected.isFetching ? undefined : selected.data
     const rows = React.useMemo(() => {
-        const options = list.data ?? []
+        const options = list.isError || list.isFetching ? [] : (list.data?.items.filter((item) => item.partyId !== value) ?? [])
         if (
             !selectedOption ||
             options.some((item) => item.partyId === selectedOption.partyId)
@@ -89,25 +105,42 @@ export function ReceivableCounterpartySearchCombobox({
             return options
         }
         return [selectedOption, ...options]
-    }, [list.data, selectedOption])
+    }, [list.data, list.isError, list.isFetching, selectedOption, value])
 
     return (
-        <SettlementPartyCombobox
-            {...props}
-            value={value}
-            onValueChange={(id) => {
-                onValueChange(id)
-                onItemChange?.(rows.find((item) => item.partyId === id))
-            }}
-            parties={rows}
-            onSearchChange={setInput}
-            filterMode="remote"
-            loading={list.isFetching || selected.isFetching}
-            emptyLabel={
-                list.isError
-                    ? getErrorMessage(list.error, "往来主体加载失败，请重试")
-                    : emptyLabel
-            }
-        />
+        <div className="min-w-0">
+            <SettlementPartyCombobox
+                {...props}
+                value={value}
+                onValueChange={(id) => {
+                    onValueChange(id)
+                    onItemChange?.(rows.find((item) => item.partyId === id))
+                }}
+                parties={rows}
+                onSearchChange={setInput}
+                filterMode="remote"
+                loading={list.isFetching || selected.isFetching}
+                emptyLabel={
+                    list.isError || selected.isError
+                        ? getErrorMessage(
+                              list.error ?? selected.error,
+                              "往来主体加载失败，请重试",
+                          )
+                        : list.data?.empty_reason === "no_scope"
+                          ? "当前角色无此目录的数据范围，请申请权限"
+                          : emptyLabel
+                }
+            />
+            <SelectorQueryFeedback
+                id={props.id}
+                failed={list.isError || selected.isError}
+                error={list.error ?? selected.error}
+                noScope={!list.isFetching && !list.isError && list.data?.empty_reason === "no_scope"}
+                onRetry={() => {
+                    void list.refetch()
+                    if (value) void selected.refetch()
+                }}
+            />
+        </div>
     )
 }

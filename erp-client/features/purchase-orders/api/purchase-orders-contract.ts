@@ -25,7 +25,6 @@ export type PurchaseOrderListResult = {
     scopeSummary?: string
     asOf?: string
     ownershipBasis?: string
-    ownerOptions?: { value: string; label: string }[]
     rows: PurchaseOrderListItem[]
     total: number
     page: number

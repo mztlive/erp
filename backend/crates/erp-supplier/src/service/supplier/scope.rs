@@ -1,6 +1,6 @@
 //! 供应商列表的一致授权快照；范围与业务版本跨页携带。
 
-use application_core::{AuditActor, FilterOption, FilteredPage};
+use application_core::{AuditActor, OwnershipPage};
 use persistence_core::Transactional;
 use serde::Serialize;
 use validator::Validate;
@@ -18,11 +18,10 @@ use crate::repository::{SupplierExt, SupplierListSearchInput};
 /// 列表响应保持现有字段并声明独立的授权时点及版本。
 #[derive(Serialize)]
 pub struct SupplierListView {
-    /// 分页结果、维护人候选与归属口径。
+    /// 分页结果与归属口径。
     #[serde(flatten)]
-    pub data: FilteredPage<SupplierView>,
-    /// 能力负责人候选，只收窄不授予可见权。
-    pub capability_owner_options: Vec<FilterOption>,
+    pub data: OwnershipPage<SupplierView>,
+
     /// 跨页与导出必须原样回传的范围版本。
     pub scope_version: String,
     /// RBAC 策略版本。
@@ -43,8 +42,7 @@ struct SupplierSnapshot {
     total: i64,
     page: u64,
     page_size: u32,
-    owner_options: Vec<FilterOption>,
-    capability_owner_options: Vec<FilterOption>,
+
     context: SupplierResolvedScope,
     no_scope: bool,
 }
@@ -127,8 +125,7 @@ impl SupplierService {
                             total: 0,
                             page: input.page,
                             page_size: input.page_size,
-                            owner_options: Vec::new(),
-                            capability_owner_options: Vec::new(),
+
                             context,
                             no_scope,
                         });
@@ -188,9 +185,8 @@ fn to_list_view(snapshot: SupplierSnapshot) -> SupplierListView {
         as_of: snapshot.context.as_of.as_utc().to_rfc3339(),
         empty_reason: snapshot.no_scope.then_some("no_scope"),
         scope_summary: "供应商整体维护人及其业务组织范围",
-        capability_owner_options: snapshot.capability_owner_options,
-        data: FilteredPage {
-            owner_options: snapshot.owner_options,
+
+        data: OwnershipPage {
             ownership_basis: "supplier_maintainer",
             page: application_core::PageView {
                 items: snapshot.items,
@@ -305,9 +301,6 @@ async fn hydrate_snapshot(args: HydrateArgs<'_>) -> Result<SupplierSnapshot> {
     let (parties, revisions) = party.list_with_current_revisions(&bundle.party_ids, executor).await?;
     let entity_names = load_entity_names(party, &bundle.profiles, executor).await?;
     let maintainer_ids = unique_ids(bundle.page.items.iter().map(|row| row.maintainer_user_id.clone()));
-    let capability_owners = unique_ids(bundle.capabilities.iter().map(|item| item.owner_user_id.clone()));
-    let owner_options = accounts.filter_options(&maintainer_ids).await?;
-    let capability_owner_options = accounts.filter_options(&capability_owners).await?;
     let names = accounts.names_by_ids(&maintainer_ids).await?;
     let items = assemble_supplier_views(SupplierViewAssembleInput {
         rows: bundle.page.items,
@@ -320,16 +313,7 @@ async fn hydrate_snapshot(args: HydrateArgs<'_>) -> Result<SupplierSnapshot> {
         maintainer_names: names,
         as_of: erp_core::common::time::BusinessDate::today(),
     });
-    Ok(SupplierSnapshot {
-        no_scope,
-        items,
-        total,
-        page,
-        page_size,
-        owner_options,
-        capability_owner_options,
-        context,
-    })
+    Ok(SupplierSnapshot { no_scope, items, total, page, page_size, context })
 }
 
 async fn expand_org_filter(

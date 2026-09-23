@@ -1,15 +1,11 @@
 import assert from "node:assert/strict"
-import test from "node:test"
+import { test } from "vitest"
 
 import {
     classifyFormalCommandError,
     FormalCommandKeyLedger,
-} from "../lib/formal-command.ts"
-import {
-    fromFetchError,
-    fromHttpResponse,
-    fromParse,
-} from "../lib/api/errors.ts"
+} from "@/lib/formal-command"
+import { fromFetchError, fromHttpResponse, fromParse } from "@/lib/api/errors"
 
 test("unknown result reuses the original key and immutable payload", () => {
     let sequence = 0

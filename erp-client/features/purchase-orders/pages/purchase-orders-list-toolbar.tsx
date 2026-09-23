@@ -1,8 +1,4 @@
 "use client"
-import {
-    ResponsibleUserFilter,
-    type ResponsibleUserOption,
-} from "@/features/entity-selectors/components/responsible-user-filter"
 
 import * as React from "react"
 
@@ -11,16 +7,17 @@ import {
     ListWorkspaceFilterBar,
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
+import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
 import type {
     PurchaseOrderAppliedChip,
     PurchaseOrderFilterKey,
 } from "@/features/purchase-orders/hooks/use-purchase-orders-list-filters"
+
 const prefix = "procurement-orders-list"
 
 export type PurchaseOrdersListToolbarProps = {
     ownerDraft: string
     setOwnerDraft: (value: string) => void
-    ownerOptions: readonly ResponsibleUserOption[]
     searchInputRef: React.RefObject<HTMLInputElement | null>
     searchDraft: string
     setSearchDraft: React.Dispatch<React.SetStateAction<string>>
@@ -37,7 +34,6 @@ export type PurchaseOrdersListToolbarProps = {
 export function PurchaseOrdersListToolbar({
     ownerDraft,
     setOwnerDraft,
-    ownerOptions,
     searchInputRef,
     searchDraft,
     setSearchDraft,
@@ -70,13 +66,13 @@ export function PurchaseOrdersListToolbar({
             }
             primaryFilters={
                 <div className="w-56 max-w-full min-w-0">
-                    <ResponsibleUserFilter
+                    <PersonDirectoryFilter
                         id="procurement-orders-list-owner"
+                        category="procurement"
                         label="采购负责人"
                         hideLabel
                         value={ownerDraft}
                         onChange={setOwnerDraft}
-                        options={ownerOptions}
                     />
                 </div>
             }

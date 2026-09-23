@@ -126,9 +126,7 @@ export function useSupplierOrdersListColumns({
                 enableSorting: false,
                 cell: ({ row }) => (
                     <span className="truncate text-[13px]">
-                        {row.original.followUpUserName ||
-                            row.original.followUpUserId ||
-                            "—"}
+                        {row.original.followUpUserName || "—"}
                     </span>
                 ),
             },
@@ -139,9 +137,7 @@ export function useSupplierOrdersListColumns({
                 enableSorting: false,
                 cell: ({ row }) => (
                     <span className="truncate text-[13px]">
-                        {row.original.handlerUserName ||
-                            row.original.handlerUserId ||
-                            "—"}
+                        {row.original.handlerUserName || "—"}
                     </span>
                 ),
             },

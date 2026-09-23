@@ -1,7 +1,8 @@
 "use client"
 
 import type { Dispatch, SetStateAction } from "react"
-import { OptionCombobox, OwnerCombobox } from "@/components/business"
+import { OptionCombobox } from "@/components/business"
+import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
 import { ListWorkspaceFilterField } from "@/components/business/list-workspace"
 import {
     ContractSearchCombobox,
@@ -16,7 +17,6 @@ import {
     SALES_ORDER_REVIEW_STATUS_OPTIONS,
 } from "@/features/sales-orders/lib/filter-orders"
 import type { SalesOrdersListFilterDraft } from "@/features/sales-orders/lib/sales-orders-list-filters"
-import { useOwnerOptionsQuery } from "@/hooks/use-options"
 
 const progressFields = [
     {
@@ -70,7 +70,6 @@ export function SalesOrdersListFilterPanel({
     draft: SalesOrdersListFilterDraft
     onDraftChange: Dispatch<SetStateAction<SalesOrdersListFilterDraft>>
 }) {
-    const owners = useOwnerOptionsQuery()
     const renderEnum = ({
         key,
         id,
@@ -191,18 +190,19 @@ export function SalesOrdersListFilterPanel({
                         htmlFor="sales-orders-list-filter-created-by"
                         label="创建人"
                     >
-                        <OwnerCombobox
+                        <PersonDirectoryFilter
                             id="sales-orders-list-filter-created-by"
-                            owners={owners.data ?? []}
-                            loading={owners.isFetching}
-                            value={draft.createdBy || undefined}
-                            onValueChange={(createdBy) =>
+                            category="business"
+                            selectionMode="single"
+                            label="创建人"
+                            hideLabel
+                            value={draft.createdBy}
+                            onChange={(createdBy) =>
                                 onDraftChange((current) => ({
                                     ...current,
                                     createdBy: createdBy ?? "",
                                 }))
                             }
-                            placeholder="全部创建人"
                         />
                     </ListWorkspaceFilterField>
                 </div>

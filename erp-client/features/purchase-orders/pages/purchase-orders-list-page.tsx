@@ -163,7 +163,6 @@ export function PurchaseOrdersListPage() {
                     <PurchaseOrdersListToolbar
                         ownerDraft={filters.ownerDraft}
                         setOwnerDraft={filters.setOwnerDraft}
-                        ownerOptions={ctrl.listQuery.data?.ownerOptions ?? []}
                         searchInputRef={ctrl.searchInputRef}
                         searchDraft={filters.searchDraft}
                         setSearchDraft={filters.setSearchDraft}

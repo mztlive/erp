@@ -148,10 +148,6 @@ export function SuppliersListPage() {
                         }
                         loading={state.listQuery.isFetching}
                         failed={state.listQuery.isError}
-                        ownerOptions={state.listQuery.data?.ownerOptions ?? []}
-                        capabilityOwnerOptions={
-                            state.listQuery.data?.capabilityOwnerOptions ?? []
-                        }
                     />
                 }
                 tableClassName={suppliersListStyles.table}

@@ -9,20 +9,6 @@ use crate::error::{Error, Result};
 /// Port customer uses to validate sales accounts and resolve display names.
 #[async_trait]
 pub trait AccountFactPort: Send + Sync {
-    /// 生成业务查询用途的人员候选，不用于任务改派。
-    ///
-    /// # 参数
-    /// * `ids` - 调用方按业务可见对象限定的人员 ID 集合
-    ///
-    /// # 返回值
-    /// 返回稳定 ID 与可区分同名、停用状态的显示标签。
-    ///
-    /// # 错误
-    /// 未接线或查询失败必须报错，不得退化为全账号候选。
-    async fn filter_options(&self, _ids: &[String]) -> Result<Vec<application_core::FilterOption>> {
-        Err(Error::Internal("人员候选端口未接线".into()))
-    }
-
     /// Reject when the account does not exist or cannot log in.
     ///
     /// # Parameters

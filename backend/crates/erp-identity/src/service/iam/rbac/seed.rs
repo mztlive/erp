@@ -9,7 +9,7 @@ use crate::entity::access_control::{DataScope, DataScopeData, DataScopeId, DataS
 use crate::entity::{Permission, PermissionSet, RoleData};
 use crate::error::{Error, Result};
 use crate::repository::prelude::*;
-use crate::service::access_control::consumers::validate_binding;
+use crate::service::access_control::consumers::{validate_binding, validate_scope_type};
 use crate::{AccessControlExt, MongoCasbinAdapter};
 
 impl RbacService {
@@ -237,6 +237,7 @@ fn validate_scope_manifest(role: &str, resource: &str, definitions: &[DataScopeD
         }
         data.binding.validate(data.scope_type, &data.scope_targets)?;
         validate_binding(&data.binding)?;
+        validate_scope_type(&data.binding.resource, data.scope_type)?;
     }
     Ok(())
 }

@@ -86,7 +86,19 @@ function BusinessObjectCombobox({
     "aria-describedby": ariaDescribedBy,
     className,
 }: BusinessObjectComboboxProps) {
-    const selected = useStickySelected(items, value, (item) => item.id)
+    const resolved = useStickySelected(
+        items,
+        value,
+        (item) => item.id,
+        filterMode !== "remote",
+    )
+    // 远程授权未确认时仅保留身份，不能回退到组件内保存的旧名称。
+    const selected: BusinessObjectOption | null = resolved ?? (value ? {
+        id: value,
+        code: "",
+        label: loading ? "已选对象（正在核对）" : "已选对象（当前不可用）",
+        status: { label: "待核对", tone: "neutral" },
+    } : null)
 
     return (
         <Combobox

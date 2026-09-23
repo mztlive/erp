@@ -275,8 +275,9 @@ export type SupplierOrderListResult = {
     emptyReason?: string | null
     scopeVersion?: string
     ownershipBasis?: string
-    ownerOptions: ReadonlyArray<{ value: string; label: string }>
-    handlerOptions: ReadonlyArray<{ value: string; label: string }>
+    /** 未迁移。页内跟进人候选，不是采购人员目录。行姓名不读这里。 */
+
+    /** 未迁移。当前开放异常任务处理人的页内候选。行姓名不读这里。 */
 }
 
 export type ExportCommand = {

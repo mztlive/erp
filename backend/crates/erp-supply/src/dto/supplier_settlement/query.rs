@@ -526,15 +526,6 @@ pub struct SupplierSettlementStatementListView {
     /// 当前负责人权威来源。
     #[serde(default)]
     pub ownership_basis: &'static str,
-    /// 对账负责人候选。
-    #[serde(default)]
-    pub owner_options: Vec<application_core::FilterOption>,
-    /// 差异处理人候选。
-    #[serde(default)]
-    pub operator_options: Vec<application_core::FilterOption>,
-    /// 当前复核人候选。
-    #[serde(default)]
-    pub handler_options: Vec<application_core::FilterOption>,
 }
 
 /// 供应商结算单分页视图（复用 D32 的契约形状）。

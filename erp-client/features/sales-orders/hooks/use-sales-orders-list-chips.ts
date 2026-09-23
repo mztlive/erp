@@ -1,6 +1,6 @@
 import * as React from "react"
 
-import { useOwnerOptionsQuery } from "@/hooks/use-options"
+import { usePersonDirectorySelected } from "@/features/entity-selectors/hooks/person-directory"
 import {
     salesOrderCloseLabel,
     salesOrderCollectionLabel,
@@ -31,7 +31,10 @@ export function useSalesOrdersListChips(
     items: readonly SalesOrderListItem[],
     removeFilter: (key: SalesOrdersListFilterKey) => void,
 ): readonly SalesOrdersAppliedChip[] {
-    const ownerOptionsQuery = useOwnerOptionsQuery()
+    const creatorQuery = usePersonDirectorySelected(
+        "business",
+        url.createdBy ? [url.createdBy] : [],
+    )
     // 来源锁定条件命中时，当前页所有行都属于同一客户/合同，可用行数据解析业务名
     const sample = items[0]
 
@@ -84,9 +87,11 @@ export function useSalesOrdersListChips(
                 onClear: () => removeFilter("orgUnitIds"),
             })
         if (url.createdBy) {
-            const ownerLabel = ownerOptionsQuery.data?.find(
-                (owner) => owner.userId === url.createdBy,
-            )?.displayName
+            const ownerLabel = creatorQuery.isSuccess && !creatorQuery.isFetching
+                ? creatorQuery.data?.items.find(
+                      (owner) => owner.id === url.createdBy,
+                  )?.name
+                : undefined
             chips.push({
                 key: "createdBy",
                 label: `创建人：${ownerLabel ?? "已选创建人"}`,
@@ -176,7 +181,9 @@ export function useSalesOrdersListChips(
         }
         return chips
     }, [
-        ownerOptionsQuery.data,
+        creatorQuery.data,
+        creatorQuery.isSuccess,
+        creatorQuery.isFetching,
         removeFilter,
         sample,
         url.closeStatus,

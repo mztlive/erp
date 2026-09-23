@@ -1,14 +1,14 @@
 # 列表筛选候选独立查询执行合同
 
-版本：1.0
+版本：1.4
 
 制定日期：2026-09-23
 
-状态：执行合同已建立；业务代码、权限配置、初始化及运行验收均未实施。
+状态：R0—R5 代码、用途复核及本地检查已完成；生产构建受外部字体下载阻塞，真实环境验收待执行。第 11 章是当前实现、配置和验证状态的权威清单；第 10 章定义必须持续满足的行为。不得将本地检查通过登记为真实业务验收通过。
 
 适用范围：管理端列表、查询型报表、目录页面中的人员、组织、客户、供应商、结算主体、仓库及字典筛选。覆盖后端随列表返回候选、前端从查询结果反推候选两种实现。
 
-实施入口：后续 agent 必须先读本文件、根目录规则和目标子项目 `AGENTS.md`，按第 8 章批次执行，第 9 章逐项登记。不得将本文的目标状态登记为已实现。
+实施入口：后续 agent 必须先读本文件、根目录规则和目标子项目 `AGENTS.md`，按第 11 章未完成项及第 8 章文件边界执行，并更新第 11 章验收状态。不得将本文的目标状态登记为已实现。
 
 ## 1. 产品规则与完成边界
 
@@ -75,7 +75,7 @@
 
 ### 3.2 其他人员与对象资源
 
-1. 采购、维护人、能力负责人、制单人、经办人、任务处理人分别登记候选语义。相同资格与相同授权对象可复用接口；不同资格或授权口径不得仅因为都返回 `id/name` 就合并。
+1. 采购、维护人、能力负责人、制单人、经办人、任务处理人分别登记候选语义。销售／采购属于明确的岗位类别；维护人、经办人、申请人等字段在普通查询中使用第 10.1 节的后台人员目录，无需逐个新建岗位资格记录。具有单独历史语义或明确限定资格的字段另行登记。不得因同处一个页面就将所有人员字段接入销售／采购目录。
 2. 新增人员类别前先登记“接口、资源动作、拥有领域、资格来源、组织映射、状态规则、默认授权”。禁止每个页面新增一套人员目录，也禁止客户端传任意 `resource` 或 `permission` 绕过服务端固定注册。
 3. 销售、采购混合筛选必须按页面字段语义登记允许的类别；服务端或前端组合均须保留每一类自身授权，不得以有销售查询权获取采购候选。
 4. 客户、供应商、仓库已有列表接口符合轻量、分页、资格及授权要求时直接复用；若绑定管理权限、强制启用状态或携带沉重候选聚合，则在拥有领域提供独立轻量查询。不得为了选择器授予账号／主数据维护权限。
@@ -148,7 +148,7 @@
 
 ## 6. 静态盘点与逐模块交付清单
 
-盘点日期：2026-09-23。以下为源码入口，不代表运行验证。路径前缀 `B` 为 `backend/crates/`，`F` 为 `erp-client/features/`。后续执行者必须按当前工作树复核调用链；同一业务的多个 Tab 或多个返回字段不得只改其中一个。
+盘点日期：2026-09-23。以下登记迁移范围及原耦合入口，不表示当前仍存在该耦合；当前实现见第 11 章。路径前缀 `B` 为 `backend/crates/`，`F` 为 `erp-client/features/`。后续执行者必须按当前工作树复核调用链；同一业务的多个 Tab 或多个返回字段不得只改其中一个。
 
 ### 6.1 已确认的普通候选耦合
 
@@ -163,22 +163,22 @@
 | Q07 | 供应商：维护人、能力负责人 | `erp-supplier/src/service/supplier/scope.rs` | `master-data/api/lists/supplier.ts`；`api/resource-queries.ts` | 按字段资格接独立目录，不把两个负责人当成同一岗位 |
 | Q08 | 供应商供给：维护人、负责采购 | `erp-read-models/src/supplier_center/offering/scope.rs`、`dto.rs` | `supplier-offerings/pages/supplier-offerings-page.tsx`；`types.ts` | 当前页／已选 ID 候选替换；表格展示也在消费 owner options，须解耦 |
 | Q09 | 供应商订单：跟进人、处理人 | `erp-processes/src/supply_execution/list.rs`；`erp-supply/src/dto/supplier_fulfillment_scope.rs` | `supplier-orders/api/list.ts` | 跟进人／处理人查询目录；当前代码用候选补行姓名，删除前先补业务行字段 |
-| Q10 | 供应商结算：owner/operator/handler | `erp-supply/src/service/supplier_settlement/query.rs`；`dto/supplier_settlement/query.rs` | `supplier-settlements/api/settlements-list.ts`、`settlements-wire.ts` | 三类人员候选目前从页内 prepared_by／difference_handler_user_id／reviewed_by 生成；先核对实际字段语义再接独立目录 |
+| Q10 | 供应商结算：owner/operator/handler | `erp-supply/src/service/supplier_settlement/query.rs`；`dto/supplier_settlement/query.rs` | `supplier-settlements/api/settlements-list.ts`、`settlements-wire.ts` | 三类候选使用后台人员目录；owner 匹配 prepared_by，operator 匹配 difference_handler_user_id，handler 匹配当前开放复核任务处理人 |
 | Q11 | 客户应收、回款、开票申请 | `erp-read-models/src/finance/funds_scope/{receivable,receipt,request,rows}.rs` | `customer-receivables/api/scoped-view.ts`；`invoice-requests/scoped-view.ts` | 销售人员目录；保留资金份额授权与金额口径 |
 | Q12 | 供应商应付、付款、进项分配 | `erp-read-models/src/finance/funds_scope/{payable,payment,allocation,rows}.rs` | `supplier-payables/api/scoped-view.ts`；沿各 handler 查其他消费方 | 采购人员目录；不得因替换候选放宽关联采购单授权 |
 | Q13 | 发票：销售／采购混合负责人 | `erp-read-models/src/finance/funds_scope/invoice.rs` | 沿 `funds-scope.ts` 与客户／供应商往来发票 Tab 复核 | 按发票方向登记目录类别，不能无条件并入全部销售及采购 |
 | Q14 | 客户质量现任视图：负责人、组织 | `erp-read-models/src/customer_quality/current.rs`、`dto.rs` | `customer-quality/` 内查询、类型与筛选组件 | 销售人员／组织目录；当前来源为授权客户事实，仍不满足零业务候选要求 |
 | Q15 | 履约队列：仓库 | `erp-read-models/src/workbench/fulfillment_queue.rs` 及其 repository_page 来源 | `fulfillment-operations/api/queue.ts` | 核对仓库集合是否由任务反推；普通仓库筛选接仓库目录，任务执行资格保持原规则 |
 
-Q10 的 `handler_options` 当前取 `reviewed_by`，不能仅凭字段名替换为“当前待办处理人”。若既有参数、文案、字段事实不一致，先在本批登记中锁定原合同语义；实质业务纠错另列，不随候选拆分默改。
+Q10 的 `handler_user_ids` 固定表示当前开放复核任务处理人，与 `organization-data-scope-contract.md` 和 S4 查询参数合同一致；没有开放复核任务时不匹配。`reviewed_by` 保留实际已复核人事实，不作为该参数的匹配条件。已复核人查询不属于本次范围，后续须以独立参数和独立接口合同扩展，不得复用或合并 `handler_user_ids`。
 
 ### 6.2 扩展盘点、显式例外与公共收尾
 
 | ID | 入口／对象 | 分类与执行要求 |
 | --- | --- | --- |
 | Q16 | `B/erp-read-models/src/customer_quality/history.rs`、`finance/actual_profit_loss/{projection,attribution,dto}.rs` | 历史人员／组织例外；独立历史查询，保留冻结归属，不接当前人员目录 |
-| Q17 | `F/access-audit/pages/hooks/use-access-audit-page.ts` 的 `actionOptions` | 当前从事件结果生成动作候选；改用审计动作权威注册表，允许选出零事件 |
-| Q18 | `F/actual-profit-loss/hooks/use-profit-loss-filter-presentation.ts` 的 `costTypeOptions` | 当前取 `costComposition`；改用成本类型权威字典。福利场景已来自常量，复核后保留 |
+| Q17 | `F/access-audit/pages/hooks/use-access-audit-page.ts` 的 `actionOptions` | 原事件结果候选改用审计动作权威注册表，允许选出零事件 |
+| Q18 | `F/actual-profit-loss/hooks/use-profit-loss-filter-presentation.ts` 的 `costTypeOptions` | 原 `costComposition` 候选改用成本类型权威字典。福利场景已来自常量，复核后保留 |
 | Q19 | `F/entity-selectors/api/{customers,parties,suppliers,warehouses,contracts}.ts`；`hooks/queries.ts` | 已有独立查询不自动算合格：核对 DataScope、用途、固定第一页、强制 active、回显吞错与缓存。业务录入和查询筛选不能共用隐含资格 |
 | Q20 | `F/master-data/api/lists/products.ts` 的 `fetchProductFilterOptions`；`F/inventory/api/list.ts` 的仓库读取 | 已独立读取的路径，复核分页、权限与错误隔离；不为了形式统一重复造接口 |
 | Q21 | `B/erp-workflow/src/service/work_item/finance_responsibility.rs`；路由 reviewer-options、warehouse-fulfillment-handler-options、recovery-options；`F/procurement-responsibilities/` | 逐一判断查询或命令用途；命令／分派候选保留专用规则，禁止批量替换。普通查询消费方另行拆出 |
@@ -227,14 +227,14 @@ rg -n 'ownerOptions|handlerOptions|operatorOptions|settlementOptions|warehouseOp
 
 | 批次 | 依赖 | 交付范围 | 退出条件 | 当前状态 |
 | --- | --- | --- | --- | --- |
-| B0 基线与资格登记 | 无 | 复核 Q01—Q23；登记各候选类别资格、接口、资源动作、角色默认授权及状态规则 | 第 9 章登记表完整；普通／历史／命令候选分类无混用；缺口有明确前置任务 | 未开始 |
-| B1 公共销售目录与选择器 | B0 销售登记 | 身份域 salespeople、DataScope／权限／种子、回显、多选远程选择器、缓存失效 | A01、A02、A05—A10、A14 本地证据；接口可独立接入，不依赖合同集合 | 未开始 |
-| B2 合同完整样例 | B1、结算主体目录前置 | Q01 负责人和结算主体；前后端与相关 OpenAPI 同批切换 | A01—A12 适用项完成；候选查询不随合同查询变化；行显示完整 | 未开始 |
-| B3 销售链路 | B2 | Q02、Q03、Q05、Q14；按功能逐项交付 | 每个接口／页面／Tab 独立核销，当前人员／组织不依赖业务记录 | 未开始 |
-| B4 采购与主数据 | B0 对应类别登记、B1 组件 | Q04、Q06—Q08、Q19—Q20 对应入口 | 资格区别清楚；前后端不再生产当前页或已选 ID 伪全集 | 未开始 |
-| B5 执行与财务 | B3／B4 所需目录 | Q09—Q13、Q15；复核 Q21 | 三类人员、行名称、任务资格、资金份额均保留；不能仅改一个资金 Tab | 未开始 |
-| B6 历史与字典 | B0 分类 | Q16—Q18、Q22 分类结论 | 历史接口及例外登记完成；普通字典不由结果集限制 | 未开始 |
-| B7 公共收尾 | B2—B6 | Q23、剩余 Q19—Q21、全仓搜索与文档核对 | 所有普通候选消费者切换；历史／命令／对象内例外均有依据；无旧字段回退 | 未开始 |
+| B0 基线与资格登记 | 无 | 复核 Q01—Q23；登记各候选类别资格、接口、资源动作、角色默认授权及状态规则 | 第 11 章登记完整；普通／历史／命令候选分类无混用；缺口有明确前置任务 | 代码已落地；验收及门禁状态见 11.5 |
+| B1 公共销售目录与选择器 | B0 销售登记 | 身份域 salespeople、DataScope／权限／种子、回显、多选远程选择器、缓存失效 | A01、A02、A05—A10、A14 本地证据；接口可独立接入，不依赖合同集合 | 代码已落地；验收及门禁状态见 11.5 |
+| B2 合同完整样例 | B2a 依赖 B1；B2b 依赖结算主体目录 | Q01 拆为 B2a 负责人、B2b 结算主体；每个子项前后端与 OpenAPI 同批切换 | 两个子项分别核销，均完成才核销 B2；两个候选字段全部删除，不允许回退 | 代码已落地；验收及门禁状态见 11.5 |
+| B3 销售链路 | B1 及对应目录；不等待 B2b | Q02、Q03、Q05、Q14；按功能逐项交付 | 每个接口／页面／Tab 独立核销，当前人员／组织不依赖业务记录 | 代码已落地；验收及门禁状态见 11.5 |
+| B4 采购与主数据 | B0 对应类别登记、B1 组件 | Q04、Q06—Q08、Q19—Q20 对应入口 | 资格区别清楚；前后端不再生产当前页或已选 ID 伪全集 | 代码已落地；验收及门禁状态见 11.5 |
+| B5 执行与财务 | B3／B4 所需目录 | Q09—Q13、Q15；复核 Q21 | 三类人员、行名称、任务资格、资金份额均保留；不能仅改一个资金 Tab | 代码已落地；验收及门禁状态见 11.5 |
+| B6 历史与字典 | B0 分类 | Q16—Q18、Q22 分类结论 | 历史接口及例外登记完成；普通字典不由结果集限制 | 代码已落地；验收及门禁状态见 11.5 |
+| B7 公共收尾 | B2—B6 | Q23、剩余 Q19—Q21、全仓搜索与文档核对 | 所有普通候选消费者切换；历史／命令／对象内例外均有依据；无旧字段回退 | 代码已落地；验收及门禁状态见 11.5 |
 
 1. 每次实施以用户指定批次为界；未指定时从最早未完成的前置批次开始。不得跳过销售资格和默认授权登记直接改 UI。
 2. 每个功能必须纵向完成后端、前端、权限配置代码、文档及适用检查。基础接口可以先交付，消费页面不得进入接口未完成的半切换状态。
@@ -251,7 +251,9 @@ rg -n 'ownerOptions|handlerOptions|operatorOptions|settlementOptions|warehouseOp
 
 ## 9. 后续 agent 的交付记录格式
 
-每批在本章追加一份记录，采用以下固定字段。只记录最终执行合同、状态与证据，不写讨论过程或尝试复盘。
+交付记录必须描述最终接口、行为、所有权和证据。第 11 章保存当前有效状态；禁止在正文保留与当前实现冲突的旧状态或讨论过程。
+
+每批按以下字段提交交付记录，并更新第 11 章对应条目。被新证据替代的状态必须更新，不能仅在文末追加相反结论。
 
 ```text
 批次／功能 ID：
@@ -273,4 +275,262 @@ rg -n 'ownerOptions|handlerOptions|operatorOptions|settlementOptions|warehouseOp
 前置缺口／下一可执行批次：
 ```
 
-本合同建立时的记录：仅完成静态盘点和执行规则；B0—B7 均未开始。未运行程序、单元测试、真实数据库、浏览器或业务验收。
+## 10. 目录行为与持续验收规则
+
+本章约束目录、授权和消费方的最终行为。修改相关模块时必须继续满足本章规则；当前完成状态及验证范围见第 11 章。
+
+### 10.1 后台人员目录与字段映射
+
+1. 新增 `GET /admin/business-people` 与 `GET /admin/business-people/selected`，资源动作固定为 `business_person:list`，由 `erp-identity` 拥有，复用既有人员查询组件、回显和范围机制。
+2. 目录对象集合为未软删除的后台账号（`AccountKind::Admin`），包含启用和停用状态并显示状态。不要求其担任销售／采购角色、当前具有某命令权限、已有业务记录或存在开放任务。这是查询目录，不能复用在职命令资格过滤。
+3. 目录必须执行自身 DataScope，允许 Company、Organization、Team、SelfOwned；组织按候选账号有效主属组织映射，其他组合规则与销售目录相同。不能直接调用全量 `/admin/admins`，也不能给所有有业务页权限的人自动授予 Company。
+4. 该类别不需要新增“维护人资格”“申请人资格”“经办人资格”等表；账号类型是其对象资格。现有销售／采购资格记录不复制到此类别，不从业务记录补记该类别成员。
+5. 新增动作与默认范围须按第 3.3 节形成显式配置清单。没有范围时保持空；不得把“暂无默认授权”视为可以回退旧候选或放宽权限的理由。
+6. 停用账号只能参与查询，不因此恢复登录、建单、交接或任务处理资格。软删除历史身份按历史查询合同处理，不得通过普通目录绕过删除语义。
+
+| 筛选字段 | 目标候选目录 | 业务结果继续匹配的事实 |
+| --- | --- | --- |
+| 合同当前客户负责人、负责销售 | `sales_person:list` | 当前客户 OWNER 或销售单明确负责人 |
+| 采购负责人、负责采购 | `procurement_person:list` | 采购责任事实 |
+| 商品／供应商／供给维护人、能力负责人 | `business_person:list` | 各对象原维护／能力责任字段；不改成交接资格 |
+| 供应商订单跟进人 | `business_person:list` | `follow_up_user_id` |
+| 供应商订单当前异常处理人 | `business_person:list` | 开放 W26 任务的处理人；没有开放任务就不匹配 |
+| 登记／核销／付款／收票经办人 | `business_person:list` | 原 operator 参数及经办类型所指事实 |
+| 开票申请人、当前开票处理人 | `business_person:list` | 原申请人字段和当前开票任务处理人 |
+| 结算制单人、差异经办人、当前复核人 | `business_person:list` | owner 匹配 prepared_by；operator 匹配 difference_handler_user_id；handler_user_ids 匹配当前开放复核任务处理人，无开放任务不匹配；reviewed_by 仍为已复核事实 |
+
+允许选择尚未做过该业务的后台人员，结果为空；这不表示该人员取得命令资格。查询字段沿用不同的参数，不能因候选目录相同就合并经办人、申请人和当前处理人的查询语义。
+
+**固定接线约束：** `customer-receivables/pages/components/receivable-scope-toolbar.tsx` 的经办人、`invoice-requests/components/scope-page.tsx` 的申请人和当前开票处理人、`supplier-payables/pages/supplier-scope-page.tsx` 的经办人，不得继续使用所在页面的 sales／procurement 类别。共用列表 `ownerOptions` 不能作为岗位资格证明。Q11—Q13 的负责人、经办人、申请人和当前处理人必须按本节分别选择目录。
+
+### 10.2 合同、结算主体与仓库
+
+1. Q01 拆为 B2a 合同负责人和 B2b 结算主体。B2a 独立接入现有销售目录，删除合同 `owner_options` 及其专用读取；保留行姓名、搜索、排序、授权及当前客户归属。不得等待 B2b 才实施 B2a。
+2. B2b 新增轻量 `GET /admin/settlement-parties` 及 `/selected`，动作固定为 `settlement_party:list`，主体由 `erp-party` 拥有，通过本域窄 Port 接入公共 DataScope；身份域不得直接查询主体集合。
+3. 主体对象映射为 `ScopedObject.settlement_party_id = 当前主体 PartyId`，目标维度为 `SettlementParty`。已有合同 `settlement_party_id` 使用 `PartyId`，不得替换为 CustomerId、SupplierId 或内部部门 ID。
+4. 首批合法授权为显式 Company 或显式主体 ID 集合。主体集合使用现有非内部组织维度的显式目标机制；当前模型使用 `scope_type=Organization`、`target_dimension=SettlementParty`、`target_mode=Explicit` 表达该集合，界面必须显示“指定结算主体”，不能解释为内部部门。禁止 OwnOrg、ManagedOrgs、SelfOwned、Collaborative 和下级组织展开。
+5. 结算主体不必具有内部主属组织。主体身份是授权维度，显式目标需经 `ScopeTargetPort` 校验，Company 必须明确配置；不能从可见合同反推目标、复制合同的本人／协作范围或缺省授予公司范围。
+6. 主体资格沿用合同可引用的主体类型规则，不要求已存在合同。搜索、分页、回显必须使用相同资格和授权；名称由目录提供当前名称，合同正文／业务行仍按既有快照语义展示。
+7. 合同列表不得返回 `owner_options` 或 `settlement_options`；不得保留双读回退或从合同结果构造候选。
+8. Q15 对仓库采用同样的对象授权原则：`warehouse:list` 的 Handler、Service 和 Repository 必须完整执行 DataScope，不能凭路由有 RBAC 就认定已做范围校验。接入 `Warehouse` 维度，以 WarehouseId 映射；显式 Company／指定仓库集合均需配置，不从任务结果反推仓库目录。
+9. 仓库目录与履约任务读取／执行范围分别授权，选中仓库不授予其中任务的读取、处理或交接资格。新筛选目录不复用 `warehouse-fulfillment-handler-options` 等命令资格接口。
+
+### 10.3 审计动作与历史候选
+
+1. Q17 必须撤除把权限目录 `resource.action` 拼成审计动作全集的实现。权限代码表示可执行动作，审计代码表示实际记录事件，不能相互推导；`user_role.assign` 必须按真实写入值保留，不能为了对齐权限改为 `user_role.create`。
+2. 在审计拥有领域建立显式动作注册表，包含稳定事件代码和中文标签。盘点当前事件写入入口及动态事件代码生成规则，逐项登记，不查询数据库里出现过的事件作为注册源。
+3. 由审计查询接口提供固定目录，或由构建生成前端字典，选择一种权威同步方式并登记。普通列表零结果也必须能选择真实动作；未知历史 URL 值只回显，不伪装为已登记动作。
+4. 中文关键词转审计动作、动作筛选标签和固定下拉选项使用同一审计注册表；不能只修下拉框而保留基于权限名称排列组合的关键词映射。
+5. 审计业务域与其他业务域继续通过 Port／组合层协作，不让全部业务 crate 直接依赖 `erp-audit`。新增注册约束不得把未知旧事件读取变成失败；历史未知值按既有回显策略处理。
+6. Q16 的历史候选允许按授权历史事实确定身份，但仍须独立于历史报表分页和结果接口。禁止把候选生成挪到筛选之前后继续保留在报表响应中。成本类型使用固定字典，对象内部档位继续遵循对象内选择规则。
+
+### 10.4 公共能力验收门槛
+
+| 编号 | 能力 | 必须满足的规则 |
+| --- | --- | --- |
+| R0a | 有界目录查询 | 资格、范围、搜索组合为数据库条件或有明确规模上限的等价索引；禁止无界全量 ID 与无界 `$in`。已选回显先限定最多 100 个请求 ID |
+| R0b | 分页版本 | `page>1` 缺／空版本必须拒绝；旧版本遇范围撤销必须先报告版本冲突，不能直接返回空页 |
+| R0c | 内容失效 | 版本包含授权、名称、账号状态和查询资格变化；ID 不变不能作为继续使用旧标签的依据 |
+| R0d | 资格维护 | 保留有效／终止及显式恢复接口，支持自定义岗位首次授予；初始化不恢复已终止资格 |
+| R5a | 响应合同 | 列表 OpenAPI、后端 DTO、前端类型和测试夹具同步；禁止恢复已删除候选字段 |
+| R5b | 仓储清理 | 销售、采购不得恢复无调用的 `current_owner_ids`；真实归属查询按业务用途保留 |
+| R5c | 公共分页 | `OwnershipPage` 只承载分页与归属口径；不得恢复 `FilteredPage` 或候选合并逻辑 |
+| R5d | 用途复核 | 按 11.8 检验对象自身授权、搜索分页、停用身份、回显错误及命令资格；接口独立不等于业务验收通过 |
+
+新增接口继续执行第 3.3 节权限及初始化规则；禁止自动修改真实环境配置。
+
+### 10.5 模块依赖与完成核销
+
+| 顺序／任务 | 依赖 | 可独立交付的结果 |
+| --- | --- | --- |
+| R0 公共目录补齐 | 当前代码 | 保持分页版本、查询规模、资格维护与失效规则；同步当前验证证据 |
+| R1 后台人员目录＋错误接线修复 | R0、显式 business_person 授权配置代码 | 落地第 10.1 节，先纠正财务经办／申请／处理人，再接 Q06—Q10 中通用人员字段 |
+| R2 合同负责人 | R0、现有销售目录 | 完成 B2a；无需等待结算主体、R1 或仓库 |
+| R3 主体与仓库目录 | 对应领域 Port／DataScope 登记 | 完成 B2b 与 Q15；两个领域分别拥有文件，可独立实施 |
+| R4 审计及历史接口 | 事件注册／历史字段语义 | 完成 Q17 和 Q16 剩余独立接口；不能改写历史事件或归属 |
+| R5 文档、死代码与全量消费方核对 | 按资源实际完成情况 | OpenAPI 随对应接口立即同步；无调用仓储方法可独立清理；FilteredPage 最后删除；Q19—Q21、Q23 逐项核销 |
+
+并行执行时公共身份目录和共享选择器必须单一文件所有者；财务同一资金模块由一个实施者负责。主体、仓库、审计可按领域拆分，文档与集成核销由主 agent 统一负责。是否启动子 agent 依当次用户授权，不由本文自动触发。
+
+追加验收：
+
+- A17：没有销售／采购角色但有资格被查询的财务、运营、仓储后台账号，可在授权的经办人／申请人／处理人查询目录中找到；选择无匹配记录者返回业务空结果。
+- A18：后台人员目录不授予该人员任一命令资格，也不扩大查看者的资金、合同或任务范围。
+- A19：主体和仓库仅命中显式授权的对象身份或显式 Company；没有内部部门仍能按自身维度正确判定，缺少配置不放行。
+- A20：实际 `user_role.assign` 事件即使当前没有记录也能从权威动作目录选择；权限目录中不存在真实事件的值不被自动伪造进候选。
+- A21：人员第二页缺版本、旧版本遇撤权分别拒绝；回显最多 100 个 ID 不读取全目录；资格终止及显示信息变化不保留过期回显。
+- A22：已切换与未切换接口的 OpenAPI 分别吻合真实响应，不能通过统一删除共享 owner_options 声明冒充全量完成。
+
+实施状态与有效检查结果以第 11 章为准。
+
+
+## 11. 当前实现、使用约束与剩余交付
+
+本章实现登记须以当前文件内容核验；11.5 所列既有门禁记录不能用于证明后续修复版本通过。当前修复批次仅做源码修改与静态核对，未运行构建、测试、服务、数据库、seed 或浏览器。不得将“代码完成”登记成业务验收通过。
+
+### 11.1 实施状态
+
+| 任务 | 当前代码状态 | 后续执行要求 |
+| --- | --- | --- |
+| R0a—R0c | 已改：数据库按后台身份、授权索引、资格和搜索执行聚合；回显先限定请求 ID；后续页强制版本；版本包含姓名、账号、状态和资格版本 | 执行 A21 的真实账号验收；同时检验零结果和撤权 |
+| R0d | 已提供 GET／PUT 查询资格维护接口，支持自定义岗位首次入目录、终止、显式恢复、乐观锁和事务审计 | 按 11.3 操作；管理页面尚未增加资格按钮，不得声称已有图形化管理入口 |
+| R1／Q06—Q10 | 已切换维护人、能力负责人、跟进人、当前异常处理人、结算制单／差异／复核人员至后台目录；相关列表不再返回人员候选 | 执行 A17、A18；供给行使用 maintainer_user_name，不能重新从候选回填 |
+| R1／Q11—Q13 | 经办人、申请人、当前开票处理人已改为 business 类别；负责销售和负责采购保留各自类别 | 各查询参数独立提交，保持原经办类型及任务语义 |
+| R1 补充 | 库存流水经办人、调整经办／申请／当前审批人改为后台目录；销售列表创建人筛选及 chip 使用后台目录与同目录已选回显 | 不能用命令候选恢复上述查询字段 |
+| R2／Q01 B2a | 合同负责人已切换销售目录，合同 owner_options 已删除 | 合同 settlement_options 已随 B2b 删除，禁止恢复列表候选 |
+| R3／Q01 B2b、Q15 | 已接入本域独立目录和 selected；原 warehouse:list 列表也执行自身范围；删除合同 settlement_options 和履约队列 warehouse_options 及聚合 | 按 11.6 配置并执行 A19；不得由合同、任务或库存结果推导目录 |
+| R4／Q17 | 已建立真实审计事件固定目录，前端动作选项、标签和中文关键词共用生成物 | 新增事件写入必须先登记；未知历史值继续允许读取和回显 |
+| R4／Q16 | 客户经营质量、实际盈亏历史目录已拆为独立端点；报表响应不再携带历史人员／组织候选 | 按 11.7 保留冻结名称、冻结路径和历史授权；不得使用当前销售目录 |
+| R5a—R5c／Q23 | 已同步 S1／S3 人员候选字段；删除销售、采购 current_owner_ids；FilteredPage 已删除，OwnershipPage 只保留分页与归属口径；collect-pages 不再合并人员候选 | 新端点见 person-directory-openapi.yaml；不得恢复旧字段或双读回退 |
+| R5d／Q19—Q21 | 已按 11.8 逐用途复核；查询选择器完整分页、同口径回显，移除旧候选和吞错；命令服务资格保留 | 当前修复后的构建、库单测、前端模拟及真实账号验收均须执行，不沿用修复前结论 |
+
+### 11.2 目录查询及规模合同
+
+1. 三类目录及资格管理 API 以 [person-directory-openapi.yaml](person-directory-openapi.yaml) 为协议来源。业务列表请求不得夹带到目录请求中。
+2. `business` 使用未软删除后台账号身份；`sales`、`procurement` 额外关联有效查询资格。全部类别均允许冻结和归档账号参与查询，禁止据此恢复命令能力。
+3. 公司范围且没有个人范围上限时，数据库直接执行账号条件；组织／本人范围使用同一组织快照解析出的有界人员索引。索引最多 10000 个账号；超过上限整体拒绝，不截断、不回退公司范围。当前索引规模校验先于关键词搜索，超过范围索引上限时必须先收窄组织条件。授权阶段只读取有界组织树、操作人当前成员及管理关系；其他人员关系须按授权组织或 selected ID 在数据库中限定当前有效期，以 10001 条作为超限探针，禁止先读取全部历史成员再裁剪。组织树上限为 10000 节点，超限必须先调整组织索引能力，不能回退无范围校验。
+4. 内容版本索引最多 10000 项，投影只含稳定 ID、名称、登录账号、账号状态、账号版本与资格版本，不读取密码等凭证字段。超过内容索引上限时必须收窄目录搜索或组织条件。
+5. 已选回显最多 100 个 ID，先按请求 ID 限定范围再查资格；禁止扫描类别全体人员后匹配回显。
+6. 版本只可在相同目录及相同搜索／组织条件内跨页使用。第二页起缺失、空白或过期版本必须拒绝；无范围时也必须先处理旧版本冲突。显示信息和资格变化须改变内容版本；成员关系定时生效或到期，即使组织修订号未再变化，也须改变受影响目录的组织标签及内容版本。scope_version 最大长度为 256 字符。
+7. 查询失败或重新验证期间不展示旧人员候选；已选 ID 保留，可清除并重试。不得将权限或网络错误伪装为成功的空目录。
+
+### 11.3 资格管理与初始化合同
+
+1. 资格管理动作固定为 `person_query_qualification:manage`，独立执行 InternalOrg 维度范围。默认清单只为 `role-root`、`role-sysadmin` 配置 Company；其他岗位无默认管理范围。
+2. 先 GET `/admin/person-query-qualifications/{category}/{account_id}`。`category` 仅允许 `sales`、`procurement`；后台通用目录不能建立岗位资格记录。
+3. GET 返回 `null` 时，首次授予提交 PUT `{"status":"active","reason":"经确认的业务原因"}`，不传 version；目标必须是未软删除后台账号，不要求预定义岗位角色。
+4. 已有记录的终止或恢复，PUT 必须携带最近读取的 version：`{"status":"terminated","version":1,"reason":"经确认的业务原因"}`；恢复时 status 改为 active。409 后必须重新读取，禁止盲重试覆盖。
+5. 写入资格和 `person_query_qualification.change` 审计事件必须在同一事务完成。查询资格变更不得变更账号角色、登录状态、交接资格或业务范围。
+6. 自动补记只创建不存在的销售／采购资格；撤销角色不删除查询资格；初始化或重新绑定角色不得自动恢复已终止资格。自定义角色成员按本节显式授予。
+7. `business_person:list` 默认范围：销售、采购、运营、仓储为 SelfOwned；销售领导为管理组织；财务、管理层和超级管理员为显式 Company。其他岗位没有默认范围。以上均为初始化代码清单，禁止宣称真实库已同步。
+8. 预定义角色首次创建可以写入显式目录动作清单；既有角色的启动补齐不得补回 sales_person:list、procurement_person:list、business_person:list、settlement_party:list、warehouse:list 或 person_query_qualification:manage。缺失动作无法区分未部署与人工撤销，须由管理员显式授予；范围配置仍不得覆盖人工记录或恢复已撤销配置。
+9. 禁止为修复下拉框而自动执行真实库 seed、回填或修改真实用户范围。上线前由环境负责人核验动作授权、同角色范围和组织主属关系。
+
+### 11.4 审计动作注册合同
+
+1. 本页查询的集合是身份域 `audit_events`；注册表归 `erp-identity/src/entity/access_control/audit_actions.rs`。其他集合 `audit_logs` 的事件不能无条件加入本页候选。
+2. 已登记八个真实写入值：permission.create／update／delete、data_scope.create／delete、user_role.assign／revoke、person_query_qualification.change。当前写入入口没有动态组合事件代码；新增动态规则须先穷举并登记合法事件。
+3. `web-api/build.rs` 从注册表生成 `erp-client/lib/audit-actions.generated.ts`；不得手工维护第二份字典。权限漂移检查同时检查这份生成物，提交时必须包含它。
+4. 新的权限配置审计写入动作未登记时拒绝；旧记录读取不做注册强校验。标签与中文关键词只能来自登记项，不得拼接权限目录或做资源和动词排列组合。未知历史动作仅以“未知历史动作（原值）”回显；不得作为可选择的合法候选，须保留清除旧条件的能力。
+
+### 11.5 本地门禁与验收限制
+
+验收证据限定为本地源码检查、库单元测试和前端模拟测试。禁止据此核销 A01—A22 的真实多账号、真实目录和浏览器验收。
+
+下表为修复前已登记记录，未在本次重跑；所有受本次修改影响的门禁均为待验证。
+
+| 门禁 | 既有记录及执行范围（不代表当前版本通过） |
+| --- | --- |
+| `env -u ERP_TEST_MONGO_URI CARGO_INCREMENTAL=0 cargo test --workspace --lib --locked --offline` | 4120 通过、0 失败、63 忽略；未运行集成测试或真实 Mongo／S3 |
+| `CARGO_INCREMENTAL=0 cargo check --workspace --locked --offline` | 通过 |
+| `CARGO_INCREMENTAL=0 cargo clippy --workspace --all-targets --all-features --locked --offline -- -D warnings` | 通过 |
+| 后端 `cargo fmt --all -- --check`、前端 `npm run format:check`、`git diff --check` | 通过 |
+| 领域边界及 BPM 边界 | 通过；未新增业务领域间依赖 |
+| 前端 `npm run lint`、`tsc --noEmit --pretty false` | 通过；含定点数与 feature-cycles 检查 |
+| 前端 `npm test` | Vitest 233 文件、981 用例通过；Node 73 用例通过；无未处理错误 |
+| 三份目录 OpenAPI 的 Redocly lint | 通过；6 条推荐警告为本地 server URL 与未声明许可证，不得编造生产地址或开源许可证 |
+| 权限／审计生成内容一致性 | 强制重建 web-api 后，两份生成物与重建前内容一致；在隔离 Git 索引下执行漂移脚本通过，真实暂存区未改变。正式提交仍必须纳入两份生成物 |
+| 前端 `npm run build` | 未通过：`next/font/google` 下载 Noto Sans 时无法连接 `fonts.googleapis.com`；失败发生在字体下载阶段，类型检查已独立通过，完整打包尚未验证。须在可访问字体源的构建环境重跑，不得以模拟字体响应记为生产构建通过 |
+
+本地回归必须保留以下行为覆盖：
+
+- `erp-client/tests/query-directories.test.tsx`：独立对象目录、停用对象、完整分页、版本冲突、10000 项上限、已选授权、人员分页及历史目录与报表条件隔离。
+- `erp-client/tests/person-directory-filter.test.tsx`：重新校验与撤权时撤下旧姓名，保留已选 ID，不静默清除业务筛选。
+- 合同、库存、商品、选品、履约和供应商订单测试使用当前响应合同；行姓名来自业务行，不能从候选回填。
+- 跨功能测试放 `erp-client/tests/`；依赖前端 bundler 模块解析的测试由 Vitest 执行，不能放入 Node 直接加载的 `.mts` 用例。
+
+开发工作区的生成内容检查允许使用临时索引，禁止为检查而暂存他人变更。在仓库根执行：
+
+```bash
+(
+  selector_index_dir=$(mktemp -d)
+  trap 'rm -rf "$selector_index_dir"' EXIT
+  export GIT_INDEX_FILE="$selector_index_dir/index"
+  git read-tree HEAD
+  git add -- erp-client/lib/permissions.generated.ts erp-client/lib/audit-actions.generated.ts
+  cd backend
+  touch apps/web-api/build.rs
+  CARGO_INCREMENTAL=0 ./scripts/check-permissions-drift.sh
+)
+```
+
+此命令验证重建前后的一致性，不代表真实索引或提交已包含生成物。提交阶段必须在真实索引再次执行漂移门禁。
+
+本轮未执行真实库配置修改、seed、服务重启、浏览器或 E2E；未创建提交。部署与真实验收按 11.9 执行。
+
+### 11.6 结算主体与仓库目录执行合同
+
+1. HTTP 协议以 [object-directory-openapi.yaml](object-directory-openapi.yaml) 为准。`settlement_party:list` 使用 SettlementParty 维度；`warehouse:list` 使用 Warehouse 维度。对象映射分别为 PartyId、WarehouseId。
+2. 两个目录只接受显式 Company 或 `scope_type=organization`、正确对象维度、`target_mode=explicit` 的对象 ID 集合。禁止内部组织、本人、协作、动态目标模式及下级展开。角色范围取并集，再与个人上限求交；没有范围或交集为空返回 no_scope。
+3. 授权目标索引及搜索结果快照各最多 10000 项，超限整体拒绝。搜索支持当前名称和编号的字面量匹配；已选端点最多 100 个 ID，先与授权目标求交。包含停用对象并标明状态；软删除对象不返回。
+4. 名称只取 `current_revision_id`，不得用最大 revision_no 或未来修订代替。响应只含 ID、编号、当前名称、状态与范围元信息，不返回主体或仓库的敏感资料。
+5. 对象目录内容版本覆盖稳定排序后的 ID、编号、名称、状态及授权版本。翻页必须携带同搜索首页版本；旧版本遇撤权到空范围仍返回冲突。原 `/admin/warehouses` 保留业务参数并新增 scope_version 与范围元信息，第二页起必须传版本。
+6. 合同列表只返回合同、指标和归属范围；履约队列只返回作业、计数和范围。合同结算主体、履约仓库筛选分别调用独立目录。仓库目录授权不授予库存读取、任务读取、收货或发货权限。
+7. 初始化代码只建立下表明确列出的 Company 规则及配套 list 动作；未列出的角色不增加默认范围。实际环境必须由负责人确认配置并显式部署，禁止执行真实库 seed 作为本地验证。
+
+| 目录 | 显式 Company 默认岗位 |
+| --- | --- |
+| settlement_party:list | role-root、role-finance、role-management、role-sales、role-sales-leader、role-procurement |
+| warehouse:list | role-root、role-finance、role-management、role-warehouse、role-procurement、role-sales、role-sales-leader、role-operations |
+
+8. 配置页登记上述两个资源以及三类人员目录、人员查询资格管理资源。非内部组织的 organization 范围显示“指定结算主体”或“指定仓库”，不得显示为部门授权。动作授权、范围定义、目标有效性分别校验。
+9. 索引使用原集合的稳定 ID 唯一索引及修订 ID 索引；名称关联只做最小字段投影。当前名称模糊搜索需要遍历授权对象，规模受上述上限约束；不得宣称已实现全文索引或无限规模目录。
+
+### 11.7 历史候选执行合同
+
+1. 使用 [historical-directory-openapi.yaml](historical-directory-openapi.yaml) 的两个端点：`GET /admin/customer-quality/history/directory`、`GET /admin/actual-profit-loss/history-directory`。删除报表 DTO 的 attributionUserOptions、attributionOrgOptions；前端候选缓存独立于报表结果缓存。
+2. 目录请求只允许 from、to、可选 customer_id、可选 scope_version；实际盈亏额外要求 period_basis。禁止人员、组织、搜索、分组、覆盖率、成本类型、业务结果页码等参数；未知字段拒绝。
+3. 授权沿用对应历史报表的动作组合、同角色证明和来源订单范围，不扩大合法历史参与的范围。来源装载和授权在同一事务完成，返回前重新核验授权与订单版本。
+4. 身份只取首次生效 SalesAttribution。人员同名不同 ID 分开；同一 ID 的多个冻结名称稳定并列；组织保留冻结直接归属与当时祖先路径。当前离职、改名或组织移动不改写历史候选。
+5. 单次完整返回两个候选数组，每类最多 10000 项；来源订单沿用既有最多一年、10000 单限制。超过边界整体拒绝，不截断，不用报表当前页补全。空候选与权限、网络错误必须分开显示。
+6. 查询键只绑定端点、期间、期间口径及客户上下文。选择一个历史人员后，报表可以为空，历史目录仍保持该上下文的完整候选。刷新或失败时撤下旧候选，允许单独重试目录。
+
+### 11.8 Q19—Q21 用途及消费方核销表
+
+| 消费方／用途 | 权威来源与约束 | 当前执行规则 |
+| --- | --- | --- |
+| 客户普通筛选 | customer:list、自身 DataScope；具有 customer_scope:detail 时默认 all_authorized，否则默认 assigned | all_authorized 仍按既有后端合同要求额外范围权限，不自动授予；assigned 只覆盖自身可负责或协作的客户。搜索与回显使用同一明确口径，包含停用客户，不要求当前业务页已有记录；显式请求无权口径须报授权错误，不吞错降级 |
+| 客户建单等录入 | 同一客户目录加显式 assigned 等业务范围与 active 条件 | 不因筛选目录扩展而取消录入条件，写命令继续复核 |
+| 供应商普通筛选／录入 | supplier:list 与供应商自身范围 | 筛选含停用，录入保留 active；搜索与已选回显使用相同用途条件 |
+| 合同对象选择器 | contract:list，自身授权与调用方显式客户／assigned 条件 | 完整分页；直接用列表 current_revision 展示，不再额外读 detail 或以某一客户存在合同代替选中合同的资格；selectableOnly 保留 EFFECTIVE 条件 |
+| 结算主体普通筛选 | settlement_party:list 独立目录 | 合同、应收普通筛选及配置目标使用 filter 用途；不要求存在合同或应收子账 |
+| 结算主体录入 | party:list 主体主数据与 active 条件 | 统一共享 party-selector/api；完整分页，名称只取当前修订，错误不伪装空结果；最终命令复核引用资格 |
+| 仓库普通筛选 | warehouse:list 独立目录 | 包含停用；与作业、库存结果分别授权 |
+| 采购收货仓库 | warehouse:list 授权列表、active、require_inbound_handler | 保留收货用途；已选回显同样要求处理人；不能用普通查询目录替代收货资格 |
+| 商品分类／品牌／供应商筛选 | 各资源原目录及原权限门控 | 完整分页，筛选含停用并标明状态；缺动作标记不可用，查询错误沿原 Query 错误态传播 |
+| 库存台账仓库筛选与行名称 | 筛选用独立目录；已授权流水行名称经库存域已有 WarehouseFactsPort 补齐 | 删除前端随库存结果整表读取仓库和 warehouses 候选字段；筛选 chip 单独查询当前已选目录，不能从行集合推导可选仓库 |
+| 应收往来主体核销录入 | 主体 active 及该主体可读应收子账 | form 用途保留现有资格交集；selected 也按同一交集重验，不能仅凭主体 detail 合格 |
+| 财务责任规则负责人 | work_item 的 finance_responsibility_owner_options | 保留可登录后台账号、付款／开票必需权限资格；普通经办人筛选不得复用 |
+| 供应商结算复核人录入／改派 | 单据 reviewer-options | 保留当前经办人、可编辑单据、本人排除、有效后台账号、复核权限及对应单据范围校验；提交仍重验 |
+| 仓库收发责任配置 | warehouse-fulfillment-handler-options | 保留入库／仓发命令资格，不作为普通仓库或人员筛选源 |
+| 审批恢复动作 | 实例 recovery-options | 保留实例读取／管理范围、阻塞类型与版本提示，恢复命令再次校验 |
+| 采购责任规则配置 | 管理端账号清单用于提出负责人，规则写入和责任解析验证可登录后台账号、purchase_order:create 等已有资格 | 保留命令流程，禁止用 procurement_person:list 查询资格代替命令校验；不将配置人员列表复用为业务查询下拉框 |
+
+补充约束：
+
+- 客户、供应商、合同及主数据录入选择器复用对象自身列表完整翻页；`fetchSelectorList` 最多收集 10000 项，超限失败并要求收窄。已有通用对象选择器的单项回显复用相同用途的完整授权目录查找，不能回退 detail 或当前业务行；主体／仓库普通筛选使用专用 selected 端点。
+- Query key 必须包含用途、客户范围及 selectableOnly 等资格条件。禁止在不同用途之间共享已选缓存。请求切换、重新验证或失败期间不展示旧候选；失败不得继续合并旧 selectedItem 名称。
+- 候选失败保留所选 ID 和清除操作，不恢复旧业务列表 options 字段。历史候选控件在业务请求失败、加载和空范围状态下仍须独立显示；对象选择器显示目录错误和独立重试入口，no_scope 须明确提示无目录数据范围。重新验证期间不得由控件本地记忆、列表旧行或已选快照恢复名称。
+- 单个查询的 scope_version 或 DATA_SCOPE_CHANGED 仅使同类目录／业务查询失效；不得因此清除无关业务结果。确认账号、全局 policy_version、organization_version 变化或会话失效时，才跨功能清除私有缓存。
+- Q19—Q21 的“已复核”只证明上述代码接线和用途分类。浏览器、真实多角色及规模边界验收仍须按 11.5 和第 7 章执行。
+
+### 11.9 后续环境验收与交付步骤
+
+1. 先核对本章状态及工作区差异，不得恢复列表候选或覆盖他人改动。当前修复涉及目录返回信封、缓存和回显行为；执行门禁前须更新相关模拟夹具与断言，修复前通过记录不得代替当前验证。
+2. 在可访问 Google Fonts 的构建环境运行 `npm run build`，记录实际退出状态与构建结果；外部资源失败不得用关闭类型检查或模拟字体响应绕过。
+3. 在授权的验收环境显式部署权限与 DataScope 默认清单，完成 A01—A22、无记录对象、停用对象、范围撤销、后续页旧版本、历史身份变化等验收。不得自动修改真实用户或真实库配置。当前仓库规则禁止真实 Mongo／外部服务集成测试，执行者须遵守环境授权与适用测试规则。
+4. 提交前生成权限及审计字典，连同接口合同和领域改动一并复核；真实索引必须包含两份生成物。禁止将临时索引检查解释为已提交。
+5. 只有生产构建、配置部署及真实验收证据完整后，才能把整体验收状态改为通过。本地后端验证仅跑库单测；禁止把真实 Mongo、S3 或清库 E2E 当作本地门禁。
+
+### 11.10 当前修复验收门槛
+
+| 验收项 | 前置条件与操作 | 必须达到的结果 |
+| --- | --- | --- |
+| 撤销与初始化 | 在获授权环境撤销既有角色目录动作、范围和人员资格后重跑初始化 | 不恢复已撤销动作、范围或已终止资格；首次创建角色按清单初始化 |
+| 规模与有效期 | 准备 10000／10001 条当前关系、较多历史关系及预定生效调岗；翻页并跨越生效时点 | 数据库有界读取，超限整体拒绝；历史关系不挤占当前关系上限；旧内容版本拒绝，名称与组织标签按本次授权回显 |
+| 独立错误与缓存 | 已选人员／主体／仓库后触发重验、网络失败、目录局部版本变化及账号切换 | 保留 ID、清除及重试能力，撤下旧名称；局部目录失败不清空业务结果；全局撤权或换账号清除私有缓存 |
+| 客户权限口径 | 分别使用只有 customer:list 和另有 customer_scope:detail 的账号 | 默认分别请求 assigned 和 all_authorized；列表与回显同口径；显式无权请求仍拒绝 |
+| 结算事实 | 同一人员分别有当前开放复核任务、只有已完成复核记录、没有相关结算记录 | handler_user_ids 仅命中当前开放任务；其余正常空结果；候选均按后台目录资格与自身范围 |
+| 历史目录与审计 | 业务报表失败时打开历史筛选；加载 URL 中的未知历史审计动作 | 历史候选仍可查询、清除与重试；未知审计值明确回显为未知且不能作为合法候选重新选择 |
+
+既有合同指标差异单独管理：`backend/docs/api/list-search.md` 第 3 节规定新增 q、metric、负责人和主体筛选不影响合同指标；`erp-contract/src/repository/list_search.rs` 的 metrics 分面当前使用 `search.filter()`。本次候选拆分修复不得改动该统计口径；指标差异须另行确定方案并验收，不能据本次修复登记指标符合合同。

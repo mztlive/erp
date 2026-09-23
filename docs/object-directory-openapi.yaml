@@ -1,0 +1,83 @@
+openapi: 3.1.0
+info:
+  title: 独立结算主体与仓库查询目录
+  version: 1.0.0
+  description: 目录按自身资源动作和对象身份维度授权，不依赖合同或任务；查询资格不能代替命令资格。
+servers:
+  - url: http://localhost:10001
+security:
+  - bearerAuth: []
+paths:
+  /admin/settlement-parties:
+    get:
+      operationId: listSettlementPartyDirectory
+      summary: 结算主体目录（settlement_party:list）
+      description: 未删除企业主体，包含停用主体；当前名称通过 current_revision_id 读取。
+      parameters: &directoryParams
+        - {name: q, in: query, schema: {type: string, maxLength: 200}, description: 当前名称或稳定编号的字面量检索。}
+        - {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
+        - {name: page_size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+        - {name: scope_version, in: query, schema: {type: string, maxLength: 256}, description: 第二页起必填，须与相同搜索条件首页一致；包含名称、状态及授权版本。}
+        - {name: ids, in: query, schema: {type: string}, description: 可选精确身份集合，最多100项；不得混入q或后续页。推荐使用selected端点。}
+      responses: &directoryResponses
+        '200':
+          description: 独立目录页。身份不存在或不可读时不返回；空授权为no_scope。
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: {type: boolean}
+                  data: {$ref: '#/components/schemas/DirectoryPage'}
+        '400': {description: 非法页码、页大小、后续页缺版本或匹配轻量快照超过10000项；超限整体拒绝。}
+        '401': {description: 未认证。}
+        '403': {description: 无目录动作权限、账号失效或不合法的范围配置。}
+        '409': {description: DATA_SCOPE_CHANGED。旧版本遇到空授权仍拒绝，不返回成功空页。}
+        '422': {description: 参数解析失败、未知参数、空ids或ids超过100项。}
+  /admin/settlement-parties/selected:
+    get:
+      operationId: selectedSettlementPartyDirectory
+      summary: 当前授权下的已选结算主体回显
+      parameters: &selectedParams
+        - {name: ids, in: query, required: true, schema: {type: string}, description: 1至100个逗号分隔稳定对象ID；先按请求集合收窄再查询。}
+      responses: *directoryResponses
+  /admin/warehouse-directory:
+    get:
+      operationId: listWarehouseDirectory
+      summary: 仓库目录（warehouse:list）
+      description: 未删除仓库，包含停用仓库；不检查任务是否存在或是否有入库处理人。
+      parameters: *directoryParams
+      responses: *directoryResponses
+  /admin/warehouse-directory/selected:
+    get:
+      operationId: selectedWarehouseDirectory
+      summary: 当前授权下的已选仓库回显
+      parameters: *selectedParams
+      responses: *directoryResponses
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}
+  schemas:
+    DirectoryItem:
+      type: object
+      additionalProperties: false
+      required: [id, code, name, status]
+      properties:
+        id: {type: string}
+        code: {type: string}
+        name: {type: string}
+        status: {type: string, enum: [active, disabled]}
+    DirectoryPage:
+      type: object
+      required: [items, total, page, page_size, scope_version, policy_version, organization_version, as_of, empty_reason]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/DirectoryItem'}}
+        total: {type: integer, minimum: 0, maximum: 10000}
+        page: {type: integer, minimum: 1}
+        page_size: {type: integer, minimum: 1, maximum: 100}
+        scope_version: {type: string}
+        policy_version: {type: integer}
+        organization_version: {type: integer}
+        as_of: {type: string, format: date-time}
+        empty_reason: {type: [string, 'null'], enum: [no_scope, null]}

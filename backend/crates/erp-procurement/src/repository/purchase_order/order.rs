@@ -249,26 +249,6 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
 /// 采购主表集合的域查询。
 #[allow(async_fn_in_trait)]
 pub trait PurchaseOrderRepositoryExt {
-    /// 返回未删除且落在已证明范围内的负责人集合。
-    ///
-    /// # 参数
-    /// * `scope` - 已由应用层完成资源动作授权的对象范围
-    /// * `executor` - 事务或无事务执行器
-    ///
-    /// # 返回
-    /// 返回去重的负责人 ID；候选不按登录资格过滤，不能用于改派。
-    ///
-    /// # 错误
-    /// 数据库查询失败向上传播。
-    ///
-    /// # 关键业务约束
-    /// 候选必须与列表同一授权边界，不得按登录用户自行推断。
-    async fn current_owner_ids(
-        &self,
-        scope: &super::scope::PurchaseReadScope,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<String>>;
-
     /// 分页检索采购单列表（投影查询）。
     ///
     /// 只返回 [`PurchaseOrderRow`] 所需的列表字段，不加载整文档；排序字段
@@ -349,22 +329,6 @@ pub trait PurchaseOrderRepositoryExt {
 }
 
 impl PurchaseOrderRepositoryExt for persistence_core::Repository<'_, PurchaseOrder> {
-    async fn current_owner_ids(
-        &self,
-        scope: &super::scope::PurchaseReadScope,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<String>> {
-        let collection = self.collection();
-        let mut query = collection.distinct(
-            "owner_user_id",
-            doc! { "deleted_at": entity_core::NOT_DELETED_TIMESTAMP_BSON, "$and": [scope.document()] },
-        );
-        if let Some(session) = executor.session() {
-            query = query.session(session);
-        }
-        Ok(query.await?.into_iter().filter_map(|v| v.as_str().map(str::to_owned)).collect())
-    }
-
     async fn search_purchase_orders(
         &self,
         filter: &PurchaseOrderFilter,

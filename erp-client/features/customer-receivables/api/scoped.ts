@@ -97,7 +97,6 @@ export type ReceivableScopeListView = {
     invoices: readonly ScopedInvoiceWire[]
     total: number
     summary: FundsSummaryWire | undefined
-    ownerOptions: readonly { value: string; label: string }[]
     scopeVersion: string | undefined
     policyVersion: number | undefined
     organizationVersion: number | undefined

@@ -1,4 +1,6 @@
 "use client"
+import { useQuery } from "@tanstack/react-query"
+import { selectedObjectDirectory } from "@/lib/object-directory"
 
 import { Button } from "@/components/ui/button"
 
@@ -264,6 +266,13 @@ export function InventoryLedgerPage() {
         (a) => a.adjustmentId === adjustmentIdParam,
     )?.adjustmentNo
 
+    const warehouseLabelQuery = useQuery({
+        queryKey: ["warehouse-directory", "label", warehouseId],
+        queryFn: () =>
+            selectedObjectDirectory("warehouse-directory", warehouseId ?? ""),
+        enabled: Boolean(warehouseId),
+        staleTime: 0,
+    })
     /** 已生效条件全部显性为 chip；来源锁定参数（skuId 等）不得成为隐形查询参数。 */
     const appliedChips = React.useMemo<readonly LedgerAppliedChip[]>(() => {
         const chips: LedgerAppliedChip[] = []
@@ -272,9 +281,10 @@ export function InventoryLedgerPage() {
             chips.push({ key: "q", label: `搜索：${trimmedQ}` })
         }
         if (warehouseId) {
-            const warehouseLabel = (data?.warehouses ?? []).find(
-                (w) => w.id === warehouseId,
-            )?.name
+            const warehouseLabel =
+                warehouseLabelQuery.isError || warehouseLabelQuery.isFetching
+                    ? undefined
+                    : warehouseLabelQuery.data?.name
             chips.push({
                 key: "warehouseId",
                 label: `仓库：${warehouseLabel ?? "已选仓库"}`,
@@ -351,7 +361,9 @@ export function InventoryLedgerPage() {
         chipAdjustmentNo,
         chipSalesLineLabel,
         chipSkuName,
-        data?.warehouses,
+        warehouseLabelQuery.data?.name,
+        warehouseLabelQuery.isError,
+        warehouseLabelQuery.isFetching,
         movementType,
         occurredFrom,
         occurredTo,

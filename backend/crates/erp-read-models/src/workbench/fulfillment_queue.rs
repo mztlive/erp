@@ -286,15 +286,6 @@ pub struct FulfillmentQueueMetricView {
     pub count: i64,
 }
 
-/// W09 仓库筛选选项。
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct FulfillmentQueueWarehouseView {
-    /// 仓库 ID。
-    pub id: String,
-    /// 仓库代码或安全回退标签。
-    pub label: String,
-}
-
 /// W09 服务端分页读模型。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct FulfillmentQueuePageView {
@@ -314,8 +305,6 @@ pub struct FulfillmentQueuePageView {
     pub visible_types: Vec<FulfillmentQueueOperationType>,
     /// 当前筛选内按类型汇总的跨页指标。
     pub metrics: Vec<FulfillmentQueueMetricView>,
-    /// 当前筛选内可用的仓库选项。
-    pub warehouse_options: Vec<FulfillmentQueueWarehouseView>,
     /// 服务端快照时点。
     pub as_of: Instant,
 }
@@ -416,11 +405,6 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
                 operation_type,
             })
             .collect();
-        let warehouse_options = repository_page
-            .warehouses
-            .into_iter()
-            .map(|warehouse| FulfillmentQueueWarehouseView { id: warehouse.id, label: warehouse.label })
-            .collect();
         let current_version = self.auth.queue_scope_version(&actor, executor).await?;
         ensure_scope_version(1, Some(&identity_version), &current_version)?;
 
@@ -433,7 +417,6 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             scope_version,
             visible_types,
             metrics,
-            warehouse_options,
             as_of: Instant::now(),
         })
     }
@@ -572,7 +555,6 @@ fn empty_page(
         scope_version,
         visible_types: Vec::new(),
         metrics: Vec::new(),
-        warehouse_options: Vec::new(),
         as_of: Instant::now(),
     }
 }

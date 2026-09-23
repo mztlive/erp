@@ -55,7 +55,8 @@ test("余额仓库作为常用条件不展开更多面板，修改条件须查�
 
 test("流水重置更多条件仅清流水条件草稿，保留常用仓库与已生效查询", () => {
     const { result, patchUrl } = setup("movement")
-    expect(result.current.panelOpen).toBe(true)
+    expect(result.current.panelOpen).toBe(false)
+    act(() => result.current.setPanelOpen(true))
     act(() => {
         result.current.setOccurredFromDraft("2026-09-01")
         result.current.setWarehouseIdDraft("warehouse-b")

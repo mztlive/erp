@@ -212,7 +212,7 @@ impl FundsAccess {
         decided: Vec<(PayableAccountRow, Option<LinkedPurchaseFact>, bool)>,
         authorization: FundsAuthorization,
         fingerprint: std::collections::hash_map::DefaultHasher,
-        executor: &mut dyn Executor,
+        _executor: &mut dyn Executor,
     ) -> Result<FundsScopedPage<ScopedPayableAccountRow>> {
         let total = decided.len() as u64;
         let page = query.paging.page.max(1);
@@ -248,12 +248,10 @@ impl FundsAccess {
         ensure_version(params.scope_version.as_deref(), &version).map_err(|_| changed())?;
         let summary =
             build_summary(&triples, &owner_of, whole_amount(all_whole, whole_sum), &version, !all_whole)?;
-        let owner_options = self.owner_options_purchase(&authorization, executor).await?;
         Ok(FundsScopedPage {
             items,
             total,
             summary,
-            owner_options,
             page,
             page_size: page_size as u32,
             scope_version: version.clone(),

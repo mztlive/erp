@@ -17,6 +17,7 @@ import {
     useComboboxAnchor,
 } from "@/components/ui/combobox"
 import type { ComboboxOption } from "@/components/business/option-combobox"
+import { remoteSearchFromInputChange } from "@/components/business/combobox-input-search"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -47,6 +48,12 @@ export type MultiOptionComboboxProps = {
     "aria-describedby"?: string
     className?: string
     size?: "sm" | "default"
+    filterMode?: "local" | "remote"
+    onSearchChange?: (query: string) => void
+    loading?: boolean
+    hasMore?: boolean
+    onLoadMore?: () => void
+    loadMoreId?: string
 }
 
 /**
@@ -66,6 +73,12 @@ export function MultiOptionCombobox({
     "aria-describedby": ariaDescribedBy,
     className,
     size = "default",
+    filterMode = "local",
+    onSearchChange,
+    loading = false,
+    hasMore = false,
+    onLoadMore,
+    loadMoreId,
 }: MultiOptionComboboxProps) {
     const items = React.useMemo(() => toInternal(options), [options])
     const selected = React.useMemo(
@@ -82,10 +95,19 @@ export function MultiOptionCombobox({
             onValueChange={(next) => {
                 onValueChange(next.map((item) => item.value))
             }}
+            onInputValueChange={(query, details) => {
+                if (filterMode !== "remote") return
+                const nextQuery = remoteSearchFromInputChange(
+                    query,
+                    details.reason,
+                )
+                if (nextQuery !== undefined) onSearchChange?.(nextQuery)
+            }}
             itemToStringLabel={(item) => item.label}
             itemToStringValue={(item) => item.value}
             isItemEqualToValue={(item, current) => item.value === current.value}
             filter={(item, query) => {
+                if (filterMode === "remote") return true
                 const q = query.trim().toLowerCase()
                 if (!q) return true
                 return item.__search.toLowerCase().includes(q)
@@ -169,7 +191,9 @@ export function MultiOptionCombobox({
                         showTrigger={false}
                     />
                 )}
-                <ComboboxEmpty>{emptyLabel}</ComboboxEmpty>
+                <ComboboxEmpty>
+                    {loading ? "正在加载" : emptyLabel}
+                </ComboboxEmpty>
                 <ComboboxList>
                     {items.map((item) => (
                         <ComboboxItem
@@ -186,6 +210,19 @@ export function MultiOptionCombobox({
                         </ComboboxItem>
                     ))}
                 </ComboboxList>
+                {hasMore && onLoadMore ? (
+                    <Button
+                        id={loadMoreId}
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="w-full"
+                        disabled={loading}
+                        onClick={onLoadMore}
+                    >
+                        加载更多
+                    </Button>
+                ) : null}
             </ComboboxContent>
         </Combobox>
     )

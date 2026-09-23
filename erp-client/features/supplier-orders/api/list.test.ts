@@ -25,7 +25,9 @@ test("把视图、取消退款和人员筛选交给服务端并保留三分空�
                 cancel_status: "NONE",
                 refund_status: "NONE",
                 follow_up_user_id: "buyer-1",
+                follow_up_user_name: "采购员（buyer）",
                 handler_user_id: "handler-1",
+                handler_user_name: "处理人（handler）",
                 business_org_unit_id: "org-a",
                 version: 1,
                 created_at: 1_700_000_000,
@@ -37,8 +39,6 @@ test("把视图、取消退款和人员筛选交给服务端并保留三分空�
         empty_reason: null,
         scope_version: "v1:abc",
         ownership_basis: "fulfillment_follow_up",
-        owner_options: [{ value: "buyer-1", label: "采购员（buyer）" }],
-        handler_options: [{ value: "handler-1", label: "处理人（handler）" }],
     })
 
     const result = await fetchSupplierOrders({
@@ -84,8 +84,6 @@ test("无范围空态不在客户端按视图截断分页", async () => {
         page_size: 50,
         empty_reason: "no_scope",
         scope_version: "v0",
-        owner_options: [],
-        handler_options: [],
     })
     const result = await fetchSupplierOrders({
         view: "actionable",

@@ -150,9 +150,6 @@ export type SettlementListView = {
     queriedAt: string
     filterSummary: string
     scopeVersion?: string
-    ownerOptions: SettlementFilterOption[]
-    operatorOptions: SettlementFilterOption[]
-    handlerOptions: SettlementFilterOption[]
 }
 
 type SettlementItemView = {

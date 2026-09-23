@@ -256,7 +256,6 @@ export function ReceivableScopeListPane({
                         cancelMoreFilters={urlState.cancelMoreFilters}
                         clearFilters={urlState.clearFilters}
                         hasPendingChanges={urlState.hasPendingChanges}
-                        ownerOptions={data?.ownerOptions ?? []}
                         resultCount={data?.total}
                         loading={isPending}
                         failed={isError}

@@ -13,7 +13,7 @@ import { DatePicker } from "@/components/ui/date-picker"
 import { useRemoteSearchCombobox } from "@/features/entity-selectors/hooks/use-remote-search-combobox"
 import { useSearchInput } from "@/features/entity-selectors/hooks/use-search-input"
 import { useSupplierSelectorQuery } from "@/features/entity-selectors/hooks/queries"
-import { ResponsibleUserFilter } from "@/features/entity-selectors/components/responsible-user-filter"
+import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
 import { OrganizationUnitFilter } from "@/features/organization/components/organization-unit-filter"
 import type {
     SupplierOrdersFilterKey,
@@ -61,6 +61,7 @@ function ResidentSupplierFilter({
         value ?? undefined,
     )
     const { rows, loading, emptyLabel } = useRemoteSearchCombobox({
+        selectedId: value ?? undefined,
         list: query.list,
         selected: query.selected,
         idOf: (item) => item.supplierId,
@@ -95,16 +96,12 @@ export function SupplierOrdersListToolbar({
     resultCount,
     loading,
     failed,
-    ownerOptions = [],
-    handlerOptions = [],
 }: {
     searchInputRef: React.RefObject<HTMLInputElement | null>
     filters: ReturnType<typeof useSupplierOrdersFilters>
     resultCount?: number
     loading: boolean
     failed: boolean
-    ownerOptions?: ReadonlyArray<{ value: string; label: string }>
-    handlerOptions?: ReadonlyArray<{ value: string; label: string }>
 }) {
     const moreCount = f.appliedChips.filter(({ key }) =>
         MORE_CHIP_KEYS.includes(key),
@@ -256,19 +253,20 @@ export function SupplierOrdersListToolbar({
                             人员
                         </legend>
                         <div className="grid min-w-0 gap-3">
-                            <ResponsibleUserFilter
+                            {/* 未接人员目录：跟进人不是采购查询资格，处理人是开放异常任务负责人。 */}
+                            <PersonDirectoryFilter
                                 id={`${prefix}-owner`}
                                 label="跟进人"
                                 value={f.ownerUserIdsDraft}
                                 onChange={f.setOwnerUserIdsDraft}
-                                options={ownerOptions}
+                                category="business"
                             />
-                            <ResponsibleUserFilter
+                            <PersonDirectoryFilter
                                 id={`${prefix}-handler`}
                                 label="异常处理人"
                                 value={f.handlerUserIdsDraft}
                                 onChange={f.setHandlerUserIdsDraft}
-                                options={handlerOptions}
+                                category="business"
                             />
                         </div>
                     </fieldset>

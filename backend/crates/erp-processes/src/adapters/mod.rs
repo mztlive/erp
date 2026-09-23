@@ -238,3 +238,11 @@ pub use scope_target_validation::scope_configuration;
 pub use settlement_data_scope::{
     MongoSettlementDataScope, scoped_settlement_process, scoped_settlement_service, settlement_access,
 };
+
+mod party_directory;
+pub use party_directory::party_directory;
+
+mod warehouse_directory;
+pub use warehouse_directory::warehouse_directory;
+
+mod directory_scope;

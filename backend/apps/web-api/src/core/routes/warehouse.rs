@@ -23,6 +23,22 @@ use crate::core::middleware::with_permission;
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
+            "/warehouse-directory",
+            with_permission(
+                get(warehouse::directory::list),
+                rbac,
+                warehouse::directory::list_permission_key(),
+            ),
+        )
+        .route(
+            "/warehouse-directory/selected",
+            with_permission(
+                get(warehouse::directory::selected),
+                rbac,
+                warehouse::directory::selected_permission_key(),
+            ),
+        )
+        .route(
             "/warehouses",
             with_permission(get(warehouse::warehouse_list), rbac, warehouse::warehouse_list_permission_key()),
         )

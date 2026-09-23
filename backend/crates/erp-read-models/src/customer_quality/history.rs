@@ -4,7 +4,6 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use application_core::FilterOption;
 use persistence_core::{Executor, Transactional};
 use rust_decimal::Decimal;
 
@@ -36,7 +35,7 @@ impl super::CustomerQualityReadModel {
         let access = QualityAccess::new(self.db.clone(), self.rbac.clone(), self.customer_scope.clone());
         let (sales_context, sales_scope) = access.resolve_history(actor, executor).await?;
         if sales_scope.is_empty() {
-            let mut view = assemble_history(query, Vec::new(), totals_for(&[]), Vec::new(), Vec::new());
+            let mut view = assemble_history(query, Vec::new(), totals_for(&[]));
             view.empty_reason = Some("no_scope".into());
             apply_context(&mut view, &sales_context);
             let expected = sales_context.scope_version.clone();
@@ -47,10 +46,7 @@ impl super::CustomerQualityReadModel {
         let sources = HistorySnapshot::load(&self.db, filter, executor).await?;
         let expected = version(&sales_context.scope_version, &sources.orders);
         super::ensure_version(query.scope_version.as_deref(), &expected)?;
-        let (user_options, org_options) = history_options(&sources);
         let mut view = project_history(query, sources);
-        view.attribution_user_options = user_options;
-        view.attribution_org_options = org_options;
         apply_context(&mut view, &sales_context);
         if !export {
             view.rows.items = page_items(view.rows.items, query);
@@ -93,47 +89,14 @@ impl super::CustomerQualityReadModel {
     }
 }
 
-/// 历史候选来自完整授权订单集合；同名人员以稳定身份区分，组织含历史路径全量节点。
-fn history_options(sources: &HistorySnapshot) -> (Vec<FilterOption>, Vec<FilterOption>) {
-    let mut users = BTreeMap::<String, BTreeSet<String>>::new();
-    let mut orgs = BTreeMap::<String, BTreeSet<String>>::new();
-    for order in &sources.orders {
-        if let Some(attribution) = &order.attribution {
-            users
-                .entry(attribution.attribution_user_id.clone())
-                .or_default()
-                .insert(attribution.attribution_user_name.clone());
-            for node in &attribution.org_path {
-                orgs.entry(node.id.clone()).or_default().insert(node.name.clone());
-            }
-            // 直接归属组织必在候选中，即使路径缺失也不丢弃。
-            orgs.entry(attribution.attribution_org_unit_id.clone())
-                .or_default()
-                .insert(attribution.attribution_org_unit_name.clone());
-        }
-    }
-    (labels(users), labels(orgs))
-}
-
-/// 同名候选以稳定身份区分；候选没有责任分派资格语义。
-fn labels(values: BTreeMap<String, BTreeSet<String>>) -> Vec<FilterOption> {
-    values
-        .into_iter()
-        .map(|(value, names)| FilterOption {
-            label: format!("{} · {}", names.into_iter().collect::<Vec<_>>().join("／"), value),
-            value,
-        })
-        .collect()
-}
-
-/// 同一快照内投影汇总、分组、排序；排序分页最后执行。
+/// 在冻结归属条件下汇总报表，目录由独立端点提供。
 fn project_history(query: &HistoryQualityQuery, sources: HistorySnapshot) -> HistoryQualityView {
     let has_period_orders = !sources.orders.is_empty();
     let matched: Vec<&QualityOrder> =
         sources.orders.iter().filter(|o| matches_history(o, query, &sources)).collect();
     let rows = group_history_rows(&matched, &query.dimension, &sources);
     let totals = totals_for(&rows);
-    let mut view = assemble_history(query, rows, totals, Vec::new(), Vec::new());
+    let mut view = assemble_history(query, rows, totals);
     // 候选由调用方填入，此处仅决定空态。
     if view.rows.total == 0 {
         view.empty_reason = Some(if has_period_orders { "filtered_empty" } else { "no_data" }.into());
@@ -344,8 +307,6 @@ fn assemble_history(
     query: &HistoryQualityQuery,
     rows: Vec<HistoryQualityRow>,
     totals: QualityTotals,
-    user_options: Vec<FilterOption>,
-    org_options: Vec<FilterOption>,
 ) -> HistoryQualityView {
     let total = rows.len();
     HistoryQualityView {
@@ -367,8 +328,6 @@ fn assemble_history(
         totals,
         rows: QualityRows { dimension: query.dimension.clone(), items: rows, total },
         filter_summary: history_filter_summary(query),
-        attribution_user_options: user_options,
-        attribution_org_options: org_options,
         can_export: true,
     }
 }

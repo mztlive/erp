@@ -1,8 +1,6 @@
 import type { ContractComboboxItem } from "@/components/business/entity-comboboxes"
-import { apiGet } from "@/lib/api"
-import type { Page } from "@/lib/api/paging"
+import { fetchSelectorList } from "@/lib/selector-list"
 
-import { OPTION_PAGE_SIZE } from "./shared"
 import type { ContractSearch } from "./types"
 
 type ContractDto = Readonly<{
@@ -12,6 +10,7 @@ type ContractDto = Readonly<{
     settlement_party_id: string
     status: string
     current_revision_id?: string | null
+    current_revision?: ContractRevisionDto | null
 }>
 
 type ContractRevisionDto = Readonly<{
@@ -21,9 +20,6 @@ type ContractRevisionDto = Readonly<{
     settlement_party_name: string
     valid_to?: string | null
 }>
-
-type ContractDetailDto = ContractDto &
-    Readonly<{ revisions: readonly ContractRevisionDto[] }>
 
 function contractStatus(status: string) {
     switch (status.toUpperCase()) {
@@ -36,19 +32,8 @@ function contractStatus(status: string) {
     }
 }
 
-async function contractItem(row: ContractDto): Promise<ContractComboboxItem> {
-    let revision: ContractRevisionDto | undefined
-    try {
-        const detail = await apiGet<ContractDetailDto>(
-            `/admin/contracts/${encodeURIComponent(row.id)}`,
-        )
-        revision =
-            detail.revisions.find(
-                (item) => item.id === detail.current_revision_id,
-            ) ?? detail.revisions[0]
-    } catch {
-        // 合同稳定编号和状态仍可用于选择；修订摘要按权限降级。
-    }
+function contractItem(row: ContractDto): ContractComboboxItem {
+    const revision = row.current_revision ?? undefined
     const status = contractStatus(row.status)
     return {
         contractId: row.id,
@@ -65,41 +50,22 @@ async function contractItem(row: ContractDto): Promise<ContractComboboxItem> {
 export async function searchContracts(
     input: ContractSearch,
 ): Promise<readonly ContractComboboxItem[]> {
-    const page = await apiGet<Page<ContractDto>>("/admin/contracts", {
+    const page = await fetchSelectorList<ContractDto>("/admin/contracts", {
         q: input.query.trim() || undefined,
         customer_id: input.customerId || undefined,
         scope: input.scope,
         status: input.selectableOnly ? "EFFECTIVE" : undefined,
-        page: 1,
-        page_size: OPTION_PAGE_SIZE,
         sort_by: "created_at",
         sort_dir: "desc",
     })
-    return Promise.all(page.items.map(contractItem))
+    return page.items.map(contractItem)
 }
 
 export async function fetchContractOption(
     contractId: string,
-    input: Pick<ContractSearch, "scope"> = {},
+    input: Omit<ContractSearch, "query"> = { purpose: "filter" },
 ): Promise<ContractComboboxItem | null> {
     if (!contractId) return null
-    try {
-        const row = await apiGet<ContractDto>(
-            `/admin/contracts/${encodeURIComponent(contractId)}`,
-        )
-        if (input.scope === "assigned") {
-            const page = await apiGet<Page<ContractDto>>("/admin/contracts", {
-                customer_id: row.customer_id,
-                scope: "assigned",
-                page: 1,
-                page_size: 1,
-            })
-            if (page.total <= 0) {
-                return null
-            }
-        }
-        return contractItem(row)
-    } catch {
-        return null
-    }
+    const rows = await searchContracts({ ...input, query: "" })
+    return rows.find((row) => row.contractId === contractId) ?? null
 }

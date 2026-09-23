@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use application_core::{AuditActor, FilteredPage};
+use application_core::AuditActor;
 use erp_identity::AccessControlExt;
 use erp_identity::repository::prelude::*;
 use erp_procurement::dto::purchase_order::{
@@ -44,7 +44,8 @@ impl PurchaseOrderReadService {
     /// * `RepositoryError` - 数据库查询失败
     ///
     /// # 关键业务约束
-    /// 列表、候选与总数在同一授权快照完成；后续页必须回传范围版本。
+    /// 列表与总数在同一授权快照完成；后续页必须回传范围版本。
+    /// 人员候选不由此接口生产，行负责人姓名仍来自当前页单据事实。
     pub async fn purchase_order_list(
         &self,
         params: &PurchaseOrderListParams,
@@ -69,15 +70,12 @@ impl PurchaseOrderReadService {
             as_of: snapshot.context.as_of.as_utc().to_rfc3339(),
             empty_reason: snapshot.no_scope.then_some("no_scope"),
             scope_summary: "采购单当前负责人及单据业务组织范围",
-            data: FilteredPage {
-                owner_options: snapshot.owner_options,
-                ownership_basis: "current_procurement_owner",
-                page: PageView {
-                    items,
-                    total: snapshot.page.total,
-                    page: snapshot.page_no,
-                    page_size: snapshot.page_size,
-                },
+            ownership_basis: "current_procurement_owner",
+            data: PageView {
+                items,
+                total: snapshot.page.total,
+                page: snapshot.page_no,
+                page_size: snapshot.page_size,
             },
         })
     }

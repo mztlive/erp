@@ -71,8 +71,11 @@ test("编辑不会提前查询，查询统一提交常用和更多条件并回�
     window.history.replaceState(null, "", "/master-data/sellable-items?page=3")
     render(<Harness />)
     input("search", " 茶礼 ")
-    fireEvent.click(screen.getByRole("radio", { name: "实物" }))
-    fireEvent.click(screen.getByRole("button", { name: /更多筛选/ }))
+    fireEvent.click(
+        document.getElementById("sellable-items-filter-kind-trigger")!,
+    )
+    fireEvent.click(await screen.findByRole("option", { name: "实物" }))
+    fireEvent.click(document.getElementById("sellable-items-filter-more")!)
     input("region", "北京")
     expect(replace).not.toHaveBeenCalled()
     expect(screen.getByText(/条件已修改，待查询/)).toBeTruthy()
@@ -92,8 +95,10 @@ test("重置更多条件只清草稿，保留常用条件和已生效结果", ()
         "/master-data/sellable-items?q=茶&productKind=PHYSICAL&productBrandId=brand&supplyRegion=北京",
     )
     render(<Harness />)
-    fireEvent.click(screen.getByRole("button", { name: /更多筛选/ }))
-    fireEvent.click(screen.getByRole("button", { name: "重置更多条件" }))
+    fireEvent.click(document.getElementById("sellable-items-filter-more")!)
+    fireEvent.click(
+        document.getElementById("sellable-items-filter-reset-more")!,
+    )
     expect(replace).not.toHaveBeenCalled()
     expect(window.location.search).toContain("productBrandId=brand")
     expect(screen.getByText("品牌：测试品牌")).toBeTruthy()
@@ -105,10 +110,9 @@ test("重置更多条件只清草稿，保留常用条件和已生效结果", ()
         ).value,
     ).toBe("茶")
     expect(
-        screen
-            .getByRole("radio", { name: "实物" })
-            .getAttribute("aria-checked"),
-    ).toBe("true")
+        (screen.getByRole("combobox", { name: "商品类型" }) as HTMLInputElement)
+            .value,
+    ).toContain("实物")
     expect(screen.getByText(/条件已修改，待查询/)).toBeTruthy()
 })
 
@@ -119,27 +123,27 @@ test("移除已生效标签不会丢弃其他待查询输入", () => {
         "/master-data/sellable-items?productBrandId=brand",
     )
     render(<Harness />)
-    fireEvent.click(screen.getByRole("button", { name: /更多筛选/ }))
-    input("region", "上海")
+    input("search", "上海")
     fireEvent.click(screen.getByRole("button", { name: "移除品牌：测试品牌" }))
     expect(window.location.search).toBe("")
     expect(
         (
             document.getElementById(
-                "sellable-items-filter-region",
+                "sellable-items-filter-search",
             ) as HTMLInputElement
         ).value,
     ).toBe("上海")
     expect(screen.getByText(/条件已修改，待查询/)).toBeTruthy()
 })
 
-test("隐藏的无效价格阻止查询并展开错误字段", async () => {
+test("无效价格阻止应用并聚焦错误字段", async () => {
     render(<Harness />)
-    fireEvent.click(screen.getByRole("button", { name: /更多筛选/ }))
+    fireEvent.click(document.getElementById("sellable-items-filter-more")!)
     input("price-min", "200")
     input("price-max", "100")
-    fireEvent.click(screen.getByRole("button", { name: /更多筛选/ }))
-    await submit()
+    await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "应用筛选" }))
+    })
     expect(replace).not.toHaveBeenCalled()
     expect(screen.getByRole("alert")).toBeTruthy()
     expect(document.activeElement?.id).toBe("sellable-items-filter-price-min")
@@ -163,7 +167,7 @@ test("外部 URL 变化会回填条件，清除全部同时清除草稿和当前
         ).value,
     ).toBe("茶")
     input("search", "新条件")
-    fireEvent.click(screen.getByRole("button", { name: "清除全部" }))
+    fireEvent.click(screen.getByRole("button", { name: "清空" }))
     expect(window.location.search).toBe("")
     expect(
         (

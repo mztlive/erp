@@ -42,7 +42,7 @@ use crate::core::response::ApiResponse;
 /// * `query` - 分页与筛选参数（扁平传递）
 ///
 /// # 返回
-/// 返回范围分页视图（`items`/`total`/`summary`/`owner_options`/`scope_version`）。
+/// 返回范围分页视图（`items`/`total`/`summary`/`scope_version`）。负责销售候选不随列表返回。
 pub async fn receivable_account_list(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -130,7 +130,7 @@ pub async fn receivable_account_create(
 /// * `query` - 分页与筛选参数（扁平传递）
 ///
 /// # 返回
-/// 返回范围分页视图（`items`/`total`/`summary`/`owner_options`/`scope_version`）。
+/// 返回范围分页视图（`items`/`total`/`summary`/`scope_version`）。负责销售候选不随列表返回。
 pub async fn customer_receipt_list(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -338,7 +338,7 @@ pub async fn customer_receipt_post(
 /// * `query` - 分页与筛选参数（扁平传递）
 ///
 /// # 返回
-/// 返回范围分页视图（`items`/`total`/`summary`/`owner_options`/`scope_version`）。
+/// 返回范围分页视图（`items`/`total`/`summary`/`scope_version`）。销售与采购负责人候选不合并进列表。
 pub async fn invoice_list(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,

@@ -62,6 +62,12 @@ const WIRED_CONSUMERS: ReadonlyArray<{
     },
     { resource: "cost_entry", actions: ["list", "detail"] },
     { resource: "cost_allocation", actions: ["list"] },
+    { resource: "sales_person", actions: ["list"] },
+    { resource: "procurement_person", actions: ["list"] },
+    { resource: "business_person", actions: ["list"] },
+    { resource: "person_query_qualification", actions: ["manage"] },
+    { resource: "settlement_party", actions: ["list"] },
+    { resource: "warehouse", actions: ["list"] },
 ]
 
 export function isRegisteredIdentifier(value: string): boolean {
@@ -113,6 +119,31 @@ export function validateCreateDataScope(
     }
     if (!isStableIdentity(input.subjectId)) {
         return "主体必须使用稳定 ID，不能用显示名"
+    }
+    const objectDimension =
+        input.resource === "settlement_party"
+            ? "settlement_party"
+            : input.resource === "warehouse"
+              ? "warehouse"
+              : null
+    if (
+        objectDimension &&
+        (input.targetDimension !== objectDimension ||
+            !["company", "organization"].includes(input.scopeType))
+    ) {
+        return "该目录仅支持公司范围或指定对象集合，请选择对应目标维度"
+    }
+    if (
+        [
+            "sales_person",
+            "procurement_person",
+            "business_person",
+            "person_query_qualification",
+        ].includes(input.resource) &&
+        (input.targetDimension !== "internal_org" ||
+            input.scopeType === "collaborative")
+    ) {
+        return "人员目录只支持内部组织维度的公司、组织、团队或本人范围"
     }
     const needsTargets =
         input.scopeType === "organization" || input.scopeType === "team"

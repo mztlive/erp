@@ -245,6 +245,8 @@ impl RbacService {
         self.policy_store
             .replace_subject_roles(&subject(account_kind, account_id), &role_keys, executor)
             .await?;
+        crate::service::person_directory::grant_assigned_roles(&self.db, account_id, &role_ids, executor)
+            .await?;
         Ok(())
     }
 

@@ -154,9 +154,7 @@ export type MasterDataListResult = Readonly<{
     eligibilityAsOf: string
     queriedAt: string
     emptyReason?: "no_scope" | string | null
-    ownerOptions?: ReadonlyArray<{ value: string; label: string }>
-    capabilityOwnerOptions?: ReadonlyArray<{ value: string; label: string }>
-    procurementOwnerOptions?: ReadonlyArray<{ value: string; label: string }>
+
     metrics: readonly {
         key: string
         label: string

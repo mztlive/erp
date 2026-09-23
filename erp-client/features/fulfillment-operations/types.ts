@@ -292,7 +292,6 @@ export type FulfillmentQueueView = Readonly<{
         nextOperationId?: string
         filterSummary: string
         /** 服务端在当前授权筛选内形成的仓库选项。 */
-        warehouseOptions: ReadonlyArray<{ value: string; label: string }>
         /** 当前角色能看到的作业类型；类型分段与指标只渲染这些 */
         visibleTypes: readonly FulfillmentOperationType[]
         roleLabel: string

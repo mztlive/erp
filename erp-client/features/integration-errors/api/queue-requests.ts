@@ -71,7 +71,8 @@ export async function fetchIntegrationQueue(
                     query.view === "result_unknown"
                         ? "result_unknown"
                         : errorClassToBackend(query.errorClass),
-                status: query.view === "resolved" ? "resolved" : errorStatus(query),
+                status:
+                    query.view === "resolved" ? "resolved" : errorStatus(query),
                 handler_user_ids: handlers,
                 operator_user_ids: operators,
                 scope_version: query.scopeVersion,

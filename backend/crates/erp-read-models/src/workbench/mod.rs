@@ -36,7 +36,7 @@ pub(crate) use facts::{
 pub use fulfillment_queue::{
     FulfillmentQueueGateFilter, FulfillmentQueueGateState, FulfillmentQueueItemView,
     FulfillmentQueueListParams, FulfillmentQueueMetricView, FulfillmentQueueOperationType,
-    FulfillmentQueuePageView, FulfillmentQueueWarehouseView,
+    FulfillmentQueuePageView,
 };
 pub use query::WorkbenchReadService;
 

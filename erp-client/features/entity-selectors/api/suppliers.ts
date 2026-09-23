@@ -1,8 +1,8 @@
 import type { SupplierComboboxItem } from "@/components/business/entity-comboboxes"
 import { apiGet } from "@/lib/api"
-import type { Page } from "@/lib/api/paging"
+import { fetchSelectorList } from "@/lib/selector-list"
 
-import { OPTION_PAGE_SIZE, activeStatus } from "./shared"
+import { activeStatus } from "./shared"
 import type { EntitySearch } from "./types"
 
 type SupplierDto = Readonly<{
@@ -32,11 +32,9 @@ function supplierItem(row: SupplierDto): SupplierComboboxItem {
 export async function searchSuppliers(
     input: EntitySearch,
 ): Promise<readonly SupplierComboboxItem[]> {
-    const page = await apiGet<Page<SupplierDto>>("/admin/suppliers", {
+    const page = await fetchSelectorList<SupplierDto>("/admin/suppliers", {
         keyword: input.query.trim() || undefined,
-        status: "active",
-        page: 1,
-        page_size: OPTION_PAGE_SIZE,
+        status: input.purpose === "filter" ? undefined : "active",
         sort_by: "supplier_no",
         sort_dir: "asc",
     })
@@ -45,17 +43,11 @@ export async function searchSuppliers(
 
 export async function fetchSupplierOption(
     supplierId: string,
+    input: Omit<EntitySearch, "query"> = { purpose: "filter" },
 ): Promise<SupplierComboboxItem | null> {
     if (!supplierId) return null
-    try {
-        return supplierItem(
-            await apiGet<SupplierDto>(
-                `/admin/suppliers/${encodeURIComponent(supplierId)}`,
-            ),
-        )
-    } catch {
-        return null
-    }
+    const rows = await searchSuppliers({ ...input, query: "" })
+    return rows.find((row) => row.supplierId === supplierId) ?? null
 }
 
 /** 发票使用往来单位标识，不能使用供应商账户标识。 */

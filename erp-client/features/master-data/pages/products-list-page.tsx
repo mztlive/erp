@@ -170,10 +170,7 @@ export function ProductsListPage() {
                         searchInputRef={searchInputRef}
                         filters={filters}
                         appliedChips={state.appliedChips}
-                        ownerOptions={state.listQuery.data?.ownerOptions ?? []}
-                        procurementOwnerOptions={
-                            state.listQuery.data?.procurementOwnerOptions ?? []
-                        }
+
                         productFilterOptionsQuery={
                             state.productFilterOptionsQuery
                         }

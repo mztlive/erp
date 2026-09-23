@@ -860,6 +860,92 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         ],
     },
     {
+        name: "人员目录",
+        description: "独立人员查询与资格维护",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/person-query-qualifications/{category}/{account_id}",
+                description: "读取人员查询资格",
+                permission: {
+                    resource: "person_query_qualification",
+                    action: "manage",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/person-query-qualifications/{category}/{account_id}",
+                description: "维护人员查询资格",
+                permission: {
+                    resource: "person_query_qualification",
+                    action: "manage",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/salespeople",
+                description: "查询销售人员",
+                permission: {
+                    resource: "sales_person",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/salespeople/selected",
+                description: "回显已选销售人员",
+                permission: {
+                    resource: "sales_person",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/procurement-people",
+                description: "查询采购负责人",
+                permission: {
+                    resource: "procurement_person",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/procurement-people/selected",
+                description: "回显已选采购负责人",
+                permission: {
+                    resource: "procurement_person",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/business-people",
+                description: "查询后台人员",
+                permission: {
+                    resource: "business_person",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/business-people/selected",
+                description: "回显已选后台人员",
+                permission: {
+                    resource: "business_person",
+                    action: "list",
+                },
+            },
+        ],
+    },
+    {
         name: "组织管理",
         description: "内部组织、成员与管理关系",
         permissions: [
@@ -1006,6 +1092,52 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 description: "查询审计事件列表",
                 permission: {
                     resource: "audit_event",
+                    action: "list",
+                },
+            },
+        ],
+    },
+    {
+        name: "对象目录",
+        description: "按独立范围查询业务对象",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/settlement-parties",
+                description: "查询结算主体目录",
+                permission: {
+                    resource: "settlement_party",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/settlement-parties/selected",
+                description: "回显settlement_party目录",
+                permission: {
+                    resource: "settlement_party",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/warehouse-directory",
+                description: "查询仓库目录",
+                permission: {
+                    resource: "warehouse",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/warehouse-directory/selected",
+                description: "回显warehouse目录",
+                permission: {
+                    resource: "warehouse",
                     action: "list",
                 },
             },
@@ -1395,6 +1527,32 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 permission: {
                     resource: "customer_assignment",
                     action: "create",
+                },
+            },
+        ],
+    },
+    {
+        name: "历史归属目录",
+        description: "冻结归属查询",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/customer-quality/history/directory",
+                description: "查询历史归属候选",
+                permission: {
+                    resource: "sales_order",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/actual-profit-loss/history-directory",
+                description: "查询历史归属候选",
+                permission: {
+                    resource: "cost_entry",
+                    action: "list",
                 },
             },
         ],

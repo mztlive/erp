@@ -1,9 +1,5 @@
 //! 历史身份筛选和候选复用完整授权订单集合，不从当前页推断候选。
 
-use std::collections::{BTreeMap, BTreeSet};
-
-use application_core::FilterOption;
-
 use super::calculation::OrderResult;
 use super::dto::ProfitLossQuery;
 
@@ -33,30 +29,4 @@ fn matches_group(order: &OrderResult, group: Option<&str>) -> bool {
         _ => return false,
     };
     actual.unwrap_or_default() == id
-}
-
-/// 候选覆盖本次期间和业务条件内的授权数据；历史名称保留，身份相同的旧名称合并。
-pub(super) fn options(orders: &[OrderResult]) -> (Vec<FilterOption>, Vec<FilterOption>) {
-    let mut users = BTreeMap::<String, BTreeSet<String>>::new();
-    let mut organizations = BTreeMap::<String, BTreeSet<String>>::new();
-    for order in orders {
-        if let (Some(id), Some(name)) = (&order.row.attribution_user_id, &order.row.attribution_user_name) {
-            users.entry(id.clone()).or_default().insert(name.clone());
-        }
-        for node in &order.attribution_path {
-            organizations.entry(node.id.clone()).or_default().insert(node.name.clone());
-        }
-    }
-    (labels(users), labels(organizations))
-}
-
-/// 同名候选以稳定身份区分；候选没有责任分派资格语义。
-fn labels(values: BTreeMap<String, BTreeSet<String>>) -> Vec<FilterOption> {
-    values
-        .into_iter()
-        .map(|(value, names)| FilterOption {
-            label: format!("{} · {}", names.into_iter().collect::<Vec<_>>().join("／"), value),
-            value,
-        })
-        .collect()
 }

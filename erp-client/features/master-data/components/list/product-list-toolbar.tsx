@@ -10,7 +10,7 @@ import {
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
 import { Input } from "@/components/ui/input"
-import { ResponsibleUserFilter } from "@/features/entity-selectors/components/responsible-user-filter"
+import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
 import type { useProductFilterOptionsQuery } from "@/features/master-data/hooks/queries"
 import type { ProductAppliedChip } from "@/features/master-data/hooks/use-product-list-state"
 import type { useProductListFilters } from "@/features/master-data/hooks/use-product-list-filters"
@@ -46,8 +46,7 @@ export function ProductListToolbar({
     filters: f,
     appliedChips,
     productFilterOptionsQuery,
-    ownerOptions,
-    procurementOwnerOptions,
+
     resultCount,
     loading,
     failed,
@@ -57,8 +56,7 @@ export function ProductListToolbar({
     filters: ReturnType<typeof useProductListFilters>
     appliedChips: readonly ProductAppliedChip[]
     productFilterOptionsQuery: ReturnType<typeof useProductFilterOptionsQuery>
-    ownerOptions: ReadonlyArray<{ value: string; label: string }>
-    procurementOwnerOptions: ReadonlyArray<{ value: string; label: string }>
+
     resultCount?: number
     loading: boolean
     failed: boolean
@@ -163,19 +161,19 @@ export function ProductListToolbar({
                             人员
                         </legend>
                         <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-                            <ResponsibleUserFilter
+                            <PersonDirectoryFilter
                                 id={`${prefix}-owner`}
                                 label="维护人"
                                 value={f.ownerUserIdsDraft}
                                 onChange={f.setOwnerUserIdsDraft}
-                                options={ownerOptions}
+                                category="business"
                             />
-                            <ResponsibleUserFilter
+                            <PersonDirectoryFilter
                                 id={`${prefix}-procurement-owner`}
                                 label="采购负责人"
                                 value={f.procurementOwnerUserIdsDraft}
                                 onChange={f.setProcurementOwnerUserIdsDraft}
-                                options={procurementOwnerOptions}
+                                category="procurement"
                             />
                         </div>
                     </fieldset>

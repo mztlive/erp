@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { cleanup, render, screen } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, expect, it, vi } from "vitest"
 
 const navigation = vi.hoisted(() => ({
@@ -95,11 +95,12 @@ afterEach(() => {
 
 it("主体与范围类型出现在可见筛选和条件芯片中，可单独清除", () => {
     renderPage()
+    fireEvent.click(screen.getByRole("button", { name: /^更多筛选/ }))
     expect(screen.getByLabelText("主体")).toBeTruthy()
     expect(screen.getByLabelText("范围类型")).toBeTruthy()
     expect(screen.getByText("主体：销售")).toBeTruthy()
     expect(screen.getByText("公司级")).toBeTruthy()
-    expect(screen.getByRole("button", { name: "清除全部" })).toBeTruthy()
+    expect(screen.getByRole("button", { name: "重置" })).toBeTruthy()
 })
 
 it("无 data_scope:list 的 403 呈现无模块权限", () => {

@@ -29,6 +29,7 @@ export function useStickySelected<T>(
     items: readonly T[],
     key: string | undefined,
     keyOf: (item: T) => string,
+    retainMissing = true,
 ): T | null {
     const lastRef = React.useRef<T | null>(null)
     if (!key) {
@@ -36,6 +37,10 @@ export function useStickySelected<T>(
         return null
     }
     const fromList = items.find((item) => keyOf(item) === key) ?? null
+    if (!retainMissing) {
+        lastRef.current = null
+        return fromList
+    }
     if (fromList) lastRef.current = fromList
     return (
         fromList ??

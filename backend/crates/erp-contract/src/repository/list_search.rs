@@ -9,9 +9,7 @@ use serde::Deserialize;
 
 use super::ContractExt;
 use super::contract::{ContractDomainRepository, ContractFilter, ContractRow};
-use crate::dto::contract::{
-    ContractFilterOption, ContractMetric, ContractMetrics, ContractRevisionView, ContractView,
-};
+use crate::dto::contract::{ContractMetric, ContractMetrics, ContractRevisionView, ContractView};
 
 /// 可见合同引用的客户搜索事实，外域数据由端口提供。
 #[derive(Debug, Clone)]
@@ -150,13 +148,12 @@ impl ContractSearch {
 pub struct ContractCount {
     pub total: i64,
 }
-/// 单个聚合同时返回结果页、筛选总数、范围指标与结算主体候选项。
+/// 单个聚合同时返回结果页、筛选总数与范围指标。
 #[derive(Debug, Deserialize, Default)]
 pub struct ContractSearchResult {
     pub items: Vec<ContractRow>,
     pub totals: Vec<ContractCount>,
     pub metrics: Vec<ContractMetrics>,
-    pub settlement_options: Vec<ContractFilterOption>,
 }
 impl ContractSearchResult {
     /// 空命中聚合计数视为零。
@@ -265,7 +262,6 @@ fn list_pipeline(filter: &ContractFilter, search: &ContractSearch, today: Busine
             "items": [doc! { "$match": search.filter() }, doc! { "$sort": list_sort(filter) }, doc! { "$skip": filter.skip() as i64 }, doc! { "$limit": filter.limit() }],
             "totals": [doc! { "$match": search.filter() }, doc! { "$count": "total" }],
             "metrics": [doc! { "$match": search.filter() }, doc! { "$group": metric_group() }],
-            "settlement_options": [doc! { "$sort": { "id": 1 } }, doc! { "$group": { "_id": "$settlement_party_id", "label": { "$first": "$search_settlement" } } }, doc! { "$project": { "_id": 0, "value": "$_id", "label": 1 } }, doc! { "$sort": { "label": 1, "value": 1 } }]
         } },
     ]
 }

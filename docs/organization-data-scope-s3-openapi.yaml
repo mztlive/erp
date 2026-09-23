@@ -11,8 +11,8 @@ paths:
   /admin/sales-orders:
     get:
       operationId: sales_scope_list
-      summary: 当前授权范围内的销售单列表与负责人候选
-      description: 同事务执行范围过滤、业务筛选、总数、候选及业务版本读取；返回前复核。最多匹配 10000 张单，超过上限必须收窄期间或客户；跨页和 CSV 下载前须使用同一 scope_version。
+      summary: 当前授权范围内的销售单列表
+      description: 同事务执行范围过滤、业务筛选、总数及业务版本读取；返回前复核。最多匹配 10000 张单，超过上限必须收窄期间或客户；跨页和 CSV 下载前须使用同一 scope_version。
       parameters:
         - $ref: '#/components/parameters/ScopeVersion'
         - $ref: '#/components/parameters/Page'
@@ -23,7 +23,7 @@ paths:
           description: 逗号分隔稳定人员 ID，最多 100 项；同字段 OR，不同条件 AND。
       responses:
         '200':
-          description: 原 ApiResponse.data 分页及 owner_options，增加 ScopeMetadata；ownership_basis 为 document_sales_owner。
+          description: 原 ApiResponse.data 分页，增加 ScopeMetadata；ownership_basis 为 document_sales_owner。
           content:
             application/json:
               schema:
@@ -36,7 +36,6 @@ paths:
                         properties:
                           items: {type: array, items: {type: object}}
                           total: {type: integer}
-                          owner_options: {type: array, items: {type: object}}
         '400': {$ref: '#/components/responses/Invalid'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '409': {$ref: '#/components/responses/Changed'}

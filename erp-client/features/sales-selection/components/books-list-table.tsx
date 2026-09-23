@@ -13,10 +13,7 @@ import { listWorkspaceEmptyStateClassName } from "@/components/business/list-wor
 import { Button } from "@/components/ui/button"
 import { buildBooksListColumns } from "@/features/sales-selection/components/books-list-columns"
 import { bookIdentity } from "@/features/sales-selection/lib/presentation"
-import type {
-    SelectionBook,
-    SelectionOwnerOption,
-} from "@/features/sales-selection/types"
+import type { SelectionBook } from "@/features/sales-selection/types"
 
 /**
  * 选品册结果表：贴齐工作区表格框架，失败与空态走统一组件。
@@ -31,7 +28,6 @@ export function BooksListTable({
     filtersActive,
     onClearFilters,
     noScope = false,
-    ownerOptions = [],
     page,
     pageSize,
     onPaginationChange,
@@ -47,23 +43,12 @@ export function BooksListTable({
     onClearFilters: () => void
     /** 无数据范围：与筛空区分展示，不提示创建解决。 */
     noScope?: boolean
-    /** 同一授权快照内的负责人候选，用于解析显示名。 */
-    ownerOptions?: readonly SelectionOwnerOption[]
     page: number
     pageSize: number
     onPaginationChange: (next: PaginationState) => void
     onRowNavigate: (bookId: string) => void
 }) {
-    const ownerLabels = React.useMemo(() => {
-        const labels = new Map<string, string>()
-        for (const option of ownerOptions)
-            labels.set(option.value, option.label)
-        return labels
-    }, [ownerOptions])
-    const columns = React.useMemo(
-        () => buildBooksListColumns((ownerId) => ownerLabels.get(ownerId)),
-        [ownerLabels],
-    )
+    const columns = React.useMemo(() => buildBooksListColumns(), [])
     const pagination = React.useMemo<PaginationState>(
         () => ({
             pageIndex: Math.max(0, page - 1),

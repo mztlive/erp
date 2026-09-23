@@ -10,7 +10,7 @@ import {
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
 import { Input } from "@/components/ui/input"
-import { ResponsibleUserFilter } from "@/features/entity-selectors/components/responsible-user-filter"
+import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
 import {
     CompanySkuSearchCombobox,
     SupplierSearchCombobox,
@@ -77,10 +77,10 @@ export type SupplierOfferingsToolbarProps = {
     onSupplierIdDraftChange: (value: string | null) => void
     ownerUserIdsDraft: string
     onOwnerUserIdsDraftChange: (value: string) => void
-    ownerOptions: ReadonlyArray<{ value: string; label: string }>
+
     procurementOwnerUserIdsDraft: string
     onProcurementOwnerUserIdsDraftChange: (value: string) => void
-    procurementOwnerOptions: ReadonlyArray<{ value: string; label: string }>
+
     orgUnitIdsDraft: string
     onOrgUnitIdsDraftChange: (value: string) => void
     includeDescendantsDraft: boolean
@@ -118,10 +118,10 @@ export function SupplierOfferingsToolbar({
     onSupplierIdDraftChange,
     ownerUserIdsDraft,
     onOwnerUserIdsDraftChange,
-    ownerOptions,
+
     procurementOwnerUserIdsDraft,
     onProcurementOwnerUserIdsDraftChange,
-    procurementOwnerOptions,
+
     orgUnitIdsDraft,
     onOrgUnitIdsDraftChange,
     includeDescendantsDraft,
@@ -214,19 +214,19 @@ export function SupplierOfferingsToolbar({
                             人员
                         </legend>
                         <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-                            <ResponsibleUserFilter
+                            <PersonDirectoryFilter
                                 id="supplier-offerings-toolbar-owner"
                                 label="维护人"
                                 value={ownerUserIdsDraft}
                                 onChange={onOwnerUserIdsDraftChange}
-                                options={ownerOptions}
+                                category="business"
                             />
-                            <ResponsibleUserFilter
+                            <PersonDirectoryFilter
                                 id="supplier-offerings-toolbar-procurement-owner"
                                 label="采购负责人"
                                 value={procurementOwnerUserIdsDraft}
                                 onChange={onProcurementOwnerUserIdsDraftChange}
-                                options={procurementOwnerOptions}
+                                category="procurement"
                             />
                         </div>
                     </fieldset>

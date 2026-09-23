@@ -22,6 +22,18 @@ use crate::core::middleware::with_permission;
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
+            "/settlement-parties",
+            with_permission(get(party::directory::list), rbac, party::directory::list_permission_key()),
+        )
+        .route(
+            "/settlement-parties/selected",
+            with_permission(
+                get(party::directory::selected),
+                rbac,
+                party::directory::selected_permission_key(),
+            ),
+        )
+        .route(
             "/companies",
             with_permission(
                 get(party::company::company_list),

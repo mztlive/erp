@@ -576,8 +576,6 @@ pub struct CurrentQualityView {
     pub totals: QualityTotals,
     pub rows: QualityRows<CurrentQualityRow>,
     pub filter_summary: String,
-    pub owner_options: Vec<application_core::FilterOption>,
-    pub org_options: Vec<application_core::FilterOption>,
     pub can_export: bool,
 }
 
@@ -597,8 +595,6 @@ pub struct HistoryQualityView {
     pub totals: QualityTotals,
     pub rows: QualityRows<HistoryQualityRow>,
     pub filter_summary: String,
-    pub attribution_user_options: Vec<application_core::FilterOption>,
-    pub attribution_org_options: Vec<application_core::FilterOption>,
     pub can_export: bool,
 }
 

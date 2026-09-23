@@ -108,6 +108,8 @@ pub struct StockBalanceView {
 /// 库存流水列表视图（正式事实）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct StockMovementView {
+    /// 已授权流水行引用仓库的当前名称，独立于筛选目录。
+    pub warehouse_name: Option<String>,
     /// 实体主键。
     pub id: String,
     /// 仓库。

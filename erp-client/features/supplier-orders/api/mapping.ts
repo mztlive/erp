@@ -89,6 +89,11 @@ function priorityOf(status: SupplierFulfillmentStatus): number {
     }
 }
 
+function displayName(value: string | null | undefined): string | undefined {
+    const name = value?.trim()
+    return name || undefined
+}
+
 export function mapListRow(o: BackendOrder): SupplierOrderListRow {
     const fulfillment = asFulfillment(o.fulfillment_status)
     const cancel = asCancel(o.cancel_status)
@@ -118,7 +123,9 @@ export function mapListRow(o: BackendOrder): SupplierOrderListRow {
         updatedAt: lastBusinessAt,
         lastBusinessAt,
         followUpUserId: o.follow_up_user_id ?? undefined,
+        followUpUserName: displayName(o.follow_up_user_name),
         handlerUserId: o.handler_user_id ?? undefined,
+        handlerUserName: displayName(o.handler_user_name),
         businessOrgUnitId: o.business_org_unit_id ?? undefined,
         itemCount: 0,
         allowedActions: ["OPEN_CENTER", "NOTE"],

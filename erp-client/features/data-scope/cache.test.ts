@@ -77,7 +77,7 @@ describe("scope cache across features", () => {
         stop()
         client.clear()
     })
-    it("clears cache when 409 carries DATA_SCOPE_CHANGED code", async () => {
+    it("clears the rejected query but retains unrelated results on a local scope conflict", async () => {
         const client = makeClient()
         const stop = subscribeScopeCache(client)
         const error = Object.assign(
@@ -100,7 +100,9 @@ describe("scope cache across features", () => {
         await observer.refetch()
         expect(observer.getCurrentResult().data).toBeUndefined()
         expect(observer.getCurrentResult().error).toBe(error)
-        expect(client.getQueryData(["sales-orders", "list"])).toBeUndefined()
+        expect(client.getQueryData(["sales-orders", "list"])).toEqual({
+            secret: "old sales",
+        })
         unobserve()
         stop()
         client.clear()

@@ -31,7 +31,7 @@ export type SupplierOfferingsTableProps = {
     error?: Error | null
     hasFilters: boolean
     noScope?: boolean
-    ownerOptions?: ReadonlyArray<{ value: string; label: string }>
+
     taskMode: boolean
     taskBusinessObjectId?: string
     onRetry: () => void
@@ -53,7 +53,7 @@ export function SupplierOfferingsTable({
     error,
     hasFilters,
     noScope = false,
-    ownerOptions = [],
+
     taskMode,
     taskBusinessObjectId,
     onRetry,
@@ -176,13 +176,7 @@ export function SupplierOfferingsTable({
                         </TableCell>
                         <TableCell>
                             <span className="text-sm">
-                                {ownerOptions.find(
-                                    (option) =>
-                                        option.value ===
-                                        item.maintainer_user_id,
-                                )?.label ??
-                                    item.maintainer_user_id ??
-                                    "—"}
+                                {item.maintainer_user_name || "—"}
                             </span>
                         </TableCell>
                         <TableCell>

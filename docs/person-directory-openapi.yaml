@@ -1,0 +1,132 @@
+openapi: 3.1.0
+info:
+  title: 独立人员查询目录
+  version: 1.0.0
+  description: 候选不依赖业务单据；列表与已选回显执行各自类别的 list 权限和 DataScope。查询资格不授予命令权限。授权组织树最多10000节点，当前成员关系按授权组织或已选ID有界查询，不预读全部历史成员。
+servers:
+  - url: http://localhost:10001
+security:
+  - bearerAuth: []
+paths:
+  /admin/salespeople:
+    get:
+      operationId: listSalespeople
+      summary: 销售查询目录（sales_person:list）
+      parameters: &listParameters
+        - {name: q, in: query, schema: {type: string, maxLength: 200}}
+        - {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
+        - {name: page_size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+        - {name: org_unit_ids, in: query, schema: {type: string}, description: 最多100个逗号分隔的组织ID；只收窄目录范围。}
+        - {name: include_descendants, in: query, schema: {type: boolean}, description: true时必须提供组织条件。}
+        - {name: scope_version, in: query, schema: {type: string, maxLength: 256}, description: 第二页起必填；目录或授权变化返回409。}
+      responses: &directoryResponses
+        '200':
+          description: 一页独立人员目录；无范围时返回空页且empty_reason为no_scope。
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: {type: boolean}
+                  data: {$ref: '#/components/schemas/DirectoryPage'}
+        '400': {description: 参数不合法，或范围／目录内容版本索引超过10000项，必须收窄条件；组织树超过10000节点须调整索引能力。}
+        '422': {description: 查询参数反序列化失败或包含未知字段。}
+        '403': {description: 没有目录动作权限或账号失效。}
+        '409': {description: DATA_SCOPE_CHANGED，必须清空旧页并从第一页重查。}
+  /admin/procurement-people:
+    get:
+      operationId: listProcurementPeople
+      summary: 采购查询目录（procurement_person:list）
+      parameters: *listParameters
+      responses: *directoryResponses
+  /admin/business-people:
+    get:
+      operationId: listBusinessPeople
+      summary: 后台人员目录（business_person:list）
+      description: 所有未软删除后台账号，包括冻结与归档账号；无需销售／采购资格，不读取角色命令资格。
+      parameters: *listParameters
+      responses: *directoryResponses
+  /admin/salespeople/selected:
+    get:
+      operationId: selectedSalespeople
+      summary: 回显已选销售人员（sales_person:list）
+      parameters: &selectedParameters
+        - name: ids
+          in: query
+          required: true
+          schema: {type: string}
+          description: 1至100个逗号分隔的稳定账号ID；不存在、无资格或范围外的账号不返回名称。
+      responses: *directoryResponses
+  /admin/procurement-people/selected:
+    get:
+      operationId: selectedProcurementPeople
+      summary: 回显已选采购人员（procurement_person:list）
+      parameters: *selectedParameters
+      responses: *directoryResponses
+  /admin/business-people/selected:
+    get:
+      operationId: selectedBusinessPeople
+      summary: 回显已选后台人员（business_person:list）
+      parameters: *selectedParameters
+      responses: *directoryResponses
+  /admin/person-query-qualifications/{category}/{account_id}:
+    parameters:
+      - {name: category, in: path, required: true, schema: {type: string, enum: [sales, procurement]}}
+      - {name: account_id, in: path, required: true, schema: {type: string}}
+    get:
+      operationId: getPersonQueryQualification
+      summary: 读取查询资格（person_query_qualification:manage）
+      responses:
+        '200': {description: ApiResponse.data为资格记录或null；记录包含version、status、managed_by、management_reason。}
+        '403': {description: 缺管理动作或目标账号不在管理范围内。}
+        '404': {description: 后台账号不存在。}
+    put:
+      operationId: changePersonQueryQualification
+      summary: 显式授予、终止或恢复查询资格（person_query_qualification:manage）
+      description: 使用独立管理范围；同事务写入资格及审计事件。不会授予或撤销角色，不改变业务命令资格。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [status, reason]
+              properties:
+                status: {type: string, enum: [active, terminated]}
+                version: {type: integer, minimum: 0, description: 已有记录必填；首次授予不得传入。}
+                reason: {type: string, minLength: 1, maxLength: 500}
+      responses:
+        '200': {description: ApiResponse.data为保存后的资格记录及新version。}
+        '400': {description: 请求不合法、类别不支持或目标不是后台账号。}
+        '403': {description: 缺管理动作或目标账号不在管理范围内。}
+        '404': {description: 后台账号不存在。}
+        '409': {description: 版本冲突；必须重新读取并核对当前资格。}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}
+  schemas:
+    DirectoryPage:
+      type: object
+      required: [items, total, page, page_size, scope_version, policy_version, organization_version, as_of, empty_reason]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [id, name, account, status, org_label]
+            properties:
+              id: {type: string}
+              name: {type: string}
+              account: {type: string}
+              status: {type: string, enum: [active, suspended, archived]}
+              org_label: {type: [string, 'null']}
+        total: {type: integer, minimum: 0}
+        page: {type: integer, minimum: 1}
+        page_size: {type: integer, minimum: 1, maximum: 100}
+        scope_version: {type: string, description: 授权版本及当前查询内人员名称、账号、状态、资格和当前生效成员关系的摘要；定时调岗生效或到期亦改变版本，只在相同目录条件内使用。}
+        policy_version: {type: integer}
+        organization_version: {type: integer}
+        as_of: {type: string, format: date-time}
+        empty_reason: {type: [string, 'null'], enum: [no_scope, null]}

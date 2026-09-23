@@ -97,6 +97,8 @@ pub struct WarehouseRow {
 /// 仓库列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct WarehouseFilter {
+    /// 已证明的目录授权身份；Some空集合必须返回空。
+    pub authorized_ids: Option<Vec<String>>,
     /// 指定仓库身份，与关键词取交集。
     pub warehouse_id: Option<String>,
     /// 必须具有非空入库经办人。
@@ -118,6 +120,7 @@ pub struct WarehouseFilter {
 }
 
 filter_default!(WarehouseFilter {
+    authorized_ids: None,
     warehouse_id: None,
     require_inbound_handler: false,
     q: None,
@@ -140,6 +143,9 @@ impl QueryFilter for WarehouseFilter {
         }
         if let Some(id) = &self.warehouse_id {
             filter.insert("id", id);
+        }
+        if let Some(ids) = &self.authorized_ids {
+            filter.insert("$and", vec![doc! { "id": { "$in": ids } }]);
         }
         if self.require_inbound_handler {
             filter.insert("inbound_handler_user_id", doc! { "$type": "string", "$regex": r"\S" });

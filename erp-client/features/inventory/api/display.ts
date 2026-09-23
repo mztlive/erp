@@ -214,17 +214,10 @@ export const isRuntimeAdjustmentStatus = (status?: string): boolean => {
     )
 }
 
-export function filterSummary(
-    query: InventoryQuery,
-    total: number,
-    warehouses: { id: string; name: string }[],
-): string {
+export function filterSummary(query: InventoryQuery, total: number): string {
     const parts = [
         VIEW_LABEL[query.view],
-        query.warehouseId
-            ? (warehouses.find((w) => w.id === query.warehouseId)?.name ??
-              "已选仓库")
-            : "全部仓库",
+        query.warehouseId ? "已选仓库" : "全部仓库",
         query.availability && query.availability !== "all"
             ? AVAILABILITY_LABEL[query.availability]
             : "全部状态",

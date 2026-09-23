@@ -15,7 +15,7 @@ import {
     useDeleteDataScopeMutation,
 } from "@/features/organization/hooks/queries"
 import {
-    SCOPE_TYPE_LABEL,
+    scopeTypeLabel,
     TARGET_MODE_LABEL,
 } from "@/features/organization/lib/labels"
 import { unitLabel } from "@/features/organization/lib/tree"
@@ -107,7 +107,10 @@ export function SubjectScopesPanel({
                                             .join("、")}
                                     </p>
                                     <p className="mt-1 text-muted-foreground">
-                                        {SCOPE_TYPE_LABEL[row.scopeType]}
+                                        {scopeTypeLabel(
+                                            row.scopeType,
+                                            row.targetDimension,
+                                        )}
                                         {row.targetMode
                                             ? ` · ${TARGET_MODE_LABEL[row.targetMode]}`
                                             : ""}

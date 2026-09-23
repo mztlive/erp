@@ -38,6 +38,7 @@ export type BackendStockBalance = {
 }
 
 export type BackendStockMovement = {
+    warehouse_name?: string | null
     id: string
     warehouse_id: string
     sku_id: string

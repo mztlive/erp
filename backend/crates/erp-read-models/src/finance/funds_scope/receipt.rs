@@ -371,7 +371,7 @@ impl FundsAccess {
         facts: HashMap<String, LinkedSalesFact>,
         authorization: FundsAuthorization,
         fingerprint: std::collections::hash_map::DefaultHasher,
-        executor: &mut dyn Executor,
+        _executor: &mut dyn Executor,
     ) -> Result<FundsScopedPage<ScopedCustomerReceiptRow>> {
         let total = decided.len() as u64;
         let page = query.paging.page.max(1);
@@ -401,12 +401,10 @@ impl FundsAccess {
         let version = format!("{:x}", fingerprint.finish());
         ensure_version(params.scope_version.as_deref(), &version).map_err(|_| changed())?;
         let summary = build_summary(&triples, &owner_of, whole_amount(whole, whole_sum), &version, !whole)?;
-        let owner_options = self.owner_options_sales(&authorization, executor).await?;
         Ok(FundsScopedPage {
             items,
             total,
             summary,
-            owner_options,
             page,
             page_size,
             scope_version: version.clone(),

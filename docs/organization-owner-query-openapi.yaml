@@ -25,7 +25,7 @@ paths:
         - $ref: '#/components/parameters/PageSize'
       responses:
         '200':
-          description: 原 ApiResponse 信封内的分页 data，增加授权时点、范围版本、口径摘要与当前主负责人候选。
+          description: 原 ApiResponse 信封内的分页 data，增加授权时点、范围版本、归属口径摘要；人员候选独立查询人员目录。
           content:
             application/json:
               schema:
@@ -57,7 +57,7 @@ paths:
         - $ref: '#/components/parameters/PageSize'
       responses:
         '200':
-          description: 原 ApiResponse 信封内的分页 data，增加授权时点、范围版本、口径摘要与当前主负责人候选。
+          description: 原 ApiResponse 信封内的分页 data，增加授权时点、范围版本、归属口径摘要；人员候选独立查询人员目录。
           content:
             application/json:
               schema:
@@ -232,7 +232,7 @@ components:
               enum: [current_customer_owner]
     OwnerPage:
       type: object
-      required: [items, total, page, page_size, owner_options, ownership_basis]
+      required: [items, total, page, page_size, ownership_basis]
       properties:
         items:
           type: array
@@ -241,15 +241,6 @@ components:
         total: {type: integer, minimum: 0}
         page: {type: integer, minimum: 1}
         page_size: {type: integer, minimum: 1, maximum: 100}
-        owner_options:
-          type: array
-          description: 本资源完整可见对象的当前负责人候选；保留仍负责数据的停用账号，不作为改派资格证明。
-          items:
-            type: object
-            required: [value, label]
-            properties:
-              value: {type: string, description: 稳定人员 ID}
-              label: {type: string, description: 姓名、登录账号与适用的停用标记}
         ownership_basis:
           type: string
           enum: [current_customer_owner, document_sales_owner, current_procurement_owner]

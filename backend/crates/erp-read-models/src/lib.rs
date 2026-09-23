@@ -17,13 +17,13 @@ pub use customer_center::{
 };
 pub use fulfillment_queue::{
     FulfillmentQueueFilter, FulfillmentQueueItemRow, FulfillmentQueueMetricRow, FulfillmentQueueRepository,
-    FulfillmentQueueRepositoryPage, FulfillmentQueueWarehouseRow,
+    FulfillmentQueueRepositoryPage,
 };
 pub use workbench::{
     FulfillmentQueueGateFilter, FulfillmentQueueGateState, FulfillmentQueueItemView,
     FulfillmentQueueListParams, FulfillmentQueueMetricView, FulfillmentQueueOperationType,
-    FulfillmentQueuePageView, FulfillmentQueueWarehouseView, WorkItemListParams, WorkItemPageView,
-    WorkItemStatsParams, WorkItemStatsView, WorkItemView, WorkbenchReadService,
+    FulfillmentQueuePageView, WorkItemListParams, WorkItemPageView, WorkItemStatsParams, WorkItemStatsView,
+    WorkItemView, WorkbenchReadService,
 };
 
 pub mod finance;
@@ -43,3 +43,5 @@ pub mod ports;
 
 #[cfg(test)]
 mod test_indexes;
+
+pub mod historical_directory;

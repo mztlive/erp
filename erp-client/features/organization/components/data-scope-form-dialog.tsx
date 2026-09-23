@@ -20,6 +20,7 @@ import { actionLabel, resourceLabel } from "@/lib/permission-catalog"
 import {
     DIMENSION_LABEL,
     SCOPE_TYPE_LABEL,
+    scopeTypeLabel,
     TARGET_MODE_LABEL,
 } from "@/features/organization/lib/labels"
 import {
@@ -267,14 +268,38 @@ export function DataScopeFormDialog({
                         )
                     }}
                 />
-                <form.AppField
-                    name="scopeType"
-                    children={(field) => (
-                        <field.SelectField
-                            id="organization-scope-type"
-                            label="范围类型"
-                            options={Object.entries(SCOPE_TYPE_LABEL).map(
-                                ([value, label]) => ({ value, label }),
+                <form.Subscribe
+                    selector={(state) => ({
+                        dimension: state.values.targetDimension,
+                        resource: state.values.resource,
+                    })}
+                    children={({ dimension, resource }) => (
+                        <form.AppField
+                            name="scopeType"
+                            children={(field) => (
+                                <field.SelectField
+                                    id="organization-scope-type"
+                                    label="范围类型"
+                                    options={Object.keys(SCOPE_TYPE_LABEL)
+                                        .filter(
+                                            (value) =>
+                                                ![
+                                                    "settlement_party",
+                                                    "warehouse",
+                                                ].includes(resource) ||
+                                                [
+                                                    "company",
+                                                    "organization",
+                                                ].includes(value),
+                                        )
+                                        .map((value) => ({
+                                            value,
+                                            label: scopeTypeLabel(
+                                                value as DataScopeType,
+                                                dimension,
+                                            ),
+                                        }))}
+                                />
                             )}
                         />
                     )}
@@ -299,24 +324,49 @@ export function DataScopeFormDialog({
                     children={(scopeType) =>
                         scopeType === "organization" || scopeType === "team" ? (
                             <>
-                                <form.AppField
-                                    name="targetMode"
-                                    children={(field) => (
-                                        <field.SelectField
-                                            id="organization-scope-mode"
-                                            label="目标模式"
-                                            options={Object.entries(
-                                                TARGET_MODE_LABEL,
-                                            ).map(([value, label]) => ({
-                                                value,
-                                                label,
-                                            }))}
-                                        />
-                                    )}
+                                <form.Subscribe
+                                    selector={(state) =>
+                                        state.values.targetDimension
+                                    }
+                                    children={(dimension) =>
+                                        dimension === "internal_org" ? (
+                                            <form.AppField
+                                                name="targetMode"
+                                                children={(field) => (
+                                                    <field.SelectField
+                                                        id="organization-scope-mode"
+                                                        label="目标模式"
+                                                        options={Object.entries(
+                                                            TARGET_MODE_LABEL,
+                                                        ).map(
+                                                            ([
+                                                                value,
+                                                                label,
+                                                            ]) => ({
+                                                                value,
+                                                                label,
+                                                            }),
+                                                        )}
+                                                    />
+                                                )}
+                                            />
+                                        ) : (
+                                            <p className="text-sm text-muted-foreground">
+                                                仅授权下方指定的
+                                                {dimension === "warehouse"
+                                                    ? "仓库"
+                                                    : "结算主体"}
+                                                。
+                                            </p>
+                                        )
+                                    }
                                 />
                                 <form.Subscribe
                                     selector={(state) =>
-                                        state.values.targetMode
+                                        state.values.targetDimension ===
+                                        "internal_org"
+                                            ? state.values.targetMode
+                                            : "explicit"
                                     }
                                     children={(mode) =>
                                         mode === "explicit" ? (
@@ -325,7 +375,7 @@ export function DataScopeFormDialog({
                                                 children={(field) => (
                                                     <Field>
                                                         <FieldLabel htmlFor="organization-scope-targets">
-                                                            组织目标
+                                                            授权目标
                                                         </FieldLabel>
                                                         <form.Subscribe
                                                             selector={(state) =>

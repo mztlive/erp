@@ -131,3 +131,21 @@ mod tests {
         assert!(serde_json::from_value::<CurrentQualityQuery>(json).is_err());
     }
 }
+
+/// 独立历史候选；只接受期间与客户上下文，不接受报表结果条件。
+#[permission_macros::permission(
+    group = "历史归属目录",
+    group_desc = "冻结归属查询",
+    desc = "查询历史归属候选",
+    resource = "sales_order",
+    action = "list"
+)]
+pub async fn quality_history_directory(
+    State(state): State<AppState>,
+    Extension(subject): Extension<RbacSubject>,
+    Extension(actor): Extension<application_core::AuditActor>,
+    Query(query): Query<erp_read_models::historical_directory::HistoricalDirectoryQuery>,
+) -> Result<erp_read_models::historical_directory::HistoricalDirectoryView> {
+    ensure_list_access(&state, &subject).await?;
+    Ok(ApiResponse::ok_with_data(read_model(&state).history_directory(query, &actor).await?))
+}

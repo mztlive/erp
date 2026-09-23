@@ -55,7 +55,6 @@ export async function fetchSalesOrders(
             scope_summary: string
             as_of?: string
             ownership_basis?: string
-            owner_options: { value: string; label: string }[]
         }
     >("/admin/sales-orders", {
         scope_version: query.scopeVersion,
@@ -114,7 +113,6 @@ export async function fetchSalesOrders(
 
     return {
         items,
-        ownerOptions: page.owner_options ?? [],
         emptyReason: page.empty_reason,
         scopeVersion: page.scope_version,
         policyVersion: page.policy_version,

@@ -371,8 +371,6 @@ pub struct ProfitLossView {
     pub filter_summary: String,
     pub excluded_note: String,
     pub ownership_basis: String,
-    pub attribution_user_options: Vec<application_core::FilterOption>,
-    pub attribution_org_options: Vec<application_core::FilterOption>,
 }
 /// 同步完成的全量筛选导出；文件内容由服务端生成，不伪造后台任务。
 #[derive(Debug, Serialize)]

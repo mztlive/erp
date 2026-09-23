@@ -51,7 +51,7 @@ use crate::core::response::ApiResponse;
 /// * `query` - 分页与筛选参数（扁平传递）
 ///
 /// # 返回
-/// 返回范围分页视图（`items`/`total`/`summary`/`owner_options`/`scope_version`）。
+/// 返回范围分页视图（`items`/`total`/`summary`/`scope_version`）。采购负责人候选不随列表返回。
 pub async fn payable_account_list(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -173,7 +173,7 @@ pub async fn payable_account_create(
 /// * `query` - 分页与筛选参数（扁平传递）
 ///
 /// # 返回
-/// 返回范围分页视图（`items`/`total`/`summary`/`owner_options`/`scope_version`）。
+/// 返回范围分页视图（`items`/`total`/`summary`/`scope_version`）。采购负责人候选不随列表返回。
 pub async fn supplier_payment_list(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -415,7 +415,7 @@ pub async fn purchase_invoice_allocation_post(
 /// * `query` - 分页与筛选参数（`payable_account_id` 必填）
 ///
 /// # 返回
-/// 返回范围分页视图（`items`/`total`/`summary`/`owner_options`/`scope_version`）。
+/// 返回范围分页视图（`items`/`total`/`summary`/`scope_version`）。采购负责人候选不随列表返回。
 pub async fn purchase_invoice_allocation_list(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,

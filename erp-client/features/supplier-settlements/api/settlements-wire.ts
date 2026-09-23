@@ -154,9 +154,6 @@ export type BackendStatementPage = Page<BackendStatement> & {
     scope_version?: string
     scope_summary?: string
     ownership_basis?: string
-    owner_options?: Array<{ value: string; label: string }>
-    operator_options?: Array<{ value: string; label: string }>
-    handler_options?: Array<{ value: string; label: string }>
 }
 
 export type BackendReviewActionBlocker = {

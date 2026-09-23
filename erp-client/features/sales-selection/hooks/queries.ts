@@ -136,7 +136,7 @@ export const useProposalDetail = (proposalId: string) =>
         enabled: Boolean(proposalId),
     })
 
-/** 按选品册查询其唯一方案（已提交行链方案详情用）。 */
+/** 按选品册读取方案列表首行；明细用方案详情查询。 */
 export const useProposalByBook = (bookId: string, enabled = false) =>
     useQuery({
         queryKey: [...salesSelectionKeys.proposal(bookId), "by-book"] as const,

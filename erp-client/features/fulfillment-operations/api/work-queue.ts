@@ -70,14 +70,7 @@ const fulfillmentQueuePageSchema = z
                 })
                 .strict(),
         ),
-        warehouse_options: z.array(
-            z
-                .object({
-                    id: z.string().min(1),
-                    label: z.string().min(1),
-                })
-                .strict(),
-        ),
+
         as_of: z.number().int(),
     })
     .strict()

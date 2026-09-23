@@ -34,6 +34,24 @@ use crate::service::approval::business_adapter::{ApprovalAdapterSpec, adapter_sp
 use crate::service::approval::process_kind::process_kind_of;
 use crate::service::approval::{ApprovalActionContext, DecisionActionParams};
 
+/// 已通过当前任务授权的执行记录及乐观锁版本。
+struct OpenDecisionExecution {
+    item: WorkItem,
+    execution_id: ApprovalNodeExecutionId,
+    execution: ApprovalNodeExecution,
+    expected_execution_version: u64,
+}
+
+/// 与执行记录和冻结业务快照一致的审批主体。
+struct OpenDecisionSubject {
+    instance_id: ApprovalProcessInstanceId,
+    instance: ApprovalProcessInstance,
+    expected_instance_version: u64,
+    document_type: DocumentType,
+    snapshot: ApprovalSubjectSnapshot,
+    spec: ApprovalAdapterSpec,
+}
+
 pub(super) struct OpenDecisionRuntime {
     pub(super) item: WorkItem,
     pub(super) execution: ApprovalNodeExecution,
@@ -72,19 +90,8 @@ pub(super) async fn load_open_decision_runtime(
     command: &RuntimeDecisionCommand,
     executor: &mut dyn Executor,
 ) -> Result<OpenDecisionRuntime> {
-    let (item, execution_id, execution, expected_execution_version) =
-        load_open_decision_execution(db, actor, command, executor).await?;
-    load_open_decision_subject(
-        db,
-        actor,
-        command,
-        item,
-        execution_id,
-        execution,
-        expected_execution_version,
-        executor,
-    )
-    .await
+    let execution = load_open_decision_execution(db, actor, command, executor).await?;
+    load_open_decision_subject(db, actor, command, execution, executor).await
 }
 
 async fn load_open_decision_execution(
@@ -92,7 +99,7 @@ async fn load_open_decision_execution(
     actor: &AuditActor,
     command: &RuntimeDecisionCommand,
     executor: &mut dyn Executor,
-) -> Result<(WorkItem, ApprovalNodeExecutionId, ApprovalNodeExecution, u64)> {
+) -> Result<OpenDecisionExecution> {
     let item = db
         .work_items()
         .find_document_approval_by_id(&command.work_item_id, executor)
@@ -108,47 +115,30 @@ async fn load_open_decision_execution(
         .await?
         .ok_or_else(hidden_not_found)?;
     let expected_execution_version = execution.base.version;
-    Ok((item, execution_id, execution, expected_execution_version))
+    Ok(OpenDecisionExecution { item, execution_id, execution, expected_execution_version })
 }
 
 async fn load_open_decision_subject(
     db: &Database,
     actor: &AuditActor,
     command: &RuntimeDecisionCommand,
-    item: WorkItem,
-    execution_id: ApprovalNodeExecutionId,
-    execution: ApprovalNodeExecution,
-    expected_execution_version: u64,
+    loaded: OpenDecisionExecution,
     executor: &mut dyn Executor,
 ) -> Result<OpenDecisionRuntime> {
-    let (instance_id, instance, expected_instance_version, document_type, snapshot, spec) =
-        load_open_decision_instance(db, &execution, executor).await?;
-    let (open_tasks, instance_assignee) = load_open_decision_tasks(
-        db,
-        actor,
-        command,
-        &item,
-        &execution,
-        &execution_id,
-        &instance_id,
-        &instance,
-        &snapshot,
-        document_type,
-        &spec,
-        executor,
-    )
-    .await?;
+    let subject = load_open_decision_instance(db, &loaded.execution, executor).await?;
+    let (open_tasks, instance_assignee) =
+        load_open_decision_tasks(db, actor, command, &loaded, &subject, executor).await?;
     Ok(OpenDecisionRuntime {
-        item,
-        execution,
-        execution_id,
-        instance,
-        instance_id,
-        expected_instance_version,
-        expected_execution_version,
-        snapshot,
-        document_type,
-        spec,
+        item: loaded.item,
+        execution: loaded.execution,
+        execution_id: loaded.execution_id,
+        expected_execution_version: loaded.expected_execution_version,
+        instance: subject.instance,
+        instance_id: subject.instance_id,
+        expected_instance_version: subject.expected_instance_version,
+        snapshot: subject.snapshot,
+        document_type: subject.document_type,
+        spec: subject.spec,
         open_tasks,
         instance_assignee,
     })
@@ -158,14 +148,7 @@ async fn load_open_decision_instance(
     db: &Database,
     execution: &ApprovalNodeExecution,
     executor: &mut dyn Executor,
-) -> Result<(
-    ApprovalProcessInstanceId,
-    ApprovalProcessInstance,
-    u64,
-    DocumentType,
-    ApprovalSubjectSnapshot,
-    ApprovalAdapterSpec,
-)> {
+) -> Result<OpenDecisionSubject> {
     let instance_id = execution.process_instance_id.clone();
     let instance =
         db.bpm_workflow().find_instance_by_id(&instance_id, executor).await?.ok_or_else(hidden_not_found)?;
@@ -188,46 +171,47 @@ async fn load_open_decision_instance(
             instance.subject_version,
         )
         .map_err(|_| Error::ConflictError("审批实例与冻结业务快照不一致".to_string()))?;
-    Ok((
+    Ok(OpenDecisionSubject {
         instance_id,
         instance,
         expected_instance_version,
         document_type,
         snapshot,
-        adapter_spec_of(document_type)?,
-    ))
+        spec: adapter_spec_of(document_type)?,
+    })
 }
 
 async fn load_open_decision_tasks(
     db: &Database,
     actor: &AuditActor,
     command: &RuntimeDecisionCommand,
-    item: &WorkItem,
-    execution: &ApprovalNodeExecution,
-    execution_id: &ApprovalNodeExecutionId,
-    instance_id: &ApprovalProcessInstanceId,
-    instance: &ApprovalProcessInstance,
-    snapshot: &ApprovalSubjectSnapshot,
-    document_type: DocumentType,
-    spec: &ApprovalAdapterSpec,
+    loaded: &OpenDecisionExecution,
+    subject: &OpenDecisionSubject,
     executor: &mut dyn Executor,
 ) -> Result<(Vec<WorkItem>, ApprovalInstanceAssignee)> {
-    let subject = RuntimeReadSubject {
-        instance: instance.clone(),
-        current_execution: Some(execution.clone()),
-        snapshot: snapshot.clone(),
-        document_type,
+    let read_subject = RuntimeReadSubject {
+        instance: subject.instance.clone(),
+        current_execution: Some(loaded.execution.clone()),
+        snapshot: subject.snapshot.clone(),
+        document_type: subject.document_type,
     };
-    if !task_proves_current_responsibility(item, execution, &subject, actor.id(), spec.owner_role.as_str()) {
+    if !task_proves_current_responsibility(
+        &loaded.item,
+        &loaded.execution,
+        &read_subject,
+        actor.id(),
+        subject.spec.owner_role.as_str(),
+    ) {
         return Err(Error::ConflictError("APPROVAL_RESPONSIBILITY_CONFLICT".to_string()));
     }
-    let open_tasks = db.work_items().open_approval_tasks_for_execution(execution_id, executor).await?;
+    let open_tasks =
+        db.work_items().open_approval_tasks_for_execution(&loaded.execution_id, executor).await?;
     if open_tasks.is_empty() || !open_tasks.iter().any(|task| task.base.id == command.work_item_id) {
         return Err(Error::from_approval_code(ErrorCode::ApprovalTaskNotOpen));
     }
     let instance_assignee = db
         .bpm_workflow()
-        .find_assignee_for_node(instance_id, &execution.node_key, executor)
+        .find_assignee_for_node(&subject.instance_id, &loaded.execution.node_key, executor)
         .await?
         .ok_or_else(|| Error::ConflictError("实例缺少节点审批人绑定".to_string()))?;
     Ok((open_tasks, instance_assignee))
@@ -247,7 +231,9 @@ pub(super) async fn prepare_open_decision(
         revalidate_decision_eligibilities(db, rbac, object_read, actor, command, loaded, executor).await?;
     let writes =
         plan_open_decision(actor, command, loaded, graph, current_eligibility, next_eligibility, now)?;
-    finish_prepared_open_decision(db, rbac, object_read, actor, command, loaded, writes, now, executor).await
+    let runtime_admin_ids =
+        blocked_runtime_admin_ids(db, rbac, object_read, loaded, &writes, executor).await?;
+    finish_prepared_open_decision(actor, command, loaded, writes, now, runtime_admin_ids)
 }
 
 async fn revalidate_decision_eligibilities(
@@ -352,16 +338,13 @@ fn plan_open_decision(
     Ok(*writes)
 }
 
-async fn finish_prepared_open_decision(
-    db: &Database,
-    rbac: &impl crate::ports::WorkflowAuthorizationPort,
-    object_read: &dyn crate::ports::ApprovalObjectReadPort,
+fn finish_prepared_open_decision(
     actor: &AuditActor,
     command: &RuntimeDecisionCommand,
     loaded: &OpenDecisionRuntime,
     writes: PlannedWrites,
     now: Instant,
-    executor: &mut dyn Executor,
+    runtime_admin_ids: Vec<String>,
 ) -> Result<PreparedOpenDecision> {
     let actor_id = actor.id().to_string();
     let owner_role = loaded.spec.owner_role.as_str().to_string();
@@ -369,8 +352,6 @@ async fn finish_prepared_open_decision(
     let subject_version = writes.instance.subject_version.to_string();
     let business_object_id = writes.instance.subject.subject_id().to_string();
     let document_type_label = loaded.document_type.label().to_string();
-    let runtime_admin_ids =
-        blocked_runtime_admin_ids(db, rbac, object_read, loaded, &writes, executor).await?;
     let should_finalize = writes.commit == CommitRequired::TerminalApproved;
     let action_context =
         decision_action_context(command, loaded, &actor_id, &business_object_id, &subject_version)?;

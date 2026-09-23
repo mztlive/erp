@@ -1,4 +1,4 @@
-use application_core::{AuditActor, FilterOption};
+use application_core::AuditActor;
 use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
 
@@ -203,9 +203,6 @@ fn list_view(
         },
     );
     SupplierSettlementStatementListView {
-        owner_options: id_options(items.iter().map(|row| row.prepared_by.clone())),
-        operator_options: id_options(items.iter().map(|row| row.difference_handler_user_id.clone())),
-        handler_options: id_options(items.iter().filter_map(|row| row.reviewed_by.clone())),
         items,
         total,
         page: filter.page,
@@ -228,13 +225,6 @@ fn empty_list_view(
     no_scope: bool,
 ) -> SupplierSettlementStatementListView {
     list_view(Vec::new(), 0, &statement_filter(query), None, Some(context), no_scope)
-}
-
-fn id_options(ids: impl Iterator<Item = String>) -> Vec<FilterOption> {
-    let mut values = ids.filter(|id| !id.is_empty()).collect::<Vec<_>>();
-    values.sort();
-    values.dedup();
-    values.into_iter().map(|value| FilterOption { label: value.clone(), value }).collect()
 }
 
 /// 构建结算单列表筛选条件。

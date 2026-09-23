@@ -59,7 +59,7 @@ describe("inventory list optional enhancements", () => {
         apiGetMock.mockReset()
     })
 
-    it("keeps an authorized balance view when warehouse options return 403", async () => {
+    it("loads authorized balances without requesting warehouse directory", async () => {
         apiGetMock.mockImplementation(async (path, params) => {
             if (path === "/admin/warehouses") throw forbidden
             if (path === "/admin/stock-adjustments") return page([], 3)
@@ -76,7 +76,9 @@ describe("inventory list optional enhancements", () => {
             "CREATE_ADJUSTMENT",
         ])
         expect(result.total).toBe(1)
-        expect(result.warehouses).toEqual([])
+        expect(apiGetMock.mock.calls.map(([path]) => path)).not.toContain(
+            "/admin/warehouses",
+        )
         expect(result.filterSummary).toContain("已选仓库")
         expect(result.filterSummary).not.toContain("warehouse-1")
         expect(result.hasWarehouseScope).toBe(true)
@@ -84,7 +86,7 @@ describe("inventory list optional enhancements", () => {
         expect(result.emptyReason).toBeUndefined()
     })
 
-    it("does not infer missing data scope from an empty warehouse option list", async () => {
+    it("preserves the data scope returned by the balance endpoint", async () => {
         apiGetMock.mockImplementation(async (path, params) => {
             if (path === "/admin/warehouses") return page([])
             if (path === "/admin/stock-adjustments") return page([])
@@ -97,7 +99,9 @@ describe("inventory list optional enhancements", () => {
         const result = await fetchInventoryList(query)
 
         expect(result.balances).toHaveLength(1)
-        expect(result.warehouses).toEqual([])
+        expect(apiGetMock.mock.calls.map(([path]) => path)).not.toContain(
+            "/admin/warehouses",
+        )
         expect(result.hasWarehouseScope).toBe(true)
         expect(result.emptyReason).toBeUndefined()
     })

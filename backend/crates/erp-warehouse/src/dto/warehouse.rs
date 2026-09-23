@@ -250,6 +250,8 @@ impl From<Warehouse> for WarehouseView {
 /// 仓库列表查询参数。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct WarehouseListParams {
+    /// 后续页携带的范围版本。
+    pub scope_version: Option<String>,
     /// 按稳定身份回填选择项。
     pub warehouse_id: Option<String>,
     /// 采购入库用途只返回已配置经办人的仓库。

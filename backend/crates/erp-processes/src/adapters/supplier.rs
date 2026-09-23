@@ -405,13 +405,6 @@ impl MongoSupplierAccountFacts {
 
 #[async_trait]
 impl AccountFactPort for MongoSupplierAccountFacts {
-    async fn filter_options(
-        &self,
-        ids: &[String],
-    ) -> erp_supplier::Result<Vec<application_core::FilterOption>> {
-        Ok(self.db.accounts().filter_options(ids, &mut NoTransaction).await?)
-    }
-
     async fn ensure_can_login(&self, user_id: &str) -> erp_supplier::Result<()> {
         let account = self
             .db

@@ -21,9 +21,10 @@ import { useAccessListFilters } from "@/features/access-audit/pages/hooks/use-ac
 import { useAccessUrlState } from "@/features/access-audit/pages/hooks/use-access-url-state"
 import type { AccessAppliedChip } from "@/features/access-audit/components/access-list-toolbar"
 import {
-    actionFilterLabel,
-    resultFilterLabel,
-} from "@/features/access-audit/lib/filter-options"
+    AUDIT_ACTION_OPTIONS,
+    registeredAuditActionLabel,
+} from "@/features/access-audit/lib/audit-labels"
+import { resultFilterLabel } from "@/features/access-audit/lib/filter-options"
 import { buildAccessListQuery } from "@/features/access-audit/pages/lib/build-list-query"
 import { useAssignableRolesQuery } from "@/features/admin/queries"
 import type { AccessView } from "@/features/access-audit/types"
@@ -292,26 +293,25 @@ function useAccessAuditPage(surface: "access" | "audit" = "access") {
           )
         : Boolean(applied.q)
 
-    /** 动作选项：取自当前查询结果里出现过的动作，保证选项都能筛出记录。 */
+    /** 动作选项来自审计事件注册表，与当前页和事件结果无关；已选但不在目录中的值只做回显。 */
     const actionOptions = React.useMemo(() => {
-        const seen = new Set<string>()
-        const options: { value: string; label: string }[] = []
-        for (const event of data?.auditEvents ?? []) {
-            if (!event.actionType || seen.has(event.actionType)) continue
-            seen.add(event.actionType)
-            options.push({
-                value: event.actionType,
-                label: actionFilterLabel(event.actionType),
-            })
+        if (
+            !applied.action ||
+            AUDIT_ACTION_OPTIONS.some(
+                (option) => option.value === applied.action,
+            )
+        ) {
+            return AUDIT_ACTION_OPTIONS
         }
-        if (applied.action && !seen.has(applied.action)) {
-            options.unshift({
+        return [
+            ...AUDIT_ACTION_OPTIONS,
+            {
                 value: applied.action,
-                label: actionFilterLabel(applied.action),
-            })
-        }
-        return options.sort((a, b) => a.label.localeCompare(b.label))
-    }, [applied.action, data?.auditEvents])
+                label: registeredAuditActionLabel(applied.action),
+                disabled: true,
+            },
+        ]
+    }, [applied.action])
 
     /** 已生效条件全部显性化为可移除 chip。 */
     const appliedChips = React.useMemo<readonly AccessAppliedChip[]>(() => {
@@ -327,7 +327,7 @@ function useAccessAuditPage(surface: "access" | "audit" = "access") {
         if (applied.action) {
             chips.push({
                 key: "action",
-                label: `动作：${actionFilterLabel(applied.action)}`,
+                label: `动作：${registeredAuditActionLabel(applied.action)}`,
             })
         }
         if (applied.result) {

@@ -13,7 +13,7 @@ use crate::error::Result;
 impl CustomerService {
     /// 分页查询客户角色列表。
     ///
-    /// 授权、筛选、计数和负责人候选在同一查询快照中完成。
+    /// 授权、筛选和计数在同一查询快照中完成。负责销售候选不由本接口生产。
     ///
     /// # 参数
     /// * `params` - 查询参数，含范围版本与组织筛选
@@ -29,6 +29,7 @@ impl CustomerService {
     ///
     /// # 关键业务约束
     /// 角色无有效范围返回空集并标记 `no_scope`；有规则但对象为空不使用该标记。不得用公司范围兜底。
+    /// 常规列表与全部有权客户共用本响应。负责人筛选只收窄客户；行负责人姓名来自当前页归属。
     pub async fn customer_list(
         &self,
         params: &CustomerListParams,
@@ -124,15 +125,12 @@ fn to_list_view(snapshot: CustomerSnapshot) -> CustomerListView {
         as_of: snapshot.context.as_of.as_utc().to_rfc3339(),
         empty_reason: snapshot.no_scope.then_some("no_scope"),
         scope_summary: "客户当前主负责人、协作关系及负责人所属组织范围",
-        data: application_core::FilteredPage {
-            owner_options: snapshot.owner_options,
-            ownership_basis: "current_customer_owner",
-            page: application_core::PageView {
-                items: snapshot.items,
-                total: snapshot.total,
-                page: snapshot.page,
-                page_size: snapshot.page_size,
-            },
+        ownership_basis: "current_customer_owner",
+        data: application_core::PageView {
+            items: snapshot.items,
+            total: snapshot.total,
+            page: snapshot.page,
+            page_size: snapshot.page_size,
         },
     }
 }
@@ -164,5 +162,62 @@ mod tests {
         }
         assert!(ensure_scope_version(Some("scope-a"), "scope-a").is_ok());
         assert!(ensure_stable_snapshot("scope-a", "scope-a").is_ok());
+    }
+
+    /// 常规列表与全部有权客户共用该视图：不返回负责销售候选，已授权行仍带负责人姓名。
+    #[test]
+    fn customer_list_omits_owner_candidates_and_keeps_row_owner_name() {
+        use erp_core::common::time::Instant;
+
+        use super::super::scope::CustomerSnapshot;
+        use super::to_list_view;
+        use crate::dto::customer::{CustomerScope, CustomerView};
+        use crate::entity::customer::CustomerAccountStatus;
+        use crate::ports::CustomerResolvedScope;
+
+        let view = to_list_view(CustomerSnapshot {
+            items: vec![CustomerView {
+                id: "cust-1".to_string(),
+                party_id: "party-1".to_string(),
+                party_no: Some("P-1".to_string()),
+                legal_name: Some("示例客户".to_string()),
+                short_name: None,
+                customer_no: "C-1".to_string(),
+                default_payment_term_id: None,
+                status: CustomerAccountStatus::Active,
+                owner_user_id: Some("sales-1".to_string()),
+                owner_user_name: Some("张三".to_string()),
+                collaborator_count: 0,
+                scope_tags: vec![CustomerScope::AllAuthorized],
+                version: 1,
+                created_at: 1,
+                updated_at: 1,
+            }],
+            total: 1,
+            page: 1,
+            page_size: 20,
+            context: CustomerResolvedScope {
+                user_id: "actor-1".to_string(),
+                resource: "customer".to_string(),
+                action: "list".to_string(),
+                role_clauses: vec![],
+                user_limit: None,
+                policy_version: 3,
+                organization_version: 4,
+                scope_version: "scope-v1".to_string(),
+                as_of: Instant::from_unix_secs(0),
+            },
+            no_scope: false,
+        });
+        let json = serde_json::to_value(&view).unwrap();
+        assert!(json.get("owner_options").is_none());
+        assert_eq!(json["ownership_basis"], "current_customer_owner");
+        assert_eq!(json["total"], 1);
+        assert_eq!(json["page"], 1);
+        assert_eq!(json["page_size"], 20);
+        assert_eq!(json["scope_version"], "scope-v1");
+        assert_eq!(json["empty_reason"], serde_json::Value::Null);
+        assert_eq!(json["items"][0]["owner_user_id"], "sales-1");
+        assert_eq!(json["items"][0]["owner_user_name"], "张三");
     }
 }

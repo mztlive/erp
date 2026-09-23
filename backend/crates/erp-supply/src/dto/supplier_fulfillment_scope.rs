@@ -1,21 +1,32 @@
-//! 供应商履约订单范围列表、交接与候选 DTO。
+//! 供应商履约订单范围列表、行展示姓名、交接与候选 DTO。
 
-use application_core::{FilterOption, FilteredPage};
+use application_core::OwnershipPage;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use super::supplier_fulfillment::SupplierFulfillmentOrderView;
 use crate::error::Result;
 
+/// 已授权列表行。跟进人与处理人姓名来自本行账号，不来自筛选候选。
+#[derive(Debug, Clone, Serialize)]
+pub struct SupplierFulfillmentOrderListItem {
+    /// 订单行。
+    #[serde(flatten)]
+    pub order: SupplierFulfillmentOrderView,
+    /// 订单上的内部跟进人姓名。账号不存在或姓名为空白时省略。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub follow_up_user_name: Option<String>,
+    /// 当前开放异常任务处理人姓名。无开放任务、账号不存在或姓名为空白时省略。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub handler_user_name: Option<String>,
+}
+
 /// 列表响应保持现有字段并声明独立的授权时点及版本。
 #[derive(Debug, Clone, Serialize)]
 pub struct SupplierFulfillmentOrderListView {
-    /// 分页结果、跟进人候选与归属口径。
+    /// 分页结果与归属口径。行上带跟进人、处理人姓名。
     #[serde(flatten)]
-    pub data: FilteredPage<SupplierFulfillmentOrderView>,
-    /// 当前开放 W26 处理人候选；只收窄不授予跟进资格。
-    #[serde(default)]
-    pub handler_options: Vec<FilterOption>,
+    pub data: OwnershipPage<SupplierFulfillmentOrderListItem>,
     /// 跨页与导出必须原样回传的范围版本。
     pub scope_version: String,
     /// RBAC 策略版本。

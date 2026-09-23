@@ -1,5 +1,8 @@
 /// 销售领导推荐权限。
 pub(crate) const SALES_LEADER_PERMISSIONS: &[&str] = &[
+    "warehouse:list",
+    "business_person:list",
+    "settlement_party:list",
     "sales_invoice_request:list",
     "sales_invoice_request:detail",
     "sales_invoice_request:submit",
@@ -17,6 +20,8 @@ pub(crate) const SALES_LEADER_PERMISSIONS: &[&str] = &[
     "document_attachment:list",
     "business_document:list",
     "business_document:detail",
+    "sales_person:list",
+    "procurement_person:list",
     "customer:list",
     "customer:detail",
     "customer_scope:detail",

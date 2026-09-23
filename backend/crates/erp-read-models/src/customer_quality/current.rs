@@ -4,7 +4,6 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use application_core::FilterOption;
 use erp_customer::ports::CustomerDataScopePort;
 use persistence_core::{Executor, Transactional};
 use rust_decimal::Decimal;
@@ -39,7 +38,7 @@ impl super::CustomerQualityReadModel {
         let (customer_context, customer_scope, sales_context, sales_scope) =
             access.resolve_current(actor, executor).await?;
         if no_current_scope(&customer_context, &customer_scope) && sales_scope.is_empty() {
-            let mut view = assemble_current(query, Vec::new(), totals_for(&[]), Vec::new(), Vec::new());
+            let mut view = assemble_current(query, Vec::new(), totals_for(&[]));
             view.empty_reason = Some("no_scope".into());
             apply_context(&mut view, &customer_context, &sales_context);
             let expected = format!("{}:{}", customer_context.scope_version, sales_context.scope_version);
@@ -253,13 +252,12 @@ fn matches_owner_group(customer: &CustomerFact, group: Option<&str>) -> bool {
     }
 }
 
-/// 同一快照内投影汇总、分组、排序与候选；排序分页最后执行。
+/// 同一快照内投影汇总、分组与排序；排序分页最后执行。
 fn project_current(
     query: &CurrentQualityQuery,
     sources: super::source::CurrentSnapshot,
 ) -> CurrentQualityView {
     let has_period_orders = !sources.orders.is_empty() || !sources.customers.is_empty();
-    let (owner_options, org_options) = current_options(&sources.customers, &sources);
     let orders_by_customer = group_orders_by_customer(&sources.orders);
     let mut rows = Vec::new();
     for customer in &sources.customers {
@@ -292,7 +290,7 @@ fn project_current(
     }
     let grouped = group_current_rows(rows, &query.dimension, &sources);
     let totals = totals_for(&grouped);
-    let mut view = assemble_current(query, grouped, totals, owner_options, org_options);
+    let mut view = assemble_current(query, grouped, totals);
     if view.rows.total == 0 {
         view.empty_reason = Some(if has_period_orders { "filtered_empty" } else { "no_data" }.into());
     }
@@ -330,41 +328,6 @@ fn summarize_orders(
         }
     }
     (orders.len(), total, unpriced, first, latest)
-}
-
-/// 现任候选来自完整授权客户集合；同名人员以稳定身份区分。
-fn current_options(
-    customers: &[CustomerFact],
-    sources: &super::source::CurrentSnapshot,
-) -> (Vec<FilterOption>, Vec<FilterOption>) {
-    let mut users = BTreeMap::<String, BTreeSet<String>>::new();
-    let mut orgs = BTreeMap::<String, BTreeSet<String>>::new();
-    for customer in customers {
-        if let (Some(id), Some(name)) = (
-            &customer.owner_user_id,
-            customer.owner_user_id.as_ref().and_then(|id| sources.account_names.get(id)),
-        ) {
-            users.entry(id.clone()).or_default().insert(name.clone());
-        }
-        if let (Some(id), Some(name)) = (
-            &customer.owner_org_unit_id,
-            customer.owner_org_unit_id.as_ref().and_then(|id| sources.org_names.get(id)),
-        ) {
-            orgs.entry(id.clone()).or_default().insert(name.clone());
-        }
-    }
-    (labels(users), labels(orgs))
-}
-
-/// 同名候选以稳定身份区分；候选没有责任分派资格语义。
-fn labels(values: BTreeMap<String, BTreeSet<String>>) -> Vec<FilterOption> {
-    values
-        .into_iter()
-        .map(|(value, names)| FilterOption {
-            label: format!("{} · {}", names.into_iter().collect::<Vec<_>>().join("／"), value),
-            value,
-        })
-        .collect()
 }
 
 /// 现任分组：客户行、负责人分组、组织分组三者互斥，永不混排。
@@ -508,8 +471,6 @@ fn assemble_current(
     query: &CurrentQualityQuery,
     rows: Vec<CurrentQualityRow>,
     totals: QualityTotals,
-    owner_options: Vec<FilterOption>,
-    org_options: Vec<FilterOption>,
 ) -> CurrentQualityView {
     let total = rows.len();
     CurrentQualityView {
@@ -531,8 +492,6 @@ fn assemble_current(
         totals,
         rows: QualityRows { dimension: query.dimension.clone(), items: rows, total },
         filter_summary: current_filter_summary(query),
-        owner_options,
-        org_options,
         can_export: true,
     }
 }

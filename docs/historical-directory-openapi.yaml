@@ -1,0 +1,71 @@
+openapi: 3.1.0
+info:
+  title: 历史归属独立候选目录
+  version: 1.0.0
+  description: 独立于报表结果、分页和筛选。只从完整授权期间订单的首次生效快照读取身份和名称，不查询当前人员或当前组织。
+servers:
+  - url: http://localhost:10001
+security:
+  - bearerAuth: []
+paths:
+  /admin/customer-quality/history/directory:
+    get:
+      operationId: customerQualityHistoryDirectory
+      summary: 客户经营质量历史候选
+      description: 沿用历史贡献口径的客户和销售单读取门槛及历史授权，返回前重验授权版本。禁止传入当前人员、组织、关键词、报表分组或页码。
+      parameters:
+        - {$ref: '#/components/parameters/From'}
+        - {$ref: '#/components/parameters/To'}
+        - {$ref: '#/components/parameters/Customer'}
+        - {$ref: '#/components/parameters/Version'}
+      responses: &historyResponses
+        '200':
+          description: 完整有界历史目录。每类候选最多10000项，超限整体拒绝；候选中同名身份分别保留，同一身份多个冻结名称并列。
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: {type: boolean}
+                  data: {$ref: '#/components/schemas/HistoricalDirectory'}
+        '400': {description: 期间非法、跨度超过一年、来源订单或候选超过10000项；不得返回截断目录。}
+        '401': {description: 未认证。}
+        '403': {description: 无相应报表的读取动作或账号失效。}
+        '409': {description: DATA_SCOPE_CHANGED，授权或来源订单版本变化，须重新读取目录。}
+        '422': {description: 未知字段、缺少必填参数或解析失败。}
+  /admin/actual-profit-loss/history-directory:
+    get:
+      operationId: actualProfitLossHistoryDirectory
+      summary: 实际经营盈亏历史候选
+      description: 沿用成本与销售单同角色读取证明；只装载授权订单，不计算成本金额或报表投影。
+      parameters:
+        - {$ref: '#/components/parameters/From'}
+        - {$ref: '#/components/parameters/To'}
+        - {$ref: '#/components/parameters/Customer'}
+        - {$ref: '#/components/parameters/Version'}
+        - {name: period_basis, in: query, required: true, schema: {type: string, enum: [sales_order_effective_date]}}
+      responses: *historyResponses
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}
+  parameters:
+    From: {name: from, in: query, required: true, schema: {type: string, format: date}}
+    To: {name: to, in: query, required: true, schema: {type: string, format: date}}
+    Customer: {name: customer_id, in: query, schema: {type: string}, description: 可选客户上下文，只收窄来源订单；不使用结果页客户集合。}
+    Version: {name: scope_version, in: query, schema: {type: string}, description: 可选目录来源版本；不允许沿用不同期间或客户上下文的报表版本。}
+  schemas:
+    FrozenOption:
+      type: object
+      required: [value, label]
+      properties:
+        value: {type: string}
+        label: {type: string}
+    HistoricalDirectory:
+      type: object
+      required: [attributionUserOptions, attributionOrgOptions, scopeVersion, emptyReason]
+      properties:
+        attributionUserOptions: {type: array, maxItems: 10000, items: {$ref: '#/components/schemas/FrozenOption'}}
+        attributionOrgOptions: {type: array, maxItems: 10000, items: {$ref: '#/components/schemas/FrozenOption'}}
+        scopeVersion: {type: string}
+        emptyReason: {type: [string, 'null'], enum: [no_scope, no_data, null]}

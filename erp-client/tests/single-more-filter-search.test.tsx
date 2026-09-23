@@ -113,7 +113,7 @@ test("接口错误类别由 q 提交，旧独立类别不再与关键词叠加",
             onClearFilters={vi.fn()}
         />,
     )
-    expect(screen.queryByRole("button", { name: /更多筛选/ })).toBeNull()
+    expect(screen.getByRole("button", { name: /更多筛选/ })).toBeTruthy()
     expect(screen.getByPlaceholderText(/错误类别/)).toBeTruthy()
     fireEvent.submit(screen.getByRole("form", { name: "接口错误队列查询" }))
     expect(patchUrl).toHaveBeenLastCalledWith(
@@ -169,7 +169,15 @@ test.each(["payment", "purchase_invoice", "unallocated"])(
                 failed={false}
             />,
         )
-        expect(screen.queryByRole("button", { name: /更多筛选/ })).toBeNull()
+        if (view === "unallocated") {
+            expect(
+                screen.getByRole("button", { name: /更多筛选/ }),
+            ).toBeTruthy()
+        } else {
+            expect(
+                screen.queryByRole("button", { name: /更多筛选/ }),
+            ).toBeNull()
+        }
         act(() => result.current.setSearchInput(" 供应商乙 "))
         act(() => result.current.applyFilters())
         expect(submittedParams().get("q")).toBe("供应商乙")

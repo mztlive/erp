@@ -159,6 +159,11 @@ export function ActualProfitLossPage() {
 
                     {page.data || page.viewQuery.isError || page.scopeError ? (
                         <ProfitLossRowsPanel
+                            historyDirectory={page.historyDirectory}
+                            directoryError={page.directoryQuery.error}
+                            onRetryDirectory={() =>
+                                void page.directoryQuery.refetch()
+                            }
                             data={page.data}
                             dimension={page.dimension}
                             coverage={page.coverageDraft}

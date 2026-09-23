@@ -77,28 +77,22 @@ it("跨页携带并复核 scope_version，版本变化拒绝拼接", async () =>
     })
 })
 
-it("跨页合并维护人与能力负责人候选", async () => {
+it("列表只收集行与总数，不把旧响应候选合并为目录", async () => {
     vi.mocked(apiGet)
         .mockResolvedValueOnce({
             items: [{ id: "first" }],
             total: 2,
             owner_options: [{ value: "buyer-a", label: "甲" }],
-            capability_owner_options: [{ value: "cap-a", label: "能力甲" }],
         })
         .mockResolvedValueOnce({
             items: [{ id: "second" }],
             total: 2,
             owner_options: [{ value: "buyer-b", label: "乙" }],
-            capability_owner_options: [{ value: "cap-a", label: "能力甲" }],
         })
-    expect(await fetchCompleteList("/list")).toMatchObject({
+    const result = await fetchCompleteList("/list")
+    expect(result).toEqual({
         items: [{ id: "first" }, { id: "second" }],
         total: 2,
-        owner_options: [
-            { value: "buyer-a", label: "甲" },
-            { value: "buyer-b", label: "乙" },
-        ],
-        capability_owner_options: [{ value: "cap-a", label: "能力甲" }],
     })
 })
 

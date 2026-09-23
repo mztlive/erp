@@ -2,6 +2,7 @@
 mod access;
 mod attribution;
 mod calculation;
+mod directory;
 pub mod dto;
 mod export;
 mod projection;

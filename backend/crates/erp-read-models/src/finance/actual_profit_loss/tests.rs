@@ -278,7 +278,7 @@ fn historical_groups_use_frozen_ids_and_preserve_unknown_contribution() {
 }
 
 #[test]
-fn attribution_filters_intersect_before_totals_and_keep_full_scope_candidates() {
+fn attribution_filters_intersect_before_totals() {
     let mut orders = calculation::calculate(&sources(), as_of(), false).unwrap();
     orders[0].row.attribution_user_id = Some("sales-a".into());
     orders[0].row.attribution_user_name = Some("同名销售".into());
@@ -295,8 +295,6 @@ fn attribution_filters_intersect_before_totals_and_keep_full_scope_candidates() 
     assert_eq!(view.rows.total, 1);
     assert_eq!(view.totals.net_sales_revenue, "100.00");
     assert_eq!(view.totals.actual_profit_loss_net.as_deref(), Some("35.00"));
-    assert_eq!(view.attribution_user_options.len(), 2);
-    assert_ne!(view.attribution_user_options[0].label, view.attribution_user_options[1].label);
     q.attribution_org_unit_ids = Some(serde_json::from_value(serde_json::json!("current-parent")).unwrap());
     let empty = projection::project(orders, &q, "2026-09-11", true, "测试范围").unwrap();
     assert_eq!(empty.rows.total, 0);

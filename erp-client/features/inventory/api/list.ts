@@ -74,31 +74,7 @@ import type {
     BackendStockBalance,
     BackendStockMovement,
     BackendStockReservation,
-    BackendWarehouse,
 } from "@/features/inventory/api/dto"
-
-async function fetchWarehouses(): Promise<
-    { id: string; code: string; name: string }[]
-> {
-    try {
-        const page = await apiGet<BackendPage<BackendWarehouse>>(
-            "/admin/warehouses",
-            {
-                page: 1,
-                page_size: 100,
-                sort_by: "warehouse_code",
-                sort_dir: "asc",
-            },
-        )
-        return page.items.map((w) => ({
-            id: w.id,
-            code: w.warehouse_code,
-            name: w.warehouse_code, // WarehouseView has no display name; use code
-        }))
-    } catch {
-        return []
-    }
-}
 
 async function fetchOptionalMetrics(query: InventoryQuery): Promise<{
     balanceDimensionCount: number
@@ -152,15 +128,7 @@ export async function fetchInventoryList(
     const page = pageFromCursor(query.cursor, query.view, pageSize)
     const sort = query.sort.length > 0 ? query.sort : []
     const { sort_by, sort_dir } = sortTokenToBackend(sort, query.view)
-    const warehouseOptions = fetchWarehouses()
     const optionalMetrics = fetchOptionalMetrics(query)
-    let loadedWarehouseOptions:
-        | { id: string; code: string; name: string }[]
-        | undefined
-    const loadWarehouseOptions = async () => {
-        loadedWarehouseOptions ??= await warehouseOptions
-        return loadedWarehouseOptions
-    }
     const emptyBase = (
         emptyReason: InventoryListView["emptyReason"],
         extras: Partial<InventoryListView> = {},
@@ -191,7 +159,6 @@ export async function fetchInventoryList(
         emptyReason,
         excludedKindsNote: EXCLUDED_NOTE,
         openingStockNote: OPENING_STOCK_NOTE,
-        warehouses: [],
         ...extras,
     })
     const permissionRevoked = () =>
@@ -252,11 +219,7 @@ export async function fetchInventoryList(
         )
         if (!res) return permissionRevoked()
         takeScope(res)
-        const warehouses = await loadWarehouseOptions()
-        const whMap = new Map(warehouses.map((w) => [w.id, w.name]))
-        movements = res.items.map((m) =>
-            mapMovement(m, { warehouseName: whMap.get(m.warehouse_id) }),
-        )
+        movements = res.items.map((m) => mapMovement(m))
         total = res.total
         dataWatermark =
             movements
@@ -324,7 +287,6 @@ export async function fetchInventoryList(
 
     const { balanceDimensionCount, pendingAdjustmentCount } =
         await optionalMetrics
-    const warehouses = await loadWarehouseOptions()
     // reserved/zero metrics require availability filters the backend lacks
     const reservedDimensionCount = 0
     const zeroAvailableDimensionCount = 0
@@ -379,7 +341,7 @@ export async function fetchInventoryList(
         previousCursor,
         pageSize,
         sort: query.sort,
-        filterSummary: filterSummary(query, total, warehouses),
+        filterSummary: filterSummary(query, total),
         permissionVersion: "pv-real",
         dataWatermark,
         lastMovementWatermark: dataWatermark,
@@ -391,6 +353,5 @@ export async function fetchInventoryList(
         emptyReason,
         excludedKindsNote: EXCLUDED_NOTE,
         openingStockNote: OPENING_STOCK_NOTE,
-        warehouses,
     }
 }

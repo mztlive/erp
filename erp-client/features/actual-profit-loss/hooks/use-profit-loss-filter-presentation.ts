@@ -1,9 +1,14 @@
 "use client"
 
+import type { HistoricalDirectory } from "@/lib/historical-directory"
 import * as React from "react"
 import { WELFARE_SCENARIO_OPTIONS } from "@/lib/business-options"
 
 import type { ComboboxOption } from "@/components/business/option-combobox"
+import {
+    COST_TYPE_LABEL,
+    COST_TYPE_OPTIONS,
+} from "@/features/actual-profit-loss/lib/presentation"
 import {
     COST_TYPE_CHIP_PREFIX,
     type ProfitLossAppliedChip,
@@ -16,6 +21,7 @@ import {
 
 type Options = Readonly<{
     data: ProfitLossView | undefined
+    historyDirectory?: HistoricalDirectory
     qParam: string
     coverage: ProfitLossCoverage
     customerId: string | undefined
@@ -30,6 +36,7 @@ type Options = Readonly<{
 /** 将已生效筛选投影为 chip 与可撤销的下拉选项。 */
 export function useProfitLossFilterPresentation({
     data,
+    historyDirectory,
     qParam,
     coverage,
     customerId,
@@ -52,25 +59,14 @@ export function useProfitLossFilterPresentation({
                 ?.identityLabel,
         [data?.rows.items, salesOrderId],
     )
-    const costTypeLabelMap = React.useMemo(
-        () =>
-            new Map(
-                (data?.costComposition ?? []).map((item) => [
-                    item.costType,
-                    item.label,
-                ]),
-            ),
-        [data?.costComposition],
-    )
-
     const appliedChips = React.useMemo<readonly ProfitLossAppliedChip[]>(() => {
         const chips: ProfitLossAppliedChip[] = []
         if (attributionGroup) {
             const [dimension, id] = attributionGroup.split(":")
             const options =
                 dimension === "attribution_org"
-                    ? data?.attributionOrgOptions
-                    : data?.attributionUserOptions
+                    ? historyDirectory?.attributionOrgOptions
+                    : historyDirectory?.attributionUserOptions
             const label = id
                 ? (options?.find((option) => option.value === id)?.label ?? id)
                 : "未知归属"
@@ -83,13 +79,13 @@ export function useProfitLossFilterPresentation({
             [
                 "attributionUserIds",
                 attributionUserIds,
-                data?.attributionUserOptions,
+                historyDirectory?.attributionUserOptions,
                 "历史归属销售",
             ],
             [
                 "attributionOrgUnitIds",
                 attributionOrgUnitIds,
-                data?.attributionOrgOptions,
+                historyDirectory?.attributionOrgOptions,
                 "历史归属组织",
             ],
         ] as const) {
@@ -128,7 +124,7 @@ export function useProfitLossFilterPresentation({
         for (const value of costTypes) {
             chips.push({
                 key: `${COST_TYPE_CHIP_PREFIX}${value}`,
-                label: `成本类型：${costTypeLabelMap.get(value) ?? value}`,
+                label: `成本类型：${COST_TYPE_LABEL[value] ?? value}`,
             })
         }
         return chips
@@ -136,10 +132,9 @@ export function useProfitLossFilterPresentation({
         attributionGroup,
         attributionUserIds,
         attributionOrgUnitIds,
-        data?.attributionUserOptions,
-        data?.attributionOrgOptions,
+        historyDirectory?.attributionUserOptions,
+        historyDirectory?.attributionOrgOptions,
         benefitScenario,
-        costTypeLabelMap,
         costTypes,
         coverage,
         customerId,
@@ -160,27 +155,14 @@ export function useProfitLossFilterPresentation({
         return [...labels].map((label) => ({ value: label, label }))
     }, [benefitScenario])
     const costTypeOptions = React.useMemo<readonly ComboboxOption[]>(() => {
-        const seen = new Set<string>()
-        const options: ComboboxOption[] = []
-        for (const item of data?.costComposition ?? []) {
-            if (item.costType && !seen.has(item.costType)) {
-                seen.add(item.costType)
-                options.push({
-                    value: item.costType,
-                    label: item.label || item.costType,
-                })
-            }
-        }
-        for (const value of costTypes) {
-            if (!seen.has(value)) {
-                options.push({
-                    value,
-                    label: costTypeLabelMap.get(value) ?? value,
-                })
-            }
-        }
-        return options
-    }, [costTypeLabelMap, costTypes, data?.costComposition])
+        const known = new Set(COST_TYPE_OPTIONS.map((option) => option.value))
+        const extra = costTypes
+            .filter((value) => value && !known.has(value))
+            .map((value) => ({ value, label: value }))
+        return extra.length === 0
+            ? COST_TYPE_OPTIONS
+            : [...COST_TYPE_OPTIONS, ...extra]
+    }, [costTypes])
 
     return {
         appliedChips,

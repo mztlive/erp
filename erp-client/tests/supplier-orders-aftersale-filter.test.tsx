@@ -68,7 +68,8 @@ test("已生效售后条件支持 URL 回填、移除和清除全部", () => {
 test("重置更多条件保留当前查询，提交后才清除 URL", () => {
     state.url = { ...state.url, aftersalePending: true }
     const { result } = setup()
-    expect(result.current.panelOpen).toBe(true)
+    expect(result.current.panelOpen).toBe(false)
+    act(() => result.current.setPanelOpen(true))
     act(() => result.current.resetMoreFilters())
     expect(result.current.aftersalePendingDraft).toBe(false)
     expect(result.current.hasPendingChanges).toBe(true)

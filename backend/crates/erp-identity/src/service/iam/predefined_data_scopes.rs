@@ -58,6 +58,12 @@ pub(crate) const RESOURCE_ACTIONS: &[(&str, &[&str])] = &[
         "supplier_fulfillment_order",
         &["list", "detail", "investigate", "complete", "submit", "cancel", "refund", "reject", "handover"],
     ),
+    ("person_query_qualification", &["manage"]),
+    ("settlement_party", &["list"]),
+    ("warehouse", &["list"]),
+    ("business_person", &["list"]),
+    ("sales_person", &["list"]),
+    ("procurement_person", &["list"]),
 ];
 
 /// 首次初始化显式岗位清单；没有条目的岗位不获得兜底范围。
@@ -69,6 +75,8 @@ pub async fn ensure_predefined_role_data_scopes(rbac: &SharedRbacService) -> Res
         "role-sales",
         "role-sales-leader",
         "role-procurement",
+        "role-operations",
+        "role-warehouse",
         "role-finance",
         "role-management",
         "role-sysadmin",
@@ -102,6 +110,35 @@ pub(crate) async fn seed_role(rbac: &SharedRbacService, role: &str) -> Result<()
 
 /// 明确岗位、资源与动作的默认规则，RBAC 仍独立决定实际动作权限。
 fn definitions(role: &str, resource: &str, actions: &[&str]) -> Vec<DataScopeData> {
+    if matches!(resource, "settlement_party" | "warehouse") {
+        let eligible = matches!(role, "role-root" | "role-finance" | "role-management")
+            || (resource == "settlement_party"
+                && matches!(role, "role-sales" | "role-sales-leader" | "role-procurement"))
+            || (resource == "warehouse"
+                && matches!(
+                    role,
+                    "role-warehouse"
+                        | "role-procurement"
+                        | "role-sales"
+                        | "role-sales-leader"
+                        | "role-operations"
+                ));
+        return if eligible {
+            vec![definition(role, resource, actions, DataScopeType::Company)]
+        } else {
+            Vec::new()
+        };
+    }
+    if resource == "person_query_qualification" {
+        return if matches!(role, "role-root" | "role-sysadmin") {
+            vec![definition(role, resource, actions, DataScopeType::Company)]
+        } else {
+            Vec::new()
+        };
+    }
+    if matches!(resource, "sales_person" | "procurement_person" | "business_person") {
+        return person_directory_definitions(role, resource, actions);
+    }
     if !definition_applies(role, resource) {
         return Vec::new();
     }
@@ -233,6 +270,31 @@ fn integration_definitions(role: &str, resource: &str, actions: &[&str]) -> Vec<
         .collect()
 }
 
+/// 人员目录的默认范围。不复制合同或采购单的既有范围。
+///
+/// 销售本人、采购本人、销售领导按管理组织、财务和管理层按公司。
+/// 超级管理员沿用公司级。没有列出的岗位保持关闭。
+fn person_directory_definitions(role: &str, resource: &str, actions: &[&str]) -> Vec<DataScopeData> {
+    let scope_type = match (role, resource) {
+        ("role-sales" | "role-procurement" | "role-operations" | "role-warehouse", "business_person") => {
+            DataScopeType::SelfOwned
+        },
+        ("role-sales-leader", "business_person") => DataScopeType::Team,
+        ("role-finance" | "role-management", "business_person") => DataScopeType::Company,
+        ("role-root", "business_person" | "sales_person" | "procurement_person") => DataScopeType::Company,
+        ("role-sales", "sales_person") => DataScopeType::SelfOwned,
+        ("role-procurement", "procurement_person") => DataScopeType::SelfOwned,
+        ("role-sales-leader", "sales_person" | "procurement_person") => DataScopeType::Team,
+        ("role-finance" | "role-management", "sales_person" | "procurement_person") => DataScopeType::Company,
+        _ => return Vec::new(),
+    };
+    let granted = actions.iter().copied().filter(|action| *action == "list").collect::<Vec<_>>();
+    if granted.is_empty() {
+        return Vec::new();
+    }
+    vec![definition(role, resource, &granted, scope_type)]
+}
+
 /// 构造清单中的单条规范化输入；动态管理范围必须显式授予管理关系才产生目标。
 fn definition(role: &str, resource: &str, actions: &[&str], scope_type: DataScopeType) -> DataScopeData {
     DataScopeData {
@@ -248,7 +310,8 @@ fn definition(role: &str, resource: &str, actions: &[&str], scope_type: DataScop
                 "stock_adjustment" | "stock_balance" | "stock_movement" | "stock_reservation" => {
                     ScopeDimension::Warehouse
                 },
-                "customer_refund" | "supplier_refund" => ScopeDimension::SettlementParty,
+                "customer_refund" | "supplier_refund" | "settlement_party" => ScopeDimension::SettlementParty,
+                "warehouse" => ScopeDimension::Warehouse,
                 _ => ScopeDimension::InternalOrg,
             },
             target_mode: scope_type.requires_targets().then_some(ScopeTargetMode::ManagedOrgs),
@@ -311,5 +374,26 @@ mod tests {
         }
         let finance = definitions("role-finance", "supplier_payment", &["list", "detail"]);
         assert!(finance.iter().all(|rule| rule.scope_type == DataScopeType::Company));
+    }
+
+    #[test]
+    fn person_directories_do_not_copy_business_list_scopes() {
+        let sales = definitions("role-sales", "sales_person", &["list"]);
+        assert_eq!(sales.len(), 1);
+        assert_eq!(sales[0].scope_type, DataScopeType::SelfOwned);
+        assert!(definitions("role-sales", "procurement_person", &["list"]).is_empty());
+        assert!(definitions("role-procurement", "sales_person", &["list"]).is_empty());
+        let procurement = definitions("role-procurement", "procurement_person", &["list"]);
+        assert_eq!(procurement[0].scope_type, DataScopeType::SelfOwned);
+        let leader = definitions("role-sales-leader", "sales_person", &["list"]);
+        assert_eq!(leader[0].scope_type, DataScopeType::Team);
+        assert_eq!(leader[0].binding.target_mode, Some(ScopeTargetMode::ManagedOrgs));
+        assert!(
+            definitions("role-finance", "sales_person", &["list"])
+                .iter()
+                .all(|rule| rule.scope_type == DataScopeType::Company)
+        );
+        assert!(definitions("role-operations", "sales_person", &["list"]).is_empty());
+        assert!(definitions("role-warehouse", "procurement_person", &["list"]).is_empty());
     }
 }

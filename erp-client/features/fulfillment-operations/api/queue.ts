@@ -60,10 +60,7 @@ export type FulfillmentQueueFilters = {
     scopeVersion?: string
 }
 
-function filterSummary(
-    filters: FulfillmentQueueFilters,
-    warehouseOptions: FulfillmentQueueView["context"]["warehouseOptions"],
-): string {
+function filterSummary(filters: FulfillmentQueueFilters): string {
     const parts = [
         filters.operationTypes && filters.operationTypes.length > 0
             ? filters.operationTypes
@@ -76,10 +73,7 @@ function filterSummary(
     if (filters.gate === "blocked") parts.push("先款未到")
     if (filters.gate === "satisfied") parts.push("货款已到")
     if (filters.warehouseId) {
-        const label = warehouseOptions.find(
-            (w) => w.value === filters.warehouseId,
-        )?.label
-        parts.push(label ?? "指定仓库")
+        parts.push("指定仓库")
     }
     if (filters.q) parts.push(`单号 ${filters.q}`)
     if (filters.salesOrderId) parts.push(`销售单 ${filters.salesOrderId}`)
@@ -195,15 +189,6 @@ function exactOperationQueueView(
     operation: FulfillmentOperation | undefined,
     emptyReason: FulfillmentQueueView["emptyReason"],
 ): FulfillmentQueueView {
-    const warehouseOptions =
-        operation?.source.warehouseId && operation.source.warehouseLabel
-            ? [
-                  {
-                      value: operation.source.warehouseId,
-                      label: operation.source.warehouseLabel,
-                  },
-              ]
-            : []
     return {
         preferences: { autoNextDefault: filters.role !== "warehouse" },
         context: {
@@ -213,8 +198,7 @@ function exactOperationQueueView(
             pageSize: 1,
             totalPages: 1,
             currentOperationId: operation?.operationId,
-            filterSummary: filterSummary(filters, warehouseOptions),
-            warehouseOptions,
+            filterSummary: filterSummary(filters),
             visibleTypes: [operationType],
             roleLabel: role.label,
             viewerLabel: role.userLabel,
@@ -329,8 +313,7 @@ export async function fetchFulfillmentQueue(
                 page: filters.page ?? 1,
                 pageSize: filters.pageSize ?? DEFAULT_QUEUE_PAGE_SIZE,
                 totalPages: 1,
-                filterSummary: filterSummary(filters, []),
-                warehouseOptions: [],
+                filterSummary: filterSummary(filters),
                 visibleTypes: role.types,
                 roleLabel: role.label,
                 viewerLabel: role.userLabel,
@@ -431,10 +414,6 @@ export async function fetchFulfillmentQueue(
             : operations.length === 0
               ? "FILTER_NO_RESULT"
               : undefined
-    const warehouseOptions = response.warehouse_options.map((warehouse) => ({
-        value: warehouse.id,
-        label: warehouse.label,
-    }))
     const metrics = accessibleTypes.map((operationType) => ({
         operationType,
         label: `待${OPERATION_TYPE_SHORT[operationType]}`,
@@ -466,8 +445,7 @@ export async function fetchFulfillmentQueue(
             currentOperationId: current?.operationId,
             previousOperationId: operations[positionInPage - 1]?.operationId,
             nextOperationId: operations[positionInPage + 1]?.operationId,
-            filterSummary: filterSummary(filters, warehouseOptions),
-            warehouseOptions,
+            filterSummary: filterSummary(filters),
             visibleTypes: accessibleTypes,
             roleLabel: role.label,
             viewerLabel: role.userLabel,

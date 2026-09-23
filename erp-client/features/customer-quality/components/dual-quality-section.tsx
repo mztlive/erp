@@ -1,4 +1,5 @@
 "use client"
+import { useHistoricalDirectory } from "@/lib/historical-directory"
 
 import * as React from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
@@ -9,6 +10,8 @@ import { Button } from "@/components/ui/button"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { getErrorMessage } from "@/lib/api/errors"
 import { isDataScopeChanged } from "@/features/data-scope/cache"
+import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
+import { OrganizationUnitFilter } from "@/features/organization/components/organization-unit-filter"
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
 
 import { downloadQualityCsv } from "../api/dual-caliber"
@@ -412,7 +415,7 @@ function CurrentCaliberPanel({
     const scopeVersion = searchParams.get("scopeVersion") ?? undefined
 
     const [qDraft, setQDraft] = React.useState(qParam)
-    const [idDraft, setIdDraft] = React.useState("")
+    const suppressDescendantsPatch = React.useRef(false)
     React.useEffect(() => {
         if (document.activeElement?.id !== "customers-quality-dual-search") {
             setQDraft(qParam)
@@ -425,7 +428,8 @@ function CurrentCaliberPanel({
             to,
             ownerUserIds: ownerIds.length ? ownerIds : undefined,
             orgUnitIds: orgIds.length ? orgIds : undefined,
-            includeDescendants,
+            includeDescendants:
+                orgIds.length > 0 ? includeDescendants : undefined,
             customerId,
             ownerGroup,
             q: qParam || undefined,
@@ -479,13 +483,32 @@ function CurrentCaliberPanel({
         })
     }
 
-    function applyIdDraft() {
-        const ids = parseCsvIds(idDraft)
-        if (ids.length === 0) return
-        const merged = serializeCsvIds([...ownerIds, ...ids])
-        setIdDraft("")
+    function applyOwners(value: string) {
         patchDual({
-            ownerUserIds: merged || null,
+            ownerUserIds: value || null,
+            scopeVersion: null,
+            dualPage: null,
+        })
+    }
+
+    function applyOrgs(value: string) {
+        const cleared = value.trim() === ""
+        if (cleared) suppressDescendantsPatch.current = true
+        patchDual({
+            orgUnitIds: cleared ? null : value,
+            ...(cleared ? { includeDescendants: null } : {}),
+            scopeVersion: null,
+            dualPage: null,
+        })
+    }
+
+    function applyDescendants(checked: boolean) {
+        if (suppressDescendantsPatch.current) {
+            suppressDescendantsPatch.current = false
+            return
+        }
+        patchDual({
+            includeDescendants: checked ? "true" : null,
             scopeVersion: null,
             dualPage: null,
         })
@@ -543,37 +566,26 @@ function CurrentCaliberPanel({
                         查询
                     </Button>
                 </div>
-                <div className="flex min-w-0 gap-2">
-                    <label
-                        htmlFor="customers-quality-dual-owner-id"
-                        className="sr-only"
-                    >
-                        现任负责人 ID
-                    </label>
-                    <input
-                        id="customers-quality-dual-owner-id"
-                        value={idDraft}
-                        onChange={(e) => setIdDraft(e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                                e.preventDefault()
-                                applyIdDraft()
-                            }
-                        }}
-                        placeholder="现任负责人 ID（逗号分隔）"
-                        className="h-9 min-w-0 flex-1 rounded-lg border border-border bg-background px-3 font-mono text-sm"
-                    />
-                    <Button
-                        id="customers-quality-dual-owner-add"
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={applyIdDraft}
-                    >
-                        添加
-                    </Button>
-                </div>
+                <PersonDirectoryFilter
+                    id="customers-quality-dual-owner"
+                    category="sales"
+                    label="现任负责人"
+                    value={ownerIds.join(",")}
+                    onChange={applyOwners}
+                    orgUnitIds={orgIds}
+                    includeDescendants={
+                        orgIds.length > 0 && includeDescendants === true
+                    }
+                />
             </div>
+            <OrganizationUnitFilter
+                id="customers-quality-dual-org"
+                label="现任组织"
+                value={orgIds.join(",")}
+                onChange={applyOrgs}
+                includeDescendants={includeDescendants === true}
+                onDescendantsChange={applyDescendants}
+            />
 
             <div className="flex min-w-0 flex-wrap items-center gap-2 text-[13px]">
                 <label
@@ -629,24 +641,6 @@ function CurrentCaliberPanel({
                         </option>
                     ))}
                 </select>
-                <label className="flex cursor-pointer items-center gap-1.5">
-                    <input
-                        id="customers-quality-dual-descendants"
-                        type="checkbox"
-                        checked={includeDescendants === true}
-                        onChange={(e) =>
-                            patchDual({
-                                includeDescendants: e.target.checked
-                                    ? "true"
-                                    : null,
-                                scopeVersion: null,
-                                dualPage: null,
-                            })
-                        }
-                        className="size-4"
-                    />
-                    组织含下级
-                </label>
                 {hasFilters ? (
                     <Button
                         id="customers-quality-dual-clear"
@@ -739,42 +733,6 @@ function CurrentCaliberPanel({
                         organizationVersion={data.organizationVersion}
                         scopeVersion={data.scopeVersion}
                     />
-                    <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
-                        <CandidatePicker
-                            idPrefix="customers-quality-dual-owner"
-                            title="现任负责人候选"
-                            options={data.ownerOptions}
-                            selected={ownerIds}
-                            emptyLabel="当前结果无负责人候选。"
-                            onToggle={(id) => {
-                                const merged = serializeCsvIds(
-                                    toggleId(ownerIds, id),
-                                )
-                                patchDual({
-                                    ownerUserIds: merged || null,
-                                    scopeVersion: null,
-                                    dualPage: null,
-                                })
-                            }}
-                        />
-                        <CandidatePicker
-                            idPrefix="customers-quality-dual-org"
-                            title="现任组织候选"
-                            options={data.orgOptions}
-                            selected={orgIds}
-                            emptyLabel="当前结果无组织候选。"
-                            onToggle={(id) => {
-                                const merged = serializeCsvIds(
-                                    toggleId(orgIds, id),
-                                )
-                                patchDual({
-                                    orgUnitIds: merged || null,
-                                    scopeVersion: null,
-                                    dualPage: null,
-                                })
-                            }}
-                        />
-                    </div>
                     {emptyReason === "filtered-empty" ||
                     data.rows.total === 0 ? (
                         <BusinessEmptyState
@@ -1045,6 +1003,14 @@ function HistoryCaliberPanel({
         ],
     )
     const viewQuery = useHistoryQualityQuery(query)
+    const directoryQuery = useHistoricalDirectory(
+        "/admin/customer-quality/history/directory",
+        query,
+    )
+    const directory =
+        directoryQuery.isError || directoryQuery.isFetching
+            ? undefined
+            : directoryQuery.data
     useScopeVersionWriteBack(
         viewQuery.data?.scopeVersion,
         page,
@@ -1267,6 +1233,58 @@ function HistoryCaliberPanel({
                 </div>
             ) : null}
 
+            {directoryQuery.isError && (
+                <BusinessFailureState
+                    title="历史候选加载失败"
+                    error={directoryQuery.error}
+                    onRetry={() => void directoryQuery.refetch()}
+                />
+            )}
+            <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
+                <CandidatePicker
+                    idPrefix="customers-quality-dual-attribution-user"
+                    title="历史归属销售候选"
+                    options={directory?.attributionUserOptions ?? []}
+                    selected={userIds}
+                    emptyLabel={
+                        directoryQuery.isFetching
+                            ? "正在加载历史候选…"
+                            : "该期间授权范围内无历史销售候选。"
+                    }
+                    onToggle={(id) => {
+                        const merged = serializeCsvIds(
+                            toggleId(userIds, id),
+                        )
+                        patchDual({
+                            attributionUserIds: merged || null,
+                            scopeVersion: null,
+                            dualPage: null,
+                        })
+                    }}
+                />
+                <CandidatePicker
+                    idPrefix="customers-quality-dual-attribution-org"
+                    title="历史归属组织候选"
+                    options={directory?.attributionOrgOptions ?? []}
+                    selected={orgIds}
+                    emptyLabel={
+                        directoryQuery.isFetching
+                            ? "正在加载历史候选…"
+                            : "该期间授权范围内无历史组织候选。"
+                    }
+                    onToggle={(id) => {
+                        const merged = serializeCsvIds(
+                            toggleId(orgIds, id),
+                        )
+                        patchDual({
+                            attributionOrgUnitIds: merged || null,
+                            scopeVersion: null,
+                            dualPage: null,
+                        })
+                    }}
+                />
+            </div>
+
             {viewQuery.isError ? (
                 isScopeChanged(viewQuery.error) ? (
                     <ScopeChangedPanel
@@ -1312,42 +1330,6 @@ function HistoryCaliberPanel({
                         organizationVersion={data.organizationVersion}
                         scopeVersion={data.scopeVersion}
                     />
-                    <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
-                        <CandidatePicker
-                            idPrefix="customers-quality-dual-attribution-user"
-                            title="历史归属销售候选"
-                            options={data.attributionUserOptions}
-                            selected={userIds}
-                            emptyLabel="当前结果无历史销售候选。"
-                            onToggle={(id) => {
-                                const merged = serializeCsvIds(
-                                    toggleId(userIds, id),
-                                )
-                                patchDual({
-                                    attributionUserIds: merged || null,
-                                    scopeVersion: null,
-                                    dualPage: null,
-                                })
-                            }}
-                        />
-                        <CandidatePicker
-                            idPrefix="customers-quality-dual-attribution-org"
-                            title="历史归属组织候选"
-                            options={data.attributionOrgOptions}
-                            selected={orgIds}
-                            emptyLabel="当前结果无历史组织候选。"
-                            onToggle={(id) => {
-                                const merged = serializeCsvIds(
-                                    toggleId(orgIds, id),
-                                )
-                                patchDual({
-                                    attributionOrgUnitIds: merged || null,
-                                    scopeVersion: null,
-                                    dualPage: null,
-                                })
-                            }}
-                        />
-                    </div>
                     {emptyReason === "filtered-empty" ||
                     data.rows.total === 0 ? (
                         <BusinessEmptyState

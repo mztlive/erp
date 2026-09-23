@@ -1,5 +1,6 @@
 /// 系统管理员（技术运维，非超级管理员）推荐权限。
 pub(crate) const SYSADMIN_PERMISSIONS: &[&str] = &[
+    "person_query_qualification:manage",
     "org_unit:list",
     "org_unit:manage",
     "company:list",

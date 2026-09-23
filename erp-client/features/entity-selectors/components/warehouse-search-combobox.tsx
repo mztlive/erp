@@ -1,5 +1,7 @@
 "use client"
 
+import { SelectorQueryFeedback } from "@/components/business/selector-query-feedback"
+
 import {
     WarehouseCombobox,
     type WarehouseComboboxItem,
@@ -34,6 +36,7 @@ export function WarehouseSearchCombobox({
         loading,
         emptyLabel: resolvedEmptyLabel,
     } = useRemoteSearchCombobox({
+        selectedId: value,
         list: query.list,
         selected: query.selected,
         selectedItem,
@@ -42,18 +45,30 @@ export function WarehouseSearchCombobox({
         fallbackError: "仓库加载失败，请重试",
     })
     return (
-        <WarehouseCombobox
-            {...props}
-            value={value}
-            warehouses={rows}
-            onValueChange={(id) => {
-                onValueChange(id)
-                onItemChange?.(rows.find((item) => item.warehouseId === id))
-            }}
-            onSearchChange={search.onSearchChange}
-            filterMode="remote"
-            loading={loading}
-            emptyLabel={resolvedEmptyLabel}
-        />
+        <div className="min-w-0">
+            <WarehouseCombobox
+                {...props}
+                value={value}
+                warehouses={rows}
+                onValueChange={(id) => {
+                    onValueChange(id)
+                    onItemChange?.(rows.find((item) => item.warehouseId === id))
+                }}
+                onSearchChange={search.onSearchChange}
+                filterMode="remote"
+                loading={loading}
+                emptyLabel={resolvedEmptyLabel}
+            />
+            <SelectorQueryFeedback
+                id={props.id}
+                failed={query.list.isError || query.selected.isError}
+                error={query.list.error ?? query.selected.error}
+                noScope={!query.list.isFetching && !query.list.isError && query.list.emptyReason === "no_scope"}
+                onRetry={() => {
+                    void query.list.refetch()
+                    if (value) void query.selected.refetch()
+                }}
+            />
+        </div>
     )
 }

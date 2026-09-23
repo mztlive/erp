@@ -20,8 +20,7 @@ export async function fetchW29WorkItems(input?: {
     const result = await listWorkItems({
         scope: input?.history ? "history" : "managed",
         timezone:
-            Intl.DateTimeFormat().resolvedOptions().timeZone ||
-            "Asia/Shanghai",
+            Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai",
         page: 1,
         pageSize: 100,
         handlerUserIds: input?.handlerUserIds,

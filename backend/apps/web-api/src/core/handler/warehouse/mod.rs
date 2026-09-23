@@ -4,8 +4,10 @@
 //! 直接复用 `erp_warehouse` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
 
 use application_core::AuditActor;
+use application_core::directory::ScopedPage;
 use axum::extract::{Path, Query, State};
 use axum::{Extension, Json};
+use erp_processes::adapters::warehouse_directory;
 use erp_warehouse::{
     CreateWarehouseRequest, CreateWarehouseSkuPolicyRequest, PageView,
     UpdateWarehouseFulfillmentHandlersRequest, UpdateWarehouseRequest, UpdateWarehouseSkuPolicyRequest,
@@ -34,9 +36,10 @@ use crate::core::response::ApiResponse;
 /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
 pub async fn warehouse_list(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<WarehouseListParams>,
-) -> Result<PageView<WarehouseView>> {
-    let page = state.warehouse_service().warehouse_list(&params).await?;
+) -> Result<ScopedPage<WarehouseView>> {
+    let page = warehouse_directory(state.db(), state.rbac()).warehouses(actor, params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -270,3 +273,5 @@ pub async fn warehouse_sku_policy_delete(
 
     Ok(ApiResponse::ok())
 }
+
+pub mod directory;

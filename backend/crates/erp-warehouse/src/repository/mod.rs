@@ -12,3 +12,5 @@ pub use warehouse::{
     WarehouseRevisionRepositoryExt, WarehouseRevisionRow, WarehouseRow, WarehouseSkuPolicyFilter,
     WarehouseSkuPolicyRepositoryExt, WarehouseSkuPolicyRow,
 };
+
+pub(crate) mod directory;

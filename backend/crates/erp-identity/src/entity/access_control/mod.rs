@@ -12,6 +12,7 @@
 //! - `data_scope` 按 W19 §5.1 数据范围（公司、组织、团队、本人负责、协作等
 //!   固定策略）建模，是本域的新增能力。
 
+pub mod audit_actions;
 pub mod audit_event;
 pub mod data_scope;
 pub mod permission;

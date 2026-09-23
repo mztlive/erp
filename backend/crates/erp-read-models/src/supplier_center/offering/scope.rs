@@ -3,7 +3,7 @@
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
-use application_core::{AuditActor, FilterOption, FilteredPage};
+use application_core::{AuditActor, OwnershipPage};
 use erp_identity::AccessControlExt;
 use erp_identity::repository::prelude::*;
 use erp_supply::repository::prelude::*;
@@ -37,12 +37,8 @@ impl SupplierOfferingReadService {
             return Err(crate::support::data_scope_changed("数据范围已变化，请从第一页刷新"));
         }
         Ok(SupplierOfferingListView {
-            data: FilteredPage {
-                owner_options: snapshot.owner_options,
-                ownership_basis: "offering_maintainer",
-                page: snapshot.page,
-            },
-            procurement_owner_options: snapshot.procurement_owner_options,
+            data: OwnershipPage { ownership_basis: "offering_maintainer", page: snapshot.page },
+
             scope_version: snapshot.scope_version,
             policy_version: snapshot.policy_version,
             organization_version: snapshot.organization_version,
@@ -75,8 +71,7 @@ impl SupplierOfferingReadService {
 
 struct OfferingSnapshot {
     page: application_core::PageView<super::dto::SupplierOfferingView>,
-    owner_options: Vec<FilterOption>,
-    procurement_owner_options: Vec<FilterOption>,
+
     scope_version: String,
     policy_version: u64,
     organization_version: u64,
@@ -103,18 +98,16 @@ async fn build_snapshot(
     let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
     bundle.page.total.hash(&mut fingerprint);
     context.scope_version = format!("{}:{:x}", context.scope_version, fingerprint.finish());
-    let owner_ids: Vec<String> =
-        crate::support::dedup_sorted(bundle.page.items.iter().map(|row| row.maintainer_user_id.clone()));
-    let owner_options = db.accounts().filter_options(&owner_ids, executor).await?;
-    let procurement_ids =
-        params.procurement_owner_user_ids.as_ref().map(|ids| ids.as_slice().to_vec()).unwrap_or_default();
-    let procurement_owner_options = db.accounts().filter_options(&procurement_ids, executor).await?;
-    let view = super::page_view(bundle, &query)?;
+    let mut view = super::page_view(bundle, &query)?;
+    let ids = view.items.iter().map(|row| row.maintainer_user_id.clone()).collect::<Vec<_>>();
+    let names = db.accounts().names_by_ids(&ids, executor).await?;
+    for row in &mut view.items {
+        row.maintainer_user_name = names.get(&row.maintainer_user_id).cloned();
+    }
     Ok(OfferingSnapshot {
         no_scope,
         page: view,
-        owner_options,
-        procurement_owner_options,
+
         scope_version: context.scope_version,
         policy_version: context.policy_version,
         organization_version: context.organization_version,

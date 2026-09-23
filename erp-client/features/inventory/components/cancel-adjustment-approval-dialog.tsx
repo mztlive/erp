@@ -2,6 +2,7 @@
 
 import * as React from "react"
 
+import { getErrorMessage } from "@/lib/api/errors"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import {
@@ -71,7 +72,9 @@ export function CancelAdjustmentApprovalDialog({
                     setConflictMessage(approvalConflictMessage(error))
                     return
                 }
-                throw error
+                setConflictMessage(
+                    getErrorMessage(error, "撤回失败，请核对审批状态后重试"),
+                )
             }
         },
     })

@@ -11,8 +11,7 @@ import {
 } from "@/components/business/list-workspace"
 import { Input } from "@/components/ui/input"
 import { WarehouseSearchCombobox } from "@/features/entity-selectors"
-import { ResponsibleUserFilter } from "@/features/entity-selectors/components/responsible-user-filter"
-import { useOwnerOptionsQuery } from "@/hooks/use-options"
+import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
 import { MOVEMENT_TYPE_OPTIONS } from "@/features/inventory/lib/presentation"
 import type {
     LedgerAppliedChip,
@@ -120,10 +119,6 @@ export function LedgerToolbar({
     const showMovementMore = view === "movement"
     const showAdjustmentMore = view === "adjustment"
     const showMore = showMovementMore || showAdjustmentMore
-    const ownerOptions = (useOwnerOptionsQuery().data ?? []).map((item) => ({
-        value: item.userId,
-        label: item.displayName,
-    }))
     const moreCount = appliedChips.filter(({ key }) =>
         showMovementMore
             ? key === "movementType" ||
@@ -291,37 +286,37 @@ export function LedgerToolbar({
                                         </p>
                                     ) : null}
                                 </ListWorkspaceFilterField>
-                                <ResponsibleUserFilter
+                                <PersonDirectoryFilter
                                     id="inventory-ledger-operator-filter"
                                     label="经办人"
                                     value={operatorUserIdsDraft}
                                     onChange={setOperatorUserIdsDraft}
-                                    options={ownerOptions}
+                                    category="business"
                                 />
                             </div>
                         ) : null}
                         {showAdjustmentMore ? (
                             <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-                                <ResponsibleUserFilter
+                                <PersonDirectoryFilter
                                     id="inventory-ledger-adjustment-operator-filter"
                                     label="经办人"
                                     value={operatorUserIdsDraft}
                                     onChange={setOperatorUserIdsDraft}
-                                    options={ownerOptions}
+                                    category="business"
                                 />
-                                <ResponsibleUserFilter
+                                <PersonDirectoryFilter
                                     id="inventory-ledger-applicant-filter"
                                     label="申请人"
                                     value={applicantUserIdsDraft}
                                     onChange={setApplicantUserIdsDraft}
-                                    options={ownerOptions}
+                                    category="business"
                                 />
-                                <ResponsibleUserFilter
+                                <PersonDirectoryFilter
                                     id="inventory-ledger-handler-filter"
                                     label="当前审批人"
                                     value={handlerUserIdsDraft}
                                     onChange={setHandlerUserIdsDraft}
-                                    options={ownerOptions}
+                                    category="business"
                                 />
                             </div>
                         ) : null}

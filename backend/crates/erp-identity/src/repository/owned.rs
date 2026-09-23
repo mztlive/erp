@@ -3,6 +3,8 @@
 //! Domain-specific methods are extension traits on the generic repository.
 
 pub type AccountCoreRepository<'a> = persistence_core::Repository<'a, crate::entity::AccountCore>;
+pub type PersonQueryQualificationRepository<'a> =
+    persistence_core::Repository<'a, crate::entity::person_directory::PersonQueryQualification>;
 pub type AuditEventRepository<'a> =
     persistence_core::Repository<'a, crate::entity::access_control::AuditEvent>;
 pub type DataScopeRepository<'a> = persistence_core::Repository<'a, crate::entity::access_control::DataScope>;

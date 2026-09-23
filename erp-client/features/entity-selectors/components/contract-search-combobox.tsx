@@ -56,6 +56,7 @@ export function ContractSearchCombobox({
         loading,
         emptyLabel: resolvedEmptyLabel,
     } = useRemoteSearchCombobox({
+        selectedId: value,
         list: query.list,
         selected: query.selected,
         selectedItem,

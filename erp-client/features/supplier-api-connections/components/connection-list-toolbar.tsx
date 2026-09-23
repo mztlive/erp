@@ -86,6 +86,7 @@ function ResidentSupplierFilter({
         value ?? undefined,
     )
     const { rows, loading, emptyLabel } = useRemoteSearchCombobox({
+        selectedId: value ?? undefined,
         list: query.list,
         selected: query.selected,
         idOf: (item) => item.supplierId,

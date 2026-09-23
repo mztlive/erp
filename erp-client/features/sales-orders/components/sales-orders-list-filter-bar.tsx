@@ -1,7 +1,6 @@
 "use client"
 
-import type { ResponsibleUserOption } from "@/features/entity-selectors/components/responsible-user-filter"
-import { ResponsibleUserFilter } from "@/features/entity-selectors/components/responsible-user-filter"
+import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
 
 import { OptionCombobox } from "@/components/business"
 import { DateRangePicker } from "@/components/ui/date-picker"
@@ -36,15 +35,17 @@ const MORE_CHIP_KEYS: readonly SalesOrdersListFilterKey[] = [
     "orgUnitIds",
 ]
 
+function selectedOrgUnitIds(value: string): string[] {
+    return value.split(",").filter(Boolean)
+}
+
 export function SalesOrdersListFilterBar({
-    ownerOptions,
     filters: f,
     chips,
     resultCount,
     loading,
     failed,
 }: {
-    ownerOptions: readonly ResponsibleUserOption[]
     filters: ReturnType<typeof useSalesOrdersListFilters>
     chips: readonly SalesOrdersAppliedChip[]
     resultCount?: number
@@ -89,17 +90,23 @@ export function SalesOrdersListFilterBar({
             primaryFilters={
                 <>
                     <div className="w-44 max-w-full">
-                        <ResponsibleUserFilter
+                        <PersonDirectoryFilter
                             id="sales-orders-list-owner"
+                            category="sales"
                             label="负责销售"
                             hideLabel
                             value={f.filterDraft.ownerUserIds}
-                            options={ownerOptions}
                             onChange={(ownerUserIds) =>
                                 f.setFilterDraft((draft) => ({
                                     ...draft,
                                     ownerUserIds,
                                 }))
+                            }
+                            orgUnitIds={selectedOrgUnitIds(
+                                f.filterDraft.orgUnitIds,
+                            )}
+                            includeDescendants={
+                                f.filterDraft.includeDescendants
                             }
                         />
                     </div>

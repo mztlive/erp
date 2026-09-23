@@ -37,7 +37,6 @@ export async function fetchInvoiceRequestScopeList(
         requests: page.items ?? [],
         total: page.total ?? 0,
         summary: page.summary,
-        ownerOptions: page.owner_options ?? [],
         scopeVersion: page.scope_version,
         policyVersion: page.policy_version,
         organizationVersion: page.organization_version,

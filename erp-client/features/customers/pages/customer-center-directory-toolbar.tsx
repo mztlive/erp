@@ -1,8 +1,5 @@
 "use client"
-import {
-    ResponsibleUserFilter,
-    type ResponsibleUserOption,
-} from "@/features/entity-selectors/components/responsible-user-filter"
+import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
 
 import * as React from "react"
 
@@ -29,13 +26,16 @@ const STATUS_OPTIONS = [
 
 const MORE_CHIP_KEYS: readonly CustomerFilterKey[] = ["orgUnitIds"]
 
+function selectedOrgUnitIds(value: string): string[] {
+    return value.split(",").filter(Boolean)
+}
+
 /**
  * 客户中心目录工具条：负责销售和状态常驻，组织在更多筛选。
  */
 export function CustomerCenterDirectoryToolbar({
     ownerDraft,
     setOwnerDraft,
-    ownerOptions,
     orgDraft,
     setOrgDraft,
     descendantsDraft,
@@ -60,7 +60,6 @@ export function CustomerCenterDirectoryToolbar({
 }: {
     ownerDraft: string
     setOwnerDraft: (value: string) => void
-    ownerOptions: readonly ResponsibleUserOption[]
     orgDraft: string
     setOrgDraft: (value: string) => void
     descendantsDraft: boolean
@@ -119,13 +118,15 @@ export function CustomerCenterDirectoryToolbar({
             primaryFilters={
                 <>
                     <div className="w-56 min-w-0 max-w-full">
-                        <ResponsibleUserFilter
+                        <PersonDirectoryFilter
                             id="customers-directory-owner"
+                            category="sales"
                             label="负责销售"
                             hideLabel
                             value={ownerDraft}
                             onChange={setOwnerDraft}
-                            options={ownerOptions}
+                            orgUnitIds={selectedOrgUnitIds(orgDraft)}
+                            includeDescendants={descendantsDraft}
                         />
                     </div>
                     <OptionCombobox

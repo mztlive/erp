@@ -4,7 +4,7 @@ import { fetchContracts } from "./list"
 vi.mock("@/lib/api", () => ({ apiGet: vi.fn() }))
 beforeEach(() => vi.resetAllMocks())
 
-it("合同查询传递已生效条件和真实页码，并保留服务端总数及全范围候选", async () => {
+it("合同查询传递已生效条件和真实页码，并保留服务端总数及范围版本", async () => {
     vi.mocked(apiGet).mockResolvedValue({
         items: [
             {
@@ -31,10 +31,6 @@ it("合同查询传递已生效条件和真实页码，并保留服务端总数�
             expired: 100,
             terminated: 100,
         },
-        settlement_options: [
-            { value: "party-outside-page", label: "其他结算主体" },
-        ],
-        owner_options: [{ value: "user-1", label: "负责人甲" }],
         scope_version: "v1",
         policy_version: 3,
         organization_version: 4,
@@ -74,7 +70,7 @@ it("合同查询传递已生效条件和真实页码，并保留服务端总数�
     expect(result.items[0].contractId).toBe("contract-101")
     expect(result.total).toBe(101)
     expect(result.metrics.all).toBe(500)
-    expect(result.settlementOptions[0].value).toBe("party-outside-page")
+    expect(apiGet).toHaveBeenCalledTimes(1)
     expect(result.emptyReason).toBeUndefined()
     expect(result.scopeVersion).toBe("v1")
     expect(result.ownershipBasis).toBe("current_customer_owner")
@@ -91,8 +87,6 @@ it("空关键词清除后仍用真实第一页，默认采用将到期优先排�
             expired: 0,
             terminated: 0,
         },
-        settlement_options: [],
-        owner_options: [],
         empty_reason: "no_scope",
         scope_version: "v2",
         policy_version: 1,

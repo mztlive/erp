@@ -1,5 +1,8 @@
 /// 销售推荐权限。
 pub(crate) const SALES_PERMISSIONS: &[&str] = &[
+    "warehouse:list",
+    "business_person:list",
+    "settlement_party:list",
     "sales_invoice_request:list",
     "sales_invoice_request:detail",
     "sales_invoice_request:submit",
@@ -33,6 +36,7 @@ pub(crate) const SALES_PERMISSIONS: &[&str] = &[
     "party_contact:*",
     "party_address:*",
     "party_tax_profile:*",
+    "sales_person:list",
     "customer:list",
     "customer:detail",
     "customer:create",

@@ -75,13 +75,13 @@ work item、租约、投影、事实、幂等键只出现在代码注释、字�
 
 共享样式在 `components/ui/sheet.tsx`（遮罩、头、标题、页脚）和 `components/business/list.tsx` 的 `QuickPreviewSheet`（插槽与正文布局）。业务页面复用这两处，不复制后代选择器去覆盖头、标题、页脚、padding 或字号。
 
-| 场景 | 用什么 |
-| --- | --- |
+| 场景                                               | 用什么                               |
+| -------------------------------------------------- | ------------------------------------ |
 | 列表里确认「这是谁、现在能不能用、关键数字是多少」 | `QuickPreviewSheet` `size="preview"` |
-| 正式单据纸质核对 | `PaperDocument` 浮层 |
-| 对照行项目、双栏或读完整主记录 | `QuickPreviewSheet` `size="detail"` |
-| 编辑、校验、提交 | 对象中心或 Dialog + TanStack Form |
-| 破坏性确认 | `FormalActionConfirmDialog` |
+| 正式单据纸质核对                                   | `PaperDocument` 浮层                 |
+| 对照行项目、双栏或读完整主记录                     | `QuickPreviewSheet` `size="detail"`  |
+| 编辑、校验、提交                                   | 对象中心或 Dialog + TanStack Form    |
+| 破坏性确认                                         | `FormalActionConfirmDialog`          |
 
 宽度和遮罩只来自 `size`（`app/globals.css` 的 `--spacing-preview` / `--spacing-detail`）。不传 `contentClassName` / `overlayClassName` 改宽度或遮罩。商品池上残留的 460px `contentClassName` 不要照抄。主数据 / 目录点读用 `preview`。
 
@@ -91,12 +91,12 @@ work item、租约、投影、事实、幂等键只出现在代码注释、字�
 
 `QuickPreviewSheet` 的顺序是 identity → title → description → summary。
 
-| 插槽 | 放什么 |
-| --- | --- |
-| `identity` | 稳定编号，带人类可读前缀，用 `.num`。例：`SKU 编号：A-001` |
-| `title` | 用户认得的对象名。不写「预览」「详情」 |
-| `description` | 一条次身份，例如规格。占位文案（「无规格」）则省略整个插槽 |
-| `summary` | 一个状态 Badge + 一句弱化限定。状态用 `BusinessStatusBadge context="preview"` 或语义 `Badge` |
+| 插槽          | 放什么                                                                                       |
+| ------------- | -------------------------------------------------------------------------------------------- |
+| `identity`    | 稳定编号，带人类可读前缀，用 `.num`。例：`SKU 编号：A-001`                                   |
+| `title`       | 用户认得的对象名。不写「预览」「详情」                                                       |
+| `description` | 一条次身份，例如规格。占位文案（「无规格」）则省略整个插槽                                   |
+| `summary`     | 一个状态 Badge + 一句弱化限定。状态用 `BusinessStatusBadge context="preview"` 或语义 `Badge` |
 
 正文是短文：先给这张列表要回答的那个数字（金额 `MoneyValue`，数量 `QuantityValue`，比例 `RateValue`），没有这种数字就从资料区起笔。分区用正文级标题；空值写成 `—` 或「未标注」；名称已在 title 就不再做名称行。内部 ID、审计字段、行项目表、纸质单据、完整时间线和筛选控件不进窄栏，放到对象中心或 `size="detail"`。
 

@@ -12,6 +12,7 @@ REPO_DIR="$(cd "${BACKEND_DIR}/.." && pwd)"
 
 GENERATED_FILES=(
     "${REPO_DIR}/erp-client/lib/permissions.generated.ts"
+    "${REPO_DIR}/erp-client/lib/audit-actions.generated.ts"
 )
 
 echo "重新构建 web-api 以生成权限定义…"

@@ -8,6 +8,7 @@
  */
 
 import { apiGet, apiPost } from "@/lib/api"
+import { COST_TYPE_LABEL } from "@/features/actual-profit-loss/lib/presentation"
 
 import type {
     CostEntryDetail,
@@ -65,18 +66,6 @@ type PeriodBasisDto = ProfitLossPeriodBasisConfig & {
 type ProfitLossViewDto = ProfitLossView & {
     as_of?: string
     projected_at?: string
-}
-
-const COST_TYPE_LABEL: Record<string, string> = {
-    product: "商品",
-    logistics: "物流",
-    printing: "印刷",
-    storage: "仓储",
-    delivery: "配送",
-    platform_tech: "平台技术",
-    offline_service: "线下服务",
-    rebate: "返点",
-    other: "其他",
 }
 
 const COST_STAGE_LABEL: Record<string, string> = {

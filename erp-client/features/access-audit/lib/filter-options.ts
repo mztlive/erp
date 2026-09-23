@@ -16,7 +16,7 @@ export type AccessResultFilterValue =
     | "FAILED"
     | "UNKNOWN"
 
-/** 审计动作取值即后端 action_type（`<对象>.<动作>`），选项由查询结果实时归纳。 */
+/** 审计动作取值即后端 action_type（`<对象>.<动作>`）。候选来自权限目录，不从事件结果归纳。 */
 export type AccessActionFilterValue = string
 
 export const RESULT_FILTER_VALUES: readonly AccessResultFilterValue[] = [

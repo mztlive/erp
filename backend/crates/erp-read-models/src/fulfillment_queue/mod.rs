@@ -4,5 +4,5 @@ mod repository;
 
 pub use repository::{
     FulfillmentQueueFilter, FulfillmentQueueItemRow, FulfillmentQueueMetricRow, FulfillmentQueueRepository,
-    FulfillmentQueueRepositoryPage, FulfillmentQueueWarehouseRow,
+    FulfillmentQueueRepositoryPage,
 };

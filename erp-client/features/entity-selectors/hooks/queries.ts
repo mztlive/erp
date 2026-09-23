@@ -25,22 +25,22 @@ import {
 } from "@/features/entity-selectors/api/index"
 import { queryKeyRoots } from "@/lib/query-key-roots"
 
-const STALE_TIME = 5 * 60 * 1000
+const STALE_TIME = 0
 
 export const entitySelectorKeys = {
     all: queryKeyRoots.entitySelectors,
     supplier: (input: EntitySearch) =>
         [...entitySelectorKeys.all, "supplier", input] as const,
-    supplierDetail: (id: string) =>
-        [...entitySelectorKeys.all, "supplier", "detail", id] as const,
+    supplierDetail: (id: string, purpose?: EntitySearch["purpose"]) =>
+        [...entitySelectorKeys.all, "supplier", "detail", id, purpose] as const,
     customer: (input: CustomerSearch) =>
         [...entitySelectorKeys.all, "customer", input] as const,
-    customerDetail: (id: string) =>
-        [...entitySelectorKeys.all, "customer", "detail", id] as const,
+    customerDetail: (id: string, input?: Omit<CustomerSearch, "query">) =>
+        [...entitySelectorKeys.all, "customer", "detail", id, input] as const,
     party: (input: EntitySearch) =>
         [...entitySelectorKeys.all, "party", input] as const,
-    partyDetail: (id: string) =>
-        [...entitySelectorKeys.all, "party", "detail", id] as const,
+    partyDetail: (id: string, purpose?: EntitySearch["purpose"]) =>
+        [...entitySelectorKeys.all, "party", "detail", id, purpose] as const,
     warehouse: (input: EntitySearch) =>
         [...entitySelectorKeys.all, "warehouse", input] as const,
     warehouseDetail: (id: string, purpose: EntitySearch["purpose"]) =>
@@ -53,8 +53,8 @@ export const entitySelectorKeys = {
         ] as const,
     contract: (input: ContractSearch) =>
         [...entitySelectorKeys.all, "contract", input] as const,
-    contractDetail: (id: string, scope?: ContractSearch["scope"]) =>
-        [...entitySelectorKeys.all, "contract", "detail", id, scope] as const,
+    contractDetail: (id: string, input?: Omit<ContractSearch, "query">) =>
+        [...entitySelectorKeys.all, "contract", "detail", id, input] as const,
     salesOrder: (input: EntitySearch) =>
         [...entitySelectorKeys.all, "sales-order", input] as const,
     salesOrderDetail: (id: string) =>
@@ -78,7 +78,6 @@ export function useDebouncedSearch(value: string, delay = 250) {
 function commonQueryOptions() {
     return {
         staleTime: STALE_TIME,
-        placeholderData: <T>(previous: T | undefined) => previous,
     }
 }
 
@@ -92,8 +91,12 @@ export function useSupplierSelectorQuery(
         ...commonQueryOptions(),
     })
     const selected = useQuery({
-        queryKey: entitySelectorKeys.supplierDetail(selectedId ?? ""),
-        queryFn: () => fetchSupplierOption(selectedId ?? ""),
+        queryKey: entitySelectorKeys.supplierDetail(
+            selectedId ?? "",
+            input.purpose,
+        ),
+        queryFn: () =>
+            fetchSupplierOption(selectedId ?? "", { purpose: input.purpose }),
         enabled: Boolean(selectedId),
         staleTime: STALE_TIME,
     })
@@ -103,16 +106,26 @@ export function useSupplierSelectorQuery(
 export function useCustomerSelectorQuery(
     input: CustomerSearch,
     selectedId?: string,
+    options?: { enabled?: boolean },
 ) {
+    const enabled = options?.enabled ?? true
     const list = useQuery({
         queryKey: entitySelectorKeys.customer(input),
         queryFn: () => searchCustomers(input),
         ...commonQueryOptions(),
+        enabled,
     })
     const selected = useQuery({
-        queryKey: entitySelectorKeys.customerDetail(selectedId ?? ""),
-        queryFn: () => fetchCustomerOption(selectedId ?? ""),
-        enabled: Boolean(selectedId),
+        queryKey: entitySelectorKeys.customerDetail(selectedId ?? "", {
+            purpose: input.purpose,
+            scope: input.scope,
+        }),
+        queryFn: () =>
+            fetchCustomerOption(selectedId ?? "", {
+                purpose: input.purpose,
+                scope: input.scope,
+            }),
+        enabled: enabled && Boolean(selectedId),
         staleTime: STALE_TIME,
     })
     return { list, selected }
@@ -128,12 +141,18 @@ export function usePartySelectorQuery(
         ...commonQueryOptions(),
     })
     const selected = useQuery({
-        queryKey: entitySelectorKeys.partyDetail(selectedId ?? ""),
-        queryFn: () => fetchPartyOption(selectedId ?? ""),
+        queryKey: entitySelectorKeys.partyDetail(
+            selectedId ?? "",
+            input.purpose,
+        ),
+        queryFn: () => fetchPartyOption(selectedId ?? "", input.purpose),
         enabled: Boolean(selectedId),
         staleTime: STALE_TIME,
     })
-    return { list, selected }
+    return {
+        list: { ...list, data: list.data?.items, emptyReason: list.data?.empty_reason },
+        selected,
+    }
 }
 
 export function useWarehouseSelectorQuery(
@@ -154,7 +173,10 @@ export function useWarehouseSelectorQuery(
         enabled: Boolean(selectedId),
         staleTime: STALE_TIME,
     })
-    return { list, selected }
+    return {
+        list: { ...list, data: list.data?.items, emptyReason: list.data?.empty_reason },
+        selected,
+    }
 }
 
 export function useContractSelectorQuery(
@@ -170,12 +192,19 @@ export function useContractSelectorQuery(
         enabled,
     })
     const selected = useQuery({
-        queryKey: entitySelectorKeys.contractDetail(
-            selectedId ?? "",
-            input.scope,
-        ),
+        queryKey: entitySelectorKeys.contractDetail(selectedId ?? "", {
+            purpose: input.purpose,
+            scope: input.scope,
+            customerId: input.customerId,
+            selectableOnly: input.selectableOnly,
+        }),
         queryFn: () =>
-            fetchContractOption(selectedId ?? "", { scope: input.scope }),
+            fetchContractOption(selectedId ?? "", {
+                purpose: input.purpose,
+                scope: input.scope,
+                customerId: input.customerId,
+                selectableOnly: input.selectableOnly,
+            }),
         enabled: enabled && Boolean(selectedId),
         staleTime: STALE_TIME,
     })
@@ -275,3 +304,10 @@ export function useCompanySkuSelectorQuery(input: EntitySearch) {
         ...commonQueryOptions(),
     })
 }
+
+export {
+    personDirectoryListKey,
+    personDirectorySelectedKey,
+    usePersonDirectoryList,
+    usePersonDirectorySelected,
+} from "@/features/entity-selectors/hooks/person-directory"

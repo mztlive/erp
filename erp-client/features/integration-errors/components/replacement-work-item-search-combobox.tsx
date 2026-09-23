@@ -4,6 +4,7 @@ import {
     OptionCombobox,
     type OptionComboboxProps,
 } from "@/components/business/option-combobox"
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import { useIntegrationQueueQuery } from "../hooks/queries"
 import { getErrorMessage } from "@/lib/api/errors"
 
@@ -18,13 +19,22 @@ export function ReplacementWorkItemSearchCombobox({
     emptyLabel,
     ...props
 }: ReplacementWorkItemSearchComboboxProps) {
-    const query = useIntegrationQueueQuery({
-        view: "mine",
-        mode: "errors",
-        environment: "all",
-        owner: "assigned",
-    })
-    const options = (query.data?.items ?? [])
+    const profileQuery = useAccountProfileQuery()
+    const currentUserId = profileQuery.data?.userid
+    const query = useIntegrationQueueQuery(
+        {
+            view: "mine",
+            mode: "errors",
+            environment: "all",
+            currentUserId,
+        },
+        Boolean(currentUserId),
+    )
+    const options = (
+        query.isError || query.isFetching || !currentUserId
+            ? []
+            : (query.data?.items ?? [])
+    )
         .filter(
             (item) =>
                 item.identity.itemType === "ERROR_TASK" &&
@@ -41,11 +51,11 @@ export function ReplacementWorkItemSearchCombobox({
         <OptionCombobox
             {...props}
             options={options}
-            loading={query.isFetching}
+            loading={profileQuery.isPending || query.isFetching}
             emptyLabel={
-                query.isError
+                query.isError || profileQuery.isError
                     ? getErrorMessage(
-                          query.error,
+                          profileQuery.error ?? query.error,
                           "替代任务加载失败，请刷新后重试",
                       )
                     : emptyLabel

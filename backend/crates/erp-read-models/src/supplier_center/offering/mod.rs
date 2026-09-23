@@ -186,6 +186,7 @@ fn build_view(
         version: row.version,
         created_at: row.created_at,
         maintainer_user_id: row.maintainer_user_id,
+        maintainer_user_name: None,
         business_org_unit_id: row.business_org_unit_id,
     }
 }

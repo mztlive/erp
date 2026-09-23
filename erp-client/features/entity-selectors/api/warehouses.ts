@@ -1,41 +1,41 @@
 import type { WarehouseComboboxItem } from "@/components/business/entity-comboboxes"
+import {
+    searchObjectDirectory,
+    selectedObjectDirectory,
+    type ObjectDirectoryItem,
+} from "@/lib/object-directory"
 import { apiGet } from "@/lib/api"
 import type { Page } from "@/lib/api/paging"
 
-import { OPTION_PAGE_SIZE, activeStatus } from "./shared"
+import { fetchSelectorList, type SelectorPage } from "@/lib/selector-list"
+import { activeStatus } from "./shared"
 import type { EntitySearch } from "./types"
 
 type WarehouseDto = Readonly<{
     id: string
     warehouse_code: string
+    current_revision_id?: string | null
     status: string
     inbound_handler_user_id?: string | null
     outbound_handler_user_id?: string | null
 }>
 
 type WarehouseRevisionDto = Readonly<{
+    id: string
     name: string
 }>
 
 async function warehouseItem(
     row: WarehouseDto,
 ): Promise<WarehouseComboboxItem> {
-    let warehouseName = row.warehouse_code
-    try {
-        const revisions = await apiGet<Page<WarehouseRevisionDto>>(
-            "/admin/warehouse-revisions",
-            {
-                warehouse_id: row.id,
-                page: 1,
-                page_size: 1,
-                sort_by: "revision_no",
-                sort_dir: "desc",
-            },
-        )
-        warehouseName = revisions.items[0]?.name?.trim() || row.warehouse_code
-    } catch {
-        // 仓库代码是稳定且可展示的回退值。
-    }
+    const revisions = await fetchSelectorList<WarehouseRevisionDto>(
+        "/admin/warehouse-revisions",
+        { warehouse_id: row.id },
+    )
+    const warehouseName =
+        revisions.items
+            .find((revision) => revision.id === row.current_revision_id)
+            ?.name?.trim() || row.warehouse_code
     const enabled = activeStatus(row.status)
     return {
         warehouseId: row.id,
@@ -48,18 +48,20 @@ async function warehouseItem(
 
 export async function searchWarehouses(
     input: EntitySearch,
-): Promise<readonly WarehouseComboboxItem[]> {
-    const page = await apiGet<Page<WarehouseDto>>("/admin/warehouses", {
+): Promise<SelectorPage<WarehouseComboboxItem>> {
+    if (input.purpose === "filter") {
+        const page = await searchObjectDirectory("warehouse-directory", input.query)
+        return { ...page, items: page.items.map(directoryItem) }
+    }
+    const page = await fetchSelectorList<WarehouseDto>("/admin/warehouses", {
         q: input.query.trim() || undefined,
         require_inbound_handler:
             input.purpose === "purchase-receipt" || undefined,
         status: "active",
-        page: 1,
-        page_size: OPTION_PAGE_SIZE,
         sort_by: "warehouse_code",
         sort_dir: "asc",
     })
-    return Promise.all(page.items.map(warehouseItem))
+    return { ...page, items: await Promise.all(page.items.map(warehouseItem)) }
 }
 
 export async function fetchWarehouseOption(
@@ -67,6 +69,13 @@ export async function fetchWarehouseOption(
     purpose: EntitySearch["purpose"] = "filter",
 ): Promise<WarehouseComboboxItem | null> {
     if (!warehouseId) return null
+    if (purpose === "filter") {
+        const row = await selectedObjectDirectory(
+            "warehouse-directory",
+            warehouseId,
+        )
+        return row ? directoryItem(row) : null
+    }
     const page = await apiGet<Page<WarehouseDto>>("/admin/warehouses", {
         warehouse_id: warehouseId,
         require_inbound_handler: purpose === "purchase-receipt" || undefined,
@@ -82,4 +91,15 @@ export async function fetchWarehouseOption(
         return null
     }
     return row ? warehouseItem(row) : null
+}
+
+function directoryItem(row: ObjectDirectoryItem): WarehouseComboboxItem {
+    const enabled = activeStatus(row.status)
+    return {
+        warehouseId: row.id,
+        warehouseCode: row.code,
+        warehouseName: row.name,
+        statusLabel: enabled ? "启用" : "停用",
+        statusTone: enabled ? "success" : "neutral",
+    }
 }

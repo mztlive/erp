@@ -3,7 +3,7 @@
 //! 应用启动时按固定角色 ID 幂等写入：
 //! - 数据库中尚不存在（含软删除记录）时创建角色与推荐权限；
 //! - 已存在且权限仍等于已知旧种子时，整集升级到当前推荐权限；
-//! - 其余已存在角色只**追加**当前种子中尚未覆盖的权限，不删除管理员额外授予的权限，
+//! - 其余已存在角色只追加旧业务种子权限；查询目录权限仅在首次创建角色时初始化，
 //!   也不覆盖名称、启停状态与 system 标记。
 //!
 //! 角色集合与默认权限对齐第一期部门职责（`docs/erp-phase-1.md` §11）、
@@ -135,6 +135,7 @@ pub async fn ensure_predefined_roles(rbac: &SharedRbacService) -> Result<()> {
     ensure_missing_permissions(rbac).await?;
     super::predefined_data_scopes::ensure_predefined_role_data_scopes(rbac).await?;
     crate::service::organization::ensure_home_department(rbac.database().clone()).await?;
+    crate::service::person_directory::sync_role_grants(rbac).await?;
     Ok(())
 }
 
@@ -153,7 +154,17 @@ pub async fn ensure_predefined_roles(rbac: &SharedRbacService) -> Result<()> {
 /// 只追加缺失权限；已有更宽通配覆盖目标时视为已具备，不再写入重复细项。
 async fn ensure_missing_permissions(rbac: &SharedRbacService) -> Result<()> {
     for role in PREDEFINED_ROLES {
-        let desired = parse_permissions(role.permissions)?;
+        // 已存在角色的目录授权由管理员显式维护；缺失无法区分从未授予与人工撤销。
+        let desired = parse_permissions(role.permissions)?
+            .into_iter()
+            .filter(|permission| {
+                !matches!(
+                    (permission.resource(), permission.action()),
+                    ("sales_person" | "procurement_person" | "business_person" | "settlement_party" | "warehouse", "list")
+                        | ("person_query_qualification", "manage")
+                )
+            })
+            .collect();
         if rbac.ensure_missing_seeded_role_permissions(role.id, desired).await? {
             tracing::info!(
                 role_id = role.id,

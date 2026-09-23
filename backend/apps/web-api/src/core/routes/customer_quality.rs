@@ -21,6 +21,14 @@ use crate::core::middleware::with_permission;
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
+            "/customer-quality/history/directory",
+            with_permission(
+                get(customer_quality::quality_history_directory),
+                rbac,
+                customer_quality::quality_history_directory_permission_key(),
+            ),
+        )
+        .route(
             "/customer-quality/current",
             with_permission(
                 get(customer_quality::quality_current),

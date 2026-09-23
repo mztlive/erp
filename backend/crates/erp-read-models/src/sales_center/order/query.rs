@@ -58,16 +58,23 @@ impl SalesOrderReadService {
     /// 分页查询销售单列表。
     ///
     /// 排序字段白名单在 Service 层校验（api-contract §4），禁止任意字段透传。
+    /// 负责销售候选不由本接口生产。
     ///
     /// # 参数
     /// * `params` - 查询参数
+    /// * `actor` - 已认证操作人
     ///
     /// # 返回
-    /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+    /// 返回带范围版本的分页视图，不含负责销售候选。
     ///
     /// # 错误
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
+    /// * `ConflictError` - 跨页范围版本缺失或已变化
     /// * `RepositoryError` - 数据库查询失败
+    ///
+    /// # 关键业务约束
+    /// 负责销售筛选只收窄授权结果。行负责人姓名由当前页销售单事实解析，不依赖销售人员目录。
+    /// 创建人筛选保持独立字段，不并入负责销售候选。
     #[tracing::instrument(
         name = "sales_order.list",
         skip_all,
@@ -82,7 +89,7 @@ impl SalesOrderReadService {
         crate::support::ensure_deep_page(params.page.unwrap_or(1), expected)?;
         validator::Validate::validate(params)?;
         let search = self.keyword_search(params.q.as_deref()).await?;
-        let super::scope::SalesSnapshot { page, owner_options, context, no_scope } =
+        let super::scope::SalesSnapshot { page, context, no_scope } =
             self.list_snapshot(params, search.clone(), actor).await?;
         if expected.is_some_and(|value| value != context.scope_version) {
             return Err(crate::support::data_scope_changed("数据范围已变化，请从第一页刷新"));
@@ -162,11 +169,8 @@ impl SalesOrderReadService {
             as_of: context.as_of.as_utc().to_rfc3339(),
             empty_reason: no_scope.then_some("no_scope"),
             scope_summary: "销售单当前负责人、业务组织及有效协作或参与范围",
-            data: application_core::FilteredPage {
-                owner_options,
-                ownership_basis: "document_sales_owner",
-                page: PageView { items, total: page.total, page: page.page, page_size: page.page_size },
-            },
+            ownership_basis: "document_sales_owner",
+            data: PageView { items, total: page.total, page: page.page, page_size: page.page_size },
         })
     }
 

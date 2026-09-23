@@ -70,7 +70,7 @@ impl ContractService {
                         executor,
                     )
                     .await?;
-                    finish_list_snapshot(&db, accounts.as_ref(), filter, search, context, executor)
+                    finish_list_snapshot(&db, filter, search, context, executor)
                         .await
                         .map(|(view, context)| ContractSnapshot { view, context, no_scope })
                 })
@@ -168,7 +168,6 @@ async fn load_list_filter_and_search(
 /// 聚合失败、版本超限或候选读取失败时拒绝。
 async fn finish_list_snapshot(
     db: &mongodb::Database,
-    accounts: &dyn crate::ports::AccountNamePort,
     filter: ContractFilter,
     search: ContractSearch,
     mut context: ContractResolvedScope,
@@ -182,12 +181,6 @@ async fn finish_list_snapshot(
     let fingerprint = super::access::scope_fingerprint_input(&[], &[], versions.as_slice(), &[]);
     context.scope_version =
         format!("{}:{:x}", context.scope_version, super::access::stable_fingerprint(&fingerprint));
-    let owner_options = accounts
-        .filter_options(&search.customers.iter().filter_map(|c| c.owner_id.clone()).collect::<Vec<_>>())
-        .await?
-        .into_iter()
-        .map(|o| crate::dto::contract::ContractFilterOption { value: o.value, label: o.label })
-        .collect();
     let total = result.total();
     let items = super::query::contract_rows(db, result.items, &search.customers, executor).await?;
     let view = ContractListView {
@@ -200,8 +193,6 @@ async fn finish_list_snapshot(
         scope_summary: "合同当前客户主负责人、协作关系、负责人所属组织及合法单据参与",
         page: PageView { items, total, page: filter.page, page_size: filter.page_size },
         metrics: result.metrics.into_iter().next().unwrap_or_default(),
-        settlement_options: result.settlement_options,
-        owner_options,
     };
     Ok((view, context))
 }

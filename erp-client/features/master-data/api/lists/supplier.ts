@@ -10,7 +10,7 @@ import type {
 
 export async function listSuppliers(
     query: MasterDataListQuery,
-): Promise<Pick<MasterDataListResult, "rows" | "emptyReason" | "ownerOptions" | "capabilityOwnerOptions">> {
+): Promise<Pick<MasterDataListResult, "rows" | "emptyReason">> {
     const status =
         query.lifecycleStatus === "enabled"
             ? "active"
@@ -23,10 +23,13 @@ export async function listSuppliers(
             status,
             keyword: query.q || undefined,
             capability_codes: joinFilterCodes(query.supplierCapabilityCodes),
-            qualification_types: joinFilterCodes(query.supplierQualificationTypes),
+            qualification_types: joinFilterCodes(
+                query.supplierQualificationTypes,
+            ),
             qualification_health: query.supplierQualificationHealth,
             owner_user_ids: query.owner_user_ids || undefined,
-            capability_owner_user_ids: query.capability_owner_user_ids || undefined,
+            capability_owner_user_ids:
+                query.capability_owner_user_ids || undefined,
             org_unit_ids: query.org_unit_ids || undefined,
             include_descendants: query.include_descendants || undefined,
         },
@@ -35,18 +38,7 @@ export async function listSuppliers(
     return {
         rows: result.items.map((supplier) => mapSupplierRow(supplier)),
         emptyReason: result.empty_reason === "no_scope" ? "no_scope" : null,
-        ownerOptions: mapOptions(result.owner_options),
-        capabilityOwnerOptions: mapOptions(result.capability_owner_options),
     }
-}
-
-function mapOptions(
-    options: readonly { value: string; label: string }[] | undefined,
-): { value: string; label: string }[] {
-    return (options ?? []).map((option) => ({
-        value: option.value,
-        label: option.label,
-    }))
 }
 
 /** 规范化多选条件，供后端以逗号分隔的稳定查询参数接收。 */

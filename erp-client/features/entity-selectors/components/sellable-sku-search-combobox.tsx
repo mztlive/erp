@@ -38,6 +38,7 @@ export function SellableSkuSearchCombobox({
         loading,
         emptyLabel: resolvedEmptyLabel,
     } = useRemoteSearchCombobox({
+        selectedId: value,
         list: query,
         selectedItem,
         idOf: (item) => item.productId,

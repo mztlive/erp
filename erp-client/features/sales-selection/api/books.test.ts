@@ -9,7 +9,7 @@ beforeEach(() => {
     vi.resetAllMocks()
 })
 
-it("列表携带负责人与组织范围并解析候选与版本", async () => {
+it("列表携带负责人与组织范围并解析列表与版本", async () => {
     vi.mocked(apiGet).mockResolvedValue({
         page: {
             items: [
@@ -33,7 +33,6 @@ it("列表携带负责人与组织范围并解析候选与版本", async () => {
             page: 1,
             page_size: 20,
         },
-        owner_options: [{ value: "user-1", label: "张三（zhangsan）" }],
         scope_version: "v1",
         policy_version: 3,
         organization_version: 5,
@@ -58,9 +57,7 @@ it("列表携带负责人与组织范围并解析候选与版本", async () => {
     )
     expect(result.rows).toHaveLength(1)
     expect(result.rows[0].sales_owner_user_id).toBe("user-1")
-    expect(result.ownerOptions).toEqual([
-        { value: "user-1", label: "张三（zhangsan）" },
-    ])
+    expect(apiGet).toHaveBeenCalledTimes(1)
     expect(result.scopeVersion).toBe("v1")
     expect(result.noScope).toBe(false)
 })
@@ -68,7 +65,6 @@ it("列表携带负责人与组织范围并解析候选与版本", async () => {
 it("无范围时透出标记供页面与筛空区分", async () => {
     vi.mocked(apiGet).mockResolvedValue({
         page: { items: [], total: 0, page: 1, page_size: 20 },
-        owner_options: [],
         scope_version: "v2",
         policy_version: 3,
         organization_version: 5,
@@ -77,5 +73,4 @@ it("无范围时透出标记供页面与筛空区分", async () => {
     const result = await fetchBooks({ page: 1 })
     expect(result.rows).toEqual([])
     expect(result.noScope).toBe(true)
-    expect(result.ownerOptions).toEqual([])
 })

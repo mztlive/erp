@@ -1,5 +1,8 @@
 "use client"
 
+import { useQuery } from "@tanstack/react-query"
+import { selectedObjectDirectory } from "@/lib/object-directory"
+
 import * as React from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import type { PaginationState, SortingState } from "@tanstack/react-table"
@@ -251,13 +254,24 @@ export function useContractsList() {
                 .displayName ?? "未知",
         [allRows, customerId],
     )
-    const selectedSettlementPartyLabel = React.useMemo(
-        () =>
-            contractsQuery.data?.settlementOptions.find(
-                (option) => option.value === settlementPartyId,
-            )?.label ?? "未知",
-        [contractsQuery.data?.settlementOptions, settlementPartyId],
-    )
+    const selectedSettlement = useQuery({
+        queryKey: [
+            "party-selector",
+            "directory-label",
+            settlementPartyId ?? "",
+        ],
+        queryFn: () =>
+            selectedObjectDirectory(
+                "settlement-parties",
+                settlementPartyId ?? "",
+            ),
+        enabled: Boolean(settlementPartyId),
+        staleTime: 0,
+    })
+    const selectedSettlementPartyLabel =
+        selectedSettlement.isError || selectedSettlement.isFetching
+            ? "不可用"
+            : (selectedSettlement.data?.name ?? "未知")
 
     /** 全部已生效条件 → chip；查询、摘要、计数、导出只读 Applied。 */
     const appliedChips = React.useMemo<readonly ContractAppliedChip[]>(() => {
@@ -364,9 +378,6 @@ export function useContractsList() {
         settlementPartyId,
     ])
 
-    const settlementPartyOptions = contractsQuery.data?.settlementOptions ?? []
-    const ownerOptions = contractsQuery.data?.ownerOptions ?? []
-
     const handlePaginationChange = React.useCallback(
         (next: PaginationState) => {
             pushUrl({ page: next.pageIndex + 1, pageSize: next.pageSize })
@@ -438,8 +449,6 @@ export function useContractsList() {
         appliedChips,
         filterDescription,
         filterSnapshotLabel,
-        settlementPartyOptions,
-        ownerOptions,
         isFiltered,
         applyFilters,
         resetMoreFilters,

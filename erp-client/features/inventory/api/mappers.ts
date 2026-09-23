@@ -201,7 +201,10 @@ export function mapMovement(
         movementId: m.id,
         balanceId: `${m.warehouse_id}:${m.sku_id}`,
         warehouseId: m.warehouse_id,
-        warehouseName: labels?.warehouseName ?? AUTHORIZED_WAREHOUSE_LABEL,
+        warehouseName:
+            m.warehouse_name ??
+            labels?.warehouseName ??
+            AUTHORIZED_WAREHOUSE_LABEL,
         skuId: m.sku_id,
         skuCode: labels?.skuCode ?? m.sku_id,
         skuName: labels?.skuName ?? m.sku_id,

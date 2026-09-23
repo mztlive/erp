@@ -35,6 +35,7 @@ import {
     ORGANIZATION_BOUNDARY_NOTICE,
     PAGE_NARROW_CLASS,
     SCOPE_TYPE_LABEL,
+    scopeTypeLabel,
 } from "@/features/organization/lib/labels"
 import { registeredResources } from "@/features/organization/lib/scope-payload"
 import {
@@ -562,7 +563,11 @@ export function DataScopesPage() {
                                                 row.subjectType,
                                                 row.subjectId,
                                             )}{" "}
-                                            · {SCOPE_TYPE_LABEL[row.scopeType]}
+                                            ·{" "}
+                                            {scopeTypeLabel(
+                                                row.scopeType,
+                                                row.targetDimension,
+                                            )}
                                             {row.scopeTargets.length > 0
                                                 ? ` · ${row.scopeTargets
                                                       .map((id) =>

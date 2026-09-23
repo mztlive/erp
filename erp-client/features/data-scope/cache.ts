@@ -55,31 +55,48 @@ function scopeFailure(error: unknown): boolean {
 const isProfile = (query: Query) =>
     query.queryKey[0] === "account" && query.queryKey[1] === "profile"
 
+/** 独立目录按类别隔离；业务查询按所属资源失效，不跨到其他查询族。 */
+function scopeFamily(query: Query): string {
+    const key = query.queryKey
+    if (key[0] === "customer-receivables" &&
+        (key[1] === "counterparty-options" || key[1] === "counterparty-selected")) {
+        return JSON.stringify([key[0], "counterparty-directory"])
+    }
+    if (key[0] === "master-data" && key[1] === "product-filter-options") {
+        return JSON.stringify(key.slice(0, 2))
+    }
+    const depth = key[0] === "entity-selectors"
+        ? (key[1] === "person-directory" ? 3 : 2)
+        : key[0] === "historical-directory" ? 2 : 1
+    return JSON.stringify(key.slice(0, depth))
+}
+
 /**
  * 绑定 QueryClient 的范围失效订阅。
- * 普通 403/404 只清除失败查询并重验权限；确认全局授权变化后才清除跨功能数据。
+ * 普通 403/404、目录内容版本变化只清除同类查询；确认全局授权变化才跨功能清理。
  * 成功的业务变更清除其他缓存并重读活动查询，覆盖责任交接与配置变更。
  */
 export function subscribeScopeCache(client: QueryClient): () => void {
     let version: string | null = null
     let policy: number | undefined
     let organization: number | undefined
-    let pendingClear: { source: Query | undefined; error?: unknown } | undefined
+    const pendingClears: { source: Query | undefined; error?: unknown; local: boolean }[] = []
     const scopeVersions = new Map<string, string>()
     let clearing = false
     let disposed = false
     const rejected = new Set<string>()
 
-    const clear = async (source: Query | undefined, error?: unknown) => {
+    const clear = async (source: Query | undefined, error?: unknown, local = false) => {
         if (disposed) return
         if (clearing) {
-            pendingClear = { source, error }
+            pendingClears.push({ source, error, local })
             return
         }
         clearing = true
         try {
             const matches = (query: Query) =>
-                query !== source && !isProfile(query)
+                query !== source && !isProfile(query) &&
+                (!local || (source != null && scopeFamily(query) === scopeFamily(source)))
             // 先取消旧请求；取消完成之前也立即撤下已经显示的旧数据。
             const pending = client.cancelQueries(
                 { predicate: matches },
@@ -108,25 +125,26 @@ export function subscribeScopeCache(client: QueryClient): () => void {
             }
             await pending
             if (!disposed && !error) {
-                await client.refetchQueries({
+                // 不等待网络完成，后续全局撤权必须能立即取消这些重查。
+                void client.refetchQueries({
                     predicate: matches,
                     type: "active",
                 })
             }
         } finally {
             clearing = false
-            const pending = pendingClear
-            pendingClear = undefined
-            if (pending) void clear(pending.source, pending.error)
+            const pending = pendingClears.shift()
+            if (pending) void clear(pending.source, pending.error, pending.local)
         }
     }
 
     const handleFailure = (error: unknown, source?: Query) => {
         const status = (error as { status?: number }).status
-        if (status === 401 || isDataScopeChanged(error)) {
+        if (status === 401) {
             void clear(source, error)
             return
         }
+        if (source) void clear(source, error, true)
         // 某个资源不可读，不代表其他资源也不可读。重验账号版本来识别真正撤权。
         void client.refetchQueries({ predicate: isProfile, type: "active" })
     }
@@ -188,7 +206,9 @@ export function subscribeScopeCache(client: QueryClient): () => void {
                 stringField(fields, "scope_version")
             if (nextScope != null) {
                 const previous = scopeVersions.get(query.queryHash)
-                changed ||= previous != null && previous !== nextScope
+                if (!changed && previous != null && previous !== nextScope) {
+                    void clear(query, undefined, true)
+                }
                 scopeVersions.set(query.queryHash, nextScope)
             }
             const next = authorizationVersion(data)

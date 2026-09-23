@@ -5,6 +5,7 @@
 
 mod access;
 mod current;
+mod directory;
 mod dto;
 mod export;
 mod history;

@@ -20,7 +20,6 @@ export async function fetchCustomerDirectory(
             : "/admin/customers"
     const page = await apiGet<
         Page<BackendCustomerView> & {
-            owner_options: { value: string; label: string }[]
             empty_reason?: string | null
             scope_version: string
             policy_version: number
@@ -52,7 +51,6 @@ export async function fetchCustomerDirectory(
         scopeSummary: page.scope_summary,
         asOf: page.as_of,
         ownershipBasis: page.ownership_basis,
-        ownerOptions: page.owner_options ?? [],
         items: page.items.map(mapDirectoryItem),
         totalInScope: page.total,
         page: page.page,

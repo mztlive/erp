@@ -20,17 +20,8 @@ type ListEnvelope = Page<BackendOrder> & {
     empty_reason?: string | null
     scope_version?: string
     ownership_basis?: string
-    owner_options?: { value: string; label: string }[]
-    handler_options?: { value: string; label: string }[]
-    as_of?: string
-}
 
-function optionLabel(
-    id: string | undefined,
-    options: ReadonlyArray<{ value: string; label: string }>,
-): string | undefined {
-    if (!id) return undefined
-    return options.find((option) => option.value === id)?.label
+    as_of?: string
 }
 
 export async function fetchSupplierOrders(
@@ -61,14 +52,10 @@ export async function fetchSupplierOrders(
         },
     )
 
-    const ownerOptions = pageRes.owner_options ?? []
-    const handlerOptions = pageRes.handler_options ?? []
-    const rows = (pageRes.items ?? []).map((order) => {
-        const row = mapListRow(order)
-        row.followUpUserName = optionLabel(row.followUpUserId, ownerOptions)
-        row.handlerUserName = optionLabel(row.handlerUserId, handlerOptions)
-        return row
-    })
+    // 跟进人、处理人筛选仍用本列表页内候选。资格不是 role-procurement / role-sales，未接人员目录。
+    // 行姓名只读 follow_up_user_name / handler_user_name，不从候选标签回填。
+
+    const rows = (pageRes.items ?? []).map((order) => mapListRow(order))
 
     return {
         rows,
@@ -85,7 +72,5 @@ export async function fetchSupplierOrders(
         emptyReason: pageRes.empty_reason,
         scopeVersion: pageRes.scope_version,
         ownershipBasis: pageRes.ownership_basis,
-        ownerOptions,
-        handlerOptions,
     }
 }

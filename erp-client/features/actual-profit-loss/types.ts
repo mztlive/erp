@@ -176,8 +176,6 @@ export type ProfitLossView = Readonly<{
     organizationVersion?: number
     scopeVersion?: string
     ownershipBasis?: string
-    attributionUserOptions?: readonly { value: string; label: string }[]
-    attributionOrgOptions?: readonly { value: string; label: string }[]
     filterSummary: string
     excludedNote: string
     correctionPendingNotice?: string

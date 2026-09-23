@@ -69,7 +69,6 @@ export async function fetchPurchaseOrders(
             scope_summary: string
             as_of?: string
             ownership_basis?: string
-            owner_options: { value: string; label: string }[]
         }
     >("/admin/purchase-orders", {
         scope_version: query.scopeVersion,
@@ -87,7 +86,6 @@ export async function fetchPurchaseOrders(
 
     return {
         rows,
-        ownerOptions: pageData.owner_options ?? [],
         emptyReason: pageData.empty_reason,
         scopeVersion: pageData.scope_version,
         policyVersion: pageData.policy_version,

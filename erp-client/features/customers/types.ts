@@ -207,7 +207,6 @@ export type CustomerDirectoryQuery = Readonly<{
 }>
 
 export type CustomerDirectoryResult = Readonly<{
-    ownerOptions?: { value: string; label: string }[]
     /** False when role has no customer data scope at all. */
     hasCustomerScope: boolean
     emptyReason?: string | null

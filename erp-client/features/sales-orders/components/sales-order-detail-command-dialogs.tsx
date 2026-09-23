@@ -52,7 +52,10 @@ export function SalesOrderDetailSecondaryActions({
                 order={order}
                 onResult={onApprovalResult}
             />
-            <SalesOrderHandoverButton order={order} onResult={onApprovalResult} />
+            <SalesOrderHandoverButton
+                order={order}
+                onResult={onApprovalResult}
+            />
             <Button
                 id="sales-orders-detail-start-change"
                 type="button"

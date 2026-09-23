@@ -1,5 +1,7 @@
 /// 采购推荐权限。
 pub(crate) const PROCUREMENT_PERMISSIONS: &[&str] = &[
+    "business_person:list",
+    "settlement_party:list",
     "company:list",
     "company:detail",
     "procurement_responsibility:list",
@@ -62,6 +64,7 @@ pub(crate) const PROCUREMENT_PERMISSIONS: &[&str] = &[
     "contract:detail",
     "sales_order:list",
     "sales_order:detail",
+    "procurement_person:list",
     "purchase_order:*",
     "purchase_change_order:*",
     // 销售变更履约影响确认（财务复核仍由 work_item 责任角色隔离）

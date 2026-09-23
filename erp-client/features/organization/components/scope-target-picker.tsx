@@ -46,6 +46,7 @@ export function ScopeTargetPicker({
             {[...value, ""].map((id, index) => (
                 <div className="flex gap-2" key={id || "add"}>
                     <Picker
+                        purpose="filter"
                         id={
                             index === 0
                                 ? "organization-scope-targets"

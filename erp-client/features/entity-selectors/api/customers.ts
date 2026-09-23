@@ -1,8 +1,7 @@
 import type { CustomerComboboxItem } from "@/components/business/entity-comboboxes"
-import { apiGet } from "@/lib/api"
-import type { Page } from "@/lib/api/paging"
+import { fetchSelectorList } from "@/lib/selector-list"
 
-import { OPTION_PAGE_SIZE, activeStatus } from "./shared"
+import { activeStatus } from "./shared"
 import type { CustomerSearch } from "./types"
 
 type CustomerDto = Readonly<{
@@ -37,12 +36,10 @@ export async function searchCustomers(
         input.scope === "all_authorized"
             ? "/admin/customers/all-authorized"
             : "/admin/customers"
-    const page = await apiGet<Page<CustomerDto>>(path, {
+    const page = await fetchSelectorList<CustomerDto>(path, {
         scope: input.scope,
         keyword: input.query.trim() || undefined,
-        status: "active",
-        page: 1,
-        page_size: OPTION_PAGE_SIZE,
+        status: input.purpose === "filter" ? undefined : "active",
         sort_by: "updated_at",
         sort_dir: "desc",
     })
@@ -51,15 +48,12 @@ export async function searchCustomers(
 
 export async function fetchCustomerOption(
     customerId: string,
+    input: Omit<CustomerSearch, "query"> = {
+        purpose: "filter",
+        scope: "assigned",
+    },
 ): Promise<CustomerComboboxItem | null> {
     if (!customerId) return null
-    try {
-        return customerItem(
-            await apiGet<CustomerDto>(
-                `/admin/customers/${encodeURIComponent(customerId)}`,
-            ),
-        )
-    } catch {
-        return null
-    }
+    const rows = await searchCustomers({ ...input, query: "" })
+    return rows.find((row) => row.id === customerId) ?? null
 }

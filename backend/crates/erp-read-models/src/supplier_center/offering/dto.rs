@@ -125,6 +125,8 @@ pub struct SupplierOfferingView {
     /// 当前维护人。
     #[serde(default)]
     pub maintainer_user_id: String,
+    /// 授权行的维护人姓名；缺失时为空。
+    pub maintainer_user_name: Option<String>,
     /// 当前业务组织。
     #[serde(default)]
     pub business_org_unit_id: String,
@@ -133,12 +135,9 @@ pub struct SupplierOfferingView {
 /// 列表响应保持现有字段并声明独立的授权时点及版本。
 #[derive(Debug, Clone, Serialize)]
 pub struct SupplierOfferingListView {
-    /// 分页结果、维护人候选与归属口径。
+    /// 分页结果与归属口径。
     #[serde(flatten)]
-    pub data: application_core::FilteredPage<SupplierOfferingView>,
-    /// 采购负责人候选；不授予维护资格。
-    #[serde(default)]
-    pub procurement_owner_options: Vec<application_core::FilterOption>,
+    pub data: application_core::OwnershipPage<SupplierOfferingView>,
     /// 跨页与导出必须原样回传的范围版本。
     pub scope_version: String,
     /// RBAC 策略版本。
@@ -307,6 +306,7 @@ mod tests {
             version: 1,
             created_at: 1,
             maintainer_user_id: "user-1".to_string(),
+            maintainer_user_name: None,
             business_org_unit_id: "org-1".to_string(),
         };
         view.redact_costs();
