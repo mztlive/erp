@@ -533,4 +533,14 @@ rg -n 'ownerOptions|handlerOptions|operatorOptions|settlementOptions|warehouseOp
 | 结算事实 | 同一人员分别有当前开放复核任务、只有已完成复核记录、没有相关结算记录 | handler_user_ids 仅命中当前开放任务；其余正常空结果；候选均按后台目录资格与自身范围 |
 | 历史目录与审计 | 业务报表失败时打开历史筛选；加载 URL 中的未知历史审计动作 | 历史候选仍可查询、清除与重试；未知审计值明确回显为未知且不能作为合法候选重新选择 |
 
-既有合同指标差异单独管理：`backend/docs/api/list-search.md` 第 3 节规定新增 q、metric、负责人和主体筛选不影响合同指标；`erp-contract/src/repository/list_search.rs` 的 metrics 分面当前使用 `search.filter()`。本次候选拆分修复不得改动该统计口径；指标差异须另行确定方案并验收，不能据本次修复登记指标符合合同。
+合同指标执行 `backend/docs/api/list-search.md` 第 3 节：授权、归属范围、组织、客户、合同号及状态构成基础统计范围；q、metric、负责人和主体筛选只影响结果行与 total。Service 不得按负责人提前收窄公共范围，Repository 的 metrics 分面只对基础范围分组统计。当前代码已按此边界调整，构建、单元测试与真实数据验收尚未执行。
+
+合同指标验收要求：
+
+1. 前置条件：授权范围内准备不同负责人、主体及状态的合同，另准备授权范围外合同和合法历史参与合同。
+2. 操作：固定客户、组织及归属范围，分别切换 q、metric、owner_user_ids、settlement_party_id、排序和分页，包括无匹配人员或关键词。
+3. 预期：结果行与 total 按相同条件变化；metrics 保持基础范围统计值。列表无匹配时仍可返回非零指标；范围外合同不能进入任一统计，空授权的列表、总数和指标均为零。
+4. 操作：切换 customer_id、org_unit_ids、scope、contract_no 或 status；同时检验合法历史参与与这些条件的交集。
+5. 预期：指标随基础范围变化；历史参与只包含已被合同 list 动作授权且满足基础条件的合同，不扩大命令资格。
+6. 规模：基础范围超过 10000 张合同须整体拒绝，并要求收窄客户、组织、合同号或状态；不得靠负责人筛选隐藏基础统计范围超限。
+7. 版本：取得第一页后，交接当前客户负责人或修改其显示名，再以旧 scope_version 翻页或导出，必须返回 DATA_SCOPE_CHANGED。仅外域事实返回顺序变化不得导致冲突。

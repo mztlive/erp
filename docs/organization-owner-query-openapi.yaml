@@ -77,27 +77,37 @@ paths:
     get:
       operationId: contracts_owner_query
       summary: 查询合同当前跟进负责人范围内的数据
-      description: 仅在既有授权结果上按人员 ID 收窄；同字段 OR，不同字段 AND。owner、组织和处理人等未注册参数必须拒绝。列表、总数、导出复用相同条件。
+      description: |
+        仅在既有授权结果上按人员 ID 收窄结果行及 total；同字段 OR，不同字段 AND。
+        owner 姓名和处理人等未注册参数必须拒绝；组织条件继续收窄既有授权，跨页和导出携带 scope_version。
+        列表、总数、导出复用相同筛选；metrics 保留合同 DataScope、合法历史参与、scope 归属范围、组织、客户、合同号和状态条件，
+        不随 q、metric、owner_user_ids、settlement_party_id、排序或分页变化。
+        基础范围版本索引最多 10000 张合同，超限整体拒绝，须收窄客户、组织、合同号或状态条件。
       parameters:
+        - $ref: '#/components/parameters/ScopeVersion'
         - $ref: '#/components/parameters/OwnerIds'
+        - $ref: '#/components/parameters/OrgUnitIds'
+        - $ref: '#/components/parameters/IncludeDescendants'
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PageSize'
       responses:
         '200':
-          description: 原 ApiResponse 信封内的分页 data，增加完整可见范围候选与负责人口径。
+          description: 原 ApiResponse 信封内的分页 data，包含负责人、授权元信息及基础范围指标；普通候选通过独立目录查询。
           content:
             application/json:
               schema:
                 type: object
                 properties:
                   data:
-                    $ref: '#/components/schemas/OwnerPage'
+                    $ref: '#/components/schemas/ContractPage'
         '400':
           description: Query 解码拒绝未知参数、旧姓名参数、空 ID、非法格式或超过 100 个 ID。
         '401':
           description: 未登录或会话失效。
         '403':
           description: 缺少原资源读取权限；人员条件不能授予权限。
+        '409':
+          $ref: '#/components/responses/DataScopeChanged'
   /admin/sales-orders:
     get:
       operationId: sales_orders_owner_query
@@ -215,6 +225,29 @@ components:
     DataScopeChanged:
       description: DATA_SCOPE_CHANGED；HTTP 稳定码为 DATA_SCOPE_CHANGED。清除旧结果并从第一页刷新，不拼接旧页面或输出旧文件。
   schemas:
+    ContractPage:
+      allOf:
+        - $ref: '#/components/schemas/OwnerPage'
+        - type: object
+          required: [metrics, scope_version, policy_version, organization_version, as_of, scope_summary]
+          properties:
+            scope_version: {type: string, description: 包含基础范围合同版本及当前客户负责人身份和显示事实；后续页与导出原样回传。}
+            policy_version: {type: integer, minimum: 0}
+            organization_version: {type: integer, minimum: 0}
+            as_of: {type: string, format: date-time}
+            scope_summary: {type: string}
+            empty_reason: {type: [string, 'null'], enum: [no_scope, null]}
+            ownership_basis: {type: string, enum: [current_customer_owner]}
+            metrics:
+              type: object
+              description: 合同自身授权及基础条件内的指标，不随关键词、快捷指标、负责人、主体或分页变化；可在列表无匹配时非零。
+              required: [all, effective, expiring_30d, expired, terminated]
+              properties:
+                all: {type: integer, minimum: 0}
+                effective: {type: integer, minimum: 0}
+                expiring_30d: {type: integer, minimum: 0}
+                expired: {type: integer, minimum: 0}
+                terminated: {type: integer, minimum: 0}
     CustomerPage:
       allOf:
         - $ref: '#/components/schemas/OwnerPage'

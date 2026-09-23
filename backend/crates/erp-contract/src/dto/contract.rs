@@ -653,7 +653,8 @@ pub enum ContractMetric {
     Terminated,
 }
 
-/// 合同范围指标；不随关键词、快捷筛选或页码变化。
+/// 合同范围指标；保留授权、归属范围、组织、客户、合同号及状态条件。
+/// 不随关键词、快捷指标、负责人、结算主体、排序或页码变化。
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ContractMetrics {
     pub all: i64,
@@ -663,7 +664,7 @@ pub struct ContractMetrics {
     pub terminated: i64,
 }
 
-/// 合同分页列表；保留 Page 字段并追加全范围指标。
+/// 合同分页列表；保留 Page 字段并追加授权基础范围内的指标。
 #[derive(Debug, Clone, Serialize)]
 pub struct ContractListView {
     /// 当前客户主负责人构成合同跟进责任。

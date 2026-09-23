@@ -85,7 +85,7 @@ impl ContractRow {
         }
     }
 }
-/// 列表新增筛选，精确字段与关键词按交集执行。
+/// 仅用于结果行和总数的筛选，精确字段与关键词按交集执行，不改变范围指标。
 #[derive(Debug, Clone, Default)]
 pub struct ContractSearch {
     pub q: Option<String>,
@@ -251,7 +251,8 @@ fn advance_search_result(
     Ok(ContractSearchResult::default())
 }
 
-/// 查询流水线：范围 → 当前修订 → 统一派生字段 → 分面分页与统计。
+/// 查询流水线：授权及基础条件 → 当前修订 → 派生字段 → 列表与范围指标分面。
+/// 结果行和总数应用 ContractSearch；指标只统计进入分面前的基础范围。
 fn list_pipeline(filter: &ContractFilter, search: &ContractSearch, today: BusinessDate) -> Vec<Document> {
     vec![
         doc! { "$match": filter.to_doc() },
@@ -261,7 +262,7 @@ fn list_pipeline(filter: &ContractFilter, search: &ContractSearch, today: Busine
         doc! { "$facet": {
             "items": [doc! { "$match": search.filter() }, doc! { "$sort": list_sort(filter) }, doc! { "$skip": filter.skip() as i64 }, doc! { "$limit": filter.limit() }],
             "totals": [doc! { "$match": search.filter() }, doc! { "$count": "total" }],
-            "metrics": [doc! { "$match": search.filter() }, doc! { "$group": metric_group() }],
+            "metrics": [doc! { "$group": metric_group() }],
         } },
     ]
 }
@@ -320,7 +321,7 @@ fn apply_metric(filter: &mut Document, metric: Option<ContractMetric>) {
     }
 }
 
-/// 范围统计不受关键词或快捷状态筛选影响。
+/// 范围统计保留基础条件，不受关键词、快捷指标、负责人、主体和分页影响。
 fn metric_group() -> Document {
     doc! { "_id": null, "all": { "$sum": 1 },
         "effective": { "$sum": { "$cond": [{ "$eq": ["$status", "EFFECTIVE"] }, 1, 0] } },

@@ -19,7 +19,7 @@ use crate::repository::prelude::*;
 use crate::repository::{ContractExt, ContractRow};
 
 impl ContractService {
-    /// 分页查询合同并返回当前可见范围的指标和筛选候选项。
+    /// 分页查询合同并返回授权及基础条件内的范围指标。
     ///
     /// # 参数
     /// * `params` - 关键词、结构化筛选、组织与范围版本

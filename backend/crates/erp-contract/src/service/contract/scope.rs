@@ -1,7 +1,8 @@
-//! 合同列表与候选的一致授权快照；范围与业务版本跨页携带。
+//! 合同列表与范围指标的一致授权快照；范围与业务版本跨页携带。
 
 use application_core::AuditActor;
 use persistence_core::Transactional;
+use serde_json::to_vec;
 
 use super::ContractService;
 use super::access::intersect_ids;
@@ -10,7 +11,7 @@ use crate::error::{Error, Result};
 use crate::ports::{ContractDataScopePort, ContractResolvedScope};
 use crate::repository::list_search::ContractSearch;
 use crate::repository::prelude::*;
-use crate::repository::scope::ContractReadScope;
+use crate::repository::scope::{ContractReadScope, ContractVersion};
 use crate::repository::{ContractExt, ContractFilter};
 
 /// 同一事务内的列表快照，供跨页版本复核。
@@ -24,7 +25,7 @@ pub(super) struct ContractSnapshot {
 }
 
 impl ContractService {
-    /// 授权、总数、候选与合同版本全部在同一个事务读取。
+    /// 授权、总数、范围指标与合同版本全部在同一个事务读取。
     ///
     /// # 参数
     /// * `query` - 已归一化查询
@@ -57,7 +58,7 @@ impl ContractService {
                 Box::pin(async move {
                     let (context, scope, no_scope, as_of) =
                         resolve_list_scope(&access, &actor, executor).await?;
-                    let (filter, search) = load_list_filter_and_search(
+                    let (filter, search, versions) = load_list_filter_and_search(
                         &db,
                         data_scope.as_ref(),
                         assignments.as_ref(),
@@ -70,7 +71,7 @@ impl ContractService {
                         executor,
                     )
                     .await?;
-                    finish_list_snapshot(&db, filter, search, context, executor)
+                    finish_list_snapshot(&db, filter, search, versions, context, executor)
                         .await
                         .map(|(view, context)| ContractSnapshot { view, context, no_scope })
                 })
@@ -102,7 +103,7 @@ async fn resolve_list_scope(
     Ok((context, scope, no_scope, as_of))
 }
 
-/// 求交授权与业务筛选并装配搜索事实（`list_snapshot` 第二步）。
+/// 求交授权与基础条件并装配列表搜索事实（`list_snapshot` 第二步）。
 ///
 /// # 参数
 /// * `db` - 合同数据库
@@ -117,10 +118,10 @@ async fn resolve_list_scope(
 /// * `executor` - 调用方执行器
 ///
 /// # 返回
-/// 返回仓储筛选与搜索条件。
+/// 返回基础筛选、结果搜索条件及同一基础范围的有界合同版本集合。
 ///
 /// # 错误
-/// 组织展开失败、成员超限或归属查询失败时拒绝。
+/// 组织展开失败、基础范围或成员超限、归属查询失败时拒绝。
 #[allow(clippy::too_many_arguments)]
 async fn load_list_filter_and_search(
     db: &mongodb::Database,
@@ -133,10 +134,14 @@ async fn load_list_filter_and_search(
     query: &ContractListQuery,
     as_of: erp_core::common::time::BusinessDate,
     executor: &mut dyn persistence_core::Executor,
-) -> Result<(ContractFilter, ContractSearch)> {
+) -> Result<(ContractFilter, ContractSearch, Vec<ContractVersion>)> {
     let (customer_ids, historical_contract_ids) =
         apply_list_filters(db, data_scope, assignments, context, scope, query, executor).await?;
     let filter = list_filter(query, customer_ids, historical_contract_ids);
+    let versions = db.contract().query_versions(&filter, executor).await?;
+    if versions.len() > 10_000 {
+        return Err(Error::ValidationError("合同基础范围超过上限，请收窄客户、组织、合同号或状态条件".into()));
+    }
     let ids = db.contract().list_customer_ids(&filter, executor).await?;
     let customer_facts =
         super::query::list_customer_facts_with(customers, assignments, accounts, &ids, as_of, executor)
@@ -148,16 +153,16 @@ async fn load_list_filter_and_search(
         owner_user_ids: query.owner_user_ids.clone(),
         customers: customer_facts,
     };
-    Ok((filter, search))
+    Ok((filter, search, versions))
 }
 
 /// 执行搜索聚合并组装对外视图（`list_snapshot` 第三步）。
 ///
 /// # 参数
 /// * `db` - 合同数据库
-/// * `accounts` - 账号显示名 Port
 /// * `filter` - 已与授权求交的仓储筛选
 /// * `search` - 列表搜索条件
+/// * `versions` - 同一基础范围已经过规模校验的合同版本集合
 /// * `context` - 已解析事实（指纹写入范围版本）
 /// * `executor` - 调用方执行器
 ///
@@ -165,20 +170,23 @@ async fn load_list_filter_and_search(
 /// 返回对外视图与携带指纹的授权上下文。
 ///
 /// # 错误
-/// 聚合失败、版本超限或候选读取失败时拒绝。
+/// 聚合或行展示事实读取失败时拒绝。
 async fn finish_list_snapshot(
     db: &mongodb::Database,
     filter: ContractFilter,
     search: ContractSearch,
+    versions: Vec<ContractVersion>,
     mut context: ContractResolvedScope,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<(ContractListView, ContractResolvedScope)> {
     let result = db.contract().search_list(&filter, &search, executor).await?;
-    let versions = db.contract().query_versions(&filter, executor).await?;
-    if versions.len() > 10_000 {
-        return Err(Error::ValidationError("合同查询超过上限，请收窄组织或负责人条件".into()));
-    }
-    let fingerprint = super::access::scope_fingerprint_input(&[], &[], versions.as_slice(), &[]);
+    let mut fingerprint = super::access::scope_fingerprint_input(&[], &[], versions.as_slice(), &[]);
+    // 当前负责人不再收窄公共范围；其身份和显示事实仍须参与跨页版本。
+    let mut customer_facts = search.customers.iter()
+        .map(|customer| (&customer.id, &customer.owner_id, &customer.number, &customer.owner))
+        .collect::<Vec<_>>();
+    customer_facts.sort_unstable();
+    fingerprint.extend(to_vec(&customer_facts).map_err(|error| Error::Internal(error.to_string()))?);
     context.scope_version =
         format!("{}:{:x}", context.scope_version, super::access::stable_fingerprint(&fingerprint));
     let total = result.total();
@@ -333,7 +341,7 @@ fn list_filter(
     }
 }
 
-/// 将业务筛选与授权集合求交。
+/// 将客户、组织和归属范围条件与授权集合求交，形成列表及指标共用的基础范围。
 ///
 /// # 参数
 /// * `data_scope` - 组织展开与成员事实 Port
@@ -352,6 +360,7 @@ fn list_filter(
 ///
 /// # 关键业务约束
 /// Assigned 只是收窄条件；All 不得绕过 DataScope。
+/// 负责人条件交给 ContractSearch 在结果分支匹配，不得提前缩小范围指标。
 async fn apply_list_filters(
     db: &mongodb::Database,
     data_scope: &dyn ContractDataScopePort,
@@ -365,13 +374,6 @@ async fn apply_list_filters(
     let mut ids = scope.authorized_customer_ids.clone();
     let mut constraint: Option<Vec<String>> = None;
     constraint = intersect_ids(constraint, assignment_filter(scope, query.scope));
-    if let Some(owners) = &query.owner_user_ids {
-        constraint = Some(
-            assignments
-                .current_owner_customer_ids(constraint.as_deref(), Some(owners.as_slice()), as_of, executor)
-                .await?,
-        );
-    }
     constraint =
         apply_org_unit_filter(data_scope, assignments, context, constraint, query, as_of, executor).await?;
     if let Some(customer_id) = &query.customer_id {
