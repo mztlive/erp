@@ -6,10 +6,10 @@ import { FixedOptionRadioFilter } from "@/components/business"
 import {
     ListSearchField,
     ListWorkspaceFilterBar,
-    ListWorkspaceFilterField,
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
 import { ResponsibleUserFilter } from "@/features/entity-selectors/components/responsible-user-filter"
+import { OrganizationUnitFilter } from "@/features/organization/components/organization-unit-filter"
 import type { ReceivableScopeChip } from "@/features/customer-receivables/pages/hooks/use-receivable-scope-url-state"
 import type { ReceivableScopeQuery } from "@/features/customer-receivables/api/scoped"
 
@@ -44,6 +44,7 @@ type Props = {
     removeFilter: (key: ReceivableScopeChip["key"]) => void
     applyFilters: () => void
     resetMoreFilters: () => void
+    cancelMoreFilters: () => void
     clearFilters: () => void
     hasPendingChanges: boolean
     ownerOptions: readonly { value: string; label: string }[]
@@ -74,6 +75,7 @@ export function ReceivableScopeToolbar({
     removeFilter,
     applyFilters,
     resetMoreFilters,
+    cancelMoreFilters,
     clearFilters,
     hasPendingChanges,
     ownerOptions,
@@ -82,17 +84,15 @@ export function ReceivableScopeToolbar({
     failed,
 }: Props) {
     const moreCount = appliedChips.filter(({ key }) =>
-        [
-            "salesOwnerUserIds",
-            "operatorUserIds",
-            "operatorKind",
-            "orgUnitIds",
-        ].includes(key),
+        ["operatorUserIds", "orgUnitIds"].includes(key),
     ).length
 
     return (
         <ListWorkspaceFilterBar
             density="compact"
+            morePresentation="popover"
+            moreSize="compact"
+            className="[&_[data-slot=list-toolbar-filters]]:min-w-0 [&_[data-slot=list-toolbar-filters]]:shrink [&_[data-slot=list-toolbar-filters]]:self-center"
             idPrefix={prefix}
             formAriaLabel="客户往来范围查询"
             onSubmit={applyFilters}
@@ -111,19 +111,26 @@ export function ReceivableScopeToolbar({
             }
             moreCount={moreCount}
             moreOpen={panelOpen}
-            onToggleMore={() => setPanelOpen((open) => !open)}
+            onToggleMore={() =>
+                panelOpen ? cancelMoreFilters() : setPanelOpen(true)
+            }
             morePanelId={panelId}
             morePanelAriaLabel="客户往来范围更多筛选条件"
             onResetMore={resetMoreFilters}
-            morePanel={
-                <div className="grid min-w-0 gap-5">
+            primaryFilters={
+                <div className="w-56 max-w-full min-w-0">
                     <ResponsibleUserFilter
                         id={`${prefix}-sales-owner`}
                         label="负责销售"
+                        hideLabel
                         value={salesOwnerDraft}
                         onChange={setSalesOwnerDraft}
                         options={ownerOptions}
                     />
+                </div>
+            }
+            morePanel={
+                <div className="grid min-w-0 gap-5">
                     <ResponsibleUserFilter
                         id={`${prefix}-operator`}
                         label={
@@ -154,35 +161,14 @@ export function ReceivableScopeToolbar({
                             }))}
                         />
                     ) : null}
-                    <ListWorkspaceFilterField
-                        htmlFor={`${prefix}-org`}
-                        label="业务组织（逗号分隔组织 ID）"
-                    >
-                        <input
-                            id={`${prefix}-org`}
-                            className="h-9 w-full min-w-0 rounded-md border bg-background px-3 text-sm"
-                            value={orgDraft}
-                            onChange={(event) =>
-                                setOrgDraft(event.target.value)
-                            }
-                            placeholder="全部组织"
-                            aria-label="筛选业务组织"
-                        />
-                    </ListWorkspaceFilterField>
-                    <label
-                        htmlFor={`${prefix}-include-descendants`}
-                        className="flex min-w-0 items-center gap-2 text-sm"
-                    >
-                        <input
-                            id={`${prefix}-include-descendants`}
-                            type="checkbox"
-                            checked={descendantsDraft}
-                            onChange={(event) =>
-                                setDescendantsDraft(event.target.checked)
-                            }
-                        />
-                        包含下级组织
-                    </label>
+                    <OrganizationUnitFilter
+                        id={`${prefix}-org`}
+                        label="业务组织"
+                        value={orgDraft}
+                        onChange={setOrgDraft}
+                        includeDescendants={descendantsDraft}
+                        onDescendantsChange={setDescendantsDraft}
+                    />
                 </div>
             }
             resultStatus={listWorkspaceFilterStatusText({

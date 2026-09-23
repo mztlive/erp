@@ -395,6 +395,7 @@ export function AccountsPage() {
                 ariaLabel="账号列表"
                 toolbar={
                     <ListWorkspaceFilterBar
+                        morePresentation="popover"
                         idPrefix="governance-admin-accounts"
                         formAriaLabel="账号查询"
                         onSubmit={applyFilters}

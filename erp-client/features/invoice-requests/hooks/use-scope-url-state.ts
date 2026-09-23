@@ -53,14 +53,7 @@ export function useInvoiceRequestScopeUrlState() {
     const [descendantsDraft, setDescendantsDraft] =
         React.useState(includeDescendants)
     const searchInputRef = React.useRef<HTMLInputElement | null>(null)
-    const [panelOpen, setPanelOpen] = React.useState(
-        Boolean(
-            salesOwnerUserIds ||
-            applicantUserIds ||
-            handlerUserIds ||
-            orgUnitIds,
-        ),
-    )
+    const [panelOpen, setPanelOpen] = React.useState(false)
 
     const pageFromUrl = React.useMemo(() => {
         const page = Number.parseInt(searchParams.get("page") ?? "1", 10)
@@ -198,6 +191,23 @@ export function useInvoiceRequestScopeUrlState() {
         )
     }, [patchUrl])
 
+    /** 只清申请人、当前开票处理人和业务组织草稿；保留搜索与负责销售。 */
+    const resetMoreFilters = React.useCallback(() => {
+        setApplicantDraft("")
+        setHandlerDraft("")
+        setOrgDraft("")
+        setDescendantsDraft(false)
+    }, [])
+
+    /** 取消、关闭、Esc 和外点只恢复低频草稿。 */
+    const cancelMoreFilters = React.useCallback(() => {
+        setApplicantDraft(applicantUserIds ?? "")
+        setHandlerDraft(handlerUserIds ?? "")
+        setOrgDraft(orgUnitIds ?? "")
+        setDescendantsDraft(includeDescendants)
+        setPanelOpen(false)
+    }, [applicantUserIds, handlerUserIds, includeDescendants, orgUnitIds])
+
     const handlePaginationChange = React.useCallback(
         (next: PaginationState, nextScopeVersion?: string) => {
             patchUrl(
@@ -319,6 +329,8 @@ export function useInvoiceRequestScopeUrlState() {
         patchUrl,
         applyFilters,
         removeFilter,
+        resetMoreFilters,
+        cancelMoreFilters,
         clearFilters,
         handlePaginationChange,
     }

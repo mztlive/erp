@@ -94,20 +94,6 @@ function hasStructuredFilters(
     )
 }
 
-/** 更多筛选面板内的已生效条件（时间与结果在常用区，不计入）。 */
-function hasMoreFilters(
-    applied: AccessAppliedFilters,
-    view: AccessView,
-): boolean {
-    if (view !== "audit") return false
-    return Boolean(
-        applied.action ||
-        applied.actorId ||
-        applied.traceId ||
-        applied.objectId,
-    )
-}
-
 /**
  * W19 筛选状态：Applied（URL）/ Draft（本地受控）/ UI（面板与校验）。
  * Draft 变化不写 URL、不触发请求；提交、清除与 chip 移除都走 patchFilterUrl。
@@ -143,9 +129,8 @@ export function useAccessListFilters({
     const [draft, setDraft] = React.useState<AccessFilterDraft>(() =>
         toDraft(applied),
     )
-    const [panelOpen, setPanelOpen] = React.useState(() =>
-        hasMoreFilters(applied, view),
-    )
+    // 深链只显示已生效标签，不自动打开浮层。
+    const [panelOpen, setPanelOpen] = React.useState(false)
     const [filterError, setFilterError] = React.useState<string | null>(null)
 
     const updateDraft = React.useCallback(
@@ -197,6 +182,18 @@ export function useAccessListFilters({
             objectId: "",
         }))
     }, [])
+
+    /** 取消、关闭、Esc 和外点只恢复低频草稿，保留搜索、时间和结果。 */
+    const cancelMoreFilters = React.useCallback(() => {
+        setDraft((current) => ({
+            ...current,
+            action: applied.action ?? "all",
+            actorId: applied.actorId ?? "",
+            traceId: applied.traceId ?? "",
+            objectId: applied.objectId ?? "",
+        }))
+        setPanelOpen(false)
+    }, [applied])
 
     /** 清除全部：草稿、错误、面板与全部筛选参数同时重置；保留视图与详情/导航上下文。 */
     const clearAllFilters = React.useCallback(() => {
@@ -300,6 +297,7 @@ export function useAccessListFilters({
         hasStructuredFilters: hasStructuredFilters(applied, view),
         applyFilters,
         resetMoreFilters,
+        cancelMoreFilters,
         clearAllFilters,
         removeFilter,
         filterError,

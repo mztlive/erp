@@ -78,7 +78,8 @@ export function useSupplierListFilters(
     const capabilityOwnerUserIds =
         searchParams.get("capability_owner_user_ids") ?? ""
     const orgUnitIds = searchParams.get("org_unit_ids") ?? ""
-    const includeDescendants = searchParams.get("include_descendants") === "true"
+    const includeDescendants =
+        searchParams.get("include_descendants") === "true"
     const hasStructuredSupplierFilters = Boolean(
         lifecycleStatus !== "all" ||
         supplierQualificationHealth ||
@@ -89,8 +90,9 @@ export function useSupplierListFilters(
         orgUnitIds,
     )
 
+    // 深链只显示已生效标签，不自动打开筛选浮层。
     const [supplierFilterPanelOpen, setSupplierFilterPanelOpen] =
-        React.useState(hasStructuredSupplierFilters)
+        React.useState(false)
     const [supplierCapabilityCodesDraft, setSupplierCapabilityCodesDraft] =
         React.useState<string[]>(supplierCapabilityCodes)
     const [
@@ -103,7 +105,8 @@ export function useSupplierListFilters(
     ] = React.useState<SupplierQualificationHealth | "all">(
         supplierQualificationHealth ?? "all",
     )
-    const [ownerUserIdsDraft, setOwnerUserIdsDraft] = React.useState(ownerUserIds)
+    const [ownerUserIdsDraft, setOwnerUserIdsDraft] =
+        React.useState(ownerUserIds)
     const [capabilityOwnerUserIdsDraft, setCapabilityOwnerUserIdsDraft] =
         React.useState(capabilityOwnerUserIds)
     const [orgUnitIdsDraft, setOrgUnitIdsDraft] = React.useState(orgUnitIds)
@@ -146,7 +149,10 @@ export function useSupplierListFilters(
             owner_user_ids: ownerUserIdsDraft || null,
             capability_owner_user_ids: capabilityOwnerUserIdsDraft || null,
             org_unit_ids: orgUnitIdsDraft.trim() || null,
-            include_descendants: includeDescendantsDraft ? "true" : null,
+            include_descendants:
+                orgUnitIdsDraft.trim() && includeDescendantsDraft
+                    ? "true"
+                    : null,
             page: null,
         })
         resetPagination()
@@ -197,15 +203,30 @@ export function useSupplierListFilters(
         [patchUrl, resetPagination, setSearchDraft],
     )
 
-    /** 仅重置更多条件草稿；保留关键词、启停、资质状态及当前查询结果。 */
+    /** 仅重置低频草稿；保留关键词、资质状态、供应能力及当前结果。 */
     const resetMoreFilters = React.useCallback(() => {
-        setSupplierCapabilityCodesDraft([])
         setSupplierQualificationTypesDraft([])
         setOwnerUserIdsDraft("")
         setCapabilityOwnerUserIdsDraft("")
         setOrgUnitIdsDraft("")
         setIncludeDescendantsDraft(false)
     }, [])
+
+    /** 取消、外点和 Esc 只恢复低频草稿，保留搜索、资质状态和供应能力。 */
+    const cancelMoreFilters = React.useCallback(() => {
+        setSupplierQualificationTypesDraft(supplierQualificationTypes)
+        setOwnerUserIdsDraft(ownerUserIds)
+        setCapabilityOwnerUserIdsDraft(capabilityOwnerUserIds)
+        setOrgUnitIdsDraft(orgUnitIds)
+        setIncludeDescendantsDraft(includeDescendants)
+        setSupplierFilterPanelOpen(false)
+    }, [
+        capabilityOwnerUserIds,
+        includeDescendants,
+        orgUnitIds,
+        ownerUserIds,
+        supplierQualificationTypes,
+    ])
 
     const hasPendingChanges =
         searchDraft.trim() !== q.trim() ||
@@ -225,6 +246,10 @@ export function useSupplierListFilters(
         setSupplierCapabilityCodesDraft([])
         setSupplierQualificationTypesDraft([])
         setSupplierQualificationHealthDraft("all")
+        setOwnerUserIdsDraft("")
+        setCapabilityOwnerUserIdsDraft("")
+        setOrgUnitIdsDraft("")
+        setIncludeDescendantsDraft(false)
         setSupplierFilterPanelOpen(false)
         patchUrl({
             q: null,
@@ -302,6 +327,7 @@ export function useSupplierListFilters(
         applySupplierFilters,
         removeFilter,
         resetMoreFilters,
+        cancelMoreFilters,
         clearAllFilters,
     }
 }

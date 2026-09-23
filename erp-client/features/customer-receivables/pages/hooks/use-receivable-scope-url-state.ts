@@ -72,9 +72,7 @@ export function useReceivableScopeUrlState() {
     const [descendantsDraft, setDescendantsDraft] =
         React.useState(includeDescendants)
     const searchInputRef = React.useRef<HTMLInputElement | null>(null)
-    const [panelOpen, setPanelOpen] = React.useState(
-        Boolean(salesOwnerUserIds || operatorUserIds || orgUnitIds),
-    )
+    const [panelOpen, setPanelOpen] = React.useState(false)
 
     const pageFromUrl = React.useMemo(() => {
         const page = Number.parseInt(searchParams.get("page") ?? "1", 10)
@@ -221,6 +219,23 @@ export function useReceivableScopeUrlState() {
         )
     }, [patchUrl])
 
+    /** 只清经办人、经办人口径和组织草稿；保留搜索与负责销售。 */
+    const resetMoreFilters = React.useCallback(() => {
+        setOperatorDraft("")
+        setOperatorKindDraft("")
+        setOrgDraft("")
+        setDescendantsDraft(false)
+    }, [])
+
+    /** 取消、关闭、Esc 和外点只恢复低频草稿。 */
+    const cancelMoreFilters = React.useCallback(() => {
+        setOperatorDraft(operatorUserIds ?? "")
+        setOperatorKindDraft(operatorKind ?? "")
+        setOrgDraft(orgUnitIds ?? "")
+        setDescendantsDraft(includeDescendants)
+        setPanelOpen(false)
+    }, [includeDescendants, operatorKind, operatorUserIds, orgUnitIds])
+
     const handlePaginationChange = React.useCallback(
         (next: PaginationState, nextScopeVersion?: string) => {
             patchUrl(
@@ -363,6 +378,8 @@ export function useReceivableScopeUrlState() {
         patchUrl,
         applyFilters,
         removeFilter,
+        resetMoreFilters,
+        cancelMoreFilters,
         clearFilters,
         handlePaginationChange,
         changeView,

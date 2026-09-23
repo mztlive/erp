@@ -6,7 +6,6 @@ import type { PaginationState } from "@tanstack/react-table"
 import type { SettlementsUrlState } from "@/features/supplier-settlements/lib/url-state"
 import {
     hasAppliedSettlementFilters,
-    hasMoreSettlementFilters,
     joinSettlementStatusParam,
     parseSettlementStatusParam,
     validateSettlementPeriodRange,
@@ -66,11 +65,8 @@ export function useSettlementListState(
     const [includeDescendantsDraft, setIncludeDescendantsDraft] =
         React.useState(Boolean(urlState.includeDescendants))
 
-    // ---- UI 态 ----
-    // 深链带结构化条件时展开面板；展开态本身不写 URL。
-    const [panelOpen, setPanelOpen] = React.useState(() =>
-        hasMoreSettlementFilters(urlState),
-    )
+    // 深链条件显示为标签，不自动打开浮层。
+    const [panelOpen, setPanelOpen] = React.useState(false)
     const [periodError, setPeriodError] = React.useState<string | null>(null)
 
     /** 唯一提交路径：收起态 Enter 与主行「查询」共用。 */
@@ -80,7 +76,11 @@ export function useSettlementListState(
             periodToDraft,
         )
         setPeriodError(error)
-        if (error) return
+        if (error) {
+            setPanelOpen(true)
+            return
+        }
+        const org = orgUnitIdsDraft.trim()
         patchUrl({
             q: searchDraft.trim() || undefined,
             supplierId: supplierIdDraft ?? undefined,
@@ -92,8 +92,9 @@ export function useSettlementListState(
             ownerUserIds: ownerUserIdsDraft.trim() || undefined,
             operatorUserIds: operatorUserIdsDraft.trim() || undefined,
             handlerUserIds: handlerUserIdsDraft.trim() || undefined,
-            orgUnitIds: orgUnitIdsDraft.trim() || undefined,
-            includeDescendants: includeDescendantsDraft || undefined,
+            orgUnitIds: org || undefined,
+            includeDescendants:
+                org && includeDescendantsDraft ? true : undefined,
             page: 1,
         })
         setPanelOpen(false)
@@ -168,10 +169,8 @@ export function useSettlementListState(
         [patchUrl],
     )
 
-    /** 只清「更多筛选」草稿；保留关键词、差异类型与当前结果。 */
+    /** 只清低频草稿；保留关键词、供应商、状态、差异类型与当前结果。 */
     const resetMoreFilters = React.useCallback(() => {
-        setSupplierIdDraft(null)
-        setStatusDraft([])
         setPeriodFromDraft("")
         setPeriodToDraft("")
         setPeriodError(null)
@@ -181,6 +180,27 @@ export function useSettlementListState(
         setOrgUnitIdsDraft("")
         setIncludeDescendantsDraft(false)
     }, [])
+
+    /** 取消、关闭、Esc 和外点只恢复低频草稿，保留搜索、供应商、状态和差异类型。 */
+    const cancelMoreFilters = React.useCallback(() => {
+        setPeriodFromDraft(urlState.periodFrom ?? "")
+        setPeriodToDraft(urlState.periodTo ?? "")
+        setPeriodError(null)
+        setOwnerUserIdsDraft(urlState.ownerUserIds ?? "")
+        setOperatorUserIdsDraft(urlState.operatorUserIds ?? "")
+        setHandlerUserIdsDraft(urlState.handlerUserIds ?? "")
+        setOrgUnitIdsDraft(urlState.orgUnitIds ?? "")
+        setIncludeDescendantsDraft(Boolean(urlState.includeDescendants))
+        setPanelOpen(false)
+    }, [
+        urlState.handlerUserIds,
+        urlState.includeDescendants,
+        urlState.operatorUserIds,
+        urlState.orgUnitIds,
+        urlState.ownerUserIds,
+        urlState.periodFrom,
+        urlState.periodTo,
+    ])
 
     const hasPendingChanges =
         searchDraft.trim() !== (urlState.q ?? "").trim() ||
@@ -287,6 +307,7 @@ export function useSettlementListState(
         applyFilters,
         removeFilter,
         resetMoreFilters,
+        cancelMoreFilters,
         hasPendingChanges,
         clearAllFilters,
     }

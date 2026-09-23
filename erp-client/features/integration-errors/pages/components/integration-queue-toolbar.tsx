@@ -4,7 +4,6 @@ import { OptionCombobox } from "@/components/business"
 import {
     ListSearchField,
     ListWorkspaceFilterBar,
-    ListWorkspaceInlineFilter,
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
 import { Label } from "@/components/ui/label"
@@ -58,28 +57,71 @@ export function IntegrationQueueToolbar({
     const [environmentDraft, setEnvironmentDraft] = React.useState(
         urlState.environment,
     )
+    const [handlerDraft, setHandlerDraft] = React.useState(
+        urlState.handlerUserIds ?? "",
+    )
+    const [operatorDraft, setOperatorDraft] = React.useState(
+        urlState.operatorUserIds ?? "",
+    )
+    const [panelOpen, setPanelOpen] = React.useState(false)
     React.useEffect(() => {
         setModeDraft(urlState.mode)
     }, [urlState.mode])
     React.useEffect(() => {
         setEnvironmentDraft(urlState.environment)
     }, [urlState.environment])
+    React.useEffect(() => {
+        setHandlerDraft(urlState.handlerUserIds ?? "")
+    }, [urlState.handlerUserIds])
+    React.useEffect(() => {
+        setOperatorDraft(urlState.operatorUserIds ?? "")
+    }, [urlState.operatorUserIds])
     const applyFilters = React.useCallback(() => {
         patchUrl({
             q: searchDraft.trim() || null,
             mode: modeDraft,
             environment: environmentDraft,
+            handlerUserIds: handlerDraft || null,
+            operatorUserIds: operatorDraft || null,
             errorClass: null,
             taskId: null,
             differenceId: null,
         })
-    }, [environmentDraft, modeDraft, patchUrl, searchDraft])
+        setPanelOpen(false)
+    }, [
+        environmentDraft,
+        handlerDraft,
+        modeDraft,
+        operatorDraft,
+        patchUrl,
+        searchDraft,
+    ])
+
+    const resetMoreFilters = React.useCallback(() => {
+        setOperatorDraft("")
+    }, [])
+
+    const cancelMoreFilters = React.useCallback(() => {
+        setOperatorDraft(urlState.operatorUserIds ?? "")
+        setPanelOpen(false)
+    }, [urlState.operatorUserIds])
+
+    const clearFilters = React.useCallback(() => {
+        setModeDraft("all")
+        setEnvironmentDraft("production")
+        setHandlerDraft("")
+        setOperatorDraft("")
+        setPanelOpen(false)
+        onClearFilters()
+    }, [onClearFilters])
 
     const removeFilter = React.useCallback(
         (key: IntegrationFilterKey) => {
             if (key === "q") onSearchDraftChange("")
             if (key === "mode") setModeDraft("all")
             if (key === "environment") setEnvironmentDraft("production")
+            if (key === "handlerUserIds") setHandlerDraft("")
+            if (key === "operatorUserIds") setOperatorDraft("")
             const cleared =
                 key === "mode"
                     ? "all"
@@ -136,7 +178,9 @@ export function IntegrationQueueToolbar({
     const hasPendingChanges =
         searchDraft.trim() !== (urlState.q ?? "") ||
         modeDraft !== urlState.mode ||
-        environmentDraft !== urlState.environment
+        environmentDraft !== urlState.environment ||
+        (handlerDraft || undefined) !== urlState.handlerUserIds ||
+        (operatorDraft || undefined) !== urlState.operatorUserIds
 
     return (
         <div className="sticky top-0 z-10 space-y-3 bg-card py-2">
@@ -165,38 +209,18 @@ export function IntegrationQueueToolbar({
                     aria-label="队列视图"
                     inputClassName="w-[9.5rem]"
                 />
-                <ResponsibleUserFilter
-                    id="integration-queue-toolbar-handler"
-                    label="当前处理人"
-                    value={urlState.handlerUserIds ?? ""}
-                    options={[]}
-                    onChange={(value) =>
-                        patchUrl({
-                            handlerUserIds: value || null,
-                            taskId: null,
-                            differenceId: null,
-                        })
-                    }
-                />
-                <ResponsibleUserFilter
-                    id="integration-queue-toolbar-operator"
-                    label="历史处理人"
-                    value={urlState.operatorUserIds ?? ""}
-                    options={[]}
-                    onChange={(value) =>
-                        patchUrl({
-                            operatorUserIds: value || null,
-                            taskId: null,
-                            differenceId: null,
-                        })
-                    }
-                />
             </div>
             <ListWorkspaceFilterBar
+                morePresentation="popover"
+                moreSize="compact"
                 density="compact"
                 idPrefix="integration-queue-toolbar"
                 formAriaLabel="接口错误队列查询"
                 onSubmit={applyFilters}
+                queryButtonId="integration-queue-toolbar-query"
+                moreButtonId="integration-queue-toolbar-more"
+                resetMoreButtonId="integration-queue-toolbar-reset"
+                morePanelId="integration-queue-toolbar-more-panel"
                 search={
                     <ListSearchField
                         id="integration-queue-toolbar-search"
@@ -207,60 +231,81 @@ export function IntegrationQueueToolbar({
                         aria-label="搜索"
                     />
                 }
-                commonFilters={
+                moreCount={urlState.operatorUserIds ? 1 : 0}
+                moreOpen={panelOpen}
+                onToggleMore={() =>
+                    panelOpen ? cancelMoreFilters() : setPanelOpen(true)
+                }
+                morePanelAriaLabel="接口错误更多筛选条件"
+                onResetMore={resetMoreFilters}
+                primaryFilters={
                     <>
-                        <ListWorkspaceInlineFilter
-                            htmlFor="integration-queue-toolbar-mode"
-                            label="模式"
-                        >
-                            <OptionCombobox
-                                id="integration-queue-toolbar-mode"
-                                value={modeDraft}
-                                onValueChange={(v) =>
-                                    setModeDraft(
-                                        (v as typeof modeDraft | null) ?? "all",
-                                    )
-                                }
-                                options={(
-                                    Object.keys(
-                                        MODE_LABEL,
-                                    ) as (keyof typeof MODE_LABEL)[]
-                                ).map((m) => ({
-                                    value: m,
-                                    label: MODE_LABEL[m],
-                                }))}
-                                inputClassName="w-[8rem]"
-                                aria-label="模式"
-                                allowClear={false}
+                        <div className="w-56 max-w-full min-w-0">
+                            <ResponsibleUserFilter
+                                id="integration-queue-toolbar-handler"
+                                label="当前处理人"
+                                hideLabel
+                                value={handlerDraft}
+                                options={[]}
+                                onChange={setHandlerDraft}
                             />
-                        </ListWorkspaceInlineFilter>
-                        <ListWorkspaceInlineFilter
-                            htmlFor="integration-queue-toolbar-environment"
-                            label="环境"
-                        >
-                            <OptionCombobox
-                                id="integration-queue-toolbar-environment"
-                                value={environmentDraft}
-                                onValueChange={(v) =>
-                                    setEnvironmentDraft(
-                                        (v as typeof environmentDraft | null) ??
-                                            "production",
-                                    )
-                                }
-                                options={(
-                                    Object.keys(
-                                        ENV_LABEL,
-                                    ) as (keyof typeof ENV_LABEL)[]
-                                ).map((e) => ({
-                                    value: e,
-                                    label: ENV_LABEL[e],
-                                }))}
-                                inputClassName="w-[7rem]"
-                                aria-label="环境"
-                                allowClear={false}
-                            />
-                        </ListWorkspaceInlineFilter>
+                        </div>
+                        <OptionCombobox
+                            id="integration-queue-toolbar-environment"
+                            className="w-48 max-w-full min-w-0"
+                            filterLabel="环境"
+                            value={environmentDraft}
+                            onValueChange={(value) =>
+                                setEnvironmentDraft(
+                                    value === "all" || value === "verification"
+                                        ? value
+                                        : "production",
+                                )
+                            }
+                            options={(
+                                Object.keys(
+                                    ENV_LABEL,
+                                ) as (keyof typeof ENV_LABEL)[]
+                            ).map((environment) => ({
+                                value: environment,
+                                label: ENV_LABEL[environment],
+                            }))}
+                            aria-label="环境"
+                            placeholder="生产"
+                            allowClear={false}
+                        />
                     </>
+                }
+                commonFilters={
+                    <OptionCombobox
+                        id="integration-queue-toolbar-mode"
+                        className="w-44 max-w-full min-w-0"
+                        filterLabel="模式"
+                        value={modeDraft}
+                        onValueChange={(value) =>
+                            setModeDraft(value === "errors" ? "errors" : "all")
+                        }
+                        options={(
+                            Object.keys(
+                                MODE_LABEL,
+                            ) as (keyof typeof MODE_LABEL)[]
+                        ).map((mode) => ({
+                            value: mode,
+                            label: MODE_LABEL[mode],
+                        }))}
+                        aria-label="模式"
+                        placeholder="全部"
+                        allowClear={false}
+                    />
+                }
+                morePanel={
+                    <ResponsibleUserFilter
+                        id="integration-queue-toolbar-operator"
+                        label="历史处理人"
+                        value={operatorDraft}
+                        options={[]}
+                        onChange={setOperatorDraft}
+                    />
                 }
                 resultStatus={listWorkspaceFilterStatusText({
                     loading,
@@ -271,7 +316,7 @@ export function IntegrationQueueToolbar({
                 })}
                 chips={appliedChips}
                 onClearChip={(key) => removeFilter(key as IntegrationFilterKey)}
-                onClearAll={onClearFilters}
+                onClearAll={clearFilters}
                 clearButtonId="integration-queue-toolbar-clear-filters"
                 hasPendingChanges={hasPendingChanges}
                 pendingHint="条件已修改，待查询"

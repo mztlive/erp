@@ -11,6 +11,7 @@ import {
     ComboboxItem,
     ComboboxList,
 } from "@/components/ui/combobox"
+import { InputGroupAddon } from "@/components/ui/input-group"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 
@@ -37,6 +38,8 @@ export type TreeComboboxProps = {
     /** 服务端已完成搜索时关闭本地二次过滤。 */
     filterMode?: "local" | "remote"
     label: string
+    /** 查询栏常驻名称，与选中值分开显示，不随选择或输入消失。 */
+    filterLabel?: string
     placeholder?: string
     emptyLabel?: string
     loading?: boolean
@@ -138,6 +141,7 @@ export function TreeCombobox({
     onSearchChange,
     filterMode = "local",
     label,
+    filterLabel,
     placeholder = "搜索名称或编号",
     emptyLabel = "没有符合条件的对象",
     loading = false,
@@ -254,7 +258,13 @@ export function TreeCombobox({
                     showClear
                     disabled={disabled}
                     className="w-full"
-                />
+                >
+                    {filterLabel ? (
+                        <InputGroupAddon className="shrink-0 whitespace-nowrap font-normal">
+                            {filterLabel}：
+                        </InputGroupAddon>
+                    ) : null}
+                </ComboboxInput>
                 <ComboboxContent>
                     <ComboboxEmpty>
                         {loading ? "正在加载…" : emptyLabel}

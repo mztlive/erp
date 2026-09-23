@@ -42,7 +42,7 @@ export type CustomerQualityFilterCardProps = {
 }
 
 /**
- * 客户经营质量明细筛选工具栏：常用业务性质常驻，票款口径在更多面板。
+ * 客户经营质量明细筛选：业务性质单独成行。没有低频条件，不提供更多面板。
  * 期间条不属于本表单。
  */
 export function CustomerQualityFilterCard({
@@ -62,6 +62,7 @@ export function CustomerQualityFilterCard({
 }: CustomerQualityFilterCardProps) {
     return (
         <ListWorkspaceFilterBar
+            morePresentation="popover"
             idPrefix="customers-quality"
             formAriaLabel="客户经营质量查询"
             onSubmit={onApplyFilters}

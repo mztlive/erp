@@ -201,6 +201,7 @@ export function ConnectionList({
                         onApplyFilters={filters.applyFilters}
                         onClearFilters={filters.clearFilters}
                         onResetMoreFilters={filters.resetMoreFilters}
+                        onCancelMoreFilters={filters.cancelMoreFilters}
                         healthDraft={filters.healthDraft}
                         onHealthDraftChange={filters.setHealthDraft}
                         capabilityDraft={filters.capabilityDraft}

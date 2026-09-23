@@ -108,6 +108,7 @@ export function CustomerReceivablesListPane({
                         removeFilter={urlState.removeFilter}
                         applyFilters={urlState.applyFilters}
                         resetMoreFilters={urlState.resetMoreFilters}
+                        cancelMoreFilters={urlState.cancelMoreFilters}
                         clearFilters={urlState.clearFilters}
                         hasPendingChanges={urlState.hasPendingChanges}
                         resultCount={data?.total}

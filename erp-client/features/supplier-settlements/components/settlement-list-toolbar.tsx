@@ -5,19 +5,20 @@ import * as React from "react"
 import {
     FixedOptionRadioFilter,
     MultiOptionCombobox,
+    OptionCombobox,
 } from "@/components/business"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Input } from "@/components/ui/input"
 import { ResponsibleUserFilter } from "@/features/entity-selectors/components/responsible-user-filter"
+import { useRemoteSearchCombobox } from "@/features/entity-selectors/hooks/use-remote-search-combobox"
+import { useSearchInput } from "@/features/entity-selectors/hooks/use-search-input"
+import { useSupplierSelectorQuery } from "@/features/entity-selectors/hooks/queries"
 import type { SettlementFilterOption } from "@/features/supplier-settlements/types"
 import {
     ListSearchField,
     ListWorkspaceFilterBar,
-    ListWorkspaceFilterField,
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
 import { DatePicker } from "@/components/ui/date-picker"
-import { SupplierSearchCombobox } from "@/features/entity-selectors"
+import { OrganizationUnitFilter } from "@/features/organization/components/organization-unit-filter"
 import type { SettlementsUrlState } from "@/features/supplier-settlements/lib/url-state"
 import {
     buildSettlementFilterChips,
@@ -34,11 +35,61 @@ type SetState<T> = React.Dispatch<React.SetStateAction<T>>
 
 const prefix = "supplier-settlements-list"
 const panelId = `${prefix}-more-panel`
+const MORE_CHIP_KEYS: readonly SettlementFilterKey[] = [
+    "period",
+    "ownerUserIds",
+    "operatorUserIds",
+    "handlerUserIds",
+    "orgUnitIds",
+]
 
 const STATUS_FILTER_OPTIONS = SETTLEMENT_STATUS_VALUES.map((value) => ({
     value,
     label: STATUS_LABEL[value],
 }))
+
+function ResidentSupplierFilter({
+    id,
+    value,
+    onValueChange,
+}: {
+    id: string
+    value: string | null
+    onValueChange: (value: string | null) => void
+}) {
+    const search = useSearchInput()
+    const query = useSupplierSelectorQuery(
+        { query: search.input, purpose: "filter" },
+        value ?? undefined,
+    )
+    const { rows, loading, emptyLabel } = useRemoteSearchCombobox({
+        list: query.list,
+        selected: query.selected,
+        idOf: (item) => item.supplierId,
+        fallbackError: "供应商加载失败，请重试",
+    })
+    return (
+        <OptionCombobox
+            id={id}
+            className="w-56 max-w-full min-w-0"
+            filterLabel="供应商"
+            aria-label="供应商"
+            placeholder="全部"
+            searchPlaceholder="搜索供应商名称或编码"
+            filterMode="remote"
+            onSearchChange={search.onSearchChange}
+            loading={loading}
+            emptyLabel={emptyLabel}
+            value={value}
+            onValueChange={onValueChange}
+            options={rows.map((item) => ({
+                value: item.supplierId,
+                label: item.supplierName,
+                keywords: item.supplierCode,
+            }))}
+        />
+    )
+}
 
 export function SettlementListToolbar({
     urlState,
@@ -54,6 +105,7 @@ export function SettlementListToolbar({
     applyFilters,
     removeFilter,
     resetMoreFilters,
+    cancelMoreFilters,
     clearAllFilters,
     supplierIdDraft,
     setSupplierIdDraft,
@@ -95,6 +147,7 @@ export function SettlementListToolbar({
     applyFilters: () => void
     removeFilter: (key: SettlementFilterKey) => void
     resetMoreFilters: () => void
+    cancelMoreFilters: () => void
     clearAllFilters: () => void
     supplierIdDraft: string | null
     setSupplierIdDraft: SetState<string | null>
@@ -129,20 +182,15 @@ export function SettlementListToolbar({
         [suppliers, urlState],
     )
     const moreCount = appliedChips.filter(({ key }) =>
-        [
-            "supplierId",
-            "status",
-            "period",
-            "ownerUserIds",
-            "operatorUserIds",
-            "handlerUserIds",
-            "orgUnitIds",
-        ].includes(key),
+        MORE_CHIP_KEYS.includes(key),
     ).length
 
     return (
         <ListWorkspaceFilterBar
             density="compact"
+            morePresentation="popover"
+            moreSize="wide"
+            className="[&_[data-slot=list-toolbar-filters]]:min-w-0 [&_[data-slot=list-toolbar-filters]]:shrink [&_[data-slot=list-toolbar-filters]]:self-center"
             idPrefix={prefix}
             formAriaLabel="结算单查询"
             onSubmit={applyFilters}
@@ -163,10 +211,31 @@ export function SettlementListToolbar({
             }
             moreCount={moreCount}
             moreOpen={panelOpen}
-            onToggleMore={() => setPanelOpen((open) => !open)}
+            onToggleMore={() =>
+                panelOpen ? cancelMoreFilters() : setPanelOpen(true)
+            }
             morePanelId={panelId}
             morePanelAriaLabel="结算单列表更多筛选条件"
             onResetMore={resetMoreFilters}
+            primaryFilters={
+                <>
+                    <ResidentSupplierFilter
+                        id={`${prefix}-filter-supplier`}
+                        value={supplierIdDraft}
+                        onValueChange={setSupplierIdDraft}
+                    />
+                    <MultiOptionCombobox
+                        id={`${prefix}-filter-status`}
+                        className="w-48 max-w-full min-w-0"
+                        filterLabel="状态"
+                        aria-label="状态"
+                        value={statusDraft}
+                        onValueChange={setStatusDraft}
+                        options={STATUS_FILTER_OPTIONS}
+                        placeholder="全部"
+                    />
+                </>
+            }
             commonFilters={
                 <FixedOptionRadioFilter
                     idPrefix={`${prefix}-filter-difference-type`}
@@ -178,88 +247,52 @@ export function SettlementListToolbar({
                 />
             }
             morePanel={
-                <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,2fr)]">
-                    <ResponsibleUserFilter
-                        id={`${prefix}-filter-owner`}
-                        label="对账负责人"
-                        value={ownerUserIdsDraft}
-                        onChange={setOwnerUserIdsDraft}
-                        options={ownerOptions}
-                    />
-                    <ResponsibleUserFilter
-                        id={`${prefix}-filter-operator`}
-                        label="差异处理人"
-                        value={operatorUserIdsDraft}
-                        onChange={setOperatorUserIdsDraft}
-                        options={operatorOptions}
-                    />
-                    <ResponsibleUserFilter
-                        id={`${prefix}-filter-handler`}
-                        label="当前复核人"
-                        value={handlerUserIdsDraft}
-                        onChange={setHandlerUserIdsDraft}
-                        options={handlerOptions}
-                    />
-                    <ListWorkspaceFilterField
-                        htmlFor={`${prefix}-filter-org`}
-                        label="业务组织"
-                    >
-                        <Input
-                            id={`${prefix}-filter-org`}
-                            value={orgUnitIdsDraft}
-                            onChange={(event) =>
-                                setOrgUnitIdsDraft(event.target.value)
-                            }
-                            placeholder="组织 ID，逗号分隔"
-                            aria-label="按结算业务组织筛选"
-                        />
-                        <label
-                            htmlFor={`${prefix}-filter-org-descendants`}
-                            className="mt-2 flex items-center gap-2 text-xs text-muted-foreground"
-                        >
-                            <Checkbox
-                                id={`${prefix}-filter-org-descendants`}
-                                checked={includeDescendantsDraft}
-                                onCheckedChange={(checked) =>
-                                    setIncludeDescendantsDraft(checked === true)
-                                }
+                <div className="space-y-5">
+                    <fieldset className="min-w-0 space-y-3">
+                        <legend className="mb-1 text-sm font-medium">
+                            人员
+                        </legend>
+                        <div className="grid min-w-0 gap-3">
+                            <ResponsibleUserFilter
+                                id={`${prefix}-filter-owner`}
+                                label="对账负责人"
+                                value={ownerUserIdsDraft}
+                                onChange={setOwnerUserIdsDraft}
+                                options={ownerOptions}
                             />
-                            包含下级
-                        </label>
-                    </ListWorkspaceFilterField>
-                    <ListWorkspaceFilterField
-                        htmlFor={`${prefix}-filter-supplier`}
-                        label="供应商"
-                    >
-                        <SupplierSearchCombobox
-                            id={`${prefix}-filter-supplier`}
-                            purpose="filter"
-                            className="w-full"
-                            value={supplierIdDraft ?? undefined}
-                            onValueChange={(id) =>
-                                setSupplierIdDraft(id ?? null)
-                            }
-                            aria-label="供应商"
-                            placeholder="全部供应商"
+                            <ResponsibleUserFilter
+                                id={`${prefix}-filter-operator`}
+                                label="差异处理人"
+                                value={operatorUserIdsDraft}
+                                onChange={setOperatorUserIdsDraft}
+                                options={operatorOptions}
+                            />
+                            <ResponsibleUserFilter
+                                id={`${prefix}-filter-handler`}
+                                label="当前复核人"
+                                value={handlerUserIdsDraft}
+                                onChange={setHandlerUserIdsDraft}
+                                options={handlerOptions}
+                            />
+                        </div>
+                    </fieldset>
+                    <fieldset className="min-w-0 border-t pt-4">
+                        <legend className="sr-only">业务组织</legend>
+                        <OrganizationUnitFilter
+                            id={`${prefix}-filter-org`}
+                            label="业务组织"
+                            value={orgUnitIdsDraft}
+                            onChange={setOrgUnitIdsDraft}
+                            includeDescendants={includeDescendantsDraft}
+                            onDescendantsChange={setIncludeDescendantsDraft}
                         />
-                    </ListWorkspaceFilterField>
-                    <ListWorkspaceFilterField
-                        htmlFor={`${prefix}-filter-status`}
-                        label="状态"
-                    >
-                        <MultiOptionCombobox
-                            id={`${prefix}-filter-status`}
-                            className="w-full"
-                            value={statusDraft}
-                            onValueChange={setStatusDraft}
-                            options={STATUS_FILTER_OPTIONS}
-                            placeholder="全部状态"
-                            aria-label="状态"
-                        />
-                    </ListWorkspaceFilterField>
-                    <ListWorkspaceFilterField label="结算期间">
+                    </fieldset>
+                    <fieldset className="min-w-0 border-t pt-4">
+                        <legend className="mb-3 text-sm font-medium">
+                            结算期间
+                        </legend>
                         <div
-                            className="flex items-center gap-1.5"
+                            className="flex min-w-0 items-center gap-1.5"
                             role="group"
                             aria-label="结算期间"
                             aria-describedby={
@@ -268,7 +301,7 @@ export function SettlementListToolbar({
                         >
                             <DatePicker
                                 id={`${prefix}-filter-period-from`}
-                                className="w-0 min-w-0 flex-1"
+                                className="w-0 min-w-0 flex-1 [&_button]:h-control"
                                 value={periodFromDraft || undefined}
                                 onValueChange={(next) => {
                                     setPeriodFromDraft(next ?? "")
@@ -280,7 +313,7 @@ export function SettlementListToolbar({
                             <span className="text-muted-foreground">至</span>
                             <DatePicker
                                 id={`${prefix}-filter-period-to`}
-                                className="w-0 min-w-0 flex-1"
+                                className="w-0 min-w-0 flex-1 [&_button]:h-control"
                                 value={periodToDraft || undefined}
                                 onValueChange={(next) => {
                                     setPeriodToDraft(next ?? "")
@@ -299,7 +332,7 @@ export function SettlementListToolbar({
                                 {periodError}
                             </span>
                         ) : null}
-                    </ListWorkspaceFilterField>
+                    </fieldset>
                 </div>
             }
             resultStatus={listWorkspaceFilterStatusText({

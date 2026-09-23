@@ -1,40 +1,176 @@
 "use client"
+
+import * as React from "react"
 import Link from "next/link"
-import { useRouter, useSearchParams } from "next/navigation"
-import { useAppForm } from "@/components/form"
-import { PageScaffold } from "@/components/business"
-import { Button } from "@/components/ui/button"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
+
+import { OptionCombobox, PageScaffold } from "@/components/business"
+import {
+    ListSearchField,
+    ListWorkspaceFilterBar,
+    ListWorkspaceFilterField,
+    listWorkspaceFilterStatusText,
+} from "@/components/business/list-workspace"
 import { CustomerSearchCombobox } from "@/features/entity-selectors/components/customer-search-combobox"
 import { SalesOrderSearchCombobox } from "@/features/entity-selectors/components/sales-order-search-combobox"
-import { InvoiceRequestPanel } from "./request-panel"
+import {
+    useInvoiceRequestPermissions,
+    useInvoiceRequests,
+} from "../hooks/queries"
 import { requestStatusLabels, type RequestStatus } from "../api"
-/** 客户往来开票申请页；筛选条件显式提交并保存在 URL。 */
+import { InvoiceRequestPanel } from "./request-panel"
+
+const STATUS_OPTIONS = (
+    Object.entries(requestStatusLabels) as [RequestStatus, string][]
+).map(([value, label]) => ({ value, label }))
+
+function isRequestStatus(value: string): value is RequestStatus {
+    return value in requestStatusLabels
+}
+
+/** 客户往来开票申请页；草稿不请求，查询后写入 URL 并回到第一页。 */
 export function InvoiceRequestsPage() {
     const params = useSearchParams()
     const router = useRouter()
-    const status = params.get("status") as RequestStatus | null
-    const form = useAppForm({
-        defaultValues: {
-            q: params.get("q") ?? "",
-            customerId: params.get("customerId") ?? "",
-            salesOrderId: params.get("salesOrderId") ?? "",
-            status: status ?? "",
-        },
-        onSubmit: ({ value }) => {
-            const next = new URLSearchParams()
-            for (const [key, entry] of Object.entries(value))
-                if (entry.trim()) next.set(key, entry.trim())
-            router.replace(
-                `/finance/customer-accounts/invoice-requests?${next}`,
-            )
-        },
-    })
+    const pathname = usePathname()
+    const appliedQuery = params.toString()
+    const q = params.get("q") ?? ""
+    const customerId = params.get("customerId") ?? ""
+    const salesOrderId = params.get("salesOrderId") ?? ""
+    const statusParam = params.get("status") ?? ""
+    const appliedStatus = isRequestStatus(statusParam) ? statusParam : ""
+    const [searchDraft, setSearchDraft] = React.useState(q)
+    const [customerDraft, setCustomerDraft] = React.useState(customerId)
+    const [orderDraft, setOrderDraft] = React.useState(salesOrderId)
+    const [statusDraft, setStatusDraft] = React.useState(appliedStatus)
+    const [panelOpen, setPanelOpen] = React.useState(false)
+    const permissions = useInvoiceRequestPermissions()
     const query = {
-        q: params.get("q") ?? undefined,
-        customer_id: params.get("customerId") ?? undefined,
-        sales_order_id: params.get("salesOrderId") ?? undefined,
-        status: status && status in requestStatusLabels ? status : undefined,
+        q: q.trim() || undefined,
+        customer_id: customerId || undefined,
+        sales_order_id: salesOrderId || undefined,
+        status: appliedStatus || undefined,
     }
+    const listQuery = useInvoiceRequests(
+        {
+            ...query,
+            page: 1,
+            page_size: 10,
+        },
+        permissions.canRead,
+    )
+
+    React.useEffect(() => {
+        setSearchDraft(q)
+        setCustomerDraft(customerId)
+        setOrderDraft(salesOrderId)
+        setStatusDraft(appliedStatus)
+    }, [appliedStatus, customerId, q, salesOrderId])
+
+    const replaceFilters = React.useCallback(
+        (nextValues: {
+            q: string
+            customerId: string
+            salesOrderId: string
+            status: string
+        }) => {
+            const next = new URLSearchParams(appliedQuery)
+            const write = (key: string, value: string) => {
+                const trimmed = value.trim()
+                if (trimmed) next.set(key, trimmed)
+                else next.delete(key)
+            }
+            write("q", nextValues.q)
+            write("customerId", nextValues.customerId)
+            write("salesOrderId", nextValues.salesOrderId)
+            write(
+                "status",
+                isRequestStatus(nextValues.status) ? nextValues.status : "",
+            )
+            const queryString = next.toString()
+            router.replace(
+                queryString ? `${pathname}?${queryString}` : pathname,
+                { scroll: false },
+            )
+            setPanelOpen(false)
+        },
+        [appliedQuery, pathname, router],
+    )
+
+    const applyFilters = React.useCallback(() => {
+        replaceFilters({
+            q: searchDraft,
+            customerId: customerDraft,
+            salesOrderId: orderDraft,
+            status: statusDraft,
+        })
+    }, [customerDraft, orderDraft, replaceFilters, searchDraft, statusDraft])
+
+    const resetMoreFilters = React.useCallback(() => {
+        setOrderDraft("")
+        setStatusDraft("")
+    }, [])
+
+    const cancelMoreFilters = React.useCallback(() => {
+        setOrderDraft(salesOrderId)
+        setStatusDraft(appliedStatus)
+        setPanelOpen(false)
+    }, [appliedStatus, salesOrderId])
+
+    const removeFilter = React.useCallback(
+        (key: "q" | "customerId" | "salesOrderId" | "status") => {
+            if (key === "q") setSearchDraft("")
+            if (key === "customerId") setCustomerDraft("")
+            if (key === "salesOrderId") setOrderDraft("")
+            if (key === "status") setStatusDraft("")
+            replaceFilters({
+                q: key === "q" ? "" : q,
+                customerId: key === "customerId" ? "" : customerId,
+                salesOrderId: key === "salesOrderId" ? "" : salesOrderId,
+                status: key === "status" ? "" : appliedStatus,
+            })
+        },
+        [appliedStatus, customerId, q, replaceFilters, salesOrderId],
+    )
+
+    const clearFilters = React.useCallback(() => {
+        setSearchDraft("")
+        setCustomerDraft("")
+        setOrderDraft("")
+        setStatusDraft("")
+        replaceFilters({
+            q: "",
+            customerId: "",
+            salesOrderId: "",
+            status: "",
+        })
+    }, [replaceFilters])
+
+    const chips = React.useMemo(() => {
+        const items: { key: string; label: string }[] = []
+        const queryText = q.trim()
+        if (queryText) items.push({ key: "q", label: `搜索：${queryText}` })
+        if (customerId) items.push({ key: "customerId", label: "已选客户" })
+        if (salesOrderId)
+            items.push({ key: "salesOrderId", label: "已选销售单" })
+        if (appliedStatus) {
+            items.push({
+                key: "status",
+                label: `状态：${requestStatusLabels[appliedStatus]}`,
+            })
+        }
+        return items
+    }, [appliedStatus, customerId, q, salesOrderId])
+
+    const moreCount = chips.filter(
+        ({ key }) => key === "salesOrderId" || key === "status",
+    ).length
+    const hasPendingChanges =
+        searchDraft.trim() !== q.trim() ||
+        customerDraft !== customerId ||
+        orderDraft !== salesOrderId ||
+        statusDraft !== appliedStatus
+
     return (
         <PageScaffold density="compact" className="space-y-6">
             <header>
@@ -70,113 +206,108 @@ export function InvoiceRequestsPage() {
                 </span>
             </nav>
             <InvoiceRequestPanel
-                key={params.toString()}
+                key={appliedQuery}
                 query={query}
                 toolbar={
-                    <form
-                        id="invoice-request-filters"
-                        className="grid items-end gap-3 md:grid-cols-2 xl:grid-cols-5"
-                        onSubmit={(e) => {
-                            e.preventDefault()
-                            void form.handleSubmit()
-                        }}
-                    >
-                        <form.AppField name="q">
-                            {(field) => (
-                                <field.TextField
-                                    id="invoice-request-search"
-                                    label="搜索"
-                                    placeholder="申请单号、抬头、事由"
-                                />
-                            )}
-                        </form.AppField>
-                        <form.AppField name="customerId">
-                            {(field) => (
-                                <div className="space-y-2 text-sm">
-                                    <label htmlFor="invoice-request-filter-customer">
-                                        客户
-                                    </label>
-                                    <CustomerSearchCombobox
-                                        id="invoice-request-filter-customer"
-                                        purpose="filter"
-                                        scope="all_authorized"
-                                        value={field.state.value}
-                                        onValueChange={(id) =>
-                                            field.handleChange(id ?? "")
-                                        }
-                                    />
-                                </div>
-                            )}
-                        </form.AppField>
-                        <form.AppField name="salesOrderId">
-                            {(field) => (
-                                <div className="space-y-2 text-sm">
-                                    <label htmlFor="invoice-request-filter-order">
-                                        销售单
-                                    </label>
+                    <ListWorkspaceFilterBar
+                        morePresentation="popover"
+                        moreSize="compact"
+                        className="[&_[data-slot=list-toolbar-filters]]:min-w-0 [&_[data-slot=list-toolbar-filters]]:shrink [&_[data-slot=list-toolbar-filters]]:self-center"
+                        idPrefix="invoice-request-filter"
+                        formAriaLabel="开票申请查询"
+                        onSubmit={applyFilters}
+                        queryButtonId="invoice-request-filter-apply"
+                        resetMoreButtonId="invoice-request-filter-reset"
+                        search={
+                            <ListSearchField
+                                id="invoice-request-search"
+                                value={searchDraft}
+                                onChange={setSearchDraft}
+                                placeholder="申请单号、抬头、事由"
+                                aria-label="搜索开票申请"
+                            />
+                        }
+                        moreCount={moreCount}
+                        moreOpen={panelOpen}
+                        onToggleMore={() =>
+                            panelOpen ? cancelMoreFilters() : setPanelOpen(true)
+                        }
+                        morePanelId="invoice-request-filter-more-panel"
+                        morePanelAriaLabel="开票申请更多筛选条件"
+                        onResetMore={resetMoreFilters}
+                        primaryFilters={
+                            <CustomerSearchCombobox
+                                id="invoice-request-filter-customer"
+                                className="w-56 max-w-full min-w-0"
+                                filterLabel="客户"
+                                purpose="filter"
+                                scope="all_authorized"
+                                value={customerDraft || undefined}
+                                onValueChange={(id) =>
+                                    setCustomerDraft(id ?? "")
+                                }
+                                placeholder="全部"
+                            />
+                        }
+                        morePanel={
+                            <div className="grid min-w-0 gap-4">
+                                <ListWorkspaceFilterField
+                                    htmlFor="invoice-request-filter-order"
+                                    label="销售单"
+                                >
                                     <SalesOrderSearchCombobox
                                         id="invoice-request-filter-order"
-                                        value={field.state.value}
+                                        className="w-full min-w-0"
+                                        value={orderDraft || undefined}
                                         onValueChange={(id) =>
-                                            field.handleChange(id ?? "")
+                                            setOrderDraft(id ?? "")
                                         }
+                                        placeholder="全部销售单"
                                     />
-                                </div>
-                            )}
-                        </form.AppField>
-                        <form.AppField name="status">
-                            {(field) => (
-                                <div className="space-y-2 text-sm">
-                                    <label htmlFor="invoice-request-filter-status">
-                                        状态
-                                    </label>
-                                    <select
+                                </ListWorkspaceFilterField>
+                                <ListWorkspaceFilterField
+                                    htmlFor="invoice-request-filter-status"
+                                    label="状态"
+                                >
+                                    <OptionCombobox
                                         id="invoice-request-filter-status"
-                                        className="h-9 w-full rounded-md border bg-background px-3"
-                                        value={field.state.value}
-                                        onChange={(e) =>
-                                            field.handleChange(e.target.value)
+                                        className="w-full min-w-0"
+                                        aria-label="状态"
+                                        value={statusDraft || null}
+                                        onValueChange={(value) =>
+                                            setStatusDraft(
+                                                value && isRequestStatus(value)
+                                                    ? value
+                                                    : "",
+                                            )
                                         }
-                                    >
-                                        <option value="">全部状态</option>
-                                        {Object.entries(
-                                            requestStatusLabels,
-                                        ).map(([value, label]) => (
-                                            <option key={value} value={value}>
-                                                {label}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-                            )}
-                        </form.AppField>
-                        <div className="flex gap-2">
-                            <Button
-                                id="invoice-request-filter-apply"
-                                type="submit"
-                            >
-                                搜索
-                            </Button>
-                            <Button
-                                id="invoice-request-filter-reset"
-                                type="button"
-                                variant="outline"
-                                onClick={() => {
-                                    form.reset({
-                                        q: "",
-                                        customerId: "",
-                                        salesOrderId: "",
-                                        status: "",
-                                    })
-                                    router.replace(
-                                        "/finance/customer-accounts/invoice-requests",
-                                    )
-                                }}
-                            >
-                                重置
-                            </Button>
-                        </div>
-                    </form>
+                                        options={STATUS_OPTIONS}
+                                        placeholder="全部状态"
+                                    />
+                                </ListWorkspaceFilterField>
+                            </div>
+                        }
+                        resultStatus={listWorkspaceFilterStatusText({
+                            loading: listQuery.isFetching,
+                            failed: listQuery.isError,
+                            resultCount: listQuery.data?.total,
+                            noun: "条申请",
+                            loadingLabel: "正在加载申请…",
+                        })}
+                        chips={chips}
+                        onClearChip={(key) =>
+                            removeFilter(
+                                key as
+                                    | "q"
+                                    | "customerId"
+                                    | "salesOrderId"
+                                    | "status",
+                            )
+                        }
+                        onClearAll={clearFilters}
+                        hasPendingChanges={hasPendingChanges}
+                        pendingHint="条件已修改，待查询"
+                    />
                 }
                 initialRequestId={params.get("requestId") ?? undefined}
                 initialCreate={params.get("create") === "1"}

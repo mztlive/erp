@@ -1,23 +1,20 @@
 "use client"
 
 import * as React from "react"
-import {
-    CategoryCombobox,
-    FixedOptionRadioFilter,
-    OptionCombobox,
-} from "@/components/business"
+
+import { CategoryCombobox, OptionCombobox } from "@/components/business"
 import {
     ListSearchField,
     ListWorkspaceFilterBar,
     ListWorkspaceFilterField,
-    ListWorkspaceInlineFilter,
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
 import { Input } from "@/components/ui/input"
 import type { SellableAppliedChip } from "./sellable-list-toolbar"
 import type { useSellableListFilters } from "@/features/master-data/hooks/use-sellable-list-filters"
 import type { useProductFilterOptionsQuery } from "@/features/master-data/hooks/queries"
-import { PRODUCT_KIND_RADIO_FILTER_OPTIONS } from "@/features/master-data/lib/list-filters"
+import { PRODUCT_KIND_FILTER_OPTIONS } from "@/features/master-data/lib/list-filters"
+import type { ProductKind } from "@/features/master-data/types"
 
 const prefix = "sellable-items-filter"
 const panelId = `${prefix}-more-panel`
@@ -63,9 +60,13 @@ export function SellableItemsFilterBar({
 
     return (
         <ListWorkspaceFilterBar
+            morePresentation="popover"
+            moreSize="wide"
+            className="[&_[data-slot=list-toolbar-filters]]:min-w-0 [&_[data-slot=list-toolbar-filters]]:shrink [&_[data-slot=list-toolbar-filters]]:self-center"
             idPrefix={prefix}
             formAriaLabel="公司商品池查询"
             onSubmit={f.applySellableFilters}
+            queryButtonId={`${prefix}-query`}
             search={
                 <ListSearchField
                     id={`${prefix}-search`}
@@ -78,53 +79,69 @@ export function SellableItemsFilterBar({
             }
             moreCount={moreCount}
             moreOpen={f.sellableFilterPanelOpen}
-            onToggleMore={() => f.setSellableFilterPanelOpen((open) => !open)}
+            onToggleMore={() =>
+                f.sellableFilterPanelOpen
+                    ? f.cancelMoreFilters()
+                    : f.setSellableFilterPanelOpen(true)
+            }
             morePanelId={panelId}
             morePanelAriaLabel="更多筛选条件"
+            moreButtonId={`${prefix}-more`}
+            resetMoreButtonId={`${prefix}-reset-more`}
+            clearButtonId={`${prefix}-clear`}
             onResetMore={f.resetMoreFilters}
-            commonFilters={
+            primaryFilters={
                 <>
-                    <FixedOptionRadioFilter
-                        idPrefix={`${prefix}-kind`}
-                        label="商品类型"
-                        variant="quiet"
-                        value={f.productKindDraft}
-                        onValueChange={f.setProductKindDraft}
-                        options={PRODUCT_KIND_RADIO_FILTER_OPTIONS}
-                    />
-                    <ListWorkspaceInlineFilter
-                        htmlFor={`${prefix}-category`}
-                        label="分类"
-                    >
-                        <CategoryCombobox
-                            id={`${prefix}-category`}
-                            className="w-full sm:w-60"
-                            aria-label="商品分类"
-                            categories={filterOptions.data?.categories ?? []}
-                            value={f.productCategoryIdDraft ?? undefined}
-                            onValueChange={(value) =>
-                                f.setProductCategoryIdDraft(value ?? null)
-                            }
-                            loading={filterOptions.isPending}
-                            placeholder="全部分类"
-                            emptyLabel={
-                                filterOptions.data?.unavailable?.includes(
-                                    "categories",
+                    <OptionCombobox
+                        id={`${prefix}-kind`}
+                        className="w-48 max-w-full min-w-0"
+                        filterLabel="商品类型"
+                        aria-label="商品类型"
+                        value={
+                            f.productKindDraft === "all"
+                                ? null
+                                : f.productKindDraft
+                        }
+                        options={PRODUCT_KIND_FILTER_OPTIONS}
+                        placeholder="全部"
+                        onValueChange={(value) =>
+                            f.setProductKindDraft(
+                                PRODUCT_KIND_FILTER_OPTIONS.some(
+                                    (option) => option.value === value,
                                 )
-                                    ? "当前账号无分类查询权限"
-                                    : "没有符合条件的分类"
-                            }
-                        />
-                    </ListWorkspaceInlineFilter>
+                                    ? (value as ProductKind)
+                                    : "all",
+                            )
+                        }
+                    />
+                    <CategoryCombobox
+                        id={`${prefix}-category`}
+                        className="w-56 max-w-full min-w-0"
+                        filterLabel="分类"
+                        categories={filterOptions.data?.categories ?? []}
+                        value={f.productCategoryIdDraft ?? undefined}
+                        onValueChange={(value) =>
+                            f.setProductCategoryIdDraft(value ?? null)
+                        }
+                        loading={filterOptions.isPending}
+                        placeholder="全部"
+                        emptyLabel={
+                            filterOptions.data?.unavailable?.includes(
+                                "categories",
+                            )
+                                ? "当前账号无分类查询权限"
+                                : "没有符合条件的分类"
+                        }
+                    />
                 </>
             }
             morePanel={
-                <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+                <div className="grid min-w-0 gap-5">
                     <fieldset className="min-w-0">
                         <legend className="mb-3 text-xs font-medium">
                             品牌与供货
                         </legend>
-                        <div className="grid min-w-0 gap-3 sm:grid-cols-3">
+                        <div className="grid min-w-0 gap-3 sm:grid-cols-2">
                             <ListWorkspaceFilterField
                                 htmlFor={`${prefix}-brand`}
                                 label="品牌"
@@ -174,6 +191,7 @@ export function SellableItemsFilterBar({
                                 />
                             </ListWorkspaceFilterField>
                             <ListWorkspaceFilterField
+                                className="sm:col-span-2"
                                 htmlFor={`${prefix}-region`}
                                 label="可供区域"
                             >
@@ -191,7 +209,7 @@ export function SellableItemsFilterBar({
                             </ListWorkspaceFilterField>
                         </div>
                     </fieldset>
-                    <fieldset className="min-w-0 lg:border-l lg:pl-5">
+                    <fieldset className="min-w-0">
                         <legend className="mb-3 text-xs font-medium">
                             销售价格
                         </legend>
@@ -200,7 +218,7 @@ export function SellableItemsFilterBar({
                                 <Input
                                     id={`${prefix}-price-min`}
                                     ref={priceInputRef}
-                                    className="w-0 min-w-0 flex-1"
+                                    className="h-control w-0 min-w-0 flex-1"
                                     aria-label="最低销售价"
                                     placeholder="最低价"
                                     inputMode="decimal"
@@ -226,7 +244,7 @@ export function SellableItemsFilterBar({
                                 </span>
                                 <Input
                                     id={`${prefix}-price-max`}
-                                    className="w-0 min-w-0 flex-1"
+                                    className="h-control w-0 min-w-0 flex-1"
                                     aria-label="最高销售价"
                                     placeholder="最高价"
                                     inputMode="decimal"

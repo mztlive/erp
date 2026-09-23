@@ -1,16 +1,21 @@
 "use client"
 
-import { BanIcon, CircleCheckIcon, PencilIcon } from "lucide-react"
+import { BanIcon, CircleCheckIcon, PencilIcon, PlusIcon } from "lucide-react"
 import { useState } from "react"
 import type { ColumnDef } from "@tanstack/react-table"
 import {
     DataTable,
+    PageActions,
     PageHeader,
     PageScaffold,
     TableRowActions,
 } from "@/components/business"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import {
+    ListSearchField,
+    ListWorkSurface,
+    ListWorkspaceFilterBar,
+    listWorkspaceFilterStatusText,
+} from "@/components/business/list-workspace"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
 import { getErrorMessage } from "@/lib/api/errors"
@@ -34,6 +39,16 @@ export const CompaniesPage = () => {
         page_size: pagination.pageSize,
     })
     const mutation = useSaveCompanyMutation()
+    const appliedKeyword = keyword.trim()
+    const applySearch = () => {
+        setKeyword(search.trim())
+        setPagination((current) => ({ ...current, pageIndex: 0 }))
+    }
+    const clearSearch = () => {
+        setSearch("")
+        setKeyword("")
+        setPagination((current) => ({ ...current, pageIndex: 0 }))
+    }
     const changeStatus = async (company: Company) => {
         setError("")
         const { id, ...input } = company
@@ -116,53 +131,81 @@ export const CompaniesPage = () => {
             <PageHeader
                 title="公司主体"
                 description="维护我方签约、付款公司及导入别名。停用后不再用于新资料选择，历史引用继续保留。"
+                actions={
+                    <PageActions
+                        actions={[
+                            {
+                                id: "companies-create",
+                                actionKey: "create",
+                                label: "新建公司主体",
+                                icon: PlusIcon,
+                                disabled: !canCreate,
+                                onClick: () => setEditing("new"),
+                            },
+                        ]}
+                    />
+                }
             />
-            <form
-                className="flex flex-wrap items-center gap-3"
-                onSubmit={(e) => {
-                    e.preventDefault()
-                    setKeyword(search.trim())
-                    setPagination((p) => ({ ...p, pageIndex: 0 }))
-                }}
-            >
-                <Input
-                    id="companies-search"
-                    aria-label="搜索公司名称或别名"
-                    placeholder="搜索公司名称或别名"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    className="max-w-sm"
-                />
-                <Button
-                    id="companies-search-submit"
-                    type="submit"
-                    variant="outline"
-                >
-                    查询
-                </Button>
-                <Button
-                    id="companies-create"
-                    type="button"
-                    disabled={!canCreate}
-                    onClick={() => setEditing("new")}
-                >
-                    新建公司主体
-                </Button>
-            </form>
             {(error || query.isError) && (
                 <p role="alert" className="text-sm text-destructive">
                     {error || getErrorMessage(query.error, "公司主体加载失败")}
                 </p>
             )}
-            <DataTable
-                id="companies-table"
-                data={query.data?.items ?? []}
-                columns={columns}
-                getRowId={(row) => row.id}
-                rowCount={query.data?.total ?? 0}
-                pagination={pagination}
-                onPaginationChange={setPagination}
-                loading={query.isFetching}
+            <ListWorkSurface
+                ariaLabel="公司主体列表"
+                toolbar={
+                    <ListWorkspaceFilterBar
+                        morePresentation="popover"
+                        idPrefix="companies"
+                        formAriaLabel="公司主体查询"
+                        onSubmit={applySearch}
+                        queryButtonId="companies-search-submit"
+                        clearButtonId="companies-clear"
+                        search={
+                            <ListSearchField
+                                id="companies-search"
+                                value={search}
+                                onChange={setSearch}
+                                placeholder="搜索公司名称或别名"
+                                aria-label="搜索公司名称或别名"
+                            />
+                        }
+                        resultStatus={listWorkspaceFilterStatusText({
+                            loading: query.isFetching,
+                            failed: query.isError,
+                            resultCount: query.data
+                                ? query.data.total
+                                : undefined,
+                            noun: "条",
+                            loadingLabel: "正在加载公司主体…",
+                        })}
+                        chips={
+                            appliedKeyword
+                                ? [
+                                      {
+                                          key: "q",
+                                          label: `搜索：${appliedKeyword}`,
+                                      },
+                                  ]
+                                : []
+                        }
+                        onClearChip={clearSearch}
+                        onClearAll={clearSearch}
+                        hasPendingChanges={search.trim() !== appliedKeyword}
+                    />
+                }
+                table={
+                    <DataTable
+                        id="companies-table"
+                        data={query.data?.items ?? []}
+                        columns={columns}
+                        getRowId={(row) => row.id}
+                        rowCount={query.data?.total ?? 0}
+                        pagination={pagination}
+                        onPaginationChange={setPagination}
+                        loading={query.isFetching}
+                    />
+                }
             />
             {editing && (
                 <CompanyForm

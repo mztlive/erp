@@ -255,6 +255,10 @@ export function CustomerCenterPage() {
                         appliedChips={directoryState.appliedChips}
                         removeFilter={directoryState.removeFilter}
                         applyFilters={directoryState.applyFilters}
+                        panelOpen={directoryState.panelOpen}
+                        setPanelOpen={directoryState.setPanelOpen}
+                        resetMoreFilters={directoryState.resetMoreFilters}
+                        cancelMoreFilters={directoryState.cancelMoreFilters}
                         clearAllFilters={directoryState.clearAllFilters}
                         hasPendingChanges={directoryState.hasPendingChanges}
                         resultCount={data?.totalInScope}

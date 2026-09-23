@@ -36,6 +36,10 @@ export type SupplierOfferingAppliedChip = Readonly<{
     label: string
 }>
 
+function selectedCount(value: string) {
+    return value.split(",").filter((part) => part.trim()).length
+}
+
 /**
  * 把 Tab 以外的已生效条件派生为可单独移除的 chip（docs/ui-filter-design.md §3.6）。
  * 公司 SKU 显示业务编号、供应商显示业务名称，不展示内部 ID（§4.5）；
@@ -88,19 +92,19 @@ export function buildSupplierOfferingAppliedChips(
     if (urlState.ownerUserIds) {
         chips.push({
             key: "ownerUserIds",
-            label: `维护人：${urlState.ownerUserIds}`,
+            label: `维护人：已选 ${selectedCount(urlState.ownerUserIds)} 人`,
         })
     }
     if (urlState.procurementOwnerUserIds) {
         chips.push({
             key: "procurementOwnerUserIds",
-            label: `采购负责人：${urlState.procurementOwnerUserIds}`,
+            label: `采购负责人：已选 ${selectedCount(urlState.procurementOwnerUserIds)} 人`,
         })
     }
     if (urlState.orgUnitIds) {
         chips.push({
             key: "orgUnitIds",
-            label: `业务组织：${urlState.orgUnitIds}`,
+            label: `业务组织：已选 ${selectedCount(urlState.orgUnitIds)} 个${urlState.includeDescendants ? "（含下级）" : ""}`,
         })
     }
     return chips
@@ -110,8 +114,8 @@ export function buildSupplierOfferingAppliedChips(
  * 供应商供给列表页的 URL 状态、筛选草稿与导航补丁。
  *
  * 契约：已生效筛选全部由 URL 派生；草稿只在提交时写入 URL，
- * 后退/前进/清除通过 URL 回填草稿。面板展开态属于 UI 状态，
- * URL 回填只同步草稿，不抢夺当前展开态（docs/ui-filter-design.md §5）。
+ * 后退/前进/清除通过 URL 回填草稿。面板初始关闭，深链不自动打开。
+ * 取消、关闭、Esc 和外点只恢复低频草稿，保留搜索和常驻草稿。
  */
 export function useSupplierOfferingsPageState() {
     const router = useRouter()
@@ -135,18 +139,6 @@ export function useSupplierOfferingsPageState() {
         urlState.productNo ||
         urlState.supplierId ||
         urlState.status ||
-        urlState.sourceType ||
-        urlState.availabilityStatus ||
-        urlState.ownerUserIds ||
-        urlState.procurementOwnerUserIds ||
-        urlState.orgUnitIds ||
-        urlState.includeDescendants,
-    )
-    const hasMoreFilters = Boolean(
-        (!skuLocked && urlState.skuId) ||
-        urlState.skuNo ||
-        urlState.productNo ||
-        urlState.supplierId ||
         urlState.sourceType ||
         urlState.availabilityStatus ||
         urlState.ownerUserIds ||
@@ -196,8 +188,8 @@ export function useSupplierOfferingsPageState() {
     )
     const [includeDescendantsDraft, setIncludeDescendantsDraft] =
         React.useState(Boolean(urlState.includeDescendants))
-    /** 初始深链带结构化条件时展开；此后展开态只由用户与提交结果控制（§5.5）。 */
-    const [filterPanelOpen, setFilterPanelOpen] = React.useState(hasMoreFilters)
+    /** 深链条件显示为已生效标签，不自动打开浮层。 */
+    const [filterPanelOpen, setFilterPanelOpen] = React.useState(false)
 
     /** 合并 URL 补丁并保留未变的导航上下文。 */
     const patchUrl = React.useCallback(
@@ -213,6 +205,8 @@ export function useSupplierOfferingsPageState() {
 
     /** 一次提交关键词与全部结构化筛选草稿；成功后收起面板（§8.1）。 */
     const applyFilters = React.useCallback(() => {
+        const orgUnitIds = orgUnitIdsDraft.trim()
+        if (!orgUnitIds) setIncludeDescendantsDraft(false)
         patchUrl({
             q: searchDraft.trim() || undefined,
             skuId: skuIdDraft || undefined,
@@ -227,8 +221,9 @@ export function useSupplierOfferingsPageState() {
             ownerUserIds: ownerUserIdsDraft.trim() || undefined,
             procurementOwnerUserIds:
                 procurementOwnerUserIdsDraft.trim() || undefined,
-            orgUnitIds: orgUnitIdsDraft.trim() || undefined,
-            includeDescendants: includeDescendantsDraft || undefined,
+            orgUnitIds: orgUnitIds || undefined,
+            includeDescendants:
+                orgUnitIds && includeDescendantsDraft ? true : undefined,
             scopeVersion: undefined,
             page: 1,
         })
@@ -283,12 +278,20 @@ export function useSupplierOfferingsPageState() {
             }
             if (key === "sourceType") {
                 setSourceTypeDraft("all")
-                patchUrl({ sourceType: undefined, page: 1, scopeVersion: undefined })
+                patchUrl({
+                    sourceType: undefined,
+                    page: 1,
+                    scopeVersion: undefined,
+                })
                 return
             }
             if (key === "ownerUserIds") {
                 setOwnerUserIdsDraft("")
-                patchUrl({ ownerUserIds: undefined, page: 1, scopeVersion: undefined })
+                patchUrl({
+                    ownerUserIds: undefined,
+                    page: 1,
+                    scopeVersion: undefined,
+                })
                 return
             }
             if (key === "procurementOwnerUserIds") {
@@ -312,27 +315,51 @@ export function useSupplierOfferingsPageState() {
                 return
             }
             setAvailabilityStatusDraft("all")
-            patchUrl({ availabilityStatus: undefined, page: 1, scopeVersion: undefined })
+            patchUrl({
+                availabilityStatus: undefined,
+                page: 1,
+                scopeVersion: undefined,
+            })
         },
         [clearSkuLock, patchUrl],
     )
 
     /**
-     * 仅重置更多条件草稿；保留关键词、关系状态与已生效结果。
+     * 仅重置低频草稿；保留关键词、常驻条件与已生效结果。
      * 商品页带入的 skuId 属于导航上下文，不在此清除。
      */
     const resetMoreFilters = React.useCallback(() => {
         setSkuNoDraft("")
         setProductNoDraft("")
-        setSupplierIdDraft(null)
         setSourceTypeDraft("all")
-        setAvailabilityStatusDraft("all")
         setOwnerUserIdsDraft("")
         setProcurementOwnerUserIdsDraft("")
         setOrgUnitIdsDraft("")
         setIncludeDescendantsDraft(false)
         if (!skuLocked) setSkuIdDraft(null)
     }, [skuLocked])
+
+    /** 关闭面板时只撤销低频草稿；保留搜索、供应商和当前可供。 */
+    const cancelMoreFilters = React.useCallback(() => {
+        setSkuIdDraft(urlState.skuId ?? null)
+        setSkuNoDraft(urlState.skuNo ?? "")
+        setProductNoDraft(urlState.productNo ?? "")
+        setSourceTypeDraft(urlState.sourceType ?? "all")
+        setOwnerUserIdsDraft(urlState.ownerUserIds ?? "")
+        setProcurementOwnerUserIdsDraft(urlState.procurementOwnerUserIds ?? "")
+        setOrgUnitIdsDraft(urlState.orgUnitIds ?? "")
+        setIncludeDescendantsDraft(Boolean(urlState.includeDescendants))
+        setFilterPanelOpen(false)
+    }, [
+        urlState.includeDescendants,
+        urlState.orgUnitIds,
+        urlState.ownerUserIds,
+        urlState.procurementOwnerUserIds,
+        urlState.productNo,
+        urlState.skuId,
+        urlState.skuNo,
+        urlState.sourceType,
+    ])
 
     /**
      * 清空关键词与全部筛选参数并收起面板；商品页带入的 skuId 与 returnTo
@@ -425,11 +452,15 @@ export function useSupplierOfferingsPageState() {
         urlState.availabilityStatus
             ? `当前可供：${AVAILABILITY_STATUS_LABELS[urlState.availabilityStatus]}`
             : null,
-        urlState.ownerUserIds ? `维护人：${urlState.ownerUserIds}` : null,
-        urlState.procurementOwnerUserIds
-            ? `采购负责人：${urlState.procurementOwnerUserIds}`
+        urlState.ownerUserIds
+            ? `维护人：已选 ${selectedCount(urlState.ownerUserIds)} 人`
             : null,
-        urlState.orgUnitIds ? `业务组织：${urlState.orgUnitIds}` : null,
+        urlState.procurementOwnerUserIds
+            ? `采购负责人：已选 ${selectedCount(urlState.procurementOwnerUserIds)} 人`
+            : null,
+        urlState.orgUnitIds
+            ? `业务组织：已选 ${selectedCount(urlState.orgUnitIds)} 个${urlState.includeDescendants ? "（含下级）" : ""}`
+            : null,
     ].filter(Boolean)
 
     const hasPendingChanges =
@@ -483,6 +514,7 @@ export function useSupplierOfferingsPageState() {
         clearSkuLock,
         removeFilter,
         resetMoreFilters,
+        cancelMoreFilters,
         appliedFilterLabels,
         hasPendingChanges,
     }

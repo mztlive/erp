@@ -2,12 +2,11 @@
 
 import * as React from "react"
 
-import { FixedOptionRadioFilter, OptionCombobox } from "@/components/business"
+import { OptionCombobox } from "@/components/business"
 import {
     ListSearchField,
     ListWorkspaceFilterBar,
     ListWorkspaceFilterField,
-    ListWorkspaceInlineFilter,
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
 import { DateRangePicker } from "@/components/ui/date-picker"
@@ -51,6 +50,7 @@ type AccessListToolbarProps = {
     actionOptions?: readonly { value: string; label: string }[]
     filterError?: string | null
     resetMoreFilters?: () => void
+    onCancelMoreFilters?: () => void
     hasPendingChanges?: boolean
     resultCount?: number
     loading?: boolean
@@ -73,6 +73,7 @@ function AccessListToolbar({
     actionOptions = [],
     filterError,
     resetMoreFilters,
+    onCancelMoreFilters,
     hasPendingChanges = false,
     resultCount,
     loading,
@@ -89,6 +90,8 @@ function AccessListToolbar({
 
     return (
         <ListWorkspaceFilterBar
+            morePresentation="popover"
+            moreSize="wide"
             idPrefix={idPrefix}
             formAriaLabel={isAudit ? "审计事件查询" : "角色查询"}
             onSubmit={applyFilters}
@@ -116,71 +119,93 @@ function AccessListToolbar({
             moreCount={moreCount}
             moreOpen={panelOpen}
             onToggleMore={
-                showMore ? () => setPanelOpen((open) => !open) : undefined
+                showMore
+                    ? () => {
+                          if (!panelOpen) {
+                              setPanelOpen(true)
+                              return
+                          }
+                          if (onCancelMoreFilters) onCancelMoreFilters()
+                          else setPanelOpen(false)
+                      }
+                    : undefined
             }
             moreButtonId="operations-audit-toolbar-filter-trigger"
             morePanelId="operations-audit-toolbar-more-panel"
             morePanelAriaLabel="审计查询更多筛选条件"
             onResetMore={showMore ? resetMoreFilters : undefined}
             resetMoreButtonId="operations-audit-toolbar-reset-filters"
-            commonFilters={
+            primaryFilters={
                 showMore ? (
                     <>
-                        <ListWorkspaceInlineFilter
-                            htmlFor="operations-audit-toolbar-date-range"
-                            label="时间范围"
-                        >
-                            <DateRangePicker
-                                id="operations-audit-toolbar-date-range"
-                                className="w-full sm:w-72"
-                                value={{
-                                    from: draft.from,
-                                    to: draft.to,
-                                }}
-                                onValueChange={(next) => {
-                                    updateDraft("from", next?.from ?? "")
-                                    updateDraft("to", next?.to ?? "")
-                                }}
-                                placeholder="选择审计时间范围"
-                                aria-invalid={Boolean(filterError)}
-                                aria-describedby={
-                                    filterError ? dateErrorId : undefined
-                                }
-                            />
-                        </ListWorkspaceInlineFilter>
-                        <FixedOptionRadioFilter
-                            id="operations-audit-toolbar-filter-result"
-                            label="结果"
-                            variant="quiet"
-                            value={draft.result}
-                            onValueChange={(value) =>
-                                updateDraft("result", value)
+                        <DateRangePicker
+                            id="operations-audit-toolbar-date-range"
+                            className="w-56 max-w-full min-w-0 [&_button]:h-control"
+                            filterLabel="时间范围"
+                            value={{
+                                from: draft.from,
+                                to: draft.to,
+                            }}
+                            onValueChange={(next) => {
+                                updateDraft("from", next?.from ?? "")
+                                updateDraft("to", next?.to ?? "")
+                            }}
+                            placeholder="全部"
+                            aria-invalid={Boolean(filterError)}
+                            aria-describedby={
+                                filterError ? dateErrorId : undefined
                             }
-                            options={RESULT_FILTER_RADIO_OPTIONS}
                         />
-                        {filterError ? (
-                            <p
-                                id={dateErrorId}
-                                className="text-xs text-destructive"
-                                role="alert"
-                            >
-                                {filterError}
-                            </p>
-                        ) : null}
+                        <OptionCombobox
+                            id="operations-audit-toolbar-filter-result"
+                            className="w-48 max-w-full min-w-0"
+                            filterLabel="结果"
+                            aria-label="结果"
+                            value={draft.result}
+                            allowClear={false}
+                            onValueChange={(value) => {
+                                const next = (value ??
+                                    "all") as AccessFilterDraft["result"]
+                                if (
+                                    !RESULT_FILTER_RADIO_OPTIONS.some(
+                                        (option) => option.value === next,
+                                    )
+                                ) {
+                                    return
+                                }
+                                updateDraft("result", next)
+                            }}
+                            options={RESULT_FILTER_RADIO_OPTIONS}
+                            placeholder="全部"
+                        />
                     </>
+                ) : undefined
+            }
+            commonFilters={
+                showMore && filterError ? (
+                    <p
+                        id={dateErrorId}
+                        className="text-xs text-destructive"
+                        role="alert"
+                    >
+                        {filterError}
+                    </p>
                 ) : undefined
             }
             morePanel={
                 showMore ? (
-                    <div className="grid min-w-0 gap-5">
-                        <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <fieldset className="min-w-0 space-y-3">
+                        <legend className="mb-1 text-sm font-medium">
+                            事件定位
+                        </legend>
+                        <div className="grid min-w-0 gap-3 sm:grid-cols-2">
                             <ListWorkspaceFilterField
                                 htmlFor="operations-audit-toolbar-action"
                                 label="动作"
                             >
                                 <OptionCombobox
                                     id="operations-audit-toolbar-action"
-                                    className="w-full"
+                                    className="w-full min-w-0"
                                     value={
                                         draft.action === "all"
                                             ? null
@@ -200,7 +225,7 @@ function AccessListToolbar({
                             >
                                 <Input
                                     id="operations-audit-toolbar-actor"
-                                    className="w-full"
+                                    className="w-full min-w-0"
                                     value={draft.actorId}
                                     onChange={(event) =>
                                         updateDraft(
@@ -219,7 +244,7 @@ function AccessListToolbar({
                             >
                                 <Input
                                     id="operations-audit-toolbar-trace"
-                                    className="w-full"
+                                    className="w-full min-w-0"
                                     value={draft.traceId}
                                     onChange={(event) =>
                                         updateDraft(
@@ -238,7 +263,7 @@ function AccessListToolbar({
                             >
                                 <Input
                                     id="operations-audit-toolbar-object"
-                                    className="w-full"
+                                    className="w-full min-w-0"
                                     value={draft.objectId}
                                     onChange={(event) =>
                                         updateDraft(
@@ -252,7 +277,7 @@ function AccessListToolbar({
                                 />
                             </ListWorkspaceFilterField>
                         </div>
-                    </div>
+                    </fieldset>
                 ) : undefined
             }
             resultStatus={listWorkspaceFilterStatusText({

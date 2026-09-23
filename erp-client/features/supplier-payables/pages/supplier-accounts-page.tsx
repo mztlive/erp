@@ -49,6 +49,7 @@ export function SupplierAccountsPage() {
         appliedChips,
         applyFilters,
         resetMoreFilters,
+        cancelMoreFilters,
         hasPendingChanges,
         removeFilter,
         supplierDraft,
@@ -118,6 +119,7 @@ export function SupplierAccountsPage() {
             appliedChips={appliedChips}
             applyFilters={applyFilters}
             resetMoreFilters={resetMoreFilters}
+            cancelMoreFilters={cancelMoreFilters}
             clearAllFilters={clearFilters}
             removeFilter={removeFilter}
             supplierDraft={supplierDraft}

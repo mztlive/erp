@@ -91,18 +91,6 @@ export function useSupplierOrdersFilters(
         url.handlerUserIds ||
         url.orgUnitIds,
     )
-    /** 更多面板初始展开只认非常用条件。 */
-    const hasMoreFilters = Boolean(
-        url.cancelStatuses?.length ||
-        url.refundStatuses?.length ||
-        url.aftersalePending ||
-        url.paidFrom ||
-        url.paidTo ||
-        url.ownerUserIds ||
-        url.handlerUserIds ||
-        url.orgUnitIds,
-    )
-
     const { searchDraft, setSearchDraft } = useSupplierOrdersSearchDraft({
         q: url.q,
         searchInputRef,
@@ -137,7 +125,8 @@ export function useSupplierOrdersFilters(
     const [includeDescendantsDraft, setIncludeDescendantsDraft] =
         React.useState(Boolean(url.includeDescendants))
 
-    const [panelOpen, setPanelOpen] = React.useState(hasMoreFilters)
+    /** 深链条件显示为标签，不自动打开浮层。 */
+    const [panelOpen, setPanelOpen] = React.useState(false)
     const [filterError, setFilterError] = React.useState<string | null>(null)
 
     // 供应商名称解析（chip 文案用业务名称，不展示内部 ID）；无 supplierId 时不请求。
@@ -179,7 +168,10 @@ export function useSupplierOrdersFilters(
             ownerUserIds: ownerUserIdsDraft.trim() || undefined,
             handlerUserIds: handlerUserIdsDraft.trim() || undefined,
             orgUnitIds: orgUnitIdsDraft.trim() || undefined,
-            includeDescendants: includeDescendantsDraft || undefined,
+            includeDescendants:
+                orgUnitIdsDraft.trim() && includeDescendantsDraft
+                    ? true
+                    : undefined,
             page: 1,
         })
         setPanelOpen(false)
@@ -242,7 +234,32 @@ export function useSupplierOrdersFilters(
         [setSearchDraft, updateUrl],
     )
 
-    /** 仅清除更多筛选草稿；保留关键词、供应商、履约状态与当前结果。 */
+    /** 取消、关闭、Esc 和外点只恢复低频草稿，保留搜索、供应商和履约状态。 */
+    const cancelMoreFilters = React.useCallback(() => {
+        setCancelStatusesDraft(url.cancelStatuses ?? [])
+        setRefundStatusesDraft(url.refundStatuses ?? [])
+        setAftersalePendingDraft(Boolean(url.aftersalePending))
+        setPaidFromDraft(url.paidFrom ?? "")
+        setPaidToDraft(url.paidTo ?? "")
+        setOwnerUserIdsDraft(url.ownerUserIds ?? "")
+        setHandlerUserIdsDraft(url.handlerUserIds ?? "")
+        setOrgUnitIdsDraft(url.orgUnitIds ?? "")
+        setIncludeDescendantsDraft(Boolean(url.includeDescendants))
+        setFilterError(null)
+        setPanelOpen(false)
+    }, [
+        url.aftersalePending,
+        url.cancelStatuses,
+        url.handlerUserIds,
+        url.includeDescendants,
+        url.orgUnitIds,
+        url.ownerUserIds,
+        url.paidFrom,
+        url.paidTo,
+        url.refundStatuses,
+    ])
+
+    /** 只清低频草稿；保留关键词、供应商、履约状态与当前结果。 */
     const resetMoreFilters = React.useCallback(() => {
         setCancelStatusesDraft([])
         setRefundStatusesDraft([])
@@ -449,6 +466,7 @@ export function useSupplierOrdersFilters(
         applyFilters,
         removeFilter,
         resetMoreFilters,
+        cancelMoreFilters,
         clearAllFilters,
     }
 }

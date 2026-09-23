@@ -12,6 +12,7 @@ import {
     ComboboxItem,
     ComboboxList,
 } from "@/components/ui/combobox"
+import { InputGroupAddon } from "@/components/ui/input-group"
 import {
     remoteSearchFromInputChange,
     useStickySelected,
@@ -51,6 +52,8 @@ interface BusinessObjectComboboxProps {
     /** 服务端已完成搜索时关闭本地二次过滤。 */
     filterMode?: "local" | "remote"
     label: string
+    /** 查询栏常驻名称。不传时选择器外观保持原样。 */
+    filterLabel?: string
     placeholder?: string
     emptyLabel?: string
     loading?: boolean
@@ -71,6 +74,7 @@ function BusinessObjectCombobox({
     onBlur,
     filterMode = "local",
     label,
+    filterLabel,
     placeholder = "搜索名称或编号",
     emptyLabel = "没有符合条件的对象",
     loading = false,
@@ -135,7 +139,13 @@ function BusinessObjectCombobox({
                     onBlur={onBlur}
                     disabled={disabled}
                     className="w-full"
-                />
+                >
+                    {filterLabel ? (
+                        <InputGroupAddon className="shrink-0 whitespace-nowrap font-normal">
+                            {filterLabel}：
+                        </InputGroupAddon>
+                    ) : null}
+                </ComboboxInput>
                 <ComboboxContent>
                     <ComboboxEmpty>
                         {loading ? "正在加载…" : emptyLabel}

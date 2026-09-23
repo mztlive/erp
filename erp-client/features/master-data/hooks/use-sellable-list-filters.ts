@@ -251,6 +251,28 @@ export function useSellableListFilters(
         setSupplyRegionDraft,
     ])
 
+    /** 取消、外点和 Esc 只恢复低频草稿，保留搜索、商品类型和分类。 */
+    const cancelMoreFilters = React.useCallback(() => {
+        setProductBrandIdDraft(productBrandId ?? null)
+        setProductSupplierIdDraft(productSupplierId ?? null)
+        setSupplyRegionDraft(supplyRegion ?? "")
+        setProductSalesPriceMinDraft(productSalesPriceMin ?? "")
+        setProductSalesPriceMaxDraft(productSalesPriceMax ?? "")
+        setProductSalesPriceError(null)
+        setSellableFilterPanelOpen(false)
+    }, [
+        productBrandId,
+        productSalesPriceMax,
+        productSalesPriceMin,
+        productSupplierId,
+        setProductBrandIdDraft,
+        setProductSalesPriceMaxDraft,
+        setProductSalesPriceMinDraft,
+        setProductSupplierIdDraft,
+        setSupplyRegionDraft,
+        supplyRegion,
+    ])
+
     const hasPendingChanges =
         searchDraft.trim() !== q.trim() ||
         productKindDraft !== (productKind ?? "all") ||
@@ -377,6 +399,7 @@ export function useSellableListFilters(
         applySupplyPreset,
         removeFilter,
         resetMoreFilters,
+        cancelMoreFilters,
         clearAllFilters,
     }
 }

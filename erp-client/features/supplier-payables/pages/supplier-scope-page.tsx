@@ -12,9 +12,9 @@ import {
 } from "@/components/business"
 import {
     ListWorkspaceFilterBar,
-    ListWorkspaceFilterField,
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
+import { OrganizationUnitFilter } from "@/features/organization/components/organization-unit-filter"
 import { ListSearchField } from "@/components/business/list-search-field"
 import { ListWorkspaceHeader } from "@/components/business/list-workspace"
 import { PageScaffold } from "@/components/business"
@@ -333,6 +333,9 @@ export function SupplierScopePage() {
                 toolbar={
                     <ListWorkspaceFilterBar
                         density="compact"
+                        morePresentation="popover"
+                        moreSize="compact"
+                        className="[&_[data-slot=list-toolbar-filters]]:min-w-0 [&_[data-slot=list-toolbar-filters]]:shrink [&_[data-slot=list-toolbar-filters]]:self-center"
                         idPrefix={toolbarPrefix}
                         formAriaLabel="供应商往来范围查询"
                         onSubmit={urlState.applyFilters}
@@ -349,28 +352,36 @@ export function SupplierScopePage() {
                                 aria-label="搜索供应商往来范围"
                             />
                         }
-                        moreCount={urlState.appliedChips.length}
+                        moreCount={
+                            urlState.appliedChips.filter(
+                                ({ key }) =>
+                                    key === "operatorUserIds" ||
+                                    key === "orgUnitIds",
+                            ).length
+                        }
                         moreOpen={urlState.panelOpen}
                         onToggleMore={() =>
-                            urlState.setPanelOpen((open) => !open)
+                            urlState.panelOpen
+                                ? urlState.cancelMoreFilters()
+                                : urlState.setPanelOpen(true)
                         }
                         morePanelId={`${toolbarPrefix}-more-panel`}
                         morePanelAriaLabel="供应商往来范围更多筛选条件"
-                        onResetMore={() => {
-                            urlState.setProcurementOwnerDraft("")
-                            urlState.setOperatorDraft("")
-                            urlState.setOrgDraft("")
-                            urlState.setDescendantsDraft(false)
-                        }}
-                        morePanel={
-                            <div className="grid min-w-0 gap-5">
+                        onResetMore={urlState.resetMoreFilters}
+                        primaryFilters={
+                            <div className="w-56 max-w-full min-w-0">
                                 <ResponsibleUserFilter
                                     id={`${toolbarPrefix}-procurement-owner`}
                                     label="采购负责人"
+                                    hideLabel
                                     value={urlState.procurementOwnerDraft}
                                     onChange={urlState.setProcurementOwnerDraft}
                                     options={data?.ownerOptions ?? []}
                                 />
+                            </div>
+                        }
+                        morePanel={
+                            <div className="grid min-w-0 gap-5">
                                 <ResponsibleUserFilter
                                     id={`${toolbarPrefix}-operator`}
                                     label={
@@ -385,39 +396,18 @@ export function SupplierScopePage() {
                                     onChange={urlState.setOperatorDraft}
                                     options={data?.ownerOptions ?? []}
                                 />
-                                <ListWorkspaceFilterField
-                                    htmlFor={`${toolbarPrefix}-org`}
-                                    label="业务组织（逗号分隔组织 ID）"
-                                >
-                                    <input
-                                        id={`${toolbarPrefix}-org`}
-                                        className="h-9 w-full min-w-0 rounded-md border bg-background px-3 text-sm"
-                                        value={urlState.orgDraft}
-                                        onChange={(event) =>
-                                            urlState.setOrgDraft(
-                                                event.target.value,
-                                            )
-                                        }
-                                        placeholder="全部组织"
-                                        aria-label="筛选业务组织"
-                                    />
-                                </ListWorkspaceFilterField>
-                                <label
-                                    htmlFor={`${toolbarPrefix}-include-descendants`}
-                                    className="flex min-w-0 items-center gap-2 text-sm"
-                                >
-                                    <input
-                                        id={`${toolbarPrefix}-include-descendants`}
-                                        type="checkbox"
-                                        checked={urlState.descendantsDraft}
-                                        onChange={(event) =>
-                                            urlState.setDescendantsDraft(
-                                                event.target.checked,
-                                            )
-                                        }
-                                    />
-                                    包含下级组织
-                                </label>
+                                <OrganizationUnitFilter
+                                    id={`${toolbarPrefix}-org`}
+                                    label="业务组织"
+                                    value={urlState.orgDraft}
+                                    onChange={urlState.setOrgDraft}
+                                    includeDescendants={
+                                        urlState.descendantsDraft
+                                    }
+                                    onDescendantsChange={
+                                        urlState.setDescendantsDraft
+                                    }
+                                />
                             </div>
                         }
                         resultStatus={listWorkspaceFilterStatusText({

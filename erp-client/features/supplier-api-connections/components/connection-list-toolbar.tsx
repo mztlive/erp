@@ -10,7 +10,9 @@ import {
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
-import { SupplierSearchCombobox } from "@/features/entity-selectors"
+import { useRemoteSearchCombobox } from "@/features/entity-selectors/hooks/use-remote-search-combobox"
+import { useSearchInput } from "@/features/entity-selectors/hooks/use-search-input"
+import { useSupplierSelectorQuery } from "@/features/entity-selectors/hooks/queries"
 import type {
     ConnectionAppliedChip,
     ConnectionFilterKey,
@@ -67,8 +69,50 @@ const MORE_CHIP_KEYS: readonly ConnectionFilterKey[] = [
     "health",
     "capability",
     "catalogFreshness",
-    "supplierId",
 ]
+
+function ResidentSupplierFilter({
+    id,
+    value,
+    onValueChange,
+}: {
+    id: string
+    value: string | null
+    onValueChange: (value: string | null) => void
+}) {
+    const search = useSearchInput()
+    const query = useSupplierSelectorQuery(
+        { query: search.input, purpose: "filter" },
+        value ?? undefined,
+    )
+    const { rows, loading, emptyLabel } = useRemoteSearchCombobox({
+        list: query.list,
+        selected: query.selected,
+        idOf: (item) => item.supplierId,
+        fallbackError: "供应商加载失败，请重试",
+    })
+    return (
+        <OptionCombobox
+            id={id}
+            className="w-56 max-w-full min-w-0"
+            filterLabel="供应商"
+            aria-label="供应商"
+            placeholder="全部"
+            searchPlaceholder="搜索供应商名称或编码"
+            filterMode="remote"
+            onSearchChange={search.onSearchChange}
+            loading={loading}
+            emptyLabel={emptyLabel}
+            value={value}
+            onValueChange={onValueChange}
+            options={rows.map((item) => ({
+                value: item.supplierId,
+                label: item.supplierName,
+                keywords: item.supplierCode,
+            }))}
+        />
+    )
+}
 
 export type ConnectionListToolbarProps = {
     searchInputRef: React.RefObject<HTMLInputElement | null>
@@ -83,6 +127,7 @@ export type ConnectionListToolbarProps = {
     onApplyFilters: () => void
     onClearFilters: () => void
     onResetMoreFilters: () => void
+    onCancelMoreFilters: () => void
     healthDraft: readonly string[]
     onHealthDraftChange: SetState<string[]>
     capabilityDraft: string
@@ -110,6 +155,7 @@ export function ConnectionListToolbar({
     onApplyFilters,
     onClearFilters,
     onResetMoreFilters,
+    onCancelMoreFilters,
     healthDraft,
     onHealthDraftChange,
     capabilityDraft,
@@ -129,6 +175,9 @@ export function ConnectionListToolbar({
 
     return (
         <ListWorkspaceFilterBar
+            morePresentation="popover"
+            moreSize="compact"
+            className="[&_[data-slot=list-toolbar-filters]]:min-w-0 [&_[data-slot=list-toolbar-filters]]:shrink [&_[data-slot=list-toolbar-filters]]:self-center"
             idPrefix="supplier-api-connections-toolbar-filter"
             formAriaLabel="API 供应商连接查询"
             onSubmit={onApplyFilters}
@@ -143,11 +192,30 @@ export function ConnectionListToolbar({
                 />
             }
             queryButtonId="supplier-api-connections-toolbar-apply"
-            extraPrimary={
+            moreCount={moreCount}
+            moreOpen={filterPanelOpen}
+            onToggleMore={() =>
+                filterPanelOpen
+                    ? onCancelMoreFilters()
+                    : onFilterPanelOpenChange(true)
+            }
+            moreButtonId="supplier-api-connections-toolbar-more-filters"
+            morePanelId="supplier-api-connections-toolbar-more-panel"
+            morePanelAriaLabel="连接列表更多筛选条件"
+            onResetMore={onResetMoreFilters}
+            resetMoreButtonId="supplier-api-connections-toolbar-reset-more"
+            primaryFilters={
+                <ResidentSupplierFilter
+                    id="supplier-api-connections-toolbar-supplier"
+                    value={supplierIdDraft}
+                    onValueChange={onSupplierIdDraftChange}
+                />
+            }
+            commonFilters={
                 <div
                     role="group"
                     aria-label="环境快捷筛选"
-                    className="flex flex-wrap items-center gap-1"
+                    className="flex min-w-0 flex-wrap items-center gap-1"
                 >
                     {ENVIRONMENT_FILTER_OPTIONS.map((option) => {
                         const active = environment === option.value
@@ -169,39 +237,15 @@ export function ConnectionListToolbar({
                     })}
                 </div>
             }
-            moreCount={moreCount}
-            moreOpen={filterPanelOpen}
-            onToggleMore={() => onFilterPanelOpenChange(!filterPanelOpen)}
-            moreButtonId="supplier-api-connections-toolbar-more-filters"
-            morePanelId="supplier-api-connections-toolbar-more-panel"
-            morePanelAriaLabel="连接列表更多筛选条件"
-            onResetMore={onResetMoreFilters}
-            resetMoreButtonId="supplier-api-connections-toolbar-reset-more"
             morePanel={
-                <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    <ListWorkspaceFilterField
-                        htmlFor="supplier-api-connections-toolbar-supplier"
-                        label="供应商"
-                    >
-                        <SupplierSearchCombobox
-                            id="supplier-api-connections-toolbar-supplier"
-                            value={supplierIdDraft ?? undefined}
-                            onValueChange={(value) =>
-                                onSupplierIdDraftChange(value ?? null)
-                            }
-                            purpose="filter"
-                            placeholder="全部供应商"
-                            className="w-full"
-                            aria-label="供应商"
-                        />
-                    </ListWorkspaceFilterField>
+                <div className="grid min-w-0 gap-3">
                     <ListWorkspaceFilterField
                         htmlFor="supplier-api-connections-toolbar-capability"
                         label="能力"
                     >
                         <OptionCombobox
                             id="supplier-api-connections-toolbar-capability"
-                            className="w-full"
+                            className="w-full min-w-0"
                             value={capabilityDraft || undefined}
                             onValueChange={(value) =>
                                 onCapabilityDraftChange(value ?? "")
@@ -209,6 +253,7 @@ export function ConnectionListToolbar({
                             options={CAPABILITY_FILTER_OPTIONS}
                             placeholder="全部能力"
                             searchPlaceholder="搜索能力名称"
+                            aria-label="能力"
                         />
                     </ListWorkspaceFilterField>
                     <ListWorkspaceFilterField
@@ -217,7 +262,7 @@ export function ConnectionListToolbar({
                     >
                         <MultiOptionCombobox
                             id="supplier-api-connections-toolbar-health"
-                            className="w-full"
+                            className="w-full min-w-0"
                             value={healthDraft}
                             onValueChange={onHealthDraftChange}
                             options={HEALTH_FILTER_OPTIONS}
@@ -231,7 +276,7 @@ export function ConnectionListToolbar({
                     >
                         <MultiOptionCombobox
                             id="supplier-api-connections-toolbar-catalog"
-                            className="w-full"
+                            className="w-full min-w-0"
                             value={catalogFreshnessDraft}
                             onValueChange={onCatalogFreshnessDraftChange}
                             options={CATALOG_FRESHNESS_FILTER_OPTIONS}

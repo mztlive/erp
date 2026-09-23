@@ -101,16 +101,8 @@ export function useLedgerFilters({
         (view === "adjustment" &&
             Boolean(operatorUserIds || applicantUserIds || handlerUserIds)),
     )
-    const hasMoreFilters = Boolean(
-        (view === "movement" &&
-            (movementType.length > 0 ||
-                Boolean(occurredFrom || occurredTo) ||
-                Boolean(operatorUserIds))) ||
-        (view === "adjustment" &&
-            Boolean(operatorUserIds || applicantUserIds || handlerUserIds)),
-    )
-    // 有更多条件的初始深链展开面板；URL 回填不得再次强制展开
-    const [panelOpen, setPanelOpen] = React.useState(hasMoreFilters)
+    // 深链只显示已生效标签，不自动打开面板。
+    const [panelOpen, setPanelOpen] = React.useState(false)
     const [filterError, setFilterError] = React.useState<string | null>(null)
 
     /** 唯一提交路径：查询按钮与 Enter 共用。 */
@@ -200,6 +192,25 @@ export function useLedgerFilters({
         }
         setFilterError(null)
     }, [view])
+
+    /** 取消、关闭、Esc 和外点只恢复低频草稿，保留搜索与常驻仓库、库存条件。 */
+    const cancelMoreFilters = React.useCallback(() => {
+        setMovementTypeDraft(movementType)
+        setOccurredFromDraft(occurredFrom ?? "")
+        setOccurredToDraft(occurredTo ?? "")
+        setOperatorUserIdsDraft(operatorUserIds ?? "")
+        setApplicantUserIdsDraft(applicantUserIds ?? "")
+        setHandlerUserIdsDraft(handlerUserIds ?? "")
+        setFilterError(null)
+        setPanelOpen(false)
+    }, [
+        applicantUserIds,
+        handlerUserIds,
+        movementType,
+        occurredFrom,
+        occurredTo,
+        operatorUserIds,
+    ])
 
     /** 清除全部：草稿、错误、面板、全部筛选参数（含来源锁定）与分页同时重置；保留视图与排序。 */
     const clearAllFilters = React.useCallback(() => {
@@ -310,6 +321,7 @@ export function useLedgerFilters({
         applyFilters,
         removeFilter,
         resetMoreFilters,
+        cancelMoreFilters,
         clearAllFilters,
         hasPendingChanges,
     }

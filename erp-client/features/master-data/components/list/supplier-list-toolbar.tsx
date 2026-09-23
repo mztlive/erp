@@ -4,16 +4,14 @@ import * as React from "react"
 
 import {
     FixedOptionCheckboxFilter,
-    FixedOptionRadioFilter,
+    MultiOptionCombobox,
+    OptionCombobox,
 } from "@/components/business"
 import {
     ListSearchField,
     ListWorkspaceFilterBar,
-    ListWorkspaceFilterField,
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Input } from "@/components/ui/input"
 import { ResponsibleUserFilter } from "@/features/entity-selectors/components/responsible-user-filter"
 import { masterDataSearchPlaceholder } from "@/features/master-data/lib/copy"
 import {
@@ -26,14 +24,18 @@ import type {
     SupplierFilterKey,
     useSupplierListFilters,
 } from "@/features/master-data/hooks/use-supplier-list-filters"
+import { OrganizationUnitFilter } from "@/features/organization/components/organization-unit-filter"
 
 const MORE_CHIP_KEYS = [
-    "supplierCapabilityCodes",
     "supplierQualificationTypes",
     "owner_user_ids",
     "capability_owner_user_ids",
     "org_unit_ids",
 ] as const
+const QUALIFICATION_HEALTH_OPTIONS =
+    SUPPLIER_QUALIFICATION_HEALTH_OPTIONS.filter(
+        (option) => option.value !== "all",
+    )
 
 export function SupplierListToolbar({
     idPrefix,
@@ -64,9 +66,13 @@ export function SupplierListToolbar({
 
     return (
         <ListWorkspaceFilterBar
+            morePresentation="popover"
+            moreSize="wide"
+            className="[&_[data-slot=list-toolbar-filters]]:min-w-0 [&_[data-slot=list-toolbar-filters]]:shrink [&_[data-slot=list-toolbar-filters]]:self-center"
             idPrefix={prefix}
             formAriaLabel="供应商与资质查询"
             onSubmit={f.applySupplierFilters}
+            queryButtonId={`${prefix}-query`}
             search={
                 <ListSearchField
                     id={`${prefix}-search-input`}
@@ -79,44 +85,57 @@ export function SupplierListToolbar({
             }
             moreCount={moreCount}
             moreOpen={f.supplierFilterPanelOpen}
-            onToggleMore={() => f.setSupplierFilterPanelOpen((open) => !open)}
+            onToggleMore={() =>
+                f.supplierFilterPanelOpen
+                    ? f.cancelMoreFilters()
+                    : f.setSupplierFilterPanelOpen(true)
+            }
             morePanelId={panelId}
             morePanelAriaLabel="供应商与资质更多筛选条件"
             moreButtonId={`${prefix}-filter-trigger`}
             resetMoreButtonId={`${prefix}-reset`}
             clearButtonId={`${prefix}-clear-filters`}
             onResetMore={f.resetMoreFilters}
-            commonFilters={
+            primaryFilters={
                 <>
-                    <FixedOptionRadioFilter
+                    <OptionCombobox
                         id={`${prefix}-filter-qualification-health`}
-                        label="资质状态"
-                        variant="quiet"
-                        value={f.supplierQualificationHealthDraft}
-                        onValueChange={f.setSupplierQualificationHealthDraft}
-                        options={SUPPLIER_QUALIFICATION_HEALTH_OPTIONS}
+                        className="w-56 max-w-full min-w-0"
+                        filterLabel="资质状态"
                         aria-label="资质状态"
+                        value={
+                            f.supplierQualificationHealthDraft === "all"
+                                ? null
+                                : f.supplierQualificationHealthDraft
+                        }
+                        options={QUALIFICATION_HEALTH_OPTIONS}
+                        placeholder="全部"
+                        onValueChange={(value) => {
+                            const next = QUALIFICATION_HEALTH_OPTIONS.find(
+                                (option) => option.value === value,
+                            )
+                            f.setSupplierQualificationHealthDraft(
+                                next ? next.value : "all",
+                            )
+                        }}
                     />
+                    <div className="w-56 max-w-full min-w-0">
+                        <MultiOptionCombobox
+                            id={`${prefix}-filter-capability`}
+                            filterLabel="供应能力"
+                            aria-label="供应能力，可多选"
+                            value={f.supplierCapabilityCodesDraft}
+                            onValueChange={f.setSupplierCapabilityCodesDraft}
+                            options={SUPPLIER_CAPABILITY_OPTIONS}
+                        />
+                    </div>
                 </>
             }
             morePanel={
                 <div className="grid min-w-0 gap-5">
                     <fieldset className="min-w-0">
                         <legend className="mb-3 text-xs font-medium">
-                            供应能力
-                        </legend>
-                        <FixedOptionCheckboxFilter
-                            id={`${prefix}-filter-capability`}
-                            label="供应能力"
-                            value={f.supplierCapabilityCodesDraft}
-                            onValueChange={f.setSupplierCapabilityCodesDraft}
-                            options={SUPPLIER_CAPABILITY_OPTIONS}
-                            aria-label="供应能力，可多选"
-                        />
-                    </fieldset>
-                    <fieldset className="min-w-0">
-                        <legend className="mb-3 text-xs font-medium">
-                            资质类型
+                            资质
                         </legend>
                         <FixedOptionCheckboxFilter
                             id={`${prefix}-filter-qualification-type`}
@@ -127,47 +146,40 @@ export function SupplierListToolbar({
                             aria-label="资质类型，可多选"
                         />
                     </fieldset>
-                    <ResponsibleUserFilter
-                        id={`${prefix}-filter-maintainer`}
-                        label="维护人"
-                        value={f.ownerUserIdsDraft}
-                        onChange={f.setOwnerUserIdsDraft}
-                        options={ownerOptions}
-                    />
-                    <ResponsibleUserFilter
-                        id={`${prefix}-filter-capability-owner`}
-                        label="能力负责人"
-                        value={f.capabilityOwnerUserIdsDraft}
-                        onChange={f.setCapabilityOwnerUserIdsDraft}
-                        options={capabilityOwnerOptions}
-                    />
-                    <ListWorkspaceFilterField
-                        htmlFor={`${prefix}-filter-org`}
-                        label="业务组织"
-                    >
-                        <Input
-                            id={`${prefix}-filter-org`}
-                            value={f.orgUnitIdsDraft}
-                            onChange={(event) =>
-                                f.setOrgUnitIdsDraft(event.target.value)
-                            }
-                            placeholder="组织 ID，逗号分隔"
-                            aria-label="按供应商业务组织筛选"
-                        />
-                        <label
-                            htmlFor={`${prefix}-filter-org-descendants`}
-                            className="mt-2 flex items-center gap-2 text-xs text-muted-foreground"
-                        >
-                            <Checkbox
-                                id={`${prefix}-filter-org-descendants`}
-                                checked={f.includeDescendantsDraft}
-                                onCheckedChange={(checked) =>
-                                    f.setIncludeDescendantsDraft(checked === true)
-                                }
+                    <fieldset className="min-w-0">
+                        <legend className="mb-3 text-xs font-medium">
+                            人员
+                        </legend>
+                        <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                            <ResponsibleUserFilter
+                                id={`${prefix}-filter-maintainer`}
+                                label="维护人"
+                                value={f.ownerUserIdsDraft}
+                                onChange={f.setOwnerUserIdsDraft}
+                                options={ownerOptions}
                             />
-                            包含下级
-                        </label>
-                    </ListWorkspaceFilterField>
+                            <ResponsibleUserFilter
+                                id={`${prefix}-filter-capability-owner`}
+                                label="能力负责人"
+                                value={f.capabilityOwnerUserIdsDraft}
+                                onChange={f.setCapabilityOwnerUserIdsDraft}
+                                options={capabilityOwnerOptions}
+                            />
+                        </div>
+                    </fieldset>
+                    <fieldset className="min-w-0">
+                        <legend className="mb-3 text-xs font-medium">
+                            范围
+                        </legend>
+                        <OrganizationUnitFilter
+                            id={`${prefix}-filter-org`}
+                            label="业务组织"
+                            value={f.orgUnitIdsDraft}
+                            onChange={f.setOrgUnitIdsDraft}
+                            includeDescendants={f.includeDescendantsDraft}
+                            onDescendantsChange={f.setIncludeDescendantsDraft}
+                        />
+                    </fieldset>
                 </div>
             }
             resultStatus={listWorkspaceFilterStatusText({

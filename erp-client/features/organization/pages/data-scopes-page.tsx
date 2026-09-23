@@ -13,6 +13,7 @@ import {
     ListSearchField,
     ListWorkSurface,
     ListWorkspaceFilterBar,
+    ListWorkspaceFilterField,
     ListWorkspaceHeader,
     listWorkspaceFilterStatusText,
     listWorkspaceStyles as styles,
@@ -82,12 +83,39 @@ export function DataScopesPage() {
     const createMutation = useCreateDataScopeMutation()
     const deleteMutation = useDeleteDataScopeMutation()
     const [searchDraft, setSearchDraft] = React.useState(url.q ?? "")
+    const [resourceDraft, setResourceDraft] = React.useState(
+        url.resource ?? "all",
+    )
+    const [actionDraft, setActionDraft] = React.useState(url.action ?? "all")
+    const [subjectTypeDraft, setSubjectTypeDraft] = React.useState(
+        url.subjectType,
+    )
+    const [subjectIdDraft, setSubjectIdDraft] = React.useState(
+        url.subjectId ?? "all",
+    )
+    const [scopeTypeDraft, setScopeTypeDraft] = React.useState(url.scopeType)
+    const [filterPanelOpen, setFilterPanelOpen] = React.useState(false)
     const [createOpen, setCreateOpen] = React.useState(false)
     const resources = React.useMemo(() => registeredResources(), [])
 
     React.useEffect(() => {
         setSearchDraft(url.q ?? "")
     }, [url.q])
+    React.useEffect(() => {
+        setResourceDraft(url.resource ?? "all")
+    }, [url.resource])
+    React.useEffect(() => {
+        setActionDraft(url.action ?? "all")
+    }, [url.action])
+    React.useEffect(() => {
+        setSubjectTypeDraft(url.subjectType)
+    }, [url.subjectType])
+    React.useEffect(() => {
+        setSubjectIdDraft(url.subjectId ?? "all")
+    }, [url.subjectId])
+    React.useEffect(() => {
+        setScopeTypeDraft(url.scopeType)
+    }, [url.scopeType])
 
     const people = orgQuery.data?.people ?? []
     const roles = orgQuery.data?.roles ?? []
@@ -109,6 +137,72 @@ export function DataScopesPage() {
     })
     const subjectLabel = (type: string, id: string) =>
         type === "user" ? personLabel(people, id) : roleLabel(roles, id)
+
+    const applyFilters = () => {
+        pushUrl({
+            q: searchDraft.trim() || undefined,
+            resource: resourceDraft === "all" ? undefined : resourceDraft,
+            action:
+                resourceDraft === "all" || actionDraft === "all"
+                    ? undefined
+                    : actionDraft,
+            subjectType: subjectTypeDraft,
+            subjectId:
+                subjectTypeDraft === "all" || subjectIdDraft === "all"
+                    ? undefined
+                    : subjectIdDraft,
+            scopeType: scopeTypeDraft,
+        })
+        setFilterPanelOpen(false)
+    }
+    const resetMoreFilters = () => {
+        setActionDraft("all")
+        setSubjectIdDraft("all")
+        setScopeTypeDraft("all")
+    }
+    const cancelMoreFilters = () => {
+        setActionDraft(
+            resourceDraft === (url.resource ?? "all")
+                ? (url.action ?? "all")
+                : "all",
+        )
+        setSubjectIdDraft(
+            subjectTypeDraft === url.subjectType
+                ? (url.subjectId ?? "all")
+                : "all",
+        )
+        setScopeTypeDraft(url.scopeType)
+        setFilterPanelOpen(false)
+    }
+    const clearAllFilters = () => {
+        setSearchDraft("")
+        setResourceDraft("all")
+        setActionDraft("all")
+        setSubjectTypeDraft("all")
+        setSubjectIdDraft("all")
+        setScopeTypeDraft("all")
+        setFilterPanelOpen(false)
+        pushUrl({
+            q: undefined,
+            resource: undefined,
+            action: undefined,
+            subjectType: "all",
+            subjectId: undefined,
+            scopeType: "all",
+        })
+    }
+    const hasPendingChanges =
+        (searchDraft.trim() || undefined) !== url.q ||
+        (resourceDraft === "all" ? undefined : resourceDraft) !==
+            url.resource ||
+        (resourceDraft === "all" || actionDraft === "all"
+            ? undefined
+            : actionDraft) !== url.action ||
+        subjectTypeDraft !== url.subjectType ||
+        (subjectTypeDraft === "all" || subjectIdDraft === "all"
+            ? undefined
+            : subjectIdDraft) !== url.subjectId ||
+        scopeTypeDraft !== url.scopeType
 
     if (profileQuery.isPending || scopesQuery.isPending) {
         return (
@@ -162,11 +256,28 @@ export function DataScopesPage() {
                 ariaLabel="数据范围列表"
                 toolbar={
                     <ListWorkspaceFilterBar
+                        morePresentation="popover"
+                        moreSize="compact"
                         idPrefix="organization-scope"
                         formAriaLabel="范围配置查询"
-                        onSubmit={() =>
-                            pushUrl({ q: searchDraft.trim() || undefined })
+                        onSubmit={applyFilters}
+                        queryButtonId="organization-scope-query"
+                        moreButtonId="organization-scope-more"
+                        resetMoreButtonId="organization-scope-reset-more"
+                        morePanelId="organization-scope-more-panel"
+                        moreCount={
+                            Number(Boolean(url.action)) +
+                            Number(Boolean(url.subjectId)) +
+                            Number(url.scopeType !== "all")
                         }
+                        moreOpen={filterPanelOpen}
+                        onToggleMore={() =>
+                            filterPanelOpen
+                                ? cancelMoreFilters()
+                                : setFilterPanelOpen(true)
+                        }
+                        morePanelAriaLabel="数据范围更多筛选条件"
+                        onResetMore={resetMoreFilters}
                         search={
                             <ListSearchField
                                 id="organization-scope-search"
@@ -177,11 +288,13 @@ export function DataScopesPage() {
                             />
                         }
                         primaryFilters={
-                            <div className="flex min-w-0 flex-wrap gap-3">
+                            <>
                                 <OptionCombobox
                                     id="organization-scope-filter-resource"
+                                    className="w-56 max-w-full min-w-0"
+                                    filterLabel="资源"
                                     aria-label="资源"
-                                    value={url.resource ?? "all"}
+                                    value={resourceDraft}
                                     options={[
                                         { value: "all", label: "全部资源" },
                                         ...resources.map((item) => ({
@@ -189,111 +302,142 @@ export function DataScopesPage() {
                                             label: resourceLabel(item.resource),
                                         })),
                                     ]}
-                                    onValueChange={(value) =>
-                                        pushUrl({
-                                            resource:
-                                                !value || value === "all"
-                                                    ? undefined
-                                                    : value,
-                                            action: undefined,
-                                        })
-                                    }
-                                    allowClear={false}
-                                />
-                                <OptionCombobox
-                                    id="organization-scope-filter-action"
-                                    aria-label="动作"
-                                    value={url.action ?? "all"}
-                                    options={[
-                                        { value: "all", label: "全部动作" },
-                                        ...(
-                                            resources.find(
-                                                (item) =>
-                                                    item.resource ===
-                                                    url.resource,
-                                            )?.actions ?? []
-                                        ).map((action) => ({
-                                            value: action,
-                                            label: actionLabel(action),
-                                        })),
-                                    ]}
-                                    onValueChange={(value) =>
-                                        pushUrl({
-                                            action:
-                                                !value || value === "all"
-                                                    ? undefined
-                                                    : value,
-                                        })
-                                    }
+                                    onValueChange={(value) => {
+                                        setResourceDraft(
+                                            !value || value === "all"
+                                                ? "all"
+                                                : value,
+                                        )
+                                        setActionDraft("all")
+                                    }}
+                                    placeholder="全部资源"
                                     allowClear={false}
                                 />
                                 <OptionCombobox
                                     id="organization-scope-filter-subject-type"
+                                    className="w-48 max-w-full min-w-0"
+                                    filterLabel="主体类型"
                                     aria-label="主体类型"
-                                    value={url.subjectType}
+                                    value={subjectTypeDraft}
                                     options={[
                                         { value: "all", label: "全部主体" },
                                         { value: "role", label: "角色" },
                                         { value: "user", label: "用户上限" },
                                     ]}
-                                    onValueChange={(value) =>
-                                        pushUrl({
-                                            subjectType: (value ??
-                                                "all") as typeof url.subjectType,
-                                            subjectId: undefined,
-                                        })
-                                    }
+                                    onValueChange={(value) => {
+                                        setSubjectTypeDraft(
+                                            value === "role" || value === "user"
+                                                ? value
+                                                : "all",
+                                        )
+                                        setSubjectIdDraft("all")
+                                    }}
+                                    placeholder="全部主体"
                                     allowClear={false}
                                 />
-                                {url.subjectType !== "all" ? (
+                            </>
+                        }
+                        morePanel={
+                            <div className="grid min-w-0 gap-3">
+                                <ListWorkspaceFilterField
+                                    htmlFor="organization-scope-filter-action"
+                                    label="动作"
+                                >
+                                    <OptionCombobox
+                                        id="organization-scope-filter-action"
+                                        className="w-full min-w-0"
+                                        aria-label="动作"
+                                        value={actionDraft}
+                                        options={[
+                                            { value: "all", label: "全部动作" },
+                                            ...(
+                                                resources.find(
+                                                    (item) =>
+                                                        item.resource ===
+                                                        resourceDraft,
+                                                )?.actions ?? []
+                                            ).map((action) => ({
+                                                value: action,
+                                                label: actionLabel(action),
+                                            })),
+                                        ]}
+                                        onValueChange={(value) =>
+                                            setActionDraft(
+                                                !value || value === "all"
+                                                    ? "all"
+                                                    : value,
+                                            )
+                                        }
+                                        placeholder="全部动作"
+                                        allowClear={false}
+                                    />
+                                </ListWorkspaceFilterField>
+                                <ListWorkspaceFilterField
+                                    htmlFor="organization-scope-filter-subject"
+                                    label="主体"
+                                >
                                     <OptionCombobox
                                         id="organization-scope-filter-subject"
+                                        className="w-full min-w-0"
                                         aria-label="主体"
-                                        value={url.subjectId ?? "all"}
+                                        disabled={subjectTypeDraft === "all"}
+                                        value={subjectIdDraft}
                                         options={[
                                             { value: "all", label: "全部主体" },
-                                            ...(url.subjectType === "user"
+                                            ...(subjectTypeDraft === "user"
                                                 ? people.map((person) => ({
                                                       value: person.id,
                                                       label: `${person.label}（${person.account}）`,
                                                   }))
-                                                : roles.map((role) => ({
-                                                      value: role.id,
-                                                      label: role.name,
-                                                  }))),
+                                                : subjectTypeDraft === "role"
+                                                  ? roles.map((role) => ({
+                                                        value: role.id,
+                                                        label: role.name,
+                                                    }))
+                                                  : []),
                                         ]}
                                         onValueChange={(value) =>
-                                            pushUrl({
-                                                subjectId:
-                                                    !value || value === "all"
-                                                        ? undefined
-                                                        : value,
-                                            })
+                                            setSubjectIdDraft(
+                                                !value || value === "all"
+                                                    ? "all"
+                                                    : value,
+                                            )
                                         }
+                                        placeholder="全部主体"
                                         allowClear={false}
                                     />
-                                ) : null}
-                                <OptionCombobox
-                                    id="organization-scope-filter-scope-type"
-                                    aria-label="范围类型"
-                                    value={url.scopeType}
-                                    options={[
-                                        { value: "all", label: "全部范围类型" },
-                                        ...Object.entries(SCOPE_TYPE_LABEL).map(
-                                            ([value, label]) => ({
+                                </ListWorkspaceFilterField>
+                                <ListWorkspaceFilterField
+                                    htmlFor="organization-scope-filter-scope-type"
+                                    label="范围类型"
+                                >
+                                    <OptionCombobox
+                                        id="organization-scope-filter-scope-type"
+                                        className="w-full min-w-0"
+                                        aria-label="范围类型"
+                                        value={scopeTypeDraft}
+                                        options={[
+                                            {
+                                                value: "all",
+                                                label: "全部范围类型",
+                                            },
+                                            ...Object.entries(
+                                                SCOPE_TYPE_LABEL,
+                                            ).map(([value, label]) => ({
                                                 value,
                                                 label,
-                                            }),
-                                        ),
-                                    ]}
-                                    onValueChange={(value) =>
-                                        pushUrl({
-                                            scopeType: (value ??
-                                                "all") as typeof url.scopeType,
-                                        })
-                                    }
-                                    allowClear={false}
-                                />
+                                            })),
+                                        ]}
+                                        onValueChange={(value) =>
+                                            setScopeTypeDraft(
+                                                (value ??
+                                                    "all") as typeof url.scopeType,
+                                            )
+                                        }
+                                        placeholder="全部范围类型"
+                                        allowClear={false}
+                                    />
+                                </ListWorkspaceFilterField>
                             </div>
                         }
                         resultStatus={listWorkspaceFilterStatusText({
@@ -368,19 +512,8 @@ export function DataScopesPage() {
                             if (key === "scopeType")
                                 pushUrl({ scopeType: "all" })
                         }}
-                        onClearAll={() =>
-                            pushUrl({
-                                q: undefined,
-                                resource: undefined,
-                                action: undefined,
-                                subjectType: "all",
-                                subjectId: undefined,
-                                scopeType: "all",
-                            })
-                        }
-                        hasPendingChanges={
-                            (searchDraft.trim() || undefined) !== url.q
-                        }
+                        onClearAll={clearAllFilters}
+                        hasPendingChanges={hasPendingChanges}
                     />
                 }
                 table={
@@ -402,16 +535,7 @@ export function DataScopesPage() {
                         <OrganizationEmptyByReason
                             idPrefix="organization-scope"
                             reason={emptyReason}
-                            onClearFilters={() =>
-                                pushUrl({
-                                    q: undefined,
-                                    resource: undefined,
-                                    action: undefined,
-                                    subjectType: "all",
-                                    subjectId: undefined,
-                                    scopeType: "all",
-                                })
-                            }
+                            onClearFilters={clearAllFilters}
                         />
                     ) : (
                         <ul className="min-w-0 space-y-2 overflow-x-hidden">

@@ -85,9 +85,9 @@ export function useSupplierAccountsFilters() {
     const [searchInput, setSearchInput] = React.useState(qParam)
     const searchInputRef = React.useRef<HTMLInputElement | null>(null)
     const hasStructuredFilters = Boolean(
-        supplierId || sourceType || paymentGate,
+        supplierId || sourceType || paymentGate || track,
     )
-    const [panelOpen, setPanelOpen] = React.useState(hasStructuredFilters)
+    const [panelOpen, setPanelOpen] = React.useState(false)
     const [supplierDraft, setSupplierDraft] = React.useState<string | null>(
         supplierId ?? null,
     )
@@ -223,11 +223,26 @@ export function useSupplierAccountsFilters() {
         trackDraft,
         view,
     ])
+    /** 只清当前视图的低频草稿；应付保留状态与到期，待核销只清轨道。 */
     const resetMoreFilters = React.useCallback(() => {
-        setSupplierDraft(null)
-        setSourceTypeDraft("all")
-        setPaymentGateDraft("all")
-    }, [])
+        if (view === "payable") {
+            setSupplierDraft(null)
+            setSourceTypeDraft("all")
+            setPaymentGateDraft("all")
+        }
+        if (view === "unallocated") setTrackDraft("all")
+    }, [view])
+
+    /** 取消、关闭、Esc 和外点只恢复低频草稿，保留搜索与常驻状态、到期。 */
+    const cancelMoreFilters = React.useCallback(() => {
+        if (view === "payable") {
+            setSupplierDraft(supplierId ?? null)
+            setSourceTypeDraft(sourceType ?? "all")
+            setPaymentGateDraft(paymentGate ?? "all")
+        }
+        if (view === "unallocated") setTrackDraft(track ?? "all")
+        setPanelOpen(false)
+    }, [paymentGate, sourceType, supplierId, track, view])
 
     const hasPendingChanges =
         searchInput.trim() !== qParam.trim() ||
@@ -411,12 +426,13 @@ export function useSupplierAccountsFilters() {
         searchInput,
         setSearchInput,
         searchInputRef,
-        panelOpen: view === "payable" && panelOpen,
+        panelOpen: (view === "payable" || view === "unallocated") && panelOpen,
         setPanelOpen,
         hasStructuredFilters,
         appliedChips,
         applyFilters,
         resetMoreFilters,
+        cancelMoreFilters,
         hasPendingChanges,
         removeFilter,
         supplierDraft,

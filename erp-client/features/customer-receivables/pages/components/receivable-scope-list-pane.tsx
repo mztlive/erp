@@ -252,13 +252,8 @@ export function ReceivableScopeListPane({
                         appliedChips={urlState.appliedChips}
                         removeFilter={urlState.removeFilter}
                         applyFilters={urlState.applyFilters}
-                        resetMoreFilters={() => {
-                            urlState.setSalesOwnerDraft("")
-                            urlState.setOperatorDraft("")
-                            urlState.setOperatorKindDraft("")
-                            urlState.setOrgDraft("")
-                            urlState.setDescendantsDraft(false)
-                        }}
+                        resetMoreFilters={urlState.resetMoreFilters}
+                        cancelMoreFilters={urlState.cancelMoreFilters}
                         clearFilters={urlState.clearFilters}
                         hasPendingChanges={urlState.hasPendingChanges}
                         ownerOptions={data?.ownerOptions ?? []}

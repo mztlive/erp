@@ -7,14 +7,14 @@ import {
     ListSearchField,
     ListWorkspaceFilterBar,
     ListWorkspaceFilterField,
-    ListWorkspaceInlineFilter,
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
 import { DatePicker } from "@/components/ui/date-picker"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Input } from "@/components/ui/input"
+import { useRemoteSearchCombobox } from "@/features/entity-selectors/hooks/use-remote-search-combobox"
+import { useSearchInput } from "@/features/entity-selectors/hooks/use-search-input"
+import { useSupplierSelectorQuery } from "@/features/entity-selectors/hooks/queries"
 import { ResponsibleUserFilter } from "@/features/entity-selectors/components/responsible-user-filter"
-import { SupplierSearchCombobox } from "@/features/entity-selectors"
+import { OrganizationUnitFilter } from "@/features/organization/components/organization-unit-filter"
 import type {
     SupplierOrdersFilterKey,
     useSupplierOrdersFilters,
@@ -46,6 +46,49 @@ const MORE_CHIP_KEYS: readonly SupplierOrdersFilterKey[] = [
     "orgUnitIds",
 ]
 
+function ResidentSupplierFilter({
+    id,
+    value,
+    onValueChange,
+}: {
+    id: string
+    value: string | null
+    onValueChange: (value: string | null) => void
+}) {
+    const search = useSearchInput()
+    const query = useSupplierSelectorQuery(
+        { query: search.input, purpose: "filter" },
+        value ?? undefined,
+    )
+    const { rows, loading, emptyLabel } = useRemoteSearchCombobox({
+        list: query.list,
+        selected: query.selected,
+        idOf: (item) => item.supplierId,
+        fallbackError: "供应商加载失败，请重试",
+    })
+    return (
+        <OptionCombobox
+            id={id}
+            className="w-56 max-w-full min-w-0"
+            filterLabel="供应商"
+            aria-label="供应商"
+            placeholder="全部"
+            searchPlaceholder="搜索供应商名称或编码"
+            filterMode="remote"
+            onSearchChange={search.onSearchChange}
+            loading={loading}
+            emptyLabel={emptyLabel}
+            value={value}
+            onValueChange={onValueChange}
+            options={rows.map((item) => ({
+                value: item.supplierId,
+                label: item.supplierName,
+                keywords: item.supplierCode,
+            }))}
+        />
+    )
+}
+
 export function SupplierOrdersListToolbar({
     searchInputRef,
     filters: f,
@@ -70,6 +113,9 @@ export function SupplierOrdersListToolbar({
     return (
         <ListWorkspaceFilterBar
             density="compact"
+            morePresentation="popover"
+            moreSize="wide"
+            className="[&_[data-slot=list-toolbar-filters]]:min-w-0 [&_[data-slot=list-toolbar-filters]]:shrink [&_[data-slot=list-toolbar-filters]]:self-center"
             idPrefix={prefix}
             formAriaLabel="供应商订单查询"
             onSubmit={f.applyFilters}
@@ -86,7 +132,9 @@ export function SupplierOrdersListToolbar({
             }
             moreCount={moreCount}
             moreOpen={f.panelOpen}
-            onToggleMore={() => f.setPanelOpen((open) => !open)}
+            onToggleMore={() =>
+                f.panelOpen ? f.cancelMoreFilters() : f.setPanelOpen(true)
+            }
             morePanelId={panelId}
             morePanelAriaLabel="供应商订单更多筛选条件"
             moreButtonId={`${prefix}-toggle`}
@@ -94,51 +142,37 @@ export function SupplierOrdersListToolbar({
             resetMoreButtonId={`${prefix}-reset-more`}
             clearButtonId={`${prefix}-clear-all`}
             onResetMore={f.resetMoreFilters}
-            commonFilters={
+            primaryFilters={
                 <>
-                    <ListWorkspaceInlineFilter
-                        htmlFor={`${prefix}-supplier`}
-                        label="供应商"
-                    >
-                        <SupplierSearchCombobox
-                            id={`${prefix}-supplier`}
-                            className="w-full sm:w-60"
-                            purpose="filter"
-                            value={f.supplierIdDraft ?? undefined}
-                            onValueChange={(id) =>
-                                f.setSupplierIdDraft(id ?? null)
-                            }
-                            placeholder="全部供应商"
-                        />
-                    </ListWorkspaceInlineFilter>
-                    <ListWorkspaceInlineFilter
-                        htmlFor={`${prefix}-fulfillment`}
-                        label="履约状态"
-                    >
-                        <MultiOptionCombobox
-                            id={`${prefix}-fulfillment`}
-                            className="w-full sm:w-60"
-                            value={f.fulfillmentStatusesDraft}
-                            onValueChange={(values) =>
-                                f.setFulfillmentStatusesDraft(
-                                    values as SupplierFulfillmentStatus[],
-                                )
-                            }
-                            options={FULFILLMENT_STATUSES.map((s) => ({
-                                value: s,
-                                label: FULFILLMENT_STATUS_LABEL[s],
-                            }))}
-                            aria-label="履约状态"
-                            placeholder="全部履约状态"
-                        />
-                    </ListWorkspaceInlineFilter>
+                    <ResidentSupplierFilter
+                        id={`${prefix}-supplier`}
+                        value={f.supplierIdDraft}
+                        onValueChange={f.setSupplierIdDraft}
+                    />
+                    <MultiOptionCombobox
+                        id={`${prefix}-fulfillment`}
+                        className="w-48 max-w-full min-w-0"
+                        filterLabel="履约状态"
+                        aria-label="履约状态"
+                        value={f.fulfillmentStatusesDraft}
+                        onValueChange={(values) =>
+                            f.setFulfillmentStatusesDraft(
+                                values as SupplierFulfillmentStatus[],
+                            )
+                        }
+                        options={FULFILLMENT_STATUSES.map((status) => ({
+                            value: status,
+                            label: FULFILLMENT_STATUS_LABEL[status],
+                        }))}
+                        placeholder="全部"
+                    />
                 </>
             }
             morePanel={
-                <div className="grid min-w-0 gap-5 lg:grid-cols-2">
-                    <fieldset className="min-w-0">
-                        <legend className="mb-3 text-xs font-medium">
-                            取消与退款
+                <div className="space-y-5">
+                    <fieldset className="min-w-0 space-y-3">
+                        <legend className="mb-1 text-sm font-medium">
+                            售后
                         </legend>
                         <div className="grid min-w-0 gap-3 sm:grid-cols-2">
                             <ListWorkspaceFilterField
@@ -147,7 +181,7 @@ export function SupplierOrdersListToolbar({
                             >
                                 <OptionCombobox
                                     id={`${prefix}-cancel`}
-                                    className="w-full"
+                                    className="w-full min-w-0"
                                     value={f.cancelStatusesDraft[0] ?? ""}
                                     onValueChange={(value) =>
                                         f.setCancelStatusesDraft(
@@ -156,9 +190,9 @@ export function SupplierOrdersListToolbar({
                                                 : [],
                                         )
                                     }
-                                    options={CANCEL_STATUSES.map((s) => ({
-                                        value: s,
-                                        label: CANCEL_STATUS_LABEL[s],
+                                    options={CANCEL_STATUSES.map((status) => ({
+                                        value: status,
+                                        label: CANCEL_STATUS_LABEL[status],
                                     }))}
                                     aria-label="取消状态"
                                     placeholder="全部取消状态"
@@ -170,7 +204,7 @@ export function SupplierOrdersListToolbar({
                             >
                                 <OptionCombobox
                                     id={`${prefix}-aftersale`}
-                                    className="w-full"
+                                    className="w-full min-w-0"
                                     value={
                                         f.aftersalePendingDraft
                                             ? "pending"
@@ -198,7 +232,7 @@ export function SupplierOrdersListToolbar({
                             >
                                 <OptionCombobox
                                     id={`${prefix}-refund`}
-                                    className="w-full"
+                                    className="w-full min-w-0"
                                     value={f.refundStatusesDraft[0] ?? ""}
                                     onValueChange={(value) =>
                                         f.setRefundStatusesDraft(
@@ -207,9 +241,9 @@ export function SupplierOrdersListToolbar({
                                                 : [],
                                         )
                                     }
-                                    options={REFUND_STATUSES.map((s) => ({
-                                        value: s,
-                                        label: REFUND_STATUS_LABEL[s],
+                                    options={REFUND_STATUSES.map((status) => ({
+                                        value: status,
+                                        label: REFUND_STATUS_LABEL[status],
                                     }))}
                                     aria-label="退款状态"
                                     placeholder="全部退款状态"
@@ -217,9 +251,9 @@ export function SupplierOrdersListToolbar({
                             </ListWorkspaceFilterField>
                         </div>
                     </fieldset>
-                    <fieldset className="min-w-0">
-                        <legend className="mb-3 text-xs font-medium">
-                            跟进人与异常处理人
+                    <fieldset className="min-w-0 space-y-3 border-t pt-4">
+                        <legend className="pr-2 text-sm font-medium">
+                            人员
                         </legend>
                         <div className="grid min-w-0 gap-3">
                             <ResponsibleUserFilter
@@ -236,85 +270,63 @@ export function SupplierOrdersListToolbar({
                                 onChange={f.setHandlerUserIdsDraft}
                                 options={handlerOptions}
                             />
-                            <ListWorkspaceFilterField
-                                htmlFor={`${prefix}-org`}
-                                label="业务组织"
-                            >
-                                <Input
-                                    id={`${prefix}-org`}
-                                    value={f.orgUnitIdsDraft}
-                                    onChange={(event) =>
-                                        f.setOrgUnitIdsDraft(event.target.value)
-                                    }
-                                    placeholder="组织 ID，逗号分隔"
-                                    aria-label="按订单业务组织筛选"
-                                />
-                                <label
-                                    htmlFor={`${prefix}-org-descendants`}
-                                    className="mt-2 flex items-center gap-2 text-xs text-muted-foreground"
-                                >
-                                    <Checkbox
-                                        id={`${prefix}-org-descendants`}
-                                        checked={f.includeDescendantsDraft}
-                                        onCheckedChange={(checked) =>
-                                            f.setIncludeDescendantsDraft(
-                                                checked === true,
-                                            )
-                                        }
-                                    />
-                                    包含下级组织
-                                </label>
-                            </ListWorkspaceFilterField>
                         </div>
                     </fieldset>
-                    <fieldset className="min-w-0 lg:border-l lg:pl-5">
-                        <legend className="mb-3 text-xs font-medium">
-                            支付时间
+                    <fieldset className="min-w-0 border-t pt-4">
+                        <legend className="sr-only">业务组织</legend>
+                        <OrganizationUnitFilter
+                            id={`${prefix}-org`}
+                            label="业务组织"
+                            value={f.orgUnitIdsDraft}
+                            onChange={f.setOrgUnitIdsDraft}
+                            includeDescendants={f.includeDescendantsDraft}
+                            onDescendantsChange={f.setIncludeDescendantsDraft}
+                        />
+                    </fieldset>
+                    <fieldset className="min-w-0 border-t pt-4">
+                        <legend className="mb-3 text-sm font-medium">
+                            支付日期
                         </legend>
-                        <ListWorkspaceFilterField label="支付日期">
-                            <div className="flex min-w-0 items-center gap-1.5">
-                                <DatePicker
-                                    id={`${prefix}-paid-from`}
-                                    className="w-0 min-w-0 flex-1"
-                                    value={f.paidFromDraft || undefined}
-                                    onValueChange={(next) => {
-                                        f.setPaidFromDraft(next ?? "")
-                                        f.setFilterError(null)
-                                    }}
-                                    placeholder="开始日期"
-                                    aria-invalid={Boolean(f.filterError)}
-                                    aria-describedby={
-                                        f.filterError ? paidErrorId : undefined
-                                    }
-                                />
-                                <span className="text-muted-foreground">
-                                    至
-                                </span>
-                                <DatePicker
-                                    id={`${prefix}-paid-to`}
-                                    className="w-0 min-w-0 flex-1"
-                                    value={f.paidToDraft || undefined}
-                                    onValueChange={(next) => {
-                                        f.setPaidToDraft(next ?? "")
-                                        f.setFilterError(null)
-                                    }}
-                                    placeholder="结束日期"
-                                    aria-invalid={Boolean(f.filterError)}
-                                    aria-describedby={
-                                        f.filterError ? paidErrorId : undefined
-                                    }
-                                />
-                            </div>
-                            {f.filterError ? (
-                                <span
-                                    id={paidErrorId}
-                                    className="text-xs text-destructive"
-                                    role="alert"
-                                >
-                                    {f.filterError}
-                                </span>
-                            ) : null}
-                        </ListWorkspaceFilterField>
+                        <div className="flex min-w-0 items-center gap-1.5">
+                            <DatePicker
+                                id={`${prefix}-paid-from`}
+                                className="w-0 min-w-0 flex-1 [&_button]:h-control"
+                                value={f.paidFromDraft || undefined}
+                                onValueChange={(next) => {
+                                    f.setPaidFromDraft(next ?? "")
+                                    f.setFilterError(null)
+                                }}
+                                placeholder="开始日期"
+                                aria-invalid={Boolean(f.filterError)}
+                                aria-describedby={
+                                    f.filterError ? paidErrorId : undefined
+                                }
+                            />
+                            <span className="text-muted-foreground">至</span>
+                            <DatePicker
+                                id={`${prefix}-paid-to`}
+                                className="w-0 min-w-0 flex-1 [&_button]:h-control"
+                                value={f.paidToDraft || undefined}
+                                onValueChange={(next) => {
+                                    f.setPaidToDraft(next ?? "")
+                                    f.setFilterError(null)
+                                }}
+                                placeholder="结束日期"
+                                aria-invalid={Boolean(f.filterError)}
+                                aria-describedby={
+                                    f.filterError ? paidErrorId : undefined
+                                }
+                            />
+                        </div>
+                        {f.filterError ? (
+                            <span
+                                id={paidErrorId}
+                                className="text-xs text-destructive"
+                                role="alert"
+                            >
+                                {f.filterError}
+                            </span>
+                        ) : null}
                     </fieldset>
                 </div>
             }

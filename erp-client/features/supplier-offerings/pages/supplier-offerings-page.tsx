@@ -230,6 +230,7 @@ export const SupplierOfferingsPage = () => {
                             onApplyFilters={state.applyFilters}
                             onClearFilters={state.clearFilters}
                             onResetMoreFilters={state.resetMoreFilters}
+                            onCancelMoreFilters={state.cancelMoreFilters}
                             sourceTypeDraft={state.sourceTypeDraft}
                             onSourceTypeDraftChange={state.setSourceTypeDraft}
                             availabilityStatusDraft={

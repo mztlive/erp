@@ -6,30 +6,31 @@ import {
 
 import * as React from "react"
 
-import { Checkbox } from "@/components/ui/checkbox"
-import { Input } from "@/components/ui/input"
-import { FixedOptionRadioFilter } from "@/components/business"
+import { OptionCombobox } from "@/components/business"
 import {
     ListSearchField,
     ListWorkspaceFilterBar,
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
-import type { DirectoryStatus } from "@/features/customers/lib/directory-url"
 import type {
     CustomerAppliedChip,
     CustomerFilterKey,
 } from "@/features/customers/hooks/use-customer-center-directory-state"
+import type { DirectoryStatus } from "@/features/customers/lib/directory-url"
+import { OrganizationUnitFilter } from "@/features/organization/components/organization-unit-filter"
 
 type SetState<T> = React.Dispatch<React.SetStateAction<T>>
 
-const STATUS_RADIO_OPTIONS = [
+const STATUS_OPTIONS = [
     { value: "all", label: "全部" },
     { value: "active", label: "启用" },
     { value: "disabled", label: "停用" },
 ] as const
 
+const MORE_CHIP_KEYS: readonly CustomerFilterKey[] = ["orgUnitIds"]
+
 /**
- * 客户中心目录工具条：关键词草稿 + 常驻状态筛选，查询后统一生效。
+ * 客户中心目录工具条：负责销售和状态常驻，组织在更多筛选。
  */
 export function CustomerCenterDirectoryToolbar({
     ownerDraft,
@@ -44,9 +45,13 @@ export function CustomerCenterDirectoryToolbar({
     setSearchDraft,
     statusDraft,
     setStatusDraft,
+    panelOpen,
+    setPanelOpen,
     appliedChips,
     removeFilter,
     applyFilters,
+    resetMoreFilters,
+    cancelMoreFilters,
     clearAllFilters,
     hasPendingChanges,
     resultCount,
@@ -65,20 +70,33 @@ export function CustomerCenterDirectoryToolbar({
     setSearchDraft: SetState<string>
     statusDraft: DirectoryStatus
     setStatusDraft: SetState<DirectoryStatus>
+    panelOpen: boolean
+    setPanelOpen: (open: boolean) => void
     appliedChips: readonly CustomerAppliedChip[]
     removeFilter: (key: CustomerFilterKey) => void
     applyFilters: () => void
+    resetMoreFilters: () => void
+    cancelMoreFilters: () => void
     clearAllFilters: () => void
     hasPendingChanges: boolean
     resultCount?: number
     loading?: boolean
     failed?: boolean
 }) {
+    const moreCount = appliedChips.filter((chip) =>
+        MORE_CHIP_KEYS.includes(chip.key),
+    ).length
+
     return (
         <ListWorkspaceFilterBar
+            morePresentation="popover"
+            moreSize="compact"
+            className="[&_[data-slot=list-toolbar-search]]:lg:w-80 [&_[data-slot=list-toolbar-filters]]:min-w-0 [&_[data-slot=list-toolbar-filters]]:shrink [&_[data-slot=list-toolbar-filters]]:self-center"
             idPrefix="customers-directory"
             formAriaLabel="客户目录查询"
             onSubmit={applyFilters}
+            queryButtonId="customers-directory-query"
+            clearButtonId="customers-directory-clear-all"
             search={
                 <ListSearchField
                     id="customers-directory-search"
@@ -90,54 +108,54 @@ export function CustomerCenterDirectoryToolbar({
                     aria-label="搜索客户"
                 />
             }
-            commonFilters={
+            moreCount={moreCount}
+            moreOpen={panelOpen}
+            onToggleMore={() =>
+                panelOpen ? cancelMoreFilters() : setPanelOpen(true)
+            }
+            morePanelId="customers-directory-more-panel"
+            morePanelAriaLabel="客户更多筛选条件"
+            onResetMore={resetMoreFilters}
+            primaryFilters={
                 <>
-                    <ResponsibleUserFilter
-                        id="customers-directory-owner"
-                        label="负责销售"
-                        value={ownerDraft}
-                        onChange={setOwnerDraft}
-                        options={ownerOptions}
-                    />
-                    <div className="min-w-0 space-y-1.5">
-                        <label
-                            className="text-xs text-muted-foreground"
-                            htmlFor="customers-directory-org"
-                        >
-                            组织
-                        </label>
-                        <Input
-                            id="customers-directory-org"
-                            value={orgDraft}
-                            onChange={(event) =>
-                                setOrgDraft(event.target.value)
-                            }
-                            placeholder="组织 ID，逗号分隔"
-                            aria-label="按当前主负责人所属组织筛选"
+                    <div className="w-56 min-w-0 max-w-full">
+                        <ResponsibleUserFilter
+                            id="customers-directory-owner"
+                            label="负责销售"
+                            hideLabel
+                            value={ownerDraft}
+                            onChange={setOwnerDraft}
+                            options={ownerOptions}
                         />
-                        <label
-                            htmlFor="customers-directory-org-descendants"
-                            className="flex items-center gap-2 text-xs text-muted-foreground"
-                        >
-                            <Checkbox
-                                id="customers-directory-org-descendants"
-                                checked={descendantsDraft}
-                                onCheckedChange={(checked) =>
-                                    setDescendantsDraft(checked === true)
-                                }
-                            />
-                            包含下级
-                        </label>
                     </div>
-                    <FixedOptionRadioFilter
+                    <OptionCombobox
                         id="customers-directory-status"
-                        label="状态"
-                        variant="quiet"
+                        className="w-44 min-w-0 max-w-full"
+                        filterLabel="状态"
+                        aria-label="状态"
+                        allowClear={false}
                         value={statusDraft}
-                        onValueChange={setStatusDraft}
-                        options={STATUS_RADIO_OPTIONS}
+                        options={STATUS_OPTIONS}
+                        onValueChange={(value) => {
+                            setStatusDraft(
+                                value === "disabled" || value === "all"
+                                    ? value
+                                    : "active",
+                            )
+                        }}
+                        placeholder="启用"
                     />
                 </>
+            }
+            morePanel={
+                <OrganizationUnitFilter
+                    id="customers-directory-org"
+                    label="组织"
+                    value={orgDraft}
+                    onChange={setOrgDraft}
+                    includeDescendants={descendantsDraft}
+                    onDescendantsChange={setDescendantsDraft}
+                />
             }
             resultStatus={listWorkspaceFilterStatusText({
                 loading,
@@ -150,7 +168,8 @@ export function CustomerCenterDirectoryToolbar({
             onClearChip={(key) => removeFilter(key as CustomerFilterKey)}
             onClearAll={clearAllFilters}
             hasPendingChanges={hasPendingChanges}
-            clearButtonId="customers-directory-clear-all"
+            pendingHint="条件已修改，待查询 · 导出仍按已生效条件"
+            idleHint="导出与当前查询结果一致"
         />
     )
 }

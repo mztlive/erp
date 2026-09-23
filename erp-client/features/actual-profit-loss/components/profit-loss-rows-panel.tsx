@@ -67,6 +67,7 @@ export type ProfitLossRowsPanelProps = {
     appliedChips: readonly ProfitLossAppliedChip[]
     onRemoveFilter: (key: string) => void
     onResetMoreFilters: () => void
+    onCancelMoreFilters: () => void
     onClearAllFilters: () => void
     hasPendingChanges: boolean
     onDimensionChange: (value: string) => void
@@ -110,6 +111,7 @@ export function ProfitLossRowsPanel({
     appliedChips,
     onRemoveFilter,
     onResetMoreFilters,
+    onCancelMoreFilters,
     onClearAllFilters,
     hasPendingChanges,
     onDimensionChange,
@@ -171,6 +173,8 @@ export function ProfitLossRowsPanel({
             }
             toolbar={
                 <ListWorkspaceFilterBar
+                    morePresentation="popover"
+                    moreSize="wide"
                     idPrefix="actual-profit-loss-filter"
                     formAriaLabel="盈亏明细查询"
                     onSubmit={onApplyFilters}
@@ -190,7 +194,9 @@ export function ProfitLossRowsPanel({
                     }
                     moreCount={moreCount}
                     moreOpen={panelOpen}
-                    onToggleMore={() => setPanelOpen((open) => !open)}
+                    onToggleMore={() =>
+                        panelOpen ? onCancelMoreFilters() : setPanelOpen(true)
+                    }
                     morePanelId="actual-profit-loss-filter-more-panel"
                     morePanelAriaLabel="盈亏明细更多筛选条件"
                     onResetMore={onResetMoreFilters}
@@ -205,68 +211,97 @@ export function ProfitLossRowsPanel({
                         />
                     }
                     morePanel={
-                        <div className="grid min-w-0 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                            <ListWorkspaceFilterField
-                                htmlFor="actual-profit-loss-filter-attribution-user"
-                                label="历史归属销售"
-                            >
-                                <MultiOptionCombobox
-                                    id="actual-profit-loss-filter-attribution-user"
-                                    className="w-full"
-                                    value={attributionUsersDraft}
-                                    onValueChange={onAttributionUsersChange}
-                                    options={data?.attributionUserOptions ?? []}
-                                    placeholder="全部历史归属销售"
-                                    aria-label="历史归属销售"
-                                />
-                            </ListWorkspaceFilterField>
-                            <ListWorkspaceFilterField
-                                htmlFor="actual-profit-loss-filter-attribution-org"
-                                label="历史归属组织（含当时下级）"
-                            >
-                                <MultiOptionCombobox
-                                    id="actual-profit-loss-filter-attribution-org"
-                                    className="w-full"
-                                    value={attributionOrgsDraft}
-                                    onValueChange={onAttributionOrgsChange}
-                                    options={data?.attributionOrgOptions ?? []}
-                                    placeholder="全部历史归属组织"
-                                    aria-label="历史归属组织"
-                                />
-                            </ListWorkspaceFilterField>
-                            <ListWorkspaceFilterField
-                                htmlFor="actual-profit-loss-filter-benefit-scenario"
-                                label="福利场景"
-                            >
-                                <OptionCombobox
-                                    id="actual-profit-loss-filter-benefit-scenario"
-                                    className="w-full"
-                                    value={benefitScenarioDraft || undefined}
-                                    aria-label="福利场景"
-                                    onValueChange={(value) =>
-                                        onBenefitScenarioDraftChange(
-                                            value ?? "",
-                                        )
-                                    }
-                                    options={benefitScenarioOptions}
-                                    placeholder="全部福利场景"
-                                    searchPlaceholder="搜索福利场景"
-                                />
-                            </ListWorkspaceFilterField>
-                            <ListWorkspaceFilterField
-                                htmlFor="actual-profit-loss-filter-cost-types"
-                                label="成本类型"
-                            >
-                                <MultiOptionCombobox
-                                    id="actual-profit-loss-filter-cost-types"
-                                    className="w-full"
-                                    value={costTypesDraft}
-                                    aria-label="成本类型"
-                                    onValueChange={onCostTypesDraftChange}
-                                    options={costTypeOptions}
-                                    placeholder="全部成本类型"
-                                />
-                            </ListWorkspaceFilterField>
+                        <div className="space-y-5">
+                            <fieldset className="min-w-0 space-y-3">
+                                <legend className="mb-1 text-sm font-medium">
+                                    历史归属
+                                </legend>
+                                <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                                    <ListWorkspaceFilterField
+                                        htmlFor="actual-profit-loss-filter-attribution-user"
+                                        label="历史归属销售"
+                                    >
+                                        <MultiOptionCombobox
+                                            id="actual-profit-loss-filter-attribution-user"
+                                            className="w-full min-w-0"
+                                            value={attributionUsersDraft}
+                                            onValueChange={
+                                                onAttributionUsersChange
+                                            }
+                                            options={
+                                                data?.attributionUserOptions ??
+                                                []
+                                            }
+                                            placeholder="全部历史归属销售"
+                                            aria-label="历史归属销售"
+                                        />
+                                    </ListWorkspaceFilterField>
+                                    <ListWorkspaceFilterField
+                                        htmlFor="actual-profit-loss-filter-attribution-org"
+                                        label="历史归属组织（含当时下级）"
+                                    >
+                                        <MultiOptionCombobox
+                                            id="actual-profit-loss-filter-attribution-org"
+                                            className="w-full min-w-0"
+                                            value={attributionOrgsDraft}
+                                            onValueChange={
+                                                onAttributionOrgsChange
+                                            }
+                                            options={
+                                                data?.attributionOrgOptions ??
+                                                []
+                                            }
+                                            placeholder="全部历史归属组织"
+                                            aria-label="历史归属组织"
+                                        />
+                                    </ListWorkspaceFilterField>
+                                </div>
+                            </fieldset>
+                            <fieldset className="min-w-0 border-t pt-4">
+                                <legend className="pr-2 text-sm font-medium">
+                                    场景与成本
+                                </legend>
+                                <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                                    <ListWorkspaceFilterField
+                                        htmlFor="actual-profit-loss-filter-benefit-scenario"
+                                        label="福利场景"
+                                    >
+                                        <OptionCombobox
+                                            id="actual-profit-loss-filter-benefit-scenario"
+                                            className="w-full min-w-0"
+                                            value={
+                                                benefitScenarioDraft ||
+                                                undefined
+                                            }
+                                            aria-label="福利场景"
+                                            onValueChange={(value) =>
+                                                onBenefitScenarioDraftChange(
+                                                    value ?? "",
+                                                )
+                                            }
+                                            options={benefitScenarioOptions}
+                                            placeholder="全部福利场景"
+                                            searchPlaceholder="搜索福利场景"
+                                        />
+                                    </ListWorkspaceFilterField>
+                                    <ListWorkspaceFilterField
+                                        htmlFor="actual-profit-loss-filter-cost-types"
+                                        label="成本类型"
+                                    >
+                                        <MultiOptionCombobox
+                                            id="actual-profit-loss-filter-cost-types"
+                                            className="w-full min-w-0"
+                                            value={costTypesDraft}
+                                            aria-label="成本类型"
+                                            onValueChange={
+                                                onCostTypesDraftChange
+                                            }
+                                            options={costTypeOptions}
+                                            placeholder="全部成本类型"
+                                        />
+                                    </ListWorkspaceFilterField>
+                                </div>
+                            </fieldset>
                         </div>
                     }
                     resultStatus={listWorkspaceFilterStatusText({

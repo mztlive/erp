@@ -148,6 +148,7 @@ export function AuditPage() {
                         actionOptions={page.actionOptions}
                         filterError={page.filterError}
                         resetMoreFilters={page.resetMoreFilters}
+                        onCancelMoreFilters={page.cancelMoreFilters}
                         hasPendingChanges={page.hasPendingChanges}
                         resultCount={rows.length}
                         loading={

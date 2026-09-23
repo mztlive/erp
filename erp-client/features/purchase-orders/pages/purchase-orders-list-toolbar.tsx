@@ -52,6 +52,8 @@ export function PurchaseOrdersListToolbar({
 }: PurchaseOrdersListToolbarProps) {
     return (
         <ListWorkspaceFilterBar
+            morePresentation="popover"
+            className="[&_[data-slot=list-toolbar-filters]]:min-w-0 [&_[data-slot=list-toolbar-filters]]:shrink [&_[data-slot=list-toolbar-filters]]:self-center"
             idPrefix={`${prefix}-filter`}
             formAriaLabel="采购单查询"
             onSubmit={applyFilters}
@@ -66,14 +68,17 @@ export function PurchaseOrdersListToolbar({
                     aria-label="搜索采购单"
                 />
             }
-            commonFilters={
-                <ResponsibleUserFilter
-                    id="procurement-orders-list-owner"
-                    label="采购负责人"
-                    value={ownerDraft}
-                    onChange={setOwnerDraft}
-                    options={ownerOptions}
-                />
+            primaryFilters={
+                <div className="w-56 max-w-full min-w-0">
+                    <ResponsibleUserFilter
+                        id="procurement-orders-list-owner"
+                        label="采购负责人"
+                        hideLabel
+                        value={ownerDraft}
+                        onChange={setOwnerDraft}
+                        options={ownerOptions}
+                    />
+                </div>
             }
             queryButtonId={`${prefix}-apply-filters`}
             clearButtonId={`${prefix}-clear-all`}

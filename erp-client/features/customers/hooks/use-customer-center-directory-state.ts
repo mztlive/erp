@@ -38,8 +38,9 @@ export type CustomerAppliedChip = Readonly<{
 
 /**
  * 客户中心目录的 URL 派生状态（docs/ui-filter-design.md §5）：
- * Applied 以 URL 为唯一事实源；Draft（关键词/状态）只存本地，
- * Draft 变化不触发请求。所有变更通过 router.replace(scroll: false) 写回 URL。
+ * Applied 以 URL 为唯一事实源；Draft 只存本地，变化不触发请求。
+ * 所有变更通过 router.replace(scroll: false) 写回 URL。
+ * 更多筛选默认关闭，深链不自动展开。
  */
 export function useCustomerCenterDirectoryState() {
     const router = useRouter()
@@ -78,6 +79,7 @@ export function useCustomerCenterDirectoryState() {
     const [searchDraft, setSearchDraft] = React.useState(q)
     const [statusDraft, setStatusDraft] =
         React.useState<DirectoryStatus>(status)
+    const [panelOpen, setPanelOpen] = React.useState(false)
 
     // URL 回填只同步 Draft
     React.useEffect(() => {
@@ -120,16 +122,18 @@ export function useCustomerCenterDirectoryState() {
         ],
     )
 
-    /** 单一提交路径：查询按钮与搜索框 Enter 共用。 */
+    /** 查询与「应用筛选」提交全部草稿，回到第一页并关闭面板。 */
     const applyFilters = React.useCallback(() => {
+        const orgUnitIdsNext = orgDraft.trim()
         pushState({
             q: searchDraft.trim(),
             status: statusDraft,
             ownerUserIds: ownerDraft,
-            orgUnitIds: orgDraft,
-            includeDescendants: descendantsDraft,
+            orgUnitIds: orgUnitIdsNext,
+            includeDescendants: Boolean(orgUnitIdsNext) && descendantsDraft,
             page: 1,
         })
+        setPanelOpen(false)
     }, [
         pushState,
         searchDraft,
@@ -175,10 +179,18 @@ export function useCustomerCenterDirectoryState() {
         [pushState],
     )
 
-    /** 仅重置更多条件草稿；本页无更多面板。 */
+    /** 只清组织草稿；保留搜索、负责销售、状态和当前结果。 */
     const resetMoreFilters = React.useCallback(() => {
-        return
+        setOrgDraft("")
+        setDescendantsDraft(false)
     }, [])
+
+    /** 关闭面板时只恢复组织草稿，保留外部查询栏草稿。 */
+    const cancelMoreFilters = React.useCallback(() => {
+        setOrgDraft(orgUnitIds)
+        setDescendantsDraft(includeDescendants)
+        setPanelOpen(false)
+    }, [includeDescendants, orgUnitIds])
 
     /** 同时重置 Draft、URL 筛选参数与分页；保留 scope/sort/dir。 */
     const clearAllFilters = React.useCallback(() => {
@@ -187,6 +199,7 @@ export function useCustomerCenterDirectoryState() {
         setOwnerDraft("")
         setOrgDraft("")
         setDescendantsDraft(false)
+        setPanelOpen(false)
         pushState({
             q: "",
             status: "active",
@@ -278,6 +291,8 @@ export function useCustomerCenterDirectoryState() {
         setSearchDraft,
         statusDraft,
         setStatusDraft,
+        panelOpen,
+        setPanelOpen,
         searchInputRef,
         hasStructuredFilters,
         hasActiveFilters,
@@ -288,6 +303,7 @@ export function useCustomerCenterDirectoryState() {
         applyScope,
         removeFilter,
         resetMoreFilters,
+        cancelMoreFilters,
         clearAllFilters,
         handlePaginationChange,
         sorting,

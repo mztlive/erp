@@ -15,7 +15,6 @@ import {
     ListWorkspaceFilterBar,
     ListWorkspaceHeader,
     ListWorkspaceViews,
-    ListWorkspaceInlineFilter,
     listWorkspaceEmptyStateClassName,
     listWorkspaceFilterStatusText,
     listWorkspaceStyles as styles,
@@ -70,7 +69,6 @@ export function ApprovalProcessesPage() {
             ),
         [searchParams],
     )
-    const [moreOpen, setMoreOpen] = React.useState(false)
     const [searchDraft, setSearchDraft] = React.useState(urlState.q)
     const [policyDraft, setPolicyDraft] = React.useState(urlState.policy)
     const [statusDraft, setStatusDraft] = React.useState(urlState.status)
@@ -291,6 +289,7 @@ export function ApprovalProcessesPage() {
                 ariaLabel="审批流程单据类型目录"
                 toolbar={
                     <ListWorkspaceFilterBar
+                        morePresentation="popover"
                         density="compact"
                         idPrefix="governance-approval-processes-catalog"
                         formAriaLabel="审批流程查询"
@@ -304,60 +303,48 @@ export function ApprovalProcessesPage() {
                                 aria-label="搜索单据类型"
                             />
                         }
-                        moreOpen={moreOpen}
-                        onToggleMore={() => setMoreOpen((open) => !open)}
-                        moreCount={
-                            Number(urlState.policy !== "ALL") +
-                            Number(urlState.status !== "ALL")
-                        }
-                        morePanel={
-                            <div className="flex flex-col gap-3 lg:flex-row lg:gap-6">
-                                <ListWorkspaceInlineFilter
-                                    htmlFor="governance-approval-processes-catalog-policy"
-                                    label="审批要求"
-                                >
-                                    <OptionCombobox
-                                        id="governance-approval-processes-catalog-policy"
-                                        className="w-full sm:w-44"
-                                        aria-label="审批要求"
-                                        options={[...POLICY_OPTIONS]}
-                                        value={policyDraft}
-                                        allowClear={false}
-                                        onValueChange={(value) =>
-                                            setPolicyDraft(
-                                                value === "PROCESS_REQUIRED" ||
-                                                    value === "NO_APPROVAL"
-                                                    ? value
-                                                    : "ALL",
-                                            )
-                                        }
-                                    />
-                                </ListWorkspaceInlineFilter>
-                                <ListWorkspaceInlineFilter
-                                    htmlFor="governance-approval-processes-catalog-status"
-                                    label="配置状态"
-                                >
-                                    <OptionCombobox
-                                        id="governance-approval-processes-catalog-status"
-                                        className="w-full sm:w-48"
-                                        aria-label="配置状态"
-                                        options={[...STATUS_OPTIONS]}
-                                        value={statusDraft}
-                                        allowClear={false}
-                                        onValueChange={(value) =>
-                                            setStatusDraft(
-                                                value === "PUBLISHED" ||
-                                                    value ===
-                                                        "MISSING_CONFIGURATION" ||
-                                                    value === "HAS_DRAFT" ||
-                                                    value === "NOT_APPLICABLE"
-                                                    ? value
-                                                    : "ALL",
-                                            )
-                                        }
-                                    />
-                                </ListWorkspaceInlineFilter>
-                            </div>
+                        primaryFilters={
+                            <>
+                                <OptionCombobox
+                                    id="governance-approval-processes-catalog-policy"
+                                    className="w-56 max-w-full min-w-0"
+                                    filterLabel="审批要求"
+                                    aria-label="审批要求"
+                                    options={[...POLICY_OPTIONS]}
+                                    value={policyDraft}
+                                    allowClear={false}
+                                    placeholder="全部"
+                                    onValueChange={(value) =>
+                                        setPolicyDraft(
+                                            value === "PROCESS_REQUIRED" ||
+                                                value === "NO_APPROVAL"
+                                                ? value
+                                                : "ALL",
+                                        )
+                                    }
+                                />
+                                <OptionCombobox
+                                    id="governance-approval-processes-catalog-status"
+                                    className="w-56 max-w-full min-w-0"
+                                    filterLabel="配置状态"
+                                    aria-label="配置状态"
+                                    options={[...STATUS_OPTIONS]}
+                                    value={statusDraft}
+                                    allowClear={false}
+                                    placeholder="全部"
+                                    onValueChange={(value) =>
+                                        setStatusDraft(
+                                            value === "PUBLISHED" ||
+                                                value ===
+                                                    "MISSING_CONFIGURATION" ||
+                                                value === "HAS_DRAFT" ||
+                                                value === "NOT_APPLICABLE"
+                                                ? value
+                                                : "ALL",
+                                        )
+                                    }
+                                />
+                            </>
                         }
                         resultStatus={listWorkspaceFilterStatusText({
                             loading: catalogQuery.isPending,

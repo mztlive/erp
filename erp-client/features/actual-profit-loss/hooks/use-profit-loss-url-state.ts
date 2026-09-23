@@ -40,6 +40,7 @@ export function useProfitLossUrlState({ basisConfig, basisResolved }: Options) {
     const to = searchParams.get("to") ?? resolvedDefault.to
     const periodBasisUrl = searchParams.get("periodBasis") ?? ""
     const coverage = parseCoverage(searchParams.get("coverage"))
+    const [coverageDraft, setCoverageDraft] = React.useState(coverage)
     const dimension = parseDimension(searchParams.get("dimension"))
     const customerId = searchParams.get("customerId") ?? undefined
     const salesOrderId = searchParams.get("salesOrderId") ?? undefined
@@ -90,8 +91,8 @@ export function useProfitLossUrlState({ basisConfig, basisResolved }: Options) {
     const [costTypesDraft, setCostTypesDraft] = React.useState<string[]>(() => [
         ...costTypes,
     ])
-    const [filterPanelOpen, setFilterPanelOpen] =
-        React.useState(hasStructuredFilters)
+    // 深链只显示已生效标签，不自动打开浮层。
+    const [filterPanelOpen, setFilterPanelOpen] = React.useState(false)
     const pagination = React.useMemo<PaginationState>(
         () => ({ pageIndex: page - 1, pageSize }),
         [page, pageSize],
@@ -193,6 +194,9 @@ export function useProfitLossUrlState({ basisConfig, basisResolved }: Options) {
         setSearchInput(qParam)
     }, [qParam])
     React.useEffect(() => {
+        setCoverageDraft(coverage)
+    }, [coverage])
+    React.useEffect(() => {
         setBenefitScenarioDraft(benefitScenario ?? "")
         setCostTypesDraft([...costTypes])
     }, [benefitScenario, costTypes])
@@ -256,6 +260,7 @@ export function useProfitLossUrlState({ basisConfig, basisResolved }: Options) {
             attributionOrgUnitIds:
                 serializeCsvValues(attributionOrgsDraft) || null,
             q: searchInput.trim() || null,
+            coverage: coverageDraft === "covered" ? null : coverageDraft,
             benefitScenario: benefitScenarioDraft.trim() || null,
             costType: serializeCsvValues(costTypesDraft) || null,
             page: null,
@@ -266,11 +271,13 @@ export function useProfitLossUrlState({ basisConfig, basisResolved }: Options) {
         attributionOrgsDraft,
         benefitScenarioDraft,
         costTypesDraft,
+        coverageDraft,
         patchUrl,
         searchInput,
     ])
     const clearAllFilters = React.useCallback(() => {
         setSearchInput("")
+        setCoverageDraft("covered")
         setBenefitScenarioDraft("")
         setCostTypesDraft([])
         setAttributionUsersDraft([])
@@ -297,12 +304,22 @@ export function useProfitLossUrlState({ basisConfig, basisResolved }: Options) {
         setAttributionOrgsDraft([])
     }, [])
 
+    /** 取消、关闭、Esc 和外点只恢复低频草稿，保留搜索词。 */
+    const cancelMoreFilters = React.useCallback(() => {
+        setAttributionUsersDraft([...attributionUserIds])
+        setAttributionOrgsDraft([...attributionOrgUnitIds])
+        setBenefitScenarioDraft(benefitScenario ?? "")
+        setCostTypesDraft([...costTypes])
+        setFilterPanelOpen(false)
+    }, [attributionOrgUnitIds, attributionUserIds, benefitScenario, costTypes])
+
     const hasPendingChanges =
         serializeCsvValues(attributionUsersDraft) !==
             serializeCsvValues(attributionUserIds) ||
         serializeCsvValues(attributionOrgsDraft) !==
             serializeCsvValues(attributionOrgUnitIds) ||
         searchInput.trim() !== qParam.trim() ||
+        coverageDraft !== coverage ||
         benefitScenarioDraft.trim() !== (benefitScenario ?? "") ||
         serializeCsvValues(costTypesDraft) !== serializeCsvValues(costTypes)
     const removeFilter = React.useCallback(
@@ -319,6 +336,7 @@ export function useProfitLossUrlState({ basisConfig, basisResolved }: Options) {
                 setSearchInput("")
                 patchUrl({ q: null, page: null })
             } else if (key === "coverage") {
+                setCoverageDraft("covered")
                 patchUrl({ coverage: null, page: null })
             } else if (key === "customerId") {
                 patchUrl({ customerId: null, page: null })
@@ -352,17 +370,9 @@ export function useProfitLossUrlState({ basisConfig, basisResolved }: Options) {
         },
         [patchUrl],
     )
-    const handleCoverageChange = React.useCallback(
-        (value: string) => {
-            const next = value as ProfitLossCoverage
-            patchUrl(
-                next === "covered"
-                    ? { coverage: null, page: null }
-                    : { coverage: next, page: null },
-            )
-        },
-        [patchUrl],
-    )
+    const handleCoverageChange = React.useCallback((value: string) => {
+        setCoverageDraft(value as ProfitLossCoverage)
+    }, [])
     const handleDimensionChange = React.useCallback(
         (value: string) => patchUrl({ dimension: value, page: null }),
         [patchUrl],
@@ -383,6 +393,7 @@ export function useProfitLossUrlState({ basisConfig, basisResolved }: Options) {
         periodBasisUrl,
         periodBasisValid,
         coverage,
+        coverageDraft,
         dimension,
         customerId,
         salesOrderId,
@@ -405,6 +416,7 @@ export function useProfitLossUrlState({ basisConfig, basisResolved }: Options) {
         applyFilters,
         clearAllFilters,
         resetMoreFilters,
+        cancelMoreFilters,
         hasPendingChanges,
         removeFilter,
         pagination,

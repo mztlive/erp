@@ -65,6 +65,7 @@ export interface CustomerReceivablesUrlState {
     applyFilters: () => void
     removeFilter: (key: CustomerReceivablesFilterKey) => void
     resetMoreFilters: () => void
+    cancelMoreFilters: () => void
     clearFilters: () => void
     handlePaginationChange: (next: PaginationState) => void
 }
@@ -139,8 +140,8 @@ export function useCustomerReceivablesUrlState(
         React.useState<ReceivableStatusFilter>(statusDraftFromUrl)
 
     const hasStructuredFilters = Boolean(counterpartyPartyId || status)
-    // 有结构化条件的初始深链展开面板；后续 URL 回填不得抢夺展开态。
-    const [panelOpen, setPanelOpen] = React.useState(hasStructuredFilters)
+    // 深链只显示已生效标签，不自动打开面板。
+    const [panelOpen, setPanelOpen] = React.useState(false)
 
     // 分页从 URL 派生；筛选变更写 URL 并回第 1 页。
     const pageFromUrl = React.useMemo(
@@ -262,11 +263,16 @@ export function useCustomerReceivablesUrlState(
         [patchUrl],
     )
 
-    /** 只清「更多筛选」草稿；保留关键词、到期常用条件、来源锁定和当前结果。 */
+    /** 只清往来主体草稿；保留搜索、状态、到期和当前结果。 */
     const resetMoreFilters = React.useCallback(() => {
         setCounterpartyPartyIdDraft(null)
-        setStatusDraft("all")
     }, [])
+
+    /** 取消、关闭、Esc 和外点只恢复往来主体草稿。 */
+    const cancelMoreFilters = React.useCallback(() => {
+        setCounterpartyPartyIdDraft(counterpartyPartyId ?? null)
+        setPanelOpen(false)
+    }, [counterpartyPartyId])
 
     const hasPendingChanges =
         searchDraft.trim() !== qParam.trim() ||
@@ -397,6 +403,7 @@ export function useCustomerReceivablesUrlState(
         applyFilters,
         removeFilter,
         resetMoreFilters,
+        cancelMoreFilters,
         clearFilters,
         handlePaginationChange,
     }

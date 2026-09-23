@@ -64,6 +64,7 @@ interface LedgerToolbarProps {
     removeFilter: (key: LedgerFilterKey) => void
     applyFilters: () => void
     resetMoreFilters: () => void
+    cancelMoreFilters: () => void
     clearAllFilters: () => void
     filterError: string | null
     setFilterError: SetState<string | null>
@@ -105,6 +106,7 @@ export function LedgerToolbar({
     removeFilter,
     applyFilters,
     resetMoreFilters,
+    cancelMoreFilters,
     clearAllFilters,
     filterError,
     setFilterError,
@@ -136,19 +138,22 @@ export function LedgerToolbar({
     const warehouseFilter = (
         <WarehouseSearchCombobox
             id="inventory-ledger-warehouse-filter"
-            className="w-full sm:w-44"
+            className="w-44 max-w-full min-w-0"
+            filterLabel="仓库"
             value={warehouseIdDraft ?? undefined}
             onValueChange={(id) => setWarehouseIdDraft(id ?? null)}
             purpose="filter"
-            aria-label="筛选仓库"
-            placeholder="全部仓库"
+            aria-label="仓库"
+            placeholder="全部"
         />
     )
 
     return (
         <ListWorkspaceFilterBar
             density="compact"
-            className="[&_[data-slot=list-toolbar-search]]:lg:w-72 [&_[data-slot=list-toolbar-primary]>div>[data-slot=separator]]:hidden"
+            morePresentation="popover"
+            moreSize={showAdjustmentMore ? "compact" : "wide"}
+            className="[&_[data-slot=list-toolbar-search]]:lg:w-72 [&_[data-slot=list-toolbar-filters]]:min-w-0 [&_[data-slot=list-toolbar-filters]]:shrink [&_[data-slot=list-toolbar-filters]]:self-center [&_[data-slot=list-toolbar-primary]>div>[data-slot=separator]]:hidden"
             idPrefix="inventory-ledger-filter"
             formAriaLabel="库存台账查询"
             onSubmit={applyFilters}
@@ -166,7 +171,10 @@ export function LedgerToolbar({
             moreCount={moreCount}
             moreOpen={panelOpen}
             onToggleMore={
-                showMore ? () => setPanelOpen((open) => !open) : undefined
+                showMore
+                    ? () =>
+                          panelOpen ? cancelMoreFilters() : setPanelOpen(true)
+                    : undefined
             }
             moreButtonId="inventory-ledger-filters-trigger"
             morePanelId="inventory-ledger-more-panel"
@@ -180,9 +188,14 @@ export function LedgerToolbar({
                     {showAvailabilityCommon ? (
                         <OptionCombobox
                             id="inventory-ledger-availability-filter"
-                            className="w-full sm:w-44"
+                            className="w-44 max-w-full min-w-0"
+                            filterLabel="库存条件"
                             aria-label="库存条件"
-                            value={availabilityDraft}
+                            value={
+                                availabilityDraft === "all"
+                                    ? null
+                                    : availabilityDraft
+                            }
                             onValueChange={(value) =>
                                 setAvailabilityDraft(
                                     AVAILABILITY_OPTIONS.find(
@@ -190,15 +203,10 @@ export function LedgerToolbar({
                                     )?.value ?? "all",
                                 )
                             }
-                            options={AVAILABILITY_OPTIONS.map((option) => ({
-                                ...option,
-                                label:
-                                    option.value === "all"
-                                        ? "库存筛选"
-                                        : option.label,
-                            }))}
-                            allowClear={false}
-                            placeholder="库存筛选"
+                            options={AVAILABILITY_OPTIONS.filter(
+                                (option) => option.value !== "all",
+                            )}
+                            placeholder="全部"
                         />
                     ) : null}
                 </>

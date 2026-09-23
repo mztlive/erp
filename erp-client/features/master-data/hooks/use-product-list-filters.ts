@@ -98,9 +98,9 @@ export function useProductListFilters(
         includeDescendants,
     )
 
-    const [productFilterPanelOpen, setProductFilterPanelOpen] = React.useState(
-        hasStructuredProductFilters,
-    )
+    // 深链只显示已生效标签，不自动打开筛选浮层。
+    const [productFilterPanelOpen, setProductFilterPanelOpen] =
+        React.useState(false)
     const [productKindDraft, setProductKindDraft] = React.useState<
         ProductKind | "all"
     >(productKind ?? "all")
@@ -170,6 +170,7 @@ export function useProductListFilters(
             setProductFilterPanelOpen(true)
             return
         }
+        const organizationIds = orgUnitIdsDraft.trim()
         patchUrl({
             q: searchDraft.trim() || null,
             productKind: productKindDraft === "all" ? null : productKindDraft,
@@ -191,8 +192,9 @@ export function useProductListFilters(
             ownerUserIds: ownerUserIdsDraft.trim() || null,
             procurementOwnerUserIds:
                 procurementOwnerUserIdsDraft.trim() || null,
-            orgUnitIds: orgUnitIdsDraft.trim() || null,
-            includeDescendants: includeDescendantsDraft ? "true" : null,
+            orgUnitIds: organizationIds || null,
+            includeDescendants:
+                organizationIds && includeDescendantsDraft ? "true" : null,
             page: null,
         })
         resetPagination()
@@ -279,6 +281,35 @@ export function useProductListFilters(
         setOrgUnitIdsDraft("")
         setIncludeDescendantsDraft(false)
     }, [])
+
+    /** 取消、外点和 Esc 只恢复低频草稿，保留搜索、类型和分类。 */
+    const cancelMoreFilters = React.useCallback(() => {
+        setRevisionTimingDraft(revisionTiming)
+        setProductListingStatusDraft(productListingStatus ?? "all")
+        setProductSupplyCoverageDraft(productSupplyCoverage ?? "all")
+        setProductBrandIdDraft(productBrandId ?? null)
+        setProductSupplierIdDraft(productSupplierId ?? null)
+        setProductSalesPriceMinDraft(productSalesPriceMin ?? "")
+        setProductSalesPriceMaxDraft(productSalesPriceMax ?? "")
+        setProductSalesPriceError(null)
+        setOwnerUserIdsDraft(ownerUserIds ?? "")
+        setProcurementOwnerUserIdsDraft(procurementOwnerUserIds ?? "")
+        setOrgUnitIdsDraft(orgUnitIds ?? "")
+        setIncludeDescendantsDraft(includeDescendants)
+        setProductFilterPanelOpen(false)
+    }, [
+        includeDescendants,
+        orgUnitIds,
+        ownerUserIds,
+        procurementOwnerUserIds,
+        productBrandId,
+        productListingStatus,
+        productSalesPriceMax,
+        productSalesPriceMin,
+        productSupplierId,
+        productSupplyCoverage,
+        revisionTiming,
+    ])
 
     const hasPendingChanges =
         searchDraft.trim() !== q.trim() ||
@@ -426,6 +457,7 @@ export function useProductListFilters(
         applyProductFilters,
         removeFilter,
         resetMoreFilters,
+        cancelMoreFilters,
         clearAllFilters,
     }
 }

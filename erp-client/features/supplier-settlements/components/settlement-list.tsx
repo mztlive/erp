@@ -263,6 +263,7 @@ function SettlementList({
                         applyFilters={filters.applyFilters}
                         removeFilter={filters.removeFilter}
                         resetMoreFilters={filters.resetMoreFilters}
+                        cancelMoreFilters={filters.cancelMoreFilters}
                         clearAllFilters={filters.clearAllFilters}
                         supplierIdDraft={filters.supplierIdDraft}
                         setSupplierIdDraft={filters.setSupplierIdDraft}

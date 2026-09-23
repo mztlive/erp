@@ -40,9 +40,11 @@ export function DictionaryListToolbar({
 
     return (
         <ListWorkspaceFilterBar
+            morePresentation="popover"
             idPrefix={prefix}
             formAriaLabel={`${countLabel}查询`}
             onSubmit={f.applyListFilters}
+            queryButtonId={`${prefix}-query`}
             search={
                 <ListSearchField
                     id={`${prefix}-search-input`}

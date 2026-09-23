@@ -161,7 +161,7 @@ export function ActualProfitLossPage() {
                         <ProfitLossRowsPanel
                             data={page.data}
                             dimension={page.dimension}
-                            coverage={page.coverage}
+                            coverage={page.coverageDraft}
                             hasFilters={page.hasFilters}
                             searchInput={page.searchInput}
                             searchInputRef={page.searchInputRef}
@@ -173,6 +173,7 @@ export function ActualProfitLossPage() {
                             appliedChips={page.appliedChips}
                             onRemoveFilter={page.removeFilter}
                             onResetMoreFilters={page.resetMoreFilters}
+                            onCancelMoreFilters={page.cancelMoreFilters}
                             onClearAllFilters={page.clearAllFilters}
                             hasPendingChanges={page.hasPendingChanges}
                             onDimensionChange={page.handleDimensionChange}

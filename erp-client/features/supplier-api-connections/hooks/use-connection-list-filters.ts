@@ -120,12 +120,6 @@ export function useConnectionListFilters(
         applied.catalogFreshness.length > 0 ||
         applied.supplierId,
     )
-    const hasMoreFilters = Boolean(
-        applied.health.length > 0 ||
-        applied.capability ||
-        applied.catalogFreshness.length > 0 ||
-        applied.supplierId,
-    )
     const hasFilters = Boolean(applied.q || hasStructuredFilters)
 
     const [searchDraft, setSearchDraft] = React.useState(applied.q ?? "")
@@ -141,8 +135,8 @@ export function useConnectionListFilters(
     const [supplierIdDraft, setSupplierIdDraft] = React.useState<string | null>(
         applied.supplierId ?? null,
     )
-    /** 初始深链带结构化条件时展开；此后展开态只由用户与提交结果控制（§5.5）。 */
-    const [filterPanelOpen, setFilterPanelOpen] = React.useState(hasMoreFilters)
+    /** 深链条件显示为标签，不自动打开浮层。 */
+    const [filterPanelOpen, setFilterPanelOpen] = React.useState(false)
 
     /** 一次提交关键词与全部结构化筛选草稿；成功后收起面板（§8.1）。 */
     const applyFilters = React.useCallback(() => {
@@ -204,13 +198,20 @@ export function useConnectionListFilters(
         [patchUrl],
     )
 
-    /** 仅重置更多条件草稿；保留关键词、状态、环境与已生效结果。 */
+    /** 只清低频草稿；保留关键词、供应商、状态、环境与已生效结果。 */
     const resetMoreFilters = React.useCallback(() => {
         setHealthDraft([])
         setCapabilityDraft("")
         setCatalogFreshnessDraft([])
-        setSupplierIdDraft(null)
     }, [])
+
+    /** 取消、关闭、Esc 和外点只恢复低频草稿，保留搜索和供应商。 */
+    const cancelMoreFilters = React.useCallback(() => {
+        setHealthDraft(applied.health)
+        setCapabilityDraft(applied.capability ?? "")
+        setCatalogFreshnessDraft(applied.catalogFreshness)
+        setFilterPanelOpen(false)
+    }, [applied])
 
     /**
      * 清空关键词与全部筛选参数并收起面板；environment 属视图类参数保留
@@ -321,6 +322,7 @@ export function useConnectionListFilters(
         applyEnvironment,
         removeFilter,
         resetMoreFilters,
+        cancelMoreFilters,
         clearFilters,
         appliedFilterLabels,
         hasPendingChanges,

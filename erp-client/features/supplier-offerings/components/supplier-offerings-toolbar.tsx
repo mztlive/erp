@@ -2,20 +2,20 @@
 
 import * as React from "react"
 
-import { FixedOptionRadioFilter } from "@/components/business"
+import { OptionCombobox } from "@/components/business"
 import {
     ListSearchField,
     ListWorkspaceFilterBar,
     ListWorkspaceFilterField,
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { ResponsibleUserFilter } from "@/features/entity-selectors/components/responsible-user-filter"
 import {
     CompanySkuSearchCombobox,
     SupplierSearchCombobox,
 } from "@/features/entity-selectors"
+import { OrganizationUnitFilter } from "@/features/organization/components/organization-unit-filter"
 import type {
     AvailabilityStatusFilter,
     OfferingSourceFilter,
@@ -28,14 +28,12 @@ import {
 } from "@/features/supplier-offerings/types"
 
 const SOURCE_TYPE_FILTER_OPTIONS = [
-    { value: "all", label: "全部" },
     { value: "MANUAL", label: SOURCE_TYPE_LABELS.MANUAL },
     { value: "EXCEL", label: SOURCE_TYPE_LABELS.EXCEL },
     { value: "API", label: SOURCE_TYPE_LABELS.API },
 ] as const
 
 const AVAILABILITY_STATUS_FILTER_OPTIONS = [
-    { value: "all", label: "全部" },
     { value: "AVAILABLE", label: AVAILABILITY_STATUS_LABELS.AVAILABLE },
     { value: "UNAVAILABLE", label: AVAILABILITY_STATUS_LABELS.UNAVAILABLE },
     { value: "STOPPED", label: AVAILABILITY_STATUS_LABELS.STOPPED },
@@ -44,11 +42,9 @@ const AVAILABILITY_STATUS_FILTER_OPTIONS = [
 
 const MORE_CHIP_KEYS: readonly SupplierOfferingFilterKey[] = [
     "sourceType",
-    "availabilityStatus",
     "skuId",
     "skuNo",
     "productNo",
-    "supplierId",
     "ownerUserIds",
     "procurementOwnerUserIds",
     "orgUnitIds",
@@ -65,6 +61,7 @@ export type SupplierOfferingsToolbarProps = {
     onApplyFilters: () => void
     onClearFilters: () => void
     onResetMoreFilters: () => void
+    onCancelMoreFilters: () => void
     sourceTypeDraft: OfferingSourceFilter
     onSourceTypeDraftChange: (value: OfferingSourceFilter) => void
     availabilityStatusDraft: AvailabilityStatusFilter
@@ -105,6 +102,7 @@ export function SupplierOfferingsToolbar({
     onApplyFilters,
     onClearFilters,
     onResetMoreFilters,
+    onCancelMoreFilters,
     sourceTypeDraft,
     onSourceTypeDraftChange,
     availabilityStatusDraft,
@@ -139,6 +137,9 @@ export function SupplierOfferingsToolbar({
 
     return (
         <ListWorkspaceFilterBar
+            morePresentation="popover"
+            moreSize="wide"
+            className="[&_[data-slot=list-toolbar-filters]]:min-w-0 [&_[data-slot=list-toolbar-filters]]:shrink [&_[data-slot=list-toolbar-filters]]:self-center"
             idPrefix="supplier-offerings-toolbar"
             formAriaLabel="供应商供给查询"
             onSubmit={onApplyFilters}
@@ -155,137 +156,184 @@ export function SupplierOfferingsToolbar({
             queryButtonId="supplier-offerings-toolbar-apply"
             moreCount={moreCount}
             moreOpen={filterPanelOpen}
-            onToggleMore={() => onFilterPanelOpenChange(!filterPanelOpen)}
+            onToggleMore={() =>
+                filterPanelOpen
+                    ? onCancelMoreFilters()
+                    : onFilterPanelOpenChange(true)
+            }
             moreButtonId="supplier-offerings-toolbar-filter-toggle"
             morePanelId="supplier-offerings-toolbar-more-panel"
             morePanelAriaLabel="供应商供给更多筛选条件"
             onResetMore={onResetMoreFilters}
             resetMoreButtonId="supplier-offerings-toolbar-reset-more"
-            morePanel={
-                <div className="grid min-w-0 gap-5">
-                    <ResponsibleUserFilter
-                        id="supplier-offerings-toolbar-owner"
-                        label="维护人"
-                        value={ownerUserIdsDraft}
-                        onChange={onOwnerUserIdsDraftChange}
-                        options={ownerOptions}
+            primaryFilters={
+                <>
+                    <SupplierSearchCombobox
+                        id="supplier-offerings-toolbar-supplier-select"
+                        className="w-56 max-w-full min-w-0"
+                        filterLabel="供应商"
+                        value={supplierIdDraft ?? undefined}
+                        onValueChange={(value) =>
+                            onSupplierIdDraftChange(value ?? null)
+                        }
+                        placeholder="全部"
+                        aria-label="供应商"
                     />
-                    <ResponsibleUserFilter
-                        id="supplier-offerings-toolbar-procurement-owner"
-                        label="采购负责人"
-                        value={procurementOwnerUserIdsDraft}
-                        onChange={onProcurementOwnerUserIdsDraftChange}
-                        options={procurementOwnerOptions}
-                    />
-                    <ListWorkspaceFilterField
-                        htmlFor="supplier-offerings-toolbar-org"
-                        label="业务组织"
-                    >
-                        <Input
-                            id="supplier-offerings-toolbar-org"
-                            value={orgUnitIdsDraft}
-                            onChange={(event) =>
-                                onOrgUnitIdsDraftChange(event.target.value)
-                            }
-                            placeholder="组织 ID，逗号分隔"
-                            aria-label="按供给业务组织筛选"
-                        />
-                        <label
-                            htmlFor="supplier-offerings-toolbar-org-descendants"
-                            className="mt-2 flex items-center gap-2 text-xs text-muted-foreground"
-                        >
-                            <Checkbox
-                                id="supplier-offerings-toolbar-org-descendants"
-                                checked={includeDescendantsDraft}
-                                onCheckedChange={(checked) =>
-                                    onIncludeDescendantsDraftChange(
-                                        checked === true,
-                                    )
-                                }
-                            />
-                            包含下级组织
-                        </label>
-                    </ListWorkspaceFilterField>
-                    <FixedOptionRadioFilter
-                        idPrefix="supplier-offerings-toolbar-filter-source-type"
-                        label="登记来源"
-                        value={sourceTypeDraft}
-                        onValueChange={onSourceTypeDraftChange}
-                        options={SOURCE_TYPE_FILTER_OPTIONS}
-                    />
-                    <FixedOptionRadioFilter
-                        idPrefix="supplier-offerings-toolbar-filter-availability"
-                        label="当前可供"
-                        value={availabilityStatusDraft}
-                        onValueChange={onAvailabilityStatusDraftChange}
+                    <OptionCombobox
+                        id="supplier-offerings-toolbar-filter-availability"
+                        className="w-48 max-w-full"
+                        filterLabel="当前可供"
+                        aria-label="当前可供"
+                        value={
+                            availabilityStatusDraft === "all"
+                                ? null
+                                : availabilityStatusDraft
+                        }
                         options={AVAILABILITY_STATUS_FILTER_OPTIONS}
+                        onValueChange={(value) => {
+                            if (
+                                value !== null &&
+                                !AVAILABILITY_STATUS_FILTER_OPTIONS.some(
+                                    (option) => option.value === value,
+                                )
+                            ) {
+                                return
+                            }
+                            onAvailabilityStatusDraftChange(
+                                (value ?? "all") as AvailabilityStatusFilter,
+                            )
+                        }}
+                        placeholder="全部"
                     />
-                    <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                        {!skuLocked ? (
+                </>
+            }
+            morePanel={
+                <div className="space-y-5">
+                    <fieldset className="min-w-0 space-y-3">
+                        <legend className="mb-1 text-sm font-medium">
+                            人员
+                        </legend>
+                        <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                            <ResponsibleUserFilter
+                                id="supplier-offerings-toolbar-owner"
+                                label="维护人"
+                                value={ownerUserIdsDraft}
+                                onChange={onOwnerUserIdsDraftChange}
+                                options={ownerOptions}
+                            />
+                            <ResponsibleUserFilter
+                                id="supplier-offerings-toolbar-procurement-owner"
+                                label="采购负责人"
+                                value={procurementOwnerUserIdsDraft}
+                                onChange={onProcurementOwnerUserIdsDraftChange}
+                                options={procurementOwnerOptions}
+                            />
+                        </div>
+                    </fieldset>
+                    <fieldset className="min-w-0 border-t pt-4">
+                        <legend className="pr-2 text-sm font-medium">
+                            商品
+                        </legend>
+                        <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                            {!skuLocked ? (
+                                <ListWorkspaceFilterField
+                                    htmlFor="supplier-offerings-toolbar-sku-select"
+                                    label="公司 SKU"
+                                >
+                                    <CompanySkuSearchCombobox
+                                        id="supplier-offerings-toolbar-sku-select"
+                                        value={skuIdDraft ?? undefined}
+                                        onValueChange={(value) =>
+                                            onSkuIdDraftChange(value ?? null)
+                                        }
+                                        placeholder="全部公司 SKU"
+                                        className="w-full min-w-0"
+                                        aria-label="公司 SKU"
+                                    />
+                                </ListWorkspaceFilterField>
+                            ) : null}
                             <ListWorkspaceFilterField
-                                htmlFor="supplier-offerings-toolbar-sku-select"
-                                label="公司 SKU"
+                                htmlFor="supplier-offerings-toolbar-sku-no"
+                                label="SKU 编号"
                             >
-                                <CompanySkuSearchCombobox
-                                    id="supplier-offerings-toolbar-sku-select"
-                                    value={skuIdDraft ?? undefined}
-                                    onValueChange={(value) =>
-                                        onSkuIdDraftChange(value ?? null)
+                                <Input
+                                    id="supplier-offerings-toolbar-sku-no"
+                                    className="w-full min-w-0"
+                                    value={skuNoDraft}
+                                    onChange={(event) =>
+                                        onSkuNoDraftChange(event.target.value)
                                     }
-                                    placeholder="全部公司 SKU"
-                                    className="w-full"
-                                    aria-label="公司 SKU"
+                                    autoComplete="off"
+                                    placeholder="如 SKU-001"
+                                    aria-label="SKU 编号"
                                 />
                             </ListWorkspaceFilterField>
-                        ) : null}
-                        <ListWorkspaceFilterField
-                            htmlFor="supplier-offerings-toolbar-sku-no"
-                            label="SKU 编号"
-                        >
-                            <Input
-                                id="supplier-offerings-toolbar-sku-no"
-                                className="w-full"
-                                value={skuNoDraft}
-                                onChange={(event) =>
-                                    onSkuNoDraftChange(event.target.value)
+                            <ListWorkspaceFilterField
+                                htmlFor="supplier-offerings-toolbar-product-no"
+                                label="SPU 编号"
+                            >
+                                <Input
+                                    id="supplier-offerings-toolbar-product-no"
+                                    className="w-full min-w-0"
+                                    value={productNoDraft}
+                                    onChange={(event) =>
+                                        onProductNoDraftChange(
+                                            event.target.value,
+                                        )
+                                    }
+                                    autoComplete="off"
+                                    placeholder="如 P-1001"
+                                    aria-label="SPU 编号"
+                                />
+                            </ListWorkspaceFilterField>
+                        </div>
+                    </fieldset>
+                    <fieldset className="min-w-0 border-t pt-4">
+                        <legend className="pr-2 text-sm font-medium">
+                            登记来源
+                        </legend>
+                        <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                            <OptionCombobox
+                                id="supplier-offerings-toolbar-filter-source-type"
+                                className="w-full min-w-0"
+                                value={
+                                    sourceTypeDraft === "all"
+                                        ? null
+                                        : sourceTypeDraft
                                 }
-                                autoComplete="off"
-                                placeholder="如 SKU-001"
-                                aria-label="SKU 编号"
+                                options={SOURCE_TYPE_FILTER_OPTIONS}
+                                onValueChange={(value) => {
+                                    if (
+                                        value !== null &&
+                                        !SOURCE_TYPE_FILTER_OPTIONS.some(
+                                            (option) => option.value === value,
+                                        )
+                                    ) {
+                                        return
+                                    }
+                                    onSourceTypeDraftChange(
+                                        (value ??
+                                            "all") as OfferingSourceFilter,
+                                    )
+                                }}
+                                placeholder="全部"
+                                aria-label="登记来源"
                             />
-                        </ListWorkspaceFilterField>
-                        <ListWorkspaceFilterField
-                            htmlFor="supplier-offerings-toolbar-product-no"
-                            label="SPU 编号"
-                        >
-                            <Input
-                                id="supplier-offerings-toolbar-product-no"
-                                className="w-full"
-                                value={productNoDraft}
-                                onChange={(event) =>
-                                    onProductNoDraftChange(event.target.value)
-                                }
-                                autoComplete="off"
-                                placeholder="如 P-1001"
-                                aria-label="SPU 编号"
-                            />
-                        </ListWorkspaceFilterField>
-                        <ListWorkspaceFilterField
-                            htmlFor="supplier-offerings-toolbar-supplier-select"
-                            label="供应商"
-                        >
-                            <SupplierSearchCombobox
-                                id="supplier-offerings-toolbar-supplier-select"
-                                value={supplierIdDraft ?? undefined}
-                                onValueChange={(value) =>
-                                    onSupplierIdDraftChange(value ?? null)
-                                }
-                                placeholder="全部供应商"
-                                className="w-full"
-                                aria-label="供应商"
-                            />
-                        </ListWorkspaceFilterField>
-                    </div>
+                        </div>
+                    </fieldset>
+                    <fieldset className="min-w-0 border-t pt-4">
+                        <legend className="sr-only">业务组织</legend>
+                        <OrganizationUnitFilter
+                            id="supplier-offerings-toolbar-org"
+                            label="业务组织"
+                            value={orgUnitIdsDraft}
+                            onChange={onOrgUnitIdsDraftChange}
+                            includeDescendants={includeDescendantsDraft}
+                            onDescendantsChange={
+                                onIncludeDescendantsDraftChange
+                            }
+                        />
+                    </fieldset>
                 </div>
             }
             resultStatus={listWorkspaceFilterStatusText({

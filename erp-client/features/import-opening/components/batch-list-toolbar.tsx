@@ -6,7 +6,6 @@ import { OptionCombobox } from "@/components/business"
 import {
     ListSearchField,
     ListWorkspaceFilterBar,
-    ListWorkspaceInlineFilter,
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
 import type {
@@ -69,6 +68,7 @@ export function BatchListToolbar({
 }) {
     return (
         <ListWorkspaceFilterBar
+            morePresentation="popover"
             density="compact"
             idPrefix={`${toolbarIdPrefix}-filter`}
             formAriaLabel="导入批次查询"
@@ -84,27 +84,23 @@ export function BatchListToolbar({
                 />
             }
             queryButtonId={`${toolbarIdPrefix}-apply-filters`}
-            commonFilters={
-                <ListWorkspaceInlineFilter
-                    htmlFor={`${toolbarIdPrefix}-object-type`}
-                    label="对象集合"
-                >
-                    <OptionCombobox
-                        id={`${toolbarIdPrefix}-object-type`}
-                        className="w-full sm:w-60"
-                        value={objectTypeDraft}
-                        onValueChange={(value) =>
-                            setObjectTypeDraft(
-                                (value ?? "all") as BatchObjectTypeDraft,
-                            )
-                        }
-                        options={OBJECT_FILTER_OPTIONS}
-                        aria-label="对象集合"
-                        placeholder="全部对象"
-                        searchPlaceholder="搜索对象名称"
-                        allowClear={false}
-                    />
-                </ListWorkspaceInlineFilter>
+            primaryFilters={
+                <OptionCombobox
+                    id={`${toolbarIdPrefix}-object-type`}
+                    className="w-56 max-w-full min-w-0"
+                    filterLabel="对象集合"
+                    value={objectTypeDraft}
+                    onValueChange={(value) =>
+                        setObjectTypeDraft(
+                            (value ?? "all") as BatchObjectTypeDraft,
+                        )
+                    }
+                    options={OBJECT_FILTER_OPTIONS}
+                    aria-label="对象集合"
+                    placeholder="全部对象"
+                    searchPlaceholder="搜索对象名称"
+                    allowClear={false}
+                />
             }
             resultStatus={listWorkspaceFilterStatusText({
                 loading,

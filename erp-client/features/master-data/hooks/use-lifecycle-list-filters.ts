@@ -49,9 +49,8 @@ export function useLifecycleListFilters(
     const hasStructuredListFilters =
         lifecycleStatus !== "all" || revisionTiming !== "all"
 
-    const [filterPanelOpen, setFilterPanelOpen] = React.useState(
-        hasStructuredListFilters,
-    )
+    // 这些列表没有低频浮层；深链也不打开面板。
+    const [filterPanelOpen, setFilterPanelOpen] = React.useState(false)
     const [revisionTimingDraft, setRevisionTimingDraft] =
         React.useState(revisionTiming)
 
