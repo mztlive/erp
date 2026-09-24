@@ -1,0 +1,97 @@
+// ERP TKE 发布入口；从仓库根运行，旧 backend/Jenkinsfile 保持独立。
+pipeline {
+    agent { label 'selfhost' }
+    options {
+        skipDefaultCheckout(true)
+        disableConcurrentBuilds()
+        timestamps()
+        timeout(time: 120, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '20', artifactNumToKeepStr: '20'))
+    }
+    parameters {
+        string(name: 'TCR_CREDENTIALS_ID', defaultValue: 'erp-tcr', description: 'Jenkins Username with password 凭据 ID')
+        string(name: 'KUBECONFIG_CREDENTIALS_ID', defaultValue: 'erp-tke-kubeconfig', description: 'Jenkins Secret file 凭据 ID')
+        string(name: 'KUBE_CONTEXT', defaultValue: '', description: 'kubeconfig 内的目标 context 名称，必须明确填写')
+        string(name: 'IMAGE_PULL_SECRET', defaultValue: 'tcr-pull', description: 'prod 中已有的镜像拉取 Secret；已配置 TKE 免密拉取时可留空')
+        choice(name: 'IMAGE_PLATFORM', choices: ['linux/amd64', 'linux/arm64'], description: '必须与 TKE 节点架构一致；Agent 应支持该平台构建')
+        booleanParam(name: 'DEPLOY_TO_TKE', defaultValue: true, description: '执行集群发布；取消时仅质量检查、推送镜像和归档清单')
+    }
+    environment {
+        REGISTRY_HOST = 'fushangyun.tencentcloudcr.com'
+        API_REPOSITORY = 'fushangyun.tencentcloudcr.com/fushangyun/erp-api'
+        WEB_REPOSITORY = 'fushangyun.tencentcloudcr.com/fushangyun/erp'
+        NEXT_PUBLIC_API_BASE_URL = 'https://erp-api.fushangyunfu.com'
+        WEB_URL = 'https://erp.fushangyunfu.com'
+        KUBE_NAMESPACE = 'prod'
+    }
+    stages {
+        stage('Checkout') {
+            steps {
+                deleteDir()
+                checkout scm
+                sh 'bash deploy/jenkins/release.sh validate'
+                sh 'python3 deploy/jenkins/test_render.py'
+                sh 'python3 deploy/jenkins/test_release.py'
+            }
+        }
+        stage('集群前置检查') {
+            when { expression { params.DEPLOY_TO_TKE } }
+            steps {
+                withCredentials([file(credentialsId: params.KUBECONFIG_CREDENTIALS_ID, variable: 'KUBECONFIG')]) {
+                    sh 'bash deploy/jenkins/release.sh preflight'
+                }
+            }
+        }
+        stage('后端质量门禁') {
+            steps {
+                dir('backend') {
+                    sh '''#!/usr/bin/env bash
+set -euo pipefail
+cargo fmt --all -- --check
+cargo check --workspace --locked
+cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked
+./scripts/check-bpm-boundaries.sh
+./scripts/check-domain-boundaries.sh --cutover
+./scripts/check-permissions-drift.sh
+'''
+                }
+            }
+        }
+        stage('前端质量门禁') {
+            steps {
+                dir('erp-client') {
+                    sh '''#!/usr/bin/env bash
+set -euo pipefail
+npm ci
+npm run lint
+./node_modules/.bin/tsc --noEmit
+npm test
+'''
+                }
+            }
+        }
+        stage('构建并推送镜像') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: params.TCR_CREDENTIALS_ID, usernameVariable: 'TCR_USERNAME', passwordVariable: 'TCR_PASSWORD')]) {
+                    sh 'bash deploy/jenkins/release.sh build'
+                }
+                sh 'python3 deploy/jenkins/render.py'
+                archiveArtifacts(artifacts: 'release-artifacts/*', fingerprint: true)
+            }
+        }
+        stage('发布到 TKE') {
+            when { expression { params.DEPLOY_TO_TKE } }
+            steps {
+                withCredentials([file(credentialsId: params.KUBECONFIG_CREDENTIALS_ID, variable: 'KUBECONFIG')]) {
+                    sh 'bash deploy/jenkins/release.sh deploy'
+                }
+            }
+        }
+    }
+    post {
+        always {
+            archiveArtifacts(artifacts: 'release-artifacts/*', allowEmptyArchive: true, fingerprint: true)
+        }
+    }
+}

@@ -1,0 +1,72 @@
+# 腾讯云 TKE 的 CLB Ingress。不要安装 ingress-nginx。
+# 一个 Ingress 对应一个 CLB，两个域名共用它的 VIP。
+# TLS 使用控制台里已有的 Opaque Secret fsytsl-wsk87cm7，它必须和 Ingress 同在 prod。
+# 这张证书需要同时覆盖 erp.fushangyunfu.com 和 erp-api.fushangyunfu.com。
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: erp
+  labels:
+    app.kubernetes.io/name: erp
+    app.kubernetes.io/part-of: erp
+  annotations:
+    kubernetes.io/ingress.class: qcloud
+    ingress.cloud.tencent.com/auto-rewrite: "true"
+    ingress.cloud.tencent.com/tke-service-config: erp
+spec:
+  ingressClassName: qcloud
+  tls:
+    - hosts:
+        - erp.fushangyunfu.com
+        - erp-api.fushangyunfu.com
+      secretName: fsytsl-wsk87cm7
+  rules:
+    - host: erp.fushangyunfu.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: erp-client
+                port:
+                  number: 3000
+    - host: erp-api.fushangyunfu.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web-api
+                port:
+                  number: 10001
+---
+apiVersion: cloud.tencent.com/v1alpha1
+kind: TkeServiceConfig
+metadata:
+  name: erp
+  labels:
+    app.kubernetes.io/name: erp
+    app.kubernetes.io/part-of: erp
+spec:
+  loadBalancer:
+    l7Listeners:
+      - protocol: HTTPS
+        port: 443
+        defaultServer: erp.fushangyunfu.com
+        domains:
+          - domain: erp-api.fushangyunfu.com
+            rules:
+              - url: /
+                forwardType: HTTP
+                healthCheck:
+                  enable: true
+                  intervalTime: 10
+                  timeout: 5
+                  healthNum: 3
+                  unHealthNum: 3
+                  httpCheckPath: /health
+                  httpCheckMethod: GET
+                  httpCheckDomain: erp-api.fushangyunfu.com
+                  httpCode: 2

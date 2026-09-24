@@ -19,6 +19,7 @@ Web API 启动。
   部署。
 - `scripts/release-image.sh`：构建、推送镜像并生成 digest 发布清单。
 - `scripts/release-deploy.sh`：部署或回滚发布清单。
+- 仓库根 `deploy/`：Kubernetes 清单。集群部署用 `kubectl apply -k`，不替换本文件里的 Compose 与 Jenkins 流程。
 
 ## 本地 Compose
 
@@ -99,3 +100,9 @@ cd /opt/rs-project-template
 scripts/release-deploy.sh current
 scripts/release-deploy.sh rollback <release-tag>
 ```
+
+## Kubernetes
+
+集群清单在仓库根 [`deploy/README.md`](../deploy/README.md)。默认只部署
+`web-api` 和 `erp-client`；MongoDB 仍在集群外，开发集群可以另外启用
+`deploy/k8s/optional/mongo`。应用 `app.port` 保持 `10001`，与 Service 和探针一致。

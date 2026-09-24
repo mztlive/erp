@@ -1,0 +1,40 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: prod
+resources:
+  - ../../base
+patches:
+  - target:
+      group: networking.k8s.io
+      version: v1
+      kind: Ingress
+      name: erp
+    patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: erp.local
+      - op: replace
+        path: /spec/rules/1/host
+        value: api.erp.local
+      - op: remove
+        path: /spec/tls
+      - op: remove
+        path: /metadata/annotations/ingress.cloud.tencent.com~1auto-rewrite
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: web-api
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: web-api
+      spec:
+        template:
+          spec:
+            containers:
+              - name: web-api
+                env:
+                  - name: OTEL_RESOURCE_ATTRIBUTES
+                    value: deployment.environment.name=local
