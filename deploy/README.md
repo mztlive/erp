@@ -16,7 +16,7 @@ ERP 的生产、测试环境统一使用 `deploy/helm/erp` Chart，由根目录 
 | 后端配置 Secret | `prod/erp-api-config` | `test/erp-api-config` |
 | 证书 Secret | `prod/fsytsl-wsk87cm7` | `test/fsytsl-wsk87cm7` |
 
-环境 JSON 是 Helm 原生支持的 values 输入，供 Helm 与 Python 标准库共同读取。域名、CLB、配置 Secret 引用只在环境文件维护；副本、资源额度、探针与通用默认值在 Chart 中维护。需要环境专属副本或资源额度时，在对应环境文件覆盖 `api`、`client` 或 `pdb` 字段。
+环境 JSON 是 Helm 原生支持的 values 输入，发布脚本通过 `jq` 读取其中的域名和配置引用。域名、CLB、配置 Secret 引用只在环境文件维护；副本、资源额度、探针与通用默认值在 Chart 中维护。需要环境专属副本或资源额度时，在对应环境文件覆盖 `api`、`client` 或 `pdb` 字段。
 
 同一命名空间仅允许一个 `erp` release。生产资源名称、Service 端口与 Deployment selector 保持现有值：后端 `erp-api`、前端 `erp-client`、Ingress 与 TkeServiceConfig `erp`。Chart 管理两组 ServiceAccount、Deployment、NodePort Service、PDB，以及 Ingress 和 TkeServiceConfig，共 10 个资源。
 

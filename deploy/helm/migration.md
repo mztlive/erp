@@ -21,8 +21,11 @@ export KUBECONFIG=/path/to/kubeconfig
 export KUBE_CONTEXT=目标context
 # 若使用 TKE 免密拉取，保持为空；否则填当前工作负载使用的 Secret。
 export IMAGE_PULL_SECRET=''
-exports="$(python3 deploy/jenkins/environment.py)"
-eval "$exports"
+case "$DEPLOY_ENV" in
+  production) KUBE_NAMESPACE=prod ;;
+  test) KUBE_NAMESPACE=test ;;
+  *) echo '不支持的环境' >&2; exit 1 ;;
+esac
 mkdir -p release-artifacts/migration
 bash deploy/jenkins/release.sh preflight
 kubectl --kubeconfig "$KUBECONFIG" --context "$KUBE_CONTEXT" -n "$KUBE_NAMESPACE" get \

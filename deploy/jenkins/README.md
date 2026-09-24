@@ -4,6 +4,8 @@
 
 Jenkins 使用仓库根目录 `Jenkinsfile.k8s`，在 `selfhost` Agent 执行。`DEPLOY_ENV` 支持 `test` 与 `production`，默认 `test`；环境的命名空间、域名、Secret 引用和 CLB 由 `deploy/helm/erp/environments/<环境>.json` 读取，禁止通过额外命名空间参数绕过对应关系。
 
+发布逻辑集中在 `release.sh`，由 Shell 调用 Docker、Helm 和 kubectl；`jq` 仅处理环境配置及命令输出的 JSON。Chart 打包、渲染、升级和版本历史直接使用 Helm 命令。
+
 环境配置及集群准备要求见 [Kubernetes 部署合同](../README.md)。已有资源必须先按[接管执行规范](../helm/migration.md)建立 Helm 基线。
 
 ## 2. Jenkins 配置
@@ -30,7 +32,7 @@ Jenkins 使用仓库根目录 `Jenkinsfile.k8s`，在 `selfhost` Agent 执行。
 
 ## 3. Agent 与权限
 
-Agent 必须安装 Git、Bash、grep、Python 3.9+、kubectl、Helm 4.x、Docker Engine、系统级 Buildx 插件及 curl 7.71+。Python 只使用标准库。Helm 必须固定经过验证的补丁版本；本次离线验证使用 4.1.3，流水线拒绝 Helm 3。升级失败回退采用 Helm 4 的 `--rollback-on-failure`，参数依据 [Helm upgrade 文档](https://helm.sh/docs/helm/helm_upgrade/)。
+Agent 必须安装 Git、Bash、grep、jq 1.6+、kubectl、Helm 4.x、Docker Engine、系统级 Buildx 插件及 curl 7.71+。发布和离线测试均不依赖 Python。Helm 必须固定经过验证的补丁版本；当前验证版本为 4.1.3，流水线拒绝 Helm 3。升级失败回退采用 Helm 4 的 `--rollback-on-failure`，参数依据 [Helm upgrade 文档](https://helm.sh/docs/helm/helm_upgrade/)。
 
 `RUN_QUALITY_CHECKS=true` 时，还须安装 Node.js 22.18+ 的 22.x 版本、npm、Rustup 及后端指定 nightly/组件，以及 C/C++ 编译器、CMake、pkg-config、OpenSSL 开发库。关闭质量门禁不跳过镜像内编译，也不跳过部署脚本离线测试。
 
@@ -41,12 +43,12 @@ Agent 必须能够访问 Git、依赖源、TCR、目标 TKE API Server 和所选
 ## 4. 发布顺序与产物
 
 1. 清理任务工作区，检出代码，校验工具版本和环境映射。
-2. 始终执行 `test_render.py` 与 `test_release.py`。测试仅使用本地 Helm 和命令替身，不连接 Docker、集群或业务服务。
+2. 始终执行 `bash deploy/jenkins/test_release.sh`。测试使用真实的本地 Helm 和 Docker、kubectl、HTTP 命令替身，不连接 Docker、集群或业务服务；测试工作区在临时目录，退出时清理。
 3. 需要部署时，检查现有 Ingress 的共享模式和 CLB 归属，以及配置、证书、拉取 Secret 所需的数据键。
 4. 按质量开关执行后端格式、编译、Clippy、库单元测试、边界与权限漂移检查，以及前端 lint、TypeScript 和单元测试。不得新增或执行后端集成测试。
 5. 使用隔离的 Docker 登录目录与 Buildx builder 构建推送两个镜像；结束时清理凭据目录和 builder。前端构建地址从所选环境读取。
-6. 校验 Buildx digest 和构建环境，生成 `values-release.json`，执行 Helm lint、package、template，归档完整发布包。
-7. 先校验发布包哈希与环境一致性，再执行 API Server 清单 dry-run 与 Helm 服务端 dry-run，成功后用同一归档 Chart 和 values 升级。
+6. 构建成功后，在同一 Shell 环境内读取并校验 Buildx digest，将环境 values、两个镜像地址及发布标识合并为 `values-release.json`，直接执行 Helm lint、package、template，归档完整发布包。构建开始时清除旧产物，失败不得继续发布。
+7. 核对归档 values 与当前环境、域名和 Secret 引用一致，再用归档 Chart 和 values 重新渲染清单；由 Chart schema 校验参数。执行 API Server 清单 dry-run 与 Helm 服务端 dry-run，通过后用同一 Chart 包和 values 升级。
 8. Helm 等待资源就绪，超时为 15 分钟；升级失败请求回退到上一成功 release。随后再次等待两个 Deployment rollout，核对镜像，检查 API `/health` 和管理端 `/` 的公网 HTTPS 响应。
 
 发布归档保留：
@@ -54,11 +56,9 @@ Agent 必须能够访问 Git、依赖源、TCR、目标 TKE API Server 和所选
 | 文件 | 用途 |
 | --- | --- |
 | `api-build.json`、`web-build.json` | Buildx 镜像 digest |
-| `build-context.json` | 构建环境、前端 API 地址和镜像仓库 |
 | `chart.tgz` | 本次使用的完整 Chart，不依赖后续 Git 工作区 |
-| `values-release.json` | 本次环境参数、镜像 digest、发布标识与拉取 Secret 名称 |
+| `values-release.json` | 本次环境参数、镜像 digest、拉取 Secret 名称；`releaseId` 为完整提交 SHA、环境和构建编号 |
 | `manifests.yaml` | 本次渲染清单，供审查；不得直接 apply 到已由 Helm 管理的环境 |
-| `release.json` | 提交、构建号、环境、namespace、镜像及包/values/清单哈希 |
 | `helm-history.json` | Helm 升级成功后读取的 release 历史 |
 | `deployments.json` | 部署后镜像核对证据 |
 | `deployment-status.txt` | 仅在 rollout、镜像核对和公网检查全部通过时生成 |

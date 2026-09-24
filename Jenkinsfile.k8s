@@ -32,8 +32,7 @@ pipeline {
         }
         stage('发布脚本离线测试') {
             steps {
-                sh 'python3 deploy/jenkins/test_render.py'
-                sh 'python3 deploy/jenkins/test_release.py'
+                sh 'bash deploy/jenkins/test_release.sh'
             }
         }
         stage('集群前置检查') {
@@ -80,7 +79,6 @@ npm test
                 withCredentials([usernamePassword(credentialsId: params.TCR_CREDENTIALS_ID, usernameVariable: 'TCR_USERNAME', passwordVariable: 'TCR_PASSWORD')]) {
                     sh 'bash deploy/jenkins/release.sh build'
                 }
-                sh 'python3 deploy/jenkins/render.py'
                 archiveArtifacts(artifacts: 'release-artifacts/*', fingerprint: true)
             }
         }
