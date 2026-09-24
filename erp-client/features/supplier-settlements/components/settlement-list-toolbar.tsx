@@ -3,6 +3,7 @@
 import * as React from "react"
 
 import { MultiOptionCombobox, OptionCombobox } from "@/components/business"
+import { SelectorQueryFeedback } from "@/components/business/selector-query-feedback"
 import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
 import { useRemoteSearchCombobox } from "@/features/entity-selectors/hooks/use-remote-search-combobox"
 import { useSearchInput } from "@/features/entity-selectors/hooks/use-search-input"
@@ -64,26 +65,43 @@ function ResidentSupplierFilter({
         idOf: (item) => item.supplierId,
         fallbackError: "供应商加载失败，请重试",
     })
+    const directoryFailed = query.list.isError || query.selected.isError
     return (
-        <OptionCombobox
-            id={id}
-            className="w-56 max-w-full min-w-0"
-            filterLabel="供应商"
-            aria-label="供应商"
-            placeholder="全部"
-            searchPlaceholder="搜索供应商名称或编码"
-            filterMode="remote"
-            onSearchChange={search.onSearchChange}
-            loading={loading}
-            emptyLabel={emptyLabel}
-            value={value}
-            onValueChange={onValueChange}
-            options={rows.map((item) => ({
-                value: item.supplierId,
-                label: item.supplierName,
-                keywords: item.supplierCode,
-            }))}
-        />
+        <div className="min-w-0">
+            <OptionCombobox
+                id={id}
+                className="w-56 max-w-full min-w-0"
+                filterLabel="供应商"
+                aria-label="供应商"
+                placeholder="全部"
+                searchPlaceholder="搜索供应商名称或编码"
+                filterMode="remote"
+                onSearchChange={search.onSearchChange}
+                loading={loading}
+                emptyLabel={emptyLabel}
+                value={value}
+                onValueChange={onValueChange}
+                options={rows.map((item) => ({
+                    value: item.supplierId,
+                    label: item.supplierName,
+                    keywords: item.supplierCode,
+                }))}
+            />
+            <SelectorQueryFeedback
+                id={id}
+                failed={directoryFailed}
+                error={query.list.error ?? query.selected.error}
+                noScope={
+                    !query.list.isFetching &&
+                    !directoryFailed &&
+                    query.list.emptyReason === "no_scope"
+                }
+                onRetry={() => {
+                    void query.list.refetch()
+                    if (value) void query.selected.refetch()
+                }}
+            />
+        </div>
     )
 }
 

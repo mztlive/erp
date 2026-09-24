@@ -119,7 +119,7 @@ export function ActualProfitLossPage() {
                 />
             ) : null}
 
-            {/* 分析主体：仅在口径就绪后；查询失败时筛选区保持挂载（失败态在明细表面内） */}
+            {/* 口径就绪后明细筛选始终挂载；首次加载只骨架化指标和图表，表格状态留在结果区 */}
             {page.analysisReady ? (
                 <>
                     {page.viewQuery.isPending && !page.data ? (
@@ -157,65 +157,58 @@ export function ActualProfitLossPage() {
                         </>
                     ) : null}
 
-                    {page.data || page.viewQuery.isError || page.scopeError ? (
-                        <ProfitLossRowsPanel
-                            historyDirectory={page.historyDirectory}
-                            directoryError={page.directoryQuery.error}
-                            onRetryDirectory={() =>
-                                void page.directoryQuery.refetch()
-                            }
-                            data={page.data}
-                            dimension={page.dimension}
-                            coverage={page.coverageDraft}
-                            hasFilters={page.hasFilters}
-                            searchInput={page.searchInput}
-                            searchInputRef={page.searchInputRef}
-                            onSearchInputChange={page.setSearchInput}
-                            onApplyFilters={page.applyFilters}
-                            onCoverageChange={page.handleCoverageChange}
-                            panelOpen={page.filterPanelOpen}
-                            setPanelOpen={page.setFilterPanelOpen}
-                            appliedChips={page.appliedChips}
-                            onRemoveFilter={page.removeFilter}
-                            onResetMoreFilters={page.resetMoreFilters}
-                            onCancelMoreFilters={page.cancelMoreFilters}
-                            onClearAllFilters={page.clearAllFilters}
-                            hasPendingChanges={page.hasPendingChanges}
-                            onDimensionChange={page.handleDimensionChange}
-                            benefitScenarioDraft={page.benefitScenarioDraft}
-                            onBenefitScenarioDraftChange={
-                                page.setBenefitScenarioDraft
-                            }
-                            costTypesDraft={page.costTypesDraft}
-                            onCostTypesDraftChange={page.setCostTypesDraft}
-                            benefitScenarioOptions={page.benefitScenarioOptions}
-                            attributionUsersDraft={page.attributionUsersDraft}
-                            onAttributionUsersChange={
-                                page.setAttributionUsersDraft
-                            }
-                            attributionOrgsDraft={page.attributionOrgsDraft}
-                            onAttributionOrgsChange={
-                                page.setAttributionOrgsDraft
-                            }
-                            costTypeOptions={page.costTypeOptions}
-                            pageRows={page.pageRows}
-                            columns={page.columns}
-                            pagination={page.pagination}
-                            onPaginationChange={page.setPagination}
-                            sorting={page.tableSorting}
-                            onSortingChange={page.handleTableSortingChange}
-                            loading={
-                                page.viewQuery.isFetching &&
-                                !page.viewQuery.isPending
-                            }
-                            isError={
-                                page.viewQuery.isError ||
-                                Boolean(page.scopeError)
-                            }
-                            error={page.scopeError || page.viewQuery.error}
-                            onRetry={() => void page.handleRefresh()}
-                        />
-                    ) : null}
+                    <ProfitLossRowsPanel
+                        historyDirectory={page.historyDirectory}
+                        directoryError={page.directoryQuery.error}
+                        onRetryDirectory={() =>
+                            void page.directoryQuery.refetch()
+                        }
+                        data={page.data}
+                        dimension={page.dimension}
+                        coverage={page.coverageDraft}
+                        hasFilters={page.hasFilters}
+                        searchInput={page.searchInput}
+                        searchInputRef={page.searchInputRef}
+                        onSearchInputChange={page.setSearchInput}
+                        onApplyFilters={page.applyFilters}
+                        onCoverageChange={page.handleCoverageChange}
+                        panelOpen={page.filterPanelOpen}
+                        setPanelOpen={page.setFilterPanelOpen}
+                        appliedChips={page.appliedChips}
+                        onRemoveFilter={page.removeFilter}
+                        onResetMoreFilters={page.resetMoreFilters}
+                        onCancelMoreFilters={page.cancelMoreFilters}
+                        onClearAllFilters={page.clearAllFilters}
+                        hasPendingChanges={page.hasPendingChanges}
+                        onDimensionChange={page.handleDimensionChange}
+                        benefitScenarioDraft={page.benefitScenarioDraft}
+                        onBenefitScenarioDraftChange={
+                            page.setBenefitScenarioDraft
+                        }
+                        costTypesDraft={page.costTypesDraft}
+                        onCostTypesDraftChange={page.setCostTypesDraft}
+                        benefitScenarioOptions={page.benefitScenarioOptions}
+                        attributionUsersDraft={page.attributionUsersDraft}
+                        onAttributionUsersChange={page.setAttributionUsersDraft}
+                        attributionOrgsDraft={page.attributionOrgsDraft}
+                        onAttributionOrgsChange={page.setAttributionOrgsDraft}
+                        costTypeOptions={page.costTypeOptions}
+                        pageRows={page.pageRows}
+                        columns={page.columns}
+                        pagination={page.pagination}
+                        onPaginationChange={page.setPagination}
+                        sorting={page.tableSorting}
+                        onSortingChange={page.handleTableSortingChange}
+                        loading={
+                            page.viewQuery.isFetching &&
+                            !page.viewQuery.isPending
+                        }
+                        isError={
+                            page.viewQuery.isError || Boolean(page.scopeError)
+                        }
+                        error={page.scopeError || page.viewQuery.error}
+                        onRetry={() => void page.handleRefresh()}
+                    />
                 </>
             ) : null}
 

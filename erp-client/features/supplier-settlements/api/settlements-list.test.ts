@@ -29,9 +29,6 @@ describe("fetchSettlementList data scope", () => {
             processing_state: "EMPTY",
             empty_reason: "no_scope",
             scope_version: "v1",
-            owner_options: [],
-            operator_options: [],
-            handler_options: [],
         })
         const view = await fetchSettlementList({
             view: "pending",

@@ -17,7 +17,6 @@ beforeEach(() => {
         scope_summary: "销售单当前负责人、业务组织及有效协作或参与范围",
         as_of: "2026-09-14T08:00:00Z",
         ownership_basis: "document_sales_owner",
-        owner_options: [],
     })
 })
 

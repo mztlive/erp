@@ -85,11 +85,22 @@ test("目录超过一万项时要求收窄查询，不截断返回", async () =>
     expect(apiGet).toHaveBeenCalledTimes(1)
 })
 
-test("已选回显使用自身目录，越权为空、请求失败保持失败", async () => {
+test("已选回显使用自身目录，空范围保留信封，请求失败保持失败", async () => {
     expect(await selectedObjectDirectory("settlement-parties", "")).toBeNull()
     expect(apiGet).not.toHaveBeenCalled()
-    vi.mocked(apiGet).mockResolvedValueOnce({ items: [] })
-    expect(await selectedObjectDirectory("settlement-parties", "p1")).toBeNull()
+    const empty = {
+        items: [],
+        total: 0,
+        empty_reason: "no_scope",
+        scope_version: "dir-v1",
+        policy_version: 2,
+        organization_version: 3,
+        as_of: "2026-09-23T00:00:00Z",
+    }
+    vi.mocked(apiGet).mockResolvedValueOnce(empty)
+    expect(await selectedObjectDirectory("settlement-parties", "p1")).toEqual(
+        empty,
+    )
     expect(apiGet).toHaveBeenCalledWith("/admin/settlement-parties/selected", {
         ids: "p1",
     })

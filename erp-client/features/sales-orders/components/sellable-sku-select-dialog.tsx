@@ -21,6 +21,10 @@ import {
 import { SellableListToolbar } from "@/features/master-data/components/list/sellable-list-toolbar"
 import type { SellableAppliedChip } from "@/features/master-data/components/list/sellable-list-toolbar"
 import { useProductFilterOptionsQuery } from "@/features/master-data/hooks/queries"
+import {
+    directorySelectionLabel,
+    productFilterDirectoryState,
+} from "@/features/master-data/lib/product-filter-directory"
 import { SELLABLE_SUPPLY_PRESET_LABELS } from "@/features/master-data/lib/sellable-supply-preset"
 import { useSellableSkuPickerColumns } from "@/features/sales-orders/components/sellable-sku-picker-columns"
 import { useSellableSkuPickerQuery } from "@/features/sales-orders/hooks/use-sellable-sku-picker-query"
@@ -117,26 +121,27 @@ export function SellableSkuSelectDialog({
         setRowSelection({})
     }, [open])
 
-    const selectedCategoryLabel = React.useMemo(
-        () =>
-            productFilterOptionsQuery.data?.categories.find(
-                (option) => option.categoryId === filters.productCategoryId,
-            )?.categoryName ?? filters.productCategoryId,
-        [filters.productCategoryId, productFilterOptionsQuery.data?.categories],
+    const directory = productFilterDirectoryState(productFilterOptionsQuery)
+    const selectedCategoryLabel = directorySelectionLabel(
+        filters.productCategoryId,
+        directory.categories,
+        (option) => option.categoryId,
+        (option) => option.categoryName,
+        directory,
     )
-    const selectedBrandLabel = React.useMemo(
-        () =>
-            productFilterOptionsQuery.data?.brands.find(
-                (option) => option.value === filters.productBrandId,
-            )?.label ?? filters.productBrandId,
-        [filters.productBrandId, productFilterOptionsQuery.data?.brands],
+    const selectedBrandLabel = directorySelectionLabel(
+        filters.productBrandId,
+        directory.brands,
+        (option) => option.value,
+        (option) => option.label,
+        directory,
     )
-    const selectedSupplierLabel = React.useMemo(
-        () =>
-            (productFilterOptionsQuery.data?.suppliers ?? []).find(
-                (option) => option.value === filters.productSupplierId,
-            )?.label ?? filters.productSupplierId,
-        [filters.productSupplierId, productFilterOptionsQuery.data?.suppliers],
+    const selectedSupplierLabel = directorySelectionLabel(
+        filters.productSupplierId,
+        directory.suppliers,
+        (option) => option.value,
+        (option) => option.label,
+        directory,
     )
 
     const appliedChips = React.useMemo<readonly SellableAppliedChip[]>(() => {

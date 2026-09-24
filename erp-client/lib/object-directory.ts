@@ -1,4 +1,5 @@
 import { apiGet } from "@/lib/api"
+import type { ListEnvelope } from "@/lib/collect-pages"
 import { fetchSelectorList } from "@/lib/selector-list"
 
 export type ObjectDirectoryKind = "settlement-parties" | "warehouse-directory"
@@ -7,6 +8,12 @@ export type ObjectDirectoryItem = {
     code: string
     name: string
     status: string
+}
+
+/** 已选目录响应。版本字段保持响应原样，供同类缓存失效。 */
+export type ObjectDirectorySelection = ListEnvelope & {
+    items: readonly ObjectDirectoryItem[]
+    total?: number
 }
 
 /** 读取完整匹配目录；后续页携带独立版本，范围或名称变化则整次失败。 */
@@ -25,11 +32,9 @@ export async function searchObjectDirectory(
 export async function selectedObjectDirectory(
     kind: ObjectDirectoryKind,
     id: string,
-) {
+): Promise<ObjectDirectorySelection | null> {
     if (!id) return null
-    const result = await apiGet<{ items: ObjectDirectoryItem[] }>(
-        `/admin/${kind}/selected`,
-        { ids: id },
-    )
-    return result.items.find((item) => item.id === id) ?? null
+    return apiGet<ObjectDirectorySelection>(`/admin/${kind}/selected`, {
+        ids: id,
+    })
 }

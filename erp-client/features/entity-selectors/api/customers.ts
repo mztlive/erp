@@ -1,5 +1,5 @@
 import type { CustomerComboboxItem } from "@/components/business/entity-comboboxes"
-import { fetchSelectorList } from "@/lib/selector-list"
+import { fetchSelectorList, type SelectorPage } from "@/lib/selector-list"
 
 import { activeStatus } from "./shared"
 import type { CustomerSearch } from "./types"
@@ -31,7 +31,7 @@ function customerItem(row: CustomerDto): CustomerComboboxItem {
 
 export async function searchCustomers(
     input: CustomerSearch,
-): Promise<readonly CustomerComboboxItem[]> {
+): Promise<SelectorPage<CustomerComboboxItem>> {
     const path =
         input.scope === "all_authorized"
             ? "/admin/customers/all-authorized"
@@ -43,7 +43,7 @@ export async function searchCustomers(
         sort_by: "updated_at",
         sort_dir: "desc",
     })
-    return page.items.map(customerItem)
+    return { ...page, items: page.items.map(customerItem) }
 }
 
 export async function fetchCustomerOption(
@@ -54,6 +54,6 @@ export async function fetchCustomerOption(
     },
 ): Promise<CustomerComboboxItem | null> {
     if (!customerId) return null
-    const rows = await searchCustomers({ ...input, query: "" })
-    return rows.find((row) => row.id === customerId) ?? null
+    const page = await searchCustomers({ ...input, query: "" })
+    return page.items.find((row) => row.id === customerId) ?? null
 }

@@ -3,7 +3,11 @@
 import * as React from "react"
 import { ChevronRightIcon } from "lucide-react"
 
-import { remoteSearchFromInputChange } from "@/components/business/combobox-input-search"
+import {
+    MISSING_SELECTION_CHECKING_LABEL,
+    MISSING_SELECTION_UNAVAILABLE_LABEL,
+    remoteSearchFromInputChange,
+} from "@/components/business/combobox-input-search"
 import {
     Combobox,
     ComboboxChip,
@@ -43,6 +47,12 @@ export type TreeComboboxProps = {
     onSearchChange?: (query: string) => void
     /** 服务端已完成搜索时关闭本地二次过滤。 */
     filterMode?: "local" | "remote"
+    /**
+     * 当前树没有已选节点时是否沿用上次名称。
+     * 缺省保持原行为：不记忆名称，找不到节点则控件值为空。
+     * 传 false 时仍不记忆，并显示核对/不可用文案，以便保留清除。
+     */
+    retainMissingSelection?: boolean
     label: string
     /** 查询栏常驻名称，与选中值分开显示，不随选择或输入消失。 */
     filterLabel?: string
@@ -242,6 +252,7 @@ export function TreeCombobox({
     onValueChange,
     onSearchChange,
     filterMode = "local",
+    retainMissingSelection,
     label,
     filterLabel,
     placeholder = "搜索名称或编号",
@@ -266,8 +277,20 @@ export function TreeCombobox({
     const expanded = expandedIds ?? parentIds
 
     const allEntries = React.useMemo(() => flattenAll(nodes), [nodes])
-    const selected =
+    const matched =
         allEntries.find(({ node }) => node.id === value)?.node ?? null
+    // 分类树原本就不把消失的节点留在 ref 里。显式关闭时用状态文案占位，避免清空后无法清除。
+    const selected =
+        matched ??
+        (retainMissingSelection === false && value
+            ? {
+                  id: value,
+                  label: loading
+                      ? MISSING_SELECTION_CHECKING_LABEL
+                      : MISSING_SELECTION_UNAVAILABLE_LABEL,
+                  children: [],
+              }
+            : null)
     const selectedLabel = selected?.label
 
     /**

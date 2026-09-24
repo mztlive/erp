@@ -92,13 +92,13 @@ pub struct DirectoryPage {
 }
 
 impl DirectoryPage {
-    /// 对有界授权结果稳定分页，内容与授权一起参与版本计算。
+    /// 对有界授权结果稳定分页，版本覆盖授权版本、规范化搜索条件和排序后的目录项。
     /// # 参数
     /// `items` 为已完成资格、范围、搜索的完整有界结果，`query` 为规范化请求。
     /// # 返回
-    /// 目录页；调用者必须比较请求与响应版本后才返回。
+    /// 目录页；调用者必须比较请求与响应版本后才返回。空白搜索与缺省搜索相同，同一搜索的各页版本相同。
     /// # 错误
-    /// 超出规模边界或序列化失败时拒绝。
+    /// 超出规模边界、版本材料过长或序列化失败时拒绝。
     pub fn from_snapshot(
         mut items: Vec<DirectoryItem>,
         query: &DirectoryQuery,
@@ -108,10 +108,7 @@ impl DirectoryPage {
             return Err(Error::ValidationError("目录超过查询上限，请收窄搜索条件".into()));
         }
         items.sort_by(|a, b| (&a.name, &a.id).cmp(&(&b.name, &b.id)));
-        let mut hash = Sha256::new();
-        hash.update(scope.scope_version.as_bytes());
-        hash.update(serde_json::to_vec(&items).map_err(|e| Error::Internal(e.to_string()))?);
-        let scope_version = hex::encode(hash.finalize());
+        let scope_version = snapshot_scope_version(&scope.scope_version, query.q.as_deref(), &items)?;
         let total = items.len();
         let page = query.page.unwrap_or(1);
         let page_size = if query.ids.is_some() { 100 } else { query.page_size.unwrap_or(20) };
@@ -129,6 +126,26 @@ impl DirectoryPage {
             empty_reason: scope.no_scope.then_some("no_scope"),
         })
     }
+}
+
+/// 内容版本只含域标记、授权版本、规范化搜索词和排序后的目录项。
+/// 每段先写 8 字节大端长度，避免搜索词与授权版本或目录 JSON 粘连。
+/// 页码、页大小、请求中的版本和已选身份不参与计算。
+fn snapshot_scope_version(scope_version: &str, q: Option<&str>, items: &[DirectoryItem]) -> Result<String> {
+    let search = q.map(str::trim).filter(|value| !value.is_empty()).unwrap_or("");
+    let encoded_items = serde_json::to_vec(items).map_err(|error| Error::Internal(error.to_string()))?;
+    let mut hash = Sha256::new();
+    for field in [
+        b"erp.directory.snapshot.v1".as_slice(),
+        scope_version.as_bytes(),
+        search.as_bytes(),
+        encoded_items.as_slice(),
+    ] {
+        let len = u64::try_from(field.len()).map_err(|_| Error::Internal("目录版本字段过长".into()))?;
+        hash.update(len.to_be_bytes());
+        hash.update(field);
+    }
+    Ok(hex::encode(hash.finalize()))
 }
 
 /// 业务列表范围元信息；不附带下拉候选。
@@ -227,6 +244,85 @@ mod tests {
         assert_eq!(second.items[0].id, "b");
         assert_eq!(first.total, 2);
         assert_eq!(first.scope_version, second.scope_version);
+    }
+    #[test]
+    fn search_binds_version_while_paging_and_blank_query_stay_stable() {
+        let rows = vec![item("a", "相同")];
+        let alpha = DirectoryQuery { q: Some("甲".into()), ..Default::default() };
+        let beta = DirectoryQuery { q: Some("乙".into()), ..Default::default() };
+        let first = DirectoryPage::from_snapshot(rows.clone(), &alpha, scope("v1")).unwrap();
+        let other = DirectoryPage::from_snapshot(rows.clone(), &beta, scope("v1")).unwrap();
+        assert_ne!(first.scope_version, other.scope_version);
+        let second_query = DirectoryQuery {
+            q: Some("甲".into()),
+            page: Some(2),
+            page_size: Some(1),
+            scope_version: Some(first.scope_version.clone()),
+            ..Default::default()
+        };
+        let second = DirectoryPage::from_snapshot(rows.clone(), &second_query, scope("v1")).unwrap();
+        assert_eq!(first.scope_version, second.scope_version);
+        let absent =
+            DirectoryPage::from_snapshot(rows.clone(), &DirectoryQuery::default(), scope("v1")).unwrap();
+        let blank = DirectoryPage::from_snapshot(
+            rows.clone(),
+            &DirectoryQuery { q: Some(" \t ".into()), ..Default::default() },
+            scope("v1"),
+        )
+        .unwrap();
+        let empty = DirectoryPage::from_snapshot(
+            rows.clone(),
+            &DirectoryQuery { q: Some(String::new()), ..Default::default() },
+            scope("v1"),
+        )
+        .unwrap();
+        assert_eq!(absent.scope_version, blank.scope_version);
+        assert_eq!(absent.scope_version, empty.scope_version);
+        let padded = DirectoryPage::from_snapshot(
+            rows.clone(),
+            &DirectoryQuery { q: Some("  甲  ".into()), ..Default::default() },
+            scope("v1"),
+        )
+        .unwrap();
+        assert_eq!(first.scope_version, padded.scope_version);
+        let ids = serde_json::from_value(serde_json::json!("a,b")).unwrap();
+        let selected = DirectoryPage::from_snapshot(
+            rows,
+            &DirectoryQuery { ids: Some(ids), ..Default::default() },
+            scope("v1"),
+        )
+        .unwrap();
+        assert_eq!(absent.scope_version, selected.scope_version);
+    }
+    #[test]
+    fn version_fields_stay_distinct_when_text_crosses_boundaries() {
+        let rows = vec![item("a", "相同")];
+        let prefix_scope = DirectoryPage::from_snapshot(
+            rows.clone(),
+            &DirectoryQuery { q: Some("c".into()), ..Default::default() },
+            scope("ab"),
+        )
+        .unwrap();
+        let prefix_query = DirectoryPage::from_snapshot(
+            rows.clone(),
+            &DirectoryQuery { q: Some("bc".into()), ..Default::default() },
+            scope("a"),
+        )
+        .unwrap();
+        assert_ne!(prefix_scope.scope_version, prefix_query.scope_version);
+        let split_scope = DirectoryPage::from_snapshot(
+            rows.clone(),
+            &DirectoryQuery { q: Some("y".into()), ..Default::default() },
+            scope("p:x"),
+        )
+        .unwrap();
+        let split_query = DirectoryPage::from_snapshot(
+            rows,
+            &DirectoryQuery { q: Some("x:y".into()), ..Default::default() },
+            scope("p"),
+        )
+        .unwrap();
+        assert_ne!(split_scope.scope_version, split_query.scope_version);
     }
     #[test]
     fn invalid_sizes_selected_limit_and_snapshot_overflow_fail_closed() {

@@ -1,16 +1,13 @@
 "use client"
 
 import * as React from "react"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, type UseQueryResult } from "@tanstack/react-query"
 
 import type { SalesOrderComboboxItem } from "@/components/business/entity-comboboxes"
 import { apiGet, type Page } from "@/lib/api"
 import {
-    fetchContractOption,
-    fetchCustomerOption,
     fetchPartyOption,
-    fetchSupplierOption,
-    fetchWarehouseOption,
+    fetchWarehouseSelection,
     searchCompanySkus,
     searchContracts,
     searchCustomers,
@@ -23,6 +20,7 @@ import {
     type EntitySearch,
     type SellableSkuSearch,
 } from "@/features/entity-selectors/api/index"
+import type { SelectorPage } from "@/lib/selector-list"
 import { queryKeyRoots } from "@/lib/query-key-roots"
 
 const STALE_TIME = 0
@@ -51,6 +49,8 @@ export const entitySelectorKeys = {
             id,
             purpose,
         ] as const,
+    warehouseLabel: (id: string) =>
+        [...entitySelectorKeys.all, "warehouse", "label", id] as const,
     contract: (input: ContractSearch) =>
         [...entitySelectorKeys.all, "contract", input] as const,
     contractDetail: (id: string, input?: Omit<ContractSearch, "query">) =>
@@ -81,6 +81,35 @@ function commonQueryOptions() {
     }
 }
 
+/** 对外投影条目；缓存 data 保持带范围版本的页对象。 */
+function projectDirectoryList<TItem>(
+    list: UseQueryResult<SelectorPage<TItem>>,
+) {
+    return {
+        ...list,
+        data: list.data?.items,
+        emptyReason: list.data?.empty_reason,
+    }
+}
+
+function projectDirectorySelected<TItem>(
+    selected: UseQueryResult<SelectorPage<TItem>>,
+    idOf: (item: TItem) => string,
+    selectedId?: string,
+) {
+    const matched = selected.data?.items.find(
+        (item) =>
+            selectedId != null &&
+            selectedId !== "" &&
+            idOf(item) === selectedId,
+    )
+    return {
+        ...selected,
+        data: selected.data === undefined ? undefined : (matched ?? null),
+        emptyReason: selected.data?.empty_reason,
+    }
+}
+
 export function useSupplierSelectorQuery(
     input: EntitySearch,
     selectedId?: string,
@@ -95,12 +124,18 @@ export function useSupplierSelectorQuery(
             selectedId ?? "",
             input.purpose,
         ),
-        queryFn: () =>
-            fetchSupplierOption(selectedId ?? "", { purpose: input.purpose }),
+        queryFn: () => searchSuppliers({ query: "", purpose: input.purpose }),
         enabled: Boolean(selectedId),
         staleTime: STALE_TIME,
     })
-    return { list, selected }
+    return {
+        list: projectDirectoryList(list),
+        selected: projectDirectorySelected(
+            selected,
+            (item) => item.supplierId,
+            selectedId,
+        ),
+    }
 }
 
 export function useCustomerSelectorQuery(
@@ -121,14 +156,22 @@ export function useCustomerSelectorQuery(
             scope: input.scope,
         }),
         queryFn: () =>
-            fetchCustomerOption(selectedId ?? "", {
+            searchCustomers({
+                query: "",
                 purpose: input.purpose,
                 scope: input.scope,
             }),
         enabled: enabled && Boolean(selectedId),
         staleTime: STALE_TIME,
     })
-    return { list, selected }
+    return {
+        list: projectDirectoryList(list),
+        selected: projectDirectorySelected(
+            selected,
+            (item) => item.id,
+            selectedId,
+        ),
+    }
 }
 
 export function usePartySelectorQuery(
@@ -150,7 +193,7 @@ export function usePartySelectorQuery(
         staleTime: STALE_TIME,
     })
     return {
-        list: { ...list, data: list.data?.items, emptyReason: list.data?.empty_reason },
+        list: projectDirectoryList(list),
         selected,
     }
 }
@@ -169,13 +212,17 @@ export function useWarehouseSelectorQuery(
             selectedId ?? "",
             input.purpose,
         ),
-        queryFn: () => fetchWarehouseOption(selectedId ?? "", input.purpose),
+        queryFn: () => fetchWarehouseSelection(selectedId ?? "", input.purpose),
         enabled: Boolean(selectedId),
         staleTime: STALE_TIME,
     })
     return {
-        list: { ...list, data: list.data?.items, emptyReason: list.data?.empty_reason },
-        selected,
+        list: projectDirectoryList(list),
+        selected: projectDirectorySelected(
+            selected,
+            (item) => item.warehouseId,
+            selectedId,
+        ),
     }
 }
 
@@ -199,7 +246,8 @@ export function useContractSelectorQuery(
             selectableOnly: input.selectableOnly,
         }),
         queryFn: () =>
-            fetchContractOption(selectedId ?? "", {
+            searchContracts({
+                query: "",
                 purpose: input.purpose,
                 scope: input.scope,
                 customerId: input.customerId,
@@ -208,7 +256,14 @@ export function useContractSelectorQuery(
         enabled: enabled && Boolean(selectedId),
         staleTime: STALE_TIME,
     })
-    return { list, selected }
+    return {
+        list: projectDirectoryList(list),
+        selected: projectDirectorySelected(
+            selected,
+            (item) => item.contractId,
+            selectedId,
+        ),
+    }
 }
 
 type SalesOrderSelectorDto = Readonly<{

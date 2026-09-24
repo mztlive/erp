@@ -1,5 +1,6 @@
 "use client"
 import { useQuery } from "@tanstack/react-query"
+import { entitySelectorKeys } from "@/features/entity-selectors/hooks/queries"
 import { selectedObjectDirectory } from "@/lib/object-directory"
 
 import { Button } from "@/components/ui/button"
@@ -267,12 +268,18 @@ export function InventoryLedgerPage() {
     )?.adjustmentNo
 
     const warehouseLabelQuery = useQuery({
-        queryKey: ["warehouse-directory", "label", warehouseId],
+        queryKey: entitySelectorKeys.warehouseLabel(warehouseId ?? ""),
         queryFn: () =>
             selectedObjectDirectory("warehouse-directory", warehouseId ?? ""),
         enabled: Boolean(warehouseId),
         staleTime: 0,
     })
+    const warehouseName =
+        warehouseLabelQuery.isError || warehouseLabelQuery.isFetching
+            ? undefined
+            : warehouseLabelQuery.data?.items.find(
+                  (item) => item.id === warehouseId,
+              )?.name
     /** 已生效条件全部显性为 chip；来源锁定参数（skuId 等）不得成为隐形查询参数。 */
     const appliedChips = React.useMemo<readonly LedgerAppliedChip[]>(() => {
         const chips: LedgerAppliedChip[] = []
@@ -281,13 +288,9 @@ export function InventoryLedgerPage() {
             chips.push({ key: "q", label: `搜索：${trimmedQ}` })
         }
         if (warehouseId) {
-            const warehouseLabel =
-                warehouseLabelQuery.isError || warehouseLabelQuery.isFetching
-                    ? undefined
-                    : warehouseLabelQuery.data?.name
             chips.push({
                 key: "warehouseId",
-                label: `仓库：${warehouseLabel ?? "已选仓库"}`,
+                label: `仓库：${warehouseName ?? "已选仓库"}`,
             })
         }
         if (view === "balance" && availability !== "all") {
@@ -361,9 +364,7 @@ export function InventoryLedgerPage() {
         chipAdjustmentNo,
         chipSalesLineLabel,
         chipSkuName,
-        warehouseLabelQuery.data?.name,
-        warehouseLabelQuery.isError,
-        warehouseLabelQuery.isFetching,
+        warehouseName,
         movementType,
         occurredFrom,
         occurredTo,

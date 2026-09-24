@@ -170,6 +170,7 @@ export function SupplierOfferingsToolbar({
                 <>
                     <SupplierSearchCombobox
                         id="supplier-offerings-toolbar-supplier-select"
+                        purpose="filter"
                         className="w-56 max-w-full min-w-0"
                         filterLabel="供应商"
                         value={supplierIdDraft ?? undefined}

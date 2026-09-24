@@ -13,6 +13,10 @@ import {
     buildSellableTableDescription,
 } from "@/features/master-data/lib/master-data-list-summaries"
 import { resourceLabel } from "@/features/master-data/lib/data"
+import {
+    directorySelectionLabel,
+    productFilterDirectoryState,
+} from "@/features/master-data/lib/product-filter-directory"
 import { PRODUCT_KIND_LABELS } from "@/features/master-data/types"
 import type { SellableAppliedChip } from "@/features/master-data/components/list/sellable-list-toolbar"
 import {
@@ -64,26 +68,27 @@ export function useSellableListState(
         () => rows.find((row) => row.stableId === previewId) ?? null,
         [previewId, rows],
     )
-    const selectedCategoryLabel = React.useMemo(
-        () =>
-            productFilterOptionsQuery.data?.categories.find(
-                (option) => option.categoryId === filters.productCategoryId,
-            )?.categoryName ?? filters.productCategoryId,
-        [filters.productCategoryId, productFilterOptionsQuery.data?.categories],
+    const directory = productFilterDirectoryState(productFilterOptionsQuery)
+    const selectedCategoryLabel = directorySelectionLabel(
+        filters.productCategoryId,
+        directory.categories,
+        (option) => option.categoryId,
+        (option) => option.categoryName,
+        directory,
     )
-    const selectedBrandLabel = React.useMemo(
-        () =>
-            productFilterOptionsQuery.data?.brands.find(
-                (option) => option.value === filters.productBrandId,
-            )?.label ?? filters.productBrandId,
-        [filters.productBrandId, productFilterOptionsQuery.data?.brands],
+    const selectedBrandLabel = directorySelectionLabel(
+        filters.productBrandId,
+        directory.brands,
+        (option) => option.value,
+        (option) => option.label,
+        directory,
     )
-    const selectedSupplierLabel = React.useMemo(
-        () =>
-            (productFilterOptionsQuery.data?.suppliers ?? []).find(
-                (option) => option.value === filters.productSupplierId,
-            )?.label ?? filters.productSupplierId,
-        [filters.productSupplierId, productFilterOptionsQuery.data?.suppliers],
+    const selectedSupplierLabel = directorySelectionLabel(
+        filters.productSupplierId,
+        directory.suppliers,
+        (option) => option.value,
+        (option) => option.label,
+        directory,
     )
     /** 所有已生效条件均可从 chip 单独撤销。 */
     const appliedChips = React.useMemo<readonly SellableAppliedChip[]>(() => {

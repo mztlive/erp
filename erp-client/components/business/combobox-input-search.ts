@@ -1,5 +1,9 @@
 import * as React from "react"
 
+/** 已选身份还在、但当前候选里没有该对象时的控件文案。不展示内部 ID。 */
+export const MISSING_SELECTION_CHECKING_LABEL = "已选项（正在核对）"
+export const MISSING_SELECTION_UNAVAILABLE_LABEL = "已选项（当前不可用）"
+
 /**
  * 把 Base UI Combobox 的 onInputValueChange 转成远程搜索词。
  *

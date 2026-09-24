@@ -9,6 +9,7 @@ import type { SmartProps } from "@/features/entity-selectors/components/types"
 import { useContractSelectorQuery } from "@/features/entity-selectors/hooks/queries"
 import { useRemoteSearchCombobox } from "@/features/entity-selectors/hooks/use-remote-search-combobox"
 import { useSearchInput } from "@/features/entity-selectors/hooks/use-search-input"
+import { SelectorQueryFeedback } from "@/components/business/selector-query-feedback"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
 
@@ -66,18 +67,34 @@ export function ContractSearchCombobox({
         extraLoading: !scopeReady,
     })
     return (
-        <ContractCombobox
-            {...props}
-            value={value}
-            contracts={rows}
-            onValueChange={(id) => {
-                onValueChange(id)
-                onItemChange?.(rows.find((item) => item.contractId === id))
-            }}
-            onSearchChange={search.onSearchChange}
-            filterMode="remote"
-            loading={loading}
-            emptyLabel={resolvedEmptyLabel}
-        />
+        <div className="min-w-0">
+            <ContractCombobox
+                {...props}
+                value={value}
+                contracts={rows}
+                onValueChange={(id) => {
+                    onValueChange(id)
+                    onItemChange?.(rows.find((item) => item.contractId === id))
+                }}
+                onSearchChange={search.onSearchChange}
+                filterMode="remote"
+                loading={loading}
+                emptyLabel={resolvedEmptyLabel}
+            />
+            <SelectorQueryFeedback
+                id={props.id}
+                failed={query.list.isError || query.selected.isError}
+                error={query.list.error ?? query.selected.error}
+                noScope={
+                    !query.list.isFetching &&
+                    !query.list.isError &&
+                    query.list.emptyReason === "no_scope"
+                }
+                onRetry={() => {
+                    void query.list.refetch()
+                    if (value) void query.selected.refetch()
+                }}
+            />
+        </div>
     )
 }

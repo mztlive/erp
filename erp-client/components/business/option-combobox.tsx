@@ -3,6 +3,8 @@
 import * as React from "react"
 
 import {
+    MISSING_SELECTION_CHECKING_LABEL,
+    MISSING_SELECTION_UNAVAILABLE_LABEL,
     remoteSearchFromInputChange,
     useStickySelected,
 } from "@/components/business/combobox-input-search"
@@ -38,6 +40,11 @@ export type OptionComboboxProps = {
     searchPlaceholder?: string
     /** 服务端已完成搜索时关闭本地二次过滤。 */
     filterMode?: "local" | "remote"
+    /**
+     * 当前列表没有已选项时是否沿用上次名称。
+     * 默认与本地过滤一致；授权目录传 false，避免撤权后仍显示旧名称。
+     */
+    retainMissingSelection?: boolean
     /** 输入变化通知；远程模式下用于触发查询。 */
     onSearchChange?: (query: string) => void
     disabled?: boolean
@@ -82,6 +89,7 @@ export function OptionCombobox({
     disabled = false,
     loading = false,
     filterMode = "local",
+    retainMissingSelection,
     onSearchChange,
     allowClear = true,
     required = false,
@@ -99,13 +107,19 @@ export function OptionCombobox({
         items,
         value ?? undefined,
         (item) => item.value,
-        filterMode !== "remote",
+        retainMissingSelection ?? filterMode !== "remote",
     )
-    const selected: InternalOption | null = resolved ?? (value ? {
-        value,
-        label: loading ? "已选项（正在核对）" : "已选项（当前不可用）",
-        __search: "",
-    } : null)
+    const selected: InternalOption | null =
+        resolved ??
+        (value
+            ? {
+                  value,
+                  label: loading
+                      ? MISSING_SELECTION_CHECKING_LABEL
+                      : MISSING_SELECTION_UNAVAILABLE_LABEL,
+                  __search: "",
+              }
+            : null)
 
     return (
         <Combobox

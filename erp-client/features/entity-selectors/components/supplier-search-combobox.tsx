@@ -5,6 +5,7 @@ import {
     type SupplierComboboxItem,
     type SupplierComboboxProps,
 } from "@/components/business/entity-comboboxes"
+import { SelectorQueryFeedback } from "@/components/business/selector-query-feedback"
 import type { SmartProps } from "@/features/entity-selectors/components/types"
 import { useSupplierSelectorQuery } from "@/features/entity-selectors/hooks/queries"
 import { useRemoteSearchCombobox } from "@/features/entity-selectors/hooks/use-remote-search-combobox"
@@ -43,18 +44,34 @@ export function SupplierSearchCombobox({
         fallbackError: "供应商加载失败，请重试",
     })
     return (
-        <SupplierCombobox
-            {...props}
-            value={value}
-            suppliers={rows}
-            onValueChange={(id) => {
-                onValueChange(id)
-                onItemChange?.(rows.find((item) => item.supplierId === id))
-            }}
-            onSearchChange={search.onSearchChange}
-            filterMode="remote"
-            loading={loading}
-            emptyLabel={resolvedEmptyLabel}
-        />
+        <div className="min-w-0">
+            <SupplierCombobox
+                {...props}
+                value={value}
+                suppliers={rows}
+                onValueChange={(id) => {
+                    onValueChange(id)
+                    onItemChange?.(rows.find((item) => item.supplierId === id))
+                }}
+                onSearchChange={search.onSearchChange}
+                filterMode="remote"
+                loading={loading}
+                emptyLabel={resolvedEmptyLabel}
+            />
+            <SelectorQueryFeedback
+                id={props.id}
+                failed={query.list.isError || query.selected.isError}
+                error={query.list.error ?? query.selected.error}
+                noScope={
+                    !query.list.isFetching &&
+                    !query.list.isError &&
+                    query.list.emptyReason === "no_scope"
+                }
+                onRetry={() => {
+                    void query.list.refetch()
+                    if (value) void query.selected.refetch()
+                }}
+            />
+        </div>
     )
 }

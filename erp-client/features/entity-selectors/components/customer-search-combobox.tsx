@@ -33,13 +33,19 @@ export function CustomerSearchCombobox({
 }: CustomerSearchComboboxProps) {
     const search = useSearchInput()
     const profile = useAccountProfileQuery()
-    const canReadAll = hasPermission(profile.data?.permissions, "customer_scope:detail")
+    const canReadAll = hasPermission(
+        profile.data?.permissions,
+        "customer_scope:detail",
+    )
     const query = useCustomerSelectorQuery(
         {
             query: search.input,
             purpose,
             scope:
-                scope ?? (purpose === "filter" && canReadAll ? "all_authorized" : "assigned"),
+                scope ??
+                (purpose === "filter" && canReadAll
+                    ? "all_authorized"
+                    : "assigned"),
         },
         value,
         { enabled: profile.isSuccess && !profile.isFetching },
@@ -76,8 +82,20 @@ export function CustomerSearchCombobox({
             />
             <SelectorQueryFeedback
                 id={props.id}
-                failed={profile.isError || query.list.isError || query.selected.isError}
-                error={profile.error ?? query.list.error ?? query.selected.error}
+                failed={
+                    profile.isError ||
+                    query.list.isError ||
+                    query.selected.isError
+                }
+                error={
+                    profile.error ?? query.list.error ?? query.selected.error
+                }
+                noScope={
+                    !profile.isError &&
+                    !query.list.isFetching &&
+                    !query.list.isError &&
+                    query.list.emptyReason === "no_scope"
+                }
                 onRetry={() => {
                     if (profile.isError) {
                         void profile.refetch()

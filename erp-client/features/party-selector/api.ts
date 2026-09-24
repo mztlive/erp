@@ -50,7 +50,10 @@ export async function searchParties(
     input: EntitySearch,
 ): Promise<SelectorPage<SettlementPartyComboboxItem>> {
     if (input.purpose === "filter") {
-        const page = await searchObjectDirectory("settlement-parties", input.query)
+        const page = await searchObjectDirectory(
+            "settlement-parties",
+            input.query,
+        )
         return { ...page, items: page.items.map(directoryItem) }
     }
     const page = await fetchSelectorList<PartyDto>("/admin/parties", {
@@ -68,7 +71,11 @@ export async function fetchPartyOption(
 ): Promise<SettlementPartyComboboxItem | null> {
     if (!partyId) return null
     if (purpose === "filter") {
-        const row = await selectedObjectDirectory("settlement-parties", partyId)
+        const page = await selectedObjectDirectory(
+            "settlement-parties",
+            partyId,
+        )
+        const row = page?.items.find((item) => item.id === partyId)
         return row ? directoryItem(row) : null
     }
     const rows = await searchParties({ query: "", purpose })

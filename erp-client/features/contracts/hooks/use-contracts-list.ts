@@ -271,7 +271,9 @@ export function useContractsList() {
     const selectedSettlementPartyLabel =
         selectedSettlement.isError || selectedSettlement.isFetching
             ? "不可用"
-            : (selectedSettlement.data?.name ?? "未知")
+            : (selectedSettlement.data?.items.find(
+                  (item) => item.id === settlementPartyId,
+              )?.name ?? "未知")
 
     /** 全部已生效条件 → chip；查询、摘要、计数、导出只读 Applied。 */
     const appliedChips = React.useMemo<readonly ContractAppliedChip[]>(() => {

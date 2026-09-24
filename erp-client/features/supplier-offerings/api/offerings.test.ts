@@ -18,8 +18,6 @@ describe("fetchSupplierOfferings", () => {
             page: 1,
             page_size: 50,
             empty_reason: null,
-            owner_options: [{ value: "user-1", label: "张三" }],
-            procurement_owner_options: [{ value: "buyer-1", label: "李四" }],
         })
     })
 

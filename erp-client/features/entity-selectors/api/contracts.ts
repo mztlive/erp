@@ -1,5 +1,5 @@
 import type { ContractComboboxItem } from "@/components/business/entity-comboboxes"
-import { fetchSelectorList } from "@/lib/selector-list"
+import { fetchSelectorList, type SelectorPage } from "@/lib/selector-list"
 
 import type { ContractSearch } from "./types"
 
@@ -49,7 +49,7 @@ function contractItem(row: ContractDto): ContractComboboxItem {
 
 export async function searchContracts(
     input: ContractSearch,
-): Promise<readonly ContractComboboxItem[]> {
+): Promise<SelectorPage<ContractComboboxItem>> {
     const page = await fetchSelectorList<ContractDto>("/admin/contracts", {
         q: input.query.trim() || undefined,
         customer_id: input.customerId || undefined,
@@ -58,7 +58,7 @@ export async function searchContracts(
         sort_by: "created_at",
         sort_dir: "desc",
     })
-    return page.items.map(contractItem)
+    return { ...page, items: page.items.map(contractItem) }
 }
 
 export async function fetchContractOption(
@@ -66,6 +66,6 @@ export async function fetchContractOption(
     input: Omit<ContractSearch, "query"> = { purpose: "filter" },
 ): Promise<ContractComboboxItem | null> {
     if (!contractId) return null
-    const rows = await searchContracts({ ...input, query: "" })
-    return rows.find((row) => row.contractId === contractId) ?? null
+    const page = await searchContracts({ ...input, query: "" })
+    return page.items.find((row) => row.contractId === contractId) ?? null
 }

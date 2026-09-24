@@ -24,6 +24,14 @@ import type {
 import { fetchCompleteList } from "@/lib/collect-pages"
 import { fetchAllPages } from "./fetch-all"
 
+/** 读取 fetchAllPages 挂上的响应字段；没有该字段时返回 undefined，不编造。 */
+function attachedEmptyReason(value: object): string | null | undefined {
+    if (!("empty_reason" in value)) return undefined
+    const reason = (value as { empty_reason?: unknown }).empty_reason
+    if (typeof reason === "string" || reason === null) return reason
+    return undefined
+}
+
 export async function listProducts(query: MasterDataListQuery): Promise<{
     rows: MasterDataListItem[]
     emptyReason?: string | null
@@ -102,6 +110,19 @@ export async function fetchProductFilterOptions(
         unavailable.push("brands")
     if (!hasPermission(permissions, "supplier:list"))
         unavailable.push("suppliers")
+    const emptyReasons: {
+        categories?: string | null
+        brands?: string | null
+        suppliers?: string | null
+    } = {}
+    const categoryEmptyReason = attachedEmptyReason(categories)
+    const brandEmptyReason = attachedEmptyReason(brands)
+    const supplierEmptyReason = attachedEmptyReason(suppliers)
+    if (categoryEmptyReason !== undefined)
+        emptyReasons.categories = categoryEmptyReason
+    if (brandEmptyReason !== undefined) emptyReasons.brands = brandEmptyReason
+    if (supplierEmptyReason !== undefined)
+        emptyReasons.suppliers = supplierEmptyReason
     return {
         unavailable,
         categories: categories.map((category) => ({
@@ -118,6 +139,7 @@ export async function fetchProductFilterOptions(
             keywords: `${brand.brand_code} ${brand.name}`,
         })),
         suppliers: supplierOptions,
+        ...(Object.keys(emptyReasons).length > 0 ? { emptyReasons } : {}),
     }
 }
 

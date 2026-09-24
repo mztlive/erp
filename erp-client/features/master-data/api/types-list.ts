@@ -197,4 +197,13 @@ export type ProductFilterOptions = Readonly<{
         label: string
         keywords: string
     }>[]
+    /**
+     * 仅当对应目录响应本身带有 empty_reason 时出现。
+     * 没有该字段时不补，也不能据此编造 no_scope。
+     */
+    emptyReasons?: Readonly<{
+        categories?: string | null
+        brands?: string | null
+        suppliers?: string | null
+    }>
 }>

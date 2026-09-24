@@ -3,6 +3,12 @@
 import * as React from "react"
 
 import { CategoryCombobox, OptionCombobox } from "@/components/business"
+import { DirectoryFilterControl } from "@/features/master-data/components/list/directory-filter-control"
+import {
+    directoryOptionEmptyLabel,
+    productFilterDirectoryState,
+    type ProductFilterDirectoryQuery,
+} from "@/features/master-data/lib/product-filter-directory"
 import {
     ListSearchField,
     ListWorkspaceFilterBar,
@@ -12,7 +18,6 @@ import {
 import { Input } from "@/components/ui/input"
 import type { SellableAppliedChip } from "./sellable-list-toolbar"
 import type { useSellableListFilters } from "@/features/master-data/hooks/use-sellable-list-filters"
-import type { useProductFilterOptionsQuery } from "@/features/master-data/hooks/queries"
 import { PRODUCT_KIND_FILTER_OPTIONS } from "@/features/master-data/lib/list-filters"
 import type { ProductKind } from "@/features/master-data/types"
 
@@ -34,16 +39,14 @@ export function SellableItemsFilterBar({
     searchInputRef: React.RefObject<HTMLInputElement | null>
     filters: ReturnType<typeof useSellableListFilters>
     appliedChips: readonly SellableAppliedChip[]
-    filterOptions: Pick<
-        ReturnType<typeof useProductFilterOptionsQuery>,
-        "data" | "isPending"
-    >
+    filterOptions: ProductFilterDirectoryQuery
     resultCount?: number
     loading: boolean
     failed: boolean
     idleHint?: string
     statusActions?: React.ReactNode
 }) {
+    const directory = productFilterDirectoryState(filterOptions)
     const priceInputRef = React.useRef<HTMLInputElement>(null)
     const moreCount = appliedChips.filter(({ key }) =>
         [
@@ -114,25 +117,36 @@ export function SellableItemsFilterBar({
                             )
                         }
                     />
-                    <CategoryCombobox
+                    <DirectoryFilterControl
                         id={`${prefix}-category`}
-                        className="w-56 max-w-full min-w-0"
-                        filterLabel="分类"
-                        categories={filterOptions.data?.categories ?? []}
-                        value={f.productCategoryIdDraft ?? undefined}
-                        onValueChange={(value) =>
-                            f.setProductCategoryIdDraft(value ?? null)
-                        }
-                        loading={filterOptions.isPending}
-                        placeholder="全部"
-                        emptyLabel={
-                            filterOptions.data?.unavailable?.includes(
-                                "categories",
-                            )
-                                ? "当前账号无分类查询权限"
-                                : "没有符合条件的分类"
-                        }
-                    />
+                        className="w-56 max-w-full"
+                        failed={directory.failed}
+                        unavailable={directory.categoryUnavailable}
+                        noScope={directory.categoryNoScope}
+                        error={directory.error}
+                        onRetry={directory.refetch}
+                    >
+                        <CategoryCombobox
+                            id={`${prefix}-category`}
+                            className="w-full min-w-0"
+                            filterLabel="分类"
+                            categories={directory.categories}
+                            value={f.productCategoryIdDraft ?? undefined}
+                            onValueChange={(value) =>
+                                f.setProductCategoryIdDraft(value ?? null)
+                            }
+                            loading={directory.fetching}
+                            retainMissingSelection={false}
+                            placeholder="全部"
+                            emptyLabel={directoryOptionEmptyLabel({
+                                unavailable: directory.categoryUnavailable,
+                                unavailableLabel: "当前账号无分类查询权限",
+                                noScope: directory.categoryNoScope,
+                                failed: directory.failed,
+                                emptyLabel: "没有符合条件的分类",
+                            })}
+                        />
+                    </DirectoryFilterControl>
                 </>
             }
             morePanel={
@@ -146,49 +160,73 @@ export function SellableItemsFilterBar({
                                 htmlFor={`${prefix}-brand`}
                                 label="品牌"
                             >
-                                <OptionCombobox
+                                <DirectoryFilterControl
                                     id={`${prefix}-brand`}
-                                    className="w-full"
-                                    aria-label="品牌"
-                                    value={f.productBrandIdDraft}
-                                    onValueChange={f.setProductBrandIdDraft}
-                                    options={filterOptions.data?.brands ?? []}
-                                    loading={filterOptions.isPending}
-                                    placeholder="全部品牌"
-                                    emptyLabel={
-                                        filterOptions.data?.unavailable?.includes(
-                                            "brands",
-                                        )
-                                            ? "当前账号无品牌查询权限"
-                                            : "没有符合条件的品牌"
-                                    }
-                                    searchPlaceholder="搜索品牌名称或代码"
-                                />
+                                    failed={directory.failed}
+                                    unavailable={directory.brandUnavailable}
+                                    noScope={directory.brandNoScope}
+                                    error={directory.error}
+                                    onRetry={directory.refetch}
+                                >
+                                    <OptionCombobox
+                                        id={`${prefix}-brand`}
+                                        className="w-full"
+                                        aria-label="品牌"
+                                        value={f.productBrandIdDraft}
+                                        onValueChange={f.setProductBrandIdDraft}
+                                        options={directory.brands}
+                                        loading={directory.fetching}
+                                        retainMissingSelection={false}
+                                        placeholder="全部品牌"
+                                        emptyLabel={directoryOptionEmptyLabel({
+                                            unavailable:
+                                                directory.brandUnavailable,
+                                            unavailableLabel:
+                                                "当前账号无品牌查询权限",
+                                            noScope: directory.brandNoScope,
+                                            failed: directory.failed,
+                                            emptyLabel: "没有符合条件的品牌",
+                                        })}
+                                        searchPlaceholder="搜索品牌名称或代码"
+                                    />
+                                </DirectoryFilterControl>
                             </ListWorkspaceFilterField>
                             <ListWorkspaceFilterField
                                 htmlFor={`${prefix}-supplier`}
                                 label="供应商"
                             >
-                                <OptionCombobox
+                                <DirectoryFilterControl
                                     id={`${prefix}-supplier`}
-                                    className="w-full"
-                                    aria-label="供应商"
-                                    value={f.productSupplierIdDraft}
-                                    onValueChange={f.setProductSupplierIdDraft}
-                                    options={
-                                        filterOptions.data?.suppliers ?? []
-                                    }
-                                    loading={filterOptions.isPending}
-                                    placeholder="全部供应商"
-                                    emptyLabel={
-                                        filterOptions.data?.unavailable?.includes(
-                                            "suppliers",
-                                        )
-                                            ? "当前账号无供应商查询权限"
-                                            : "没有符合条件的供应商"
-                                    }
-                                    searchPlaceholder="搜索供应商名称或代码"
-                                />
+                                    failed={directory.failed}
+                                    unavailable={directory.supplierUnavailable}
+                                    noScope={directory.supplierNoScope}
+                                    error={directory.error}
+                                    onRetry={directory.refetch}
+                                >
+                                    <OptionCombobox
+                                        id={`${prefix}-supplier`}
+                                        className="w-full"
+                                        aria-label="供应商"
+                                        value={f.productSupplierIdDraft}
+                                        onValueChange={
+                                            f.setProductSupplierIdDraft
+                                        }
+                                        options={directory.suppliers}
+                                        loading={directory.fetching}
+                                        retainMissingSelection={false}
+                                        placeholder="全部供应商"
+                                        emptyLabel={directoryOptionEmptyLabel({
+                                            unavailable:
+                                                directory.supplierUnavailable,
+                                            unavailableLabel:
+                                                "当前账号无供应商查询权限",
+                                            noScope: directory.supplierNoScope,
+                                            failed: directory.failed,
+                                            emptyLabel: "没有符合条件的供应商",
+                                        })}
+                                        searchPlaceholder="搜索供应商名称或代码"
+                                    />
+                                </DirectoryFilterControl>
                             </ListWorkspaceFilterField>
                             <ListWorkspaceFilterField
                                 className="sm:col-span-2"

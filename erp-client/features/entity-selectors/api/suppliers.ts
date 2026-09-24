@@ -1,6 +1,6 @@
 import type { SupplierComboboxItem } from "@/components/business/entity-comboboxes"
 import { apiGet } from "@/lib/api"
-import { fetchSelectorList } from "@/lib/selector-list"
+import { fetchSelectorList, type SelectorPage } from "@/lib/selector-list"
 
 import { activeStatus } from "./shared"
 import type { EntitySearch } from "./types"
@@ -31,14 +31,14 @@ function supplierItem(row: SupplierDto): SupplierComboboxItem {
 
 export async function searchSuppliers(
     input: EntitySearch,
-): Promise<readonly SupplierComboboxItem[]> {
+): Promise<SelectorPage<SupplierComboboxItem>> {
     const page = await fetchSelectorList<SupplierDto>("/admin/suppliers", {
         keyword: input.query.trim() || undefined,
         status: input.purpose === "filter" ? undefined : "active",
         sort_by: "supplier_no",
         sort_dir: "asc",
     })
-    return page.items.map(supplierItem)
+    return { ...page, items: page.items.map(supplierItem) }
 }
 
 export async function fetchSupplierOption(
@@ -46,8 +46,8 @@ export async function fetchSupplierOption(
     input: Omit<EntitySearch, "query"> = { purpose: "filter" },
 ): Promise<SupplierComboboxItem | null> {
     if (!supplierId) return null
-    const rows = await searchSuppliers({ ...input, query: "" })
-    return rows.find((row) => row.supplierId === supplierId) ?? null
+    const page = await searchSuppliers({ ...input, query: "" })
+    return page.items.find((row) => row.supplierId === supplierId) ?? null
 }
 
 /** 发票使用往来单位标识，不能使用供应商账户标识。 */

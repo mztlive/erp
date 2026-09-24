@@ -1,4 +1,5 @@
 import type { WarehouseComboboxItem } from "@/components/business/entity-comboboxes"
+import type { ListEnvelope } from "@/lib/collect-pages"
 import {
     searchObjectDirectory,
     selectedObjectDirectory,
@@ -50,7 +51,10 @@ export async function searchWarehouses(
     input: EntitySearch,
 ): Promise<SelectorPage<WarehouseComboboxItem>> {
     if (input.purpose === "filter") {
-        const page = await searchObjectDirectory("warehouse-directory", input.query)
+        const page = await searchObjectDirectory(
+            "warehouse-directory",
+            input.query,
+        )
         return { ...page, items: page.items.map(directoryItem) }
     }
     const page = await fetchSelectorList<WarehouseDto>("/admin/warehouses", {
@@ -64,33 +68,54 @@ export async function searchWarehouses(
     return { ...page, items: await Promise.all(page.items.map(warehouseItem)) }
 }
 
+export async function fetchWarehouseSelection(
+    warehouseId: string,
+    purpose: EntitySearch["purpose"] = "filter",
+): Promise<SelectorPage<WarehouseComboboxItem>> {
+    if (!warehouseId) return { items: [], total: 0 }
+    if (purpose === "filter") {
+        const page = await selectedObjectDirectory(
+            "warehouse-directory",
+            warehouseId,
+        )
+        if (!page) return { items: [], total: 0 }
+        const row = page.items.find((item) => item.id === warehouseId)
+        return {
+            ...page,
+            items: row ? [directoryItem(row)] : [],
+            total: page.total ?? (row ? 1 : 0),
+        }
+    }
+    const page = await apiGet<Page<WarehouseDto> & ListEnvelope>(
+        "/admin/warehouses",
+        {
+            warehouse_id: warehouseId,
+            require_inbound_handler:
+                purpose === "purchase-receipt" || undefined,
+            status: "active",
+            page: 1,
+            page_size: 1,
+        },
+    )
+    const row = page.items.find((item) => item.id === warehouseId)
+    const items: WarehouseComboboxItem[] =
+        row &&
+        !(
+            purpose === "purchase-receipt" &&
+            !row.inbound_handler_user_id?.trim()
+        )
+            ? [await warehouseItem(row)]
+            : []
+    return { ...page, items }
+}
+
 export async function fetchWarehouseOption(
     warehouseId: string,
     purpose: EntitySearch["purpose"] = "filter",
 ): Promise<WarehouseComboboxItem | null> {
     if (!warehouseId) return null
-    if (purpose === "filter") {
-        const row = await selectedObjectDirectory(
-            "warehouse-directory",
-            warehouseId,
-        )
-        return row ? directoryItem(row) : null
-    }
-    const page = await apiGet<Page<WarehouseDto>>("/admin/warehouses", {
-        warehouse_id: warehouseId,
-        require_inbound_handler: purpose === "purchase-receipt" || undefined,
-        status: "active",
-        page: 1,
-        page_size: 1,
-    })
-    const row = page.items.find((item) => item.id === warehouseId)
-    if (
-        purpose === "purchase-receipt" &&
-        !row?.inbound_handler_user_id?.trim()
-    ) {
-        return null
-    }
-    return row ? warehouseItem(row) : null
+    const page = await fetchWarehouseSelection(warehouseId, purpose)
+    return page.items[0] ?? null
 }
 
 function directoryItem(row: ObjectDirectoryItem): WarehouseComboboxItem {

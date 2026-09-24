@@ -5,7 +5,15 @@ export async function fetchAllPages<T>(
     path: string,
     query: Record<string, unknown> = {},
 ): Promise<T[]> {
-    return (
-        await fetchCompleteList<T>(path, query, (item) => JSON.stringify(item))
-    ).items
+    const page = await fetchCompleteList<T>(path, query, (item) =>
+        JSON.stringify(item),
+    )
+    // 条目数组仍是返回值。响应里若有 empty_reason，挂在数组上，避免目录筛选丢掉 no_scope。
+    if (page.empty_reason !== undefined) {
+        Object.defineProperty(page.items, "empty_reason", {
+            value: page.empty_reason,
+            enumerable: false,
+        })
+    }
+    return page.items
 }
