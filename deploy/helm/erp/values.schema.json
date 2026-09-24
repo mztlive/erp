@@ -1,0 +1,165 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "environment": {
+      "enum": [
+        "production",
+        "test"
+      ]
+    },
+    "namespace": {
+      "enum": [
+        "prod",
+        "test"
+      ]
+    },
+    "releaseId": {
+      "type": "string"
+    },
+    "imagePullSecret": {
+      "type": "string",
+      "pattern": "^$|^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$"
+    },
+    "api": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "image": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9.:/-]*@sha256:[0-9a-f]{64}$"
+        },
+        "replicas": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "resources": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "requests": {
+              "type": "object",
+              "minProperties": 1
+            },
+            "limits": {
+              "type": "object",
+              "minProperties": 1
+            }
+          },
+          "required": [
+            "requests",
+            "limits"
+          ]
+        },
+        "configSecret": {
+          "type": "string",
+          "pattern": "^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$",
+          "maxLength": 253
+        },
+        "configRevision": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "image",
+        "replicas",
+        "resources",
+        "configSecret",
+        "configRevision"
+      ]
+    },
+    "client": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "image": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9.:/-]*@sha256:[0-9a-f]{64}$"
+        },
+        "replicas": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "resources": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "requests": {
+              "type": "object",
+              "minProperties": 1
+            },
+            "limits": {
+              "type": "object",
+              "minProperties": 1
+            }
+          },
+          "required": [
+            "requests",
+            "limits"
+          ]
+        }
+      },
+      "required": [
+        "image",
+        "replicas",
+        "resources"
+      ]
+    },
+    "ingress": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "apiHost": {
+          "type": "string",
+          "pattern": "^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$",
+          "maxLength": 253
+        },
+        "webHost": {
+          "type": "string",
+          "pattern": "^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$",
+          "maxLength": 253
+        },
+        "clbId": {
+          "type": "string",
+          "pattern": "^lb-[a-z0-9]+$"
+        },
+        "tlsSecret": {
+          "type": "string",
+          "pattern": "^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$",
+          "maxLength": 253
+        }
+      },
+      "required": [
+        "apiHost",
+        "webHost",
+        "clbId",
+        "tlsSecret"
+      ]
+    },
+    "pdb": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "minAvailable": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "minAvailable"
+      ]
+    }
+  },
+  "required": [
+    "environment",
+    "namespace",
+    "releaseId",
+    "imagePullSecret",
+    "api",
+    "client",
+    "ingress",
+    "pdb"
+  ],
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

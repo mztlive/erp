@@ -1,0 +1,26 @@
+# 必须叠加 environments/production.json 或 environments/test.json。
+environment: ""
+namespace: ""
+releaseId: ""
+imagePullSecret: ""
+api:
+  image: ""
+  replicas: 1
+  configSecret: erp-api-config
+  configRevision: "1"
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {cpu: "1", memory: 1Gi}
+client:
+  image: ""
+  replicas: 1
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {cpu: "1", memory: 1Gi}
+ingress:
+  apiHost: ""
+  webHost: ""
+  clbId: ""
+  tlsSecret: ""
+pdb:
+  minAvailable: 0

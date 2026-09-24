@@ -5,7 +5,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 
 validate() {
     local tool location missing=0
-    local tools=(git docker kubectl python3 curl bash grep)
+    local tools=(git docker kubectl helm python3 curl bash grep)
     if [[ "${RUN_QUALITY_CHECKS:-false}" == "true" ]]; then
         tools+=(cargo node npm)
     else
@@ -24,6 +24,11 @@ validate() {
         echo '工具预检查失败。请在 selfhost 上安装缺失工具，或为 Jenkins Agent 服务配置 PATH；SSH 终端可用不代表 Agent 可用。' >&2
         return 1
     fi
+    if [[ "$(helm version --template '{{.Version}}')" != v4.* ]]; then
+        echo '发布要求 Helm 4.x；Agent 必须固定经过验证的补丁版本。' >&2
+        return 1
+    fi
+    load_environment
     echo '检查 Docker Buildx：'
     if ! docker buildx version; then
         echo 'Docker Buildx 不可用，请为 Agent 安装可访问的 Buildx 插件。' >&2
@@ -40,8 +45,14 @@ validate() {
     echo '工具预检查通过。'
 }
 
-kube() {
-    local selected_context="${KUBE_CONTEXT:-}"
+load_environment() {
+    local exports
+    exports="$(python3 deploy/jenkins/environment.py)" || return
+    eval "$exports"
+}
+
+cluster_context() {
+    selected_context="${KUBE_CONTEXT:-}"
     # 只读取 Jenkins 上传的文件，不回退到 Agent 自己的 ~/.kube/config。
     if [[ ! -f "${KUBECONFIG:-}" ]]; then
         echo '缺少 Jenkins 上传的 kubeconfig 文件，请检查集群凭据。' >&2
@@ -53,26 +64,37 @@ kube() {
             return 1
         fi
     fi
+}
+
+kube() {
+    cluster_context || return
     kubectl --kubeconfig "$KUBECONFIG" --context "$selected_context" \
-        --namespace "${KUBE_NAMESPACE:-prod}" --request-timeout=30s "$@"
+        --namespace "$KUBE_NAMESPACE" --request-timeout=30s "$@"
+}
+
+helm_cluster() {
+    cluster_context || return
+    helm --kubeconfig "$KUBECONFIG" --kube-context "$selected_context" \
+        --namespace "$KUBE_NAMESPACE" "$@"
 }
 
 preflight() {
+    load_environment
     local existing_ingress
     # 不存在时允许首次创建；权限/网络错误必须停止，不能当作不存在。
     existing_ingress="$(kube get ingress erp --ignore-not-found -o json)"
     printf '%s' "$existing_ingress" | python3 -c '
-import json, sys
+import json, os, sys
 raw = sys.stdin.read().strip()
 if raw:
     annotations = json.loads(raw).get("metadata", {}).get("annotations", {})
     if (annotations.get("ingress.cloud.tencent.com/enable-group") != "true"
-            or annotations.get("kubernetes.io/ingress.existLbId") != "lb-gpk8k2ps"):
+            or annotations.get("kubernetes.io/ingress.existLbId") != os.environ["CLB_ID"]):
         raise SystemExit("现有 erp Ingress 未启用共享或绑定了其他 CLB；请先规划迁移，流水线不会删除或原地切换入口。")
 '
     # 仅验证数据键存在，不打印配置或证书内容。
-    kube get secret erp-api-config -o go-template='{{if index .data "config.toml"}}present{{end}}' | grep -qx present
-    kube get secret fsytsl-wsk87cm7 -o go-template='{{if index .data "qcloud_cert_id"}}present{{end}}' | grep -qx present
+    kube get secret "$API_CONFIG_SECRET" -o go-template='{{if index .data "config.toml"}}present{{end}}' | grep -qx present
+    kube get secret "$TLS_SECRET" -o go-template='{{if index .data "qcloud_cert_id"}}present{{end}}' | grep -qx present
     if [[ -n "${IMAGE_PULL_SECRET:-}" ]]; then
         kube get secret "$IMAGE_PULL_SECRET" \
             -o go-template='{{if index .data ".dockerconfigjson"}}present{{end}}' | grep -qx present
@@ -80,6 +102,7 @@ if raw:
 }
 
 build() (
+    load_environment
     : "${TCR_USERNAME:?缺少 TCR 用户名}" "${TCR_PASSWORD:?缺少 TCR 密码}"
     # 子 shell 内的变量在 EXIT 清理期间保持可见，且不修改调用方环境。
     builder_started=false
@@ -106,7 +129,7 @@ build() (
     fi
     builder_started=true
     docker buildx create --name "$builder_name" --driver docker-container --use >/dev/null
-    tag="$(git rev-parse --short=12 HEAD)-${BUILD_NUMBER:?缺少构建编号}"
+    tag="$(git rev-parse --short=12 HEAD)-${DEPLOY_ENV}-${BUILD_NUMBER:?缺少构建编号}"
     mkdir -p release-artifacts
     docker buildx build --builder "$builder_name" --platform "$IMAGE_PLATFORM" \
         --file deploy/jenkins/Dockerfile.web-api \
@@ -117,13 +140,26 @@ build() (
         --build-arg "NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL" \
         --tag "$WEB_REPOSITORY:$tag" --push \
         --metadata-file release-artifacts/web-build.json erp-client
+    python3 - <<'PYTHON'
+import json, os
+from pathlib import Path
+keys = ("DEPLOY_ENV", "NEXT_PUBLIC_API_BASE_URL", "API_REPOSITORY", "WEB_REPOSITORY")
+Path('release-artifacts/build-context.json').write_text(json.dumps({k: os.environ[k] for k in keys}, indent=2) + '\n')
+PYTHON
 )
 
 deploy() {
+    rm -f release-artifacts/deployment-status.txt
+    python3 deploy/jenkins/render.py verify
     preflight
-    # 先让 API Server 验证所有对象；失败时不执行正式 apply。
+    # API Server 验证完整清单；Helm 另行校验 release 归属。两步均不持久化资源。
     kube apply --dry-run=server -f release-artifacts/manifests.yaml >/dev/null
-    kube apply -f release-artifacts/manifests.yaml
+    helm_cluster upgrade --install "$HELM_RELEASE" release-artifacts/chart.tgz \
+        -f release-artifacts/values-release.json --reset-values --dry-run=server --hide-secret >/dev/null
+    helm_cluster upgrade --install "$HELM_RELEASE" release-artifacts/chart.tgz \
+        -f release-artifacts/values-release.json --reset-values \
+        --wait --rollback-on-failure --timeout 15m --history-max 20
+    helm_cluster history "$HELM_RELEASE" -o json > release-artifacts/helm-history.json
     kube rollout status deployment/erp-api --timeout=900s
     kube rollout status deployment/erp-client --timeout=900s
     kube get deployments erp-api erp-client -o json > release-artifacts/deployments.json
@@ -133,7 +169,10 @@ from pathlib import Path
 root = Path('release-artifacts')
 release = json.loads((root / 'release.json').read_text())
 expected = {'erp-api': release['api_image'], 'erp-client': release['web_image']}
-for deployment in json.loads((root / 'deployments.json').read_text())['items']:
+deployments = json.loads((root / 'deployments.json').read_text())['items']
+if {d['metadata']['name'] for d in deployments} != set(expected):
+    raise SystemExit('集群返回的 Deployment 集合不完整')
+for deployment in deployments:
     name = deployment['metadata']['name']
     containers = deployment['spec']['template']['spec']['containers']
     image = next(c['image'] for c in containers if c['name'] == name)

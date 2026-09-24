@@ -1,0 +1,13 @@
+{
+  "environment": "test",
+  "namespace": "test",
+  "ingress": {
+    "apiHost": "erp-api-test.fushangyunfu.com",
+    "webHost": "erp-test.fushangyunfu.com",
+    "clbId": "lb-gpk8k2ps",
+    "tlsSecret": "fsytsl-wsk87cm7"
+  },
+  "api": {
+    "configSecret": "erp-api-config"
+  }
+}

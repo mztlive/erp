@@ -1,6 +1,6 @@
-# 复制到 deploy/k8s/secrets/web-api-config.toml 后再填写。不要提交填写后的文件。
+# 复制到 deploy/secrets/web-api-config.toml 后再填写。不要提交填写后的文件。
 # app.port 必须保持 10001，与 Service、探针一致。
-# 启用 deploy/k8s/optional/mongo 时，uri 使用下面这一行；生产环境改成集群外副本集地址。
+# 生产和测试均使用独立配置的外部 MongoDB 副本集，填写目标环境的地址和凭据。
 
 [app]
 port = 10001
@@ -8,8 +8,8 @@ port = 10001
 secret = "replace-with-at-least-32-random-bytes"
 
 [database]
-# uri = "mongodb://mongo-0.mongo.prod.svc.cluster.local:27017/?replicaSet=rs0"
-uri = "mongodb://username:password@host:port/database"
+# replicaSet 替换为真实副本集名称；所有成员地址必须从 Pod 可达。
+uri = "mongodb://username:password@host:port/database?replicaSet=rs0"
 db_name = "rs_project_template"
 
 # 上传强制使用 S3 或 S3-compatible 对象存储；启动前必须替换凭证与 URL。

@@ -8,21 +8,19 @@ pipeline {
         buildDiscarder(logRotator(numToKeepStr: '20', artifactNumToKeepStr: '20'))
     }
     parameters {
+        choice(name: 'DEPLOY_ENV', choices: ['test', 'production'], description: 'test → test 命名空间；production → prod 命名空间。域名与配置由仓库环境 values 确定')
         string(name: 'TCR_CREDENTIALS_ID', defaultValue: 'tcr', description: 'Jenkins Username with password 凭据 ID')
         string(name: 'KUBECONFIG_CREDENTIALS_ID', defaultValue: 'tke-kubeconfig', description: 'Jenkins Secret file 凭据 ID')
         string(name: 'KUBE_CONTEXT', defaultValue: '', description: '可选：留空使用上传 kubeconfig 的 current-context；填写时覆盖默认值')
-        string(name: 'IMAGE_PULL_SECRET', defaultValue: '', description: 'prod 中已有的镜像拉取 Secret；已配置 TKE 免密拉取时可留空')
+        string(name: 'IMAGE_PULL_SECRET', defaultValue: '', description: '目标环境命名空间中已有的镜像拉取 Secret；已配置 TKE 免密拉取时可留空')
         choice(name: 'IMAGE_PLATFORM', choices: ['linux/amd64', 'linux/arm64'], description: '必须与 TKE 节点架构一致；Agent 应支持该平台构建')
-        booleanParam(name: 'RUN_QUALITY_CHECKS', defaultValue: false, description: '执行前后端质量门禁和发布脚本离线测试；当前默认跳过')
+        booleanParam(name: 'RUN_QUALITY_CHECKS', defaultValue: false, description: '执行前后端质量门禁；发布脚本离线测试始终执行')
         booleanParam(name: 'DEPLOY_TO_TKE', defaultValue: true, description: '执行集群发布；取消时仅构建推送镜像和归档清单，质量检查由独立开关控制')
     }
     environment {
         REGISTRY_HOST = 'fushangyun.tencentcloudcr.com'
         API_REPOSITORY = 'fushangyun.tencentcloudcr.com/fushangyun/erp-api'
         WEB_REPOSITORY = 'fushangyun.tencentcloudcr.com/fushangyun/erp'
-        NEXT_PUBLIC_API_BASE_URL = 'https://erp-api.fushangyunfu.com'
-        WEB_URL = 'https://erp.fushangyunfu.com'
-        KUBE_NAMESPACE = 'prod'
     }
     stages {
         stage('Checkout') {
@@ -33,7 +31,6 @@ pipeline {
             }
         }
         stage('发布脚本离线测试') {
-            when { expression { params.RUN_QUALITY_CHECKS } }
             steps {
                 sh 'python3 deploy/jenkins/test_render.py'
                 sh 'python3 deploy/jenkins/test_release.py'

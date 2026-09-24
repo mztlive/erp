@@ -2,12 +2,15 @@ apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: erp-api
+  namespace: {{ .Release.Namespace }}
   labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/name: erp-api
     app.kubernetes.io/part-of: erp
 spec:
   # 单副本允许维护时驱逐，避免阻塞节点 drain。
-  minAvailable: 0
+  minAvailable: {{ .Values.pdb.minAvailable }}
   selector:
     matchLabels:
       app.kubernetes.io/name: erp-api
@@ -16,11 +19,14 @@ apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: erp-client
+  namespace: {{ .Release.Namespace }}
   labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/name: erp-client
     app.kubernetes.io/part-of: erp
 spec:
-  minAvailable: 0
+  minAvailable: {{ .Values.pdb.minAvailable }}
   selector:
     matchLabels:
       app.kubernetes.io/name: erp-client

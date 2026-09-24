@@ -1,15 +1,16 @@
-# 腾讯云 TKE 的 CLB Ingress。不要安装 ingress-nginx。
-# 两个域名共用入口；production overlay 指定共享 CLB。
-# TLS 使用控制台里已有的 Opaque Secret fsytsl-wsk87cm7，它必须和 Ingress 同在 prod。
-# 这张证书需要同时覆盖 erp.fushangyunfu.com 和 erp-api.fushangyunfu.com。
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: erp
+  namespace: {{ .Release.Namespace }}
   labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/name: erp
     app.kubernetes.io/part-of: erp
   annotations:
+    ingress.cloud.tencent.com/enable-group: "true"
+    kubernetes.io/ingress.existLbId: {{ .Values.ingress.clbId | quote }}
     kubernetes.io/ingress.class: qcloud
     ingress.cloud.tencent.com/auto-rewrite: "true"
     ingress.cloud.tencent.com/tke-service-config: erp
@@ -17,11 +18,11 @@ spec:
   ingressClassName: qcloud
   tls:
     - hosts:
-        - erp.fushangyunfu.com
-        - erp-api.fushangyunfu.com
-      secretName: fsytsl-wsk87cm7
+        - {{ .Values.ingress.webHost | quote }}
+        - {{ .Values.ingress.apiHost | quote }}
+      secretName: {{ .Values.ingress.tlsSecret | quote }}
   rules:
-    - host: erp.fushangyunfu.com
+    - host: {{ .Values.ingress.webHost | quote }}
       http:
         paths:
           - path: /
@@ -31,7 +32,7 @@ spec:
                 name: erp-client
                 port:
                   number: 3000
-    - host: erp-api.fushangyunfu.com
+    - host: {{ .Values.ingress.apiHost | quote }}
       http:
         paths:
           - path: /
@@ -46,7 +47,10 @@ apiVersion: cloud.tencent.com/v1alpha1
 kind: TkeServiceConfig
 metadata:
   name: erp
+  namespace: {{ .Release.Namespace }}
   labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/name: erp
     app.kubernetes.io/part-of: erp
 spec:
@@ -54,9 +58,8 @@ spec:
     l7Listeners:
       - protocol: HTTPS
         port: 443
-        defaultServer: erp.fushangyunfu.com
         domains:
-          - domain: erp-api.fushangyunfu.com
+          - domain: {{ .Values.ingress.apiHost | quote }}
             rules:
               - url: /
                 forwardType: HTTP
@@ -68,5 +71,5 @@ spec:
                   unHealthNum: 3
                   httpCheckPath: /health
                   httpCheckMethod: GET
-                  httpCheckDomain: erp-api.fushangyunfu.com
+                  httpCheckDomain: {{ .Values.ingress.apiHost | quote }}
                   httpCode: 2

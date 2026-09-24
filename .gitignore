@@ -6,7 +6,7 @@
 /uploads
 /config.toml
 # 集群真实配置（含 JWT 与 S3 凭证）。只提交 example。
-/deploy/k8s/secrets/
+/deploy/secrets/
 /.docker-deps
 /.release-state
 /release-artifacts

@@ -103,6 +103,8 @@ scripts/release-deploy.sh rollback <release-tag>
 
 ## Kubernetes
 
-集群清单在仓库根 [`deploy/README.md`](../deploy/README.md)。默认只部署
-`web-api` 和 `erp-client`；MongoDB 仍在集群外，开发集群可以另外启用
-`deploy/k8s/optional/mongo`。应用 `app.port` 保持 `10001`，与 Service 和探针一致。
+生产和测试环境统一通过 `deploy/helm/erp` Chart 部署 `erp-api` 和 `erp-client`，
+执行要求见仓库根 [Kubernetes 部署合同](../deploy/README.md)。两个环境均使用独立配置的
+外部 MongoDB 副本集，应用发布不安装数据库。后端配置参考
+[配置模板](../deploy/examples/web-api-config.example.toml)，真实配置仅存放于已忽略的
+`deploy/secrets/` 或受控配置系统。应用 `app.port` 保持 `10001`，与 Service 和探针一致。

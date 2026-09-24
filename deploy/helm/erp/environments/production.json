@@ -1,0 +1,13 @@
+{
+  "environment": "production",
+  "namespace": "prod",
+  "ingress": {
+    "apiHost": "erp-api.fushangyunfu.com",
+    "webHost": "erp.fushangyunfu.com",
+    "clbId": "lb-gpk8k2ps",
+    "tlsSecret": "fsytsl-wsk87cm7"
+  },
+  "api": {
+    "configSecret": "erp-api-config"
+  }
+}
