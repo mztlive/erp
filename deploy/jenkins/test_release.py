@@ -180,20 +180,33 @@ class ValidateTests(unittest.TestCase):
             executable.write_text('#!/bin/sh\nexit 0\n')
             executable.chmod(0o755)
 
-    def validate(self):
+    def validate(self, quality="false"):
         return subprocess.run(
             [self.bash, "deploy/jenkins/release.sh", "validate"], cwd=self.root,
-            env={**os.environ, "PATH": str(self.binaries)}, capture_output=True, text=True,
+            env={**os.environ, "PATH": str(self.binaries), "RUN_QUALITY_CHECKS": quality}, capture_output=True, text=True,
         )
 
     def test_reports_all_missing_tools(self):
         for name in ("kubectl", "cargo", "npm"):
             (self.binaries / name).unlink()
-        result = self.validate()
+        result = self.validate(quality="true")
         self.assertNotEqual(result.returncode, 0)
         for name in ("kubectl", "cargo", "npm"):
             self.assertIn(f"[缺失] {name}", result.stderr)
         self.assertNotIn("检查 Docker Buildx", result.stdout)
+
+    def test_skipped_quality_does_not_require_host_build_tools(self):
+        for name in ("cargo", "node", "npm"):
+            (self.binaries / name).unlink()
+        result = self.validate()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("质量检查已跳过", result.stdout)
+
+    def test_skipped_quality_still_requires_kubectl(self):
+        (self.binaries / "kubectl").unlink()
+        result = self.validate()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("[缺失] kubectl", result.stderr)
 
     def test_distinguishes_buildx_and_daemon_failures(self):
         for command, message in (("buildx", "Docker Buildx 不可用"), ("info", "Agent 无法访问 Docker daemon")):

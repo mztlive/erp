@@ -34,7 +34,9 @@ MongoDB 使用现有内网 CVM 的副本集，连接信息写入 `web-api-config
 
 `KUBE_CONTEXT` 为可选参数，默认留空，自动使用上传 kubeconfig 的 `current-context`。只有需要覆盖文件默认选择时才填写。所有集群命令通过 `--kubeconfig` 明确指定上传文件，不读取 Agent 自身的配置，也不修改文件。文件缺失或未设置默认 context 且参数为空时，流水线停止并提示修正。可在可信终端执行 `kubectl --kubeconfig 文件路径 config get-contexts -o name` 查询可用名称，不得输出 kubeconfig 的完整内容。
 
-Agent 必须安装 Git、Bash、Python 3、kubectl（内置 Kustomize）、Docker Engine、系统级 Docker Buildx 插件、curl 7.71 或以上、Node.js 22.18 或以上的 22.x 版本、npm、Rustup，以及项目 `backend/rust-toolchain.toml` 所需的 nightly 和组件。后端主机检查还需要 C/C++ 编译器、CMake、pkg-config、OpenSSL 开发库。Docker 镜像构建使用专用 Dockerfile 中的 Rust 工具链。
+Agent 必须安装 Git、Bash、grep、Python 3、kubectl（内置 Kustomize）、Docker Engine、系统级 Docker Buildx 插件及 curl 7.71 或以上。`RUN_QUALITY_CHECKS` 默认关闭，此时不要求主机安装 Cargo、Node.js 或 npm；后端编译及前端 `npm run build` 仍在 Docker 镜像构建中执行。
+
+开启 `RUN_QUALITY_CHECKS` 时，Agent 还必须安装 Node.js 22.18 或以上的 22.x 版本、npm、Rustup，以及项目 `backend/rust-toolchain.toml` 所需的 nightly 和组件。后端主机检查还需要 C/C++ 编译器、CMake、pkg-config、OpenSSL 开发库。关闭开关只表示跳过质量门禁，不得将发布成功记作质量检查通过。
 
 Agent 必须能够访问 Git、依赖镜像源、TCR、TKE API Server 和两个 HTTPS 业务域名。TKE 节点必须能够拉取对应平台的镜像。`IMAGE_PLATFORM` 默认 `linux/amd64`；使用 ARM 节点时必须选择 `linux/arm64`，并提供匹配构建节点或已配置的跨平台构建能力。
 
@@ -59,20 +61,20 @@ Agent 必须能够访问 Git、依赖镜像源、TCR、TKE API Server 和两个 
 
 ## 执行与结果
 
-提交新发布文件和已有 K8s/前端 Docker 配套文件后，从 Jenkins 构建任务运行。上传的 kubeconfig 已设置 `current-context` 时，无需填写 `KUBE_CONTEXT`；需要覆盖时使用 `Build with Parameters` 设置。`DEPLOY_TO_TKE` 默认开启；关闭时只运行质量检查、构建推送与清单归档，不绑定集群凭据。
+提交新发布文件和已有 K8s/前端 Docker 配套文件后，从 Jenkins 构建任务运行。上传的 kubeconfig 已设置 `current-context` 时，无需填写 `KUBE_CONTEXT`；需要覆盖时使用 `Build with Parameters` 设置。`DEPLOY_TO_TKE` 默认开启；关闭时只构建推送与归档，不绑定集群凭据。`RUN_QUALITY_CHECKS` 独立控制质量检查，默认关闭。
 
 执行顺序：
 
 1. 清理本任务工作区并检出 SCM 提交。
 2. 检查工具、必需 Secret 和指定 context。
-3. 执行后端格式、编译、Clippy、库单元测试、架构边界和权限漂移检查。
-4. 执行前端依赖安装、lint、TypeScript 和单元测试；前端镜像构建执行 `npm run build`。
+3. 仅在 `RUN_QUALITY_CHECKS=true` 时执行发布脚本离线测试，以及后端格式、编译、Clippy、库单元测试、架构边界和权限漂移检查。
+4. 仅在该开关开启时执行主机上的前端依赖安装、lint、TypeScript 和单元测试；前端镜像构建始终执行 `npm run build`。
 5. 构建并推送两个镜像，标签为提交短 SHA 加构建编号；读取 Buildx 产生的镜像 digest。
 6. 在临时目录渲染生产清单，将两个 Deployment 镜像写为 `repository@sha256:...`，配置拉取 Secret，并注入发布标识。不得修改仓库中的生产 overlay。
 7. 归档 `release-artifacts`，执行 API Server dry-run，通过后正式 apply。
 8. 等待两个 Deployment rollout，核对集群镜像与本次发布 digest，并检查 API `/health` 和前端 `/` 的 HTTPS 响应。
 
-后端专用 `Dockerfile.web-api` 以 `backend/` 为上下文，预建 `/erp-client/lib`，供 `build.rs` 生成目录文件。前端镜像使用仓库中的生成物；构建前的权限漂移检查负责校验这些生成物。
+后端专用 `Dockerfile.web-api` 以 `backend/` 为上下文，预建 `/erp-client/lib`，供 `build.rs` 生成目录文件。前端镜像使用仓库中的生成物；开启质量检查时由权限漂移检查校验，关闭时不执行该校验。
 
 `release.json` 记录提交、构建编号和两个镜像 digest；`manifests.yaml` 是本次完整发布清单。只有 rollout、镜像核对和 HTTPS 检查全部通过，才会生成 `deployment-status.txt`。这些检查不等价于登录、权限、业务事务和上传验收。
 

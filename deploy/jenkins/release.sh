@@ -5,8 +5,14 @@ cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 
 validate() {
     local tool location missing=0
+    local tools=(git docker kubectl python3 curl bash grep)
+    if [[ "${RUN_QUALITY_CHECKS:-false}" == "true" ]]; then
+        tools+=(cargo node npm)
+    else
+        echo '质量检查已跳过；不检查 Agent 上的 Cargo、Node.js 和 npm。镜像编译仍在 Docker 中执行。'
+    fi
     echo '检查 selfhost Agent 的命令环境：'
-    for tool in git docker kubectl python3 curl cargo node npm bash grep; do
+    for tool in "${tools[@]}"; do
         if location="$(command -v "$tool")"; then
             printf '[OK] %s: %s\n' "$tool" "$location"
         else

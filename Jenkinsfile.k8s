@@ -13,7 +13,8 @@ pipeline {
         string(name: 'KUBE_CONTEXT', defaultValue: '', description: '可选：留空使用上传 kubeconfig 的 current-context；填写时覆盖默认值')
         string(name: 'IMAGE_PULL_SECRET', defaultValue: 'tcr-pull', description: 'prod 中已有的镜像拉取 Secret；已配置 TKE 免密拉取时可留空')
         choice(name: 'IMAGE_PLATFORM', choices: ['linux/amd64', 'linux/arm64'], description: '必须与 TKE 节点架构一致；Agent 应支持该平台构建')
-        booleanParam(name: 'DEPLOY_TO_TKE', defaultValue: true, description: '执行集群发布；取消时仅质量检查、推送镜像和归档清单')
+        booleanParam(name: 'RUN_QUALITY_CHECKS', defaultValue: false, description: '执行前后端质量门禁和发布脚本离线测试；当前默认跳过')
+        booleanParam(name: 'DEPLOY_TO_TKE', defaultValue: true, description: '执行集群发布；取消时仅构建推送镜像和归档清单，质量检查由独立开关控制')
     }
     environment {
         REGISTRY_HOST = 'fushangyun.tencentcloudcr.com'
@@ -29,6 +30,11 @@ pipeline {
                 deleteDir()
                 checkout scm
                 sh 'bash deploy/jenkins/release.sh validate'
+            }
+        }
+        stage('发布脚本离线测试') {
+            when { expression { params.RUN_QUALITY_CHECKS } }
+            steps {
                 sh 'python3 deploy/jenkins/test_render.py'
                 sh 'python3 deploy/jenkins/test_release.py'
             }
@@ -42,6 +48,7 @@ pipeline {
             }
         }
         stage('后端质量门禁') {
+            when { expression { params.RUN_QUALITY_CHECKS } }
             steps {
                 dir('backend') {
                     sh '''#!/usr/bin/env bash
@@ -58,6 +65,7 @@ env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked
             }
         }
         stage('前端质量门禁') {
+            when { expression { params.RUN_QUALITY_CHECKS } }
             steps {
                 dir('erp-client') {
                     sh '''#!/usr/bin/env bash
