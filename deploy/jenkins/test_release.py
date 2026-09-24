@@ -162,5 +162,54 @@ elif 'deployments' in args:
         self.assertFalse((self.root / "release-artifacts/deployment-status.txt").exists())
 
 
+class ValidateTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory(prefix="erp-validate-test-")
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        scripts = self.root / "deploy/jenkins"
+        scripts.mkdir(parents=True)
+        shutil.copy(Path(__file__).with_name("release.sh"), scripts)
+        self.binaries = self.root / "bin"
+        self.binaries.mkdir()
+        self.bash = shutil.which("bash")
+        for name in ("bash", "dirname"):
+            (self.binaries / name).symlink_to(shutil.which(name))
+        for name in ("git", "docker", "kubectl", "python3", "curl", "cargo", "node", "npm", "grep"):
+            executable = self.binaries / name
+            executable.write_text('#!/bin/sh\nexit 0\n')
+            executable.chmod(0o755)
+
+    def validate(self):
+        return subprocess.run(
+            [self.bash, "deploy/jenkins/release.sh", "validate"], cwd=self.root,
+            env={**os.environ, "PATH": str(self.binaries)}, capture_output=True, text=True,
+        )
+
+    def test_reports_all_missing_tools(self):
+        for name in ("kubectl", "cargo", "npm"):
+            (self.binaries / name).unlink()
+        result = self.validate()
+        self.assertNotEqual(result.returncode, 0)
+        for name in ("kubectl", "cargo", "npm"):
+            self.assertIn(f"[缺失] {name}", result.stderr)
+        self.assertNotIn("检查 Docker Buildx", result.stdout)
+
+    def test_distinguishes_buildx_and_daemon_failures(self):
+        for command, message in (("buildx", "Docker Buildx 不可用"), ("info", "Agent 无法访问 Docker daemon")):
+            with self.subTest(command=command):
+                (self.binaries / "docker").write_text(
+                    f'#!/bin/sh\nif [ "$1" = "{command}" ]; then exit 1; fi\nexit 0\n'
+                )
+                result = self.validate()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(message, result.stderr)
+
+    def test_reports_success(self):
+        result = self.validate()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("工具预检查通过", result.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()

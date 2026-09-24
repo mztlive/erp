@@ -3,6 +3,37 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 
+validate() {
+    local tool location missing=0
+    echo '检查 selfhost Agent 的命令环境：'
+    for tool in git docker kubectl python3 curl cargo node npm bash grep; do
+        if location="$(command -v "$tool")"; then
+            printf '[OK] %s: %s\n' "$tool" "$location"
+        else
+            printf '[缺失] %s：Agent 的 PATH 中找不到该命令。\n' "$tool" >&2
+            missing=1
+        fi
+    done
+    if [[ "$missing" -ne 0 ]]; then
+        echo '工具预检查失败。请在 selfhost 上安装缺失工具，或为 Jenkins Agent 服务配置 PATH；SSH 终端可用不代表 Agent 可用。' >&2
+        return 1
+    fi
+    echo '检查 Docker Buildx：'
+    if ! docker buildx version; then
+        echo 'Docker Buildx 不可用，请为 Agent 安装可访问的 Buildx 插件。' >&2
+        return 1
+    fi
+    echo '检查 Docker daemon 访问权限：'
+    if ! docker info --format '{{.ServerVersion}}'; then
+        echo 'Agent 无法访问 Docker daemon，请检查 Docker 服务、连接配置及 Agent 运行用户的权限。' >&2
+        return 1
+    fi
+    echo '检查发布脚本语法与 Git 差异：'
+    git diff --check
+    bash -n deploy/jenkins/release.sh
+    echo '工具预检查通过。'
+}
+
 kube() {
     local selected_context="${KUBE_CONTEXT:-}"
     # 只读取 Jenkins 上传的文件，不回退到 Agent 自己的 ~/.kube/config。
@@ -99,12 +130,7 @@ PY
 }
 
 case "${1:-}" in
-    validate)
-        for tool in git docker kubectl python3 curl cargo npm; do command -v "$tool" >/dev/null; done
-        docker buildx version
-        git diff --check
-        bash -n deploy/jenkins/release.sh
-        ;;
+    validate) validate ;;
     preflight) preflight ;;
     build) build ;;
     deploy) deploy ;;
