@@ -48,7 +48,7 @@ Agent 必须能够访问 Git、依赖镜像源、TCR、TKE API Server 和两个 
 2. 创建 `web-api-config`，写入完整生产配置。MongoDB 副本集成员地址必须从 Pod 可达；S3、JWT、服务端口等按 `deploy/README.md` 配置。
 3. 在 `prod` 中准备覆盖两个域名的证书 Secret `fsytsl-wsk87cm7`。
 4. 在 `prod` 中准备镜像拉取 Secret `tcr-pull`，类型为 `kubernetes.io/dockerconfigjson`；其凭据应具有两个镜像仓库的读取权限。若已配置 TKE 的 TCR 免密拉取，将 `IMAGE_PULL_SECRET` 参数留空。
-5. 启用 TKE CLB Ingress 控制器及 `TkeServiceConfig` CRD，确认 Service/Ingress Controller 版本至少为 v2.10.0，并确认共享 CLB `lb-gpk8k2ps` 对目标集群可用。该 CLB 必须为手动创建，不得使用 TKE 自动创建的实例。保证有足够容量运行两个后端和两个前端副本，并容纳滚动更新的额外 Pod。
+5. 启用 TKE CLB Ingress 控制器及 `TkeServiceConfig` CRD，确认 Service/Ingress Controller 版本至少为 v2.10.0，并确认共享 CLB `lb-gpk8k2ps` 对目标集群可用。该 CLB 必须为手动创建，不得使用 TKE 自动创建的实例。前后端稳定运行时各 1 个 Pod；保留默认滚动更新策略，更新期间可能临时创建额外 Pod。单副本维护或故障期间可能中断服务；PDB 的 `minAvailable` 设为 0，允许节点维护时驱逐。
 6. 为 kubeconfig 授予 `prod` 内 ServiceAccount、Deployment、Service、Ingress、PodDisruptionBudget、TkeServiceConfig 的 get/create/patch 权限，以及发布检查所需的 Deployment get/list/watch 权限。授予对前述指定 Secret 的 get 权限。流水线不创建 Namespace，不需要 Secret 写权限。
 
 流水线访问 Secret 只输出对应键是否存在，不将其内容写入日志或发布归档。Secret 键存在不代表配置有效，应用启动与真实业务验收仍必须检查。

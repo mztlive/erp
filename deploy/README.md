@@ -13,7 +13,7 @@ Compose 和 Jenkins 仍按 `backend/DEPLOY.md` 使用，这套清单不替换它
 
 - `k8s/base`：命名空间 `prod`、两个 Deployment/Service、CLB Ingress。
 - `k8s/overlays/local`：镜像标签 `dev`，Ingress 主机 `erp.local` 和 `api.erp.local`。
-- `k8s/overlays/production`：两个副本、PodDisruptionBudget，镜像地址需要改成实际仓库。
+- `k8s/overlays/production`：前后端各 1 个副本，PodDisruptionBudget 允许维护时驱逐；镜像地址需要改成实际仓库。
 - `k8s/examples/web-api-config.example.toml`：配置模板。
 - `k8s/optional/mongo`：开发用单节点副本集。
 - `erp-client/Dockerfile`：管理端镜像。后端镜像仍用 `backend/Dockerfile`。
@@ -104,6 +104,7 @@ kubectl -n prod port-forward service/erp-client 3000:3000
 
 - `GET /health` 返回 200 只表示进程已经开始监听。副本集校验和索引创建发生在监听之前；首次启动若索引较多，可能接近 startupProbe 的 10 分钟上限。
 - `GET /ready` 在外部连接器仍是失败关闭时返回 503。当前组合根就是这个状态，所以探针使用 `/health`。
-- 登录和上传限流是进程内的。生产 overlay 有两个 `web-api` 副本，限流不跨副本共享。
+- 生产 overlay 的 `web-api` 和 `erp-client` 各运行 1 个副本。登录和上传限流是进程内的，重启后重新计数。
+- 单副本维护或故障期间可能中断服务。PDB 的 `minAvailable` 为 0，允许节点维护时驱逐；保留该资源以更新旧部署中的 PDB，避免仅从清单移除后旧规则残留。
 - 管理端镜像不包含 `cli`。初始化或重置管理员仍在能访问同一 MongoDB 的环境执行 `cargo run -p cli -- init-admin`。
 - 部署这版 JWT 账号版本校验后，已有后台 token 会失效，操作人员需要重新登录。

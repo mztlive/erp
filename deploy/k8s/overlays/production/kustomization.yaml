@@ -24,9 +24,9 @@ patches:
         path: /spec/loadBalancer/l7Listeners/0/defaultServer
 replicas:
   - name: web-api
-    count: 2
+    count: 1
   - name: erp-client
-    count: 2
+    count: 1
 images:
   # 发布前改成仓库地址和不可变 digest，不要保留 replace-with-release。
   # kubectl kustomize 之后确认镜像形如 registry.example.com/erp/web-api@sha256:...
