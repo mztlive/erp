@@ -79,15 +79,32 @@ if raw:
     fi
 }
 
-build() {
+build() (
     : "${TCR_USERNAME:?缺少 TCR 用户名}" "${TCR_PASSWORD:?缺少 TCR 密码}"
-    local docker_auth_dir builder_name tag
+    # 子 shell 内的变量在 EXIT 清理期间保持可见，且不修改调用方环境。
+    builder_started=false
     docker_auth_dir="$(mktemp -d)"
     export DOCKER_CONFIG="$docker_auth_dir"
     # 独立的 buildx builder 与凭据目录，不修改同机其他任务的 Docker 登录状态。
     builder_name="erp-$(date +%s)-$$"
-    trap 'docker buildx rm "$builder_name" >/dev/null 2>&1 || true; rm -rf "$docker_auth_dir"' EXIT
-    printf '%s' "$TCR_PASSWORD" | docker login "$REGISTRY_HOST" --username "$TCR_USERNAME" --password-stdin
+    cleanup_build() {
+        build_status=$?
+        trap - EXIT
+        if [[ "$builder_started" == "true" ]]; then
+            docker buildx rm "$builder_name" >/dev/null 2>&1 || true
+        fi
+        rm -rf "$docker_auth_dir" || true
+        exit "$build_status"
+    }
+    trap cleanup_build EXIT
+    if printf '%s' "$TCR_PASSWORD" | docker login "$REGISTRY_HOST" --username "$TCR_USERNAME" --password-stdin; then
+        echo 'TCR 登录成功。'
+    else
+        login_status=$?
+        echo 'TCR 登录失败：请检查 Jenkins 的 TCR_CREDENTIALS_ID 所指用户名/密码是否属于目标实例、是否有效，以及实例网络访问策略。TKE 免密拉取不提供 Jenkins 推送权限。' >&2
+        exit "$login_status"
+    fi
+    builder_started=true
     docker buildx create --name "$builder_name" --driver docker-container --use >/dev/null
     tag="$(git rev-parse --short=12 HEAD)-${BUILD_NUMBER:?缺少构建编号}"
     mkdir -p release-artifacts
@@ -100,11 +117,7 @@ build() {
         --build-arg "NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL" \
         --tag "$WEB_REPOSITORY:$tag" --push \
         --metadata-file release-artifacts/web-build.json erp-client
-    # EXIT trap 使用函数局部变量，必须在函数返回前执行清理。
-    docker buildx rm "$builder_name" >/dev/null
-    rm -rf "$docker_auth_dir"
-    trap - EXIT
-}
+)
 
 deploy() {
     preflight

@@ -162,6 +162,64 @@ elif 'deployments' in args:
         self.assertFalse((self.root / "release-artifacts/deployment-status.txt").exists())
 
 
+class BuildTests(unittest.TestCase):
+    def test_cleanup_on_login_failure_build_failure_and_success(self):
+        for case, expected in (("login-failure", 17), ("build-failure", 23), ("success", 0)):
+            with self.subTest(case=case), tempfile.TemporaryDirectory(prefix="erp-build-test-") as temporary:
+                root = Path(temporary)
+                scripts = root / "deploy/jenkins"
+                scripts.mkdir(parents=True)
+                shutil.copy(Path(__file__).with_name("release.sh"), scripts)
+                binaries = root / "bin"
+                binaries.mkdir()
+                log = root / "commands.jsonl"
+                mock = '''#!/usr/bin/env python3
+import json, os, sys
+from pathlib import Path
+args = sys.argv[1:]
+auth = os.environ.get('DOCKER_CONFIG')
+with open(os.environ['COMMAND_LOG'], 'a') as log:
+    log.write(json.dumps({'tool': Path(sys.argv[0]).name, 'args': args, 'auth': auth}) + '\\n')
+if Path(sys.argv[0]).name == 'git':
+    print('abc123')
+elif args[0] == 'login':
+    sys.stdin.read()
+    Path(auth, 'config.json').write_text('mock credential')
+    if os.environ['CASE'] == 'login-failure':
+        print('unauthorized', file=sys.stderr)
+        sys.exit(17)
+elif args[:2] == ['buildx', 'build'] and os.environ['CASE'] == 'build-failure':
+    sys.exit(23)
+'''
+                for name in ("docker", "git"):
+                    file = binaries / name
+                    file.write_text(mock)
+                    file.chmod(0o755)
+                result = subprocess.run(
+                    ["bash", "deploy/jenkins/release.sh", "build"], cwd=root,
+                    env={**os.environ, "PATH": f"{binaries}:{os.environ['PATH']}",
+                         "COMMAND_LOG": str(log), "CASE": case, "TCR_USERNAME": "test",
+                         "TCR_PASSWORD": "mock-password-not-for-logs", "REGISTRY_HOST": "example.invalid",
+                         "BUILD_NUMBER": "1", "IMAGE_PLATFORM": "linux/amd64",
+                         "API_REPOSITORY": "example.invalid/api", "WEB_REPOSITORY": "example.invalid/web",
+                         "NEXT_PUBLIC_API_BASE_URL": "https://api.example.invalid"},
+                    capture_output=True, text=True,
+                )
+                self.assertEqual(result.returncode, expected, result.stderr)
+                self.assertNotIn("unbound variable", result.stderr)
+                self.assertNotIn("mock-password-not-for-logs", result.stdout + result.stderr)
+                commands = [json.loads(line) for line in log.read_text().splitlines()]
+                auth = next(c['auth'] for c in commands if c['args'][0] == 'login')
+                self.assertFalse(Path(auth).exists())
+                removals = [c for c in commands if c['args'][:2] == ['buildx', 'rm']]
+                self.assertEqual(len(removals), 0 if case == "login-failure" else 1)
+                if case == "login-failure":
+                    self.assertEqual(len(commands), 1)
+                    self.assertIn("TCR 登录失败", result.stderr)
+                if case == "success":
+                    self.assertEqual(sum(c['args'][:2] == ['buildx', 'build'] for c in commands), 2)
+
+
 class ValidateTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix="erp-validate-test-")
