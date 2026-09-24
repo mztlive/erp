@@ -31,15 +31,15 @@ ENV NODE_ENV=production \
     HOSTNAME=0.0.0.0
 
 RUN set -eux; \
-    groupadd --system --gid 10001 erp-client; \
-    useradd --system --uid 10001 --gid erp-client \
-        --home-dir /app --shell /usr/sbin/nologin erp-client
+    groupadd --gid 10001 erp; \
+    useradd --no-log-init --no-create-home --uid 10001 --gid erp \
+        --home-dir /app --shell /usr/sbin/nologin erp
 
-COPY --from=builder --chown=erp-client:erp-client /app/.next/standalone ./
-COPY --from=builder --chown=erp-client:erp-client /app/.next/static ./.next/static
-COPY --from=builder --chown=erp-client:erp-client /app/public ./public
+COPY --from=builder --chown=erp:erp /app/.next/standalone ./
+COPY --from=builder --chown=erp:erp /app/.next/static ./.next/static
+COPY --from=builder --chown=erp:erp /app/public ./public
 
-USER erp-client
+USER erp
 
 EXPOSE 3000
 

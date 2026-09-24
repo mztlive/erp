@@ -70,15 +70,15 @@ RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends ca-certificates curl libssl3 tzdata; \
     rm -rf /var/lib/apt/lists/*; \
-    groupadd --system --gid 10001 rs-project-template; \
-    useradd --system --uid 10001 --gid rs-project-template \
-        --home-dir /app --shell /usr/sbin/nologin rs-project-template; \
+    groupadd --gid 10001 erp; \
+    useradd --no-log-init --no-create-home --uid 10001 --gid erp \
+        --home-dir /app --shell /usr/sbin/nologin erp; \
     mkdir -p /app/logs; \
-    chown -R rs-project-template:rs-project-template /app
+    chown -R erp:erp /app
 
 COPY --from=builder /tmp/bin/web-api /usr/local/bin/web-api
 
-USER rs-project-template
+USER erp
 
 ENV RUST_LOG=info \
     LOG_FORMAT=json \
