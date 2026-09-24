@@ -18,7 +18,11 @@ Compose 和 Jenkins 仍按 `backend/DEPLOY.md` 使用，这套清单不替换它
 - `k8s/optional/mongo`：开发用单节点副本集。
 - `erp-client/Dockerfile`：管理端镜像。后端镜像仍用 `backend/Dockerfile`。
 
-入口是腾讯云 TKE 自带的 CLB Ingress（`kubernetes.io/ingress.class: qcloud`），不要安装 ingress-nginx。命名空间是 `prod`。TLS 引用控制台里已有的 Opaque Secret `fsytsl-wsk87cm7`，不在清单里再建证书 Secret。一个 Ingress 创建一个公网 CLB。`erp.fushangyunfu.com` 进管理端，`erp-api.fushangyunfu.com` 进 API，两条 DNS 指向同一个 CLB 地址。证书要同时覆盖这两个域名。
+入口是腾讯云 TKE 自带的 CLB Ingress（`kubernetes.io/ingress.class: qcloud`），不要安装 ingress-nginx。命名空间是 `prod`。TLS 引用控制台里已有的 Opaque Secret `fsytsl-wsk87cm7`，不在清单里再建证书 Secret。生产 overlay 使用手动创建的共享 CLB `lb-gpk8k2ps`，通过 `enable-group` 和 `existLbId` 注解指定复用，不为 ERP 自动创建独立 CLB。`erp.fushangyunfu.com` 进管理端，`erp-api.fushangyunfu.com` 进 API，两条 DNS 指向该 CLB 地址。证书要同时覆盖这两个域名。
+
+共享模式要求 Service/Ingress Controller 至少为 v2.10.0，必须在创建 Ingress 时启用。已有非共享 Ingress 不得直接追加注解迁移。其他项目复用该 CLB 时也必须在创建时启用共享，域名和路径规则不得冲突。共享 HTTPS 监听器的默认域名由入口管理方统一维护，ERP 生产清单不声明 `defaultServer`。要求见[腾讯云多 Ingress 复用 CLB 文档](https://cloud.tencent.com.cn/document/product/457/127545)。
+
+本地 overlay 未绑定生产共享 CLB，禁止将 local overlay 用于生产发布。Jenkins 发布入口为根目录 `Jenkinsfile.k8s`，执行要求见 [Jenkins 发布规范](jenkins/README.md)。
 
 ## 构建镜像
 
@@ -69,13 +73,13 @@ kubectl apply -k deploy/k8s/overlays/local
 kubectl apply -k deploy/k8s/overlays/production
 ```
 
-生产域名是 `erp.fushangyunfu.com` 和 `erp-api.fushangyunfu.com`。apply 之后执行 `kubectl -n prod get ingress erp`，把这两条 DNS 都指到同一个 ADDRESS。
+生产域名是 `erp.fushangyunfu.com` 和 `erp-api.fushangyunfu.com`。发布前可将两条 DNS 指向共享 CLB `lb-gpk8k2ps` 的公网地址；apply 之后执行 `kubectl -n prod get ingress erp`，核对 ADDRESS 与该 CLB 一致，并检查 Ingress 事件是否存在同步错误。
 
 ```bash
 kubectl -n kube-system get deploy l7-lb-controller
 ```
 
-`l7-lb-controller` 是 TKE 自带的 CLB 控制器。副本数应大于 0。不需要在组件里安装 nginx-ingress。
+部分集群的 Ingress Controller 已托管或合并至 Service Controller；未找到 `l7-lb-controller` Deployment 不能单独判定控制器不可用。共享能力要求控制器版本至少为 v2.10.0，可查看 `kube-system` 中 `tke-service-controller-config`、`tke-ingress-controller-config` 的 VERSION，无法确认时通过 TKE 控制台或工单核实。不需要安装 nginx-ingress。
 
 生产 overlay 里的 `registry.example.com` 和 `replace-with-release` 必须改成实际仓库和 digest 后再 apply。把 `images` 改成：
 

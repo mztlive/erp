@@ -9,6 +9,18 @@ kube() {
 }
 
 preflight() {
+    local existing_ingress
+    # 不存在时允许首次创建；权限/网络错误必须停止，不能当作不存在。
+    existing_ingress="$(kube get ingress erp --ignore-not-found -o json)"
+    printf '%s' "$existing_ingress" | python3 -c '
+import json, sys
+raw = sys.stdin.read().strip()
+if raw:
+    annotations = json.loads(raw).get("metadata", {}).get("annotations", {})
+    if (annotations.get("ingress.cloud.tencent.com/enable-group") != "true"
+            or annotations.get("kubernetes.io/ingress.existLbId") != "lb-gpk8k2ps"):
+        raise SystemExit("现有 erp Ingress 未启用共享或绑定了其他 CLB；请先规划迁移，流水线不会删除或原地切换入口。")
+'
     # 仅验证数据键存在，不打印配置或证书内容。
     kube get secret web-api-config -o go-template='{{if index .data "config.toml"}}present{{end}}' | grep -qx present
     kube get secret fsytsl-wsk87cm7 -o go-template='{{if index .data "qcloud_cert_id"}}present{{end}}' | grep -qx present
@@ -66,7 +78,7 @@ for deployment in json.loads((root / 'deployments.json').read_text())['items']:
     if image != expected[name]:
         raise SystemExit(f'{name}: 集群镜像与本次发布不一致')
 PY
-    # 首次部署必须先完成 CLB/DNS/证书配置，公网探测才会通过。
+    # 两个域名必须解析到共享 CLB，且证书生效，公网探测才会通过。
     curl --fail --silent --show-error --retry 12 --retry-all-errors --retry-delay 10 \
         --connect-timeout 10 --max-time 20 --output /dev/null "$NEXT_PUBLIC_API_BASE_URL/health"
     curl --fail --silent --show-error --retry 12 --retry-all-errors --retry-delay 10 \

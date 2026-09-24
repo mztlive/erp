@@ -34,7 +34,21 @@ with open(os.environ['COMMAND_LOG'], 'a') as log:
     log.write(json.dumps([tool, *args]) + '\\n')
 if tool == 'curl':
     sys.exit(0)
-if 'secret' in args:
+if 'ingress' in args:
+    case = os.environ.get('CASE')
+    if case == 'ingress-read-failure':
+        sys.exit(1)
+    if case != 'new-ingress':
+        annotations = {
+            'ingress.cloud.tencent.com/enable-group': 'true',
+            'kubernetes.io/ingress.existLbId': 'lb-gpk8k2ps',
+        }
+        if case == 'legacy-ingress':
+            annotations.pop('ingress.cloud.tencent.com/enable-group')
+        if case == 'wrong-clb':
+            annotations['kubernetes.io/ingress.existLbId'] = 'lb-other'
+        print(json.dumps({'metadata': {'annotations': annotations}}))
+elif 'secret' in args:
     if os.environ.get('CASE') != 'missing-secret':
         print('present', end='')
 elif '--dry-run=server' in args and os.environ.get('CASE') == 'dry-run-failure':
@@ -85,6 +99,19 @@ elif 'deployments' in args:
         result, commands = self.deploy("missing-secret")
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(any("apply" in command for command in commands))
+
+    def test_new_ingress_can_be_created(self):
+        result, commands = self.deploy("new-ingress")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(any("apply" in command for command in commands))
+
+    def test_incompatible_ingress_or_read_failure_prevents_apply(self):
+        for case in ("legacy-ingress", "wrong-clb", "ingress-read-failure"):
+            with self.subTest(case=case):
+                self.log.write_text("")
+                result, commands = self.deploy(case)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(any("apply" in command for command in commands))
 
     def test_dry_run_failure_prevents_live_apply(self):
         result, commands = self.deploy("dry-run-failure")

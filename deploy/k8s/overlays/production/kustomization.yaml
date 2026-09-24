@@ -4,6 +4,24 @@ namespace: prod
 resources:
   - ../../base
   - pdb.yaml
+patches:
+  - target:
+      kind: Ingress
+      name: erp
+    patch: |-
+      - op: add
+        path: /metadata/annotations/ingress.cloud.tencent.com~1enable-group
+        value: "true"
+      - op: add
+        path: /metadata/annotations/kubernetes.io~1ingress.existLbId
+        value: lb-gpk8k2ps
+  # 共享监听器的默认域名由入口管理方统一维护，ERP 不声明该全局设置。
+  - target:
+      kind: TkeServiceConfig
+      name: erp
+    patch: |-
+      - op: remove
+        path: /spec/loadBalancer/l7Listeners/0/defaultServer
 replicas:
   - name: web-api
     count: 2

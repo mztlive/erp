@@ -15,6 +15,7 @@ Jenkins 任务必须使用仓库根目录 `Jenkinsfile.k8s`。旧 `backend/Jenki
 | API 域名及前端构建参数 | `https://erp-api.fushangyunfu.com` |
 | 后端配置 | Secret `web-api-config`，键 `config.toml` |
 | CLB 证书 | Secret `fsytsl-wsk87cm7`，键 `qcloud_cert_id` |
+| 共享 CLB | 手动创建的 `lb-gpk8k2ps`，生产 Ingress 创建时启用 group |
 
 MongoDB 使用现有内网 CVM 的副本集，连接信息写入 `web-api-config`。流水线不得创建 MongoDB、重置业务数据、执行种子脚本或写入应用配置 Secret。
 
@@ -45,12 +46,16 @@ Agent 必须能够访问 Git、依赖镜像源、TCR、TKE API Server 和两个 
 2. 创建 `web-api-config`，写入完整生产配置。MongoDB 副本集成员地址必须从 Pod 可达；S3、JWT、服务端口等按 `deploy/README.md` 配置。
 3. 在 `prod` 中准备覆盖两个域名的证书 Secret `fsytsl-wsk87cm7`。
 4. 在 `prod` 中准备镜像拉取 Secret `tcr-pull`，类型为 `kubernetes.io/dockerconfigjson`；其凭据应具有两个镜像仓库的读取权限。若已配置 TKE 的 TCR 免密拉取，将 `IMAGE_PULL_SECRET` 参数留空。
-5. 启用 TKE CLB Ingress 控制器及 `TkeServiceConfig` CRD；保证有足够容量运行两个后端和两个前端副本，并容纳滚动更新的额外 Pod。
+5. 启用 TKE CLB Ingress 控制器及 `TkeServiceConfig` CRD，确认 Service/Ingress Controller 版本至少为 v2.10.0，并确认共享 CLB `lb-gpk8k2ps` 对目标集群可用。该 CLB 必须为手动创建，不得使用 TKE 自动创建的实例。保证有足够容量运行两个后端和两个前端副本，并容纳滚动更新的额外 Pod。
 6. 为 kubeconfig 授予 `prod` 内 ServiceAccount、Deployment、Service、Ingress、PodDisruptionBudget、TkeServiceConfig 的 get/create/patch 权限，以及发布检查所需的 Deployment get/list/watch 权限。授予对前述指定 Secret 的 get 权限。流水线不创建 Namespace，不需要 Secret 写权限。
 
 流水线访问 Secret 只输出对应键是否存在，不将其内容写入日志或发布归档。Secret 键存在不代表配置有效，应用启动与真实业务验收仍必须检查。
 
-首次发布创建 CLB 后，将两个域名的 DNS 指向 `prod/erp` Ingress 的地址。若 DNS 尚未配置，工作负载可能已发布，但最终 HTTPS 检查会失败；必须完成 DNS 和证书配置后复核。禁止把该次失败认定为已自动回滚。
+首次发布由流水线创建 `prod/erp` Ingress 并复用 `lb-gpk8k2ps`，无需提前手动创建 Ingress。两个域名的 DNS 必须指向该共享 CLB 的公网地址。若 DNS 尚未配置，工作负载可能已发布，但最终 HTTPS 检查会失败；必须完成 DNS 和证书配置后复核。禁止把该次失败认定为已自动回滚。
+
+前置检查允许 `erp` Ingress 不存在；若已存在，则必须已开启 `ingress.cloud.tencent.com/enable-group: "true"` 且绑定 `lb-gpk8k2ps`。遇到非共享 Ingress、其他 CLB 或读取失败时，流水线停止，不执行 apply，不自动删除入口。共享模式无法通过追加注解应用到已有非共享 Ingress；迁移必须另行安排流量切换。此检查不验证 CLB 来源、控制器版本或其他项目的路由冲突，这些条件须在发布前确认。要求见[腾讯云官方说明](https://cloud.tencent.com.cn/document/product/457/127545)。
+
+其他项目共享该 CLB 时，其 Ingress 也必须在首次创建时启用 group，且域名和路径规则不得与 ERP 冲突。共享监听器的默认域名由入口管理方统一维护；ERP 生产清单不设置 `defaultServer`。
 
 ## 执行与结果
 
