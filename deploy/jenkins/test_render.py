@@ -68,6 +68,10 @@ class RenderTests(unittest.TestCase):
         self.assertNotIn("kind: Secret\n", manifest)
         self.assertNotIn("kind: Namespace\n", manifest)
         self.assertNotIn("replace-with-release", manifest)
+        self.assertNotIn("web-api", manifest)
+        self.assertIn("serviceAccountName: erp-api", manifest)
+        self.assertIn("app.kubernetes.io/name: erp-api", manifest)
+        self.assertIn("name: erp-api", manifest)
         self.assertEqual(production.read_bytes(), before)
 
     def test_tke_managed_pull(self):

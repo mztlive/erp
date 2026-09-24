@@ -124,15 +124,15 @@ deploy() {
     # 先让 API Server 验证所有对象；失败时不执行正式 apply。
     kube apply --dry-run=server -f release-artifacts/manifests.yaml >/dev/null
     kube apply -f release-artifacts/manifests.yaml
-    kube rollout status deployment/web-api --timeout=900s
+    kube rollout status deployment/erp-api --timeout=900s
     kube rollout status deployment/erp-client --timeout=900s
-    kube get deployments web-api erp-client -o json > release-artifacts/deployments.json
+    kube get deployments erp-api erp-client -o json > release-artifacts/deployments.json
     python3 - <<'PY'
 import json
 from pathlib import Path
 root = Path('release-artifacts')
 release = json.loads((root / 'release.json').read_text())
-expected = {'web-api': release['api_image'], 'erp-client': release['web_image']}
+expected = {'erp-api': release['api_image'], 'erp-client': release['web_image']}
 for deployment in json.loads((root / 'deployments.json').read_text())['items']:
     name = deployment['metadata']['name']
     containers = deployment['spec']['template']['spec']['containers']

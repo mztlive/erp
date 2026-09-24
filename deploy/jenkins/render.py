@@ -14,7 +14,7 @@ def main():
     artifacts = root / "release-artifacts"
     images = []
     for name, metadata, variable in (
-        ("erp-web-api", "api-build.json", "API_REPOSITORY"),
+        ("erp-api", "api-build.json", "API_REPOSITORY"),
         ("erp-client", "web-build.json", "WEB_REPOSITORY"),
     ):
         digest = json.loads((artifacts / metadata).read_text())["containerimage.digest"]
@@ -47,7 +47,7 @@ def main():
         (base / "kustomization.yaml").write_text(json.dumps({
             "apiVersion": "kustomize.config.k8s.io/v1beta1",
             "kind": "Kustomization", "namespace": "prod",
-            "resources": ["web-api.yaml", "erp-client.yaml", "ingress.yaml"],
+            "resources": ["erp-api.yaml", "erp-client.yaml", "ingress.yaml"],
         }))
         # 在临时副本中由 kubectl 原生 Kustomize 修改 image 字段。
         overlay = tree / "overlays/production"
@@ -57,7 +57,7 @@ def main():
         bundle.mkdir()
         (bundle / "production.yaml").write_text(result)
         patches = []
-        for name, image in (("web-api", release["api_image"]), ("erp-client", release["web_image"])):
+        for name, image in (("erp-api", release["api_image"]), ("erp-client", release["web_image"])):
             pod_spec = {"containers": [{"name": name, "image": image}]}
             if pull_secret:
                 pod_spec["imagePullSecrets"] = [{"name": pull_secret}]

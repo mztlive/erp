@@ -3,6 +3,6 @@ kind: Kustomization
 namespace: prod
 resources:
   - namespace.yaml
-  - web-api.yaml
+  - erp-api.yaml
   - erp-client.yaml
   - ingress.yaml

@@ -2,10 +2,10 @@
 
 默认部署两个工作负载：
 
-- `web-api`：后端 API，容器端口 `10001`，配置来自 Secret `erp-api-config` 里的 `config.toml`。
+- `erp-api`：后端 API，容器端口 `10001`，配置来自 Secret `erp-api-config` 里的 `config.toml`。
 - `erp-client`：管理端，容器端口 `3000`。浏览器里的 API 地址在构建镜像时写入，不在 Pod 环境变量里改。
 
-MongoDB 和 S3 不在默认清单里。MongoDB 必须是副本集；standalone 会在 `web-api` 启动时被拒绝。S3 参数写在同一份 `config.toml`。开发集群可以另外启用 `deploy/k8s/optional/mongo` 的单节点副本集，那个库没有认证，不能当生产库。
+MongoDB 和 S3 不在默认清单里。MongoDB 必须是副本集；standalone 会在 `erp-api` 启动时被拒绝。S3 参数写在同一份 `config.toml`。开发集群可以另外启用 `deploy/k8s/optional/mongo` 的单节点副本集，那个库没有认证，不能当生产库。
 
 Compose 和 Jenkins 仍按 `backend/DEPLOY.md` 使用，这套清单不替换它们。
 
@@ -29,7 +29,7 @@ Compose 和 Jenkins 仍按 `backend/DEPLOY.md` 使用，这套清单不替换它
 在仓库根执行。管理端的 `NEXT_PUBLIC_API_BASE_URL` 必须是浏览器能打开的 API 地址。Pod 里的 Service 名浏览器访问不到。生产用 `https://erp-api.fushangyunfu.com`。
 
 ```bash
-docker build -t erp-web-api:dev -f backend/Dockerfile backend
+docker build -t erp-api:dev -f backend/Dockerfile backend
 docker build \
   --build-arg NEXT_PUBLIC_API_BASE_URL=https://erp-api.fushangyunfu.com \
   -t erp-client:dev \
@@ -51,7 +51,7 @@ kubectl -n prod create secret generic erp-api-config \
 kubectl apply -k deploy/k8s/overlays/local
 ```
 
-`deploy/k8s/secrets/` 已在根 `.gitignore` 中。进程只在启动时读取配置。以后更新 Secret 后执行 `kubectl -n prod rollout restart deployment/web-api`。
+`deploy/k8s/secrets/` 已在根 `.gitignore` 中。进程只在启动时读取配置。以后更新 Secret 后执行 `kubectl -n prod rollout restart deployment/erp-api`。
 
 启用开发用 MongoDB 时，把 `database.uri` 设为：
 
@@ -85,8 +85,8 @@ kubectl -n kube-system get deploy l7-lb-controller
 
 ```yaml
 images:
-  - name: erp-web-api
-    newName: registry.example.com/erp/web-api
+  - name: erp-api
+    newName: registry.example.com/erp/erp-api
     digest: sha256:把后端发布清单里的 digest 填在这里
   - name: erp-client
     newName: registry.example.com/erp/erp-client
@@ -96,7 +96,7 @@ images:
 没有 Ingress 时可以临时转发：
 
 ```bash
-kubectl -n prod port-forward service/web-api 10001:10001
+kubectl -n prod port-forward service/erp-api 10001:10001
 kubectl -n prod port-forward service/erp-client 3000:3000
 ```
 
@@ -104,7 +104,7 @@ kubectl -n prod port-forward service/erp-client 3000:3000
 
 - `GET /health` 返回 200 只表示进程已经开始监听。副本集校验和索引创建发生在监听之前；首次启动若索引较多，可能接近 startupProbe 的 10 分钟上限。
 - `GET /ready` 在外部连接器仍是失败关闭时返回 503。当前组合根就是这个状态，所以探针使用 `/health`。
-- 生产 overlay 的 `web-api` 和 `erp-client` 各运行 1 个副本。登录和上传限流是进程内的，重启后重新计数。
+- 生产 overlay 的 `erp-api` 和 `erp-client` 各运行 1 个副本。登录和上传限流是进程内的，重启后重新计数。
 - 单副本维护或故障期间可能中断服务。PDB 的 `minAvailable` 为 0，允许节点维护时驱逐；保留该资源以更新旧部署中的 PDB，避免仅从清单移除后旧规则残留。
 - 管理端镜像不包含 `cli`。初始化或重置管理员仍在能访问同一 MongoDB 的环境执行 `cargo run -p cli -- init-admin`。
 - 部署这版 JWT 账号版本校验后，已有后台 token 会失效，操作人员需要重新登录。

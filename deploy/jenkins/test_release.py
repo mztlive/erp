@@ -64,7 +64,7 @@ elif 'deployments' in args:
     print(json.dumps({'items': [
         {'metadata': {'name': name}, 'spec': {'template': {'spec': {
             'containers': [{'name': name, 'image': image}]
-        }}}} for name, image in zip(['web-api', 'erp-client'], images)
+        }}}} for name, image in zip(['erp-api', 'erp-client'], images)
     ]}))
 '''
         for name in ("kubectl", "curl"):

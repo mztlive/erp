@@ -38,7 +38,7 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: web-api
+                name: erp-api
                 port:
                   number: 10001
 ---

@@ -80,14 +80,24 @@ Agent 必须能够访问 Git、依赖镜像源、TCR、TKE API Server 和两个 
 
 任一阶段失败必须将 Jenkins 构建标记为失败。apply 可能部分成功；流水线不自动回滚，不自动重试整次发布，不打印后端日志或真实配置。排障时根据集群资源状态确认实际影响。
 
-## 回退
+## 后端资源命名与首次切换
+
+后端 Deployment、Service、ServiceAccount、容器、PDB 和 `app.kubernetes.io/name` 标签统一使用 `erp-api`，Pod 名称由 Deployment 生成，以 `erp-api-` 开头。前端保持 `erp-client`。Ingress `erp` 的 API 路由指向 Service `erp-api`。Rust crate 和二进制仍名为 `web-api`。
+
+TCR 免密拉取若限定 ServiceAccount，必须覆盖 `prod/erp-api` 和 `prod/erp-client`，不得只配置旧账号 `web-api`。
+
+已部署的旧资源不会被 `kubectl apply` 自动重命名或删除。首次发布新名称时，先确认现有 `prod/web-api` Deployment、Service、ServiceAccount、PDB 的标签、镜像与业务归属；禁止仅凭名称删除，以免影响其他项目。等待 `erp-api` 发布成功、Ingress 已同步新 Service、API 验证通过后，再清理确认属于 ERP 的旧资源。切换期间新旧后端可能同时运行，需要在发布窗口评估后台任务并发影响。
+
+若旧 `web-api` 实际属于其他项目，必须保留。历史发布清单可能使用旧资源名；不得将其直接作为新命名部署的自动回退清单。
+
+## 回退执行
 
 回退必须选定上一次成功构建归档的 `manifests.yaml`。使用同一目标 context 先执行服务端 dry-run，再 apply，并重新等待两个 Deployment rollout 及检查 HTTPS。不得仅回退一个镜像后宣称整次发布已恢复。
 
 ```bash
 kubectl --context 目标context -n prod apply --dry-run=server -f 上次成功发布/manifests.yaml
 kubectl --context 目标context -n prod apply -f 上次成功发布/manifests.yaml
-kubectl --context 目标context -n prod rollout status deployment/web-api --timeout=900s
+kubectl --context 目标context -n prod rollout status deployment/erp-api --timeout=900s
 kubectl --context 目标context -n prod rollout status deployment/erp-client --timeout=900s
 ```
 

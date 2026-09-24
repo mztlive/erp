@@ -1,16 +1,16 @@
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: web-api
+  name: erp-api
   labels:
-    app.kubernetes.io/name: web-api
+    app.kubernetes.io/name: erp-api
     app.kubernetes.io/part-of: erp
 spec:
   # 单副本允许维护时驱逐，避免阻塞节点 drain。
   minAvailable: 0
   selector:
     matchLabels:
-      app.kubernetes.io/name: web-api
+      app.kubernetes.io/name: erp-api
 ---
 apiVersion: policy/v1
 kind: PodDisruptionBudget
