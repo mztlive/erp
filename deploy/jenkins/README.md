@@ -32,7 +32,7 @@ MongoDB 使用现有内网 CVM 的副本集，连接信息写入 `web-api-config
 | `erp-tcr` | Username with password | 可向两个 TCR 仓库推送镜像的用户名、密码或访问令牌 |
 | `erp-tke-kubeconfig` | Secret file | 可访问目标 TKE API Server 的 kubeconfig 文件 |
 
-`KUBE_CONTEXT` 必须填写该 kubeconfig 内的目标 context 名称。可在可信终端执行 `kubectl --kubeconfig 文件路径 config get-contexts -o name` 查询，不得输出 kubeconfig 的完整内容。
+`KUBE_CONTEXT` 为可选参数，默认留空，自动使用上传 kubeconfig 的 `current-context`。只有需要覆盖文件默认选择时才填写。所有集群命令通过 `--kubeconfig` 明确指定上传文件，不读取 Agent 自身的配置，也不修改文件。文件缺失或未设置默认 context 且参数为空时，流水线停止并提示修正。可在可信终端执行 `kubectl --kubeconfig 文件路径 config get-contexts -o name` 查询可用名称，不得输出 kubeconfig 的完整内容。
 
 Agent 必须安装 Git、Bash、Python 3、kubectl（内置 Kustomize）、Docker Engine、系统级 Docker Buildx 插件、curl 7.71 或以上、Node.js 22.18 或以上的 22.x 版本、npm、Rustup，以及项目 `backend/rust-toolchain.toml` 所需的 nightly 和组件。后端主机检查还需要 C/C++ 编译器、CMake、pkg-config、OpenSSL 开发库。Docker 镜像构建使用专用 Dockerfile 中的 Rust 工具链。
 
@@ -59,7 +59,7 @@ Agent 必须能够访问 Git、依赖镜像源、TCR、TKE API Server 和两个 
 
 ## 执行与结果
 
-提交新发布文件和已有 K8s/前端 Docker 配套文件后，从 Jenkins 构建任务运行。首次任务载入 Jenkinsfile 后，使用 `Build with Parameters` 填写 `KUBE_CONTEXT`。`DEPLOY_TO_TKE` 默认开启；关闭时只运行质量检查、构建推送与清单归档，不绑定集群凭据。
+提交新发布文件和已有 K8s/前端 Docker 配套文件后，从 Jenkins 构建任务运行。上传的 kubeconfig 已设置 `current-context` 时，无需填写 `KUBE_CONTEXT`；需要覆盖时使用 `Build with Parameters` 设置。`DEPLOY_TO_TKE` 默认开启；关闭时只运行质量检查、构建推送与清单归档，不绑定集群凭据。
 
 执行顺序：
 

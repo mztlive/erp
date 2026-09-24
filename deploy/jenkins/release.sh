@@ -4,7 +4,19 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 
 kube() {
-    kubectl --context "${KUBE_CONTEXT:?必须指定 KUBE_CONTEXT}" \
+    local selected_context="${KUBE_CONTEXT:-}"
+    # 只读取 Jenkins 上传的文件，不回退到 Agent 自己的 ~/.kube/config。
+    if [[ ! -f "${KUBECONFIG:-}" ]]; then
+        echo '缺少 Jenkins 上传的 kubeconfig 文件，请检查集群凭据。' >&2
+        return 1
+    fi
+    if [[ -z "$selected_context" ]]; then
+        if ! selected_context="$(kubectl --kubeconfig "$KUBECONFIG" config current-context)" || [[ -z "$selected_context" ]]; then
+            echo '上传的 kubeconfig 未设置 current-context；请设置文件默认 context，或填写可选参数 KUBE_CONTEXT。' >&2
+            return 1
+        fi
+    fi
+    kubectl --kubeconfig "$KUBECONFIG" --context "$selected_context" \
         --namespace "${KUBE_NAMESPACE:-prod}" --request-timeout=30s "$@"
 }
 

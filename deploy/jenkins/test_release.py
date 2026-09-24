@@ -34,7 +34,11 @@ with open(os.environ['COMMAND_LOG'], 'a') as log:
     log.write(json.dumps([tool, *args]) + '\\n')
 if tool == 'curl':
     sys.exit(0)
-if 'ingress' in args:
+if 'current-context' in args:
+    if os.environ.get('CASE') == 'missing-context':
+        sys.exit(1)
+    print('uploaded-context')
+elif 'ingress' in args:
     case = os.environ.get('CASE')
     if case == 'ingress-read-failure':
         sys.exit(1)
@@ -68,9 +72,12 @@ elif 'deployments' in args:
             executable.write_text(mock)
             executable.chmod(0o755)
         self.log = self.root / "commands.jsonl"
+        self.kubeconfig = self.root / "uploaded-kubeconfig"
+        self.kubeconfig.write_text("# mock kubeconfig\n")
         self.env = {
             **os.environ, "PATH": f"{binaries}:{os.environ['PATH']}",
             "COMMAND_LOG": str(self.log), "KUBE_CONTEXT": "test-context",
+            "KUBECONFIG": str(self.kubeconfig),
             "KUBE_NAMESPACE": "prod", "IMAGE_PULL_SECRET": "tcr-pull",
             "NEXT_PUBLIC_API_BASE_URL": "https://api.example.invalid",
             "WEB_URL": "https://web.example.invalid",
@@ -82,7 +89,7 @@ elif 'deployments' in args:
             ["bash", "deploy/jenkins/release.sh", "deploy"], cwd=self.root,
             env=self.env, capture_output=True, text=True,
         )
-        commands = [json.loads(line) for line in self.log.read_text().splitlines()]
+        commands = [json.loads(line) for line in self.log.read_text().splitlines()] if self.log.exists() else []
         return result, commands
 
     def test_success_checks_rollout_images_and_https(self):
@@ -93,7 +100,35 @@ elif 'deployments' in args:
         self.assertTrue((self.root / "release-artifacts/deployment-status.txt").exists())
         for command in commands:
             if command[0] == "kubectl":
-                self.assertEqual(command[1:5], ["--context", "test-context", "--namespace", "prod"])
+                self.assertEqual(command[1:7], ["--kubeconfig", str(self.kubeconfig), "--context", "test-context", "--namespace", "prod"])
+
+    def test_blank_or_unset_context_uses_uploaded_default(self):
+        for value in ("", None):
+            with self.subTest(value=value):
+                self.log.write_text("")
+                if value is None:
+                    self.env.pop("KUBE_CONTEXT", None)
+                else:
+                    self.env["KUBE_CONTEXT"] = value
+                result, commands = self.deploy("success")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                requests = [c for c in commands if c[0] == "kubectl" and "current-context" not in c]
+                self.assertTrue(requests)
+                for command in requests:
+                    self.assertEqual(command[1:7], ["--kubeconfig", str(self.kubeconfig), "--context", "uploaded-context", "--namespace", "prod"])
+
+    def test_missing_default_context_prevents_cluster_access(self):
+        self.env["KUBE_CONTEXT"] = ""
+        result, commands = self.deploy("missing-context")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("未设置 current-context", result.stderr)
+        self.assertTrue(all("current-context" in command for command in commands))
+
+    def test_missing_uploaded_file_does_not_use_agent_config(self):
+        self.kubeconfig.unlink()
+        result, commands = self.deploy("success")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(commands, [])
 
     def test_missing_secret_prevents_any_apply(self):
         result, commands = self.deploy("missing-secret")
