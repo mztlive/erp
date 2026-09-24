@@ -8,7 +8,10 @@ FROM ${NODE_IMAGE} AS deps
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci
+# Debian 使用 GNU 原生模块。先按锁文件下载，避免 npm 将下载失败当作可选依赖跳过。
+RUN npm cache add "$(node -p 'require("./package-lock.json").packages["node_modules/@next/swc-linux-" + process.arch + "-gnu"].resolved')" \
+    && npm ci --include=optional \
+    && node -e 'const pkg = "@next/swc-linux-" + process.arch + "-gnu"; require(pkg); console.log("Native SWC loaded:", pkg)'
 
 FROM ${NODE_IMAGE} AS builder
 WORKDIR /app
