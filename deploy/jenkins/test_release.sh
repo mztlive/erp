@@ -35,7 +35,8 @@ case "$tool" in
             'login '* )
                 cat >/dev/null
                 printf '%s' "$DOCKER_CONFIG" > "$AUTH_PATH"
-                [[ "$CASE" != login-failure ]]
+                [[ "$CASE" != login-failure ]] || exit 1
+                if [[ "$CASE" == base-login-failure && "$2" == fushangyun-vpc.tencentcloudcr.com ]]; then exit 1; fi
                 ;;
             'buildx build')
                 [[ "$CASE" != build-failure ]] || exit 1
@@ -121,6 +122,10 @@ for DEPLOY_ENV in test production; do
     namespace=test; suffix=-test
     if [[ "$DEPLOY_ENV" == production ]]; then namespace=prod; suffix=; fi
     run_ok build
+    check_log 'any(.[]; .[0:3] == ["docker", "login", "example.invalid"])'
+    check_log 'any(.[]; .[0:3] == ["docker", "login", "fushangyun-vpc.tencentcloudcr.com"])'
+    check_log 'any(.[]; .[0:3] == ["docker", "buildx", "create"] and
+        .[index("--driver-opt") + 1] == "image=fushangyun-vpc.tencentcloudcr.com/base/buildkit@sha256:28a898719c18a33f4e8000685287fa36fd0dd9560c6440227d3a732d79bb41d8")'
     jq -e --arg env "$DEPLOY_ENV" --arg ns "$namespace" \
         '.environment == $env and .namespace == $ns and (.api.image | endswith("0001"))' \
         release-artifacts/values-release.json >/dev/null
@@ -177,13 +182,13 @@ export CASE=success
 # Chart 自身拒绝不匹配的命名空间，即使绕过发布脚本。
 if "$HELM_REAL" template erp release-artifacts/chart.tgz -n test -f release-artifacts/values-release.json > output.log 2>&1; then exit 1; fi
 checks=$((checks + 1))
-for CASE in login-failure build-failure invalid-digest missing-digest; do
+for CASE in login-failure base-login-failure build-failure invalid-digest missing-digest; do
     export CASE
     run_fail build
     test ! -e release-artifacts/chart.tgz
     [[ ! -d "$(cat "$AUTH_PATH")" ]]
     if grep -q "$TCR_PASSWORD" output.log; then echo '凭据出现在日志中' >&2; exit 1; fi
-    if [[ "$CASE" == login-failure ]]; then
+    if [[ "$CASE" == login-failure || "$CASE" == base-login-failure ]]; then
         check_log 'all(.[]; index("buildx") == null)'
     else
         check_log 'any(.[]; .[0:3] == ["docker", "buildx", "rm"])'

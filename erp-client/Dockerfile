@@ -1,8 +1,8 @@
-# syntax=docker.1ms.run/docker/dockerfile:1.7
+# syntax=fushangyun-vpc.tencentcloudcr.com/base/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
 # 构建上下文是 erp-client/。
 # NEXT_PUBLIC_API_BASE_URL 在 next build 时写入浏览器包，必须是浏览器能访问的 API 地址。
 
-ARG NODE_IMAGE=docker.1ms.run/node:22-bookworm-slim
+ARG NODE_IMAGE=fushangyun-vpc.tencentcloudcr.com/base/node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c
 
 FROM ${NODE_IMAGE} AS deps
 WORKDIR /app

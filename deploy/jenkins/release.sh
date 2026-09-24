@@ -4,6 +4,8 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 chart=deploy/helm/erp
 artifacts=release-artifacts
+base_registry_host=fushangyun-vpc.tencentcloudcr.com
+buildkit_image="$base_registry_host/base/buildkit@sha256:28a898719c18a33f4e8000685287fa36fd0dd9560c6440227d3a732d79bb41d8"
 
 load_environment() {
     case "${DEPLOY_ENV:-}" in
@@ -100,12 +102,16 @@ build() (
         exit "$build_status"
     }
     trap cleanup_build EXIT
-    if ! printf '%s' "$TCR_PASSWORD" | docker login "$REGISTRY_HOST" --username "$TCR_USERNAME" --password-stdin; then
-        echo 'TCR 登录失败；请检查 Jenkins 推送凭据与实例访问策略。' >&2
-        exit 1
-    fi
+    # Docker 按域名保存凭据；成品推送与内网基础镜像拉取均须登录。
+    for registry in "$REGISTRY_HOST" "$base_registry_host"; do
+        if ! printf '%s' "$TCR_PASSWORD" | docker login "$registry" --username "$TCR_USERNAME" --password-stdin; then
+            printf 'TCR 登录失败（%s）；请检查 Jenkins 凭据、域名解析与实例访问策略。\n' "$registry" >&2
+            exit 1
+        fi
+    done
     builder_started=true
-    docker buildx create --name "$builder_name" --driver docker-container --use >/dev/null
+    docker buildx create --name "$builder_name" --driver docker-container \
+        --driver-opt "image=$buildkit_image" --use >/dev/null
     commit="$(git rev-parse HEAD)"
     tag="${commit:0:12}-${DEPLOY_ENV}-${BUILD_NUMBER}"
     docker buildx build --builder "$builder_name" --platform "$IMAGE_PLATFORM" \

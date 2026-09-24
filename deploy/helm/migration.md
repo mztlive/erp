@@ -52,7 +52,7 @@ helm template erp deploy/helm/erp -n "$KUBE_NAMESPACE" \
 
 对照 `before.yaml` 和 `helm-baseline.yaml` 审查全部资源差异，允许新增 Helm 元数据和 Pod 发布/配置版本注解；不得未经核对改变入口、服务端口、探针、安全配置、资源额度或副本策略。Helm 渲染结果未指定 Service 已分配的 NodePort，不得主动删除或重建 Service。
 
-归属和差异核对通过后，执行一次性接管。先 dry-run，再执行同参数正式命令。`--take-ownership` 仅允许用于本节确认属于 ERP 的 10 个资源。
+归属和差异核对通过后，执行一次性接管。先 dry-run，再执行同参数正式命令。`--take-ownership` 仅允许用于本节确认属于 ERP 的 10 个资源。接管旧 `kubectl apply` 资源时指定 `--server-side=false`，使用客户端更新方式，避免旧字段管理器对发布注解产生服务端应用冲突。
 
 ```bash
 helm --kubeconfig "$KUBECONFIG" --kube-context "$KUBE_CONTEXT" -n "$KUBE_NAMESPACE" \
@@ -60,14 +60,14 @@ helm --kubeconfig "$KUBECONFIG" --kube-context "$KUBE_CONTEXT" -n "$KUBE_NAMESPA
   -f "deploy/helm/erp/environments/$DEPLOY_ENV.json" \
   --set-string "api.image=$api_image" --set-string "client.image=$web_image" \
   --set-string "imagePullSecret=$IMAGE_PULL_SECRET" \
-  --take-ownership --dry-run=server --hide-secret
+  --take-ownership --server-side=false --dry-run=server --hide-secret
 
 helm --kubeconfig "$KUBECONFIG" --kube-context "$KUBE_CONTEXT" -n "$KUBE_NAMESPACE" \
   upgrade --install erp deploy/helm/erp \
   -f "deploy/helm/erp/environments/$DEPLOY_ENV.json" \
   --set-string "api.image=$api_image" --set-string "client.image=$web_image" \
   --set-string "imagePullSecret=$IMAGE_PULL_SECRET" \
-  --take-ownership --wait --timeout 15m --history-max 20
+  --take-ownership --server-side=false --wait --timeout 15m --history-max 20
 ```
 
 首次接管不得附加 `--rollback-on-failure`，避免首次安装失败时卸载已接管的既有业务资源。失败时保留现场，修正差异后重试基线；不得通过 `helm uninstall` 清除 release 后重来。

@@ -64,7 +64,7 @@ services:
   # 集成测试专用 MongoDB 单节点副本集（事务需要副本集）。
   # 启动：docker compose --profile test up -d mongo
   mongo:
-    image: mongo:7
+    image: ${ERP_DEV_MONGO_IMAGE:-fushangyun.tencentcloudcr.com/base/mongo:7@sha256:9854f7139445d766a9523571d6f047530c45547460ffcf8259eb2bf4264632ca}
     profiles: ["test"]
     command: ["--replSet", "rs0"]
     restart: unless-stopped

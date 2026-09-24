@@ -1,7 +1,7 @@
-# syntax=docker.1ms.run/docker/dockerfile:1.7
+# syntax=fushangyun-vpc.tencentcloudcr.com/base/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
 
-ARG RUST_IMAGE=docker.1ms.run/rust:1.97-slim-bookworm@sha256:99e09cb2284e2ddbb73a995deee3e91783fd04d177602ccf6eab326d778ee777
-ARG DEBIAN_IMAGE=docker.1ms.run/debian:bookworm-slim@sha256:7b140f374b289a7c2befc338f42ebe6441b7ea838a042bbd5acbfca6ec875818
+ARG RUST_IMAGE=fushangyun-vpc.tencentcloudcr.com/base/rust:1.97-slim-bookworm@sha256:99e09cb2284e2ddbb73a995deee3e91783fd04d177602ccf6eab326d778ee777
+ARG DEBIAN_IMAGE=fushangyun-vpc.tencentcloudcr.com/base/debian:bookworm-slim@sha256:7b140f374b289a7c2befc338f42ebe6441b7ea838a042bbd5acbfca6ec875818
 
 FROM ${RUST_IMAGE} AS builder
 WORKDIR /app

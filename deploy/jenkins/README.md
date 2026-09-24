@@ -18,7 +18,7 @@ Jenkins 使用仓库根目录 `Jenkinsfile.k8s`，在 `selfhost` Agent 执行。
 | 参数 | 默认值与执行规则 |
 | --- | --- |
 | `DEPLOY_ENV` | `test`；生产必须显式选择 `production` |
-| `TCR_CREDENTIALS_ID` | `tcr`，Username with password，可推送两个仓库 |
+| `TCR_CREDENTIALS_ID` | `tcr`，Username with password，可推送两个业务仓库，并可读取 `base` 下的构建镜像 |
 | `KUBECONFIG_CREDENTIALS_ID` | `tke-kubeconfig`，Secret file，选择对目标环境有权限的文件 |
 | `KUBE_CONTEXT` | 空，使用上传文件的 current-context；可显式覆盖 |
 | `IMAGE_PULL_SECRET` | 空表示使用 TKE 免密拉取；否则指定目标命名空间已有 Secret |
@@ -27,6 +27,12 @@ Jenkins 使用仓库根目录 `Jenkinsfile.k8s`，在 `selfhost` Agent 执行。
 | `DEPLOY_TO_TKE` | 默认 true；false 时只构建、推送与归档，不使用集群凭据 |
 
 镜像仓库保持 `fushangyun.tencentcloudcr.com/fushangyun/erp-api` 和 `fushangyun.tencentcloudcr.com/fushangyun/erp`。标签为 `<提交短 SHA>-<环境>-<构建编号>`，避免两个环境覆盖相同标签；工作负载使用不可变 digest。
+
+基础镜像统一从 `fushangyun-vpc.tencentcloudcr.com/base` 拉取。三个 Dockerfile 固定 Rust、Debian、Node 和 Dockerfile frontend 的 digest；`release.sh` 固定 BuildKit 的 digest，并在独立 `DOCKER_CONFIG` 中分别登录成品仓库域名和 VPC 域名。Agent 主机和 BuildKit 容器必须能够解析并访问 VPC 域名；TKE 免密拉取不能替代 Agent 的登录凭据。
+
+基础镜像升级必须先同步到 TCR、记录目标 digest，再更新对应引用。`scripts/sync-erp-images.sh` 同步五个基础镜像，`scripts/sync-buildkit-image.sh` 单独同步 BuildKit；同步成功不等于构建验收完成。切换后首次 Jenkins 验证必须设置 `DEPLOY_TO_TKE=false`，确认固定镜像可拉取、前后端可构建推送后再发布。
+
+手工运行 Dockerfile 或独立的旧 Compose 构建入口前，必须执行 `docker login fushangyun-vpc.tencentcloudcr.com` 并具备 VPC 访问能力。本地 MongoDB 的 Compose 与启动脚本默认使用自有 TCR 普通域名及固定 digest，需登录 `fushangyun.tencentcloudcr.com`；内网环境可通过 `ERP_DEV_MONGO_IMAGE` 指定同一 digest 的 VPC 地址。
 
 所有集群命令显式使用上传的 kubeconfig、选定 context 和环境 namespace，不读取 Agent 默认 kubeconfig。文件缺失、无可用 context、网络或权限错误必须停止。
 

@@ -13,7 +13,7 @@
 set -euo pipefail
 
 CONTAINER_NAME="${ERP_DEV_MONGO_CONTAINER:-erp-dev-mongo}"
-IMAGE="${ERP_DEV_MONGO_IMAGE:-mongo:7}"
+IMAGE="${ERP_DEV_MONGO_IMAGE:-fushangyun.tencentcloudcr.com/base/mongo:7@sha256:9854f7139445d766a9523571d6f047530c45547460ffcf8259eb2bf4264632ca}"
 HOST_PORT="${ERP_DEV_MONGO_PORT:-27017}"
 VOLUME_NAME="erp-dev-mongo-data"
 MONGO_URI="mongodb://127.0.0.1:${HOST_PORT}/?replicaSet=rs0"
@@ -37,7 +37,7 @@ start_container() {
         docker start "${CONTAINER_NAME}" >/dev/null
         return
     fi
-    echo "启动容器 ${CONTAINER_NAME}（mongo:7，--replSet rs0，端口 ${HOST_PORT}）。"
+    echo "启动容器 ${CONTAINER_NAME}（${IMAGE}，--replSet rs0，端口 ${HOST_PORT}）。"
     docker run \
         --name "${CONTAINER_NAME}" \
         --rm \
