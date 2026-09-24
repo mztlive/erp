@@ -11,7 +11,7 @@ pipeline {
         string(name: 'TCR_CREDENTIALS_ID', defaultValue: 'tcr', description: 'Jenkins Username with password 凭据 ID')
         string(name: 'KUBECONFIG_CREDENTIALS_ID', defaultValue: 'tke-kubeconfig', description: 'Jenkins Secret file 凭据 ID')
         string(name: 'KUBE_CONTEXT', defaultValue: '', description: '可选：留空使用上传 kubeconfig 的 current-context；填写时覆盖默认值')
-        string(name: 'IMAGE_PULL_SECRET', defaultValue: 'tcr-pull', description: 'prod 中已有的镜像拉取 Secret；已配置 TKE 免密拉取时可留空')
+        string(name: 'IMAGE_PULL_SECRET', defaultValue: '', description: 'prod 中已有的镜像拉取 Secret；已配置 TKE 免密拉取时可留空')
         choice(name: 'IMAGE_PLATFORM', choices: ['linux/amd64', 'linux/arm64'], description: '必须与 TKE 节点架构一致；Agent 应支持该平台构建')
         booleanParam(name: 'RUN_QUALITY_CHECKS', defaultValue: false, description: '执行前后端质量门禁和发布脚本离线测试；当前默认跳过')
         booleanParam(name: 'DEPLOY_TO_TKE', defaultValue: true, description: '执行集群发布；取消时仅构建推送镜像和归档清单，质量检查由独立开关控制')
