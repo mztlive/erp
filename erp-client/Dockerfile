@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker.1ms.run/docker/dockerfile:1.7
 # 构建上下文是 erp-client/。
 # NEXT_PUBLIC_API_BASE_URL 在 next build 时写入浏览器包，必须是浏览器能访问的 API 地址。
 
