@@ -71,7 +71,7 @@ if raw:
         raise SystemExit("现有 erp Ingress 未启用共享或绑定了其他 CLB；请先规划迁移，流水线不会删除或原地切换入口。")
 '
     # 仅验证数据键存在，不打印配置或证书内容。
-    kube get secret web-api-config -o go-template='{{if index .data "config.toml"}}present{{end}}' | grep -qx present
+    kube get secret erp-api-config -o go-template='{{if index .data "config.toml"}}present{{end}}' | grep -qx present
     kube get secret fsytsl-wsk87cm7 -o go-template='{{if index .data "qcloud_cert_id"}}present{{end}}' | grep -qx present
     if [[ -n "${IMAGE_PULL_SECRET:-}" ]]; then
         kube get secret "$IMAGE_PULL_SECRET" \

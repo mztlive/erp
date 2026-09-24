@@ -13,11 +13,11 @@ Jenkins 任务必须使用仓库根目录 `Jenkinsfile.k8s`。旧 `backend/Jenki
 | 前端镜像仓库 | `fushangyun.tencentcloudcr.com/fushangyun/erp` |
 | 管理端域名 | `https://erp.fushangyunfu.com` |
 | API 域名及前端构建参数 | `https://erp-api.fushangyunfu.com` |
-| 后端配置 | Secret `web-api-config`，键 `config.toml` |
+| 后端配置 | Secret `erp-api-config`，键 `config.toml` |
 | CLB 证书 | Secret `fsytsl-wsk87cm7`，键 `qcloud_cert_id` |
 | 共享 CLB | 手动创建的 `lb-gpk8k2ps`，生产 Ingress 创建时启用 group |
 
-MongoDB 使用现有内网 CVM 的副本集，连接信息写入 `web-api-config`。流水线不得创建 MongoDB、重置业务数据、执行种子脚本或写入应用配置 Secret。
+MongoDB 使用现有内网 CVM 的副本集，连接信息写入 `erp-api-config`。流水线不得创建 MongoDB、重置业务数据、执行种子脚本或写入应用配置 Secret。
 
 ## Jenkins 配置
 
@@ -45,7 +45,7 @@ Agent 必须能够访问 Git、依赖镜像源、TCR、TKE API Server 和两个 
 发布前必须完成：
 
 1. 创建 `prod` 命名空间。
-2. 创建 `web-api-config`，写入完整生产配置。MongoDB 副本集成员地址必须从 Pod 可达；S3、JWT、服务端口等按 `deploy/README.md` 配置。
+2. 创建 `erp-api-config`，写入完整生产配置。MongoDB 副本集成员地址必须从 Pod 可达；S3、JWT、服务端口等按 `deploy/README.md` 配置。
 3. 在 `prod` 中准备覆盖两个域名的证书 Secret `fsytsl-wsk87cm7`。
 4. 在 `prod` 中准备镜像拉取 Secret `tcr-pull`，类型为 `kubernetes.io/dockerconfigjson`；其凭据应具有两个镜像仓库的读取权限。若已配置 TKE 的 TCR 免密拉取，将 `IMAGE_PULL_SECRET` 参数留空。
 5. 启用 TKE CLB Ingress 控制器及 `TkeServiceConfig` CRD，确认 Service/Ingress Controller 版本至少为 v2.10.0，并确认共享 CLB `lb-gpk8k2ps` 对目标集群可用。该 CLB 必须为手动创建，不得使用 TKE 自动创建的实例。前后端稳定运行时各 1 个 Pod；保留默认滚动更新策略，更新期间可能临时创建额外 Pod。单副本维护或故障期间可能中断服务；PDB 的 `minAvailable` 设为 0，允许节点维护时驱逐。

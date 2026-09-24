@@ -110,7 +110,7 @@ spec:
       volumes:
         - name: config
           secret:
-            secretName: web-api-config
+            secretName: erp-api-config
             items:
               - key: config.toml
                 path: config.toml

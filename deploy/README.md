@@ -2,7 +2,7 @@
 
 默认部署两个工作负载：
 
-- `web-api`：后端 API，容器端口 `10001`，配置来自 Secret `web-api-config` 里的 `config.toml`。
+- `web-api`：后端 API，容器端口 `10001`，配置来自 Secret `erp-api-config` 里的 `config.toml`。
 - `erp-client`：管理端，容器端口 `3000`。浏览器里的 API 地址在构建镜像时写入，不在 Pod 环境变量里改。
 
 MongoDB 和 S3 不在默认清单里。MongoDB 必须是副本集；standalone 会在 `web-api` 启动时被拒绝。S3 参数写在同一份 `config.toml`。开发集群可以另外启用 `deploy/k8s/optional/mongo` 的单节点副本集，那个库没有认证，不能当生产库。
@@ -46,7 +46,7 @@ docker build \
 mkdir -p deploy/k8s/secrets
 cp deploy/k8s/examples/web-api-config.example.toml deploy/k8s/secrets/web-api-config.toml
 kubectl create namespace prod --dry-run=client -o yaml | kubectl apply -f -
-kubectl -n prod create secret generic web-api-config \
+kubectl -n prod create secret generic erp-api-config \
   --from-file=config.toml=deploy/k8s/secrets/web-api-config.toml
 kubectl apply -k deploy/k8s/overlays/local
 ```

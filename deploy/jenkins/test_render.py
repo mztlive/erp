@@ -63,7 +63,7 @@ class RenderTests(unittest.TestCase):
         self.assertIn('ingress.cloud.tencent.com/enable-group: "true"', manifest)
         self.assertIn("kubernetes.io/ingress.existLbId: lb-gpk8k2ps", manifest)
         self.assertNotIn("defaultServer:", manifest)
-        self.assertIn("secretName: web-api-config", manifest)
+        self.assertIn("secretName: erp-api-config", manifest)
         self.assertIn("secretName: fsytsl-wsk87cm7", manifest)
         self.assertNotIn("kind: Secret\n", manifest)
         self.assertNotIn("kind: Namespace\n", manifest)
