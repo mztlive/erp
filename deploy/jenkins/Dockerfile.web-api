@@ -8,12 +8,12 @@ WORKDIR /app
 
 RUN set -eux; \
     if [ -f /etc/apt/sources.list ]; then \
-        sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list; \
-        sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list; \
+        sed -i 's/deb\.debian\.org/mirrors.cloud.tencent.com/g' /etc/apt/sources.list; \
+        sed -i 's/security\.debian\.org/mirrors.cloud.tencent.com/g' /etc/apt/sources.list; \
     fi; \
     if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
-        sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources; \
-        sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources; \
+        sed -i 's/deb\.debian\.org/mirrors.cloud.tencent.com/g' /etc/apt/sources.list.d/debian.sources; \
+        sed -i 's/security\.debian\.org/mirrors.cloud.tencent.com/g' /etc/apt/sources.list.d/debian.sources; \
     fi; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
@@ -60,12 +60,12 @@ WORKDIR /app
 
 RUN set -eux; \
     if [ -f /etc/apt/sources.list ]; then \
-        sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list; \
-        sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list; \
+        sed -i 's/deb\.debian\.org/mirrors.cloud.tencent.com/g' /etc/apt/sources.list; \
+        sed -i 's/security\.debian\.org/mirrors.cloud.tencent.com/g' /etc/apt/sources.list; \
     fi; \
     if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
-        sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources; \
-        sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources; \
+        sed -i 's/deb\.debian\.org/mirrors.cloud.tencent.com/g' /etc/apt/sources.list.d/debian.sources; \
+        sed -i 's/security\.debian\.org/mirrors.cloud.tencent.com/g' /etc/apt/sources.list.d/debian.sources; \
     fi; \
     apt-get update; \
     apt-get install -y --no-install-recommends ca-certificates curl libssl3 tzdata; \
