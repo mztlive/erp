@@ -114,6 +114,8 @@ pipeline {
 
 同一目录新建 `deploy/jenkins/release.sh`。脚本里的 `sample-service`、Chart 路径、Dockerfile 路径、容器端口和 `/health` 与自己的仓库一致。BuildKit 镜像保持下面的 digest。
 
+Builder 按「发布名-平台」保留，例如 `sample-service-linux-amd64`。构建结束只删除登录凭据，缓存留在该 builder 的状态卷里；上面的 digest 变化时才重建。记录目录与本仓库的 ERP 发布相同，默认 `~/.local/state/erp-buildx`，可用 `BUILDX_CONFIG` 覆盖。不要加 `--use`，避免改掉 Agent 的默认 builder。
+
 ```bash
 #!/usr/bin/env bash
 # 从仓库根执行：bash deploy/jenkins/release.sh validate|preflight|build|deploy
@@ -184,35 +186,57 @@ preflight() {
     fi
 }
 
+# 层缓存和 cache mount 在 builder 的状态卷里。临时 DOCKER_CONFIG 只放登录凭据。
+ensure_buildkit_builder() {
+    local builder_name="$1" stamp container
+    if [[ -z "${BUILDX_CONFIG:-}" ]]; then
+        if [[ -z "${HOME:-}" ]]; then
+            echo '缺少 HOME 或 BUILDX_CONFIG，无法保留 BuildKit 缓存。' >&2
+            return 1
+        fi
+        BUILDX_CONFIG="${HOME}/.local/state/erp-buildx"
+    fi
+    mkdir -p "$BUILDX_CONFIG"
+    export BUILDX_CONFIG
+    stamp="$BUILDX_CONFIG/${builder_name}.image"
+    container="buildx_buildkit_${builder_name}0"
+    if docker buildx inspect "$builder_name" >/dev/null 2>&1 \
+        && [[ "$(cat "$stamp" 2>/dev/null || true)" == "$buildkit_image" ]] \
+        && docker inspect "$container" >/dev/null 2>&1; then
+        return 0
+    fi
+    if docker buildx inspect "$builder_name" >/dev/null 2>&1; then
+        docker buildx rm "$builder_name" >/dev/null
+    fi
+    docker buildx create --name "$builder_name" --driver docker-container \
+        --driver-opt "image=$buildkit_image" >/dev/null
+    printf '%s\n' "$buildkit_image" > "$stamp"
+}
+
 build() {
     load_environment
     mkdir -p "$artifacts"
     rm -f "$artifacts"/{chart.tgz,values-release.json,manifests.yaml,deployment-status.txt,helm-history.json,deployment.json,image-build.json}
-    local commit tag digest
+    local commit tag digest platform builder_name registry
+    platform="${IMAGE_PLATFORM:-linux/amd64}"
+    builder_name="${release}-${platform//\//-}"
+    # 不能是 local：EXIT trap 在函数返回后才执行。
     docker_auth_dir="$(mktemp -d)"
     export DOCKER_CONFIG="$docker_auth_dir"
-    builder_name="${release}-$(date +%s)-$$"
-    builder_started=false
     cleanup_build() {
         local build_status=$?
         trap - EXIT
-        if [[ "$builder_started" == true ]]; then
-            docker buildx rm "$builder_name" >/dev/null 2>&1 || true
-        fi
         rm -rf "$docker_auth_dir"
         exit "$build_status"
     }
     trap cleanup_build EXIT
-    local registry
     for registry in "${REGISTRY_HOST:-fushangyun.tencentcloudcr.com}" "$base_registry_host"; do
         printf '%s' "$TCR_PASSWORD" | docker login "$registry" --username "$TCR_USERNAME" --password-stdin
     done
-    builder_started=true
-    docker buildx create --name "$builder_name" --driver docker-container \
-        --driver-opt "image=$buildkit_image" --use >/dev/null
+    ensure_buildkit_builder "$builder_name"
     commit="$(git rev-parse HEAD)"
     tag="${commit:0:12}-${DEPLOY_ENV}-${BUILD_NUMBER}"
-    docker buildx build --builder "$builder_name" --platform "${IMAGE_PLATFORM:-linux/amd64}" \
+    docker buildx build --builder "$builder_name" --platform "$platform" \
         --file Dockerfile --tag "$image_repository:$tag" --push \
         --metadata-file "$artifacts/image-build.json" .
     digest="$(jq -er '."containerimage.digest" | strings | select(test("^sha256:[0-9a-f]{64}$"))' "$artifacts/image-build.json")"
