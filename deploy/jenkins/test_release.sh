@@ -22,6 +22,8 @@ export REGISTRY_HOST=example.invalid BUILD_NUMBER=42 IMAGE_PLATFORM=linux/amd64
 export TCR_USERNAME=fixture TCR_PASSWORD=fixture-password IMAGE_PULL_SECRET=tcr-pull
 export DEPLOY_ENV=test CASE=success RUN_QUALITY_CHECKS=false
 export PATH="$test_root/bin:$PATH"
+export BUILDX_CONFIG="$test_root/buildx-config"
+mkdir -p "$BUILDX_CONFIG/builders"
 
 cat > bin/mock <<'MOCK'
 #!/usr/bin/env bash
@@ -37,6 +39,27 @@ case "$tool" in
                 printf '%s' "$DOCKER_CONFIG" > "$AUTH_PATH"
                 [[ "$CASE" != login-failure ]] || exit 1
                 if [[ "$CASE" == base-login-failure && "$2" == fushangyun-vpc.tencentcloudcr.com ]]; then exit 1; fi
+                ;;
+            'buildx inspect')
+                [[ -f "$BUILDX_CONFIG/builders/$3" ]] || exit 1
+                ;;
+            'buildx create')
+                prev=
+                for arg in "$@"; do
+                    if [[ "$prev" == --name ]]; then
+                        mkdir -p "$BUILDX_CONFIG/builders"
+                        : > "$BUILDX_CONFIG/builders/$arg"
+                    fi
+                    prev="$arg"
+                done
+                ;;
+            'buildx rm')
+                rm -f "$BUILDX_CONFIG/builders/$3"
+                ;;
+            inspect\ buildx_buildkit_*)
+                builder="${2#buildx_buildkit_}"
+                builder="${builder%0}"
+                [[ -f "$BUILDX_CONFIG/builders/$builder" ]] || exit 1
                 ;;
             'buildx build')
                 [[ "$CASE" != build-failure ]] || exit 1
@@ -154,8 +177,13 @@ for DEPLOY_ENV in test production; do
     run_ok build
     check_log 'any(.[]; .[0:3] == ["docker", "login", "example.invalid"])'
     check_log 'any(.[]; .[0:3] == ["docker", "login", "fushangyun-vpc.tencentcloudcr.com"])'
-    check_log 'any(.[]; .[0:3] == ["docker", "buildx", "create"] and
-        .[index("--driver-opt") + 1] == "image=fushangyun-vpc.tencentcloudcr.com/base/buildkit@sha256:28a898719c18a33f4e8000685287fa36fd0dd9560c6440227d3a732d79bb41d8")'
+    if [[ "$DEPLOY_ENV" == test ]]; then
+        check_log 'any(.[]; .[0:3] == ["docker", "buildx", "create"] and
+            .[index("--driver-opt") + 1] == "image=fushangyun-vpc.tencentcloudcr.com/base/buildkit@sha256:28a898719c18a33f4e8000685287fa36fd0dd9560c6440227d3a732d79bb41d8")'
+        check_log 'all(.[]; .[0:3] != ["docker", "buildx", "rm"])'
+    else
+        check_log 'all(.[]; .[0:3] != ["docker", "buildx", "create"] and .[0:3] != ["docker", "buildx", "rm"])'
+    fi
     jq -e --arg env "$DEPLOY_ENV" --arg ns "$namespace" \
         '.environment == $env and .namespace == $ns and (.api.image | endswith("0001"))' \
         release-artifacts/values-release.json >/dev/null
@@ -172,6 +200,14 @@ for DEPLOY_ENV in test production; do
     check_log 'all(.[]; index("--take-ownership") == null and (index("apply") == null or index("--dry-run=server") != null))'
     check_log "any(.[]; .[0] == \"curl\" and .[-1] == \"https://erp-api$suffix.fushangyunfu.com/health\")"
 done
+# BuildKit 镜像变化时才重建 builder，并写回当前 digest。
+printf 'old-image\n' > "$BUILDX_CONFIG/erp-linux-amd64.image"
+run_ok build
+check_log 'any(.[]; .[0:3] == ["docker", "buildx", "rm"])'
+check_log 'any(.[]; .[0:3] == ["docker", "buildx", "create"] and
+    .[index("--driver-opt") + 1] == "image=fushangyun-vpc.tencentcloudcr.com/base/buildkit@sha256:28a898719c18a33f4e8000685287fa36fd0dd9560c6440227d3a732d79bb41d8")'
+[[ "$(cat "$BUILDX_CONFIG/erp-linux-amd64.image")" == \
+    fushangyun-vpc.tencentcloudcr.com/base/buildkit@sha256:28a898719c18a33f4e8000685287fa36fd0dd9560c6440227d3a732d79bb41d8 ]]
 # 生产产物不得用于测试；不调用集群。
 export DEPLOY_ENV=test
 run_fail deploy
@@ -221,7 +257,8 @@ for CASE in login-failure base-login-failure build-failure invalid-digest missin
     if [[ "$CASE" == login-failure || "$CASE" == base-login-failure ]]; then
         check_log 'all(.[]; index("buildx") == null)'
     else
-        check_log 'any(.[]; .[0:3] == ["docker", "buildx", "rm"])'
+        check_log 'any(.[]; .[0:3] == ["docker", "buildx", "build"])'
+        check_log 'all(.[]; .[0:3] != ["docker", "buildx", "rm"])'
     fi
 done
 export CASE=success IMAGE_PULL_SECRET=''

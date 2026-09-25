@@ -82,22 +82,46 @@ preflight() {
     fi
 }
 
+# cargo 的 registry 与 target 缓存在 builder 的状态卷里。临时 DOCKER_CONFIG 只放登录凭据，
+# builder 记录必须放在工作区之外，否则下次构建找不到原来的 builder。
+ensure_buildkit_builder() {
+    local builder_name="$1" stamp container
+    if [[ -z "${BUILDX_CONFIG:-}" ]]; then
+        if [[ -z "${HOME:-}" ]]; then
+            echo '缺少 HOME 或 BUILDX_CONFIG，无法保留 BuildKit 缓存。' >&2
+            return 1
+        fi
+        BUILDX_CONFIG="${HOME}/.local/state/erp-buildx"
+    fi
+    mkdir -p "$BUILDX_CONFIG"
+    export BUILDX_CONFIG
+    stamp="$BUILDX_CONFIG/${builder_name}.image"
+    container="buildx_buildkit_${builder_name}0"
+    if docker buildx inspect "$builder_name" >/dev/null 2>&1 \
+        && [[ "$(cat "$stamp" 2>/dev/null || true)" == "$buildkit_image" ]] \
+        && docker inspect "$container" >/dev/null 2>&1; then
+        return 0
+    fi
+    if docker buildx inspect "$builder_name" >/dev/null 2>&1; then
+        docker buildx rm "$builder_name" >/dev/null
+    fi
+    docker buildx create --name "$builder_name" --driver docker-container \
+        --driver-opt "image=$buildkit_image" >/dev/null
+    printf '%s\n' "$buildkit_image" > "$stamp"
+}
+
 build() (
     load_environment
-    : "${TCR_USERNAME:?缺少 TCR 用户名}" "${TCR_PASSWORD:?缺少 TCR 密码}" "${BUILD_NUMBER:?缺少构建编号}"
+    : "${TCR_USERNAME:?缺少 TCR 用户名}" "${TCR_PASSWORD:?缺少 TCR 密码}" "${BUILD_NUMBER:?缺少构建编号}" "${IMAGE_PLATFORM:?缺少镜像平台}"
     # 构建与打包在同一环境完成，不保留上次运行的发布包或成功标记。
     mkdir -p "$artifacts"
     rm -f "$artifacts"/{chart.tgz,values-release.json,manifests.yaml,deployment-status.txt,helm-history.json,deployments.json,api-build.json,web-build.json}
     docker_auth_dir="$(mktemp -d)"
     export DOCKER_CONFIG="$docker_auth_dir"
-    builder_name="erp-$(date +%s)-$$"
-    builder_started=false
+    builder_name="erp-${IMAGE_PLATFORM//\//-}"
     cleanup_build() {
         build_status=$?
         trap - EXIT
-        if [[ "$builder_started" == true ]]; then
-            docker buildx rm "$builder_name" >/dev/null 2>&1 || true
-        fi
         rm -rf "$docker_auth_dir"
         exit "$build_status"
     }
@@ -109,9 +133,7 @@ build() (
             exit 1
         fi
     done
-    builder_started=true
-    docker buildx create --name "$builder_name" --driver docker-container \
-        --driver-opt "image=$buildkit_image" --use >/dev/null
+    ensure_buildkit_builder "$builder_name"
     commit="$(git rev-parse HEAD)"
     tag="${commit:0:12}-${DEPLOY_ENV}-${BUILD_NUMBER}"
     docker buildx build --builder "$builder_name" --platform "$IMAGE_PLATFORM" \
