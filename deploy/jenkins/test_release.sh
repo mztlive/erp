@@ -62,6 +62,36 @@ case "$tool" in
             [[ "$CASE" != ownership-failure ]] || exit 1
         elif [[ "$args" == *' upgrade '* ]]; then
             [[ "$CASE" != upgrade-failure ]] || exit 1
+        elif [[ "$args" == *' rollback '* ]]; then
+            [[ "$CASE" != rollback-failure ]] || exit 1
+        elif [[ "$args" == *' history '* ]]; then
+            case "$CASE" in
+                rollback-current)
+                    printf '%s\n' '[{"revision":2,"status":"deployed"}]'
+                    ;;
+                rollback-missing)
+                    printf '%s\n' '[{"revision":3,"status":"deployed"}]'
+                    ;;
+                rollback-failed-status)
+                    printf '%s\n' '[{"revision":2,"status":"failed"},{"revision":3,"status":"deployed"}]'
+                    ;;
+                rollback-ok|rollback-failure|rollback-bad-image|rollback-image-mismatch|rollback-rollout-failure|rollback-http-failure)
+                    printf '%s\n' '[{"revision":2,"status":"superseded"},{"revision":3,"status":"deployed"}]'
+                    ;;
+                *)
+                    printf '[]\n'
+                    ;;
+            esac
+            exit 0
+        elif [[ "$args" == *' get values '* ]]; then
+            if [[ "$CASE" == rollback-bad-image ]]; then
+                printf '%s\n' '{"api":{"image":"latest"},"client":{"image":"latest"}}'
+            else
+                jq -n --arg api "example.invalid/api@sha256:$(printf 'a%.0s' {1..64})" \
+                    --arg web "example.invalid/web@sha256:$(printf 'b%.0s' {1..64})" \
+                    '{api:{image:$api},client:{image:$web}}'
+            fi
+            exit 0
         fi
         printf '[]\n'
         ;;
@@ -83,16 +113,16 @@ case "$tool" in
         elif [[ "$args" == *' --dry-run=server '* ]]; then
             [[ "$CASE" != dry-run-failure ]]
         elif [[ "$args" == *' rollout '* ]]; then
-            [[ "$CASE" != rollout-failure ]]
+            [[ "$CASE" != rollout-failure && "$CASE" != rollback-rollout-failure ]]
         elif [[ "$args" == *' get deployments '* ]]; then
             jq --arg case "$CASE" '{items:[
                 {metadata:{name:"erp-api"},spec:{template:{spec:{containers:[{name:"erp-api",image:.api.image}]}}}},
                 {metadata:{name:"erp-client"},spec:{template:{spec:{containers:[{name:"erp-client",image:.client.image}]}}}}
-            ]} | if $case == "image-mismatch" then .items[0].spec.template.spec.containers[0].image = "wrong"
+            ]} | if $case == "image-mismatch" or $case == "rollback-image-mismatch" then .items[0].spec.template.spec.containers[0].image = "wrong"
                 elif $case == "missing-deployment" then .items = [.items[0]] else . end' release-artifacts/values-release.json
         fi
         ;;
-    curl) [[ "$CASE" != http-failure ]] ;;
+    curl) [[ "$CASE" != http-failure && "$CASE" != rollback-http-failure ]] ;;
 esac
 MOCK
 chmod +x bin/mock
@@ -200,6 +230,49 @@ if grep -q imagePullSecrets release-artifacts/manifests.yaml; then exit 1; fi
 export IMAGE_PULL_SECRET='invalid/name'
 run_fail build
 test ! -e release-artifacts/chart.tgz
+# 回退只接受已被替换的历史 revision，并核对目标镜像；不构建、不升级。
+export IMAGE_PULL_SECRET=tcr-pull DEPLOY_ENV=test CASE=rollback-ok ROLLBACK_REVISION=2
+no_cluster_change() { check_log 'all(.[]; index("rollback") == null and index("upgrade") == null and .[0] != "kubectl")'; }
+for ROLLBACK_REVISION in '' 0 -1 01 abc; do
+    export ROLLBACK_REVISION
+    run_fail rollback
+    no_cluster_change
+done
+export ROLLBACK_REVISION=2
+for CASE in rollback-current rollback-missing rollback-failed-status rollback-bad-image; do
+    export CASE
+    printf 'stale success' > release-artifacts/deployment-status.txt
+    run_fail rollback
+    test ! -e release-artifacts/deployment-status.txt
+    check_log 'all(.[]; index("rollback") == null and index("upgrade") == null)'
+done
+export CASE=rollback-failure
+printf 'stale success' > release-artifacts/deployment-status.txt
+run_fail rollback
+test ! -e release-artifacts/deployment-status.txt
+check_log 'any(.[]; index("rollback") != null and index("--history-max") != null)'
+for CASE in rollback-image-mismatch rollback-rollout-failure rollback-http-failure; do
+    export CASE
+    printf 'stale success' > release-artifacts/deployment-status.txt
+    run_fail rollback
+    test ! -e release-artifacts/deployment-status.txt
+done
+for DEPLOY_ENV in test production; do
+    export DEPLOY_ENV CASE=rollback-ok ROLLBACK_REVISION=2
+    namespace=test
+    [[ "$DEPLOY_ENV" == production ]] && namespace=prod
+    run_ok rollback
+    grep -q '回退完成' release-artifacts/deployment-status.txt
+    check_log "any(.[]; index(\"rollback\") != null and index(\"$ROLLBACK_REVISION\") != null and index(\"--history-max\") != null and index(\"20\") != null and index(\"--wait\") != null and index(\"--timeout\") != null and index(\"15m\") != null)"
+    check_log 'all(.[]; index("upgrade") == null and .[0] != "docker")'
+    check_log "all(.[]; if .[0] == \"kubectl\" or .[0] == \"helm\" then index(\"--namespace\") != null and .[index(\"--namespace\") + 1] == \"$namespace\" else true end)"
+done
+mv "$KUBECONFIG" "$KUBECONFIG.saved"
+export DEPLOY_ENV=test CASE=rollback-ok
+run_fail rollback
+no_cluster_change
+mv "$KUBECONFIG.saved" "$KUBECONFIG"
+unset ROLLBACK_REVISION
 # 环境文件不可复用另一个环境的域名。
 jq '.ingress.apiHost = "erp-api.fushangyunfu.com"' deploy/helm/erp/environments/test.json > changed.json
 mv changed.json deploy/helm/erp/environments/test.json

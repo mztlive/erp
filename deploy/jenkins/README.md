@@ -11,12 +11,15 @@ Jenkins 使用仓库根目录 `Jenkinsfile.k8s`，在 `selfhost` Agent 执行。
 ## 2. Jenkins 配置
 
 1. 新建一个负责 ERP 两个环境的 Pipeline 任务，例如 `erp-k8s`。禁止另建任务并发发布同一个环境；`disableConcurrentBuilds()` 只约束同一任务。
-2. 使用 `Pipeline script from SCM`，配置 ERP 仓库、Git 凭据和发布分支，Script Path 填 `Jenkinsfile.k8s`。流水线发布 `checkout scm` 检出的提交，不另行切换分支。
-3. 安装 Pipeline、Git、Credentials Binding 插件；准备以下凭据。参数只能填写凭据 ID，不得填写凭据内容。
-4. 将代码推送到配置的分支后，使用 `Build with Parameters` 选择环境。首次从旧任务更新时，必须核对新环境参数，禁止依赖旧生产默认值。
+2. 使用 `Pipeline script from SCM`，配置 ERP 仓库、Git 凭据和承载 `Jenkinsfile.k8s` 的分支，Script Path 填 `Jenkinsfile.k8s`。任务配置的分支只决定流水线定义。`ACTION=deploy` 时检出参数 `GIT_REF`；`ACTION=rollback` 时检出任务配置的分支，不使用 `GIT_REF`。
+3. 安装 Pipeline、Git、Git Parameter、Credentials Binding 插件；准备以下凭据。参数只能填写凭据 ID，不得填写凭据内容。
+4. 将含本流水线的提交推送到任务配置的分支后，使用 `Build with Parameters`。首次加载新参数时重新打开任务再构建。生产必须显式选择 `production`。
 
 | 参数 | 默认值与执行规则 |
 | --- | --- |
+| `ACTION` | `deploy`。`rollback` 按 Helm revision 回退，不构建镜像，且要求 `DEPLOY_TO_TKE=true` |
+| `GIT_REF` | `origin/main`。仅 `deploy` 使用，可选远程分支或 tag |
+| `ROLLBACK_REVISION` | 空。仅 `rollback` 使用，填正整数；来源是该环境一次已生成 `deployment-status.txt` 的构建里的 `helm-history.json` |
 | `DEPLOY_ENV` | `test`；生产必须显式选择 `production` |
 | `TCR_CREDENTIALS_ID` | `tcr`，Username with password，可推送两个业务仓库，并可读取 `base` 下的构建镜像 |
 | `KUBECONFIG_CREDENTIALS_ID` | `tke-kubeconfig`，Secret file，选择对目标环境有权限的文件 |
@@ -48,11 +51,11 @@ Agent 必须能够访问 Git、依赖源、TCR、目标 TKE API Server 和所选
 
 ## 4. 发布顺序与产物
 
-1. 清理任务工作区，检出代码，校验工具版本和环境映射。
+1. 清理任务工作区。`deploy` 检出 `GIT_REF`，`rollback` 检出任务配置分支。随后校验工具版本和环境映射；`rollback` 同时校验 revision 为正整数。
 2. 始终执行 `bash deploy/jenkins/test_release.sh`。测试使用真实的本地 Helm 和 Docker、kubectl、HTTP 命令替身，不连接 Docker、集群或业务服务；测试工作区在临时目录，退出时清理。
-3. 需要部署时，检查现有 Ingress 的共享模式和 CLB 归属，以及配置、证书、拉取 Secret 所需的数据键。
-4. 按质量开关执行后端格式、编译、Clippy、库单元测试、边界与权限漂移检查，以及前端 lint、TypeScript 和单元测试。不得新增或执行后端集成测试。
-5. 使用隔离的 Docker 登录目录与 Buildx builder 构建推送两个镜像；结束时清理凭据目录和 builder。前端构建地址从所选环境读取。
+3. `deploy` 且要发布到集群，或 `rollback` 时，检查现有 Ingress 的共享模式和 CLB 归属，以及配置、证书、拉取 Secret 所需的数据键。
+4. 仅 `deploy` 按质量开关执行后端格式、编译、Clippy、库单元测试、边界与权限漂移检查，以及前端 lint、TypeScript 和单元测试。不得新增或执行后端集成测试。
+5. 仅 `deploy`：使用隔离的 Docker 登录目录与 Buildx builder 构建推送两个镜像；结束时清理凭据目录和 builder。前端构建地址从所选环境读取。
 6. 构建成功后，在同一 Shell 环境内读取并校验 Buildx digest，将环境 values、两个镜像地址及发布标识合并为 `values-release.json`，直接执行 Helm lint、package、template，归档完整发布包。构建开始时清除旧产物，失败不得继续发布。
 7. 核对归档 values 与当前环境、域名和 Secret 引用一致，再用归档 Chart 和 values 重新渲染清单；由 Chart schema 校验参数。执行 API Server 清单 dry-run 与 Helm 服务端 dry-run，通过后用同一 Chart 包和 values 升级。
 8. Helm 等待资源就绪，超时为 15 分钟；升级失败请求回退到上一成功 release。随后再次等待两个 Deployment rollout，核对镜像，检查 API `/health` 和管理端 `/` 的公网 HTTPS 响应。
@@ -63,7 +66,7 @@ Agent 必须能够访问 Git、依赖源、TCR、目标 TKE API Server 和所选
 | --- | --- |
 | `api-build.json`、`web-build.json` | Buildx 镜像 digest |
 | `chart.tgz` | 本次使用的完整 Chart，不依赖后续 Git 工作区 |
-| `values-release.json` | 本次环境参数、镜像 digest、拉取 Secret 名称；`releaseId` 为完整提交 SHA、环境和构建编号 |
+| `values-release.json` | `deploy` 时为本次环境参数、镜像 digest、拉取 Secret 名称，`releaseId` 为完整提交 SHA、环境和构建编号。`rollback` 时为目标 revision 已保存的 values |
 | `manifests.yaml` | 本次渲染清单，供审查；不得直接 apply 到已由 Helm 管理的环境 |
 | `helm-history.json` | Helm 升级成功后读取的 release 历史 |
 | `deployments.json` | 部署后镜像核对证据 |
@@ -77,11 +80,13 @@ Agent 必须能够访问 Git、依赖源、TCR、目标 TKE API Server 和所选
 
 操作人必须先从本任务已生成 `deployment-status.txt` 的成功构建中选择目标版本，再用对应构建的 `helm-history.json` 确定 release revision。仅 `helm history` 显示 deployed 不足以证明公网和业务检查通过。
 
-以下命令在受控终端执行，替换 kubeconfig 路径和 context；测试用 `test`，生产用 `prod`。不得省略命名空间。
+Jenkins 回退：`ACTION=rollback`，`DEPLOY_ENV` 选目标环境，`ROLLBACK_REVISION` 填该 revision。流水线拒绝空值、当前 `deployed`、状态不是 `superseded`、以及镜像 digest 无效的 revision。回退不构建镜像，不恢复配置 Secret 或数据库。完成后同样等待 rollout，并按该 revision 保存的 values 核对两个镜像和公网入口。
+
+Jenkins 不可用时，在受控终端执行相同回退。替换 kubeconfig 路径和 context；测试用 `test`，生产用 `prod`。不得省略命名空间。
 
 ```bash
 helm --kubeconfig /path/to/kubeconfig --kube-context 目标context -n test history erp
-helm --kubeconfig /path/to/kubeconfig --kube-context 目标context -n test rollback erp 目标revision --wait --timeout 15m
+helm --kubeconfig /path/to/kubeconfig --kube-context 目标context -n test rollback erp 目标revision --history-max 20 --wait --timeout 15m
 kubectl --kubeconfig /path/to/kubeconfig --context 目标context -n test rollout status deployment/erp-api --timeout=900s
 kubectl --kubeconfig /path/to/kubeconfig --context 目标context -n test rollout status deployment/erp-client --timeout=900s
 ```

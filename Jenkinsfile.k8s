@@ -8,14 +8,26 @@ pipeline {
         buildDiscarder(logRotator(numToKeepStr: '20', artifactNumToKeepStr: '20'))
     }
     parameters {
+        choice(name: 'ACTION', choices: ['deploy', 'rollback'], description: 'deploy：构建所选分支或 tag 并发布。rollback：按 Helm revision 回退当前环境，不构建镜像')
+        gitParameter(
+            name: 'GIT_REF',
+            type: 'PT_BRANCH_TAG',
+            defaultValue: 'origin/main',
+            tagFilter: '*',
+            sortMode: 'DESCENDING_SMART',
+            selectedValue: 'DEFAULT',
+            quickFilterEnabled: true,
+            description: 'deploy 检出的远程分支或 tag。rollback 忽略此项'
+        )
+        string(name: 'ROLLBACK_REVISION', defaultValue: '', description: '仅 rollback 使用。正整数，取该环境成功构建的 helm-history.json；必须是 superseded，且不是当前 deployed')
         choice(name: 'DEPLOY_ENV', choices: ['test', 'production'], description: 'test → test 命名空间；production → prod 命名空间。域名与配置由仓库环境 values 确定')
         string(name: 'TCR_CREDENTIALS_ID', defaultValue: 'tcr', description: 'Jenkins Username with password 凭据 ID')
         string(name: 'KUBECONFIG_CREDENTIALS_ID', defaultValue: 'tke-kubeconfig', description: 'Jenkins Secret file 凭据 ID')
         string(name: 'KUBE_CONTEXT', defaultValue: '', description: '可选：留空使用上传 kubeconfig 的 current-context；填写时覆盖默认值')
         string(name: 'IMAGE_PULL_SECRET', defaultValue: '', description: '目标环境命名空间中已有的镜像拉取 Secret；已配置 TKE 免密拉取时可留空')
         choice(name: 'IMAGE_PLATFORM', choices: ['linux/amd64', 'linux/arm64'], description: '必须与 TKE 节点架构一致；Agent 应支持该平台构建')
-        booleanParam(name: 'RUN_QUALITY_CHECKS', defaultValue: false, description: '执行前后端质量门禁；发布脚本离线测试始终执行')
-        booleanParam(name: 'DEPLOY_TO_TKE', defaultValue: true, description: '执行集群发布；取消时仅构建推送镜像和归档清单，质量检查由独立开关控制')
+        booleanParam(name: 'RUN_QUALITY_CHECKS', defaultValue: false, description: 'deploy 时执行前后端质量门禁；发布脚本离线测试始终执行。rollback 不使用')
+        booleanParam(name: 'DEPLOY_TO_TKE', defaultValue: true, description: 'deploy 时发布到集群；false 时只构建推送镜像和归档。rollback 必须为 true')
     }
     environment {
         REGISTRY_HOST = 'fushangyun.tencentcloudcr.com'
@@ -26,7 +38,40 @@ pipeline {
         stage('Checkout') {
             steps {
                 deleteDir()
-                checkout scm
+                script {
+                    if (params.ACTION != 'deploy' && params.ACTION != 'rollback') {
+                        error 'ACTION 必须是 deploy 或 rollback。请重新打开任务，确认参数已加载后再构建。'
+                    }
+                    if (params.ACTION == 'rollback' && !params.DEPLOY_TO_TKE) {
+                        error 'rollback 会修改集群，不能与 DEPLOY_TO_TKE=false 同时使用。'
+                    }
+                    def commit
+                    if (params.ACTION == 'rollback') {
+                        if (!(params.ROLLBACK_REVISION ==~ /[1-9][0-9]*/)) {
+                            error 'rollback 必须填写正整数 ROLLBACK_REVISION。'
+                        }
+                        checkout scm
+                        commit = sh(script: 'git rev-parse --verify HEAD', returnStdout: true).trim()
+                        currentBuild.displayName = "#${env.BUILD_NUMBER} rollback ${params.DEPLOY_ENV} r${params.ROLLBACK_REVISION}"
+                        currentBuild.description = "script=${commit.take(12)}"
+                    } else {
+                        def remote = scm.userRemoteConfigs[0]
+                        def ref = params.GIT_REF?.trim()
+                        if (!ref) {
+                            error 'deploy 必须选择 GIT_REF。'
+                        }
+                        checkout scmGit(
+                            branches: [[name: ref]],
+                            userRemoteConfigs: [[
+                                credentialsId: remote.credentialsId,
+                                url: remote.url
+                            ]]
+                        )
+                        commit = sh(script: 'git rev-parse --verify HEAD', returnStdout: true).trim()
+                        currentBuild.displayName = "#${env.BUILD_NUMBER} ${ref}"
+                        currentBuild.description = "${params.DEPLOY_ENV} ${commit.take(12)}"
+                    }
+                }
                 sh 'bash deploy/jenkins/release.sh validate'
             }
         }
@@ -36,7 +81,7 @@ pipeline {
             }
         }
         stage('集群前置检查') {
-            when { expression { params.DEPLOY_TO_TKE } }
+            when { expression { params.ACTION == 'rollback' || params.DEPLOY_TO_TKE } }
             steps {
                 withCredentials([file(credentialsId: params.KUBECONFIG_CREDENTIALS_ID, variable: 'KUBECONFIG')]) {
                     sh 'bash deploy/jenkins/release.sh preflight'
@@ -44,7 +89,7 @@ pipeline {
             }
         }
         stage('后端质量门禁') {
-            when { expression { params.RUN_QUALITY_CHECKS } }
+            when { expression { params.ACTION == 'deploy' && params.RUN_QUALITY_CHECKS } }
             steps {
                 dir('backend') {
                     sh '''#!/usr/bin/env bash
@@ -61,7 +106,7 @@ env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked
             }
         }
         stage('前端质量门禁') {
-            when { expression { params.RUN_QUALITY_CHECKS } }
+            when { expression { params.ACTION == 'deploy' && params.RUN_QUALITY_CHECKS } }
             steps {
                 dir('erp-client') {
                     sh '''#!/usr/bin/env bash
@@ -75,6 +120,7 @@ npm test
             }
         }
         stage('构建并推送镜像') {
+            when { expression { params.ACTION == 'deploy' } }
             steps {
                 withCredentials([usernamePassword(credentialsId: params.TCR_CREDENTIALS_ID, usernameVariable: 'TCR_USERNAME', passwordVariable: 'TCR_PASSWORD')]) {
                     sh 'bash deploy/jenkins/release.sh build'
@@ -83,10 +129,18 @@ npm test
             }
         }
         stage('发布到 TKE') {
-            when { expression { params.DEPLOY_TO_TKE } }
+            when { expression { params.ACTION == 'deploy' && params.DEPLOY_TO_TKE } }
             steps {
                 withCredentials([file(credentialsId: params.KUBECONFIG_CREDENTIALS_ID, variable: 'KUBECONFIG')]) {
                     sh 'bash deploy/jenkins/release.sh deploy'
+                }
+            }
+        }
+        stage('回滚到指定 revision') {
+            when { expression { params.ACTION == 'rollback' } }
+            steps {
+                withCredentials([file(credentialsId: params.KUBECONFIG_CREDENTIALS_ID, variable: 'KUBECONFIG')]) {
+                    sh 'bash deploy/jenkins/release.sh rollback'
                 }
             }
         }

@@ -1,293 +1,638 @@
-# 使用现有 Jenkins 和 Helm 发布服务到 TKE
+# 应用发布到 TKE
 
-供开发同事将自己的应用部署到现有 TKE 使用。复用现有 Jenkins、TCR、TKE 和共享 CLB，不重新搭建基础设施。发布链路统一为：**代码 → 构建镜像 → 推送 TCR → Helm 安装或升级 → 验证服务**。
+按本文把应用发布到现有 Jenkins、TCR 和 TKE。下文的 `sample-service`、端口 `8080`、健康检查 `/health`、域名都换成自己的。Jenkins 凭据、Agent、共享 CLB、证书 Secret 名称保持不变。
 
-以下以 `sample-service` 演示，执行时替换为自己的服务名。前端与后端均适用；需要一起发布的多个工作负载可以放入同一个 Chart，独立发布的应用分别使用自己的 Chart 和 release。ERP 本项目直接使用[已有发布规范](../deploy/jenkins/README.md)，不套用本指南的示例字段。
-
-## 1. 确定应用和环境
-
-| 配置 | 值 |
-| --- | --- |
-| Jenkins Agent | `selfhost` |
-| Jenkins TCR 凭据 ID | `tcr` |
-| Jenkins kubeconfig 凭据 ID | `tke-kubeconfig` |
-| 示例镜像仓库 | `fushangyun.tencentcloudcr.com/fushangyun/sample-service` |
-| 共享 CLB | `lb-gpk8k2ps` |
-| 证书 Secret 名称 | `fsytsl-wsk87cm7`，必须确认目标命名空间中存在且覆盖应用域名 |
-
-在 TCR 的 `fushangyun` 命名空间创建自己的镜像仓库。约定两个环境：
-
-| 配置 | 测试 | 生产 |
-| --- | --- | --- |
-| 发布参数 `DEPLOY_ENV` | `test`，默认值 | `production`，显式选择 |
-| Kubernetes 命名空间 | `test` | `prod` |
-| 示例 Helm release | `sample-service` | `sample-service` |
-| 示例域名 | `sample-test.fushangyunfu.com` | `sample.fushangyunfu.com` |
-| 环境 values | `values-test.yaml` | `values-production.yaml` |
-
-Helm release 是一次应用安装的名称，两个命名空间可以使用相同 release 名。同一命名空间不得与其他应用重名。Deployment、容器、ServiceAccount、Service、Ingress 等资源统一使用自己的应用名称，不保留被复制项目的名称。
-
-每个环境的数据库、数据库凭据、应用密钥及对象存储空间必须独立配置。命名空间隔离不会自动隔离外部数据库；禁止直接复制生产配置作为测试配置。
-
-## 2. 在 Jenkins Agent 安装 Helm
-
-在运行 `selfhost` Agent 的服务器上安装 Helm 4.x，并固定团队验证过的版本。以下使用本仓库离线验证过的 `v4.1.3`：
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-4 -o get-helm-4.sh
-bash get-helm-4.sh --version v4.1.3
-command -v helm
-helm version --short
-```
-
-脚本默认安装到 `/usr/local/bin/helm`。必须在 Jenkins 实际执行 Shell 的环境中确认命令可用；若 SSH 终端可用而 Jenkins 找不到，给 Agent 的 PATH 加入 `/usr/local/bin`。安装方式见 [Helm 官方说明](https://helm.sh/docs/intro/install/)。
-
-Agent 还须具备 Git、Bash、Docker/Buildx、kubectl、curl，以及项目构建和脚本要求的工具，并能访问代码仓库、TCR、TKE API Server 和应用入口。Helm 使用 kubeconfig 访问集群，安装 CLI 不会自动授予集群权限。
-
-## 3. 在应用仓库准备 Chart
-
-项目必须提交以下文件，名称可按项目调整，但 Jenkins 中引用的路径必须一致：
+提交到应用仓库的文件：
 
 ```text
-Dockerfile
 Jenkinsfile.k8s
+deploy/jenkins/release.sh
 deploy/helm/sample-service/
 ├── Chart.yaml
 ├── values.yaml
-├── values-test.yaml
-├── values-production.yaml
+├── values.schema.json
+├── environments/test.json
+├── environments/production.json
 └── templates/
-    ├── deployment.yaml
-    ├── serviceaccount.yaml
-    ├── service.yaml
-    └── ingress.yaml
+    ├── app.yaml
+    ├── ingress.yaml
+    └── pdb.yaml
+Dockerfile
 ```
 
-`Chart.yaml` 至少包含：
+`release-artifacts/` 写入 `.gitignore`。
+
+## 1. 已有环境
+
+这些已经配好，发布脚本直接用：
+
+| 项目 | 值 |
+| --- | --- |
+| Jenkins Agent | `selfhost` |
+| 推送镜像凭据 | `tcr`（Username with password） |
+| 集群凭据 | `tke-kubeconfig`（Secret file） |
+| 镜像仓库 | `fushangyun.tencentcloudcr.com/fushangyun/<服务名>` |
+| 基础镜像与 BuildKit | `fushangyun-vpc.tencentcloudcr.com/base` |
+| 测试 / 生产命名空间 | `test` / `prod` |
+| 共享 CLB | `lb-gpk8k2ps` |
+| 证书 Secret | `fsytsl-wsk87cm7`，键 `qcloud_cert_id` |
+| Helm | Agent 上已安装 4.x，当前验证版本 4.1.3 |
+
+`DEPLOY_ENV=test` 固定进入 `test`，`production` 固定进入 `prod`。两个环境的数据库、密钥、对象存储分开，禁止把生产配置复制到测试。
+
+应用 Chart 只管理本服务。MongoDB、Meilisearch、命名空间、证书、CLB、应用配置 Secret 不写进 Chart。
+
+## 2. 准备 Jenkinsfile
+
+根目录新建 `Jenkinsfile.k8s`。把两处 `sample-service` 换成自己的镜像仓库名。
+
+```groovy
+// 从仓库根运行。
+pipeline {
+    agent { label 'selfhost' }
+    options {
+        skipDefaultCheckout(true)
+        disableConcurrentBuilds()
+        timeout(time: 120, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '20', artifactNumToKeepStr: '20'))
+    }
+    parameters {
+        choice(name: 'DEPLOY_ENV', choices: ['test', 'production'], description: 'test → test；production → prod')
+        string(name: 'TCR_CREDENTIALS_ID', defaultValue: 'tcr', description: 'Jenkins Username with password 凭据 ID')
+        string(name: 'KUBECONFIG_CREDENTIALS_ID', defaultValue: 'tke-kubeconfig', description: 'Jenkins Secret file 凭据 ID')
+        string(name: 'KUBE_CONTEXT', defaultValue: '', description: '留空使用上传 kubeconfig 的 current-context')
+        string(name: 'IMAGE_PULL_SECRET', defaultValue: '', description: '已配置 TKE 免密拉取时留空')
+        choice(name: 'IMAGE_PLATFORM', choices: ['linux/amd64', 'linux/arm64'], description: '必须与 TKE 节点架构一致')
+        booleanParam(name: 'DEPLOY_TO_TKE', defaultValue: true, description: 'false 时只构建推送镜像并归档，不发布')
+    }
+    environment {
+        REGISTRY_HOST = 'fushangyun.tencentcloudcr.com'
+        IMAGE_REPOSITORY = 'fushangyun.tencentcloudcr.com/fushangyun/sample-service'
+    }
+    stages {
+        stage('Checkout') {
+            steps {
+                deleteDir()
+                checkout scm
+                sh 'bash deploy/jenkins/release.sh validate'
+            }
+        }
+        stage('集群前置检查') {
+            when { expression { params.DEPLOY_TO_TKE } }
+            steps {
+                withCredentials([file(credentialsId: params.KUBECONFIG_CREDENTIALS_ID, variable: 'KUBECONFIG')]) {
+                    sh 'bash deploy/jenkins/release.sh preflight'
+                }
+            }
+        }
+        stage('构建并推送镜像') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: params.TCR_CREDENTIALS_ID, usernameVariable: 'TCR_USERNAME', passwordVariable: 'TCR_PASSWORD')]) {
+                    sh 'bash deploy/jenkins/release.sh build'
+                }
+                archiveArtifacts(artifacts: 'release-artifacts/*', fingerprint: true)
+            }
+        }
+        stage('发布到 TKE') {
+            when { expression { params.DEPLOY_TO_TKE } }
+            steps {
+                withCredentials([file(credentialsId: params.KUBECONFIG_CREDENTIALS_ID, variable: 'KUBECONFIG')]) {
+                    sh 'bash deploy/jenkins/release.sh deploy'
+                }
+            }
+        }
+    }
+    post {
+        always {
+            archiveArtifacts(artifacts: 'release-artifacts/*', allowEmptyArchive: true, fingerprint: true)
+        }
+    }
+}
+```
+
+质量检查加在「构建并推送镜像」之前。
+
+同一目录新建 `deploy/jenkins/release.sh`。脚本里的 `sample-service`、Chart 路径、Dockerfile 路径、容器端口和 `/health` 与自己的仓库一致。BuildKit 镜像保持下面的 digest。
+
+```bash
+#!/usr/bin/env bash
+# 从仓库根执行：bash deploy/jenkins/release.sh validate|preflight|build|deploy
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/../.."
+
+chart=deploy/helm/sample-service
+release=sample-service
+artifacts=release-artifacts
+image_repository="${IMAGE_REPOSITORY:-fushangyun.tencentcloudcr.com/fushangyun/sample-service}"
+base_registry_host=fushangyun-vpc.tencentcloudcr.com
+buildkit_image="$base_registry_host/base/buildkit@sha256:28a898719c18a33f4e8000685287fa36fd0dd9560c6440227d3a732d79bb41d8"
+
+load_environment() {
+    case "${DEPLOY_ENV:-}" in
+        test) namespace=test ;;
+        production) namespace=prod ;;
+        *) echo 'DEPLOY_ENV 必须是 test 或 production' >&2; return 1 ;;
+    esac
+    environment_values="$chart/environments/$DEPLOY_ENV.json"
+    jq -e --arg environment "$DEPLOY_ENV" --arg namespace "$namespace" \
+        '.environment == $environment and .namespace == $namespace' "$environment_values" >/dev/null
+    jq -es '[.[].ingress.host] | all(.[]; type == "string" and length > 0) and (unique | length == 2)' \
+        "$chart/environments/test.json" "$chart/environments/production.json" >/dev/null
+    app_url="https://$(jq -er '.ingress.host' "$environment_values")"
+}
+
+validate() {
+    local tool missing=0
+    for tool in git docker kubectl helm jq curl bash; do
+        if ! command -v "$tool" >/dev/null; then
+            printf '[缺失] %s\n' "$tool" >&2
+            missing=1
+        fi
+    done
+    [[ "$missing" == 0 ]]
+    [[ "$(helm version --template '{{.Version}}')" == v4.* ]] || { echo '需要 Helm 4.x' >&2; return 1; }
+    load_environment
+    docker buildx version
+    git diff --check
+    bash -n deploy/jenkins/release.sh
+}
+
+preflight() {
+    load_environment
+    [[ -f "${KUBECONFIG:-}" ]] || { echo '缺少 Jenkins 上传的 kubeconfig' >&2; return 1; }
+    local context="${KUBE_CONTEXT:-}" ingress clb config_secret tls_secret
+    if [[ -z "$context" ]]; then
+        context="$(kubectl --kubeconfig "$KUBECONFIG" config current-context)"
+        [[ -n "$context" ]] || { echo 'kubeconfig 没有 current-context' >&2; return 1; }
+    fi
+    kube=(kubectl --kubeconfig "$KUBECONFIG" --context "$context" --namespace "$namespace" --request-timeout=30s)
+    helm_target=(helm --kubeconfig "$KUBECONFIG" --kube-context "$context" --namespace "$namespace")
+    clb="$(jq -er '.ingress.clbId' "$environment_values")"
+    config_secret="$(jq -er '.configSecret' "$environment_values")"
+    tls_secret="$(jq -er '.ingress.tlsSecret' "$environment_values")"
+    ingress="$("${kube[@]}" get ingress "$release" --ignore-not-found -o json)"
+    if [[ -n "$ingress" ]] && ! jq -e --arg clb "$clb" '
+        .metadata.annotations["ingress.cloud.tencent.com/enable-group"] == "true"
+        and .metadata.annotations["kubernetes.io/ingress.existLbId"] == $clb' <<< "$ingress" >/dev/null; then
+        echo '现有 Ingress 未启用共享或绑定了其他 CLB' >&2
+        return 1
+    fi
+    "${kube[@]}" get secret "$config_secret" -o go-template='{{if index .data "config.yaml"}}present{{end}}' | grep -qx present
+    "${kube[@]}" get secret "$tls_secret" -o go-template='{{if index .data "qcloud_cert_id"}}present{{end}}' | grep -qx present
+    if [[ -n "${IMAGE_PULL_SECRET:-}" ]]; then
+        "${kube[@]}" get secret "$IMAGE_PULL_SECRET" >/dev/null
+    fi
+}
+
+build() {
+    load_environment
+    mkdir -p "$artifacts"
+    rm -f "$artifacts"/{chart.tgz,values-release.json,manifests.yaml,deployment-status.txt,helm-history.json,deployment.json,image-build.json}
+    local commit tag digest
+    docker_auth_dir="$(mktemp -d)"
+    export DOCKER_CONFIG="$docker_auth_dir"
+    builder_name="${release}-$(date +%s)-$$"
+    builder_started=false
+    cleanup_build() {
+        local build_status=$?
+        trap - EXIT
+        if [[ "$builder_started" == true ]]; then
+            docker buildx rm "$builder_name" >/dev/null 2>&1 || true
+        fi
+        rm -rf "$docker_auth_dir"
+        exit "$build_status"
+    }
+    trap cleanup_build EXIT
+    local registry
+    for registry in "${REGISTRY_HOST:-fushangyun.tencentcloudcr.com}" "$base_registry_host"; do
+        printf '%s' "$TCR_PASSWORD" | docker login "$registry" --username "$TCR_USERNAME" --password-stdin
+    done
+    builder_started=true
+    docker buildx create --name "$builder_name" --driver docker-container \
+        --driver-opt "image=$buildkit_image" --use >/dev/null
+    commit="$(git rev-parse HEAD)"
+    tag="${commit:0:12}-${DEPLOY_ENV}-${BUILD_NUMBER}"
+    docker buildx build --builder "$builder_name" --platform "${IMAGE_PLATFORM:-linux/amd64}" \
+        --file Dockerfile --tag "$image_repository:$tag" --push \
+        --metadata-file "$artifacts/image-build.json" .
+    digest="$(jq -er '."containerimage.digest" | strings | select(test("^sha256:[0-9a-f]{64}$"))' "$artifacts/image-build.json")"
+    jq --arg image "$image_repository@$digest" \
+        --arg release_id "$commit-$DEPLOY_ENV-$BUILD_NUMBER" \
+        --arg pull "${IMAGE_PULL_SECRET:-}" \
+        '.image = $image | .releaseId = $release_id | .imagePullSecret = $pull' \
+        "$environment_values" > "$artifacts/values-release.json"
+    helm lint "$chart" --strict --namespace "$namespace" -f "$artifacts/values-release.json"
+    helm package "$chart" --destination "$docker_auth_dir"
+    mv "$docker_auth_dir"/"${release}"-*.tgz "$artifacts/chart.tgz"
+    helm template "$release" "$artifacts/chart.tgz" --namespace "$namespace" \
+        -f "$artifacts/values-release.json" > "$artifacts/manifests.yaml"
+}
+
+deploy() {
+    load_environment
+    [[ -f "$artifacts/chart.tgz" && -f "$artifacts/values-release.json" ]] || { echo '缺少本次构建产物' >&2; return 1; }
+    jq -e --slurpfile environment "$environment_values" --arg pull "${IMAGE_PULL_SECRET:-}" '
+        [.environment, .namespace, .ingress, .configSecret, .imagePullSecret] ==
+        [$environment[0].environment, $environment[0].namespace, $environment[0].ingress,
+         $environment[0].configSecret, $pull]' "$artifacts/values-release.json" >/dev/null
+    preflight
+    helm template "$release" "$artifacts/chart.tgz" --namespace "$namespace" \
+        -f "$artifacts/values-release.json" > "$artifacts/manifests.yaml"
+    "${kube[@]}" apply --dry-run=server -f "$artifacts/manifests.yaml" >/dev/null
+    "${helm_target[@]}" upgrade --install "$release" "$artifacts/chart.tgz" \
+        -f "$artifacts/values-release.json" --reset-values --dry-run=server --hide-secret >/dev/null
+    "${helm_target[@]}" upgrade --install "$release" "$artifacts/chart.tgz" \
+        -f "$artifacts/values-release.json" --reset-values \
+        --wait --rollback-on-failure --timeout 15m --history-max 20
+    "${helm_target[@]}" history "$release" -o json > "$artifacts/helm-history.json"
+    "${kube[@]}" rollout status "deployment/$release" --timeout=900s
+    "${kube[@]}" get deployment "$release" -o json > "$artifacts/deployment.json"
+    jq -e --slurpfile values "$artifacts/values-release.json" --arg name "$release" '
+        [.spec.template.spec.containers[] | select(.name == $name) | .image] == [$values[0].image]
+    ' "$artifacts/deployment.json" >/dev/null
+    curl --fail --silent --show-error --retry 12 --retry-all-errors --retry-delay 10 \
+        --connect-timeout 10 --max-time 20 --output /dev/null "$app_url/health"
+    printf 'rollout、镜像核对与公网检查通过\n' > "$artifacts/deployment-status.txt"
+}
+
+case "${1:-}" in
+    validate) validate ;;
+    preflight) preflight ;;
+    build) build ;;
+    deploy) deploy ;;
+    *) echo '用法: bash deploy/jenkins/release.sh validate|preflight|build|deploy' >&2; exit 2 ;;
+esac
+```
+
+只在集群内被调用、不需要公网域名时：删除 `templates/ingress.yaml`，并删除脚本里 Ingress、证书 Secret 和 `curl` 这三段检查。
+
+## 3. 准备 Helm Chart
+
+Chart 放在应用仓库，随本次镜像一起打包。一个进程对应一个 Deployment。要再加一个进程，在 `templates/` 里加一份工作负载，并在发布脚本里增加它的镜像 digest。
+
+`deploy/helm/sample-service/Chart.yaml`：
 
 ```yaml
 apiVersion: v2
 name: sample-service
-version: 0.1.0
+description: sample-service on Tencent TKE
 type: application
+version: 0.1.0
 ```
 
-可以用 `helm create deploy/helm/sample-service` 生成初始结构，再按自己的应用修改。生成的默认 Chart 不能直接作为本指南的 TKE 发布文件；必须调整 values 字段、模板、入口与探针。
-
-下面约定一组示例 `values.yaml` 字段。**字段只有被模板引用才会生效；这些字段不是 Helm 自动提供的应用配置。**
+`values.yaml`：
 
 ```yaml
-image: "" # 发布时填写完整 repository@sha256:...，模板必须拒绝空值
-replicaCount: 1
+environment: ""
+namespace: ""
+releaseId: ""
+image: ""
+imagePullSecret: ""
+replicas: 1
 containerPort: 8080
 healthPath: /health
-imagePullSecret: "" # 空表示使用已配置好的 TKE 免密拉取
-config:
-  existingSecret: sample-service-config
-  key: config.yaml
-  mountPath: /app/config.yaml
+runAsUser: 10001
+configSecret: ""
+configRevision: "1"
 resources:
   requests: {cpu: 100m, memory: 256Mi}
   limits: {cpu: "1", memory: 1Gi}
-service:
-  type: NodePort
-  port: 8080
 ingress:
-  enabled: true
   host: ""
-  clbId: lb-gpk8k2ps
-  tlsSecret: fsytsl-wsk87cm7
+  clbId: ""
+  tlsSecret: ""
+pdb:
+  minAvailable: 0
 ```
 
-两个环境文件只覆盖差异项，例如：
+`values.schema.json`：
 
-```yaml
-# values-test.yaml
-ingress:
-  host: sample-test.fushangyunfu.com
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["environment", "namespace", "releaseId", "image", "imagePullSecret", "replicas", "containerPort", "healthPath", "runAsUser", "configSecret", "configRevision", "resources", "ingress", "pdb"],
+  "properties": {
+    "environment": {"enum": ["test", "production"]},
+    "namespace": {"enum": ["test", "prod"]},
+    "releaseId": {"type": "string", "minLength": 1},
+    "image": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.:/-]*@sha256:[0-9a-f]{64}$"},
+    "imagePullSecret": {"type": "string", "pattern": "^$|^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$"},
+    "replicas": {"type": "integer", "minimum": 1},
+    "containerPort": {"type": "integer", "minimum": 1, "maximum": 65535},
+    "healthPath": {"type": "string", "minLength": 1},
+    "runAsUser": {"type": "integer", "minimum": 1},
+    "configSecret": {"type": "string", "minLength": 1},
+    "configRevision": {"type": "string", "minLength": 1},
+    "resources": {"type": "object"},
+    "ingress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["host", "clbId", "tlsSecret"],
+      "properties": {
+        "host": {"type": "string", "minLength": 1},
+        "clbId": {"type": "string", "minLength": 1},
+        "tlsSecret": {"type": "string", "minLength": 1}
+      }
+    },
+    "pdb": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["minAvailable"],
+      "properties": {"minAvailable": {"type": "integer", "minimum": 0}}
+    }
+  }
+}
 ```
 
-```yaml
-# values-production.yaml
-ingress:
-  host: sample.fushangyunfu.com
+`environments/test.json`：
+
+```json
+{
+  "environment": "test",
+  "namespace": "test",
+  "configSecret": "sample-service-config",
+  "ingress": {
+    "host": "sample-test.fushangyunfu.com",
+    "clbId": "lb-gpk8k2ps",
+    "tlsSecret": "fsytsl-wsk87cm7"
+  }
+}
 ```
 
-模板必须满足以下要求：
+`environments/production.json` 把 `environment` 改为 `production`，`namespace` 改为 `prod`，`host` 改为生产域名。两个域名不能相同。
 
-| 模板 | 必须实现的内容 |
-| --- | --- |
-| Deployment | 镜像引用 `{{ required "image 必须填写 digest 镜像地址" .Values.image }}`；绑定副本、端口、资源额度、探针和配置挂载 |
-| ServiceAccount | 使用本应用账号；启用 TCR 免密拉取时确认该账号已被授权 |
-| Service | selector 与 Pod 标签一致；`targetPort` 指向实际容器端口 |
-| Ingress | 根据 `ingress.enabled` 创建；域名、CLB 和证书引用 values，后端指向本应用 Service |
-| 所有资源 | 明确归属本应用和 release，使用 `.Release.Namespace`；首次发布后保持 Deployment selector 稳定 |
-
-需要接收请求的应用必须监听 `0.0.0.0`。例如程序监听 `8080`，容器端口、Service 目标端口和探针端口必须一致；探针路径必须是应用实际提供的接口。资源额度和启动等待时间按应用调整，滚动更新须预留额外 Pod 容量。
-
-日志输出 `stdout` / `stderr`，关闭文件日志。密码、令牌和完整运行配置存入外部 Secret，Chart 只引用名称；不得放入 values、镜像、Git 或发布归档。应用必须按挂载路径读取配置；无配置文件需求时删除相应 values 和挂载模板。需要持久保存的数据不得放在 Pod 临时目录。
-
-## 4. 准备配置与访问入口
-
-在 TKE 控制台选择目标命名空间，完成以下准备。`test` 和 `prod` 分别操作，不能跨命名空间引用 Secret。
-
-| 对象 | 操作 |
-| --- | --- |
-| 命名空间 | 由管理员预先创建 `test`、`prod`；应用 Chart 不创建共享命名空间 |
-| 运行配置 | 创建 `sample-service-config`，示例键为 `config.yaml`，值为该环境的完整配置 |
-| 证书 | 准备覆盖该环境域名的 `fsytsl-wsk87cm7`；沿用 TKE 证书引用方式时包含 `qcloud_cert_id` |
-| 镜像拉取 | 配置 TKE 免密拉取，或创建拉取 Secret 并在模板中绑定 `imagePullSecrets` |
-| 外部依赖 | 确认数据库、副本集成员、对象存储等地址从该环境 Pod 可达 |
-
-需要 HTTP/HTTPS 域名访问时，Ingress 使用 `qcloud`，并在首次创建时包含以下配置。模板中的 Service 名称和端口须指向自己的应用：
+`templates/app.yaml`：
 
 ```yaml
-# templates/ingress.yaml 中的对应字段，需合入完整 Ingress 模板
+apiVersion: v1
+kind: ServiceAccount
 metadata:
+  name: sample-service
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/name: sample-service
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sample-service
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/name: sample-service
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sample-service
+  template:
+    metadata:
+      annotations:
+        app/release: {{ .Values.releaseId | quote }}
+        app/config-revision: {{ .Values.configRevision | quote }}
+      labels:
+        app.kubernetes.io/name: sample-service
+    spec:
+{{- with .Values.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ . | quote }}
+{{- end }}
+      serviceAccountName: sample-service
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.runAsUser }}
+        runAsGroup: {{ .Values.runAsUser }}
+        fsGroup: {{ .Values.runAsUser }}
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: sample-service
+          image: {{ required "image 必须是 repository@sha256:digest" .Values.image | quote }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: {{ .Values.containerPort }}
+          env:
+            - name: TZ
+              value: Asia/Shanghai
+          volumeMounts:
+            - name: config
+              mountPath: /app/config.yaml
+              subPath: config.yaml
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          startupProbe:
+            httpGet: {path: {{ .Values.healthPath | quote }}, port: http}
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: {path: {{ .Values.healthPath | quote }}, port: http}
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: {path: {{ .Values.healthPath | quote }}, port: http}
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+      volumes:
+        - name: config
+          secret:
+            secretName: {{ .Values.configSecret | quote }}
+            items:
+              - key: config.yaml
+                path: config.yaml
+            defaultMode: 0444
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sample-service
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/name: sample-service
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: sample-service
+  ports:
+    - name: http
+      port: {{ .Values.containerPort }}
+      targetPort: http
+```
+
+`templates/ingress.yaml`：
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sample-service
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/name: sample-service
   annotations:
-    kubernetes.io/ingress.class: qcloud
     ingress.cloud.tencent.com/enable-group: "true"
     kubernetes.io/ingress.existLbId: {{ .Values.ingress.clbId | quote }}
+    kubernetes.io/ingress.class: qcloud
+    ingress.cloud.tencent.com/auto-rewrite: "true"
+    ingress.cloud.tencent.com/tke-service-config: sample-service
 spec:
   ingressClassName: qcloud
   tls:
     - hosts:
         - {{ .Values.ingress.host | quote }}
       secretName: {{ .Values.ingress.tlsSecret | quote }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: sample-service
+                port:
+                  number: {{ .Values.containerPort }}
+---
+apiVersion: cloud.tencent.com/v1alpha1
+kind: TkeServiceConfig
+metadata:
+  name: sample-service
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/name: sample-service
+spec:
+  loadBalancer:
+    l7Listeners:
+      - protocol: HTTPS
+        port: 443
+        domains:
+          - domain: {{ .Values.ingress.host | quote }}
+            rules:
+              - url: /
+                forwardType: HTTP
+                healthCheck:
+                  enable: true
+                  intervalTime: 10
+                  timeout: 5
+                  healthNum: 3
+                  unHealthNum: 3
+                  httpCheckPath: {{ .Values.healthPath | quote }}
+                  httpCheckMethod: GET
+                  httpCheckDomain: {{ .Values.ingress.host | quote }}
+                  httpCode: 2
 ```
 
-Ingress 的 `spec.rules[].host` 同样引用 `ingress.host`。将测试、生产域名分别解析到共享 CLB `lb-gpk8k2ps` 的公网地址，确认域名和路径未被其他应用使用，证书覆盖对应域名。Ingress 由 Helm 创建，不必提前手工创建，也不需要为每个应用购买新的 CLB。
+`templates/pdb.yaml`：
 
-共享模式必须在创建 Ingress 时启用；已有非共享 Ingress 不能仅追加注解切换。应用只管理自己的转发规则；需要自定义 CLB 健康检查时，在 Chart 中增加本应用的 TkeServiceConfig 并从 Ingress 引用。不得修改共享监听器的 `defaultServer`。
+```yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: sample-service
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/name: sample-service
+spec:
+  minAvailable: {{ .Values.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sample-service
+```
 
-只供集群内调用的服务使用 `ClusterIP`，关闭 Ingress；不接收请求的任务无需 Service 或 Ingress。数据库、共享证书、CLB 本身和集群 CRD 不随应用 release 安装或卸载。
+首次发布后不要改 Deployment 的 `selector`。程序必须监听 `0.0.0.0`，容器端口、Service 端口、探针端口使用同一个 `containerPort`。日志打到 stdout。密码和完整配置只放 Secret，不进 values、镜像和 Git。
 
-## 5. 配置 Jenkins 发布流程
+配置没有独立文件时，删掉 ConfigMap/Secret 挂载，并同时改 schema、环境 JSON 和 `preflight` 里的 Secret 检查。
 
-在现有 Jenkins 新建 Pipeline 任务，例如 `sample-service-k8s`，选择 `Pipeline script from SCM`，填写自己的仓库、Git 凭据和发布分支，Script Path 填 `Jenkinsfile.k8s`。将所有发布文件提交并推送到该分支后执行。
+## 4. 准备 Dockerfile
 
-项目流水线必须实现以下规则：
+仓库根目录放 `Dockerfile`。基础镜像使用 `fushangyun-vpc.tencentcloudcr.com/base` 里已经同步的镜像，并写死 digest。运行阶段示例：
 
-1. 在 `selfhost` 上执行，禁用同一任务并发构建；不得再配置其他任务并发操作相同 namespace/release。
-2. 提供 `DEPLOY_ENV` 参数，默认 `test`；仅允许 `test → test`、`production → prod`，同步选择对应 values 文件。
-3. 从 Jenkins `tcr` 凭据读取推送用户名和密码，从 `tke-kubeconfig` 文件凭据读取 kubeconfig。显式选择文件中的 context，禁止回退到 Agent 默认配置。
-4. 检查工具、运行配置、证书、镜像拉取条件及现有 Ingress 的 CLB 归属；按应用要求执行质量检查。
-5. 构建并推送镜像，建议标签采用 `<提交短 SHA>-<环境>-<构建编号>`。从 Buildx `--metadata-file` 结果读取 `containerimage.digest`，生成本次发布的完整镜像地址。
-6. 生成 `release-artifacts/values-release.yaml`，至少包含 `image: 仓库地址@sha256:实际digest`；需要时填写 `imagePullSecret`。禁止用 `latest` 代替发布 digest。前端若将 API 地址写入构建产物，必须按目标环境重新构建。
-7. 执行下述校验、打包和 Helm 发布步骤，然后验证实际镜像和应用入口，全部通过才标记发布成功。
-8. 归档提交号、环境、镜像 digest、Chart 包、环境 values、本次发布 values、渲染清单、Helm revision 和验证结果。归档不得包含真实配置或 kubeconfig。
+```dockerfile
+# syntax=fushangyun-vpc.tencentcloudcr.com/base/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
+FROM fushangyun-vpc.tencentcloudcr.com/base/debian:bookworm-slim@sha256:7b140f374b289a7c2befc338f42ebe6441b7ea838a042bbd5acbfca6ec875818
+WORKDIR /app
+COPY app /app/app
+USER 10001
+EXPOSE 8080
+ENTRYPOINT ["/app/app"]
+```
 
-**这些步骤需要在自己项目的 Jenkinsfile 或发布脚本中实现。只创建同名文件不能完成发布；不得原样调用 ERP 专用脚本去部署其他应用。**
+`USER` 与 Chart 的 `runAsUser` 保持一致。进程提供 `GET /health`，返回 2xx。
 
-以下是发布脚本中的 Helm 部分。在 Bash 中执行，前提是镜像已推送、发布 values 已生成，且 Jenkins 已绑定 `KUBECONFIG`。`KUBE_CONTEXT` 可留空以使用上传文件的 current-context：
+## 5. 发布前在腾讯云准备
+
+1. 在 TCR 实例的 `fushangyun` 命名空间新建镜像仓库，名称与 `IMAGE_REPOSITORY` 最后一段相同。确认凭据 `tcr` 可以推送这个仓库，并可以拉取 `base`。
+2. 在 TKE 的 `test`、`prod` 各建一份应用 Secret，名称与环境 JSON 的 `configSecret` 相同，数据键为 `config.yaml`。两份内容按环境分别填写。
+3. 确认两个命名空间里都有证书 Secret `fsytsl-wsk87cm7`，并且证书覆盖本环境域名。Secret 不能跨命名空间引用。
+4. 把测试域名和生产域名解析到 CLB `lb-gpk8k2ps` 的公网地址。域名和路径不能与已有应用冲突。
+5. 从 Pod 里确认数据库、对象存储地址可访问。
+
+改 Secret 内容后，把 `values.yaml` 的 `configRevision` 加 1 再发布。只改 Secret 不会更新已经挂进 Pod 的文件。
+
+集群里如果已经有同名资源，而且不是这个 Helm release 创建的，先停下来。核对名称、selector、端口和当前镜像 digest 后，用同一套 Chart 做一次接管：
 
 ```bash
-set -euo pipefail
-: "${DEPLOY_ENV:?必须选择 test 或 production}"
-: "${KUBECONFIG:?必须绑定 Jenkins kubeconfig 文件凭据}"
-test -f "$KUBECONFIG"
-case "$DEPLOY_ENV" in
-  test) namespace=test ;;
-  production) namespace=prod ;;
-  *) echo '不支持的环境' >&2; exit 1 ;;
-esac
-context="${KUBE_CONTEXT:-}"
-if [ -z "$context" ]; then
-  context="$(kubectl --kubeconfig "$KUBECONFIG" config current-context)"
-fi
-test -n "$context"
-
-release=sample-service
-chart=deploy/helm/sample-service
-mkdir -p release-artifacts
-cp "$chart/values-$DEPLOY_ENV.yaml" release-artifacts/values-environment.yaml
-test -s release-artifacts/values-release.yaml
-values=(-f release-artifacts/values-environment.yaml -f release-artifacts/values-release.yaml)
-kube=(kubectl --kubeconfig "$KUBECONFIG" --context "$context" -n "$namespace")
-helm_target=(helm --kubeconfig "$KUBECONFIG" --kube-context "$context" -n "$namespace")
-
-helm lint "$chart" --strict -n "$namespace" "${values[@]}"
-package_dir="$(mktemp -d)"
-trap 'rm -rf "$package_dir"' EXIT
-helm package "$chart" --destination "$package_dir"
-mv "$package_dir"/*.tgz release-artifacts/chart.tgz
-helm template "$release" release-artifacts/chart.tgz -n "$namespace" "${values[@]}" \
-  > release-artifacts/manifests.yaml
-
-# 两次 dry-run 均通过后，才执行正式升级。
-"${kube[@]}" apply --dry-run=server -f release-artifacts/manifests.yaml >/dev/null
-"${helm_target[@]}" upgrade --install "$release" release-artifacts/chart.tgz \
-  "${values[@]}" --reset-values --dry-run=server --hide-secret >/dev/null
-"${helm_target[@]}" upgrade --install "$release" release-artifacts/chart.tgz \
-  "${values[@]}" --reset-values --wait --rollback-on-failure --timeout 15m --history-max 20
-"${helm_target[@]}" history "$release" -o json > release-artifacts/helm-history.json
+helm upgrade --install sample-service deploy/helm/sample-service \
+  --namespace test \
+  -f deploy/helm/sample-service/environments/test.json \
+  --set-string image=<当前正在运行的 repository@sha256:digest> \
+  --set-string releaseId=adopt-1 \
+  --take-ownership --server-side=false --wait --timeout 15m --history-max 20
 ```
 
-`kubectl apply --dry-run=server` 只校验、不写入资源；正式发布统一由 Helm 执行，不再对同一应用执行普通 `kubectl apply`。Helm 升级与回退参数见[官方命令说明](https://helm.sh/docs/helm/helm_upgrade/)。
+生产把命名空间和 values 换成 `prod`、`production.json`。这次不要加 `--rollback-on-failure`。接管完成后再用 Jenkins 发布。
 
-发布凭据需要目标命名空间中应用资源的发布权限、观察工作负载状态的权限，以及 Helm release 历史 Secret 的读写权限。原先只有 `kubectl apply` 权限的凭据不一定满足 Helm 要求。共享命名空间、CRD 和基础设施由管理员管理。
+## 6. 创建 Jenkins 任务并发布
 
-## 6. 发布后验证与回退
+1. 新建 Pipeline 任务，例如 `sample-service-k8s`。一个环境不要再并行另一个任务。
+2. 选择 `Pipeline script from SCM`，填应用仓库、Git 凭据和发布分支。Script Path 填 `Jenkinsfile.k8s`。
+3. 把第 2 到第 4 步的文件推上该分支。
+4. `Build with Parameters`。第一次选 `DEPLOY_ENV=test`，`DEPLOY_TO_TKE=true`。
+5. 测试通过后，再显式选择 `production`。
 
-以下命令接续上一节的同一 Bash 会话。示例约定 Deployment 和容器均名为 `sample-service`，不同命名必须同步调整：
+流水线用本次构建的 `repository@sha256:digest` 发布，不使用 `latest`。升级失败时 Helm 会回退到上一成功版本。第一次安装没有上一版本，失败可能清掉刚创建的资源。
+
+## 7. 验收和回退
+
+发布成功时，构建归档里要有 `deployment-status.txt`。同时满足：
+
+- Helm release `sample-service` 状态为 deployed。
+- Deployment 镜像等于本次 `values-release.json` 里的 digest。
+- `https://<本环境域名>/health` 返回成功。
+
+回退时，选一次带 `deployment-status.txt` 的成功构建，打开它的 `helm-history.json` 确定 revision，然后：
 
 ```bash
-"${helm_target[@]}" status "$release"
-"${kube[@]}" rollout status deployment/sample-service --timeout=900s
-"${kube[@]}" get deployment sample-service \
-  -o jsonpath='{.spec.template.spec.containers[?(@.name=="sample-service")].image}'
-"${kube[@]}" logs deployment/sample-service -c sample-service --tail=100
+helm --kubeconfig "$KUBECONFIG" --kube-context "$KUBE_CONTEXT" -n test rollback sample-service <revision> --wait --timeout 15m
+kubectl --kubeconfig "$KUBECONFIG" --context "$KUBE_CONTEXT" -n test rollout status deployment/sample-service --timeout=900s
 ```
 
-发布验证必须确认工作负载就绪且无持续重启、实际镜像与本次 digest 一致、依赖可访问，并从真实入口验证功能。使用域名时，还须检查 HTTPS 和 CLB 后端健康。无终端权限的同事在腾讯云控制台查看，涉及发布和回退的操作交由有权限人员执行。
+生产把命名空间换成 `prod`。回退之后再访问一次 `/health`。回退不会恢复 Secret，也不会撤销数据库变更。
 
-更新代码或 Chart 后，重新执行同一 Jenkins 任务。更新外部 Secret/ConfigMap 后，按程序加载方式生效；环境变量或 `subPath` 文件挂载通常需要重建 Pod：
-
-```bash
-"${kube[@]}" rollout restart deployment/sample-service
-"${kube[@]}" rollout status deployment/sample-service --timeout=900s
-```
-
-回退时，从 Jenkins 中选择已通过发布验证的构建，再根据其归档的 `helm-history.json` 确定目标 revision；不得只看 Helm 的 deployed 状态判断业务已经正常。确认旧版本兼容当前配置和数据后，执行：
-
-```bash
-"${helm_target[@]}" history "$release"
-# 将 3 替换为已经核对的目标 revision。
-"${helm_target[@]}" rollback "$release" 3 --wait --timeout 15m
-"${kube[@]}" rollout status deployment/sample-service --timeout=900s
-```
-
-回退后再次核对镜像、入口和业务功能。不要下载旧 `manifests.yaml` 后直接 apply；它用于审查，Helm 管理的资源应通过 Helm 回退。
-
-`--rollback-on-failure` 针对 Helm 安装/升级阶段的失败。后续公网探测或业务验证失败不会自动触发该回退；首次安装也不存在上一版本，失败处理可能卸载新建资源。任何回退都不会恢复外部 Secret 或撤销数据库变化。
-
-示例保留 20 个 Helm revision，镜像和 Jenkins 归档也须覆盖约定的回退窗口。revision 已清理时，用受控归档中的 Chart 包、环境 values 和发布 values 执行重新升级，先完成环境核对和 dry-run。
-
-## 7. 已有应用迁移与排错
-
-已有应用由 kubectl/Kustomize 管理时，首次切换必须先备份当前资源，确认归属，保持资源名称、Deployment selector、Service 端口和入口一致，使用当前成功版本的镜像建立 Helm 基线，再开放普通 Jenkins 升级。
-
-日常流水线不得附加 `--take-ownership`。一次性接管仅限已经确认属于本应用的资源，不能覆盖其他 release。首次接管不要使用失败卸载选项，也不得通过 `helm uninstall` 清理失败记录后重试。ERP 的具体命令见[首次接管规范](../deploy/helm/migration.md)；其他项目必须按自己的资源清单适配，不能直接复制 ERP 资源名。
-
-| 错误 | 检查项 |
-| --- | --- |
-| `helm: command not found` | 是否装在实际执行任务的 Agent 上，以及 Agent 的 PATH |
-| 不识别 `--rollback-on-failure` | Helm 是否为约定的 4.x 版本 |
-| 资源已存在、ownership 校验失败 | 是否属于其他 release，或尚未完成旧资源接管 |
-| Helm 无权读取或创建 Secret | kubeconfig 是否具备目标命名空间的 release 存储权限 |
-| Secret 不存在 | 所选环境、命名空间、Secret 名称与数据键 |
-| 推送失败 / 拉取失败 | 分别检查 Jenkins 推送凭据、TKE 拉取权限与镜像地址 |
-| Pod Pending / 资源不足 | 节点剩余容量、requests、滚动更新额外副本 |
-| 容器反复重启 | 上次退出日志、配置、外部依赖、内存与探针路径 |
-| 域名 504 | CLB 后端健康、NodePort、节点安全组和 Service 端点 |
-| Helm 超时 | 工作负载事件、探针、拉取状态及实际回退结果 |
-| 集群访问超时 | kubeconfig、context、API Server 地址和网络可达性 |
-
-容器重启时，在控制台查到实际 Pod 名，再执行以下命令；不要把带敏感内容的日志复制到公共位置：
-
-```bash
-"${kube[@]}" describe pod POD_NAME
-"${kube[@]}" logs POD_NAME -c sample-service --previous --tail=100
-```
-
-TKE 配套说明：[共享 CLB](https://cloud.tencent.com.cn/document/product/457/127545)、[镜像免密拉取](https://cloud.tencent.com/document/product/457/49225)、[网络排障](https://cloud.tencent.com/document/product/457/80913)。
+之后只改业务代码时，重新跑这个 Jenkins 任务。改端口、探针、环境变量或增加进程时，和代码放在同一次提交里改 Chart，再跑同一个任务。

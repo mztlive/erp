@@ -151,6 +151,46 @@ deploy() {
         -f "$artifacts/values-release.json" --reset-values \
         --wait --rollback-on-failure --timeout 15m --history-max 20
     "${helm_target[@]}" history erp -o json > "$artifacts/helm-history.json"
+    confirm_running
+    printf 'rollout、镜像核对与公网 HTTP 检查通过\n' > "$artifacts/deployment-status.txt"
+}
+
+# 回退到已成功发布过、且已被更新替换的 Helm revision。不构建镜像，不恢复配置 Secret 或数据库。
+rollback() {
+    local revision="${ROLLBACK_REVISION:-}" release_history
+    if [[ ! "$revision" =~ ^[1-9][0-9]*$ ]]; then
+        echo 'ROLLBACK_REVISION 必须是正整数，取成功构建的 helm-history.json。' >&2
+        return 1
+    fi
+    rm -f "$artifacts/deployment-status.txt"
+    preflight
+    release_history="$("${helm_target[@]}" history erp -o json)"
+    if ! jq -e --argjson revision "$revision" '
+        (map(select(.status == "deployed")) | length) == 1
+        and (map(select(.status == "deployed"))[0].revision != $revision)
+        and (map(select(.revision == $revision and .status == "superseded")) | length) == 1
+    ' <<<"$release_history" >/dev/null; then
+        echo "revision ${revision} 不能回退：它必须在 helm history 中，状态为 superseded，且不是当前 deployed。" >&2
+        return 1
+    fi
+    mkdir -p "$artifacts"
+    "${helm_target[@]}" get values erp --revision "$revision" -o json > "$artifacts/values-release.json"
+    if ! jq -e '
+        (.api.image | test("^[a-z0-9][a-z0-9.:/-]*@sha256:[0-9a-f]{64}$"))
+        and (.client.image | test("^[a-z0-9][a-z0-9.:/-]*@sha256:[0-9a-f]{64}$"))
+    ' "$artifacts/values-release.json" >/dev/null; then
+        echo '目标 revision 的镜像 digest 无效，已停止回退。' >&2
+        return 1
+    fi
+    "${helm_target[@]}" rollback erp "$revision" \
+        --description "rollback to ${revision} build ${BUILD_NUMBER:-manual}" \
+        --history-max 20 --wait --timeout 15m
+    "${helm_target[@]}" history erp -o json > "$artifacts/helm-history.json"
+    confirm_running
+    printf '回退完成：rollout、镜像核对与公网 HTTP 检查通过\n' > "$artifacts/deployment-status.txt"
+}
+
+confirm_running() {
     "${kube[@]}" rollout status deployment/erp-api --timeout=900s
     "${kube[@]}" rollout status deployment/erp-client --timeout=900s
     "${kube[@]}" get deployments erp-api erp-client -o json > "$artifacts/deployments.json"
@@ -163,7 +203,6 @@ deploy() {
         --connect-timeout 10 --max-time 20 --output /dev/null "$api_url/health"
     curl --fail --silent --show-error --retry 12 --retry-all-errors --retry-delay 10 \
         --connect-timeout 10 --max-time 20 --output /dev/null "$web_url/"
-    printf 'rollout、镜像核对与公网 HTTP 检查通过\n' > "$artifacts/deployment-status.txt"
 }
 
 case "${1:-}" in
@@ -171,5 +210,6 @@ case "${1:-}" in
     preflight) preflight ;;
     build) build ;;
     deploy) deploy ;;
-    *) echo '用法: bash deploy/jenkins/release.sh validate|preflight|build|deploy' >&2; exit 2 ;;
+    rollback) rollback ;;
+    *) echo '用法: bash deploy/jenkins/release.sh validate|preflight|build|deploy|rollback' >&2; exit 2 ;;
 esac
