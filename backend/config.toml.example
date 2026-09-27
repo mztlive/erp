@@ -23,3 +23,9 @@ key_prefix = "erp/uploads"
 public_base_url = "https://cdn.example.com"
 # MinIO 等需要 path-style URL 的服务设为 true。
 force_path_style = false
+
+# 可选。仅当数据库里还没有账号 admin 时，进程启动会用这个密码创建超级管理员并绑定 role-root。
+# 账号已存在时忽略，不会修改密码、状态或角色。首次登录成功后应删除本段并重启。
+# 密码为 6 到 32 个字符，不能使用示例占位值。
+# [bootstrap]
+# initial_admin_password = "replace-with-6-to-32-characters"

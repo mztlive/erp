@@ -533,7 +533,7 @@ impl AdminService {
     ///
     /// # 错误
     /// 当参数校验或持久化失败时返回错误。
-    async fn create_super_admin(
+    pub(super) async fn create_super_admin(
         &self,
         account: LoginAccount,
         password: String,

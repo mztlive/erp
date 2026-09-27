@@ -72,7 +72,7 @@ Build ERP HTTP and CLI entrypoints from domain crates, named processes, and read
    `OTEL_SDK_DISABLED=false` to send the existing `tracing` spans to an OpenTelemetry Collector.
    The required environment variables, sampling rules, and method instrumentation contract are in
    [`docs/opentelemetry.md`](docs/opentelemetry.md).
-3. Initialize or rotate the super admin (password from `--password`, `ERP_ADMIN_PASSWORD`, or a prompt):
+3. 首次启动也可在 `config.toml` 的 `[bootstrap]` 里填写 `initial_admin_password`。库中还没有 `admin` 时，Web API 会用它创建超级管理员；已有账号则忽略，不改密码。之后仍可用 CLI 初始化或轮换超级管理员（密码来自 `--password`、`ERP_ADMIN_PASSWORD` 或交互输入）：
    ```bash
    cargo run -p cli -- init-admin --account admin --name "System Admin"
    cargo run -p cli -- reset-password --account admin

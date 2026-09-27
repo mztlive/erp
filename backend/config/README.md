@@ -32,6 +32,12 @@ public_base_url = "https://assets.example.com"
 `app.secret` 少于 32 字节或仍为公开示例占位值时，加载会立即失败。不要把真实密钥提交到
 仓库；本地 `config.toml` 已被忽略。
 
+可选的 `[bootstrap].initial_admin_password` 只在数据库里还没有账号 `admin` 时，由 Web API
+启动流程创建超级管理员并绑定 `role-root`。账号已存在时忽略该字段，不修改密码、状态或角色。
+未配置或空字符串表示不创建。密码必须是 6 到 32 个字符，且不能使用模板里的示例占位值。
+调试输出会把该字段打成 `<redacted>`。首次登录成功后应从配置中删除这段并重启。Nacos 热更新
+不会补建或改写已有超级管理员，改动要等进程重启后才参与判断。
+
 `[s3]` 是 Web API 必需的启动配置。完整字段如下：
 
 ```toml

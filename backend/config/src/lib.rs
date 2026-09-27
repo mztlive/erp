@@ -42,6 +42,7 @@
 //! * `AppConfig`: 应用程序特定设置
 //! * `DatabaseConfig`: 数据库连接设置
 //! * `S3Config`: 必需的 S3 对象存储启动参数
+//! * `BootstrapConfig`: 可选的首次超级管理员密码；已有账号时不会使用
 
 use std::fmt;
 use std::path::Path;
@@ -65,6 +66,9 @@ use nacos::NacosConfigClient;
 const MIN_JWT_SECRET_BYTES: usize = 32;
 const JWT_SECRET_PLACEHOLDERS: [&str; 2] =
     ["your-secret-key-change-me", "replace-with-at-least-32-random-bytes"];
+const BOOTSTRAP_PASSWORD_MIN_CHARS: usize = 6;
+const BOOTSTRAP_PASSWORD_MAX_CHARS: usize = 32;
+const BOOTSTRAP_PASSWORD_PLACEHOLDER: &str = "replace-with-6-to-32-characters";
 
 /// 包含所有应用程序设置的主配置结构。
 ///
@@ -78,6 +82,20 @@ pub struct Config {
     pub database: DatabaseConfig,
     /// S3 对象存储参数，供存储运行时在启动期构建客户端。
     pub s3: S3Config,
+    /// 可选的首次超级管理员密码。缺省时不在启动时创建账号。
+    #[serde(default)]
+    pub bootstrap: BootstrapConfig,
+}
+
+/// 首次启动时创建超级管理员的可选配置。
+///
+/// 只在数据库里还没有 `admin` 账号时使用。已有账号时进程忽略该密码，
+/// 不修改密码、状态或角色。
+#[derive(Deserialize, Clone, Default)]
+pub struct BootstrapConfig {
+    /// 超级管理员明文初始密码。空字符串视为未配置。
+    #[serde(default)]
+    initial_admin_password: Option<String>,
 }
 
 /// 应用程序特定的配置设置。
@@ -220,6 +238,26 @@ impl S3Config {
     }
 }
 
+impl BootstrapConfig {
+    /// 返回可用于首次创建超级管理员的明文密码。
+    ///
+    /// # 返回
+    /// 配置了非空密码时返回其借用，未配置或空字符串时返回 `None`。
+    pub fn initial_admin_password(&self) -> Option<&str> {
+        self.initial_admin_password.as_deref().filter(|password| !password.is_empty())
+    }
+}
+
+impl fmt::Debug for BootstrapConfig {
+    /// 输出不包含初始密码正文的调试信息。
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("BootstrapConfig")
+            .field("initial_admin_password", &self.initial_admin_password.as_ref().map(|_| "<redacted>"))
+            .finish()
+    }
+}
+
 impl fmt::Debug for S3Config {
     /// 输出不包含密钥正文的调试信息。
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -281,8 +319,28 @@ impl Config {
             ));
         }
         validate_s3_config(&self.s3)?;
+        validate_bootstrap_password(self.bootstrap.initial_admin_password())?;
         Ok(())
     }
+}
+
+/// 校验可选的超级管理员初始密码。
+///
+/// 未配置时通过。已配置时长度必须与管理员密码规则一致，且不能使用示例占位值。
+fn validate_bootstrap_password(password: Option<&str>) -> Result<()> {
+    let Some(password) = password else {
+        return Ok(());
+    };
+    let length = password.chars().count();
+    if !(BOOTSTRAP_PASSWORD_MIN_CHARS..=BOOTSTRAP_PASSWORD_MAX_CHARS).contains(&length)
+        || password == BOOTSTRAP_PASSWORD_PLACEHOLDER
+    {
+        return Err(Error::Invalid(
+            "bootstrap.initial_admin_password must be 6 to 32 characters and must not use the example placeholder"
+                .to_string(),
+        ));
+    }
+    Ok(())
 }
 
 /// 校验 S3 签名参数、endpoint 与对象键前缀。
@@ -586,5 +644,44 @@ force_path_style = true
         assert!(!debug.contains("visible-access-key"));
         assert!(!debug.contains("visible-secret-key"));
         assert!(!debug.contains("visible-session-token"));
+    }
+
+    #[test]
+    fn missing_bootstrap_section_leaves_initial_admin_unset() {
+        let config = Config::from_toml_str(MINIMAL_CONFIG).unwrap();
+
+        assert_eq!(config.bootstrap.initial_admin_password(), None);
+    }
+
+    #[test]
+    fn blank_initial_admin_password_is_unset() {
+        let content = format!("{MINIMAL_CONFIG}\n[bootstrap]\ninitial_admin_password = \"\"\n");
+
+        let config = Config::from_toml_str(&content).unwrap();
+
+        assert_eq!(config.bootstrap.initial_admin_password(), None);
+    }
+
+    #[test]
+    fn initial_admin_password_is_kept_and_redacted_from_debug() {
+        let content = format!(
+            "{MINIMAL_CONFIG}\n[bootstrap]\ninitial_admin_password = \"visible-bootstrap-password\"\n"
+        );
+
+        let config = Config::from_toml_str(&content).unwrap();
+        let debug = format!("{config:?}");
+
+        assert_eq!(config.bootstrap.initial_admin_password(), Some("visible-bootstrap-password"));
+        assert!(!debug.contains("visible-bootstrap-password"));
+        assert!(debug.contains("<redacted>"));
+    }
+
+    #[test]
+    fn invalid_initial_admin_password_is_rejected() {
+        for password in ["short", "replace-with-6-to-32-characters", "123456789012345678901234567890123"] {
+            let content = format!("{MINIMAL_CONFIG}\n[bootstrap]\ninitial_admin_password = \"{password}\"\n");
+
+            assert!(Config::from_toml_str(&content).is_err(), "{password} must be rejected");
+        }
     }
 }

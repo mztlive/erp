@@ -190,6 +190,7 @@ git diff --check
 ```bash
 cp config.toml.example config.toml   # 填 app、database、s3
 cargo run -p web-api -- --config-path ./config.toml          # RUST_LOG=info|debug，LOG_FORMAT=json
+# 可选：[bootstrap].initial_admin_password 仅在库中还没有 admin 时创建超级管理员，已有账号不改密码
 cargo run -p cli -- init-admin --account admin --name "System Admin"
 cargo run -p cli -- reset-password --account admin             # 密码：--password > ERP_ADMIN_PASSWORD > 交互输入
 ```

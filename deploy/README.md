@@ -27,7 +27,7 @@ Chart 不管理 Namespace、MongoDB、S3、应用配置 Secret、证书 Secret�
 集群管理员必须在首次发布前完成：
 
 1. 创建对应命名空间；生产用 `prod`，测试用 `test`。
-2. 在该命名空间创建 `erp-api-config`，键为 `config.toml`。参考 [后端配置模板](examples/web-api-config.example.toml)；端口必须为 `10001`，JWT 密钥必须替换为至少 32 个随机字节。
+2. 在该命名空间创建 `erp-api-config`，键为 `config.toml`。参考 [后端配置模板](examples/web-api-config.example.toml)；端口必须为 `10001`，JWT 密钥必须替换为至少 32 个随机字节。若该库还没有超级管理员，在同一文件的 `[bootstrap]` 中填写 `initial_admin_password`（6 到 32 个字符）。API 只在启动时、且账号 `admin` 不存在时用它创建超级管理员；账号已存在则忽略，不改密码。登录确认后从 Secret 删除该字段并重启。
 3. 生产与测试使用不同数据库及凭据、JWT 密钥、S3 bucket 或受权限隔离的前缀。不得向测试 Secret 复制整份生产配置。命名空间隔离不会自动隔离外部数据库和对象存储。
 4. MongoDB 必须是副本集，成员地址必须从目标 Pod 可达。流水线不创建数据库、不清库、不执行种子或数据库迁移。
 5. 在各自命名空间准备证书 Secret，包含 `qcloud_cert_id`，并确认覆盖该环境的两个域名。Secret 不跨命名空间引用；相同名称不代表测试环境已经有证书。

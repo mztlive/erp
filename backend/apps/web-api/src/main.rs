@@ -8,6 +8,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use config::{Config, S3Config, SafeConfig};
+use erp_identity::{AdminService, InitializeSuperAdminParams};
 use erp_processes::background::{
     BackgroundRunner, ProductImportTaskAdapter, SalesSelectionTaskAdapter, SupplierImportTaskAdapter,
 };
@@ -18,6 +19,9 @@ use web_api::core::routes;
 use web_api::core::tracing::{TracingConfig, init_tracing};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
+
+const INITIAL_ADMIN_ACCOUNT: &str = "admin";
+const INITIAL_ADMIN_NAME: &str = "系统管理员";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct DbConfigKey {
@@ -117,6 +121,7 @@ async fn start(cfg: SafeConfig) -> Result<()> {
     ensure_registered_approval_policies()?;
     erp_identity::ensure_root_role(&state.rbac()).await?;
     erp_identity::ensure_predefined_roles(&state.rbac()).await?;
+    bootstrap_initial_admin(&state, config.bootstrap.initial_admin_password()).await?;
 
     spawn_config_watcher(
         state.clone(),
@@ -130,6 +135,33 @@ async fn start(cfg: SafeConfig) -> Result<()> {
     let result = run_app(app_port, state).await;
     outbox_worker.stop().await;
     result
+}
+
+/// 配置了初始密码且库中还没有超级管理员时，创建 `admin` 并绑定 root 角色。
+///
+/// 未配置密码，或账号已经存在时，不修改已有账号。
+///
+/// # 参数
+/// * `state` - 已连接数据库并完成角色初始化的应用状态
+/// * `password` - 配置中的初始密码；缺失表示不创建
+///
+/// # 返回
+/// 创建完成或无需创建时返回 `Ok(())`。
+///
+/// # 错误
+/// 密码不合法、同名账号不是系统管理员，或数据库写入失败时返回错误。
+async fn bootstrap_initial_admin(state: &AppState, password: Option<&str>) -> Result<()> {
+    let Some(password) = password else {
+        return Ok(());
+    };
+    AdminService::new(state.db(), state.rbac())
+        .bootstrap_super_admin_if_absent(InitializeSuperAdminParams::new(
+            INITIAL_ADMIN_ACCOUNT,
+            password,
+            INITIAL_ADMIN_NAME,
+        ))
+        .await?;
+    Ok(())
 }
 
 /// 启动统一后台任务执行器。进程退出时未完成任务可被下次启动恢复。

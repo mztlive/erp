@@ -17,7 +17,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - 工具链：本地 dev 用 nightly + Cranelift（`backend/.cargo/config.toml`、`rust-toolchain.toml`），crates 走 rsproxy 镜像。Docker/CI 用 `rust:1.97` + LLVM。
 - 配置：`cp config.toml.example config.toml`（已 gitignore）。MongoDB 必须是副本集（需要事务），standalone 会在启动时被拒绝。
-- 运行：`RUST_LOG=info cargo run -p web-api -- --config-path ./config.toml`（开发端口 10001）。CLI：`cargo run -p cli -- init-admin --account admin --name "System Admin"` 或 `reset-password --account admin`。
+- 运行：`RUST_LOG=info cargo run -p web-api -- --config-path ./config.toml`（开发端口 10001）。若 `config.toml` 写了 `[bootstrap].initial_admin_password`，且库中还没有 `admin`，启动时会创建超级管理员；账号已存在则忽略，不改密码。CLI：`cargo run -p cli -- init-admin --account admin --name "System Admin"` 或 `reset-password --account admin`。
 - 质量门禁：
   ```bash
   cargo fmt --all -- --check
