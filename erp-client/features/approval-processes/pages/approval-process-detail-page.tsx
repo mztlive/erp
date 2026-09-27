@@ -41,6 +41,7 @@ import {
     useDefinitionVersionsQuery,
 } from "../queries"
 import type { DefinitionCatalogItem } from "../types"
+import { lockVersionText } from "../write-payload"
 import {
     buildDetailSearchParams,
     hasUnknownDetailParams,
@@ -88,7 +89,8 @@ export function ApprovalProcessDetailPage({
     const historyTarget =
         urlState.view === "history" && urlState.version
             ? versionsQuery.data?.find(
-                  (item) => item.definition_version === urlState.version,
+                  (item) =>
+                      String(item.definition_version) === urlState.version,
               )
             : undefined
     const targetId =
@@ -107,7 +109,9 @@ export function ApprovalProcessDetailPage({
 
     React.useEffect(() => {
         if (detailQuery.data) {
-            setLockVersion(detailQuery.data.definition_lock_version)
+            setLockVersion(
+                lockVersionText(detailQuery.data.definition_lock_version),
+            )
         }
     }, [detailQuery.data])
 
@@ -436,7 +440,10 @@ export function ApprovalProcessDetailPage({
                             versions={versionsQuery.data ?? []}
                             selectedVersion={urlState.version}
                             onSelect={(item) =>
-                                replaceView("history", item.definition_version)
+                                replaceView(
+                                    "history",
+                                    String(item.definition_version),
+                                )
                             }
                         />
                     </div>
@@ -470,7 +477,9 @@ export function ApprovalProcessDetailPage({
                             detail={detailQuery.data}
                             lockVersion={
                                 lockVersion ||
-                                detailQuery.data.definition_lock_version
+                                lockVersionText(
+                                    detailQuery.data.definition_lock_version,
+                                )
                             }
                             onLockVersionChange={(next) => {
                                 setLockVersion(next)
@@ -499,7 +508,10 @@ export function ApprovalProcessDetailPage({
                     id="governance-approval-processes-detail-publish-dialog"
                     detail={detailQuery.data}
                     lockVersion={
-                        lockVersion || detailQuery.data.definition_lock_version
+                        lockVersion ||
+                        lockVersionText(
+                            detailQuery.data.definition_lock_version,
+                        )
                     }
                     open={publishOpen}
                     onOpenChange={setPublishOpen}
@@ -535,7 +547,9 @@ function RetireTarget({
     return (
         <RetireDialog
             detail={publishedQuery.data}
-            lockVersion={publishedQuery.data.definition_lock_version}
+            lockVersion={lockVersionText(
+                publishedQuery.data.definition_lock_version,
+            )}
             open={open}
             onOpenChange={onOpenChange}
             onConflict={() => void publishedQuery.refetch()}

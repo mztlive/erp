@@ -113,8 +113,10 @@ export type DefinitionCatalogItem = {
     document_type: DocumentType
     document_type_label: string
     approval_requirement: ApprovalRequirement
-    published_version: string | null
-    draft_version: string | null
+    /** 当前已发布业务版本。响应为整数，没有发布版本时为 null。 */
+    published_version: number | null
+    /** 活动草稿业务版本。响应为整数，没有草稿时为 null。 */
+    draft_version: number | null
     configuration_status: ConfigurationStatus
     allowed_actions: DefinitionAllowedAction[]
 }
@@ -122,10 +124,12 @@ export type DefinitionCatalogItem = {
 /** 历史版本摘要。 */
 export type DefinitionVersionItem = {
     definition_id: string
-    definition_version: string
+    /** 业务版本，响应为整数。 */
+    definition_version: number
     status: DefinitionStatus
     name: string
-    definition_lock_version: string
+    /** 定义锁版本，响应为整数；写请求要转成十进制字符串。 */
+    definition_lock_version: number
 }
 
 /** 定义节点详情。 */
@@ -146,10 +150,12 @@ export type DefinitionDetailView = {
     document_type: DocumentType
     document_type_label: string
     name: string
-    definition_version: string
+    /** 业务版本，响应为整数。 */
+    definition_version: number
     status: DefinitionStatus
     entry_node_key: string
-    definition_lock_version: string
+    /** 定义锁版本，响应为整数；写请求要转成十进制字符串。 */
+    definition_lock_version: number
     nodes: DefinitionNodeView[]
     created_by: string
     published_by: string | null

@@ -111,7 +111,7 @@ export const matchesCatalogFilters = (
         document_type_label: string
         approval_requirement: CatalogUrlState["policy"] | string
         configuration_status: string
-        draft_version: string | null
+        draft_version: number | null
     },
     state: CatalogUrlState,
 ): boolean => {

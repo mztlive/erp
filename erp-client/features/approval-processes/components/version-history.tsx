@@ -60,7 +60,8 @@ export function VersionHistory({
             </TableHeader>
             <TableBody>
                 {versions.map((item) => {
-                    const selected = item.definition_version === selectedVersion
+                    const selected =
+                        String(item.definition_version) === selectedVersion
                     const versionSegment = toAutomationIdSegment(
                         item.definition_version,
                     )

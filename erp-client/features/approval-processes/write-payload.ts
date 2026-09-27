@@ -45,6 +45,13 @@ export const buildNodeWrites = (
     })
 
 /**
+ * 把响应中的整数锁版本写成写请求要求的十进制字符串。
+ *
+ * @param version 定义详情或版本列表上的锁版本
+ */
+export const lockVersionText = (version: number): string => String(version)
+
+/**
  * 构造整组替换节点请求体。锁版本保持字符串。
  *
  * @param lockVersion 当前定义锁版本

@@ -157,12 +157,11 @@ export const definitionStatusLabel = (status: DefinitionStatus): string =>
 /**
  * 返回业务版本展示，空值显示「—」。
  *
- * @param version 字符串版本
+ * @param version 服务端业务版本（整数）
  */
-export const versionLabel = (version: string | null | undefined): string => {
-    const trimmed = version?.trim()
-    if (!trimmed) return "—"
-    return `${versionText.version} ${trimmed}`
+export const versionLabel = (version: number | null | undefined): string => {
+    if (version == null) return "—"
+    return `${versionText.version} ${version}`
 }
 
 /**

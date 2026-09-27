@@ -21,7 +21,10 @@ import type {
     DefinitionDetailView,
     ReplaceDefinitionNodesCommand,
 } from "../types"
-import { buildStableReplaceNodesCommand } from "../write-payload"
+import {
+    buildStableReplaceNodesCommand,
+    lockVersionText,
+} from "../write-payload"
 import { DefinitionFlowchart } from "./definition-flowchart"
 import { NodeListEditor } from "./node-list-editor"
 
@@ -100,7 +103,9 @@ export function DefinitionEditor({
                     seedDraftNodes(next.document_type, next.nodes),
                 )
                 form.setFieldValue("name", next.name)
-                onLockVersionChange(next.definition_lock_version)
+                onLockVersionChange(
+                    lockVersionText(next.definition_lock_version),
+                )
                 onSaved?.(next)
                 setSaveState("saved")
                 setSavedAt(new Date())

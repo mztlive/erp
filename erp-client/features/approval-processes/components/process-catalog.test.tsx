@@ -14,8 +14,8 @@ const item: DefinitionCatalogItem = {
     document_type: "purchase_order",
     document_type_label: "采购单",
     approval_requirement: "PROCESS_REQUIRED",
-    published_version: "3",
-    draft_version: "4",
+    published_version: 3,
+    draft_version: 4,
     configuration_status: "PUBLISHED",
     allowed_actions: ["REPLACE_NODES"],
 }
