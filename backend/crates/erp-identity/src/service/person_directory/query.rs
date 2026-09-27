@@ -15,10 +15,10 @@ use crate::entity::organization_change::OrganizationState;
 use crate::entity::person_directory::{
     DirectoryListRequest, PersonDirectoryCategory, candidate_in_directory, directory_org_ids,
 };
+use crate::repository::OrganizationRepository;
 use crate::repository::person_directory_query::{
     DIRECTORY_LIMIT, DirectoryRead, DirectoryResult, directory_page,
 };
-use crate::repository::OrganizationRepository;
 use crate::service::access_control::resolve::DataScopeService;
 use crate::service::iam::SharedRbacService;
 use crate::{Error, Result};
@@ -65,9 +65,7 @@ pub async fn list_page(
     )
     .await?;
     let display = display_version(db, &mut authorized, &result, executor).await?;
-    let version = format!("{:x}", md5::compute(format!(
-        "{display}:{:?}:{org_filter:?}", request.search,
-    )));
+    let version = format!("{:x}", md5::compute(format!("{display}:{:?}:{org_filter:?}", request.search,)));
     ensure_current_version(&request.scope_version, &version)?;
     page_from_result(result, request.page, request.page_size, &authorized, version)
 }
@@ -163,8 +161,8 @@ async fn load_scope_memberships(
     } else {
         repository.directory_memberships(None, Some(&orgs), authorized.as_of, executor).await?
     };
-    let mut seen = authorized.organizations.memberships.iter()
-        .map(|row| row.base.id.clone()).collect::<BTreeSet<_>>();
+    let mut seen =
+        authorized.organizations.memberships.iter().map(|row| row.base.id.clone()).collect::<BTreeSet<_>>();
     for row in rows {
         if seen.insert(row.base.id.clone()) {
             authorized.organizations.memberships.push(row);
@@ -180,14 +178,23 @@ async fn display_version(
     result: &DirectoryResult,
     executor: &mut dyn Executor,
 ) -> Result<String> {
-    let ids = result.versions.iter().map(|row| {
-        row.get_str("id").map(str::to_owned)
-            .map_err(|_| Error::Internal("人员目录版本索引缺少身份".into()))
-    }).collect::<Result<Vec<_>>>()?;
+    let ids = result
+        .versions
+        .iter()
+        .map(|row| {
+            row.get_str("id")
+                .map(str::to_owned)
+                .map_err(|_| Error::Internal("人员目录版本索引缺少身份".into()))
+        })
+        .collect::<Result<Vec<_>>>()?;
     authorized.organizations.memberships = OrganizationRepository::new(db)
-        .directory_memberships(Some(&ids), None, authorized.as_of, executor).await?;
+        .directory_memberships(Some(&ids), None, authorized.as_of, executor)
+        .await?;
     let content = content_version(&authorized.scope_version, result)?;
-    let relations = authorized.organizations.memberships.iter()
+    let relations = authorized
+        .organizations
+        .memberships
+        .iter()
         .map(|row| (&row.user_id, &row.org_unit_id, &row.base.id, row.base.version))
         .collect::<Vec<_>>();
     Ok(format!("{:x}", md5::compute(format!("{content}:{relations:?}"))))

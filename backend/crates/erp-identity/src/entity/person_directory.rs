@@ -329,16 +329,23 @@ pub(crate) fn directory_org_ids(
 ) -> BTreeSet<String> {
     let company = scope.role_clauses.iter().any(|clause| clause.company);
     let mut orgs = if company {
-        scope.user_limit.as_ref().filter(|limit| !limit.company)
+        scope
+            .user_limit
+            .as_ref()
+            .filter(|limit| !limit.company)
             .map(|limit| limit.org_unit_ids.clone())
             .unwrap_or_else(|| filter.cloned().unwrap_or_default())
     } else {
         scope.role_clauses.iter().flat_map(|clause| clause.org_unit_ids.iter().cloned()).collect()
     };
-    if let Some(limit) = &scope.user_limit && !limit.company {
+    if let Some(limit) = &scope.user_limit
+        && !limit.company
+    {
         orgs.retain(|id| limit.org_unit_ids.contains(id));
     }
-    if let Some(filter) = filter { orgs.retain(|id| filter.contains(id)); }
+    if let Some(filter) = filter {
+        orgs.retain(|id| filter.contains(id));
+    }
     orgs
 }
 

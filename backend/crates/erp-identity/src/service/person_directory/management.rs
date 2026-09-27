@@ -11,8 +11,8 @@ use super::PersonDirectoryService;
 use crate::entity::person_directory::{
     PersonDirectoryCategory, PersonQueryQualification, PersonQueryStatus, candidate_in_directory,
 };
-use crate::repository::prelude::*;
 use crate::repository::OrganizationRepository;
+use crate::repository::prelude::*;
 use crate::service::access_control::resolve::DataScopeService;
 use crate::{AccessControlExt, Error, Result};
 
@@ -70,7 +70,8 @@ async fn manage_target(
 ) -> Result<Option<PersonQueryQualification>> {
     let mut scope = access.resolve(actor, "person_query_qualification", "manage", executor).await?;
     scope.organizations.memberships = OrganizationRepository::new(db)
-        .directory_memberships(Some(&[account_id.to_owned()]), None, scope.as_of, executor).await?;
+        .directory_memberships(Some(&[account_id.to_owned()]), None, scope.as_of, executor)
+        .await?;
     let org = scope.organizations.own_org(account_id, scope.as_of)?;
     if !candidate_in_directory(&scope.scope, actor.id(), account_id, org, None) {
         return Err(Error::Forbidden("目标账号不在查询资格管理范围内".into()));

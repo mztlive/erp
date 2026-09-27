@@ -33,9 +33,7 @@ impl OrganizationRepository<'_> {
         Ok(OrganizationState {
             version: self.revision(executor).await?.map_or(0, |row| row.revision),
             units: bounded::<OrgUnit>(self.db, ORG_UNITS, doc! {}, executor).await?,
-            memberships: self
-                .directory_memberships(Some(&[actor_id.to_owned()]), None, at, executor)
-                .await?,
+            memberships: self.directory_memberships(Some(&[actor_id.to_owned()]), None, at, executor).await?,
             management: bounded::<OrgManagementAssignment>(
                 self.db,
                 ORG_MANAGEMENT,
@@ -63,9 +61,7 @@ impl OrganizationRepository<'_> {
         if ids.is_none() && orgs.is_none() {
             return Err(Error::ValidationError("人员组织查询必须限定账号或组织".into()));
         }
-        if ids.is_some_and(|v| v.len() > DIRECTORY_LIMIT)
-            || orgs.is_some_and(|v| v.len() > DIRECTORY_LIMIT)
-        {
+        if ids.is_some_and(|v| v.len() > DIRECTORY_LIMIT) || orgs.is_some_and(|v| v.len() > DIRECTORY_LIMIT) {
             return Err(Error::ValidationError("人员组织查询超过 10000 项".into()));
         }
         if ids.is_some_and(|values| values.is_empty()) || orgs.is_some_and(|values| values.is_empty()) {

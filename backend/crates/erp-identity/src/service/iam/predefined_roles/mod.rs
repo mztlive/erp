@@ -160,8 +160,14 @@ async fn ensure_missing_permissions(rbac: &SharedRbacService) -> Result<()> {
             .filter(|permission| {
                 !matches!(
                     (permission.resource(), permission.action()),
-                    ("sales_person" | "procurement_person" | "business_person" | "settlement_party" | "warehouse", "list")
-                        | ("person_query_qualification", "manage")
+                    (
+                        "sales_person"
+                            | "procurement_person"
+                            | "business_person"
+                            | "settlement_party"
+                            | "warehouse",
+                        "list"
+                    ) | ("person_query_qualification", "manage")
                 )
             })
             .collect();

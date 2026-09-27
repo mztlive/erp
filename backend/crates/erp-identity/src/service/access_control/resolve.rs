@@ -167,8 +167,12 @@ impl DataScopeService {
         let repository = OrganizationRepository::new(&self.db);
         if matches!(
             resource,
-            "sales_person" | "procurement_person" | "business_person"
-                | "person_query_qualification" | "settlement_party" | "warehouse"
+            "sales_person"
+                | "procurement_person"
+                | "business_person"
+                | "person_query_qualification"
+                | "settlement_party"
+                | "warehouse"
         ) {
             repository.directory_state(actor_id, at, executor).await
         } else {
