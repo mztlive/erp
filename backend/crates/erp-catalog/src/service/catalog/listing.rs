@@ -249,6 +249,7 @@ impl CatalogService {
             created_at: product.base.created_at,
             version: product.base.version,
             maintainer_user_id: product.maintainer_user_id,
+            maintainer_user_name: None,
             business_org_unit_id: product.business_org_unit_id,
         })
     }

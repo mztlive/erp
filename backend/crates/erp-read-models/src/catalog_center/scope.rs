@@ -1,5 +1,6 @@
 //! 商品列表与详情的一致授权快照；范围与业务版本跨页携带。
 
+use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
@@ -11,6 +12,8 @@ use erp_catalog::{
     CatalogAccess, CatalogDataScopePort, CatalogExt, CatalogReadScope, ProductFilter, ProductListParams,
     ProductListView, ProductView,
 };
+use erp_identity::AccessControlExt;
+use erp_identity::repository::prelude::*;
 use persistence_core::Transactional;
 
 use super::CatalogCenterReadService;
@@ -106,6 +109,7 @@ struct ProductSnapshot {
     no_scope: bool,
 }
 
+/// 在同一授权快照中查询商品，并按已授权行批量补齐维护人姓名。
 async fn build_snapshot(
     db: mongodb::Database,
     query: Arc<dyn CatalogSupplyQueryPort>,
@@ -126,7 +130,10 @@ async fn build_snapshot(
     let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
     page.total.hash(&mut fingerprint);
     context.scope_version = format!("{}:{:x}", context.scope_version, fingerprint.finish());
-    let view = product_page_view(page, &filter)?;
+    let mut view = product_page_view(page, &filter)?;
+    let ids = view.items.iter().map(|row| row.maintainer_user_id.clone()).collect::<Vec<_>>();
+    let names = db.accounts().names_by_ids(&ids, executor).await?;
+    apply_maintainer_names(&mut view.items, &names);
     Ok(ProductSnapshot {
         no_scope,
         page: view,
@@ -136,6 +143,13 @@ async fn build_snapshot(
         organization_version: context.organization_version,
         as_of: context.as_of.as_utc().to_rfc3339(),
     })
+}
+
+/// 按维护人身份匹配展示名；缺失姓名保持空值，不将内部 ID 当作姓名。
+pub(super) fn apply_maintainer_names(rows: &mut [ProductView], names: &HashMap<String, String>) {
+    for row in rows {
+        row.maintainer_user_name = names.get(&row.maintainer_user_id).cloned();
+    }
 }
 
 async fn apply_org_filter(

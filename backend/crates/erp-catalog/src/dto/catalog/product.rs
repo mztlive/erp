@@ -221,6 +221,8 @@ pub struct ProductView {
     /// 当前维护人。
     #[serde(default)]
     pub maintainer_user_id: String,
+    /// 已授权商品行的维护人姓名；由组合查询补齐，账号缺失时为空。
+    pub maintainer_user_name: Option<String>,
     /// 当前业务组织。
     #[serde(default)]
     pub business_org_unit_id: String,
@@ -254,6 +256,7 @@ impl From<ProductRow> for ProductView {
             created_at: row.created_at,
             version: row.version,
             maintainer_user_id: row.maintainer_user_id,
+            maintainer_user_name: None,
             business_org_unit_id: row.business_org_unit_id,
         }
     }

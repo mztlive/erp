@@ -66,9 +66,7 @@ export function useProductListColumns({
                 meta: { label: "维护人" },
                 cell: ({ row }) => (
                     <span className="text-sm">
-                        {row.original.ownerName ??
-                            row.original.ownerUserId ??
-                            "—"}
+                        {row.original.ownerName ?? "—"}
                     </span>
                 ),
             },

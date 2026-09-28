@@ -59,6 +59,7 @@ export type ProductDto = {
     created_at: number
     version: number
     maintainer_user_id?: string
+    maintainer_user_name?: string | null
     business_org_unit_id?: string
 }
 

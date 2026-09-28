@@ -184,7 +184,7 @@ export function mapProductRow(
         lockVersion: dto.version,
         ownerUserId: dto.maintainer_user_id || undefined,
         businessOrgUnitId: dto.business_org_unit_id || undefined,
-        ownerName: dto.maintainer_user_id || undefined,
+        ownerName: dto.maintainer_user_name?.trim() || undefined,
         metricTags: [
             lifecycle === "ENABLED" ? "enabled" : "disabled",
             ...(future ? (["pending"] as const) : []),

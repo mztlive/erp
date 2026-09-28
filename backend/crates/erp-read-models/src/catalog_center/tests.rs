@@ -4,12 +4,32 @@ use async_trait::async_trait;
 use erp_catalog::ports::supply::CatalogSupplyQueryPort;
 use erp_catalog::repository::{ProductFilter, ProductRow, SellableSkuFilter, SellableSkuRow};
 use erp_catalog::service::catalog::prepare_product_list;
-use erp_catalog::{EnableStatus, ProductKind, ProductListingStatus};
+use erp_catalog::{EnableStatus, ProductKind, ProductListingStatus, ProductView};
 use erp_core::common::time::BusinessDate;
 use persistence_core::{Executor, NoTransaction, PageResult};
 use serde_json::json;
 
 use super::*;
+
+#[test]
+fn product_maintainer_name_uses_matching_account() {
+    let mut rows = vec![ProductView::from(sample_row())];
+    let names = [("user-1".into(), "张三".into()), ("user-2".into(), "李四".into())].into();
+    scope::apply_maintainer_names(&mut rows, &names);
+    let value = serde_json::to_value(&rows[0]).unwrap();
+    assert_eq!(value["maintainer_user_id"], "user-1");
+    assert_eq!(value["maintainer_user_name"], "张三");
+}
+
+#[test]
+fn product_maintainer_name_is_null_when_account_is_missing() {
+    let mut rows = vec![ProductView::from(sample_row())];
+    let names = [("user-2".into(), "李四".into())].into();
+    scope::apply_maintainer_names(&mut rows, &names);
+    let value = serde_json::to_value(&rows[0]).unwrap();
+    assert_eq!(value["maintainer_user_id"], "user-1");
+    assert!(value["maintainer_user_name"].is_null());
+}
 
 fn sample_row() -> ProductRow {
     ProductRow {
