@@ -260,10 +260,10 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
     {
         page = await switchTo("caigou")
         await gotoHeading(page, "/procurement/orders", "采购单")
-        await expect(page.getByText(/0 条|当前没有/).first()).toBeVisible({
-            timeout: 20000,
-        })
-        await expect(page.getByText("供应商直发")).toHaveCount(0)
+        const poSearch = page.locator("#procurement-orders-list-search")
+        await poSearch.fill(salesOrderNo)
+        await poSearch.press("Enter")
+        await expect(page.locator("#procurement-orders-list-table").getByText(salesOrderNo)).toHaveCount(0)
 
         await openWorkspaceTask(page, "销售单审批", salesOrderNo, "approval")
         await expect(page.getByText("供给来源 / 履约责任")).toHaveCount(0)

@@ -129,11 +129,19 @@ export async function ensureZeroBalanceDimension(
   const now = Math.floor(Date.now() / 1000);
   const script = `const target = db.getSiblingDB(${JSON.stringify(settings.db_name)});
         const key = {warehouse_id: ${JSON.stringify(warehouse.id)}, sku_id: ${JSON.stringify(sku.id)}, deleted_at: NumberLong(0)};
-        target.stock_balances.updateOne(key, {$setOnInsert: {...key,
-          id: ${JSON.stringify(randomUUID().replaceAll("-", ""))}, version: NumberLong(1),
-          created_at: NumberLong(${now}), updated_at: NumberLong(${now}),
-          on_hand_quantity: NumberDecimal("0"), reserved_quantity: NumberDecimal("0"), available_quantity: NumberDecimal("0"), last_movement_id: null
-        }}, {upsert: true});`;
+        const existing = target.stock_balances.findOne(key);
+        if (!existing) {
+          target.stock_balances.insertOne({...key,
+            id: ${JSON.stringify(randomUUID().replaceAll("-", ""))}, version: NumberLong(1),
+            created_at: NumberLong(${now}), updated_at: NumberLong(${now}),
+            on_hand_quantity: NumberDecimal("0"), reserved_quantity: NumberDecimal("0"), available_quantity: NumberDecimal("0"), last_movement_id: null
+          });
+        } else {
+          target.stock_balances.updateOne({_id: existing._id}, {$set: {
+            updated_at: NumberLong(${now}),
+            on_hand_quantity: NumberDecimal("0"), reserved_quantity: NumberDecimal("0"), available_quantity: NumberDecimal("0")
+          }});
+        }`;
   try {
     execFileSync("mongosh", ["--norc", "--quiet", settings.uri, "--eval", script], {
       stdio: "pipe",

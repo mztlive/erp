@@ -209,7 +209,7 @@ test.describe("flow-08 销售变更单（未履约）", () => {
             await expectChangeBlocked(sales.page)
 
             // 2. 负向：审批中不得发起改单
-            await openWorkspaceTask(procurement.page, /销售单审批/, undefined, "approval")
+            await openWorkspaceTask(procurement.page, /销售单审批/, customerName, "approval")
             await expect(procurement.page.getByText("采购确认").first()).toBeVisible({
                 timeout: TIMEOUT,
             })
@@ -226,7 +226,7 @@ test.describe("flow-08 销售变更单（未履约）", () => {
             await expectChangeBlocked(sales.page)
 
             // 3. 采购再通过，销售单生效；不得出现已建采购单/已履约
-            await openWorkspaceTask(procurement.page, /销售单审批/, undefined, "approval")
+            await openWorkspaceTask(procurement.page, /销售单审批/, customerName, "approval")
             await approveCurrentDocument(procurement.page)
 
             await openSalesOrder(sales.page, salesOrderId)

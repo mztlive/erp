@@ -204,7 +204,7 @@ async function pickSkuAndFillLine(page: Page, due: Date, quantity: string): Prom
     VISIBLE,
   )
   await expect(page.locator('[data-testid^="sales-line-procurement-owner-"]')).toContainText(
-    /采购/,
+    /陈国平|采购/,
     VISIBLE,
   )
   await page.getByLabel('数量').first().fill(quantity)

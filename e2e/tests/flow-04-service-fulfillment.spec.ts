@@ -405,7 +405,7 @@ test('flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
     // 每轮先确保面板打开再重填（覆盖写等幂，草稿存在也不怕）。
     for (let attempt = 0; ; attempt += 1) {
       if ((await procurement.page.locator('[aria-label="线下服务表单"]').count()) === 0) {
-        await openWorkspaceTask(procurement.page, /履约处理/, orderNo, 'fulfillment')
+        await openWorkspaceTask(procurement.page, /履约处理/, '北京安达', 'fulfillment')
         await openFulfillmentWorkspaceForm(procurement.page)
         // 任务标题使用采购单身份，实际履约表单必须为线下服务。
         await expect(procurement.page.locator('[aria-label="线下服务表单"]')).toBeVisible({

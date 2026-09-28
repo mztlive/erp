@@ -230,6 +230,8 @@ async function ensureVirtualOfferingAndListing(page: Page) {
         await dialog.locator('#supplier-offerings-dialog-register-supply-region').press('ArrowDown')
         await page.getByRole('option', { name: '全国', exact: true }).click()
         await pickCalendarDay(page, page.locator('#supplier-offerings-dialog-register-valid-from'), isoDate(0))
+        const quantityMode = dialog.getByRole('radio', { name: '填写数量' })
+        if (await quantityMode.count()) await quantityMode.check()
         await dialog.locator('#supplier-offerings-dialog-register-available-quantity').fill('1000')
         await dialog.locator('#supplier-offerings-dialog-register-submit').click()
         // 主数据在重置间保留，供给可能已登记：成功与重复均为合法结果。

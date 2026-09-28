@@ -1,7 +1,73 @@
+import { execFileSync } from "node:child_process"
+import { randomUUID } from "node:crypto"
+import { fileURLToPath } from "node:url"
+
 import { expect, type Page } from "@playwright/test"
+
+import { apiGet, apiLogin } from "./api"
+
+/**
+ * 付款任务要求供应商主体有唯一当前默认收款账户。
+ * 供应商主体不能走通用 Party 银行账户接口，种子里也没有这行，这里按主体补一条。
+ */
+async function ensureDefaultSupplierBankAccount(keyword: string): Promise<void> {
+    const token = await apiLogin("admin")
+    const suppliers = await apiGet<{
+        items?: Array<{ party_id?: string; legal_name?: string }>
+    }>(token, "/admin/suppliers", { keyword, page: 1, page_size: 5 })
+    const supplier = suppliers.items?.find((row) => row.party_id)
+    if (!supplier?.party_id) throw new Error(`未找到供应商收款主体：${keyword}`)
+    const config = fileURLToPath(new URL("../../backend/config.toml", import.meta.url))
+    const settings = JSON.parse(
+        execFileSync(
+            "python3",
+            [
+                "-c",
+                "import json,sys,tomllib; print(json.dumps(tomllib.load(open(sys.argv[1], 'rb'))['database']))",
+                config,
+            ],
+            { encoding: "utf8" },
+        ),
+    ) as { uri: string; db_name: string }
+    const now = Math.floor(Date.now() / 1000)
+    const accountId = randomUUID().replaceAll("-", "")
+    const script = `const target = db.getSiblingDB(${JSON.stringify(settings.db_name)});
+        const partyId = ${JSON.stringify(supplier.party_id)};
+        const existing = target.party_bank_accounts.findOne({
+          party_id: partyId, is_default: true, status: "active", deleted_at: NumberLong(0)
+        });
+        if (!existing) {
+          target.party_bank_accounts.insertOne({
+            id: ${JSON.stringify(accountId)},
+            version: NumberLong(1),
+            created_at: NumberLong(${now}),
+            updated_at: NumberLong(${now}),
+            deleted_at: NumberLong(0),
+            created_by: "e2e",
+            updated_by: "e2e",
+            bank_account_no: ${JSON.stringify(`E2E-${supplier.party_id.slice(0, 8)}`)},
+            party_id: partyId,
+            account_name: ${JSON.stringify(supplier.legal_name || keyword)},
+            bank_name: "中国工商银行",
+            bank_branch_name: null,
+            account_number_ciphertext: "e2e",
+            account_number_query_hmac: ${JSON.stringify(`e2e-${supplier.party_id}`)},
+            account_number_last4: "0001",
+            valid_from: "2020-01-01",
+            valid_to: null,
+            status: "active",
+            is_default: true
+          });
+        }`
+    execFileSync("mongosh", ["--norc", "--quiet", settings.uri, "--eval", script], {
+        stdio: "pipe",
+        timeout: 30_000,
+    })
+}
 
 /** 出纳从唯一待付款任务全额付款，等待正式提交落定后再离开。 */
 export async function payOnlySupplierTask(page: Page): Promise<void> {
+    await ensureDefaultSupplierBankAccount("狮峰")
     await page.goto("/workspace?family=finance")
     const task = page.getByRole("list", { name: "待办列表" }).getByRole("button", { name: /供应商付款处理/ })
     await expect(task).toHaveCount(1, { timeout: 20_000 })

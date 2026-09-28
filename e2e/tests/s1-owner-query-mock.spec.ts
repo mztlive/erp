@@ -92,6 +92,8 @@ function meta() {
     return {
         empty_reason: null,
         scope_version: "s1-mock-v1",
+        policy_version: 1,
+        organization_version: 1,
         scope_summary: "S1 mock visible owner scope",
         as_of: "2026-09-16T00:00:00Z",
         owner_options: owners,

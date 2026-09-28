@@ -294,7 +294,7 @@ test("flow-18 停止可供后供给分配不得建采购单，必须走销售变
         page = await switchTo("admin")
         const offeringRow = await findSeededOfferingRow(page)
         await expect(offeringRow.getByText("可供").first()).toBeVisible()
-        const quantityBefore = (await offeringRow.locator("td").filter({ hasText: /数量/ }).innerText()).match(/数量\s*([\d.]+)/)?.[1]
+        const quantityBefore = (await offeringRow.locator("td").filter({ hasText: /数量/ }).first().innerText()).match(/数量\s*([\d.]+)/)?.[1]
         expect(quantityBefore).toBeTruthy()
         await offeringRow.getByRole("button", { name: /操作/ }).click()
         await page.getByRole("menuitem", { name: "更新可供" }).click()
@@ -313,7 +313,7 @@ test("flow-18 停止可供后供给分配不得建采购单，必须走销售变
         await expect(availabilityDialog).toBeHidden({ timeout: UI_TIMEOUT })
         await expect(offeringRow.getByText("停止供应").first()).toBeVisible({ timeout: UI_TIMEOUT })
         await expect(offeringRow.getByText("可供", { exact: true })).toHaveCount(0)
-        const quantityAfter = (await offeringRow.locator("td").filter({ hasText: /数量/ }).innerText()).match(/数量\s*([\d.]+)/)?.[1]
+        const quantityAfter = (await offeringRow.locator("td").filter({ hasText: /数量/ }).first().innerText()).match(/数量\s*([\d.]+)/)?.[1]
         expect(quantityAfter).toBe(quantityBefore)
 
         // 6) 负向：供给分配不得创建采购单，不得预览确认，不得虚增库存预留
