@@ -164,12 +164,25 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
         let readable = self.auth.readable_order_sources(&actor, &sources, executor).await?;
         for (index, source) in tasks {
             let item = &mut items[*index];
-            if !readable.contains(source) || !can_execute(item, &grants, &enabled_roles) {
+            let executable = can_execute(item, &grants, &enabled_roles);
+            let fulfillment =
+                item.work_item_type == erp_workflow::entity::work_item::WorkItemType::FulfillmentOperation;
+            if !order_source_allows_execution(readable.contains(source), executable, fulfillment)
+                || !executable
+            {
                 block_owner(item);
             }
         }
         Ok(())
     }
+}
+
+/// 本人履约任务在仍有执行权时，不因缺少销售单详情而失效。
+///
+/// 仓发的订单来源是销售单。仓储经办人没有销售单详情权限，任务却派给本人。
+/// 审批和非履约任务仍必须能读来源订单。
+fn order_source_allows_execution(readable: bool, executable: bool, fulfillment: bool) -> bool {
+    readable || (fulfillment && executable)
 }
 
 /// 固定任务类型提供执行权限；审批额外要求静态决定权限。
@@ -242,6 +255,14 @@ mod tests {
 
     use super::*;
     use crate::workbench::dto::WorkItemFields;
+
+    #[test]
+    fn assigned_fulfillment_stays_executable_without_sales_order_detail() {
+        assert!(order_source_allows_execution(false, true, true));
+        assert!(!order_source_allows_execution(false, false, true));
+        assert!(!order_source_allows_execution(false, true, false));
+        assert!(order_source_allows_execution(true, true, false));
+    }
 
     fn view() -> WorkItemView {
         let item = WorkItem::new_with_responsibility_key(

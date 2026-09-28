@@ -192,8 +192,8 @@ test("销项与进项红票按 Invoice 强类型命令登记，不进审批且�
         await waitHeading(kaipiao.page, "客户往来")
         const receivableRow = kaipiao.page.getByRole("row").filter({ hasText: order.orderNo })
         await expect(receivableRow).toBeVisible({ timeout: LONG })
-        await expect(receivableRow.getByText(/0\.00/).first()).toBeVisible({ timeout: LONG })
-        await expect(receivableRow.getByText(/1,288\.00|1288\.00/).first()).toBeVisible({
+        await expect(receivableRow.getByText(/可开 ¥1,288\.00/)).toBeVisible({ timeout: LONG })
+        await expect(receivableRow.getByText(/净已开票\s*(?:—|－|-|¥?0\.00)/)).toBeVisible({
             timeout: LONG,
         })
 

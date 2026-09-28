@@ -538,6 +538,7 @@ test("flow-18 停止可供后供给分配不得建采购单，必须走销售变
                 await row.getByRole("button", { name: /操作/ }).click()
                 await page.getByRole("menuitem", { name: "更新可供" }).click()
                 const dialog = page.getByRole("dialog", { name: "更新当前可供情况" })
+                await expect(dialog).toBeVisible({ timeout: UI_TIMEOUT })
                 await chooseOption(page, dialog.locator("#supplier-offerings-dialog-availability-status"), "可供")
                 await dialog.locator("#supplier-offerings-dialog-availability-reason").fill("E2E flow-18 清理：恢复测试前可供状态")
                 await dialog.getByRole("button", { name: "保存可供情况" }).click()

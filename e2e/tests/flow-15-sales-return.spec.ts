@@ -718,24 +718,32 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
         await chooseOption(
             page,
             pickSupplier.locator("#supplier-payables-pick-supplier-select"),
-            /狮峰/,
+            /杭州狮峰茶叶有限公司/,
+            "狮峰",
         );
-        await pickSupplier.locator("#supplier-payables-pick-supplier-confirm").click();
+        const confirmSupplier = pickSupplier.locator("#supplier-payables-pick-supplier-confirm");
+        await expect(confirmSupplier).toBeEnabled({ timeout: UI_TIMEOUT });
+        await confirmSupplier.click();
         await expect(page.getByRole("heading", { name: "登记进项发票" })).toBeVisible({
             timeout: UI_TIMEOUT,
         });
         await expect(page.getByRole("button", { name: "提交审批" })).toHaveCount(0);
-        const poolSelect = page
-            .locator('[id^="supplier-payables-allocation-pool-row-"][id$="-select"]')
-            .first();
-        await expect(poolSelect).toBeVisible({ timeout: UI_TIMEOUT });
-        if (!(await poolSelect.isChecked())) {
-            await page.locator("#supplier-payables-allocation-pool-select-all").click();
+        const poolSection = page.locator('section[aria-label="同供应商待核销池"]');
+        const orderRow = poolSection.getByRole("row").filter({ hasText: purchaseOrderNo });
+        await expect(orderRow).toBeVisible({ timeout: UI_TIMEOUT });
+        const orderCheck = orderRow.getByRole("checkbox");
+        if ((await orderCheck.getAttribute("aria-checked")) !== "true") {
+            await orderCheck.click();
+        }
+        const otherChecks = poolSection.getByRole("row").filter({ hasNotText: purchaseOrderNo }).getByRole("checkbox");
+        const otherCount = await otherChecks.count();
+        for (let index = 0; index < otherCount; index += 1) {
+            if ((await otherChecks.nth(index).getAttribute("aria-checked")) === "true") {
+                await otherChecks.nth(index).click();
+            }
         }
         await page.locator("#supplier-payables-allocation-pool-fill-all").click();
-        const allocatedInput = page
-            .locator('[id^="supplier-payables-allocation-pool-row-"][id$="-amount"]')
-            .first();
+        const allocatedInput = orderRow.locator('[id$="-amount"]');
         await expect(allocatedInput).toHaveValue(/.+/, { timeout: UI_TIMEOUT });
         const allocated = await allocatedInput.inputValue();
         const grossCents = Math.round(Number(allocated) * 100);

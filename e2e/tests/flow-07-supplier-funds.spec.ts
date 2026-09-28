@@ -525,11 +525,15 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
     const selectIds = await poolBoxInputs.evaluateAll((els) => els.map((el) => el.id));
     let grossCents = 0;
     for (const cell of amountCells) {
+        const rowText = await poolSection.locator(`#${cell.id}`).locator("xpath=ancestor::tr[1]").innerText();
         const cents = Math.round(Number(parseAmount(cell.value || "0")) * 100);
-        if (cents <= 0) {
+        const belongsToOrder = rowText.includes(purchaseNo);
+        if (!belongsToOrder || cents <= 0) {
             const selectId = cell.id.replace(/-amount$/, "-select");
             const index = selectIds.indexOf(selectId);
-            if (index >= 0) await poolChecks.nth(index).click();
+            if (index >= 0 && (await poolChecks.nth(index).getAttribute("aria-checked")) === "true") {
+                await poolChecks.nth(index).click();
+            }
             continue;
         }
         grossCents += cents;
