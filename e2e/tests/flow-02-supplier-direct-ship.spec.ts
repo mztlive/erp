@@ -27,6 +27,7 @@ import fs from "node:fs"
 import path from "node:path"
 
 import { createCustomerViaUi } from "../helpers/customers"
+import { ensureWarehouseStockScope } from "../helpers/inventory"
 import { openLoggedInWorkspace, type LoggedInSession } from "../helpers/login"
 import { payOnlySupplierTask } from "../helpers/payments"
 import { ensureDefaultProcurementOwner } from "../helpers/procurement"
@@ -96,20 +97,23 @@ async function gotoHeading(page: Page, pathName: string, heading: string | RegEx
     })
 }
 
-/** 代发不得给本单留下采购入库。全量套件里其他流程可以已有库存。 */
+/** 代发不得给本单留下采购入库。仓储没有默认仓库范围时台账页签不挂载。全量套件里其他流程可以已有库存。 */
 async function assertInventoryUntouched(page: Page, documentHint: string) {
+    await ensureWarehouseStockScope("BJ-TZ-01")
     await gotoHeading(page, "/inventory", "库存台账")
-    await expect(page.getByRole("button", { name: /^余额(?: \d+)?$/ })).toBeVisible({
-        timeout: 20000,
-    })
-    const ownReceipt = page.getByRole("row").filter({ hasText: documentHint }).filter({ hasText: "采购入库" })
-    await expect(ownReceipt).toHaveCount(0)
-
-    await page.locator("#inventory-ledger-view-movement").click()
-    await expect(page.getByRole("row").filter({ hasText: documentHint }).filter({ hasText: "采购入库" })).toHaveCount(0)
-
-    await page.locator("#inventory-ledger-view-reservation").click()
-    await expect(page.getByRole("row").filter({ hasText: documentHint }).filter({ hasText: "采购入库" })).toHaveCount(0)
+    for (const view of ["balance", "movement", "reservation"] as const) {
+        const tab = page.locator(`#inventory-ledger-view-${view}`)
+        await expect(tab).toBeVisible({ timeout: 20000 })
+        await tab.click()
+        await expect(tab).toHaveAttribute("aria-pressed", "true", { timeout: 20000 })
+        await expect(
+            page
+                .locator(`#inventory-ledger-${view}-table`)
+                .getByRole("row")
+                .filter({ hasText: documentHint })
+                .filter({ hasText: "采购入库" }),
+        ).toHaveCount(0)
+    }
 }
 
 test("供应商直接发客户（代发）全流程", async ({ browser }) => {
@@ -448,8 +452,9 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
 
     // ── 13. 终态断言：自有库存无变化、无采购入库单、无入仓履约 ──
     {
-        page = await switchTo("caigou")
+        page = await switchTo("cangchu")
         await assertInventoryUntouched(page, salesOrderNo)
+        page = await switchTo("caigou")
         await gotoHeading(page, "/procurement/orders", "采购单")
         const poRow = purchaseOrderRow(page, salesOrderNo)
         await expect(poRow.getByText("实物 / 供应商直发", { exact: true })).toBeVisible({

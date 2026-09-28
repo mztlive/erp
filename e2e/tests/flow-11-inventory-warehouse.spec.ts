@@ -27,6 +27,7 @@ import {
     type Page,
 } from "@playwright/test";
 
+import { apiGet, apiLogin } from "../helpers/api";
 import { createCustomerViaUi } from "../helpers/customers";
 import {
     ensureWarehouseStockScope,
@@ -145,6 +146,35 @@ async function assertBalanceNumbers(
     await expect(row).toContainText(expected.available);
 }
 
+/** 只断言这一张销售单没有采购单。共享套件里其他流程会留下采购单。 */
+async function expectThisSalesOrderHasNoPurchaseOrder(
+    page: Page,
+    salesOrderId: string,
+    salesOrderNo: string,
+) {
+    await page.goto(`/procurement/orders?q=${encodeURIComponent(salesOrderNo)}`);
+    await expect(page.getByRole("heading", { name: "采购单", exact: true })).toBeVisible({
+        timeout: UI_TIMEOUT,
+    });
+    await expect(page.locator("#procurement-orders-list-search")).toHaveValue(salesOrderNo, {
+        timeout: UI_TIMEOUT,
+    });
+    await expect(page.getByText("当前筛选无结果")).toBeVisible({ timeout: UI_TIMEOUT });
+    await expect(
+        page
+            .locator("#procurement-orders-list-table")
+            .getByRole("row")
+            .filter({ hasText: salesOrderNo }),
+    ).toHaveCount(0);
+    const listed = await apiGet<{ items?: unknown[]; total?: number }>(
+        await apiLogin("caigou"),
+        "/admin/purchase-orders",
+        { sales_order_id: salesOrderId, page: 1, page_size: 20 },
+    );
+    expect(listed.items ?? []).toHaveLength(0);
+    expect(listed.total ?? 0).toBe(0);
+}
+
 test.describe.configure({ mode: "serial" });
 
 test("flow-11 现有库存仓发：盘盈 → 销售生效 → 纯库存供给分配 → 仓发 → 验收，零采购单", async ({
@@ -196,12 +226,23 @@ test("flow-11 现有库存仓发：盘盈 → 销售生效 → 纯库存供给�
             .locator("#inventory-adjustment-dialog-note")
             .fill("flow-11 现有库存仓发盘盈");
         await adjustDialog.locator("#inventory-adjustment-dialog-submit").click();
-        await expect(page.getByText("调整已提交审批").first()).toBeVisible({ timeout: UI_TIMEOUT });
+        const submitted = page
+            .locator('[data-slot="formal-action-result"]')
+            .filter({ hasText: "调整已提交审批" });
+        await expect(submitted).toBeVisible({ timeout: UI_TIMEOUT });
+        const submittedText = (await submitted.innerText()).replace(/\s+/g, " ");
+        const adjustmentNo = submittedText.match(/单号\s+([A-Za-z0-9_-]+)/)?.[1] ?? "";
+        expect(adjustmentNo, `未能从提交结果解析调整单号：${submittedText}`).toMatch(
+            /^[A-Za-z0-9_-]{3,}$/,
+        );
         await expect(adjustDialog).toBeHidden({ timeout: UI_TIMEOUT });
 
-        // 2) caiwu 审批库存调整，余额才增加
+        // 2) caiwu 审批这一张盘盈。无单号会通过队列里另一张库存调整单。
         page = await switchTo("caiwu");
-        await openWorkspaceTask(page, "库存调整单审批", undefined, "approval");
+        await openWorkspaceTask(page, "库存调整单审批", adjustmentNo, "approval");
+        await expect(page.getByRole("region", { name: "当前工作台任务" })).toContainText(
+            adjustmentNo,
+        );
         await approveCurrentDocument(page);
 
         page = await switchTo("cangchu");
@@ -365,13 +406,9 @@ test("flow-11 现有库存仓发：盘盈 → 销售生效 → 纯库存供给�
         ).toBeVisible();
         await confirmSupplyAllocation(page, /供给分配已完成|本次供给分配已保存/);
 
-        // 6) 负向：零张采购单；库存 available 减少、reserved 增加；不得出现入库
+        // 6) 负向：本单零张采购单；库存 available 减少、reserved 增加；不得出现入库
         page = await switchTo("caigou");
-        await page.goto("/procurement/orders");
-        await expect(page.getByRole("heading", { name: "采购单", exact: true })).toBeVisible({
-            timeout: UI_TIMEOUT,
-        });
-        await expect(page.getByText("暂无采购单")).toBeVisible({ timeout: UI_TIMEOUT });
+        await expectThisSalesOrderHasNoPurchaseOrder(page, salesOrderId, salesOrderNo);
 
         page = await switchTo("xiaoshou");
         await page.goto(`/sales/orders/${salesOrderId}`);
@@ -467,10 +504,9 @@ test("flow-11 现有库存仓发：盘盈 → 销售生效 → 纯库存供给�
         await expect(page.locator("#sales-orders-detail-start-change")).toBeEnabled();
         await expect(page.getByText("改单中")).toHaveCount(0);
 
-        // 9) 全程不得出现采购单、供应商付款、采购入库
+        // 9) 本单全程不得出现采购单、供应商付款、采购入库
         page = await switchTo("caigou");
-        await page.goto("/procurement/orders");
-        await expect(page.getByText("暂无采购单")).toBeVisible({ timeout: UI_TIMEOUT });
+        await expectThisSalesOrderHasNoPurchaseOrder(page, salesOrderId, salesOrderNo);
         await page.goto("/workspace");
         await expect(page.getByRole("button", { name: /供应商付款/ })).toHaveCount(0);
         await expect(page.getByRole("button", { name: /入库/ })).toHaveCount(0);
