@@ -7,6 +7,7 @@ use erp_supply::service::supplier_offering::SupplierOfferingService;
 use mongodb::Database;
 
 use crate::Error;
+pub mod batch;
 mod command;
 mod commit;
 mod exception;

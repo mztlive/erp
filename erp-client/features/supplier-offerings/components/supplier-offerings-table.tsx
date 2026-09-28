@@ -1,6 +1,7 @@
 "use client"
 
 import { BusinessEmptyState, BusinessFailureState } from "@/components/business"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -25,6 +26,8 @@ import {
 } from "@/features/supplier-offerings/types"
 
 export type SupplierOfferingsTableProps = {
+    selectedIds?: readonly string[]
+    onSelectionChange?: (ids: string[]) => void
     items: readonly SupplierOfferingView[]
     isPending: boolean
     isError: boolean
@@ -47,6 +50,8 @@ export type SupplierOfferingsTableProps = {
 
 /** 供给列表的加载失败、空态与数据表格三态展示。 */
 export function SupplierOfferingsTable({
+    selectedIds = [],
+    onSelectionChange,
     items,
     isPending,
     isError,
@@ -124,6 +129,28 @@ export function SupplierOfferingsTable({
         <Table data-density="comfortable">
             <TableHeader>
                 <TableRow>
+                    {onSelectionChange && (
+                        <TableHead>
+                            <input
+                                id="supplier-offerings-select-all"
+                                type="checkbox"
+                                aria-label="勾选本页供给"
+                                checked={
+                                    items.length > 0 &&
+                                    items.every((item) =>
+                                        selectedIds.includes(item.id),
+                                    )
+                                }
+                                onChange={(event) =>
+                                    onSelectionChange(
+                                        event.target.checked
+                                            ? items.map((item) => item.id)
+                                            : [],
+                                    )
+                                }
+                            />
+                        </TableHead>
+                    )}
                     <TableHead>SKU 名称</TableHead>
                     <TableHead>公司商品 / SKU</TableHead>
                     <TableHead>供应商 / 订货编码</TableHead>
@@ -147,6 +174,25 @@ export function SupplierOfferingsTable({
                                 : undefined
                         }
                     >
+                        {onSelectionChange && (
+                            <TableCell>
+                                <input
+                                    id={`supplier-offerings-select-${toAutomationIdSegment(item.id)}`}
+                                    type="checkbox"
+                                    aria-label={`勾选 ${item.sku_name ?? item.sku_no ?? "供给"}`}
+                                    checked={selectedIds.includes(item.id)}
+                                    onChange={(event) =>
+                                        onSelectionChange(
+                                            event.target.checked
+                                                ? [...selectedIds, item.id]
+                                                : selectedIds.filter(
+                                                      (id) => id !== item.id,
+                                                  ),
+                                        )
+                                    }
+                                />
+                            </TableCell>
+                        )}
                         <TableCell>
                             <div className="font-medium">
                                 {item.sku_name?.trim() || "—"}

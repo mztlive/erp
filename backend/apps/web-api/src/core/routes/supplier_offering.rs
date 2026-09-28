@@ -18,6 +18,30 @@ use crate::core::middleware::with_permission;
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
+            "/supplier-offerings/batch/create",
+            with_permission(
+                post(supplier_offering::batch::create),
+                rbac,
+                supplier_offering::batch::create_permission_key(),
+            ),
+        )
+        .route(
+            "/supplier-offerings/batch/revise",
+            with_permission(
+                post(supplier_offering::batch::revise),
+                rbac,
+                supplier_offering::batch::revise_permission_key(),
+            ),
+        )
+        .route(
+            "/supplier-offerings/batch/availability",
+            with_permission(
+                post(supplier_offering::batch::availability),
+                rbac,
+                supplier_offering::batch::availability_permission_key(),
+            ),
+        )
+        .route(
             "/supplier-offerings",
             with_permission(get(supplier_offering::list), rbac, supplier_offering::list_permission_key()),
         )

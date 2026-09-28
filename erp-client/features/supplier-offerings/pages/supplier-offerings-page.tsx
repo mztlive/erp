@@ -2,6 +2,10 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
+import { BatchSupplyDialog } from "../components/batch/batch-supply-dialog"
+import type { BatchMode } from "../lib/batch-supply"
 import { PlusIcon } from "lucide-react"
 
 import { PageScaffold } from "@/components/business"
@@ -38,6 +42,29 @@ const PAGE_SIZE = 50
 /** 供应商供给列表与维护入口。 */
 export const SupplierOfferingsPage = () => {
     const state = useSupplierOfferingsPageState()
+    const account = useAccountProfileQuery()
+    const canBatchCreate = hasPermission(
+        account.data?.permissions,
+        "supplier_offering:create",
+    )
+    const canBatchRevise =
+        hasPermission(account.data?.permissions, "supplier_offering:update") &&
+        hasPermission(
+            account.data?.permissions,
+            "supplier_offering_cost:detail",
+        )
+    const canBatchAvailability = hasPermission(
+        account.data?.permissions,
+        "supplier_offering_availability:update",
+    )
+    const [selection, setSelection] = React.useState<{
+        scope: string
+        ids: string[]
+    }>({ scope: "", ids: [] })
+    const [batch, setBatch] = React.useState<{
+        mode: BatchMode
+        offerings: SupplierOfferingView[]
+    } | null>(null)
     const [createOpen, setCreateOpen] = React.useState(false)
     const [reviseOffering, setReviseOffering] =
         React.useState<SupplierOfferingView | null>(null)
@@ -69,6 +96,9 @@ export const SupplierOfferingsPage = () => {
         state.urlState.workItemId,
     )
     const items = query.data?.items ?? []
+    const selectionScope = items.map((item) => item.id).join("|")
+    const selectedIds = selection.scope === selectionScope ? selection.ids : []
+    const selectedItems = items.filter((item) => selectedIds.includes(item.id))
     const taskOffering = taskQuery.data
         ? items.find((item) => item.id === taskQuery.data.businessObjectId)
         : undefined
@@ -148,6 +178,18 @@ export const SupplierOfferingsPage = () => {
                             返回商品
                         </Button>
                     ) : null}
+                    {!state.taskMode && canBatchCreate && (
+                        <Button
+                            id="supplier-offerings-page-batch-create"
+                            type="button"
+                            variant="outline"
+                            onClick={() =>
+                                setBatch({ mode: "create", offerings: [] })
+                            }
+                        >
+                            批量添加供给
+                        </Button>
+                    )}
                     {!state.taskMode ? (
                         <Button
                             id="supplier-offerings-page-create"
@@ -274,6 +316,76 @@ export const SupplierOfferingsPage = () => {
                             failed={query.isError}
                         />
                     }
+                    selectionBar={
+                        !state.taskMode &&
+                        (canBatchRevise || canBatchAvailability) ? (
+                            <div className="flex flex-wrap items-center gap-2 text-sm">
+                                <span>本页已选 {selectedItems.length} 行</span>
+                                <Button
+                                    id="supplier-offerings-batch-select-page"
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() =>
+                                        setSelection({
+                                            scope: selectionScope,
+                                            ids: items.map((item) => item.id),
+                                        })
+                                    }
+                                >
+                                    选择本页
+                                </Button>
+                                <Button
+                                    id="supplier-offerings-batch-clear"
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() =>
+                                        setSelection({
+                                            scope: selectionScope,
+                                            ids: [],
+                                        })
+                                    }
+                                >
+                                    清空
+                                </Button>
+                                {canBatchRevise && (
+                                    <Button
+                                        id="supplier-offerings-batch-revise"
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        disabled={!selectedItems.length}
+                                        onClick={() =>
+                                            setBatch({
+                                                mode: "revise",
+                                                offerings: selectedItems,
+                                            })
+                                        }
+                                    >
+                                        批量调价与条款
+                                    </Button>
+                                )}
+                                {canBatchAvailability && (
+                                    <Button
+                                        id="supplier-offerings-batch-availability"
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        disabled={!selectedItems.length}
+                                        onClick={() =>
+                                            setBatch({
+                                                mode: "availability",
+                                                offerings: selectedItems,
+                                            })
+                                        }
+                                    >
+                                        批量更新可供情况
+                                    </Button>
+                                )}
+                            </div>
+                        ) : undefined
+                    }
                     tableClassName="flex flex-col"
                     table={
                         <div className="flex min-h-0 flex-1 flex-col">
@@ -287,6 +399,17 @@ export const SupplierOfferingsPage = () => {
                                 )}
                             >
                                 <SupplierOfferingsTable
+                                    selectedIds={selectedIds}
+                                    onSelectionChange={
+                                        !state.taskMode &&
+                                        (canBatchRevise || canBatchAvailability)
+                                            ? (ids) =>
+                                                  setSelection({
+                                                      scope: selectionScope,
+                                                      ids,
+                                                  })
+                                            : undefined
+                                    }
                                     items={items}
                                     isPending={query.isPending}
                                     isError={query.isError}
@@ -325,6 +448,14 @@ export const SupplierOfferingsPage = () => {
                 />
             ) : null}
 
+            {batch && (
+                <BatchSupplyDialog
+                    mode={batch.mode}
+                    offerings={batch.offerings}
+                    supplierId={state.urlState.supplierId}
+                    onClose={() => setBatch(null)}
+                />
+            )}
             {!state.taskMode ? (
                 <RegisterSupplyForSkuDialog
                     key={

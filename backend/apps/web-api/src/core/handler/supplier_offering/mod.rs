@@ -2,6 +2,8 @@
 //!
 //! Handler 只做协议适配、成本字段授权与 Service 调用，不定义重复 DTO。
 
+pub mod batch;
+
 use application_core::AuditActor;
 use axum::extract::{Path, Query, State};
 use axum::{Extension, Json};

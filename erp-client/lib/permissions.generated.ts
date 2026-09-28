@@ -4349,6 +4349,36 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         permissions: [
             {
                 module: "admin",
+                method: "POST",
+                path: "/admin/supplier-offerings/batch/create",
+                description: "新增供应商供给",
+                permission: {
+                    resource: "supplier_offering",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-offerings/batch/revise",
+                description: "保存供应商供给条款",
+                permission: {
+                    resource: "supplier_offering",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-offerings/batch/availability",
+                description: "更新供应商可供状态",
+                permission: {
+                    resource: "supplier_offering_availability",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
                 method: "GET",
                 path: "/admin/supplier-offerings",
                 description: "查询供应商供给列表",
