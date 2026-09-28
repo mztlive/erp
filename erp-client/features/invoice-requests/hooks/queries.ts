@@ -9,8 +9,13 @@ import {
     getRequestAmounts,
     submitRequest,
     cancelRequest,
+    normalizeInvoiceRequest,
     type RequestQuery,
 } from "../api"
+import {
+    rememberSubmittedInvoiceRequest,
+    submittedInvoiceRequest,
+} from "../pending-detail"
 export const requestKeys = { all: queryKeyRoots.invoiceRequests }
 /** 当前账号的申请与查询能力，服务端仍执行最终授权。 */
 export function useInvoiceRequestPermissions() {
@@ -39,12 +44,15 @@ export const useInvoiceRequests = (query: RequestQuery, enabled = true) =>
         enabled,
     })
 /** 详情查询支持从销售单、集中列表和工作台进入。 */
-export const useInvoiceRequest = (id?: string) =>
-    useQuery({
+export const useInvoiceRequest = (id?: string) => {
+    const seeded = id ? submittedInvoiceRequest(id) : undefined
+    return useQuery({
         queryKey: [...requestKeys.all, "detail", id],
         queryFn: () => getRequest(id!),
         enabled: Boolean(id),
+        ...(seeded ? { initialData: seeded, initialDataUpdatedAt: 0 } : {}),
     })
+}
 /** 应收额度是服务端事实，禁止用列表合计替代。 */
 export const useInvoiceRequestAmounts = (id?: string, enabled = true) =>
     useQuery({
@@ -69,7 +77,11 @@ export function useInvoiceRequestCommands() {
     }
     const submit = useMutation({
         mutationFn: submitRequest,
-        onSuccess: refresh,
+        onSuccess: async (payload) => {
+            const request = normalizeInvoiceRequest(payload)
+            if (request.id) rememberSubmittedInvoiceRequest(request)
+            await refresh()
+        },
     })
     const cancel = useMutation({
         mutationFn: cancelRequest,

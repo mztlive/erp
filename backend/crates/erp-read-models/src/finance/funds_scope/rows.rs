@@ -218,6 +218,8 @@ pub struct ScopedPayableAccountRow {
     pub settled_total: Option<Amount>,
     /// 未分配余额；部分授权为 null。
     pub open_total: Option<Amount>,
+    /// 剩余可收票额度；部分授权为 null，整单资格返回真实余额。
+    pub open_invoiceable_total: Option<Amount>,
     /// 部分受限时为 true。
     pub permission_limited: bool,
     /// 来源采购单当前采购负责人。
@@ -856,6 +858,7 @@ mod tests {
                 gross_total: None,
                 settled_total: None,
                 open_total: None,
+                open_invoiceable_total: None,
                 permission_limited: true,
                 procurement_owner_user_id: Some("buyer-1".into()),
                 business_org_unit_id: Some("org-2".into()),
@@ -873,6 +876,7 @@ mod tests {
         assert_eq!(payable_json["items"][0]["source_document_no"], "PO-1");
         assert_eq!(payable_json["items"][0]["supplier_name"], "示例供应商");
         assert!(payable_json["items"][0]["gross_total"].is_null());
+        assert!(payable_json["items"][0]["open_invoiceable_total"].is_null());
 
         let request = page(
             vec![ScopedInvoiceRequestRow {
