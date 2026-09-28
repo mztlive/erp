@@ -332,6 +332,27 @@ impl FundsAccess {
             fact.as_ref(),
             whole,
         );
+        data.entries = self
+            .db
+            .payable_entries()
+            .find_entries_by_accounts(
+                &[erp_core::ids::PayableAccountId::new(account.base.id.clone())],
+                executor,
+            )
+            .await?
+            .into_iter()
+            .map(|entry| erp_finance::dto::payable::PayableEntryView {
+                id: entry.base.id,
+                entry_type: entry.entry_type,
+                direction: entry.direction,
+                amount: entry.amount,
+                due_date: entry.due_date,
+                source_document_id: entry.source_document_id.clone(),
+                source_document_no: None,
+                source_sequence: entry.source_sequence,
+                posted_at: entry.posted_at,
+            })
+            .collect();
         data.payment_recipient = crate::finance::payable::mapping::resolve_optional_payment_recipient_for_read(
             &self.db,
             &account.supplier_id,
@@ -375,5 +396,6 @@ pub(super) fn cut_payable_account_row(
         procurement_owner_user_id: fact.and_then(|order| order.owner_user_id.clone()),
         business_org_unit_id: fact.map(|order| order.business_org_unit_id.clone()),
         payment_recipient: None,
+        entries: Vec::new(),
     }
 }

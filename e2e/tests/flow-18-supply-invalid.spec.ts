@@ -292,7 +292,7 @@ test("flow-18 停止可供后供给分配不得建采购单，必须走销售变
         // 5) 供给分配确认前停止该 SKU 的有效供给。
         // 采购岗位没有供给列表范围；种子供给的维护人是建档管理员。
         page = await switchTo("admin")
-        const offeringRow = await findSeededOfferingRow(page)
+        const offeringRow = (await findSeededOfferingRow(page)).filter({ hasText: "杭州狮峰茶叶有限公司" }).first()
         await expect(offeringRow.getByText("可供").first()).toBeVisible()
         const quantityBefore = (await offeringRow.locator("td").filter({ hasText: /数量/ }).first().innerText()).match(/数量\s*([\d.]+)/)?.[1]
         expect(quantityBefore).toBeTruthy()
