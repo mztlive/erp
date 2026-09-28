@@ -10,8 +10,8 @@ import { toAutomationIdSegment } from "@/lib/automation-id"
 import { productSkuPriceRange } from "@/features/master-data/lib/list-filters"
 import {
     blockerColumn,
-    disableOnlyActionsColumn,
     lifecycleColumn,
+    productActionsColumn,
     nameColumn,
     revisionNoColumn,
     revisionTimingColumn,
@@ -98,6 +98,7 @@ export function useProductListColumns({
     supplierOfferingsError,
     onUpdateProductListing,
     onSupplyProduct,
+    onAddSupply,
     onDisableTarget,
 }: {
     canUpdateProductListing: boolean
@@ -116,6 +117,7 @@ export function useProductListColumns({
         listed: boolean,
     ) => Promise<void>
     onSupplyProduct: (item: MasterDataListItem) => void
+    onAddSupply: (item: MasterDataListItem) => void
     onDisableTarget: (item: MasterDataListItem) => void
 }) {
     return React.useMemo<ColumnDef<MasterDataListItem>[]>(
@@ -319,15 +321,25 @@ export function useProductListColumns({
             },
             revisionTimingColumn(),
             ...blockerColumn(rows),
-            disableOnlyActionsColumn({
+            productActionsColumn({
                 lastFocusedRowId,
                 onDisableTarget,
+                onAddSupply,
+                addSupplyDisabledReason: (item) => {
+                    if (productSkusPending) return "正在读取商品规格"
+                    if (productSkusError) return "规格读取失败，请重试"
+                    const skuCount =
+                        productSkusByProduct.get(item.stableId)?.length ?? 0
+                    if (skuCount === 0) return "请先新增或启用商品规格"
+                    return undefined
+                },
             }),
         ],
         [
             canUpdateProductListing,
             currentSupplySkuIds,
             lastFocusedRowId,
+            onAddSupply,
             onDisableTarget,
             onSupplyProduct,
             onUpdateProductListing,

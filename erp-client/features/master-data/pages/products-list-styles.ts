@@ -10,6 +10,6 @@ export const productsListStyles = {
         "[&_[data-column-id=supply]]:w-28 [&_[data-column-id=supply]]:min-w-24",
         "[&_[data-column-id=listing]]:w-28 [&_[data-column-id=listing]]:min-w-24",
         "[&_[data-column-id=blocker]]:min-w-40",
-        "[&_[data-column-id=actions]]:w-20 [&_[data-column-id=actions]]:min-w-20",
+        "[&_[data-column-id=actions]]:w-44 [&_[data-column-id=actions]]:min-w-40",
     ].join(" "),
 } as const

@@ -4,6 +4,7 @@ import {
     BanIcon,
     EyeIcon,
     FilePenLineIcon,
+    PlusIcon,
     UserRoundCogIcon,
 } from "lucide-react"
 
@@ -197,6 +198,64 @@ export function disableOnlyActionsColumn({
                     moreId={`master-data-list-row-${segment}-more`}
                     moreLabel={`${item.name} 更多操作`}
                     actions={[
+                        {
+                            id: `master-data-list-row-${segment}-disable`,
+                            label: masterDataCopy.actionDisable,
+                            icon: BanIcon,
+                            disabled: !canDisable,
+                            disabledReason: disableBlocker?.message,
+                            destructive: true,
+                            onClick: () => {
+                                markFocused(lastFocusedRowId, item)
+                                onDisableTarget?.(item)
+                            },
+                        },
+                    ]}
+                />
+            )
+        },
+    }
+}
+
+export function productActionsColumn({
+    lastFocusedRowId,
+    onDisableTarget,
+    onAddSupply,
+    addSupplyDisabledReason,
+}: ActionColumnInput & {
+    onAddSupply: (item: MasterDataListItem) => void
+    addSupplyDisabledReason: (item: MasterDataListItem) => string | undefined
+}): ColumnDef<MasterDataListItem> {
+    return {
+        id: "actions",
+        size: 168,
+        minSize: 168,
+        header: masterDataCopy.colActions,
+        meta: { label: masterDataCopy.colActions, align: "end" },
+        cell: ({ row }) => {
+            const item = row.original
+            const segment = toAutomationIdSegment(item.stableId)
+            const canDisable = item.allowedActions.includes("DISABLE")
+            const disableBlocker = item.actionBlockers.find(
+                (blocker) => blocker.action === "DISABLE",
+            )
+            const addSupplyReason = addSupplyDisabledReason(item)
+            return (
+                <TableRowActions
+                    moreId={`master-data-list-row-${segment}-more`}
+                    moreLabel={`${item.name} 更多操作`}
+                    actions={[
+                        {
+                            id: `master-data-product-${segment}-add-supply`,
+                            label: "添加供给",
+                            icon: PlusIcon,
+                            disabled: addSupplyReason != null,
+                            disabledReason: addSupplyReason,
+                            onClick: () => {
+                                markFocused(lastFocusedRowId, item)
+                                onAddSupply(item)
+                            },
+                        },
                         {
                             id: `master-data-list-row-${segment}-disable`,
                             label: masterDataCopy.actionDisable,
