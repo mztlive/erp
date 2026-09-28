@@ -230,11 +230,6 @@ async function readPurchaseOrders(page: Page, salesOrderNo: string): Promise<Pur
     return refs;
 }
 
-async function openFulfillmentTask(page: Page, purchaseOrderNo: string) {
-    await openWorkspaceTask(page, /履约处理/, purchaseOrderNo, "fulfillment");
-    await openFulfillmentWorkspaceForm(page);
-}
-
 async function assertFulfillmentCannotComplete(page: Page, kind: "入库" | "代发") {
     if (kind === "入库") {
         await expect(page.locator('[aria-label="入库表单"]')).toBeVisible({
@@ -330,6 +325,18 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
         await session?.context.close();
         session = await openLoggedInWorkspace(browser, login);
         return session.page;
+    };
+
+    const openFulfillmentTask = async (page: Page, purchaseOrderNo: string) => {
+        try {
+            await openWorkspaceTask(page, /履约处理/, purchaseOrderNo, "fulfillment");
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            // 卡片有时只有客户名和销售单号，没有采购单号。只在没找到该任务时改用本单号，不点第一条履约。
+            if (!message.includes("工作台未找到任务") || !salesOrderNo) throw error;
+            await openWorkspaceTask(page, /履约处理/, salesOrderNo, "fulfillment");
+        }
+        await openFulfillmentWorkspaceForm(page);
     };
 
     try {

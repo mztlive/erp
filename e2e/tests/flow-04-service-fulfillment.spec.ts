@@ -136,6 +136,20 @@ async function clearWorkspaceSearch(page: Page) {
   }
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/** 全量套件共用工作台。负向检查只认本单号或本单客户名，不要求队列里没有别的单。 */
+async function expectNoTasksForOrder(page: Page, action: string, hints: readonly string[]) {
+  const list = page.getByRole('list', { name: '待办列表' })
+  const empty = page.getByText(/当前没有待处理事项|当前筛选没有待办|范围内没有待办/)
+  await expect(list.or(empty).first()).toBeVisible({ timeout: TIMEOUT })
+  const hint = hints.map((value) => escapeRegExp(value)).join('|')
+  const pattern = new RegExp(`(?:${action})[\\s\\S]*(?:${hint})|(?:${hint})[\\s\\S]*(?:${action})`)
+  await expect(list.getByRole('button', { name: pattern })).toHaveCount(0)
+}
+
 // 负责销售是展示名，不是输入框：必须等于侧栏账号菜单里的当前用户，且不能停在占位文案。
 async function expectLoggedInSalesOwner(page: Page, timeout: number) {
   const placeholders = ['加载当前用户…', '无法获取登录用户', '当前用户未就绪']
@@ -291,14 +305,14 @@ test('flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
     await clearWorkspaceSearch(sales.page)
     await expect(sales.page.getByRole('button', { name: /^(通过|同意审批)$/ })).toHaveCount(0)
 
-    // 负向：采购确认通过前不得履约、不得供给分配、不得关闭
+    // 负向：采购确认通过前，本单不得履约、不得供给分配、不得关闭
     await refreshWorkspace(procurement.page)
     await selectWorkspaceFamily(procurement.page, "fulfillment")
     await clearWorkspaceSearch(procurement.page)
-    await expect(procurement.page.getByRole('button', { name: /履约处理|客户验收登记/ })).toHaveCount(0)
+    await expectNoTasksForOrder(procurement.page, '履约处理|客户验收登记', [orderNo, legalName])
     await selectWorkspaceFamily(procurement.page, "procurement")
     await clearWorkspaceSearch(procurement.page)
-    await expect(procurement.page.getByRole('button', { name: /待供给分配/ })).toHaveCount(0)
+    await expectNoTasksForOrder(procurement.page, '待供给分配', [orderNo, legalName])
 
     // 5. 采购在 W01 原地通过销售单审批（采购确认节点不选供给、不录入成本）
     await openWorkspaceTask(procurement.page, /销售单审批/, orderNo, 'approval')
@@ -325,11 +339,11 @@ test('flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
     await expect(identity.getByText('已关闭')).toHaveCount(0)
     await expect(sales.page.locator('#sales-orders-detail-start-change')).toBeVisible()
 
-    // 负向：销售单刚生效时不得履约（须先完成供给分配且采购单生效）
+    // 负向：销售单刚生效时本单不得履约（须先完成供给分配且采购单生效）
     await refreshWorkspace(procurement.page)
     await selectWorkspaceFamily(procurement.page, "fulfillment")
     await clearWorkspaceSearch(procurement.page)
-    await expect(procurement.page.getByRole('button', { name: /履约处理/ })).toHaveCount(0)
+    await expectNoTasksForOrder(procurement.page, '履约处理', [orderNo, legalName])
 
     // 6. 供给分配：线下服务只能推荐采购，不得分配现有库存；确认后立即提交采购单
     if ((await procurement.page.getByRole('heading', { name: '供给分配' }).count()) === 0) {
@@ -382,11 +396,11 @@ test('flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
     await expect(procurement.page.getByText('线下服务').first()).toBeVisible()
     await expect(procurement.page.getByRole('table').getByText('草稿', { exact: true })).toHaveCount(0)
 
-    // 负向：采购单生效前仍不得服务履约
+    // 负向：采购单生效前本单仍不得服务履约
     await refreshWorkspace(procurement.page)
     await selectWorkspaceFamily(procurement.page, "fulfillment")
     await clearWorkspaceSearch(procurement.page)
-    await expect(procurement.page.getByRole('button', { name: /履约处理/ })).toHaveCount(0)
+    await expectNoTasksForOrder(procurement.page, '履约处理', [orderNo, legalName])
 
     // 7. 财务总监审批采购单（caigou 提交，caiwu 审批）
     await openWorkspaceTask(finance.page, /采购单审批/, orderNo, 'approval')

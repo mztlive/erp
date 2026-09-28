@@ -86,6 +86,51 @@ function contractPdfPath(): { name: string; mimeType: string; buffer: Buffer } {
     }
 }
 
+function virtualCategoryTreeItem(page: Page) {
+    return page
+        .getByRole('complementary', { name: '分类导航' })
+        .getByRole('treeitem', { name: new RegExp(`^${VIRTUAL_CATEGORY_NAME}(?:，|$)`) })
+}
+
+async function expectVirtualCategoryOpen(page: Page) {
+    await expect(page.getByRole('heading', { name: VIRTUAL_CATEGORY_NAME, exact: true })).toBeVisible({
+        timeout: 20000,
+    })
+    await expect(page.getByLabel('分类路径').locator('[aria-current="page"]')).toHaveText(
+        VIRTUAL_CATEGORY_NAME,
+    )
+}
+
+async function closeNewCategoryDialog(page: Page) {
+    const dialog = page.getByRole('dialog', { name: '新建商品分类' })
+    const discard = page.getByRole('alertdialog', { name: '放弃未保存的更改？' })
+    // 表单已填过：直接关会先弹出放弃确认；确认层已经在上面时不再点被挡住的关闭。
+    if (!(await discard.isVisible().catch(() => false))) {
+        await dialog.getByRole('button', { name: '关闭' }).click()
+    }
+    await expect(discard).toBeVisible({ timeout: 20000 })
+    await discard.getByRole('button', { name: '放弃更改' }).click()
+    await expect(dialog).toBeHidden({ timeout: 20000 })
+    await expect(discard).toBeHidden({ timeout: 20000 })
+}
+
+async function openExistingVirtualCategory(page: Page) {
+    const nav = page.getByRole('complementary', { name: '分类导航' })
+    if ((await virtualCategoryTreeItem(page).count()) !== 1) {
+        const expand = nav.locator('#category-nav-expand')
+        if (await expand.isVisible().catch(() => false)) await expand.click()
+    }
+    if ((await virtualCategoryTreeItem(page).count()) !== 1) {
+        const search = nav.getByLabel('搜索分类名称或代码')
+        await search.fill(VIRTUAL_CATEGORY_NAME)
+        await search.press('Enter')
+    }
+    const item = virtualCategoryTreeItem(page)
+    await expect(item).toHaveCount(1, { timeout: 20000 })
+    await item.click()
+    await expectVirtualCategoryOpen(page)
+}
+
 async function ensureVirtualCategory(page: Page) {
     await page.goto('/master-data/categories')
     await expect(page.getByRole('heading', { name: '商品分类', exact: true })).toBeVisible({ timeout: 20000 })
@@ -98,7 +143,13 @@ async function ensureVirtualCategory(page: Page) {
             { timeout: 20000 },
         )
         .catch(() => undefined)
-    if (await page.getByText(VIRTUAL_CATEGORY_NAME).count()) return
+    const nav = page.getByRole('complementary', { name: '分类导航' })
+    await expect(nav.getByText('正在加载分类…')).toBeHidden({ timeout: 20000 })
+    if ((await virtualCategoryTreeItem(page).count()) === 1) {
+        await virtualCategoryTreeItem(page).click()
+        await expectVirtualCategoryOpen(page)
+        return
+    }
     await page.locator('#master-data-category-tree-create-root').click()
     const dialog = page.getByRole('dialog', { name: /新建商品分类/ })
     await expect(dialog).toBeVisible({ timeout: 20000 })
@@ -107,18 +158,24 @@ async function ensureVirtualCategory(page: Page) {
     await chooseComboboxById(page, 'master-data-category-create-dialog-product-kind', '虚拟')
     await dialog.locator('#master-data-category-create-dialog-change-reason').fill('E2E 电子交付目录')
     await dialog.locator('#master-data-category-create-dialog-submit').click()
-    const duplicateCategory = page.getByText('数据已存在，请勿重复提交')
+    // 分类主数据清库后仍在。重复提交可能是「已新建」，也可能停在冲突文案里。
     const createdCategory = page.locator('[data-slot="toast-title"]').filter({ hasText: '已新建' })
-    await expect(createdCategory.or(duplicateCategory).first()).toBeVisible({ timeout: 20000 })
-    if (await duplicateCategory.isVisible().catch(() => false)) {
-        await dialog.getByRole('button', { name: '关闭' }).click()
-    } else {
-        await expectToast(page, '已新建')
-    }
-    await expect(page.getByRole('heading', { name: VIRTUAL_CATEGORY_NAME, exact: true })).toBeVisible({
+    const conflictCategory = page.getByText('分类已更新，请重新打开后修改')
+    const duplicateCategory = page.getByText('数据已存在，请勿重复提交')
+    await expect(createdCategory.or(conflictCategory).or(duplicateCategory).first()).toBeVisible({
         timeout: 20000,
     })
-    await expect(page.getByLabel('分类路径').locator('[aria-current="page"]')).toHaveText(VIRTUAL_CATEGORY_NAME)
+    const sawCreated = await createdCategory.isVisible().catch(() => false)
+    const sawExisting =
+        (await conflictCategory.isVisible().catch(() => false)) ||
+        (await duplicateCategory.isVisible().catch(() => false))
+    if (sawCreated && !sawExisting) {
+        await expectToast(page, '已新建')
+        await expectVirtualCategoryOpen(page)
+        return
+    }
+    await closeNewCategoryDialog(page)
+    await openExistingVirtualCategory(page)
 }
 
 async function ensureVirtualProduct(page: Page) {

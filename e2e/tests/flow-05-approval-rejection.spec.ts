@@ -362,15 +362,14 @@ async function withdrawApproval(page: Page, order: OrderSnapshot): Promise<void>
   await expect(dialog).toBeVisible(VISIBLE)
   await dialog.getByLabel('撤回原因').fill(WITHDRAW_REASON)
   await dialog.locator('#sales-orders-detail-cancel-approval-confirm').click()
-  // 成功 toast 仅展示数秒，点按超时（按钮随框卸载）后再断言必错过：以框关闭 + 回到草稿为准。
+  // 成功 toast 仅展示数秒，点按超时（按钮随框卸载）后再断言必错过：以框关闭 + 回到可编辑草稿为准。
   await expect(dialog).toBeHidden(VISIBLE)
   await expect(page.getByText('审批已撤回').first()).toBeVisible({ timeout: 5_000 }).catch(() => undefined)
-  await expect(
-    page
-      .getByRole('heading', { name: '编辑销售单' })
-      .or(page.getByRole('heading', { name: '业务信息' })),
-  ).toBeVisible(VISIBLE)
+  // 撤回后就地进入草稿编辑：标题是客户名，不再有「编辑销售单 / 业务信息」。
   await expect(page.getByText('草稿').first()).toBeVisible(VISIBLE)
+  await expect(page.getByRole('heading', { name: '基本信息', exact: true })).toBeVisible(VISIBLE)
+  await expect(page.getByRole('heading', { name: '销售明细', exact: true })).toBeVisible(VISIBLE)
+  await expect(page.getByRole('button', { name: '添加商品' })).toBeVisible(VISIBLE)
 }
 
 async function voidDraftViaHttp(page: Page, order: OrderSnapshot): Promise<void> {
