@@ -185,7 +185,8 @@ export function subscribeScopeCache(client: QueryClient): () => void {
                     status: "error",
                     error,
                 })
-                void clear(query, error)
+                // 迟到的旧版本只作废同类查询。人员候选过期不能把已成功的客户目录打成失败。
+                void clear(query, error, true)
                 return
             }
             let changed = false

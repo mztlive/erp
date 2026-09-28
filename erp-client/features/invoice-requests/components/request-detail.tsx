@@ -6,7 +6,10 @@ import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import { MoneyValue } from "@/components/business"
 import { ApprovalReadonly } from "@/features/approval-workflow/components/approval-readonly"
-import { mapDocumentApprovalViewDto } from "@/features/approval-workflow/types"
+import {
+    mapDocumentApprovalViewDto,
+    type DocumentApprovalView,
+} from "@/features/approval-workflow/types"
 import { classifyFormalCommandError } from "@/lib/formal-command"
 import { getErrorMessage } from "@/lib/api/errors"
 import { subtractFixed } from "@/lib/fixed-decimal"
@@ -16,6 +19,59 @@ import {
     useInvoiceRequestPermissions,
 } from "../hooks/queries"
 import { cancelRequest, requestStatusLabels, type InvoiceRequest } from "../api"
+
+function textOrDash(value?: string | null): string {
+    const text = value?.trim()
+    return text ? text : "—"
+}
+
+function safeRemaining(amount: string, invoiced: string): string {
+    if (
+        !/^-?\d+(?:\.\d{1,2})?$/.test(amount) ||
+        !/^-?\d+(?:\.\d{1,2})?$/.test(invoiced)
+    ) {
+        return amount
+    }
+    return subtractFixed(amount, invoiced, { maxScale: 2, outputScale: 2 })
+}
+
+/** 范围详情没有嵌套 data；缺字段时展示占位，禁止对 undefined 取属性。 */
+function requestFacts(
+    request: InvoiceRequest & {
+        amount?: string
+        applicant_user_id?: string
+    },
+) {
+    const data = request.data
+    const amount = data?.amount || request.amount || "0.00"
+    const invoiced = request.invoiced_amount || "0.00"
+    const approvalSource = request.approval
+    let approval: DocumentApprovalView | undefined
+    if (
+        approvalSource &&
+        (!approvalSource.definition ||
+            Array.isArray(approvalSource.definition.nodes)) &&
+        (approvalSource.recent_history == null ||
+            Array.isArray(approvalSource.recent_history))
+    ) {
+        approval = mapDocumentApprovalViewDto({
+            ...approvalSource,
+            recent_history: approvalSource.recent_history ?? [],
+            allowed_actions: approvalSource.allowed_actions ?? [],
+        })
+    }
+    return {
+        amount,
+        invoiced,
+        remaining: safeRemaining(amount, invoiced),
+        title: textOrDash(data?.invoice_title),
+        taxNumber: textOrDash(data?.tax_number),
+        content: textOrDash(data?.invoice_content),
+        reason: textOrDash(data?.reason),
+        applicantId: request.created_by || request.applicant_user_id || "",
+        approval,
+    }
+}
 
 /** 单据详情呈现批准与执行的独立进度；原申请人可撤回或编辑草稿。 */
 export function InvoiceRequestDetail({
@@ -55,16 +111,17 @@ export function InvoiceRequestDetail({
                 onBack={() => setCancelling(false)}
             />
         )
+    const facts = requestFacts(request)
     return (
         <section className="space-y-5" aria-label="开票申请详情">
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <h2 className="text-lg font-semibold">
-                        {request.request_no}
+                        {request.request_no || "开票申请"}
                     </h2>
                     <p className="text-sm text-muted-foreground">
-                        {request.sales_order_no} · {request.data.invoice_title}{" "}
-                        · {requestStatusLabels[request.status]}
+                        {request.sales_order_no || "—"} · {facts.title} ·{" "}
+                        {requestStatusLabels[request.status] ?? "审批中"}
                     </p>
                 </div>
                 <Button
@@ -77,16 +134,9 @@ export function InvoiceRequestDetail({
             </div>
             <div className="grid gap-4 rounded-lg bg-muted p-4 sm:grid-cols-3">
                 {[
-                    ["申请金额", request.data.amount],
-                    ["已开票", request.invoiced_amount],
-                    [
-                        "本次尚未开票",
-                        subtractFixed(
-                            request.data.amount,
-                            request.invoiced_amount,
-                            { maxScale: 2, outputScale: 2 },
-                        ),
-                    ],
+                    ["申请金额", facts.amount],
+                    ["已开票", facts.invoiced],
+                    ["本次尚未开票", facts.remaining],
                 ].map(([label, amount]) => (
                     <div key={label}>
                         <p className="text-sm text-muted-foreground">{label}</p>
@@ -98,10 +148,10 @@ export function InvoiceRequestDetail({
             </div>
             <dl className="grid gap-4 text-sm sm:grid-cols-2">
                 {[
-                    ["开票抬头", request.data.invoice_title],
-                    ["税号", request.data.tax_number],
-                    ["开票内容", request.data.invoice_content],
-                    ["申请事由", request.data.reason],
+                    ["开票抬头", facts.title],
+                    ["税号", facts.taxNumber],
+                    ["开票内容", facts.content],
+                    ["申请事由", facts.reason],
                 ].map(([label, value]) => (
                     <div key={label}>
                         <dt className="text-muted-foreground">{label}</dt>
@@ -109,10 +159,10 @@ export function InvoiceRequestDetail({
                     </div>
                 ))}
             </dl>
-            {request.approval ? (
+            {facts.approval ? (
                 <ApprovalReadonly
                     id={`invoice-request-${id}-approval`}
-                    approval={mapDocumentApprovalViewDto(request.approval)}
+                    approval={facts.approval}
                 />
             ) : null}
             <div className="flex flex-wrap gap-2">
@@ -140,7 +190,8 @@ export function InvoiceRequestDetail({
                         查看开票任务
                     </Button>
                 ) : null}
-                {request.created_by === permissions.userId &&
+                {facts.applicantId === permissions.userId &&
+                request.version > 0 &&
                 request.status === "in_approval" &&
                 permissions.canCancel ? (
                     <Button

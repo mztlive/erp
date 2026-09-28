@@ -81,8 +81,6 @@ function peoplePayload(url: string) {
         page: 1,
         page_size: 20,
         scope_version: "s1-people-v1",
-        policy_version: 1,
-        organization_version: 1,
         as_of: "2026-09-16T00:00:00Z",
         empty_reason: null,
     }
@@ -92,8 +90,8 @@ function meta() {
     return {
         empty_reason: null,
         scope_version: "s1-mock-v1",
-        policy_version: 1,
-        organization_version: 1,
+        // 不写 policy/organization 版本。登录资料的版本通常大于 1，
+        // 写死 1 会被范围缓存当成过期响应，目录成功也会显示成系统失败。
         scope_summary: "S1 mock visible owner scope",
         as_of: "2026-09-16T00:00:00Z",
         owner_options: owners,
@@ -373,7 +371,7 @@ async function installMocks(page: Page, requests: { kind: Kind; url: string; own
     await context.route(/\/admin\/contracts(\?|$)/, (route) => fulfill("contracts", route))
     await context.route(/\/admin\/sales-orders(\?|$)/, (route) => fulfill("sales", route))
     await context.route(/\/admin\/purchase-orders(\?|$)/, (route) => fulfill("purchases", route))
-    await context.route(/\/admin\/(?:salespeople|procurement-people)(?:\/selected)?(?:\?|$)/, async (route) => {
+    await context.route(/\/admin\/(?:salespeople|procurement-people|business-people)(?:\/selected)?(?:\?|$)/, async (route) => {
         const cors = {
             "access-control-allow-origin": "*",
             "access-control-allow-headers": "*",
@@ -389,6 +387,59 @@ async function installMocks(page: Page, requests: { kind: Kind; url: string; own
             headers: cors,
             body: JSON.stringify(envelope(peoplePayload(route.request().url()))),
         })
+    })
+    await context.route(/\/admin\/org-units(?:\?|$)/, async (route) => {
+        await fulfillJson(route, {
+            version: 1,
+            units: [],
+            memberships: [],
+            management: [],
+            people: [],
+            roles: [],
+            scope_version: "s1-org-v1",
+            as_of: "2026-09-16T00:00:00Z",
+            empty_reason: null,
+            scope_summary: "S1 mock org",
+            ownership_basis: "org_unit",
+        })
+    })
+    await context.route(/\/admin\/settlement-parties(?:\/selected)?(?:\?|$)/, async (route) => {
+        const { page, pageSize } = pageParams(route.request().url())
+        await fulfillJson(route, {
+            items: [],
+            total: 0,
+            page,
+            page_size: pageSize,
+            scope_version: "s1-parties-v1",
+            as_of: "2026-09-16T00:00:00Z",
+            empty_reason: null,
+            scope_summary: "S1 mock settlement parties",
+            ownership_basis: "settlement_party",
+        })
+    })
+}
+
+async function fulfillJson(
+    route: {
+        request: () => { method: () => string }
+        fulfill: (response: Record<string, unknown>) => Promise<void>
+    },
+    data: unknown,
+) {
+    const cors = {
+        "access-control-allow-origin": "*",
+        "access-control-allow-headers": "*",
+        "access-control-allow-methods": "GET,OPTIONS",
+    }
+    if (route.request().method() === "OPTIONS") {
+        await route.fulfill({ status: 204, headers: cors })
+        return
+    }
+    await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: cors,
+        body: JSON.stringify(envelope(data)),
     })
 }
 
