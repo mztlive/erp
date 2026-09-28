@@ -80,6 +80,30 @@ pub struct ScopedReceivableAccountRow {
     pub sales_owner_user_id: Option<String>,
     /// 关联销售单当前业务组织。
     pub business_org_unit_id: Option<String>,
+    /// 来源销售单业务单号。核销池按单号定位，范围裁剪不得丢掉。
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub sales_order_no: String,
+    /// 经营客户。
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub customer_id: String,
+    /// 客户名称。缺失时由客户端占位，不回退内部 ID。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub customer_name: Option<String>,
+    /// 结算往来主体。
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub counterparty_party_id: String,
+    /// 结算往来主体法定名称。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub counterparty_party_name: Option<String>,
+    /// 子账乐观锁版本。
+    #[serde(default)]
+    pub version: u64,
+    /// 剩余可开票额度。部分授权为 null。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub open_invoiceable_total: Option<Amount>,
+    /// 应收分录。回款核销池按增加分录建行。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub entries: Vec<erp_finance::dto::receivable::ReceivableEntryView>,
 }
 
 /// M07 客户回款范围行：登记/核销经办人分别查询，整单与未分配部分授权为 null。
@@ -206,6 +230,12 @@ pub struct ScopedPayableAccountRow {
     /// 应付分录。列表不填；详情必须带上，否则付款会把子账 id 当成分录 id。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub entries: Vec<erp_finance::dto::payable::PayableEntryView>,
+    /// 来源业务单号。采购来源为采购单号；空单号不返回，不得回退内部 ID。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_document_no: Option<String>,
+    /// 供应商当前法定名称。能解析时返回，供往来列表展示。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub supplier_name: Option<String>,
 }
 
 /// M09 供应商付款范围行：采购负责人与付款经办人分别查询。
@@ -319,6 +349,8 @@ pub(super) struct LinkedPurchaseFact {
     pub(super) business_org_unit_id: String,
     /// 单据业务版本。
     pub(super) version: u64,
+    /// 采购单号。空字符串表示单据没有业务单号。
+    pub(super) document_no: String,
 }
 
 /// 单据某条分配归属的关联单据；`None` 表示无关联单据的未分配份额。
@@ -403,6 +435,7 @@ impl FundsAccess {
                         owner_user_id: order.current_owner_user_id().ok().map(str::to_string),
                         business_org_unit_id: order.business_org_unit_id.clone(),
                         version: order.base.version,
+                        document_no: order.purchase_no.clone(),
                     },
                 );
             }
@@ -787,6 +820,14 @@ mod tests {
                 permission_limited: false,
                 sales_owner_user_id: Some("sales-1".into()),
                 business_org_unit_id: Some("org-1".into()),
+                sales_order_no: "XS-1".into(),
+                customer_id: "cust-1".into(),
+                customer_name: None,
+                counterparty_party_id: "party-1".into(),
+                counterparty_party_name: Some("结算客户".into()),
+                version: 1,
+                open_invoiceable_total: Some(zero_amount()),
+                entries: Vec::new(),
             }],
             "current_sales_owner_and_register_operator",
             true,
@@ -798,6 +839,9 @@ mod tests {
             true,
         );
         assert_eq!(receivable_json["items"][0]["sales_owner_user_id"], "sales-1");
+        assert_eq!(receivable_json["items"][0]["sales_order_no"], "XS-1");
+        assert_eq!(receivable_json["items"][0]["counterparty_party_name"], "结算客户");
+        assert!(receivable_json["items"][0].get("customer_name").is_none());
         assert!(receivable_json["items"][0].get("owner_user_name").is_none());
 
         let payable = page(
@@ -817,6 +861,8 @@ mod tests {
                 business_org_unit_id: Some("org-2".into()),
                 payment_recipient: None,
                 entries: Vec::new(),
+                source_document_no: Some("PO-1".into()),
+                supplier_name: Some("示例供应商".into()),
             }],
             "linked_purchase_owner",
             false,
@@ -824,6 +870,8 @@ mod tests {
         let payable_json = serde_json::to_value(&payable).unwrap();
         assert_page_keeps_scope_without_candidates(&payable_json, "linked_purchase_owner", false);
         assert_eq!(payable_json["items"][0]["procurement_owner_user_id"], "buyer-1");
+        assert_eq!(payable_json["items"][0]["source_document_no"], "PO-1");
+        assert_eq!(payable_json["items"][0]["supplier_name"], "示例供应商");
         assert!(payable_json["items"][0]["gross_total"].is_null());
 
         let request = page(

@@ -75,20 +75,29 @@ impl FundsAccess {
                     }
                     let whole = authorization.whole();
                     let visible = this.receivable_visible_share(&account.base.id, executor).await?;
-                    let row = ScopedReceivableAccountRow {
+                    let mut row = ScopedReceivableAccountRow {
                         id: account.base.id.clone(),
                         sales_order_id: account.sales_order_id.to_string(),
+                        sales_order_no: order.order_no.clone(),
                         account_seq: account.account_seq,
                         status: account.stable.status(),
                         created_at: account.base.created_at,
+                        version: account.base.version,
+                        customer_id: account.customer_id.to_string(),
+                        customer_name: None,
+                        counterparty_party_id: account.counterparty_party_id.to_string(),
+                        counterparty_party_name: None,
                         visible_settled_share: visible,
                         gross_total: whole_amount(whole, account.gross_total),
                         settled_total: whole_amount(whole, account.settled_total),
                         open_total: whole_amount(whole, account.open_total),
+                        open_invoiceable_total: whole_amount(whole, account.open_invoiceable_total),
                         permission_limited: !whole,
                         sales_owner_user_id: Some(order.sales_owner_user_id.clone()),
                         business_org_unit_id: Some(order.business_org_unit_id.clone()),
+                        entries: Vec::new(),
                     };
+                    this.finish_receivable_display(std::slice::from_mut(&mut row), executor).await?;
                     let parts = vec![facts.version_part()];
                     let version = scope_version(&authorization.context, &parts);
                     Ok(FundsScopedResult {
@@ -257,26 +266,32 @@ impl FundsAccess {
         if start < filtered.len() {
             for (row, _, _) in filtered[start..end].iter() {
                 let visible = self.receivable_visible_share(&row.id, executor).await?;
+                let order = orders_by_id.get(&row.sales_order_id);
                 items.push(ScopedReceivableAccountRow {
                     id: row.id.clone(),
                     sales_order_id: row.sales_order_id.clone(),
+                    sales_order_no: order.map(|item| item.order_no.clone()).unwrap_or_default(),
                     account_seq: row.account_seq,
                     status: row.stable.status(),
                     created_at: row.created_at,
+                    version: row.version,
+                    customer_id: row.customer_id.clone(),
+                    customer_name: None,
+                    counterparty_party_id: row.counterparty_party_id.clone(),
+                    counterparty_party_name: None,
                     visible_settled_share: visible,
                     gross_total: whole_amount(whole, row.gross_total),
                     settled_total: whole_amount(whole, row.settled_total),
                     open_total: whole_amount(whole, row.open_total),
+                    open_invoiceable_total: whole_amount(whole, row.open_invoiceable_total),
                     permission_limited: !whole,
-                    sales_owner_user_id: orders_by_id
-                        .get(&row.sales_order_id)
-                        .map(|order| order.sales_owner_user_id.clone()),
-                    business_org_unit_id: orders_by_id
-                        .get(&row.sales_order_id)
-                        .map(|order| order.business_org_unit_id.clone()),
+                    sales_owner_user_id: order.map(|item| item.sales_owner_user_id.clone()),
+                    business_org_unit_id: order.map(|item| item.business_org_unit_id.clone()),
+                    entries: Vec::new(),
                 });
             }
         }
+        self.finish_receivable_display(&mut items, executor).await?;
         let version = format!("{:x}", fingerprint.finish());
         ensure_version(params.scope_version.as_deref(), &version).map_err(|_| changed())?;
         let mut triples = Vec::new();

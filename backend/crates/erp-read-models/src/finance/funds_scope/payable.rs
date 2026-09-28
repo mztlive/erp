@@ -212,19 +212,14 @@ impl FundsAccess {
         decided: Vec<(PayableAccountRow, Option<LinkedPurchaseFact>, bool)>,
         authorization: FundsAuthorization,
         fingerprint: std::collections::hash_map::DefaultHasher,
-        _executor: &mut dyn Executor,
+        executor: &mut dyn Executor,
     ) -> Result<FundsScopedPage<ScopedPayableAccountRow>> {
         let total = decided.len() as u64;
         let page = query.paging.page.max(1);
         let page_size = u64::from(query.paging.page_size).max(1);
         let start = ((page - 1) as usize).saturating_mul(page_size as usize);
         let end = start.saturating_add(page_size as usize).min(decided.len());
-        let mut items = Vec::new();
-        if start < decided.len() {
-            for (row, fact, whole) in decided[start..end].iter() {
-                items.push(cut_payable_account_row(row, fact.as_ref(), *whole));
-            }
-        }
+        let items = self.payable_page_items(&decided, start, end, executor).await?;
         let mut triples = Vec::new();
         let mut whole_sum = zero_amount();
         let mut all_whole = true;
@@ -262,6 +257,41 @@ impl FundsAccess {
             scope_summary: "应付子账按来源采购单当前采购负责人授权；部分授权仅返获授权份额",
             ownership_basis: "linked_purchase_owner",
         })
+    }
+
+    /// 当前页应付行，并补上供应商法定名称。
+    ///
+    /// # 参数
+    /// * `decided` - 已通过范围裁剪的应付行
+    /// * `start` - 页起始下标
+    /// * `end` - 页结束下标
+    /// * `executor` - 调用方事务
+    ///
+    /// # 返回
+    /// 返回带来源单号和供应商名称的范围行。
+    ///
+    /// # 错误
+    /// 供应商名称读取失败时返回错误。
+    async fn payable_page_items(
+        &self,
+        decided: &[(PayableAccountRow, Option<LinkedPurchaseFact>, bool)],
+        start: usize,
+        end: usize,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ScopedPayableAccountRow>> {
+        if start >= end {
+            return Ok(Vec::new());
+        }
+        let supplier_ids =
+            decided[start..end].iter().map(|(row, _, _)| row.supplier_id.clone()).collect::<Vec<_>>();
+        let supplier_names = self.supplier_legal_names(&supplier_ids, executor).await?;
+        let mut items = Vec::with_capacity(end - start);
+        for (row, fact, whole) in decided[start..end].iter() {
+            let mut item = cut_payable_account_row(row, fact.as_ref(), *whole);
+            item.supplier_name = supplier_names.get(&row.supplier_id).cloned();
+            items.push(item);
+        }
+        Ok(items)
     }
 
     /// 应付子账详情同一事务内解析、取数与裁剪；版本绑定来源采购单。
@@ -353,14 +383,16 @@ impl FundsAccess {
                 posted_at: entry.posted_at,
             })
             .collect();
-        data.payment_recipient = crate::finance::payable::mapping::resolve_optional_payment_recipient_for_read(
-            &self.db,
-            &account.supplier_id,
-            executor,
-        )
-        .await?
-        .as_ref()
-        .map(crate::finance::payable::mapping::payment_recipient_view);
+        data.supplier_name = self.supplier_name_of(&account.supplier_id, executor).await?;
+        data.payment_recipient =
+            crate::finance::payable::mapping::resolve_optional_payment_recipient_for_read(
+                &self.db,
+                &account.supplier_id,
+                executor,
+            )
+            .await?
+            .as_ref()
+            .map(crate::finance::payable::mapping::payment_recipient_view);
         let parts = vec![format!("{}:{}", account.base.id, account.base.version), row_facts.version_part()];
         Ok(FundsScopedResult {
             data,
@@ -397,5 +429,10 @@ pub(super) fn cut_payable_account_row(
         business_org_unit_id: fact.map(|order| order.business_org_unit_id.clone()),
         payment_recipient: None,
         entries: Vec::new(),
+        source_document_no: fact.and_then(|order| {
+            let number = order.document_no.trim();
+            if number.is_empty() { None } else { Some(number.to_string()) }
+        }),
+        supplier_name: None,
     }
 }

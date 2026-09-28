@@ -96,7 +96,9 @@ export async function fetchSupplierAccounts(
         }),
     ])
 
-    const payables = (payPage.items ?? []).map(projectPayable)
+    const payables = await hydratePayableSupplierNames(
+        (payPage.items ?? []).map(projectPayable),
+    )
     let payments = (paymentPage.items ?? []).map(projectPayment)
     let invoices = (invPage.items ?? [])
         .filter(
@@ -376,31 +378,10 @@ export async function fetchAllocationSession(input: {
             sort_dir: "desc",
         },
     )
-    const pool = (payPage.items ?? []).map((a) => {
-        const primary = (a.entries ?? []).find(
-            (e) => e.direction === "increase",
-        )
-        const sourceType = mapSourceType(a.source_type)
-        return {
-            payableAccountId: a.id,
-            primaryEntryId: primary?.id ?? a.entries?.[0]?.id ?? a.id,
-            entryLockVersion: a.version,
-            accountLockVersion: a.version,
-            sourceType,
-            sourceTypeLabel: SOURCE_TYPE_LABEL[sourceType],
-            sourceDocumentNo: businessLabelOrPlaceholder(
-                a.source_document_no,
-                a.source_document_id,
-                missingSourceDocumentNo(sourceType),
-            ),
-            sourceDocumentId: a.source_document_id,
-            openTotal: a.open_total,
-            openInvoiceableTotal: a.open_invoiceable_total,
-            dueDate: primary?.due_date ?? "",
-            dueStateLabel: "未到期",
-            statusLabel: PAYABLE_STATUS_LABEL[mapPayableStatus(a.status)],
-        }
-    })
+    const pool: AllocationSessionView["pool"][number][] = []
+    for (const account of payPage.items ?? []) {
+        pool.push(await allocationPoolTarget(account))
+    }
 
     let existingAmount: string | undefined
     let existingUnallocated: string | undefined
@@ -448,6 +429,84 @@ export async function fetchAllocationSession(input: {
         existingDocumentNo,
     }
     return view
+}
+
+/**
+ * 范围列表不带分录时，付款只能核销详情里的增加分录，不能把子账 id 当成 entry id。
+ */
+async function allocationPoolTarget(account: BackendPayableAccount) {
+    const listed = (account.entries ?? []).find(
+        (entry) => entry.direction === "increase",
+    )
+    let entryId = listed?.id ?? account.entries?.[0]?.id
+    let dueDate = listed?.due_date ?? account.entries?.[0]?.due_date ?? ""
+    if (!entryId) {
+        const detail = await fetchPayableDetail(account.id)
+        const resolved = detail?.payable.primaryEntryId
+        if (!detail || !resolved || resolved === account.id) {
+            throw new Error("应付子账缺少可核销分录，无法登记付款")
+        }
+        entryId = resolved
+        dueDate = detail.payable.dueDate || dueDate
+    }
+    const sourceType = mapSourceType(account.source_type)
+    return {
+        payableAccountId: account.id,
+        primaryEntryId: entryId,
+        entryLockVersion: account.version,
+        accountLockVersion: account.version,
+        sourceType,
+        sourceTypeLabel: SOURCE_TYPE_LABEL[sourceType],
+        sourceDocumentNo: businessLabelOrPlaceholder(
+            account.source_document_no,
+            account.source_document_id,
+            missingSourceDocumentNo(sourceType),
+        ),
+        sourceDocumentId: account.source_document_id,
+        openTotal: account.open_total,
+        openInvoiceableTotal: account.open_invoiceable_total,
+        dueDate,
+        dueStateLabel: "未到期",
+        statusLabel: PAYABLE_STATUS_LABEL[mapPayableStatus(account.status)],
+    }
+}
+
+/**
+ * 应付列表若仍缺供应商名称，则按供应商主数据补全；失败时保留业务占位。
+ *
+ * @param payables 已投影的应付行。
+ */
+async function hydratePayableSupplierNames(
+    payables: PayableRow[],
+): Promise<PayableRow[]> {
+    const missingIds = [
+        ...new Set(
+            payables
+                .filter((row) => row.supplierName === MISSING_SUPPLIER_NAME)
+                .map((row) => row.supplierId)
+                .filter(Boolean),
+        ),
+    ]
+    if (missingIds.length === 0) return payables
+    const resolved = new Map<string, string>()
+    await Promise.all(
+        missingIds.map(async (supplierId) => {
+            const option = await fetchSupplierOption(supplierId)
+            const name = businessLabelOrPlaceholder(
+                option?.supplierName,
+                supplierId,
+                MISSING_SUPPLIER_NAME,
+            )
+            if (name !== MISSING_SUPPLIER_NAME) {
+                resolved.set(supplierId, name)
+            }
+        }),
+    )
+    if (resolved.size === 0) return payables
+    return payables.map((row) => {
+        const supplierName = resolved.get(row.supplierId)
+        return supplierName ? { ...row, supplierName } : row
+    })
 }
 
 /**
