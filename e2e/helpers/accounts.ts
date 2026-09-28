@@ -29,16 +29,16 @@ function record(
 
 const byRole = {
     admin: record("admin", "系统管理员"),
-    sales: record("xiaoshou", "销售", "role-sales"),
-    salesLeader: record("lisiyong", "销售领导", "role-sales-leader"),
-    procurement: record("caigou", "采购", "role-procurement"),
-    operations: record("yunying", "运营", "role-operations"),
-    warehouse: record("cangchu", "仓储", "role-warehouse"),
-    finance: record("caiwu", "财务总监", "role-finance"),
-    payment: record("fukuan", "出纳", "role-finance"),
-    invoice: record("kaipiao", "开票人", "role-finance"),
-    management: record("guanli", "管理层", "role-management"),
-    sysadmin: record("xitong", "系统管理员", "role-sysadmin"),
+    sales: record("xiaoshou", "周晓彤", "role-sales"),
+    salesLeader: record("lisiyong", "李思勇", "role-sales-leader"),
+    procurement: record("caigou", "陈国平", "role-procurement"),
+    operations: record("yunying", "林晓燕", "role-operations"),
+    warehouse: record("cangchu", "赵卫东", "role-warehouse"),
+    finance: record("caiwu", "王慧敏", "role-finance"),
+    payment: record("fukuan", "孙立新", "role-finance"),
+    invoice: record("kaipiao", "吴倩", "role-finance"),
+    management: record("guanli", "郑远山", "role-management"),
+    sysadmin: record("xitong", "何建明", "role-sysadmin"),
 } as const satisfies Record<string, AccountRecord>
 
 export const ACCOUNTS = {

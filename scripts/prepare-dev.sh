@@ -14,16 +14,16 @@
 #
 # 岗位账号（密码均为 123456）：
 #   admin        超级管理员
-#   xiaoshou     销售
-#   lisiyong     销售领导
-#   caigou       采购
-#   yunying      运营
-#   cangchu      仓储
-#   caiwu        财务总监
-#   fukuan       出纳
-#   kaipiao      开票人
-#   guanli       管理层
-#   xitong       系统管理员
+#   xiaoshou     周晓彤（销售）
+#   lisiyong     李思勇（销售领导）
+#   caigou       陈国平（采购）
+#   yunying      林晓燕（运营）
+#   cangchu      赵卫东（仓储）
+#   caiwu        王慧敏（财务总监，只审批）
+#   fukuan       孙立新（出纳）
+#   kaipiao      吴倩（开票人）
+#   guanli       郑远山（管理层）
+#   xitong       何建明（系统管理员）
 #
 # 财务三人分责：caiwu 只审批，不得提交回款/退款/冲正（ForbidSubmitterAsApprover）；
 # fukuan 出纳经办回款、退款、冲正和付款任务；kaipiao 开票（发票无审批）。

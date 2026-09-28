@@ -102,6 +102,21 @@ mod tests {
     }
 
     #[test]
+    fn account_display_names_are_people() {
+        let titles = ["销售", "采购", "财务", "运营", "仓储", "出纳", "开票", "管理", "系统"];
+        for account in &foundation_spec().accounts {
+            assert!(account.name.chars().count() >= 2, "{}", account.account);
+            assert_eq!(account.label, account.name);
+            assert!(
+                titles.iter().all(|title| !account.name.contains(title)),
+                "{} 的姓名是岗位称呼: {}",
+                account.account,
+                account.name
+            );
+        }
+    }
+
+    #[test]
     fn departments_cover_the_accounts_that_open_demo_documents() {
         let spec = foundation_spec();
         assert!(spec.departments.iter().any(|department| {
