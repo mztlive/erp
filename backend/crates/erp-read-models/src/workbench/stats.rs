@@ -174,7 +174,13 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
                 break;
             }
             let mut facts = self.object_facts_for_rows(&rows, executor).await?;
-            self.filter_order_access(&access.actor_id, &mut facts, executor).await?;
+            self.filter_order_access_keeping_owned_fulfillment(
+                &access.actor_id,
+                rows.iter().map(super::query::owned_fulfillment_task),
+                &mut facts,
+                executor,
+            )
+            .await?;
             let authorized = authorized_fields(rows, access, &facts);
             fields.extend(authorized.into_iter().filter(|item| {
                 super::query::matches_keyword(item, filter.query.as_deref())

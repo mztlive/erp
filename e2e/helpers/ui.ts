@@ -504,7 +504,9 @@ function workspaceTaskLocator(
  * 打开 W01 待办。不要往 `#workspace-queue-toolbar-search-input` 填单号/往来方，
  * 后端搜索不匹配这些字段，会把列表滤空。
  *
- * 默认口径是待我处理。列表里没有带 hint 的任务时，再点「范围内待办」重找。
+ * 默认口径是待我处理。列表里没有带 hint 的任务、且
+ * `#workspace-queue-scope-managed` 可见且未按下时，再点「范围内待办」重找。
+ * 没有 `work_item:manage` 的账号不渲染该按钮，不得空等。
  * 任务已经在待我处理中则不切换口径。有 hint 时不改点同类型第一条。
  *
  * `typeLabel` 可以是「销售单审批」或 `待供给分配|供给分配` 这种正则源。
@@ -529,22 +531,22 @@ export async function openWorkspaceTask(
     await expect(list.or(empty).first()).toBeVisible({ timeout: UI_TIMEOUT })
 
     const task = workspaceTaskLocator(page, typeLabel, hint)
+    const scopeGroup = page.getByRole("group", { name: "工作视图" })
+    await expect(scopeGroup).toBeVisible({ timeout: UI_TIMEOUT })
     let searchedManaged = false
-    if (!(await task.isVisible().catch(() => false))) {
-        const managed = page.getByRole("button", { name: /^范围内待办/ }).first()
-        const managedReady = await managed
-            .waitFor({ state: "visible", timeout: UI_TIMEOUT })
-            .then(() => true)
-            .catch(() => false)
-        if (managedReady) {
-            const onManaged = (await managed.getAttribute("aria-pressed")) === "true"
-            if (!onManaged) {
-                searchedManaged = true
-                await managed.click()
-                await expect(managed).toHaveAttribute("aria-pressed", "true", {
-                    timeout: UI_TIMEOUT,
-                })
-            }
+    const managed = page.locator("#workspace-queue-scope-managed")
+    if (
+        !(await task.isVisible().catch(() => false)) &&
+        (await managed.isVisible().catch(() => false))
+    ) {
+        const onManaged = (await managed.getAttribute("aria-pressed")) === "true"
+        if (!onManaged) {
+            searchedManaged = true
+            await managed.click()
+            await expect(managed).toHaveAttribute("aria-pressed", "true", {
+                timeout: UI_TIMEOUT,
+            })
+            await expect(list.or(empty).first()).toBeVisible({ timeout: UI_TIMEOUT })
         }
     }
 

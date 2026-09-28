@@ -355,6 +355,18 @@ fn apply_subject_display(
         subject.map(|item| item.brief_source.clone()).unwrap_or_else(|| fact.display.brief_source.clone());
 }
 
+/// 订单范围过滤前已装载的任务身份，只保留放回本人履约事实所需的字段。
+pub(super) struct OwnedFulfillmentTask<'a> {
+    /// 任务类型。
+    pub work_item_type: WorkItemType,
+    /// 持久化业务对象类型。
+    pub business_object_type: &'a str,
+    /// 业务对象主键。
+    pub business_object_id: &'a str,
+    /// 当前个人责任人；无具体责任人时不放回。
+    pub owner_user_id: Option<&'a str>,
+}
+
 impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
     /// 共享命令端的订单来源和公共范围判定；必须先过滤再分页或统计。
     pub(super) async fn filter_order_access(
@@ -367,6 +379,61 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
         filter_order_facts(&self.auth, actor_id, &mut authority, executor).await?;
         facts.retain(|key, _| authority.contains_key(key));
         Ok(())
+    }
+
+    /// 按订单范围过滤后，把派给本人的履约任务事实放回。
+    ///
+    /// # 参数
+    /// * `actor_id` - 当前账号
+    /// * `tasks` - 本批候选任务
+    /// * `facts` - 已装载、待按订单范围收窄的对象事实
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 范围过滤完成后，本人履约任务的对象事实仍在 `facts` 中。
+    ///
+    /// # 错误
+    /// 订单来源缺失、错配或授权查询失败时返回错误，不放回任何事实。
+    pub(super) async fn filter_order_access_keeping_owned_fulfillment<'a>(
+        &self,
+        actor_id: &str,
+        tasks: impl IntoIterator<Item = OwnedFulfillmentTask<'a>>,
+        facts: &mut WorkbenchObjectFactMap,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let loaded = facts.clone();
+        self.filter_order_access(actor_id, facts, executor).await?;
+        restore_owned_fulfillment_facts(tasks, actor_id, &loaded, facts);
+        Ok(())
+    }
+}
+
+/// 销售单详情范围滤掉仓发来源后，本人仍要看到已指派的履约任务。
+///
+/// 仓储经办人没有销售单详情权限。入库过账生成的仓发任务派给本人，
+/// 若随来源销售单一并滤掉，待我处理会是空的，范围内待办按钮也不会出现。
+/// 非履约任务和非本人任务保持失败关闭。
+fn restore_owned_fulfillment_facts<'a>(
+    tasks: impl IntoIterator<Item = OwnedFulfillmentTask<'a>>,
+    actor_id: &str,
+    loaded: &WorkbenchObjectFactMap,
+    facts: &mut WorkbenchObjectFactMap,
+) {
+    for task in tasks {
+        if task.work_item_type != WorkItemType::FulfillmentOperation || task.owner_user_id != Some(actor_id) {
+            continue;
+        }
+        let Some(policy) = object_policy(task.work_item_type, task.business_object_type) else {
+            continue;
+        };
+        let key = (policy.object_kind, task.business_object_id.to_string());
+        if facts.contains_key(&key) {
+            continue;
+        }
+        let Some(fact) = loaded.get(&key) else {
+            continue;
+        };
+        facts.insert(key, fact.clone());
     }
 }
 
@@ -525,6 +592,72 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         self.facts_reader().load_supplier_offering_facts(keys, &mut loaded, executor).await?;
         facts.extend(loaded.into_iter().map(|(key, fact)| (key, WorkbenchObjectFact::from_authority(fact))));
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod owned_fulfillment_fact_tests {
+    use erp_workflow::entity::work_item::WorkItemType;
+    use erp_workflow::ports::{ObjectFact, OrderTaskSource};
+
+    use super::{
+        OwnedFulfillmentTask, WorkbenchObjectFact, WorkbenchObjectFactMap, object_policy,
+        restore_owned_fulfillment_facts,
+    };
+
+    fn delivery_facts(id: &str) -> ((super::ObjectKind, String), WorkbenchObjectFactMap) {
+        let policy = object_policy(WorkItemType::FulfillmentOperation, "delivery").expect("仓发已注册");
+        let key = (policy.object_kind, id.to_string());
+        let fact = WorkbenchObjectFact::from_authority(
+            ObjectFact::new("so-1", "仓库发货 · 销售单 SO-1", "system")
+                .with_order_source(OrderTaskSource::Sales("so-1".into())),
+        );
+        let loaded = WorkbenchObjectFactMap::from([(key.clone(), fact)]);
+        (key, loaded)
+    }
+
+    #[test]
+    fn assigned_warehouse_ship_fact_is_restored_after_sales_scope_filter() {
+        let (key, loaded) = delivery_facts("delivery-1");
+        let mut facts = WorkbenchObjectFactMap::new();
+        restore_owned_fulfillment_facts(
+            [OwnedFulfillmentTask {
+                work_item_type: WorkItemType::FulfillmentOperation,
+                business_object_type: "delivery",
+                business_object_id: "delivery-1",
+                owner_user_id: Some("cangchu"),
+            }],
+            "cangchu",
+            &loaded,
+            &mut facts,
+        );
+        assert!(facts.contains_key(&key));
+    }
+
+    #[test]
+    fn other_owner_and_non_fulfillment_tasks_stay_filtered() {
+        let (_key, loaded) = delivery_facts("delivery-1");
+        let mut facts = WorkbenchObjectFactMap::new();
+        restore_owned_fulfillment_facts(
+            [
+                OwnedFulfillmentTask {
+                    work_item_type: WorkItemType::FulfillmentOperation,
+                    business_object_type: "delivery",
+                    business_object_id: "delivery-1",
+                    owner_user_id: Some("xiaoshou"),
+                },
+                OwnedFulfillmentTask {
+                    work_item_type: WorkItemType::DocumentApproval,
+                    business_object_type: "sales_order",
+                    business_object_id: "so-1",
+                    owner_user_id: Some("cangchu"),
+                },
+            ],
+            "cangchu",
+            &loaded,
+            &mut facts,
+        );
+        assert!(facts.is_empty());
     }
 }
 
