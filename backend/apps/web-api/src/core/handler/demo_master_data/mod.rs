@@ -47,7 +47,7 @@ pub async fn demo_master_data_status(State(state): State<AppState>) -> Result<De
 /// * `actor` - 已通过鉴权的操作人
 ///
 /// # 返回
-/// 返回新建和已存在的数量。已有账号不改密码。已启用的默认责任规则保留现有负责人。
+/// 返回新建和已存在的数量。已有账号不改密码，但姓名会同步为演示人名。已启用的默认责任规则保留现有负责人。
 pub fn demo_master_data_foundation(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,

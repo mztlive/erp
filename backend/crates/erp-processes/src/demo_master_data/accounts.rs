@@ -1,11 +1,12 @@
-//! 按规格补齐岗位账号。已有账号不改密码，缺角色时补上。
+//! 按规格补齐岗位账号。已有账号不改密码，但会把姓名同步为演示人名；缺角色时补上。
 
 use std::collections::HashMap;
 
 use application_core::AuditActor;
 use erp_core::AccountKind;
 use erp_identity::{
-    AccessControlExt, AccountCoreRepositoryExt, AdminService, CreateAdminParams, UpdateAdminRoleParams,
+    AccessControlExt, AccountCoreRepositoryExt, AdminService, CreateAdminParams, UpdateAdminParams,
+    UpdateAdminRoleParams,
 };
 use persistence_core::NoTransaction;
 
@@ -28,11 +29,15 @@ impl DemoMasterDataService {
         report: &mut DemoFoundationReport,
     ) -> Result<PreparedAccounts> {
         let mut prepared = PreparedAccounts { by_key: HashMap::new(), by_login: HashMap::new() };
+        let mut renamed = 0u32;
         for spec in &spec::foundation_spec().accounts {
             if self.ensure_account(actor, spec).await? {
                 report.accounts_created += 1;
             } else {
                 report.accounts_existing += 1;
+                if self.sync_account_name(actor, spec).await? {
+                    renamed += 1;
+                }
             }
             let id = self.account_id(&spec.account).await?;
             prepared.by_key.insert(spec.key.clone(), id.clone());
@@ -43,6 +48,9 @@ impl DemoMasterDataService {
             report
                 .notices
                 .push(format!("已新建 {} 个岗位账号，初始密码为 {password}", report.accounts_created));
+        }
+        if renamed > 0 {
+            report.notices.push(format!("已同步 {renamed} 个岗位账号的姓名为演示人名"));
         }
         Ok(prepared)
     }
@@ -81,6 +89,30 @@ impl DemoMasterDataService {
             .update_admin_role(UpdateAdminRoleParams { id, role_ids }, actor.clone())
             .await?;
         Ok(())
+    }
+
+    // 账号 id 不变，审批链、责任规则和部门引用保持有效；不改密码和角色。
+    async fn sync_account_name(&self, actor: &AuditActor, spec: &AccountSpec) -> Result<bool> {
+        let Some(existing) = self.db.accounts().find_by_account(&spec.account, &mut NoTransaction).await?
+        else {
+            // 软删除的账号不在此处理，由随后的账号解析报出明确错误。
+            return Ok(false);
+        };
+        if existing.name == spec.name {
+            return Ok(false);
+        }
+        AdminService::new(self.db.clone(), self.rbac.clone())
+            .update_admin(
+                UpdateAdminParams {
+                    id: existing.base.id,
+                    name: Some(spec.name.clone()),
+                    password: None,
+                    role_ids: None,
+                },
+                actor.clone(),
+            )
+            .await?;
+        Ok(true)
     }
 
     pub(super) async fn role_actor(&self, login: &str) -> Result<Option<AuditActor>> {
