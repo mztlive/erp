@@ -85,7 +85,7 @@ pub async fn demo_master_data_apply(
     resource = "demo_master_data",
     action = "remove"
 )]
-/// 删除下一批仍在列表中的演示主数据。
+/// 硬删除下一批已登记的演示主数据及关联记录，包含旧版软删除记录。
 ///
 /// # 参数
 /// * `state` - 应用状态

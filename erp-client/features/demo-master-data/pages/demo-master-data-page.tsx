@@ -54,7 +54,7 @@ export function DemoMasterDataPage() {
         (removed, derivedRemoved) => {
             setProgress(
                 derivedRemoved > 0
-                    ? `已删除主数据 ${removed} 条，单据 ${derivedRemoved} 条`
+                    ? `已删除主数据 ${removed} 条，关联记录 ${derivedRemoved} 条`
                     : `已删除主数据 ${removed} 条`,
             )
         },
@@ -86,7 +86,7 @@ export function DemoMasterDataPage() {
             <ListWorkspaceHeader
                 eyebrow="系统"
                 title="演示主数据"
-                description="生成一批客户、供应商、商品、仓库和字典，并补齐岗位账号、部门和审批流程。新客户交给销售账号，新供应商交给采购账号。岗位账号已存在时不改密码，新建账号的初始密码是 123456。删除时会清掉引用这批客户、供应商或商品的单据、审批和待办，并清掉演示商品自己的库存余额和流水。账号、部门、已发布的审批流程，以及没有引用这批资料的单据会保留。再次生成会恢复同一批主数据。"
+                description="生成一批客户、供应商、商品、仓库和字典，并补齐岗位账号、部门和审批流程。新客户交给销售账号，新供应商交给采购账号。岗位账号已存在时不改密码，新建账号的初始密码是 123456。删除时会清掉引用这批客户、供应商或商品的单据、审批和待办，并清掉演示商品自己的库存余额和流水。账号、部门、已发布的审批流程，以及没有引用这批资料的单据会保留。删除后不可恢复，再次生成会按当前数据模板创建新记录。"
             >
                 {canApply ? (
                     <Button
@@ -154,7 +154,7 @@ export function DemoMasterDataPage() {
                                 已生成 {statusQuery.data.active[key]} / 计划{" "}
                                 {statusQuery.data.planned[key]}
                                 {statusQuery.data.removed[key] > 0
-                                    ? `，${statusQuery.data.removed[key]} 条可恢复`
+                                    ? `，${statusQuery.data.removed[key]} 条旧数据待彻底删除`
                                     : ""}
                             </dd>
                         </div>
@@ -200,7 +200,7 @@ export function DemoMasterDataPage() {
                         <AlertDialogHeader>
                             <AlertDialogTitle>删除演示主数据</AlertDialogTitle>
                             <AlertDialogDescription>
-                                会删除这次生成的客户、供应商、商品、仓库和字典，以及引用它们的单据、审批和待办。演示商品自己的库存余额和流水会一并清掉。关联单据混有非演示商品时，会停止删除，请先处理混用单据。岗位账号、部门、已发布的审批流程，以及没有引用这批资料的单据会保留。再次生成会恢复同一批主数据。
+                                会永久删除这次生成的客户、供应商、商品、仓库和字典，以及引用它们的单据、审批和待办。演示商品自己的库存余额和流水会一并清掉。关联单据混有非演示商品时，会停止删除，请先处理混用单据。岗位账号、部门、已发布的审批流程，以及没有引用这批资料的单据会保留。删除后不可恢复，再次生成会按当前数据模板创建新记录。
                             </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>

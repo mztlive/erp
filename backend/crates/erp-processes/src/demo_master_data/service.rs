@@ -4,17 +4,17 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use application_core::AuditActor;
-use erp_catalog::{CatalogExt, CatalogService};
+use erp_catalog::CatalogService;
 use erp_identity::{AccessControlExt, AccountCoreRepositoryExt, SharedRbacService};
 use erp_party::{PartyStatus, SensitiveDataCodec};
 use erp_warehouse::WarehouseService;
 use persistence_core::NoTransaction;
 
 use super::ensure_dictionary::EnsureOutcome;
-use super::plan::{self, DemoCounts, DemoKind, DemoStep};
+use super::plan::{self, DemoCounts, DemoStep};
 use super::record::{self, DemoMasterRecord};
 use super::seed::SeedRequest;
-use super::{DemoMasterDataService, lifecycle};
+use super::{DemoMasterDataService, removal};
 use crate::adapters::{party_service, scoped_catalog_service, warehouse_service};
 use crate::{CustomerProfileService, Error, Result, SupplierProfileService};
 
@@ -43,7 +43,7 @@ pub struct DemoChunkReport {
     pub skipped: u32,
     /// 删除的主数据条数。
     pub removed: u32,
-    /// 一并删除的衍生单据条数。
+    /// 一并硬删除的关联记录条数，含历史修订和创建命令。
     pub derived_removed: u32,
     /// 跳过某些主数据时的说明。
     pub notices: Vec<String>,
@@ -58,7 +58,7 @@ pub struct DemoStatus {
     pub planned: DemoCounts,
     /// 仍在列表中的条数。
     pub active: DemoCounts,
-    /// 已从列表删除、仍可恢复的条数。
+    /// 旧版本已软删除、等待硬删除的登记条数。
     pub removed: DemoCounts,
 }
 
@@ -139,7 +139,7 @@ impl DemoMasterDataService {
         Ok(report)
     }
 
-    /// 删除下一批仍在列表中的演示主数据。
+    /// 硬删除下一批已登记的演示主数据，包含历史软删除记录。
     ///
     /// # 参数
     /// * `actor` - 当前操作人
@@ -152,32 +152,11 @@ impl DemoMasterDataService {
     pub async fn remove_chunk(&self, actor: &AuditActor) -> Result<DemoChunkReport> {
         self.ensure_enabled()?;
         let steps = plan::demo_steps()?;
-        let mut records = record::load_all(&self.db).await?;
-        self.refresh_related_ids(&mut records).await?;
-        let active_keys = records
-            .iter()
-            .filter(|record| !record.removed)
-            .map(|record| record.key.clone())
-            .collect::<Vec<_>>();
-        let derived_removed =
-            super::derived::purge_derived(&self.db, super::derived::master_ids(&records), actor).await?;
-        let batch = plan::removal_batch(&steps, &active_keys, plan::CHUNK_LEN);
-        let by_key =
-            records.iter().map(|record| (record.key.clone(), record.clone())).collect::<HashMap<_, _>>();
-        for key in &batch {
-            let Some(record) = by_key.get(key) else {
-                continue;
-            };
-            self.delete_record(actor, record).await?;
-            let mut removed = record.clone();
-            removed.removed = true;
-            record::save(&self.db, &removed).await?;
-        }
+        let outcome = removal::remove(&self.db, actor, steps.clone()).await?;
         let mut report = empty_report(0, steps.len());
-        report.removed = batch.len() as u32;
-        report.derived_removed = u32::try_from(derived_removed)
-            .map_err(|_| Error::Internal("衍生单据数量超出计数范围".to_string()))?;
-        report.done = active_keys.len() == batch.len();
+        report.removed = outcome.removed;
+        report.derived_removed = outcome.related;
+        report.done = outcome.done;
         Ok(report)
     }
 
@@ -222,98 +201,6 @@ impl DemoMasterDataService {
             },
             SeedRequest::Product(request) => self.ensure_product(actor, step, records, request).await,
         }
-    }
-
-    /// 按登记的种类和实际 ID 删除主数据。
-    async fn delete_record(&self, actor: &AuditActor, record: &DemoMasterRecord) -> Result<()> {
-        let kind = record.kind().ok_or_else(|| Error::Internal("演示清单包含未知种类".into()))?;
-        match kind {
-            DemoKind::Unit => {
-                ignore_missing(self.catalog().unit_of_measure_delete(&record.entity_id, actor).await)?
-            },
-            DemoKind::Brand => {
-                ignore_missing(self.catalog().product_brand_delete(&record.entity_id, actor).await)?
-            },
-            DemoKind::Category => {
-                ignore_missing(self.catalog().product_category_delete(&record.entity_id, actor).await)?
-            },
-            DemoKind::Warehouse => lifecycle::delete_warehouse(&self.db, actor, &record.entity_id).await?,
-            DemoKind::Customer => self.delete_customer(actor, record).await?,
-            DemoKind::Supplier => self.delete_supplier(actor, record).await?,
-            DemoKind::Product => {
-                lifecycle::delete_product_graph(&self.db, actor, &record.entity_id, &record.related_ids)
-                    .await?
-            },
-        }
-        Ok(())
-    }
-
-    /// 按清单 ID 删除客户角色及关联主体。
-    async fn delete_customer(&self, actor: &AuditActor, record: &DemoMasterRecord) -> Result<()> {
-        match crate::delete_customer(
-            self.db.clone(),
-            self.rbac.clone(),
-            record.entity_id.clone(),
-            actor.clone(),
-        )
-        .await
-        {
-            Ok(()) | Err(Error::NotFound(_)) => {},
-            Err(error) => return Err(error),
-        }
-        if let Some(party_id) = record.related_ids.first() {
-            match crate::delete_party(self.db.clone(), party_id.clone(), actor.clone()).await {
-                Ok(()) | Err(Error::NotFound(_)) => {},
-                Err(error) => return Err(error),
-            }
-        }
-        Ok(())
-    }
-
-    /// 按清单 ID 删除供应商角色及关联主体。
-    async fn delete_supplier(&self, actor: &AuditActor, record: &DemoMasterRecord) -> Result<()> {
-        match crate::delete_supplier(self.db.clone(), record.entity_id.clone(), actor.clone()).await {
-            Ok(()) | Err(Error::NotFound(_)) => {},
-            Err(error) => return Err(error),
-        }
-        if let Some(party_id) = record.related_ids.first() {
-            match crate::delete_party(self.db.clone(), party_id.clone(), actor.clone()).await {
-                Ok(()) | Err(Error::NotFound(_)) => {},
-                Err(error) => return Err(error),
-            }
-        }
-        Ok(())
-    }
-
-    /// 删除前读回商品当前及历史 SKU，并持久化清理根供重试使用。
-    async fn refresh_related_ids(&self, records: &mut [DemoMasterRecord]) -> Result<()> {
-        for record in records {
-            if record.kind().is_none()
-                || record.entity_id.trim().is_empty()
-                || record.related_ids.iter().any(|id| id.trim().is_empty())
-            {
-                return Err(Error::Internal("演示清单包含未知种类".into()));
-            }
-            if record.kind() != Some(DemoKind::Product) {
-                continue;
-            }
-            let skus = self
-                .db
-                .skus()
-                .find_many_by_field_including_deleted(
-                    "product_id",
-                    record.entity_id.clone(),
-                    &mut NoTransaction,
-                )
-                .await?;
-            for sku in skus {
-                if !record.related_ids.contains(&sku.base.id) {
-                    record.related_ids.push(sku.base.id);
-                }
-            }
-            record::save(&self.db, record).await?;
-        }
-        Ok(())
     }
 
     /// 按稳定种子键索引实际 ID 清单。
@@ -450,14 +337,5 @@ fn empty_report(next_cursor: usize, total: usize) -> DemoChunkReport {
         removed: 0,
         derived_removed: 0,
         notices: Vec::new(),
-    }
-}
-
-/// 将已不存在的字典视为删除完成。
-fn ignore_missing(result: erp_catalog::Result<()>) -> Result<()> {
-    match result {
-        Ok(()) => Ok(()),
-        Err(erp_catalog::Error::NotFound(_)) => Ok(()),
-        Err(error) => Err(error.into()),
     }
 }

@@ -1,9 +1,9 @@
 //! 演示主数据清单。删除和再次生成只认这里记下的身份。
 
-use futures_util::TryStreamExt;
 use mongodb::bson::{Document, doc};
 use mongodb::options::{IndexOptions, UpdateOptions};
 use mongodb::{Database, IndexModel};
+use persistence_core::{Executor, NoTransaction, mongo_ops};
 use serde::{Deserialize, Serialize};
 
 use super::super::plan::DemoKind;
@@ -46,15 +46,49 @@ impl DemoMasterRecord {
 /// # 错误
 /// 查询失败时返回错误。
 pub(in crate::demo_master_data) async fn load_all(db: &Database) -> Result<Vec<DemoMasterRecord>> {
-    let records = db
-        .collection::<DemoMasterRecord>(COLLECTION)
-        .find(doc! {})
-        .await
-        .map_err(persistence_core::Error::from)?
-        .try_collect::<Vec<_>>()
-        .await
-        .map_err(persistence_core::Error::from)?;
-    Ok(records)
+    load(db, &mut NoTransaction).await
+}
+
+/// 在调用方事务内读取登记，包含旧版软删除记录。
+///
+/// # 参数
+/// `db` - 数据库；`executor` - 当前事务。
+/// # 返回
+/// 返回全部登记。
+/// # 错误
+/// 数据库读取失败时返回错误。
+pub(in crate::demo_master_data) async fn load(
+    db: &Database,
+    executor: &mut dyn Executor,
+) -> Result<Vec<DemoMasterRecord>> {
+    Ok(mongo_ops::find_many(&db.collection(COLLECTION), doc! {}, Default::default(), executor).await?)
+}
+
+/// 主数据清理成功后在同一事务内删除对应登记。
+///
+/// # 参数
+/// `db` - 数据库；`records` - 本批登记；`executor` - 当前事务。
+/// # 返回
+/// 全部登记删除成功时返回空结果。
+/// # 错误
+/// 登记发生变更或数据库删除失败时返回错误。
+pub(in crate::demo_master_data) async fn forget(
+    db: &Database,
+    records: &[DemoMasterRecord],
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    for row in records {
+        let result = mongo_ops::delete_many(
+            &db.collection::<Document>(COLLECTION),
+            doc! {"key": &row.key, "entity_id": &row.entity_id},
+            executor,
+        )
+        .await?;
+        if result.deleted_count != 1 {
+            return Err(Error::BusinessLogicError("演示登记发生变化，请刷新后重试".into()));
+        }
+    }
+    Ok(())
 }
 
 /// 按稳定身份写入或覆盖一条清单。

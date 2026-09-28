@@ -1,4 +1,4 @@
-//! 恢复或软删除演示记录本身。业务删除仍走各自的领域入口。
+//! 兼容恢复旧版本软删除的演示记录；演示清理统一执行硬删除。
 
 use application_core::AuditActor;
 use entity_core::{BaseModel, NOT_DELETED_TIMESTAMP};
@@ -16,48 +16,6 @@ use crate::{Error, Result};
 
 fn is_active(base: &BaseModel) -> bool {
     base.deleted_at == NOT_DELETED_TIMESTAMP
-}
-
-/// 软删除商品及其 SKU。记录已经不在时视为已删除。
-///
-/// # 参数
-/// * `db` - 目标数据库
-/// * `actor` - 当前操作人
-/// * `product_id` - 商品 ID
-/// * `sku_ids` - 创建时记下的 SKU ID
-///
-/// # 错误
-/// 写入失败时返回错误。
-pub(super) async fn delete_product_graph(
-    db: &Database,
-    actor: &AuditActor,
-    product_id: &str,
-    sku_ids: &[String],
-) -> Result<()> {
-    let product = db.products().find_by_id_including_deleted(product_id, &mut NoTransaction).await?;
-    let mut skus = load_skus(db, product_id, sku_ids).await?;
-    let product_active = product.as_ref().is_some_and(|item| is_active(&item.base));
-    let sku_active = skus.iter().any(|sku| is_active(&sku.base));
-    if !product_active && !sku_active {
-        return Ok(());
-    }
-    let audit = actor.clone().resource_log("product.delete", "product", product_id.to_string())?;
-    run_audited(db, audit, move |db, executor| {
-        Box::pin(async move {
-            if let Some(mut product) = product
-                && is_active(&product.base)
-            {
-                db.products().soft_delete(&mut product, executor).await?;
-            }
-            for mut sku in skus.drain(..) {
-                if is_active(&sku.base) {
-                    db.skus().soft_delete(&mut sku, executor).await?;
-                }
-            }
-            Ok(())
-        })
-    })
-    .await
 }
 
 /// 恢复商品及其 SKU。商品记录不存在时返回未找到，调用方改为重新创建。
@@ -117,17 +75,6 @@ async fn load_skus(db: &Database, product_id: &str, sku_ids: &[String]) -> Resul
         }
     }
     Ok(skus)
-}
-
-/// 软删除仓库。记录已经不在时视为已删除。
-pub(super) async fn delete_warehouse(db: &Database, actor: &AuditActor, id: &str) -> Result<()> {
-    delete_loaded(db, actor, "warehouse", load_warehouse(db, id).await?, |db, executor, entity| {
-        Box::pin(async move {
-            db.warehouses().soft_delete(entity, executor).await?;
-            Ok(())
-        })
-    })
-    .await
 }
 
 /// 恢复仓库。记录不存在时返回未找到。
@@ -269,30 +216,7 @@ async fn required_category(db: &Database, id: &str) -> Result<erp_catalog::Produ
         .ok_or_else(|| Error::NotFound("演示分类已不在库中，无法恢复".to_string()))
 }
 
-async fn delete_loaded<T, F>(
-    db: &Database,
-    actor: &AuditActor,
-    resource: &str,
-    entity: Option<T>,
-    write: F,
-) -> Result<()>
-where
-    T: HasDeleted + Send + 'static,
-    F: for<'a> FnOnce(
-            &'a Database,
-            &'a mut dyn persistence_core::Executor,
-            &'a mut T,
-        )
-            -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>>
-        + Send
-        + 'static,
-{
-    let Some(entity) = entity else {
-        return Ok(());
-    };
-    set_presence(db, actor, resource, entity, true, write).await
-}
-
+/// 仅恢复旧版本软删除记录，审计与恢复在同一事务完成。
 async fn restore_loaded<T, F>(
     db: &Database,
     actor: &AuditActor,
@@ -311,32 +235,10 @@ where
         + Send
         + 'static,
 {
-    set_presence(db, actor, resource, entity, false, write).await
-}
-
-async fn set_presence<T, F>(
-    db: &Database,
-    actor: &AuditActor,
-    resource: &str,
-    entity: T,
-    delete: bool,
-    write: F,
-) -> Result<()>
-where
-    T: HasDeleted + Send + 'static,
-    F: for<'a> FnOnce(
-            &'a Database,
-            &'a mut dyn persistence_core::Executor,
-            &'a mut T,
-        )
-            -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>>
-        + Send
-        + 'static,
-{
-    if entity.is_deleted() == delete {
+    if !entity.is_deleted() {
         return Ok(());
     }
-    let action = if delete { "demo_master_data.delete" } else { "demo_master_data.restore" };
+    let action = "demo_master_data.restore";
     let audit = actor.clone().resource_log(action, resource, entity.identity())?;
     run_audited(db, audit, move |db, executor| {
         Box::pin(async move {

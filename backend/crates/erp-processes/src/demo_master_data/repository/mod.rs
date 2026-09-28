@@ -1,4 +1,5 @@
 //! 演示清理只绑定领域公开的仓储，不接受外部集合名。
+mod master;
 pub(in crate::demo_master_data) mod record;
 use erp_contract::repository::ContractExt;
 use erp_finance::repository::{CostExt, PayableExt, ReceivableExt};
@@ -26,6 +27,9 @@ use crate::{Error, Result};
 /// # 错误
 /// 集合未在白名单登记时返回错误。
 pub(super) fn ids(db: &Database, collection: &str) -> Result<IdRepository> {
+    if let Some(repository) = master::ids(db, collection) {
+        return Ok(repository);
+    }
     if let Some(repository) = workflow(db, collection) {
         return Ok(repository);
     }

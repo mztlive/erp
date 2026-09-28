@@ -2,9 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use application_core::AuditActor;
 use async_trait::async_trait;
-use erp_audit::AuditActorLogs;
 use mongodb::Database;
 use persistence_core::Executor;
 use persistence_core::repository::LinkedId;
@@ -13,11 +11,10 @@ use super::derived_graph::{self, SeedKind};
 use super::plan::DemoKind;
 use super::record::DemoMasterRecord;
 use super::repository;
-use crate::audit::run_audited;
 use crate::{Error, Result};
 
 type IdSet = BTreeSet<String>;
-type DeletionSet = BTreeMap<String, IdSet>;
+pub(super) type DeletionSet = BTreeMap<String, IdSet>;
 const MAX_ROUNDS: usize = 128;
 
 /// 由清单实际 ID 派生的清理根。
@@ -28,6 +25,7 @@ pub(super) struct MasterIds {
     supplier: Vec<String>,
     sku: Vec<String>,
     warehouse: Vec<String>,
+    references: Vec<String>,
 }
 
 impl MasterIds {
@@ -56,6 +54,8 @@ impl MasterIds {
 pub(super) fn master_ids(records: &[DemoMasterRecord]) -> MasterIds {
     let mut ids = MasterIds::default();
     for record in records {
+        ids.references.push(record.entity_id.clone());
+        ids.references.extend(record.related_ids.iter().cloned());
         match record.kind() {
             Some(DemoKind::Customer) => {
                 ids.customer.push(record.entity_id.clone());
@@ -73,28 +73,17 @@ pub(super) fn master_ids(records: &[DemoMasterRecord]) -> MasterIds {
     ids
 }
 
-/// 清理衍生数据；所有发现、校验、删除与成功审计共享一个事务。
-///
-/// # 参数
-/// `db` - 数据库；`seed` - 清理根；`actor` - 审计操作人。
-///
-/// # 返回
-/// 返回事务内物理删除的记录数量。
-///
-/// # 错误
-/// 混用、关联异常、残留或事务失败时返回错误。
-pub(super) async fn purge_derived(db: &Database, seed: MasterIds, actor: &AuditActor) -> Result<u64> {
-    let audit =
-        actor.clone().resource_log("demo_master_data.purge", "demo_master_data", "master-data".into())?;
-    run_audited(db, audit, move |db, executor| {
-        Box::pin(async move { purge(&mut MongoStore { db, executor }, &seed).await })
-    })
-    .await
-}
-
 /// 清理编排只依赖精确关联读取和 ID 删除。
 #[async_trait]
-trait Store: Send {
+pub(super) trait Store: Send {
+    /// 精确读取关联 ID，包含软删除记录。
+    ///
+    /// # 参数
+    /// collection - 已绑定集合；field - 外键；values - 精确值；parent - 父键投影。
+    /// # 返回
+    /// 返回匹配记录的实际 ID 和可选父键。
+    /// # 错误
+    /// 读取失败或关联身份无效时返回错误。
     async fn linked(
         &mut self,
         collection: &str,
@@ -102,12 +91,20 @@ trait Store: Send {
         values: &[String],
         parent: Option<&str>,
     ) -> Result<Vec<LinkedId>>;
+    /// 按实际 ID 硬删除已收集记录。
+    ///
+    /// # 参数
+    /// collection - 已绑定集合；ids - 精确主键。
+    /// # 返回
+    /// 实际删除条数。
+    /// # 错误
+    /// 删除失败时返回错误。
     async fn delete(&mut self, collection: &str, ids: &[String]) -> Result<u64>;
 }
 
-struct MongoStore<'a> {
-    db: &'a Database,
-    executor: &'a mut dyn Executor,
+pub(super) struct MongoStore<'a> {
+    pub(super) db: &'a Database,
+    pub(super) executor: &'a mut dyn Executor,
 }
 
 #[async_trait]
@@ -131,28 +128,17 @@ impl Store for MongoStore<'_> {
     }
 }
 
-/// 先完整收集和校验，任何失败均阻止后续写入。
-async fn purge(store: &mut impl Store, seed: &MasterIds) -> Result<u64> {
-    let doomed = collect(store, seed).await?;
-    let mut deleted = 0;
-    for (collection, ids) in &doomed {
-        deleted += store.delete(collection, &ids.iter().cloned().collect::<Vec<_>>()).await?;
-    }
-    for (collection, ids) in &doomed {
-        if !store.linked(collection, "id", &ids.iter().cloned().collect::<Vec<_>>(), None).await?.is_empty() {
-            return Err(Error::BusinessLogicError("演示关联数据仍有残留，删除未完成".into()));
-        }
-    }
-    if !collect(store, seed).await?.is_empty() {
-        return Err(Error::BusinessLogicError("演示关联数据仍有残留，删除未完成".into()));
-    }
-    Ok(deleted)
-}
-
 /// 按登记外键扩展到不再增长；达到保护上限时失败，禁止部分清理。
-async fn collect(store: &mut impl Store, seed: &MasterIds) -> Result<DeletionSet> {
+///
+/// # 参数
+/// store - 当前事务数据访问；seed - 登记清单实际 ID。
+/// # 返回
+/// 关联记录的精确删除集合。
+/// # 错误
+/// 混用、超出遍历上限或读取失败时返回错误。
+pub(super) async fn collect(store: &mut impl Store, seed: &MasterIds) -> Result<DeletionSet> {
     let mut doomed = DeletionSet::new();
-    let mut parents = IdSet::new();
+    let mut parents = seed.references.iter().cloned().collect::<IdSet>();
     for edge in derived_graph::edges() {
         if let Some(kind) = edge.seed {
             let hits = store.linked(edge.collection, edge.field, seed.of(kind), edge.lift).await?;
@@ -235,6 +221,7 @@ fn requires_sku(collection: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use super::super::removal::{RemovalStore, execute};
     use super::*;
 
     #[derive(Default)]
@@ -243,6 +230,10 @@ mod tests {
         deleted: Vec<(String, Vec<String>)>,
         retain_rows: bool,
         fail_delete: bool,
+        records: Vec<DemoMasterRecord>,
+        forgotten: Vec<String>,
+        fail_forget: bool,
+        companies: Vec<String>,
     }
 
     impl MemoryStore {
@@ -288,6 +279,258 @@ mod tests {
             }
             Ok(u64::try_from(before - rows.len()).unwrap())
         }
+    }
+
+    #[async_trait]
+    impl RemovalStore for MemoryStore {
+        async fn records(&mut self) -> Result<Vec<DemoMasterRecord>> {
+            Ok(self.records.clone())
+        }
+        async fn guard_companies(&mut self, ids: &[String]) -> Result<()> {
+            if ids.iter().any(|id| self.companies.contains(id)) {
+                return Err(Error::BusinessLogicError("company protected".into()));
+            }
+            Ok(())
+        }
+        async fn forget(&mut self, records: &[DemoMasterRecord]) -> Result<()> {
+            if self.fail_forget {
+                return Err(Error::Internal("injected manifest failure".into()));
+            }
+            for row in records {
+                self.forgotten.push(row.key.clone());
+                self.records.retain(|item| item.key != row.key);
+            }
+            Ok(())
+        }
+    }
+
+    fn record(kind: &str, id: &str, related: &[&str]) -> DemoMasterRecord {
+        DemoMasterRecord {
+            kind: kind.into(),
+            key: format!("seed-{id}"),
+            entity_id: id.into(),
+            related_ids: related.iter().map(|id| id.to_string()).collect(),
+            label: id.into(),
+            removed: false,
+        }
+    }
+
+    #[tokio::test]
+    async fn hard_delete_clears_roots_revisions_commands_and_manifest_then_repeats_empty() {
+        let mut db = MemoryStore {
+            records: vec![
+                record("customer", "customer", &["party"]),
+                record("supplier", "supplier", &["supplier-party"]),
+                record("product", "product", &[]),
+                record("warehouse", "warehouse", &[]),
+                record("unit", "unit", &[]),
+                record("brand", "brand", &[]),
+                record("category", "category", &[]),
+            ],
+            ..Default::default()
+        };
+        db.records[0].removed = true;
+        for (collection, id) in [
+            ("customer_accounts", "customer"),
+            ("supplier_accounts", "supplier"),
+            ("parties", "party"),
+            ("parties", "supplier-party"),
+            ("products", "product"),
+            ("warehouses", "warehouse"),
+            ("product_brands", "brand"),
+            ("product_categories", "category"),
+            ("unit_of_measures", "unit"),
+        ] {
+            db.add(collection, id, &[]);
+        }
+        for (collection, id, field, parent) in [
+            ("customer_profile_commands", "customer-command", "customer_id", "customer"),
+            ("customer_assignments", "assignment", "customer_id", "customer"),
+            ("supplier_profile_commands", "supplier-command", "supplier_id", "supplier"),
+            ("supplier_commercial_profile_revisions", "commercial", "supplier_id", "supplier"),
+            ("supplier_capabilities", "capability", "supplier_id", "supplier"),
+            ("supplier_capability_revisions", "capability-revision", "supplier_id", "supplier"),
+            ("supplier_qualifications", "qualification", "supplier_id", "supplier"),
+            ("supplier_qualification_revisions", "qualification-revision", "supplier_id", "supplier"),
+            ("supplier_rating_revisions", "rating", "supplier_id", "supplier"),
+            (
+                "supplier_qualification_capabilities",
+                "qualification-link",
+                "qualification_id",
+                "qualification",
+            ),
+            ("party_revisions", "party-revision", "party_id", "party"),
+            ("party_contacts", "contact", "party_id", "party"),
+            ("party_addresses", "address", "party_id", "party"),
+            ("party_bank_accounts", "bank", "party_id", "party"),
+            ("party_tax_profiles", "tax", "party_id", "party"),
+            ("product_revisions", "product-revision", "product_id", "product"),
+            ("product_revision_medias", "media", "product_revision_id", "product-revision"),
+            ("skus", "late-sku", "product_id", "product"),
+            ("sku_revisions", "sku-revision", "sku_id", "late-sku"),
+            ("sku_revision_attribute_values", "attribute", "sku_revision_id", "sku-revision"),
+            ("voucher_category_profile_revisions", "voucher", "sku_id", "late-sku"),
+            ("warehouse_revisions", "warehouse-revision", "warehouse_id", "warehouse"),
+            ("warehouse_sku_policies", "policy", "sku_id", "late-sku"),
+            ("product_category_attributes", "category-attribute", "category_id", "category"),
+            ("document_attachments", "attachment", "document_id", "product-revision"),
+            ("sales_orders", "order", "customer_id", "customer"),
+            ("work_items", "customer-task", "business_object_id", "customer"),
+        ] {
+            db.add(collection, id, &[(field, parent)]);
+        }
+        db.add("products", "real-product", &[]);
+        db.add("parties", "company", &[]);
+        db.add("customer_profile_commands", "real-command", &[("customer_id", "real-customer")]);
+        db.add("accounts", "admin", &[]);
+        db.add("file_assets", "asset", &[]);
+        db.add("audit_logs", "audit", &[]);
+        let outcome = execute(&mut db, &[]).await.unwrap();
+        assert!(outcome.done);
+        assert_eq!(outcome.removed, 7);
+        assert!(db.records.is_empty());
+        assert_eq!(db.forgotten.len(), 7);
+        let survivors = db.rows.values().flatten().map(|row| row["id"].as_str()).collect::<BTreeSet<_>>();
+        assert_eq!(
+            survivors,
+            BTreeSet::from(["real-product", "real-command", "company", "admin", "asset", "audit"])
+        );
+        let writes = db.deleted.len();
+        let again = execute(&mut db, &[]).await.unwrap();
+        assert!(again.done);
+        assert_eq!((again.removed, again.related), (0, 0));
+        assert_eq!(db.deleted.len(), writes);
+    }
+
+    #[tokio::test]
+    async fn hard_delete_rejects_shared_master_references_before_any_write() {
+        for (kind, collection, field, parent) in [
+            ("brand", "product_revisions", "brand_id", Some(("product_id", "real-product"))),
+            ("category", "product_categories", "parent_category_id", None),
+            ("unit", "skus", "base_unit_id", None),
+            ("customer", "supplier_accounts", "party_id", None),
+            ("warehouse", "warehouse_sku_policies", "warehouse_id", Some(("sku_id", "real-sku"))),
+        ] {
+            let mut db = MemoryStore::default();
+            let related = if kind == "customer" { vec!["root"] } else { vec![] };
+            db.records.push(record(kind, "root", &related));
+            let mut fields = vec![(field, "root")];
+            fields.extend(parent);
+            db.add(collection, "real-reference", &fields);
+            assert!(execute(&mut db, &[]).await.is_err(), "{kind}");
+            assert!(db.deleted.is_empty());
+            assert!(db.forgotten.is_empty());
+        }
+    }
+
+    #[tokio::test]
+    async fn hard_delete_failures_keep_manifest_and_never_report_success() {
+        for failure in 0..4 {
+            let mut db = MemoryStore::default();
+            db.records.push(record("customer", "customer", &["party"]));
+            db.add("customer_accounts", "customer", &[("party_id", "party")]);
+            db.add("parties", "party", &[]);
+            match failure {
+                0 => db.fail_delete = true,
+                1 => db.retain_rows = true,
+                2 => db.fail_forget = true,
+                _ => db.companies.push("party".into()),
+            }
+            assert!(execute(&mut db, &[]).await.is_err());
+            assert_eq!(db.records.len(), 1);
+            assert!(db.forgotten.is_empty());
+        }
+    }
+
+    #[tokio::test]
+    async fn hard_delete_chunks_include_old_soft_deleted_records_and_finish() {
+        let mut db = MemoryStore::default();
+        for n in 0..10 {
+            let id = format!("unit-{n}");
+            let mut row = record("unit", &id, &[]);
+            row.removed = true;
+            db.records.push(row);
+            db.add("unit_of_measures", &id, &[]);
+        }
+        let first = execute(&mut db, &[]).await.unwrap();
+        assert!(!first.done);
+        assert_eq!(first.removed, 8);
+        assert_eq!(db.records.len(), 2);
+        let last = execute(&mut db, &[]).await.unwrap();
+        assert!(last.done);
+        assert_eq!(last.removed, 2);
+        assert!(db.rows["unit_of_measures"].is_empty());
+    }
+
+    #[tokio::test]
+    async fn shared_registered_party_is_kept_until_last_role_is_deleted() {
+        let mut db = MemoryStore::default();
+        db.records.push(record("customer", "customer", &["party"]));
+        db.add("customer_accounts", "customer", &[("party_id", "party")]);
+        db.add("parties", "party", &[]);
+        for n in 0..8 {
+            let id = format!("supplier-{n}");
+            db.records.push(record("supplier", &id, &["party"]));
+            db.add("supplier_accounts", &id, &[("party_id", "party")]);
+        }
+        let first = execute(&mut db, &[]).await.unwrap();
+        assert!(!first.done);
+        assert_eq!(first.removed, 8);
+        assert_eq!(db.rows["parties"].len(), 1);
+        let last = execute(&mut db, &[]).await.unwrap();
+        assert!(last.done);
+        assert_eq!(last.related, 1);
+        assert!(db.rows["parties"].is_empty());
+    }
+
+    #[tokio::test]
+    async fn missing_primary_still_cleans_children_and_counts_actual_related_rows() {
+        let mut db = MemoryStore::default();
+        db.records.push(record("customer", "gone-customer", &["gone-party"]));
+        db.add("customer_profile_commands", "command", &[("customer_id", "gone-customer")]);
+        let result = execute(&mut db, &[]).await.unwrap();
+        assert_eq!((result.removed, result.related), (1, 1));
+        assert!(db.records.is_empty());
+        assert!(db.rows["customer_profile_commands"].is_empty());
+    }
+
+    #[tokio::test]
+    async fn mixed_document_blocks_master_and_manifest_deletion() {
+        let mut db = MemoryStore::default();
+        db.records.push(record("customer", "demo-customer", &["party"]));
+        db.add("customer_accounts", "demo-customer", &[("party_id", "party")]);
+        db.add("sales_orders", "order", &[("customer_id", "demo-customer")]);
+        db.add("sales_order_working_copies", "draft", &[("sales_order_id", "order")]);
+        db.add(
+            "sales_order_working_copy_lines",
+            "line",
+            &[("working_copy_id", "draft"), ("sku_id", "real-sku")],
+        );
+        assert!(execute(&mut db, &[]).await.is_err());
+        assert!(db.deleted.is_empty());
+        assert!(db.forgotten.is_empty());
+    }
+
+    /// 构造登记夹具后执行实际生产硬删除流程，不复制清理编排。
+    async fn purge(db: &mut MemoryStore, seed: &MasterIds) -> Result<u64> {
+        db.records.clear();
+        for id in &seed.customer {
+            db.records.push(record("customer", id, &[]));
+        }
+        for id in &seed.supplier {
+            db.records.push(record("supplier", id, &[]));
+        }
+        for id in &seed.warehouse {
+            db.records.push(record("warehouse", id, &[]));
+        }
+        if !seed.sku.is_empty() {
+            db.records.push(record(
+                "product",
+                "demo-product",
+                &seed.sku.iter().map(String::as_str).collect::<Vec<_>>(),
+            ));
+        }
+        Ok(u64::from(execute(db, &[]).await?.related))
     }
 
     fn seed() -> MasterIds {
