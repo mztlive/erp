@@ -327,31 +327,97 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
         return session.page;
     };
 
-    const openFulfillmentTask = async (page: Page, purchaseOrderNo: string) => {
-        try {
-            await openWorkspaceTask(page, /履约处理/, purchaseOrderNo, "fulfillment");
-        } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            if (!message.includes("工作台未找到任务") || !salesOrderNo) throw error;
-            const list = page.getByRole("list", { name: "待办列表" });
-            const candidates = list.getByRole("button", { name: new RegExp(salesOrderNo) });
-            const count = await candidates.count();
-            if (count === 0) throw error;
-            let opened = false;
-            for (let index = 0; index < count; index += 1) {
-                await candidates.nth(index).click();
-                await openFulfillmentWorkspaceForm(page);
-                if (await page.getByText(purchaseOrderNo).count()) {
-                    opened = true;
-                    break;
-                }
-                await page.goto("/workspace?family=fulfillment");
-                await selectWorkspaceFamily(page, "fulfillment");
+    const fulfillmentCandidates = (page: Page, hint: string) => {
+        const list = page.getByRole("list", { name: "待办列表" });
+        const quoted = hint.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+        return list
+            .locator("button")
+            .filter({ hasText: "履约处理" })
+            .filter({ hasText: hint })
+            .or(list.locator(`button[aria-label*="履约处理"][aria-label*="${quoted}"]`));
+    };
+
+    const closeFulfillmentDialog = async (page: Page) => {
+        const dialog = page.getByRole("dialog", { name: "处理履约" });
+        if (!(await dialog.isVisible().catch(() => false))) return;
+        await page.keyboard.press("Escape");
+        const hidden = await dialog.waitFor({ state: "hidden", timeout: 5_000 }).then(() => true).catch(() => false);
+        if (hidden) return;
+        await dialog.locator('[data-slot="dialog-close"]').click();
+        await expect(dialog).toBeHidden({ timeout: UI_TIMEOUT });
+    };
+
+    const openListedFulfillment = async (page: Page, purchaseOrderNo: string) => {
+        const tasks = salesOrderNo
+            ? fulfillmentCandidates(page, purchaseOrderNo).or(fulfillmentCandidates(page, salesOrderNo))
+            : fulfillmentCandidates(page, purchaseOrderNo);
+        const count = await tasks.count();
+        if (count === 0) return false;
+        let shipFallback: number | null = null;
+        for (let index = 0; index < count; index += 1) {
+            await closeFulfillmentDialog(page);
+            const card = tasks.nth(index);
+            const cardLabel = `${(await card.getAttribute("aria-label")) ?? ""} ${(await card.innerText()) || ""}`;
+            await card.click();
+            await openFulfillmentWorkspaceForm(page);
+            const dialog = page.getByRole("dialog", { name: "处理履约" });
+            if (cardLabel.includes(purchaseOrderNo)) return true;
+            const source = dialog.locator('[aria-label="来源单据"]');
+            const sourceReady = await source
+                .waitFor({ state: "visible", timeout: UI_TIMEOUT })
+                .then(() => true)
+                .catch(() => false);
+            if (!sourceReady) continue;
+            const sourceText = (await source.innerText()).replace(/\s+/g, " ");
+            if (sourceText.includes(purchaseOrderNo)) return true;
+            const ship = dialog.locator('[aria-label="公司仓发表单"]');
+            const otherPurchase = /PO-/.test(sourceText) && !sourceText.includes(purchaseOrderNo);
+            if (
+                salesOrderNo &&
+                (await ship.isVisible().catch(() => false)) &&
+                sourceText.includes(salesOrderNo) &&
+                !otherPurchase
+            ) {
+                shipFallback = index;
             }
-            if (!opened) throw error;
-            return;
         }
+        if (shipFallback == null) {
+            await closeFulfillmentDialog(page);
+            return false;
+        }
+        await closeFulfillmentDialog(page);
+        await tasks.nth(shipFallback).click();
         await openFulfillmentWorkspaceForm(page);
+        const dialog = page.getByRole("dialog", { name: "处理履约" });
+        await expect(dialog.locator('[aria-label="公司仓发表单"]')).toBeVisible({ timeout: UI_TIMEOUT });
+        await expect(dialog.getByText(salesOrderNo).first()).toBeVisible({ timeout: UI_TIMEOUT });
+        return true;
+    };
+
+    const openFulfillmentTask = async (page: Page, purchaseOrderNo: string) => {
+        await page.goto("/workspace?family=fulfillment");
+        await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible({
+            timeout: UI_TIMEOUT,
+        });
+        await selectWorkspaceFamily(page, "fulfillment");
+        if (await openListedFulfillment(page, purchaseOrderNo)) return;
+        const managed = page.locator("#workspace-queue-scope-managed");
+        if (
+            (await managed.isVisible().catch(() => false)) &&
+            (await managed.getAttribute("aria-pressed")) !== "true"
+        ) {
+            await managed.click();
+            await expect(managed).toHaveAttribute("aria-pressed", "true", { timeout: UI_TIMEOUT });
+            if (await openListedFulfillment(page, purchaseOrderNo)) return;
+        }
+        const labels = await page
+            .getByRole("list", { name: "待办列表" })
+            .locator("button")
+            .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("aria-label") || node.textContent || ""))
+            .catch(() => [] as string[]);
+        throw new Error(
+            `未找到采购单 ${purchaseOrderNo} 的履约任务（销售单 ${salesOrderNo || "未知"}）\n现有: ${labels.filter(Boolean).join(" | ") || "（空）"}`,
+        );
     };
 
     try {

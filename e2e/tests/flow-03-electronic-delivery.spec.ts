@@ -25,6 +25,7 @@ import {
     openWorkspaceTask,
     pickCalendarDay,
     readHeaderDocumentNumber,
+    selectWorkspaceFamily,
 } from '../helpers/ui'
 
 test.describe.configure({ mode: 'serial' })
@@ -348,6 +349,44 @@ async function uploadContractOnSalesOrder(page: Page, legalName: string, contrac
     })
 }
 
+const ELECTRONIC_SUPPLIER = '上海通卡'
+
+/** 电子交付待办标题是供应商和采购单号，可访问名称不一定等于 aria-label。 */
+async function openElectronicFulfillment(page: Page, purchaseNo: string) {
+    await page.goto('/workspace?family=fulfillment')
+    await expect(page.getByRole('heading', { name: '我的工作台' })).toBeVisible({
+        timeout: 20000,
+    })
+    await selectWorkspaceFamily(page, 'fulfillment')
+    const task = () => {
+        const list = page.getByRole('list', { name: '待办列表' })
+        const quoted = purchaseNo.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+        return list
+            .locator(
+                `button[aria-label*="履约处理"][aria-label*="${ELECTRONIC_SUPPLIER}"][aria-label*="${quoted}"]`,
+            )
+            .or(
+                list
+                    .locator('button')
+                    .filter({ hasText: '履约处理' })
+                    .filter({ hasText: ELECTRONIC_SUPPLIER })
+                    .filter({ hasText: purchaseNo }),
+            )
+    }
+    if (!(await task().first().isVisible().catch(() => false))) {
+        const managed = page.locator('#workspace-queue-scope-managed')
+        if (
+            (await managed.isVisible().catch(() => false)) &&
+            (await managed.getAttribute('aria-pressed')) !== 'true'
+        ) {
+            await managed.click()
+            await expect(managed).toHaveAttribute('aria-pressed', 'true', { timeout: 20000 })
+        }
+    }
+    await expect(task().first()).toBeVisible({ timeout: 20000 })
+    await task().first().click()
+}
+
 async function pickVirtualSku(page: Page) {
     await page.locator("#sales-orders-create-line-items-add").click()
     const dialog = page.getByRole('dialog', { name: '添加商品' })
@@ -523,10 +562,33 @@ test('虚拟商品电子交付全流程：销售单生效后只能采购、登�
             await expect(page.getByText('虚拟').first()).toBeVisible()
             await expect(page.getByRole('button', { name: /^(通过|同意审批)$/ })).toHaveCount(0)
             await expect(page.getByText('选择流程')).toHaveCount(0)
+            const poSearch = page.locator('#procurement-orders-list-search')
+            await poSearch.fill(salesOrderNo)
+            await poSearch.press('Enter')
+            const orderRow = page
+                .getByRole('row')
+                .filter({ hasText: salesOrderNo })
+                .filter({ hasText: ELECTRONIC_SUPPLIER })
+            await expect(orderRow).toBeVisible({ timeout: 20000 })
+            await expect(orderRow.getByText('虚拟 / 电子交付', { exact: true })).toBeVisible()
+            await expect(orderRow.getByText('已生效')).toBeVisible()
+            const openPo = orderRow.locator('[aria-label^="打开采购单"]')
+            await expect(openPo).toHaveCount(1)
+            const fromAria = ((await openPo.getAttribute('aria-label')) ?? '')
+                .replace(/^打开采购单\s*/, '')
+                .trim()
+            const fromText = ((await openPo.innerText()) || '').trim()
+            const purchaseNo = /^PO-/.test(fromAria) ? fromAria : fromText
+            expect(purchaseNo).toMatch(/^PO-/)
 
-            await openWorkspaceTask(page, /履约处理/, customerName, 'fulfillment')
+            await openElectronicFulfillment(page, purchaseNo)
             await openFulfillmentWorkspaceForm(page)
+            const deliveryDialog = page.getByRole('dialog', { name: '处理履约' })
             await expect(page.locator('[aria-label="电子交付表单"]')).toBeVisible({ timeout: 30000 })
+            await expect(deliveryDialog.getByText(salesOrderNo).first()).toBeVisible({ timeout: 20000 })
+            await expect(deliveryDialog.getByText(ELECTRONIC_SUPPLIER).first()).toBeVisible({
+                timeout: 20000,
+            })
             await expect(page.getByRole('button', { name: /^(通过|同意审批)$/ })).toHaveCount(0)
             await page.locator('#fulfillment-operations-electronic-form-recipient').fill('E2E 客户企业邮箱收件人')
             await page.locator('#fulfillment-operations-electronic-form-evidence-input').setInputFiles({ name: 'electronic-delivery.png', mimeType: 'image/png', buffer: PNG_1X1 })
