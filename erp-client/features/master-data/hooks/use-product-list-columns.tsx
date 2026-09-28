@@ -36,6 +36,7 @@ export function useProductListColumns({
     supplierOfferingsError,
     onUpdateProductListing,
     onSupplyProduct,
+    onAddSupply,
     onDisableTarget,
 }: {
     canUpdateProductListing: boolean
@@ -54,6 +55,7 @@ export function useProductListColumns({
         listed: boolean,
     ) => Promise<void>
     onSupplyProduct: (item: MasterDataListItem) => void
+    onAddSupply: (item: MasterDataListItem) => void
     onDisableTarget: (item: MasterDataListItem) => void
 }) {
     return React.useMemo<ColumnDef<MasterDataListItem>[]>(
@@ -175,42 +177,73 @@ export function useProductListColumns({
                             ? "有供给"
                             : "无供给"
                     return (
-                        <Button
-                            id={`master-data-product-${toAutomationIdSegment(item.stableId)}-supply`}
-                            type="button"
-                            size="xs"
-                            variant="ghost"
-                            className="h-auto flex-col items-start gap-1 px-0 py-0.5"
-                            aria-label={`${item.name}供给详情：${statusLabel}`}
-                            onClick={(event) => {
-                                event.stopPropagation()
-                                lastFocusedRowId.current = item.stableId
-                                onSupplyProduct(item)
-                            }}
-                        >
-                            <Badge
-                                variant={
-                                    suppliedSkuCount > 0 &&
-                                    !productSkusPending &&
-                                    !offeringPending &&
-                                    !productSkusError &&
-                                    !offeringFailed
-                                        ? "success"
-                                        : "outline"
-                                }
+                        <div className="flex flex-col items-start gap-1">
+                            <Button
+                                id={`master-data-product-${toAutomationIdSegment(item.stableId)}-supply`}
+                                type="button"
+                                size="xs"
+                                variant="ghost"
+                                className="h-auto flex-col items-start gap-1 px-0 py-0.5"
+                                aria-label={`${item.name}供给详情：${statusLabel}`}
+                                onClick={(event) => {
+                                    event.stopPropagation()
+                                    lastFocusedRowId.current = item.stableId
+                                    onSupplyProduct(item)
+                                }}
                             >
-                                {offeringPending ? "读取中…" : statusLabel}
-                            </Badge>
-                            {!productSkusPending &&
-                            !productSkusError &&
-                            !offeringPending &&
-                            !offeringFailed &&
-                            productSkus.length > 0 ? (
-                                <span className="num text-xs text-muted-foreground">
-                                    {suppliedSkuCount}/{productSkus.length} SKU
-                                </span>
-                            ) : null}
-                        </Button>
+                                <Badge
+                                    variant={
+                                        suppliedSkuCount > 0 &&
+                                        !productSkusPending &&
+                                        !offeringPending &&
+                                        !productSkusError &&
+                                        !offeringFailed
+                                            ? "success"
+                                            : "outline"
+                                    }
+                                >
+                                    {offeringPending ? "读取中…" : statusLabel}
+                                </Badge>
+                                {!productSkusPending &&
+                                !productSkusError &&
+                                !offeringPending &&
+                                !offeringFailed &&
+                                productSkus.length > 0 ? (
+                                    <span className="num text-xs text-muted-foreground">
+                                        {suppliedSkuCount}/{productSkus.length}{" "}
+                                        SKU
+                                    </span>
+                                ) : null}
+                            </Button>
+                            <Button
+                                id={`master-data-product-${toAutomationIdSegment(item.stableId)}-add-supply`}
+                                type="button"
+                                size="xs"
+                                variant="link"
+                                className="h-7 px-0"
+                                disabled={
+                                    productSkusPending ||
+                                    productSkusError ||
+                                    productSkus.length === 0
+                                }
+                                title={
+                                    productSkusPending
+                                        ? "正在读取商品规格"
+                                        : productSkusError
+                                          ? "规格读取失败，请重试"
+                                          : productSkus.length === 0
+                                            ? "请先新增或启用商品规格"
+                                            : undefined
+                                }
+                                onClick={(event) => {
+                                    event.stopPropagation()
+                                    lastFocusedRowId.current = item.stableId
+                                    onAddSupply(item)
+                                }}
+                            >
+                                添加供给
+                            </Button>
+                        </div>
                     )
                 },
             },
@@ -277,6 +310,7 @@ export function useProductListColumns({
             lastFocusedRowId,
             onDisableTarget,
             onSupplyProduct,
+            onAddSupply,
             onUpdateProductListing,
             productListingPending,
             productListingProductId,

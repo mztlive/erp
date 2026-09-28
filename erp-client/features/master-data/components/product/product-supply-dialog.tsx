@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { PlusIcon } from "lucide-react"
 
 import { BusinessFailureState } from "@/components/business"
@@ -78,7 +79,10 @@ export function ProductSupplyDialog({
 
     return (
         <Dialog open={product != null} onOpenChange={onOpenChange}>
-            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
+            <DialogContent
+                closeButtonId="master-data-product-supply-close"
+                className="max-h-[90vh] overflow-y-auto sm:max-w-5xl"
+            >
                 <DialogHeader>
                     <DialogTitle>
                         {product ? `${product.name} · 供给` : "商品供给"}
@@ -160,7 +164,7 @@ export function ProductSupplyDialog({
                                             </p>
                                         </div>
                                         <Button
-                                            id="master-data-product-product-supply-dialog-button-1"
+                                            id={`master-data-product-supply-${toAutomationIdSegment(sku.skuId)}-add`}
                                             type="button"
                                             size="sm"
                                             variant="outline"

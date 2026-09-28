@@ -29,6 +29,10 @@ import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { RegisterSupplyForSkuDialog } from "@/features/supplier-offerings/offering-dialogs"
 import { ProductImportDialog } from "@/features/master-data/components/product/product-import-dialog"
 import { launchNavDelivery } from "@/lib/nav-delivery"
+import type {
+    MasterDataListItem,
+    ProductListSkuSummary,
+} from "@/features/master-data/types"
 import type { ProductImportJob } from "@/features/master-data/api/product-import"
 
 /** 导入动作按钮与投递落点：动作 id 同时是动画起点。 */
@@ -55,6 +59,22 @@ export function ProductsListPage() {
             },
         }) > 0
     const { filters } = state
+    const openSupply = (
+        product: MasterDataListItem,
+        skus: readonly ProductListSkuSummary[],
+    ) => {
+        state.setSupplyDialogSkus(
+            skus.map((sku) => ({
+                skuId: sku.skuId,
+                skuCode: sku.skuNo,
+                skuName: sku.skuName || product.name,
+                productName: product.name,
+                specification: sku.specification,
+                baseUnit: sku.baseUnit,
+                productKind: product.productKind,
+            })),
+        )
+    }
     const columns = useProductListColumns({
         canUpdateProductListing: state.canUpdateProductListing,
         currentSupplySkuIds: state.currentSupplySkuIds,
@@ -70,6 +90,13 @@ export function ProductsListPage() {
         supplierOfferingsError: state.supplierOfferingsQuery.isError,
         onUpdateProductListing: state.updateProductListing,
         onSupplyProduct: state.setSupplyProduct,
+        onAddSupply: (product) => {
+            state.setSupplyProduct(null)
+            openSupply(
+                product,
+                state.productSkusByProduct.get(product.stableId) ?? [],
+            )
+        },
         onDisableTarget: state.setDisableTarget,
     })
     const hasActiveFilters =
@@ -299,49 +326,48 @@ export function ProductsListPage() {
                     />
                 }
             />
-            <ProductSupplyDialog
-                product={state.supplyProduct}
-                skus={
-                    state.supplyProduct
-                        ? (state.productSkusByProduct.get(
-                              state.supplyProduct.stableId,
-                          ) ?? [])
-                        : []
-                }
-                skuLoading={state.productSkusQuery.isPending}
-                skuError={state.productSkusQuery.error}
-                offerings={state.supplierOfferingsQuery.data ?? []}
-                offeringLoading={
-                    state.productPageSkuIds.length > 0 &&
-                    state.supplierOfferingsQuery.isPending
-                }
-                offeringError={state.supplierOfferingsQuery.error}
-                onRetrySkus={() => void state.productSkusQuery.refetch()}
-                onRetryOfferings={() =>
-                    void state.supplierOfferingsQuery.refetch()
-                }
-                onAddSupply={(sku) => {
-                    if (!state.supplyProduct) return
-                    state.setSupplyDialogSku({
-                        skuId: sku.skuId,
-                        skuCode: sku.skuNo,
-                        skuName: sku.skuName || state.supplyProduct.name,
-                        specification: sku.specification,
-                        baseUnit: sku.baseUnit,
-                        productKind: state.supplyProduct.productKind,
-                    })
-                }}
-                onOpenChange={(open) => {
-                    if (!open) state.setSupplyProduct(null)
-                }}
-            />
-            {state.supplyDialogSku ? (
-                <RegisterSupplyForSkuDialog
-                    key={state.supplyDialogSku.skuId}
-                    open
-                    fixedSku={state.supplyDialogSku}
+            {!state.supplyDialogSkus && (
+                <ProductSupplyDialog
+                    product={state.supplyProduct}
+                    skus={
+                        state.supplyProduct
+                            ? (state.productSkusByProduct.get(
+                                  state.supplyProduct.stableId,
+                              ) ?? [])
+                            : []
+                    }
+                    skuLoading={state.productSkusQuery.isPending}
+                    skuError={state.productSkusQuery.error}
+                    offerings={state.supplierOfferingsQuery.data ?? []}
+                    offeringLoading={
+                        state.productPageSkuIds.length > 0 &&
+                        state.supplierOfferingsQuery.isPending
+                    }
+                    offeringError={state.supplierOfferingsQuery.error}
+                    onRetrySkus={() => void state.productSkusQuery.refetch()}
+                    onRetryOfferings={() =>
+                        void state.supplierOfferingsQuery.refetch()
+                    }
+                    onAddSupply={(sku) => {
+                        if (!state.supplyProduct) return
+                        openSupply(state.supplyProduct, [sku])
+                    }}
                     onOpenChange={(open) => {
-                        if (!open) state.setSupplyDialogSku(null)
+                        if (!open) state.setSupplyProduct(null)
+                    }}
+                />
+            )}
+            {state.supplyDialogSkus ? (
+                <RegisterSupplyForSkuDialog
+                    open
+                    fixedSku={
+                        state.supplyDialogSkus.length === 1
+                            ? state.supplyDialogSkus[0]
+                            : undefined
+                    }
+                    skuOptions={state.supplyDialogSkus}
+                    onOpenChange={(open) => {
+                        if (!open) state.setSupplyDialogSkus(null)
                     }}
                 />
             ) : null}

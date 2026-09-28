@@ -85,8 +85,9 @@ export function useProductListState(
         React.useState<MasterDataListItem | null>(null)
     const [supplyProduct, setSupplyProduct] =
         React.useState<MasterDataListItem | null>(null)
-    const [supplyDialogSku, setSupplyDialogSku] =
-        React.useState<FixedSku | null>(null)
+    const [supplyDialogSkus, setSupplyDialogSkus] = React.useState<
+        readonly FixedSku[] | null
+    >(null)
     const [listingError, setListingError] = React.useState<string | null>(null)
 
     const rows = React.useMemo(
@@ -397,8 +398,8 @@ export function useProductListState(
         setDisableTarget,
         supplyProduct,
         setSupplyProduct,
-        supplyDialogSku,
-        setSupplyDialogSku,
+        supplyDialogSkus,
+        setSupplyDialogSkus,
         listingError,
         rows,
         pageRows,

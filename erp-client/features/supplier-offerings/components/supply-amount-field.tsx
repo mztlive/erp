@@ -14,11 +14,13 @@ export function SupplyAmountField({
     label,
     unit,
     required = false,
+    readOnly = false,
 }: {
     id: string
     label: string
     unit?: string
     required?: boolean
+    readOnly?: boolean
 }) {
     const field = useFieldContext<string>()
     const invalid = field.state.meta.isTouched && !field.state.meta.isValid
@@ -33,6 +35,7 @@ export function SupplyAmountField({
                 <InputGroupInput
                     id={id}
                     name={field.name}
+                    readOnly={readOnly}
                     inputMode="decimal"
                     value={field.state.value}
                     aria-required={required || undefined}

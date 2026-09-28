@@ -2,11 +2,6 @@
 
 import Link from "next/link"
 
-import {
-    Popover,
-    PopoverContent,
-    PopoverTrigger,
-} from "@/components/ui/popover"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { TableCell } from "@/components/ui/table"
@@ -48,82 +43,54 @@ function SkuSupplierCell({
     return (
         <TableCell className="whitespace-normal align-middle">
             <div className="space-y-1.5">
+                <Badge
+                    variant="outline"
+                    title={
+                        supplierCountsError
+                            ? getErrorMessage(
+                                  supplierCountsError,
+                                  "供给读取失败，请稍后重试。",
+                              )
+                            : "当前有效的已启用供给关系"
+                    }
+                >
+                    {supplierCountsPending
+                        ? "读取中…"
+                        : supplierCountsError != null
+                          ? "供给暂不可查"
+                          : `${supplierCount ?? 0} 家供应商`}
+                </Badge>
                 {sku.skuId && !isCreate ? (
-                    <Popover>
-                        <PopoverTrigger
-                            id={`master-data-product-sku-${skuSegment}-suppliers`}
-                            render={
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="xs"
-                                />
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <Button
+                            id={`master-data-product-sku-${skuSegment}-add-supply`}
+                            type="button"
+                            variant="link"
+                            size="xs"
+                            className="h-7 px-0"
+                            disabled={!canRevise}
+                            onClick={() =>
+                                onRegisterSupply(toFixedSku(fields, sku, name))
                             }
                         >
-                            {supplierCountsPending
-                                ? "…"
-                                : supplierCountsError != null
-                                  ? "供给暂不可查"
-                                  : `${supplierCount ?? 0} 家供应商`}
-                        </PopoverTrigger>
-                        <PopoverContent
-                            align="start"
-                            className="w-64 space-y-3"
+                            添加供给
+                        </Button>
+                        <Link
+                            id={`master-data-product-sku-${skuSegment}-view-supplies`}
+                            className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label={`${name}查看全部供给（新窗口）`}
+                            href={`/procurement/supplier-offerings?skuId=${encodeURIComponent(sku.skuId)}&returnTo=${encodeURIComponent(`/master-data/products/${stableId}#product-section-sku`)}`}
                         >
-                            <div>
-                                <p className="text-sm font-medium">
-                                    已启用供给关系
-                                </p>
-                                <p className="mt-2 text-sm text-muted-foreground">
-                                    {supplierCountsError != null
-                                        ? getErrorMessage(
-                                              supplierCountsError,
-                                              "当前无法读取供给，请稍后重试。",
-                                          )
-                                        : `当前共有 ${supplierCount ?? 0} 家供应商具备当前有效的供给关系；供应商及有效期明细以供给中心为准。`}
-                                </p>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
-                                <Button
-                                    id={`master-data-product-sku-${skuSegment}-add-supply`}
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    disabled={!canRevise}
-                                    onClick={() =>
-                                        onRegisterSupply(
-                                            toFixedSku(fields, sku, name),
-                                        )
-                                    }
-                                >
-                                    添加供给
-                                </Button>
-                                <Link
-                                    id={`master-data-product-sku-${skuSegment}-view-supplies`}
-                                    className="text-xs text-primary hover:underline"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    href={`/procurement/supplier-offerings?skuId=${encodeURIComponent(sku.skuId)}&returnTo=${encodeURIComponent(`/master-data/products/${stableId}#product-section-sku`)}`}
-                                >
-                                    查看全部供给（新窗口）
-                                </Link>
-                            </div>
-                        </PopoverContent>
-                    </Popover>
+                            查看供给
+                        </Link>
+                    </div>
                 ) : (
-                    <Badge variant="outline">
-                        {supplierCountsPending
-                            ? "…"
-                            : supplierCountsError != null
-                              ? "供给暂不可查"
-                              : `${supplierCount ?? 0} 家供应商`}
-                    </Badge>
-                )}
-                {!sku.skuId || isCreate ? (
                     <span className="block text-xs text-muted-foreground">
                         保存商品后可添加多家供应商
                     </span>
-                ) : null}
+                )}
             </div>
         </TableCell>
     )

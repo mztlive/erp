@@ -162,6 +162,7 @@ export type FixedSku = Readonly<{
     skuId: string
     skuCode: string
     skuName: string
+    productName?: string
     specification: string
     baseUnit: string
     productKind?: string

@@ -18,6 +18,7 @@ export function toFixedSku(
         skuId: sku.skuId ?? "",
         skuCode: sku.skuNo,
         skuName: sku.name.trim() || productName,
+        productName,
         productKind: fields.productKind,
         specification: sku.specLabel,
         baseUnit: sku.baseUnit ?? fields.baseUnit,

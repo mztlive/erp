@@ -5,11 +5,24 @@ import { createSchema, splitValues } from "./offering-forms"
 
 export const registerSupplySchema = createSchema
     .extend({
+        skuId: z.string().min(1, "请选择商品规格"),
+        samePrice: z.boolean(),
+        quantityMode: z.enum(["unknown", "provided"]),
         validityMode: z.enum(["ongoing", "dated"]),
         supplierSkuCode: z.string().trim().min(1, "请填写供应商订货编码"),
         supplyRegionText: z.string(),
     })
     .superRefine((value, context) => {
+        if (
+            value.quantityMode === "provided" &&
+            !value.availableQuantity.trim()
+        ) {
+            context.addIssue({
+                code: "custom",
+                path: ["availableQuantity"],
+                message: "请填写可供数量，或选择数量未提供",
+            })
+        }
         if (!splitValues(value.supplyRegionText).length) {
             context.addIssue({
                 code: "custom",
@@ -47,6 +60,8 @@ export function registerSupplyDefaults(
 ): z.input<typeof registerSupplySchema> {
     return {
         skuId,
+        samePrice: false,
+        quantityMode: "unknown",
         supplierId: "",
         supplierProductCode: "",
         supplierSkuCode: "",

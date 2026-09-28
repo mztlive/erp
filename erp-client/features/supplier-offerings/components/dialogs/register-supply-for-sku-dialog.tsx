@@ -1,7 +1,10 @@
 "use client"
 
 import * as React from "react"
-import { ChevronDownIcon } from "lucide-react"
+import { useStore } from "@tanstack/react-form"
+import { Checkbox } from "@/components/ui/checkbox"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { ChevronDownIcon, PackageIcon } from "lucide-react"
 import { DiscardConfirmDialog, OptionCombobox } from "@/components/business"
 import type { ProductComboboxItem } from "@/components/business/entity-comboboxes"
 import { useAppForm } from "@/components/form"
@@ -19,10 +22,7 @@ import {
 } from "@/components/ui/dialog"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import { toast } from "@/components/ui/toast"
-import {
-    CompanySkuSearchCombobox,
-    SupplierSearchCombobox,
-} from "@/features/entity-selectors"
+import { SupplierSearchCombobox } from "@/features/entity-selectors"
 import { useCreateSupplierOfferingMutation } from "@/features/supplier-offerings/hooks/queries"
 import {
     errorMessage,
@@ -40,6 +40,7 @@ import type {
 } from "@/features/supplier-offerings/types"
 import { AVAILABILITY_STATUS_LABELS } from "@/features/supplier-offerings/types"
 import { SupplierTaxRateField } from "../supplier-tax-rate-field"
+import { SupplySkuField } from "../supply-sku-field"
 import { SupplyAmountField } from "../supply-amount-field"
 import { SupplyRegionField } from "../supply-region-field"
 
@@ -56,10 +57,12 @@ export function RegisterSupplyForSkuDialog({
     open,
     onOpenChange,
     fixedSku,
+    skuOptions,
 }: {
     open: boolean
     onOpenChange: (open: boolean) => void
     fixedSku?: FixedSku
+    skuOptions?: readonly FixedSku[]
 }) {
     const mutation = useCreateSupplierOfferingMutation()
     const [supplementaryOpen, setSupplementaryOpen] = React.useState(false)
@@ -150,11 +153,33 @@ export function RegisterSupplyForSkuDialog({
         return () => window.removeEventListener("beforeunload", beforeUnload)
     }, [form, open])
 
-    const unit = fixedSku?.baseUnit || selectedSku?.baseUnit
-    const skuName = fixedSku?.skuName || selectedSku?.name
-    const skuDetails = fixedSku
-        ? [fixedSku.skuCode, fixedSku.specification, fixedSku.baseUnit]
-        : [selectedSku?.sku, selectedSku?.description, selectedSku?.baseUnit]
+    const selectedSkuId = useStore(form.store, (state) => state.values.skuId)
+    const samePrice = useStore(form.store, (state) => state.values.samePrice)
+    const quantityMode = useStore(
+        form.store,
+        (state) => state.values.quantityMode,
+    )
+    const activeSku =
+        fixedSku ?? skuOptions?.find((sku) => sku.skuId === selectedSkuId)
+    const unit = activeSku?.baseUnit || selectedSku?.baseUnit
+    const skuName =
+        activeSku?.productName ||
+        activeSku?.skuName ||
+        selectedSku?.name ||
+        skuOptions?.[0]?.productName
+    const skuCode = activeSku?.skuCode || selectedSku?.sku
+    const skuDetails = [
+        activeSku?.specification || selectedSku?.description,
+        skuCode ? `SKU：${skuCode}` : undefined,
+        unit ? `单位：${unit}` : undefined,
+    ]
+    const imageUrl =
+        activeSku?.mainImagePreviewUrl ||
+        activeSku?.carouselPreviewUrls?.[activeSku.carouselImages?.[0] ?? ""]
+    const validateQuantity = ({ value }: { value: string }) =>
+        form.getFieldValue("quantityMode") === "provided" && !value.trim()
+            ? "请填写可供数量，或选择数量未提供"
+            : undefined
     const requestClose = (next: boolean) => {
         if (mutation.isPending || form.state.isSubmitting) return
         if (!next && form.state.isDirty) setDiscardOpen(true)
@@ -166,21 +191,37 @@ export function RegisterSupplyForSkuDialog({
             <Dialog open={open} onOpenChange={requestClose}>
                 <DialogContent
                     closeButtonId={`${prefix}-close`}
-                    className="flex max-h-[92dvh] w-[calc(100vw-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[920px]"
+                    className="flex max-h-[92dvh] w-[calc(100vw-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[880px]"
                 >
                     <DialogHeader className="shrink-0 px-5 pt-4 pb-3 sm:px-6">
                         <DialogTitle className="text-lg">添加供给</DialogTitle>
                         <DialogDescription>
-                            登记供应商、含税供货价与供货条件。
+                            为商品登记供应商、含税报价与供货条件。
                         </DialogDescription>
                     </DialogHeader>
                     {skuName && (
-                        <div className="mx-5 mb-3 shrink-0 rounded-md bg-muted/50 px-3 py-2 sm:mx-6">
-                            <div className="font-medium break-words">
-                                {skuName}
-                            </div>
-                            <div className="mt-1 text-xs text-muted-foreground break-words">
-                                {skuDetails.filter(Boolean).join(" · ")}
+                        <div className="mx-5 mb-4 flex shrink-0 items-center gap-3 rounded-lg bg-muted/50 px-4 py-3 sm:mx-6">
+                            {imageUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element -- 复用商品编辑页已解析的对象存储或本地预览地址。
+                                <img
+                                    src={imageUrl}
+                                    alt=""
+                                    className="size-14 shrink-0 rounded-md object-cover"
+                                />
+                            ) : (
+                                <PackageIcon
+                                    className="size-9 shrink-0 text-muted-foreground"
+                                    aria-hidden="true"
+                                />
+                            )}
+                            <div className="min-w-0">
+                                <div className="font-medium break-words">
+                                    {skuName}
+                                </div>
+                                <div className="mt-1 text-xs text-muted-foreground break-words">
+                                    {skuDetails.filter(Boolean).join(" · ") ||
+                                        "请选择需要添加供给的商品规格"}
+                                </div>
                             </div>
                         </div>
                     )}
@@ -207,88 +248,33 @@ export function RegisterSupplyForSkuDialog({
                                 disabled={mutation.isPending}
                                 className="min-w-0 space-y-4 [&_[data-slot=field]]:gap-1.5 [&_[data-slot=field-description]]:text-xs [&_[data-slot=input]]:h-9"
                             >
+                                {!fixedSku && (
+                                    <form.AppField name="skuId">
+                                        {() => (
+                                            <SupplySkuField
+                                                id={`${prefix}-sku`}
+                                                options={skuOptions}
+                                                onItemChange={setSelectedSku}
+                                            />
+                                        )}
+                                    </form.AppField>
+                                )}
                                 <section
                                     aria-labelledby={`${prefix}-supplier-heading`}
                                     className="space-y-3"
                                 >
                                     <h3
                                         id={`${prefix}-supplier-heading`}
-                                        className="text-sm font-medium"
+                                        className="flex items-center gap-2 text-sm font-medium"
                                     >
+                                        <span
+                                            className="flex size-6 items-center justify-center rounded-full bg-foreground text-xs text-background"
+                                            aria-hidden="true"
+                                        >
+                                            1
+                                        </span>
                                         供应商信息
                                     </h3>
-                                    {!fixedSku && (
-                                        <form.AppField name="skuId">
-                                            {(field) => (
-                                                <Field
-                                                    className="min-w-0"
-                                                    data-invalid={
-                                                        (field.state.meta
-                                                            .isTouched &&
-                                                            !field.state.meta
-                                                                .isValid) ||
-                                                        undefined
-                                                    }
-                                                >
-                                                    <FieldLabel
-                                                        htmlFor={`${prefix}-sku`}
-                                                    >
-                                                        公司 SKU
-                                                        <span className="text-destructive">
-                                                            *
-                                                        </span>
-                                                    </FieldLabel>
-                                                    <CompanySkuSearchCombobox
-                                                        id={`${prefix}-sku`}
-                                                        value={
-                                                            field.state.value ||
-                                                            undefined
-                                                        }
-                                                        onValueChange={(
-                                                            value,
-                                                        ) =>
-                                                            field.handleChange(
-                                                                value ?? "",
-                                                            )
-                                                        }
-                                                        onItemChange={
-                                                            setSelectedSku
-                                                        }
-                                                        onBlur={
-                                                            field.handleBlur
-                                                        }
-                                                        label="公司 SKU"
-                                                        required
-                                                        allowClear={false}
-                                                        aria-invalid={
-                                                            field.state.meta
-                                                                .isTouched &&
-                                                            !field.state.meta
-                                                                .isValid
-                                                        }
-                                                        aria-describedby={
-                                                            field.state.meta
-                                                                .errors.length
-                                                                ? `${prefix}-sku-error`
-                                                                : undefined
-                                                        }
-                                                        placeholder="搜索商品名称或 SKU 编号"
-                                                        className="w-full"
-                                                    />
-                                                    {field.state.meta
-                                                        .isTouched && (
-                                                        <FieldError
-                                                            id={`${prefix}-sku-error`}
-                                                            errors={toFieldErrors(
-                                                                field.state.meta
-                                                                    .errors,
-                                                            )}
-                                                        />
-                                                    )}
-                                                </Field>
-                                            )}
-                                        </form.AppField>
-                                    )}
                                     <div className="grid items-start gap-x-4 gap-y-3 sm:grid-cols-2">
                                         <form.AppField name="supplierId">
                                             {(field) => (
@@ -374,7 +360,8 @@ export function RegisterSupplyForSkuDialog({
                                                     id={`${prefix}-supplier-sku-code`}
                                                     label="供应商订货编码"
                                                     required
-                                                    placeholder="供应商下单时使用的 SKU 编码"
+                                                    placeholder="填写供应商货号"
+                                                    description="向供应商下单使用的货号"
                                                 />
                                             )}
                                         </form.AppField>
@@ -384,47 +371,35 @@ export function RegisterSupplyForSkuDialog({
                                     aria-labelledby={`${prefix}-prices-heading`}
                                     className="space-y-3 border-t pt-3"
                                 >
-                                    <div className="flex items-center justify-between gap-3">
-                                        <h3
-                                            id={`${prefix}-prices-heading`}
-                                            className="text-sm font-medium"
+                                    <h3
+                                        id={`${prefix}-prices-heading`}
+                                        className="flex items-center gap-2 text-sm font-medium"
+                                    >
+                                        <span
+                                            className="flex size-6 items-center justify-center rounded-full bg-foreground text-xs text-background"
+                                            aria-hidden="true"
                                         >
-                                            供货价格{" "}
-                                            <span className="font-normal text-muted-foreground">
-                                                （含税）
-                                            </span>
-                                        </h3>
-                                        <form.Subscribe
-                                            selector={(state) =>
-                                                state.values.dropshipPrice
-                                            }
-                                        >
-                                            {(price) => (
-                                                <Button
-                                                    id={`${prefix}-copy-price`}
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    className="h-7 text-xs"
-                                                    disabled={
-                                                        !/^\d+(?:\.\d{1,4})?$/.test(
-                                                            price.trim(),
-                                                        ) || mutation.isPending
-                                                    }
-                                                    onClick={() =>
+                                            2
+                                        </span>
+                                        供货价格（含税）
+                                    </h3>
+                                    <div className="grid items-start gap-x-4 gap-y-3 sm:grid-cols-2">
+                                        <form.AppField
+                                            name="dropshipPrice"
+                                            listeners={{
+                                                onChange: ({ value }) => {
+                                                    if (
+                                                        form.getFieldValue(
+                                                            "samePrice",
+                                                        )
+                                                    )
                                                         form.setFieldValue(
                                                             "bulkPrice",
-                                                            price.trim(),
+                                                            value,
                                                         )
-                                                    }
-                                                >
-                                                    代发价填入集采价
-                                                </Button>
-                                            )}
-                                        </form.Subscribe>
-                                    </div>
-                                    <div className="grid items-start gap-x-4 gap-y-3 sm:grid-cols-2">
-                                        <form.AppField name="dropshipPrice">
+                                                },
+                                            }}
+                                        >
                                             {() => (
                                                 <SupplyAmountField
                                                     id={`${prefix}-dropship-price`}
@@ -434,16 +409,58 @@ export function RegisterSupplyForSkuDialog({
                                                 />
                                             )}
                                         </form.AppField>
-                                        <form.AppField name="bulkPrice">
-                                            {() => (
-                                                <SupplyAmountField
-                                                    id={`${prefix}-bulk-price`}
-                                                    label="集采价"
-                                                    unit={unit}
-                                                    required
-                                                />
-                                            )}
-                                        </form.AppField>
+                                        <div className="space-y-2">
+                                            <form.AppField name="bulkPrice">
+                                                {() => (
+                                                    <SupplyAmountField
+                                                        id={`${prefix}-bulk-price`}
+                                                        label="集采价"
+                                                        unit={unit}
+                                                        required
+                                                        readOnly={samePrice}
+                                                    />
+                                                )}
+                                            </form.AppField>
+                                            <form.AppField name="samePrice">
+                                                {(field) => (
+                                                    <label
+                                                        htmlFor={`${prefix}-copy-price`}
+                                                        className="flex w-fit items-center gap-2 text-xs text-muted-foreground"
+                                                    >
+                                                        <Checkbox
+                                                            className="rounded-sm border-border bg-background"
+                                                            nativeButton
+                                                            render={
+                                                                <button
+                                                                    type="button"
+                                                                    aria-label="与代发价相同"
+                                                                />
+                                                            }
+                                                            id={`${prefix}-copy-price`}
+                                                            checked={
+                                                                field.state
+                                                                    .value
+                                                            }
+                                                            onCheckedChange={(
+                                                                checked,
+                                                            ) => {
+                                                                field.handleChange(
+                                                                    checked,
+                                                                )
+                                                                if (checked)
+                                                                    form.setFieldValue(
+                                                                        "bulkPrice",
+                                                                        form.getFieldValue(
+                                                                            "dropshipPrice",
+                                                                        ),
+                                                                    )
+                                                            }}
+                                                        />
+                                                        与代发价相同
+                                                    </label>
+                                                )}
+                                            </form.AppField>
+                                        </div>
                                         <form.Subscribe
                                             selector={(state) =>
                                                 state.values.supplierId
@@ -500,8 +517,14 @@ export function RegisterSupplyForSkuDialog({
                                 >
                                     <h3
                                         id={`${prefix}-terms-heading`}
-                                        className="text-sm font-medium"
+                                        className="flex items-center gap-2 text-sm font-medium"
                                     >
+                                        <span
+                                            className="flex size-6 items-center justify-center rounded-full bg-foreground text-xs text-background"
+                                            aria-hidden="true"
+                                        >
+                                            3
+                                        </span>
                                         供货条件
                                     </h3>
                                     <form.AppField name="supplyRegionText">
@@ -636,17 +659,108 @@ export function RegisterSupplyForSkuDialog({
                                                 </Field>
                                             )}
                                         </form.AppField>
-                                        <form.AppField name="availableQuantity">
-                                            {(field) => (
-                                                <field.TextField
-                                                    id={`${prefix}-available-quantity`}
-                                                    label={`当前可供数量${unit ? `（${unit}）` : ""}`}
-                                                    inputMode="decimal"
-                                                    placeholder="数量未提供"
-                                                    description="留空表示数量未提供；填写 0 将阻止销售。"
-                                                />
+                                        <div className="min-w-0 space-y-2">
+                                            <form.AppField name="quantityMode">
+                                                {(field) => (
+                                                    <Field>
+                                                        <FieldLabel
+                                                            id={`${prefix}-quantity-label`}
+                                                        >
+                                                            当前可供数量
+                                                        </FieldLabel>
+                                                        <RadioGroup
+                                                            id={`${prefix}-quantity-mode`}
+                                                            aria-labelledby={`${prefix}-quantity-label`}
+                                                            value={
+                                                                field.state
+                                                                    .value
+                                                            }
+                                                            className="flex min-h-9 flex-wrap items-center gap-4"
+                                                            onValueChange={(
+                                                                value,
+                                                            ) => {
+                                                                field.handleChange(
+                                                                    value ===
+                                                                        "provided"
+                                                                        ? "provided"
+                                                                        : "unknown",
+                                                                )
+                                                                if (
+                                                                    value !==
+                                                                    "provided"
+                                                                )
+                                                                    form.resetField(
+                                                                        "availableQuantity",
+                                                                    )
+                                                            }}
+                                                        >
+                                                            <label
+                                                                htmlFor={`${prefix}-quantity-unknown`}
+                                                                className="flex items-center gap-2 text-xs"
+                                                            >
+                                                                <RadioGroupItem
+                                                                    className="border-border bg-background"
+                                                                    nativeButton
+                                                                    render={
+                                                                        <button
+                                                                            type="button"
+                                                                            aria-label="数量未提供"
+                                                                        />
+                                                                    }
+                                                                    id={`${prefix}-quantity-unknown`}
+                                                                    value="unknown"
+                                                                />
+                                                                数量未提供
+                                                            </label>
+                                                            <label
+                                                                htmlFor={`${prefix}-quantity-provided`}
+                                                                className="flex items-center gap-2 text-xs"
+                                                            >
+                                                                <RadioGroupItem
+                                                                    className="border-border bg-background"
+                                                                    nativeButton
+                                                                    render={
+                                                                        <button
+                                                                            type="button"
+                                                                            aria-label="填写数量"
+                                                                        />
+                                                                    }
+                                                                    id={`${prefix}-quantity-provided`}
+                                                                    value="provided"
+                                                                />
+                                                                填写数量
+                                                            </label>
+                                                        </RadioGroup>
+                                                    </Field>
+                                                )}
+                                            </form.AppField>
+                                            {quantityMode === "provided" && (
+                                                <form.AppField
+                                                    name="availableQuantity"
+                                                    validators={{
+                                                        onChangeListenTo: [
+                                                            "quantityMode",
+                                                        ],
+                                                        onChange:
+                                                            validateQuantity,
+                                                        onBlur: validateQuantity,
+                                                        onSubmit:
+                                                            validateQuantity,
+                                                    }}
+                                                >
+                                                    {(field) => (
+                                                        <field.TextField
+                                                            id={`${prefix}-available-quantity`}
+                                                            label={`可供数量${unit ? `（${unit}）` : ""}`}
+                                                            required
+                                                            inputMode="decimal"
+                                                            placeholder="请输入可供数量"
+                                                            description="填写 0 时，这条供给暂不能用于销售。"
+                                                        />
+                                                    )}
+                                                </form.AppField>
                                             )}
-                                        </form.AppField>
+                                        </div>
                                     </div>
                                     <form.Subscribe
                                         selector={(state) =>
