@@ -279,43 +279,40 @@ export function useProductListColumns({
                     const pending =
                         productListingPending &&
                         productListingProductId === item.stableId
-                    const label =
-                        inherited === "LISTED"
-                            ? "已上架"
-                            : inherited === "PARTIALLY_LISTED"
-                              ? "部分上架"
-                              : "已下架"
+                    const statusLabel = pending
+                        ? "更新中…"
+                        : inherited === "LISTED"
+                          ? "已上架"
+                          : inherited === "PARTIALLY_LISTED"
+                            ? "部分上架"
+                            : "已下架"
+                    const accessibleName = `${item.name}整组上架状态：${statusLabel}`
                     return (
-                        <div className="flex flex-col items-start gap-1.5">
-                            <Switch
-                                nativeButton
-                                render={
-                                    <button
-                                        type="button"
-                                        aria-label={`${item.name}整组上架状态`}
-                                    />
-                                }
-                                id={`master-data-product-${toAutomationIdSegment(item.stableId)}-listing`}
-                                size="sm"
-                                checked={inherited === "LISTED"}
-                                disabled={
-                                    pending ||
-                                    !canUpdateProductListing ||
-                                    (item.lifecycleStatus !== "ENABLED" &&
-                                        inherited === "UNLISTED") ||
-                                    (item.skuCount ?? 0) === 0
-                                }
-                                onCheckedChange={(checked) =>
-                                    void onUpdateProductListing(item, checked)
-                                }
-                                aria-label={`${item.name}整组上架状态`}
-                            />
-                            <span className="whitespace-nowrap text-xs text-muted-foreground">
-                                {pending
-                                    ? "更新中…"
-                                    : `${label} ${item.listedSkuCount ?? 0}/${item.skuCount ?? 0}`}
-                            </span>
-                        </div>
+                        <Switch
+                            nativeButton
+                            render={
+                                <button
+                                    type="button"
+                                    aria-label={accessibleName}
+                                    title={statusLabel}
+                                />
+                            }
+                            id={`master-data-product-${toAutomationIdSegment(item.stableId)}-listing`}
+                            size="sm"
+                            checked={inherited === "LISTED"}
+                            disabled={
+                                pending ||
+                                !canUpdateProductListing ||
+                                (item.lifecycleStatus !== "ENABLED" &&
+                                    inherited === "UNLISTED") ||
+                                (item.skuCount ?? 0) === 0
+                            }
+                            onCheckedChange={(checked) =>
+                                void onUpdateProductListing(item, checked)
+                            }
+                            aria-label={accessibleName}
+                            title={statusLabel}
+                        />
                     )
                 },
             },
