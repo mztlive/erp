@@ -12,7 +12,7 @@ use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::access::{ActorAccess, authorized_fields, authorized_item_fields, detail_scope};
-use super::facts::object_policy;
+use super::facts::{OwnedFulfillmentTask, object_policy};
 use super::stats::apply_due_filter;
 use super::{
     ProcessingBlockerView, WorkItemAllowedAction, WorkItemDueFilter, WorkItemFilter, WorkItemListParams,
@@ -21,6 +21,24 @@ use super::{
 use crate::errors::{Error, Result};
 
 pub(super) const AUTHORIZED_SCAN_BATCH_SIZE: NonZeroU32 = NonZeroU32::new(100).expect("批次大小必须非零");
+
+pub(super) fn owned_fulfillment_task(row: &erp_workflow::WorkItemRow) -> OwnedFulfillmentTask<'_> {
+    OwnedFulfillmentTask {
+        work_item_type: row.work_item_type,
+        business_object_type: &row.business_object_type,
+        business_object_id: &row.business_object_id,
+        owner_user_id: row.owner_user_id.as_deref(),
+    }
+}
+
+fn owned_fulfillment_task_item(item: &WorkItem) -> OwnedFulfillmentTask<'_> {
+    OwnedFulfillmentTask {
+        work_item_type: item.work_item_type,
+        business_object_type: &item.business_object_type,
+        business_object_id: &item.business_object_id,
+        owner_user_id: item.owner_user_id.as_deref(),
+    }
+}
 
 struct FocusedQueueContext<'a> {
     page_size: u32,
@@ -193,7 +211,13 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
                 break;
             }
             let mut facts = self.object_facts_for_rows(&rows, executor).await?;
-            self.filter_order_access(&access.actor_id, &mut facts, executor).await?;
+            self.filter_order_access_keeping_owned_fulfillment(
+                &access.actor_id,
+                rows.iter().map(owned_fulfillment_task),
+                &mut facts,
+                executor,
+            )
+            .await?;
             let fields = authorized_fields(rows, access, &facts);
             for fields in fields.into_iter().filter(|fields| {
                 matches_keyword(fields, filter.query.as_deref())
@@ -256,7 +280,13 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             })
             .collect::<HashSet<_>>();
         let mut facts = self.load_object_facts(&keys, executor).await?;
-        self.filter_order_access(&access.actor_id, &mut facts, executor).await?;
+        self.filter_order_access_keeping_owned_fulfillment(
+            &access.actor_id,
+            items.iter().map(owned_fulfillment_task_item),
+            &mut facts,
+            executor,
+        )
+        .await?;
         Ok(items.into_iter().filter_map(|item| authorized_item_fields(item, access, &facts)).collect())
     }
 
