@@ -1,7 +1,99 @@
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { apiGet, apiLogin } from "./api";
+import { API_BASE, apiGet, apiLogin } from "./api";
+
+type StockScopeRow = {
+  enabled?: boolean;
+  scope_type?: string;
+  scope_targets?: string[];
+  actions?: string[];
+};
+
+const WAREHOUSE_STOCK_GRANTS: ReadonlyArray<{
+  roleId: string;
+  resource: string;
+  actions: readonly string[];
+}> = [
+  { roleId: "role-warehouse", resource: "stock_balance", actions: ["list", "detail"] },
+  { roleId: "role-warehouse", resource: "stock_movement", actions: ["list"] },
+  { roleId: "role-warehouse", resource: "stock_reservation", actions: ["list"] },
+  {
+    roleId: "role-warehouse",
+    resource: "stock_adjustment",
+    actions: ["list", "detail", "create", "update", "submit"],
+  },
+  { roleId: "role-warehouse", resource: "approval_instance", actions: ["read"] },
+  { roleId: "role-procurement", resource: "stock_reservation", actions: ["list"] },
+];
+
+async function apiPost<T>(token: string, path: string, body: unknown): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(15_000),
+  });
+  const text = await response.text();
+  const parsed = text
+    ? (JSON.parse(text) as { success?: boolean; errorMessage?: string; data?: T })
+    : null;
+  if (!response.ok || parsed?.success === false || parsed?.data == null) {
+    throw new Error(
+      `API POST ${path} 失败（HTTP ${response.status}）: ${parsed?.errorMessage ?? text.slice(0, 300)}`,
+    );
+  }
+  return parsed.data;
+}
+
+function scopeCovers(row: StockScopeRow, actions: readonly string[], warehouseId: string): boolean {
+  if (row.enabled === false) return false;
+  const granted = new Set(row.actions ?? []);
+  if (!actions.every((action) => granted.has(action))) return false;
+  if (row.scope_type === "company") return true;
+  const targets = row.scope_targets ?? [];
+  return targets.includes(warehouseId) || targets.includes("*");
+}
+
+/**
+ * 仓储角色没有库存默认范围时，台账停在「未配置仓库数据范围」，
+ * 余额视图和搜索框都不会挂载。按仓库显式补上本流程要用的范围。
+ */
+export async function ensureWarehouseStockScope(warehouseCode: string): Promise<void> {
+  const token = await apiLogin("admin");
+  const warehouses = await apiGet<{ items: Array<{ id: string; warehouse_code: string }> }>(
+    token,
+    "/admin/warehouses",
+    { warehouse_code: warehouseCode, page: 1, page_size: 100 },
+  );
+  const warehouse = warehouses.items.find((row) => row.warehouse_code === warehouseCode);
+  if (!warehouse) throw new Error(`缺少库存测试仓库：${warehouseCode}`);
+  for (const grant of WAREHOUSE_STOCK_GRANTS) {
+    const page = await apiGet<{ items?: StockScopeRow[] }>(token, "/admin/data-scopes", {
+      subject_type: "role",
+      subject_id: grant.roleId,
+      resource: grant.resource,
+      page: 1,
+      page_size: 100,
+    });
+    if ((page.items ?? []).some((row) => scopeCovers(row, grant.actions, warehouse.id))) continue;
+    await apiPost(token, "/admin/data-scopes", {
+      schema_version: 2,
+      subject_type: "role",
+      subject_id: grant.roleId,
+      resource: grant.resource,
+      actions: grant.actions,
+      target_dimension: "warehouse",
+      scope_type: "organization",
+      scope_targets: [warehouse.id],
+      target_mode: "explicit",
+      enabled: true,
+    });
+  }
+}
 
 /** 只准备零数量仓库/SKU 维度；可用库存必须由浏览器提交盘盈并审批形成。 */
 export async function ensureZeroBalanceDimension(
