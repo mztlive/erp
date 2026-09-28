@@ -447,9 +447,9 @@ test("S2 浏览器验收：组织变更跨页可见、维度隔离、任务受�
     // 5. 组织页跨页可见：刷新后新部门可见。
     await adminPage.goto("/system/organization")
     await expect(adminPage.getByRole("heading", { name: "组织与人员" })).toBeVisible(VISIBLE)
-    const financeOrg = adminPage.getByRole("button", { name: FINANCE_ORG })
-    await financeOrg.scrollIntoViewIfNeeded()
-    await expect(financeOrg).toBeVisible(VISIBLE)
+    const financeOrgButton = adminPage.getByRole("button", { name: FINANCE_ORG })
+    await financeOrgButton.scrollIntoViewIfNeeded()
+    await expect(financeOrgButton).toBeVisible(VISIBLE)
     await adminPage.screenshot({
         path: test.info().outputPath("s2-org-units.png"),
     })

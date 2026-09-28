@@ -23,7 +23,6 @@ const WAREHOUSE_STOCK_GRANTS: ReadonlyArray<{
     resource: "stock_adjustment",
     actions: ["list", "detail", "create", "update", "submit"],
   },
-  { roleId: "role-warehouse", resource: "approval_instance", actions: ["read"] },
   { roleId: "role-procurement", resource: "stock_reservation", actions: ["list"] },
 ];
 
@@ -90,6 +89,7 @@ export async function ensureWarehouseStockScope(warehouseCode: string): Promise<
       scope_type: "organization",
       scope_targets: [warehouse.id],
       target_mode: "explicit",
+      include_descendants: null,
       enabled: true,
     });
   }
