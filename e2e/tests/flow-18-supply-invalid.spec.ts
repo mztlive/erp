@@ -2,8 +2,8 @@
  * 流程: [flow-18] 供给失效不得建采购单，必须走销售变更
  * 文档: docs/erp-phase-1.md §7.4（供给失效/停止可供/资质失效时采购单不得创建，
  *       走销售变更单）+ §4.4（生效后禁止回到审批改选源）+ §6.3（销售变更单）
- * 使用账号: admin（采购责任默认调度人）、xiaoshou（客户/合同/销售单/变更单）、
- *           caigou（销售审批、停止可供、供给分配）、caiwu（变更单财务复核）、
+ * 使用账号: admin（采购责任默认调度人、停止可供）、xiaoshou（客户/合同/销售单/变更单）、
+ *           caigou（销售审批、供给分配）、caiwu（变更单财务复核）、
  *           cangchu（库存预占负向核对）
  *
  * 文档-代码差异（以代码为准）:
@@ -54,7 +54,6 @@ const CONTRACT_PDF = path.resolve(process.cwd(), "fixtures/sample-contract.pdf")
 const SKU_KEYWORD = "龙井"
 const SKU_NAME = "狮峰明前龙井礼盒"
 const SKU_NO = "TEA-SF-LJ-250"
-const SUPPLIER_SKU_CODE = "SF-LJ-250"
 const SALES_QTY = "2"
 const MINIMAL_PDF = Buffer.from(
     "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n",
@@ -146,6 +145,20 @@ async function expectAllocationCannotCreatePurchase(page: Page, salesOrderNo: st
     ).toBeVisible({ timeout: UI_TIMEOUT })
     await expect(page.getByRole("dialog", { name: "预览供给分配" })).toHaveCount(0)
     await expect(dialogish(page, "确认供给分配")).toHaveCount(0)
+}
+
+/** 列表 q 匹配订货编码、公司 SKU 编号或当前 SKU 名称。种子 SKU 编号可唯一定位该供给。 */
+async function findSeededOfferingRow(page: Page) {
+    await page.goto(`/procurement/supplier-offerings?q=${encodeURIComponent(SKU_NO)}`)
+    await expect(page.getByRole("heading", { name: "供应商供给" })).toBeVisible({
+        timeout: UI_TIMEOUT,
+    })
+    const offeringSearch = page.getByLabel("搜索供给")
+    await offeringSearch.fill(SKU_NO)
+    await offeringSearch.press("Enter")
+    const offeringRow = page.getByRole("row").filter({ hasText: SKU_NAME })
+    await expect(offeringRow.first()).toBeVisible({ timeout: UI_TIMEOUT })
+    return offeringRow
 }
 
 test("flow-18 停止可供后供给分配不得建采购单，必须走销售变更且禁止回到审批", async ({
@@ -276,16 +289,10 @@ test("flow-18 停止可供后供给分配不得建采购单，必须走销售变
         await expect(page.getByText("将创建采购单").locator("xpath=..")).toContainText(/[1-9]\s*张/)
         await expect(page.getByRole("button", { name: "预览供给分配" })).toBeVisible()
 
-        // 5) 供给分配确认前：采购停止该 SKU 的有效供给（停止可供）
-        await page.goto(`/procurement/supplier-offerings?q=${encodeURIComponent(SUPPLIER_SKU_CODE)}`)
-        await expect(page.getByRole("heading", { name: "供应商供给" })).toBeVisible({
-            timeout: UI_TIMEOUT,
-        })
-        const offeringSearch = page.getByLabel("搜索供给")
-        await offeringSearch.fill(SUPPLIER_SKU_CODE)
-        await offeringSearch.press("Enter")
-        const offeringRow = page.getByRole("row").filter({ hasText: SKU_NAME })
-        await expect(offeringRow.first()).toBeVisible({ timeout: UI_TIMEOUT })
+        // 5) 供给分配确认前停止该 SKU 的有效供给。
+        // 采购岗位没有供给列表范围；种子供给的维护人是建档管理员。
+        page = await switchTo("admin")
+        const offeringRow = await findSeededOfferingRow(page)
         await expect(offeringRow.getByText("可供").first()).toBeVisible()
         const quantityBefore = (await offeringRow.locator("td").filter({ hasText: /数量/ }).innerText()).match(/数量\s*([\d.]+)/)?.[1]
         expect(quantityBefore).toBeTruthy()
@@ -310,6 +317,7 @@ test("flow-18 停止可供后供给分配不得建采购单，必须走销售变
         expect(quantityAfter).toBe(quantityBefore)
 
         // 6) 负向：供给分配不得创建采购单，不得预览确认，不得虚增库存预留
+        page = await switchTo("caigou")
         await expectAllocationCannotCreatePurchase(page, salesOrderNo)
         await expectNoPurchaseOrders(page, salesOrderNo)
 
@@ -468,10 +476,8 @@ test("flow-18 停止可供后供给分配不得建采购单，必须走销售变
         try {
             // reset 保留供给主数据，负向用例必须恢复原先的可供状态，避免污染后续流程。
             if (restoreSupply) {
-                const page = await switchTo("caigou")
-                await page.goto(`/procurement/supplier-offerings?q=${encodeURIComponent(SUPPLIER_SKU_CODE)}`)
-                const row = page.getByRole("row").filter({ hasText: SKU_NAME })
-                await expect(row).toBeVisible({ timeout: UI_TIMEOUT })
+                const page = await switchTo("admin")
+                const row = await findSeededOfferingRow(page)
                 await row.getByRole("button", { name: /操作/ }).click()
                 await page.getByRole("menuitem", { name: "更新可供" }).click()
                 const dialog = page.getByRole("dialog", { name: "更新当前可供情况" })
