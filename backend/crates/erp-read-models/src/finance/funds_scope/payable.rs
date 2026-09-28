@@ -424,6 +424,7 @@ pub(super) fn cut_payable_account_row(
         gross_total: whole_amount(whole, row.gross_total),
         settled_total: whole_amount(whole, row.settled_total),
         open_total: whole_amount(whole, row.open_total),
+        open_invoiceable_total: whole_amount(whole, row.open_invoiceable_total),
         permission_limited: !whole,
         procurement_owner_user_id: fact.and_then(|order| order.owner_user_id.clone()),
         business_org_unit_id: fact.map(|order| order.business_org_unit_id.clone()),
@@ -434,5 +435,63 @@ pub(super) fn cut_payable_account_row(
             if number.is_empty() { None } else { Some(number.to_string()) }
         }),
         supplier_name: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use erp_core::common::stable::StableBase;
+    use erp_core::money::Amount;
+    use erp_finance::entity::payable::{PayableAccountStatus, PayableSourceType};
+
+    use super::*;
+
+    fn amount(text: &str) -> Amount {
+        Amount::from_str(text).expect("测试金额")
+    }
+
+    fn sample_row() -> PayableAccountRow {
+        PayableAccountRow {
+            id: "pa-1".into(),
+            stable: StableBase::new(PayableAccountStatus::Open, "buyer"),
+            source_document_id: "po-1".into(),
+            supplier_id: "sup-1".into(),
+            source_type: PayableSourceType::PurchaseOrder,
+            gross_total: amount("100.00"),
+            settled_total: amount("20.00"),
+            open_total: amount("80.00"),
+            invoiceable_total: amount("100.00"),
+            invoiced_total: amount("15.00"),
+            open_invoiceable_total: amount("85.00"),
+            version: 3,
+            created_at: 1,
+        }
+    }
+
+    /// 整单资格必须带回真实可收票余额；部分授权为 null，不能写成零。
+    #[test]
+    fn whole_access_returns_open_invoiceable_total_and_partial_returns_null() {
+        let fact = LinkedPurchaseFact {
+            owner_user_id: Some("buyer-1".into()),
+            business_org_unit_id: "org-1".into(),
+            version: 2,
+            document_no: "PO-1".into(),
+        };
+        let whole = cut_payable_account_row(&sample_row(), Some(&fact), true);
+        assert_eq!(whole.open_invoiceable_total, Some(amount("85.00")));
+        assert_eq!(whole.open_total, Some(amount("80.00")));
+        assert!(!whole.permission_limited);
+        let whole_json = serde_json::to_value(&whole).expect("整单行必须可序列化");
+        assert_eq!(whole_json["open_invoiceable_total"], "85.00");
+
+        let partial = cut_payable_account_row(&sample_row(), Some(&fact), false);
+        assert_eq!(partial.open_invoiceable_total, None);
+        assert_eq!(partial.open_total, None);
+        assert!(partial.permission_limited);
+        let partial_json = serde_json::to_value(&partial).expect("部分授权行必须可序列化");
+        assert!(partial_json.get("open_invoiceable_total").is_some());
+        assert!(partial_json["open_invoiceable_total"].is_null());
     }
 }

@@ -1,5 +1,5 @@
 "use client"
-import { useState, type ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { Button } from "@/components/ui/button"
 import {
     Table,
@@ -22,6 +22,10 @@ import {
     useInvoiceRequestAmounts,
     useInvoiceRequestPermissions,
 } from "../hooks/queries"
+import {
+    dismissPendingInvoiceRequestDetail,
+    pendingInvoiceRequestDetailId,
+} from "../pending-detail"
 import { InvoiceRequestForm } from "./request-form"
 import { InvoiceRequestDetail } from "./request-detail"
 /** 销售单和客户往来共用的申请列表、提交表单与详情入口。 */
@@ -44,9 +48,21 @@ export function InvoiceRequestPanel({
 }) {
     const permissions = useInvoiceRequestPermissions()
     const [page, setPage] = useState(1)
-    const [detailId, setDetailId] = useState(initialRequestId)
-    const [creating, setCreating] = useState(initialCreate)
+    const [detailId, setDetailId] = useState(
+        () => initialRequestId || pendingInvoiceRequestDetailId(),
+    )
+    const [creating, setCreating] = useState(
+        () => initialCreate && !pendingInvoiceRequestDetailId(),
+    )
     const [editing, setEditing] = useState<InvoiceRequest>()
+    useEffect(() => {
+        if (initialRequestId) return
+        const pending = pendingInvoiceRequestDetailId()
+        if (!pending) return
+        setDetailId(pending)
+        setCreating(false)
+        setEditing(undefined)
+    }, [initialRequestId])
     const list = useInvoiceRequests(
         {
             ...filters,
@@ -79,9 +95,10 @@ export function InvoiceRequestPanel({
                         setEditing(undefined)
                     }}
                     onDone={(request) => {
+                        const id = request.id || pendingInvoiceRequestDetailId()
                         setCreating(false)
                         setEditing(undefined)
-                        setDetailId(request.id)
+                        if (id) setDetailId(id)
                     }}
                 />
             </section>
@@ -90,7 +107,10 @@ export function InvoiceRequestPanel({
         return (
             <InvoiceRequestDetail
                 id={detailId}
-                onBack={() => setDetailId(undefined)}
+                onBack={() => {
+                    dismissPendingInvoiceRequestDetail()
+                    setDetailId(undefined)
+                }}
                 onEdit={(request) => setEditing(request)}
             />
         )
@@ -113,7 +133,10 @@ export function InvoiceRequestPanel({
                             (!amounts.data ||
                                 !/[1-9]/.test(amounts.data.available_amount)),
                         )}
-                        onClick={() => setCreating(true)}
+                        onClick={() => {
+                            dismissPendingInvoiceRequestDetail()
+                            setCreating(true)
+                        }}
                     >
                         {salesOrderId ? "申请开票" : "新建开票申请"}
                     </Button>
