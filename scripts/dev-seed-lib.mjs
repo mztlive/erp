@@ -2,7 +2,7 @@
 /**
  * 开发种子共享库：HTTP 调用、岗位账号目录与幂等建号。
  *
- * 账号、部门和审批链的规格在 dev-foundation.json，演示主数据接口读取同一份。
+ * 账号、部门和审批链的规格在后端 crate 的 dev-foundation.json，演示主数据接口读取同一份。
  * 账号对齐 docs/erp-phase-1.md §11 部门职责与预定义角色（role-sales 等）。
  * 财务按岗位分离拆成总监 / 出纳 / 开票人三个账号，共用 role-finance。
  * 超级管理员 admin 不在此创建，由 CLI init-admin 或本入口的 reset-db.sh 修复。
@@ -16,7 +16,13 @@ import { fileURLToPath } from "node:url";
 export const API_BASE = process.env.API_BASE || "http://127.0.0.1:10001";
 
 export const FOUNDATION = JSON.parse(
-  readFileSync(join(dirname(fileURLToPath(import.meta.url)), "dev-foundation.json"), "utf8"),
+  readFileSync(
+    join(
+      dirname(fileURLToPath(import.meta.url)),
+      "../backend/crates/erp-processes/src/demo_master_data/dev-foundation.json",
+    ),
+    "utf8",
+  ),
 );
 
 export const DEV_PASSWORD = FOUNDATION.password;

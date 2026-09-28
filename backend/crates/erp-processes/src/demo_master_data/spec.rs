@@ -1,4 +1,6 @@
-//! 演示岗位、部门和审批链。脚本与接口共用 `scripts/dev-foundation.json`。
+//! 演示岗位、部门和审批链。脚本与接口共用本目录的 `dev-foundation.json`。
+//!
+//! 规格必须放在 crate 内。web-api 镜像只复制 `backend/`，编译时读不到仓库根的 `scripts/`。
 
 use std::sync::OnceLock;
 
@@ -60,7 +62,7 @@ pub(super) struct ApprovalNodeSpec {
 pub(super) fn foundation_spec() -> &'static FoundationFile {
     static SPEC: OnceLock<FoundationFile> = OnceLock::new();
     SPEC.get_or_init(|| {
-        serde_json::from_str(include_str!("../../../../../scripts/dev-foundation.json"))
+        serde_json::from_str(include_str!("dev-foundation.json"))
             .expect("演示基础规格无法解析")
     })
 }
