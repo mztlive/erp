@@ -238,12 +238,33 @@ async function listDeliveries(
     return (page.items ?? []).filter((row) => row.sales_order_id === salesOrderId);
 }
 
-async function listPurchaseOrders(token: string): Promise<unknown[]> {
-    const page = await apiGet<ApiPage<unknown>>(token, "/admin/purchase-orders", {
+/** 只查这一张销售单的采购单。未筛选的列表会被共享套件里的其他采购单污染。 */
+async function expectThisSalesOrderHasNoPurchaseOrder(
+    page: Page,
+    salesOrderId: string,
+    salesOrderNo: string,
+) {
+    await page.goto(`/procurement/orders?q=${encodeURIComponent(salesOrderNo)}`);
+    await expect(page.getByRole("heading", { name: "采购单", exact: true })).toBeVisible({
+        timeout: UI_TIMEOUT,
+    });
+    await expect(page.locator("#procurement-orders-list-search")).toHaveValue(salesOrderNo, {
+        timeout: UI_TIMEOUT,
+    });
+    await expect(page.getByText("当前筛选无结果")).toBeVisible({ timeout: UI_TIMEOUT });
+    await expect(
+        page
+            .locator("#procurement-orders-list-table")
+            .getByRole("row")
+            .filter({ hasText: salesOrderNo }),
+    ).toHaveCount(0);
+    const listed = await apiGet<ApiPage<unknown>>(await tokenOf("caigou"), "/admin/purchase-orders", {
+        sales_order_id: salesOrderId,
         page: 1,
         page_size: 20,
     } as never);
-    return page.items ?? [];
+    expect(listed.items ?? []).toHaveLength(0);
+    expect(listed.total ?? 0).toBe(0);
 }
 
 async function bearerToken(page: Page): Promise<string> {
@@ -510,14 +531,9 @@ test("flow-19 已生效销售单禁止直接作废：预占和仓发草稿保持
         ).toBeVisible();
         await confirmSupplyAllocation(page, /供给分配已完成|本次供给分配已保存/);
 
-        // 6) 负向：零张采购单；库存 available 减少、reserved 增加；仓发草稿已形成但尚未出库
+        // 6) 负向：本单零张采购单；库存 available 减少、reserved 增加；仓发草稿已形成但尚未出库
         page = await switchTo("caigou");
-        await page.goto("/procurement/orders");
-        await expect(page.getByRole("heading", { name: "采购单", exact: true })).toBeVisible({
-            timeout: UI_TIMEOUT,
-        });
-        await expect(page.getByText("暂无采购单")).toBeVisible({ timeout: UI_TIMEOUT });
-        expect(await listPurchaseOrders(await tokenOf("caigou"))).toHaveLength(0);
+        await expectThisSalesOrderHasNoPurchaseOrder(page, salesOrderId, salesOrderNo);
 
         page = await switchTo("xiaoshou");
         await page.goto(`/sales/orders/${salesOrderId}`);
@@ -654,11 +670,9 @@ test("flow-19 已生效销售单禁止直接作废：预占和仓发草稿保持
         await expect(page.locator("#fulfillment-operations-work-surface-confirm"))
             .toBeEnabled({ timeout: UI_TIMEOUT });
 
-        // 10) 全程不得建采购单、不得关闭、不得开变更单、被拒绝的作废请求不得出现审批实例
+        // 10) 本单不得建采购单、不得关闭、不得开变更单、被拒绝的作废请求不得出现审批实例
         page = await switchTo("caigou");
-        await page.goto("/procurement/orders");
-        await expect(page.getByText("暂无采购单")).toBeVisible({ timeout: UI_TIMEOUT });
-        expect(await listPurchaseOrders(await tokenOf("caigou"))).toHaveLength(0);
+        await expectThisSalesOrderHasNoPurchaseOrder(page, salesOrderId, salesOrderNo);
         await expectNoWorkspaceTask(page, "待供给分配|供给分配", salesOrderNo, "procurement");
         await expectNoWorkspaceTask(page, "销售变更单审批", salesOrderNo, "approval");
         await page.goto("/workspace");
