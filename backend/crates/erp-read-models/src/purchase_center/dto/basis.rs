@@ -356,6 +356,10 @@ impl CreationBasisView {
     ///
     /// # 错误
     /// 无。
+    ///
+    /// # 关键业务约束
+    /// 现有库存依据的供给来源必须是现有库存。`new` 的默认值是采购，不改的话
+    /// 客户端会把余额方案当成采购单。
     pub fn with_stock_source(
         mut self,
         stock_balance_id: Option<String>,
@@ -363,6 +367,7 @@ impl CreationBasisView {
         warehouse_name: Option<String>,
         source_available_quantity: Option<String>,
     ) -> Self {
+        self.source_type = SupplySourceType::ExistingStock;
         self.stock_balance_id = stock_balance_id;
         self.warehouse_id = warehouse_id;
         self.warehouse_name = warehouse_name;
@@ -398,5 +403,47 @@ impl CreationBasisView {
     pub fn with_lines(mut self, lines: Vec<CreationBasisLineView>) -> Self {
         self.lines = lines;
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn bare_basis(supplier_name: &str) -> CreationBasisView {
+        CreationBasisView::new(
+            "task-1".to_string(),
+            "basis-1".to_string(),
+            "so-1".to_string(),
+            "SO-1".to_string(),
+            "客户".to_string(),
+            "rev-1".to_string(),
+            String::new(),
+            supplier_name.to_string(),
+            "PHYSICAL".to_string(),
+            "WAREHOUSE".to_string(),
+            String::new(),
+            "0".to_string(),
+        )
+    }
+
+    #[test]
+    fn new_basis_stays_purchase_until_stock_source_is_set() {
+        let purchase = bare_basis("狮峰茶叶");
+        assert_eq!(purchase.source_type, SupplySourceType::Purchase);
+        assert_eq!(purchase.stock_balance_id, None);
+
+        let stock = bare_basis("现有库存 · 北京通州仓").with_stock_source(
+            Some("balance-1".to_string()),
+            Some("warehouse-1".to_string()),
+            Some("北京通州仓".to_string()),
+            Some("10".to_string()),
+        );
+        assert_eq!(stock.source_type, SupplySourceType::ExistingStock);
+        assert_eq!(stock.stock_balance_id.as_deref(), Some("balance-1"));
+        assert_eq!(stock.warehouse_name.as_deref(), Some("北京通州仓"));
+        assert_eq!(stock.source_available_quantity.as_deref(), Some("10"));
+        let json = serde_json::to_value(stock).expect("库存依据可序列化");
+        assert_eq!(json["source_type"], "EXISTING_STOCK");
     }
 }

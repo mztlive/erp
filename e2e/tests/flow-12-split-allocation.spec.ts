@@ -12,6 +12,8 @@
  *   可用量仍由仓储盘盈 + 财务审批产生。仓储角色无库存默认范围时不渲染搜索框。
  * - 供给分配确认后采购单立即提交审批，状态为「审批中」，不会留下未提交草稿。
  * - 待办只在 /workspace 原地处理；供给分配嵌入 PurchaseOrderCreatePage。
+ * - 选源是 OptionCombobox。关闭时输入框不一定显示选项文案，以打开后
+ *   `data-selected` 的选项标签区分「可用」库存和「入仓」采购。
  */
 import fs from "node:fs"
 import path from "node:path"
@@ -185,6 +187,21 @@ async function createSalesOrderWithContract(
     return { salesOrderId, salesOrderNo }
 }
 
+/** 关闭态输入框可能不是选项标签；打开后读当前选中项。 */
+async function selectedSourcingLabel(page: Page, combo: Locator): Promise<string> {
+    const closed = ((await combo.inputValue().catch(() => "")) || "").replace(/\s+/g, " ").trim()
+    if (/可用|入仓|直发|现有库存/.test(closed)) return closed
+    await combo.click()
+    const popup = page.locator('[data-slot="combobox-content"]:visible')
+    await expect(popup).toBeVisible({ timeout: TIMEOUT })
+    const selected = popup.locator('[data-slot="combobox-item"][data-selected]')
+    await expect(selected.first()).toBeVisible({ timeout: TIMEOUT })
+    const label = ((await selected.first().innerText()) || "").replace(/\s+/g, " ").trim()
+    await page.keyboard.press("Escape")
+    await expect(popup).toBeHidden({ timeout: TIMEOUT })
+    return label
+}
+
 async function sourcingEditorControl(
     page: Page,
     option: RegExp,
@@ -196,9 +213,7 @@ async function sourcingEditorControl(
     for (let index = 0; index < count; index += 1) {
         const combo = combos.nth(index)
         if (!(await combo.isVisible().catch(() => false))) continue
-        const shown =
-            (await combo.inputValue().catch(() => "")) ||
-            (await combo.innerText().catch(() => ""))
+        const shown = await selectedSourcingLabel(page, combo)
         if (!option.test(shown)) continue
         const comboId = await combo.getAttribute("id")
         const prefix = comboId?.replace(/-sourcing-option$/, "")
