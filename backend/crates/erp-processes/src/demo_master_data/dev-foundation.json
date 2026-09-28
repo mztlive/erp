@@ -1,4 +1,5 @@
 {
+  "company": { "party_no": "FSY", "legal_name": "北京福尚云科技有限公司", "short_name": "福尚云", "aliases": [], "unified_credit_code": "91110108MA01FSY01X", "status": "active" },
   "password": "123456",
   "root_department": "总部",
   "sales_department": "销售部",

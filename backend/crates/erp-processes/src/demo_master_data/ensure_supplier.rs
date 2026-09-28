@@ -1,33 +1,33 @@
 //! 生成或恢复演示供应商。没有公司主体时跳过，不改其他资料。
 
-use std::str::FromStr;
-
 use application_core::AuditActor;
-use erp_core::common::time::BusinessDate;
 use erp_core::ids::PartyId;
-use erp_core::money::Rate;
-use erp_party::PartyExt;
-use erp_party::repository::PartyRepositoryExt;
 use erp_supplier::repository::SupplierProfileCommandRepositoryExt;
-use erp_supplier::{
-    CapabilityCode, HandoverSupplierRequest, InvoiceType, QualificationType, ReconciliationCycle,
-    SaveSupplierProfileRequest, SettlementMode, SupplierExt, SupplierProfileAddressInput,
-    SupplierProfileBankAccountInput, SupplierProfileCapabilityOwnerInput, SupplierProfileContactInput,
-    SupplierProfileQualificationInput, SupplierProfileRatingInput, SupplierRating,
-};
+use erp_supplier::{HandoverSupplierRequest, SaveSupplierProfileRequest, SupplierExt};
 use persistence_core::NoTransaction;
 
 use super::ensure_dictionary::EnsureOutcome;
-use super::plan::{self, DemoStep};
+use super::plan::DemoStep;
 use super::record::{self, DemoMasterRecord};
 use super::{DemoMasterDataService, lifecycle, spec};
 use crate::{Error, Result};
 
 impl DemoMasterDataService {
+    /// 解析公司及采购岗位后执行供应商种子。
+    ///
+    /// # 参数
+    /// `actor` - 操作人；`step` - 种子身份；`request` - 供应商创建输入；`company_party_id` - 公司 ID；`notices` - 跳过原因集合。
+    ///
+    /// # 返回
+    /// 返回供应商创建、恢复或跳过结果。
+    ///
+    /// # 错误
+    /// 命令回执失效、领域写入或清单登记失败时返回错误。
     pub(super) async fn ensure_supplier(
         &self,
         actor: &AuditActor,
         step: &DemoStep,
+        request: &SaveSupplierProfileRequest,
         company_party_id: Option<&str>,
         notices: &mut Vec<String>,
     ) -> Result<EnsureOutcome> {
@@ -43,7 +43,7 @@ impl DemoMasterDataService {
         };
         let view = match self
             .suppliers()
-            .create(supplier_request(step, maintainer.id(), company_party_id)?, actor)
+            .create(supplier_request(request, maintainer.id(), company_party_id), actor)
             .await
         {
             Ok(view) => view,
@@ -55,36 +55,29 @@ impl DemoMasterDataService {
         self.remember_created_supplier(actor, step, &view.supplier_id).await
     }
 
+    /// 从供应商实际外键读取主体并登记两个 ID。
     async fn remember_created_supplier(
         &self,
         actor: &AuditActor,
         step: &DemoStep,
         supplier_id: &str,
     ) -> Result<EnsureOutcome> {
-        let party = self
-            .db
-            .parties()
-            .find_by_party_no_including_deleted(&plan::supplier_party_no(step.ordinal), &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("演示供应商创建后未能读回主体".to_string()))?;
         let supplier = self
             .db
             .supplier_accounts()
             .find_by_id_including_deleted(supplier_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("演示供应商创建后未能读回".to_string()))?;
-        let created = supplier.base.deleted_at == entity_core::NOT_DELETED_TIMESTAMP
-            && party.base.deleted_at == entity_core::NOT_DELETED_TIMESTAMP;
-        if party.base.deleted_at != entity_core::NOT_DELETED_TIMESTAMP {
-            lifecycle::restore_party(&self.db, actor, &party.base.id).await?;
-        }
+        let created = supplier.base.deleted_at == entity_core::NOT_DELETED_TIMESTAMP;
+        lifecycle::restore_party(&self.db, actor, supplier.party_id.as_ref()).await?;
         if supplier.base.deleted_at != entity_core::NOT_DELETED_TIMESTAMP {
             lifecycle::restore_supplier(&self.db, actor, supplier_id).await?;
         }
-        record::save(&self.db, &supplier_record(step, supplier_id, &party.base.id)).await?;
+        record::save(&self.db, &supplier_record(step, supplier_id, supplier.party_id.as_ref())).await?;
         Ok(if created { EnsureOutcome::Created } else { EnsureOutcome::Restored })
     }
 
+    /// 恢复已登记命令对应的供应商并对齐维护人。
     async fn adopt_supplier(
         &self,
         actor: &AuditActor,
@@ -94,13 +87,13 @@ impl DemoMasterDataService {
     ) -> Result<EnsureOutcome> {
         let outcome = self.remember_created_supplier(actor, step, supplier_id).await?;
         self.align_supplier_maintainer(actor, step, supplier_id, notices).await?;
-        if let Some(party_id) = self.supplier_party_id(step).await? {
-            let face = super::names::supplier(step.ordinal);
-            self.rename_party_if_placeholder(actor, &party_id, face.legal_name, face.short_name).await?;
-        }
-        Ok(outcome)
+        Ok(match outcome {
+            EnsureOutcome::Created => EnsureOutcome::Skipped,
+            other => other,
+        })
     }
 
+    /// 通过移交用例对齐采购维护人。
     async fn align_supplier_maintainer(
         &self,
         actor: &AuditActor,
@@ -136,15 +129,7 @@ impl DemoMasterDataService {
         Ok(())
     }
 
-    async fn supplier_party_id(&self, step: &DemoStep) -> Result<Option<String>> {
-        let party = self
-            .db
-            .parties()
-            .find_by_party_no_including_deleted(&plan::supplier_party_no(step.ordinal), &mut NoTransaction)
-            .await?;
-        Ok(party.map(|party| party.base.id))
-    }
-
+    /// 按稳定幂等键读取此前创建的供应商。
     async fn supplier_command(&self, key: &str) -> Result<Option<String>> {
         let command =
             self.db.supplier_profile_commands().find_by_idempotency_key(key, &mut NoTransaction).await?;
@@ -152,96 +137,35 @@ impl DemoMasterDataService {
     }
 }
 
+/// 将公司和采购账号占位引用解析为当前数据库 ID。
 fn supplier_request(
-    step: &DemoStep,
+    template: &SaveSupplierProfileRequest,
     maintainer_id: &str,
     company_party_id: &str,
-) -> Result<SaveSupplierProfileRequest> {
-    let ordinal = step.ordinal;
-    let face = super::names::supplier(ordinal);
-    let date = super::demo_date()?;
-    let rate = Rate::from_str("0.130000").map_err(|error| Error::Internal(error.to_string()))?;
-    Ok(SaveSupplierProfileRequest {
-        idempotency_key: step.key.clone(),
-        party_no: Some(plan::supplier_party_no(ordinal)),
-        supplier_no: Some(plan::supplier_no(ordinal)),
-        expected_party_version: None,
-        expected_supplier_version: None,
-        legal_name: face.legal_name.to_string(),
-        short_name: Some(face.short_name.to_string()),
-        unified_credit_code: None,
-        contact: Some(SupplierProfileContactInput::new(face.contact.to_string(), face.phone.to_string())),
-        clear_contact: false,
-        address: Some(SupplierProfileAddressInput {
-            address: face.address.to_string(),
-            contact_name: Some(face.contact.to_string()),
-        }),
-        clear_address: false,
-        tax_no: None,
-        clear_tax_profile: false,
-        bank_account: Some(SupplierProfileBankAccountInput {
-            bank_name: super::names::supplier_bank(ordinal).to_string(),
-            account_number: format!("622202020000{ordinal:04}"),
-        }),
-        clear_bank_account: false,
-        settlement_mode: SettlementMode::Prepayment,
-        reconciliation_cycle: ReconciliationCycle::None,
-        payment_term_snapshot: "PREPAY_50".to_string(),
-        business_category: Some("节日福利".to_string()),
-        invoice_type: InvoiceType::VatSpecial,
-        invoice_tax_rate: Some(rate),
-        invoice_tax_rates: Some(vec![rate]),
-        signing_entity_party_id: PartyId::new(company_party_id),
-        payment_entity_party_id: PartyId::new(company_party_id),
-        maintainer_user_id: Some(maintainer_id.to_string()),
-        capability_owners: vec![capability_owner(maintainer_id)],
-        capability_codes: vec![CapabilityCode::Physical],
-        qualifications: vec![supplier_qualification(ordinal, date)?],
-        rating: Some(supplier_rating(date)),
-        effective_from: date,
-        change_reason: "演示主数据".to_string(),
-    })
-}
-
-fn capability_owner(maintainer_id: &str) -> SupplierProfileCapabilityOwnerInput {
-    SupplierProfileCapabilityOwnerInput {
-        capability_code: CapabilityCode::Physical,
-        owner_user_id: maintainer_id.to_string(),
+) -> SaveSupplierProfileRequest {
+    let mut request = template.clone();
+    request.signing_entity_party_id = PartyId::new(company_party_id);
+    request.payment_entity_party_id = PartyId::new(company_party_id);
+    request.maintainer_user_id = Some(maintainer_id.to_string());
+    for owner in &mut request.capability_owners {
+        owner.owner_user_id = maintainer_id.to_string();
     }
+    request
 }
 
-fn supplier_qualification(ordinal: u16, date: BusinessDate) -> Result<SupplierProfileQualificationInput> {
-    Ok(SupplierProfileQualificationInput {
-        qualification_type: QualificationType::Contract,
-        certificate_no: format!("DEMO-HT-{ordinal:02}"),
-        issuer: None,
-        valid_from: Some(date),
-        valid_to: Some(super::demo_date_end()?),
-        attachment_id: None,
-        capability_codes: vec![CapabilityCode::Physical],
-    })
-}
-
-fn supplier_rating(date: BusinessDate) -> SupplierProfileRatingInput {
-    SupplierProfileRatingInput {
-        initial_score: Some(90),
-        rating: SupplierRating::A,
-        current_score: 90,
-        valid_from: date,
-    }
-}
-
+/// 构造供应商与主体实际 ID 的登记记录。
 fn supplier_record(step: &DemoStep, supplier_id: &str, party_id: &str) -> DemoMasterRecord {
     DemoMasterRecord {
         key: step.key.clone(),
         kind: step.kind.as_str().to_string(),
         entity_id: supplier_id.to_string(),
         related_ids: vec![party_id.to_string()],
-        label: super::names::label(step).to_string(),
+        label: step.request.label().to_string(),
         removed: false,
     }
 }
 
+/// 合并不重复的供应商准备提示。
 fn push_supplier_notice(notices: &mut Vec<String>, text: &str) {
     if !notices.iter().any(|item| item == text) {
         notices.push(text.to_string());

@@ -1,31 +1,36 @@
 //! 生成或恢复演示商品。商品引用已经生成的单位、品牌和分类。
 
 use std::collections::HashMap;
-use std::str::FromStr;
 
 use application_core::AuditActor;
-use erp_catalog::{CatalogExt, CreateProductRequest, ProductKind, ProductSkuInput, UpdateProductRequest};
-use erp_core::ids::{ProductBrandId, ProductCategoryId, SkuId, SkuRevisionId, UnitOfMeasureId};
-use erp_core::money::Amount;
+use erp_catalog::{CatalogExt, CreateProductRequest};
+use erp_core::ids::{ProductBrandId, ProductCategoryId, UnitOfMeasureId};
 use persistence_core::NoTransaction;
 
 use super::ensure_dictionary::EnsureOutcome;
-use super::plan::{self, DemoStep};
+use super::plan::{DemoKind, DemoStep};
 use super::record::{self, DemoMasterRecord};
 use super::{DemoMasterDataService, lifecycle};
 use crate::{Error, Result};
 
 impl DemoMasterDataService {
+    /// 解析字典引用后创建或恢复商品及 SKU。
+    ///
+    /// # 参数
+    /// `actor` - 操作人；`step` - 种子身份；`records` - 已登记引用；`template` - 商品创建输入。
+    ///
+    /// # 返回
+    /// 返回商品创建、恢复或已存在结果。
+    ///
+    /// # 错误
+    /// 引用无效、编号归属不符或写入失败时返回错误。
     pub(super) async fn ensure_product(
         &self,
         actor: &AuditActor,
         step: &DemoStep,
         records: &HashMap<String, DemoMasterRecord>,
+        template: &CreateProductRequest,
     ) -> Result<EnsureOutcome> {
-        let (unit_key, brand_key, category_key) = plan::product_links(step.ordinal);
-        let unit_id = required_link(records, unit_key, "计量单位")?;
-        let brand_id = required_link(records, &brand_key, "品牌")?;
-        let category_id = required_link(records, &category_key, "分类")?;
         if let Some(existing) = self
             .db
             .products()
@@ -34,15 +39,13 @@ impl DemoMasterDataService {
         {
             return self.adopt_product(actor, step, &existing.base.id, existing.base.deleted_at).await;
         }
-        let view = self
-            .catalog()
-            .product_create(product_request(step, &unit_id, &brand_id, &category_id)?, actor)
-            .await?;
+        let view = self.catalog().product_create(product_request(template, records)?, actor).await?;
         let sku_ids = self.sku_ids(&view.id).await?;
         self.remember_product(step, view.id, sku_ids).await?;
         Ok(EnsureOutcome::Created)
     }
 
+    /// 校验登记归属并恢复商品与 SKU。
     async fn adopt_product(
         &self,
         actor: &AuditActor,
@@ -50,105 +53,17 @@ impl DemoMasterDataService {
         id: &str,
         deleted_at: u64,
     ) -> Result<EnsureOutcome> {
+        record::ensure_owned(&self.db, &step.key, id).await?;
         let sku_ids = self.sku_ids(id).await?;
         let live = deleted_at == entity_core::NOT_DELETED_TIMESTAMP;
         if !live {
             lifecycle::restore_product_graph(&self.db, actor, id, &sku_ids).await?;
         }
-        self.refresh_product_name(actor, step, id).await?;
         self.remember_product(step, id.to_string(), sku_ids).await?;
         Ok(if live { EnsureOutcome::Skipped } else { EnsureOutcome::Restored })
     }
 
-    async fn refresh_product_name(
-        &self,
-        actor: &AuditActor,
-        step: &DemoStep,
-        product_id: &str,
-    ) -> Result<()> {
-        let Some(product) =
-            self.db.products().find_by_id_including_deleted(product_id, &mut NoTransaction).await?
-        else {
-            return Ok(());
-        };
-        let Some(revision_id) = product.stable.current_revision_id.as_deref() else {
-            return Ok(());
-        };
-        let Some(revision) =
-            self.db.product_revisions().find_by_id_including_deleted(revision_id, &mut NoTransaction).await?
-        else {
-            return Ok(());
-        };
-        if !revision.name.contains('演') {
-            return Ok(());
-        }
-        let name = super::names::label(step);
-        let skus = self.product_sku_inputs(product_id, name).await?;
-        if skus.is_empty() {
-            return Ok(());
-        }
-        self.catalog()
-            .product_update(
-                product_id,
-                UpdateProductRequest {
-                    version: product.base.version,
-                    change_reason: Some("更新资料名称".to_string()),
-                    name: name.to_string(),
-                    description: Some(super::names::product_spec(step.ordinal).to_string()),
-                    specification: Some(super::names::product_spec(step.ordinal).to_string()),
-                    category_id: revision.category_id,
-                    brand_id: revision.brand_id,
-                    status: revision.status,
-                    effective_from: revision.effective_from,
-                    effective_to: revision.effective_to,
-                    carousel_media: Vec::new(),
-                    detail_media: Vec::new(),
-                    skus,
-                },
-                actor,
-            )
-            .await?;
-        Ok(())
-    }
-
-    async fn product_sku_inputs(&self, product_id: &str, name: &str) -> Result<Vec<ProductSkuInput>> {
-        let skus = self
-            .db
-            .skus()
-            .find_many_by_field_including_deleted("product_id", product_id.to_string(), &mut NoTransaction)
-            .await?;
-        let mut inputs = Vec::new();
-        for sku in skus {
-            if sku.base.deleted_at != entity_core::NOT_DELETED_TIMESTAMP {
-                continue;
-            }
-            let Some(revision_id) = sku.stable.current_revision_id.as_deref() else {
-                continue;
-            };
-            let Some(revision) =
-                self.db.sku_revisions().find_by_id_including_deleted(revision_id, &mut NoTransaction).await?
-            else {
-                continue;
-            };
-            inputs.push(ProductSkuInput {
-                sku_id: Some(SkuId::new(sku.base.id)),
-                expected_sku_revision_id: Some(SkuRevisionId::new(revision.base.id)),
-                reenable: false,
-                sku_no: sku.sku_no,
-                name: if revision.name.contains('演') { name.to_string() } else { revision.name },
-                base_unit_id: sku.base_unit_id,
-                barcode: revision.barcode,
-                main_image_asset_id: revision.source_main_image_asset_id,
-                weight_kg: revision.weight_kg,
-                volume_m3: revision.volume_m3,
-                sales_visible_price_gross: revision.sales_visible_price_gross,
-                market_price: revision.market_price,
-                spec_entries: Vec::new(),
-            });
-        }
-        Ok(inputs)
-    }
-
+    /// 读取商品当前及历史 SKU 的实际主键。
     async fn sku_ids(&self, product_id: &str) -> Result<Vec<String>> {
         let skus = self
             .db
@@ -158,6 +73,7 @@ impl DemoMasterDataService {
         Ok(skus.into_iter().map(|sku| sku.base.id).collect())
     }
 
+    /// 登记商品和全部 SKU 的实际主键。
     async fn remember_product(&self, step: &DemoStep, id: String, sku_ids: Vec<String>) -> Result<()> {
         record::save(
             &self.db,
@@ -166,7 +82,7 @@ impl DemoMasterDataService {
                 kind: step.kind.as_str().to_string(),
                 entity_id: id,
                 related_ids: sku_ids,
-                label: super::names::label(step).to_string(),
+                label: step.request.label().to_string(),
                 removed: false,
             },
         )
@@ -174,51 +90,75 @@ impl DemoMasterDataService {
     }
 }
 
-fn required_link(records: &HashMap<String, DemoMasterRecord>, key: &str, label: &str) -> Result<String> {
-    let record = records.get(key).ok_or_else(|| Error::ValidationError(format!("请先生成演示{label}")))?;
-    if record.removed {
-        return Err(Error::ValidationError(format!("演示{label}已删除，请重新生成")));
-    }
+/// 只接受仍有效且种类匹配的种子引用。
+fn required_link(records: &HashMap<String, DemoMasterRecord>, key: &str, kind: DemoKind) -> Result<String> {
+    let record = records
+        .get(key)
+        .filter(|record| !record.removed && record.kind() == Some(kind))
+        .ok_or_else(|| Error::ValidationError(format!("请先生成关联主数据：{key}")))?;
     Ok(record.entity_id.clone())
 }
 
+/// 解析 JSON 中的字典引用，保持价格、规格和 SKU 编号不变。
 fn product_request(
-    step: &DemoStep,
-    unit_id: &str,
-    brand_id: &str,
-    category_id: &str,
+    template: &CreateProductRequest,
+    records: &HashMap<String, DemoMasterRecord>,
 ) -> Result<CreateProductRequest> {
-    let price = Amount::from_str(&format!("{}.00", 80 + step.ordinal))
-        .map_err(|error| Error::Internal(error.to_string()))?;
-    Ok(CreateProductRequest {
-        change_reason: Some("演示主数据".to_string()),
-        product_no: step.key.clone(),
-        product_kind: ProductKind::Physical,
-        maintainer_user_id: None,
-        name: super::names::label(step).to_string(),
-        description: Some(super::names::product_spec(step.ordinal).to_string()),
-        specification: Some(super::names::product_spec(step.ordinal).to_string()),
-        category_id: ProductCategoryId::new(category_id),
-        brand_id: ProductBrandId::new(brand_id),
-        status: None,
-        effective_from: super::demo_date()?,
-        effective_to: None,
-        carousel_media: Vec::new(),
-        detail_media: Vec::new(),
-        skus: vec![ProductSkuInput {
-            sku_id: None,
-            expected_sku_revision_id: None,
-            reenable: false,
-            sku_no: plan::sku_no(step.ordinal),
-            name: super::names::label(step).to_string(),
-            base_unit_id: UnitOfMeasureId::new(unit_id),
-            barcode: None,
-            main_image_asset_id: None,
-            weight_kg: None,
-            volume_m3: None,
-            sales_visible_price_gross: Some(price),
-            market_price: None,
-            spec_entries: Vec::new(),
-        }],
-    })
+    let mut request = template.clone();
+    request.brand_id =
+        ProductBrandId::new(required_link(records, template.brand_id.as_ref(), DemoKind::Brand)?);
+    request.category_id =
+        ProductCategoryId::new(required_link(records, template.category_id.as_ref(), DemoKind::Category)?);
+    for sku in &mut request.skus {
+        sku.base_unit_id =
+            UnitOfMeasureId::new(required_link(records, sku.base_unit_id.as_ref(), DemoKind::Unit)?);
+    }
+    Ok(request)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::demo_master_data::plan;
+    use crate::demo_master_data::seed::SeedRequest;
+
+    #[test]
+    fn references_resolve_to_registered_ids_and_reject_missing_removed_or_wrong_kind() {
+        let steps = plan::demo_steps().unwrap();
+        let SeedRequest::Product(template) = &steps.last().unwrap().request else {
+            panic!("missing product")
+        };
+        let mut records = HashMap::new();
+        for (key, kind, id) in [
+            (template.brand_id.as_ref(), DemoKind::Brand, "brand-db-id"),
+            (template.category_id.as_ref(), DemoKind::Category, "category-db-id"),
+            (template.skus[0].base_unit_id.as_ref(), DemoKind::Unit, "unit-db-id"),
+        ] {
+            records.insert(
+                key.to_string(),
+                DemoMasterRecord {
+                    key: key.into(),
+                    kind: kind.as_str().into(),
+                    entity_id: id.into(),
+                    related_ids: vec![],
+                    label: "label".into(),
+                    removed: false,
+                },
+            );
+        }
+        let request = product_request(template, &records).unwrap();
+        assert_eq!(request.brand_id.as_ref(), "brand-db-id");
+        assert_eq!(request.category_id.as_ref(), "category-db-id");
+        assert_eq!(request.skus[0].base_unit_id.as_ref(), "unit-db-id");
+        assert_eq!(request.skus[0].sales_visible_price_gross, template.skus[0].sales_visible_price_gross);
+        let brand = records.get_mut(template.brand_id.as_ref()).unwrap();
+        brand.removed = true;
+        assert!(product_request(template, &records).is_err());
+        let brand = records.get_mut(template.brand_id.as_ref()).unwrap();
+        brand.removed = false;
+        brand.kind = DemoKind::Category.as_str().into();
+        assert!(product_request(template, &records).is_err());
+        records.remove(template.brand_id.as_ref());
+        assert!(product_request(template, &records).is_err());
+    }
 }

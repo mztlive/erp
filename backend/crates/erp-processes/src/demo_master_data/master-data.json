@@ -1,0 +1,2390 @@
+[
+  {
+    "kind": "unit",
+    "data": {
+      "unit_code": "DEMO-MD-U-PIECE",
+      "name": "件",
+      "symbol": "件",
+      "quantity_scale": 0
+    }
+  },
+  {
+    "kind": "unit",
+    "data": {
+      "unit_code": "DEMO-MD-U-BOX",
+      "name": "盒",
+      "symbol": "盒",
+      "quantity_scale": 0
+    }
+  },
+  {
+    "kind": "unit",
+    "data": {
+      "unit_code": "DEMO-MD-U-CASE",
+      "name": "箱",
+      "symbol": "箱",
+      "quantity_scale": 0
+    }
+  },
+  {
+    "kind": "unit",
+    "data": {
+      "unit_code": "DEMO-MD-U-SET",
+      "name": "套",
+      "symbol": "套",
+      "quantity_scale": 0
+    }
+  },
+  {
+    "kind": "unit",
+    "data": {
+      "unit_code": "DEMO-MD-U-BOTTLE",
+      "name": "瓶",
+      "symbol": "瓶",
+      "quantity_scale": 0
+    }
+  },
+  {
+    "kind": "unit",
+    "data": {
+      "unit_code": "DEMO-MD-U-BAG",
+      "name": "袋",
+      "symbol": "袋",
+      "quantity_scale": 0
+    }
+  },
+  {
+    "kind": "brand",
+    "data": {
+      "brand_code": "DEMO-MD-B-01",
+      "name": "山野良品"
+    }
+  },
+  {
+    "kind": "brand",
+    "data": {
+      "brand_code": "DEMO-MD-B-02",
+      "name": "果壳日记"
+    }
+  },
+  {
+    "kind": "brand",
+    "data": {
+      "brand_code": "DEMO-MD-B-03",
+      "name": "百味轩"
+    }
+  },
+  {
+    "kind": "brand",
+    "data": {
+      "brand_code": "DEMO-MD-B-04",
+      "name": "洽果"
+    }
+  },
+  {
+    "kind": "brand",
+    "data": {
+      "brand_code": "DEMO-MD-B-05",
+      "name": "福记"
+    }
+  },
+  {
+    "kind": "brand",
+    "data": {
+      "brand_code": "DEMO-MD-B-06",
+      "name": "旺礼"
+    }
+  },
+  {
+    "kind": "brand",
+    "data": {
+      "brand_code": "DEMO-MD-B-07",
+      "name": "金穗"
+    }
+  },
+  {
+    "kind": "brand",
+    "data": {
+      "brand_code": "DEMO-MD-B-08",
+      "name": "鲁味"
+    }
+  },
+  {
+    "kind": "category",
+    "data": {
+      "category_code": "DEMO-MD-C-01",
+      "name": "粮油调味",
+      "product_kind": "PHYSICAL"
+    }
+  },
+  {
+    "kind": "category",
+    "data": {
+      "category_code": "DEMO-MD-C-02",
+      "name": "休闲食品",
+      "product_kind": "PHYSICAL"
+    }
+  },
+  {
+    "kind": "category",
+    "data": {
+      "category_code": "DEMO-MD-C-03",
+      "name": "茶叶冲饮",
+      "product_kind": "PHYSICAL"
+    }
+  },
+  {
+    "kind": "category",
+    "data": {
+      "category_code": "DEMO-MD-C-04",
+      "name": "酒水饮料",
+      "product_kind": "PHYSICAL"
+    }
+  },
+  {
+    "kind": "category",
+    "data": {
+      "category_code": "DEMO-MD-C-05",
+      "name": "家清纸品",
+      "product_kind": "PHYSICAL"
+    }
+  },
+  {
+    "kind": "category",
+    "data": {
+      "category_code": "DEMO-MD-C-06",
+      "name": "家居床品",
+      "product_kind": "PHYSICAL"
+    }
+  },
+  {
+    "kind": "category",
+    "data": {
+      "category_code": "DEMO-MD-C-07",
+      "name": "数码小电",
+      "product_kind": "PHYSICAL"
+    }
+  },
+  {
+    "kind": "category",
+    "data": {
+      "category_code": "DEMO-MD-C-08",
+      "name": "厨房用具",
+      "product_kind": "PHYSICAL"
+    }
+  },
+  {
+    "kind": "category",
+    "data": {
+      "category_code": "DEMO-MD-C-09",
+      "name": "生鲜礼盒",
+      "product_kind": "PHYSICAL"
+    }
+  },
+  {
+    "kind": "category",
+    "data": {
+      "category_code": "DEMO-MD-C-10",
+      "name": "节日礼盒",
+      "product_kind": "PHYSICAL"
+    }
+  },
+  {
+    "kind": "warehouse",
+    "data": {
+      "warehouse_code": "DEMO-MD-W-01",
+      "name": "杭州下沙仓",
+      "address": "杭州市钱塘区下沙街道文泽路88号",
+      "contact": "仓管周宁",
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据",
+      "inbound_handler_user_id": "$warehouse_handler",
+      "outbound_handler_user_id": "$warehouse_handler"
+    }
+  },
+  {
+    "kind": "warehouse",
+    "data": {
+      "warehouse_code": "DEMO-MD-W-02",
+      "name": "广州黄埔仓",
+      "address": "广州市黄埔区开发大道358号",
+      "contact": "仓管陈立",
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据",
+      "inbound_handler_user_id": "$warehouse_handler",
+      "outbound_handler_user_id": "$warehouse_handler"
+    }
+  },
+  {
+    "kind": "warehouse",
+    "data": {
+      "warehouse_code": "DEMO-MD-W-03",
+      "name": "成都双流仓",
+      "address": "成都市双流区物流大道166号",
+      "contact": "仓管刘畅",
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据",
+      "inbound_handler_user_id": "$warehouse_handler",
+      "outbound_handler_user_id": "$warehouse_handler"
+    }
+  },
+  {
+    "kind": "warehouse",
+    "data": {
+      "warehouse_code": "DEMO-MD-W-04",
+      "name": "上海外高桥仓",
+      "address": "上海市浦东新区外高桥保税区美盛路168号",
+      "contact": "仓管王磊",
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据",
+      "inbound_handler_user_id": "$warehouse_handler",
+      "outbound_handler_user_id": "$warehouse_handler"
+    }
+  },
+  {
+    "kind": "warehouse",
+    "data": {
+      "warehouse_code": "DEMO-MD-W-05",
+      "name": "武汉东西湖仓",
+      "address": "武汉市东西湖区走马岭食品一路",
+      "contact": "仓管赵敏",
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据",
+      "inbound_handler_user_id": "$warehouse_handler",
+      "outbound_handler_user_id": "$warehouse_handler"
+    }
+  },
+  {
+    "kind": "warehouse",
+    "data": {
+      "warehouse_code": "DEMO-MD-W-06",
+      "name": "西安浐灞仓",
+      "address": "西安市浐灞生态区灞柳一路",
+      "contact": "仓管孙浩",
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据",
+      "inbound_handler_user_id": "$warehouse_handler",
+      "outbound_handler_user_id": "$warehouse_handler"
+    }
+  },
+  {
+    "kind": "customer",
+    "data": {
+      "idempotency_key": "demo-master-customer-01",
+      "legal_name": "杭州市总工会",
+      "short_name": "杭州工会",
+      "contacts": [
+        {
+          "contact_name": "王敏",
+          "mobile": "13800001001",
+          "is_default": true
+        }
+      ],
+      "addresses": [
+        {
+          "address_type": "operating",
+          "contact_name": "王敏",
+          "address": "杭州市上城区解放路18号工会大楼",
+          "is_default": true
+        }
+      ],
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "customer",
+    "data": {
+      "idempotency_key": "demo-master-customer-02",
+      "legal_name": "深圳市南山区总工会",
+      "short_name": "南山工会",
+      "contacts": [
+        {
+          "contact_name": "李强",
+          "mobile": "13800001002",
+          "is_default": true
+        }
+      ],
+      "addresses": [
+        {
+          "address_type": "operating",
+          "contact_name": "李强",
+          "address": "深圳市南山区海德三道南海大道西",
+          "is_default": true
+        }
+      ],
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "customer",
+    "data": {
+      "idempotency_key": "demo-master-customer-03",
+      "legal_name": "成都市总工会",
+      "short_name": "成都工会",
+      "contacts": [
+        {
+          "contact_name": "张丽",
+          "mobile": "13800001003",
+          "is_default": true
+        }
+      ],
+      "addresses": [
+        {
+          "address_type": "operating",
+          "contact_name": "张丽",
+          "address": "成都市青羊区东城根上街78号",
+          "is_default": true
+        }
+      ],
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "customer",
+    "data": {
+      "idempotency_key": "demo-master-customer-04",
+      "legal_name": "南京市建邺区总工会",
+      "short_name": "建邺工会",
+      "contacts": [
+        {
+          "contact_name": "陈浩",
+          "mobile": "13800001004",
+          "is_default": true
+        }
+      ],
+      "addresses": [
+        {
+          "address_type": "operating",
+          "contact_name": "陈浩",
+          "address": "南京市建邺区江东中路269号",
+          "is_default": true
+        }
+      ],
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "customer",
+    "data": {
+      "idempotency_key": "demo-master-customer-05",
+      "legal_name": "武汉市武昌区总工会",
+      "short_name": "武昌工会",
+      "contacts": [
+        {
+          "contact_name": "刘洋",
+          "mobile": "13800001005",
+          "is_default": true
+        }
+      ],
+      "addresses": [
+        {
+          "address_type": "operating",
+          "contact_name": "刘洋",
+          "address": "武汉市武昌区中山路307号",
+          "is_default": true
+        }
+      ],
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "customer",
+    "data": {
+      "idempotency_key": "demo-master-customer-06",
+      "legal_name": "西安市雁塔区总工会",
+      "short_name": "雁塔工会",
+      "contacts": [
+        {
+          "contact_name": "赵静",
+          "mobile": "13800001006",
+          "is_default": true
+        }
+      ],
+      "addresses": [
+        {
+          "address_type": "operating",
+          "contact_name": "赵静",
+          "address": "西安市雁塔区慈恩西路66号",
+          "is_default": true
+        }
+      ],
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "customer",
+    "data": {
+      "idempotency_key": "demo-master-customer-07",
+      "legal_name": "苏州工业园区总工会",
+      "short_name": "园区工会",
+      "contacts": [
+        {
+          "contact_name": "周凯",
+          "mobile": "13800001007",
+          "is_default": true
+        }
+      ],
+      "addresses": [
+        {
+          "address_type": "operating",
+          "contact_name": "周凯",
+          "address": "苏州市工业园区现代大道999号",
+          "is_default": true
+        }
+      ],
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "customer",
+    "data": {
+      "idempotency_key": "demo-master-customer-08",
+      "legal_name": "青岛市市南区总工会",
+      "short_name": "市南工会",
+      "contacts": [
+        {
+          "contact_name": "孙婷",
+          "mobile": "13800001008",
+          "is_default": true
+        }
+      ],
+      "addresses": [
+        {
+          "address_type": "operating",
+          "contact_name": "孙婷",
+          "address": "青岛市市南区香港中路18号",
+          "is_default": true
+        }
+      ],
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "customer",
+    "data": {
+      "idempotency_key": "demo-master-customer-09",
+      "legal_name": "长沙市岳麓区总工会",
+      "short_name": "岳麓工会",
+      "contacts": [
+        {
+          "contact_name": "吴磊",
+          "mobile": "13800001009",
+          "is_default": true
+        }
+      ],
+      "addresses": [
+        {
+          "address_type": "operating",
+          "contact_name": "吴磊",
+          "address": "长沙市岳麓区桐梓坡路258号",
+          "is_default": true
+        }
+      ],
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "customer",
+    "data": {
+      "idempotency_key": "demo-master-customer-10",
+      "legal_name": "厦门市思明区总工会",
+      "short_name": "思明工会",
+      "contacts": [
+        {
+          "contact_name": "郑琳",
+          "mobile": "13800001010",
+          "is_default": true
+        }
+      ],
+      "addresses": [
+        {
+          "address_type": "operating",
+          "contact_name": "郑琳",
+          "address": "厦门市思明区湖滨北路61号",
+          "is_default": true
+        }
+      ],
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "customer",
+    "data": {
+      "idempotency_key": "demo-master-customer-11",
+      "legal_name": "合肥市蜀山区总工会",
+      "short_name": "蜀山工会",
+      "contacts": [
+        {
+          "contact_name": "黄伟",
+          "mobile": "13800001011",
+          "is_default": true
+        }
+      ],
+      "addresses": [
+        {
+          "address_type": "operating",
+          "contact_name": "黄伟",
+          "address": "合肥市蜀山区长江西路189号",
+          "is_default": true
+        }
+      ],
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "customer",
+    "data": {
+      "idempotency_key": "demo-master-customer-12",
+      "legal_name": "宁波市海曙区总工会",
+      "short_name": "海曙工会",
+      "contacts": [
+        {
+          "contact_name": "徐佳",
+          "mobile": "13800001012",
+          "is_default": true
+        }
+      ],
+      "addresses": [
+        {
+          "address_type": "operating",
+          "contact_name": "徐佳",
+          "address": "宁波市海曙区中山西路1号",
+          "is_default": true
+        }
+      ],
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "customer",
+    "data": {
+      "idempotency_key": "demo-master-customer-13",
+      "legal_name": "浙江移动通信有限公司工会",
+      "short_name": "浙江移动工会",
+      "contacts": [
+        {
+          "contact_name": "马超",
+          "mobile": "13800001013",
+          "is_default": true
+        }
+      ],
+      "addresses": [
+        {
+          "address_type": "operating",
+          "contact_name": "马超",
+          "address": "杭州市江干区解放东路19号",
+          "is_default": true
+        }
+      ],
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "customer",
+    "data": {
+      "idempotency_key": "demo-master-customer-14",
+      "legal_name": "上海建行职工工会",
+      "short_name": "上海建行工会",
+      "contacts": [
+        {
+          "contact_name": "冯雪",
+          "mobile": "13800001014",
+          "is_default": true
+        }
+      ],
+      "addresses": [
+        {
+          "address_type": "operating",
+          "contact_name": "冯雪",
+          "address": "上海市浦东新区陆家嘴环路900号",
+          "is_default": true
+        }
+      ],
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "customer",
+    "data": {
+      "idempotency_key": "demo-master-customer-15",
+      "legal_name": "深圳华为职工服务中心",
+      "short_name": "华为职工服务",
+      "contacts": [
+        {
+          "contact_name": "韩冰",
+          "mobile": "13800001015",
+          "is_default": true
+        }
+      ],
+      "addresses": [
+        {
+          "address_type": "operating",
+          "contact_name": "韩冰",
+          "address": "深圳市龙岗区坂田华为基地",
+          "is_default": true
+        }
+      ],
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "customer",
+    "data": {
+      "idempotency_key": "demo-master-customer-16",
+      "legal_name": "比亚迪汽车工业有限公司工会",
+      "short_name": "比亚迪工会",
+      "contacts": [
+        {
+          "contact_name": "曹阳",
+          "mobile": "13800001016",
+          "is_default": true
+        }
+      ],
+      "addresses": [
+        {
+          "address_type": "operating",
+          "contact_name": "曹阳",
+          "address": "深圳市坪山区比亚迪路3009号",
+          "is_default": true
+        }
+      ],
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "customer",
+    "data": {
+      "idempotency_key": "demo-master-customer-17",
+      "legal_name": "宁德时代职工工会",
+      "short_name": "宁德时代工会",
+      "contacts": [
+        {
+          "contact_name": "邓凯",
+          "mobile": "13800001017",
+          "is_default": true
+        }
+      ],
+      "addresses": [
+        {
+          "address_type": "operating",
+          "contact_name": "邓凯",
+          "address": "宁德市蕉城区漳湾镇新港路2号",
+          "is_default": true
+        }
+      ],
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "customer",
+    "data": {
+      "idempotency_key": "demo-master-customer-18",
+      "legal_name": "美的集团职工服务中心",
+      "short_name": "美的职工服务",
+      "contacts": [
+        {
+          "contact_name": "彭丽",
+          "mobile": "13800001018",
+          "is_default": true
+        }
+      ],
+      "addresses": [
+        {
+          "address_type": "operating",
+          "contact_name": "彭丽",
+          "address": "佛山市顺德区北滘镇美的大道6号",
+          "is_default": true
+        }
+      ],
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "customer",
+    "data": {
+      "idempotency_key": "demo-master-customer-19",
+      "legal_name": "海尔集团工会",
+      "short_name": "海尔工会",
+      "contacts": [
+        {
+          "contact_name": "蒋涛",
+          "mobile": "13800001019",
+          "is_default": true
+        }
+      ],
+      "addresses": [
+        {
+          "address_type": "operating",
+          "contact_name": "蒋涛",
+          "address": "青岛市崂山区海尔路1号",
+          "is_default": true
+        }
+      ],
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "customer",
+    "data": {
+      "idempotency_key": "demo-master-customer-20",
+      "legal_name": "顺丰速运职工工会",
+      "short_name": "顺丰工会",
+      "contacts": [
+        {
+          "contact_name": "蔡敏",
+          "mobile": "13800001020",
+          "is_default": true
+        }
+      ],
+      "addresses": [
+        {
+          "address_type": "operating",
+          "contact_name": "蔡敏",
+          "address": "深圳市福田区新洲十一街万基大厦",
+          "is_default": true
+        }
+      ],
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "customer",
+    "data": {
+      "idempotency_key": "demo-master-customer-21",
+      "legal_name": "京东世纪贸易有限公司工会",
+      "short_name": "京东工会",
+      "contacts": [
+        {
+          "contact_name": "潘军",
+          "mobile": "13800001021",
+          "is_default": true
+        }
+      ],
+      "addresses": [
+        {
+          "address_type": "operating",
+          "contact_name": "潘军",
+          "address": "北京市大兴区科创十一街18号",
+          "is_default": true
+        }
+      ],
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "customer",
+    "data": {
+      "idempotency_key": "demo-master-customer-22",
+      "legal_name": "阿里巴巴（中国）有限公司工会",
+      "short_name": "阿里工会",
+      "contacts": [
+        {
+          "contact_name": "董倩",
+          "mobile": "13800001022",
+          "is_default": true
+        }
+      ],
+      "addresses": [
+        {
+          "address_type": "operating",
+          "contact_name": "董倩",
+          "address": "杭州市余杭区文一西路969号",
+          "is_default": true
+        }
+      ],
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "customer",
+    "data": {
+      "idempotency_key": "demo-master-customer-23",
+      "legal_name": "腾讯科技职工服务中心",
+      "short_name": "腾讯职工服务",
+      "contacts": [
+        {
+          "contact_name": "袁航",
+          "mobile": "13800001023",
+          "is_default": true
+        }
+      ],
+      "addresses": [
+        {
+          "address_type": "operating",
+          "contact_name": "袁航",
+          "address": "深圳市南山区海天二路33号",
+          "is_default": true
+        }
+      ],
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "customer",
+    "data": {
+      "idempotency_key": "demo-master-customer-24",
+      "legal_name": "中国平安财产保险股份有限公司工会",
+      "short_name": "平安产险工会",
+      "contacts": [
+        {
+          "contact_name": "许宁",
+          "mobile": "13800001024",
+          "is_default": true
+        }
+      ],
+      "addresses": [
+        {
+          "address_type": "operating",
+          "contact_name": "许宁",
+          "address": "深圳市福田区益田路5033号",
+          "is_default": true
+        }
+      ],
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "supplier",
+    "data": {
+      "idempotency_key": "demo-master-supplier-01",
+      "party_no": "DEMO-MD-PTY-01",
+      "supplier_no": "DEMO-MD-SUP-01",
+      "legal_name": "义乌市锦礼实业有限公司",
+      "short_name": "锦礼实业",
+      "contact": {
+        "contact_name": "林建国",
+        "mobile": "13900002001"
+      },
+      "address": {
+        "address": "浙江省义乌市福田街道诚信大道88号",
+        "contact_name": "林建国"
+      },
+      "bank_account": {
+        "bank_name": "中国工商银行义乌分行",
+        "account_number": "6222020200000001"
+      },
+      "settlement_mode": "prepayment",
+      "reconciliation_cycle": "none",
+      "payment_term_snapshot": "PREPAY_50",
+      "business_category": "节日福利",
+      "invoice_type": "vat_special",
+      "invoice_tax_rate": "0.130000",
+      "invoice_tax_rates": [
+        "0.130000"
+      ],
+      "signing_entity_party_id": "$company",
+      "payment_entity_party_id": "$company",
+      "maintainer_user_id": "$supplier_maintainer",
+      "capability_owners": [
+        {
+          "capability_code": "physical",
+          "owner_user_id": "$supplier_maintainer"
+        }
+      ],
+      "capability_codes": [
+        "physical"
+      ],
+      "qualifications": [
+        {
+          "qualification_type": "contract",
+          "certificate_no": "DEMO-HT-01",
+          "valid_from": "2026-01-01",
+          "valid_to": "2031-01-01",
+          "capability_codes": [
+            "physical"
+          ]
+        }
+      ],
+      "rating": {
+        "initial_score": 90,
+        "rating": "A",
+        "current_score": 90,
+        "valid_from": "2026-01-01"
+      },
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "supplier",
+    "data": {
+      "idempotency_key": "demo-master-supplier-02",
+      "party_no": "DEMO-MD-PTY-02",
+      "supplier_no": "DEMO-MD-SUP-02",
+      "legal_name": "广州市穗选食品有限公司",
+      "short_name": "穗选食品",
+      "contact": {
+        "contact_name": "何美玲",
+        "mobile": "13900002002"
+      },
+      "address": {
+        "address": "广州市白云区江高镇私企区夏花二路",
+        "contact_name": "何美玲"
+      },
+      "bank_account": {
+        "bank_name": "中国建设银行广州白云支行",
+        "account_number": "6222020200000002"
+      },
+      "settlement_mode": "prepayment",
+      "reconciliation_cycle": "none",
+      "payment_term_snapshot": "PREPAY_50",
+      "business_category": "节日福利",
+      "invoice_type": "vat_special",
+      "invoice_tax_rate": "0.130000",
+      "invoice_tax_rates": [
+        "0.130000"
+      ],
+      "signing_entity_party_id": "$company",
+      "payment_entity_party_id": "$company",
+      "maintainer_user_id": "$supplier_maintainer",
+      "capability_owners": [
+        {
+          "capability_code": "physical",
+          "owner_user_id": "$supplier_maintainer"
+        }
+      ],
+      "capability_codes": [
+        "physical"
+      ],
+      "qualifications": [
+        {
+          "qualification_type": "contract",
+          "certificate_no": "DEMO-HT-02",
+          "valid_from": "2026-01-01",
+          "valid_to": "2031-01-01",
+          "capability_codes": [
+            "physical"
+          ]
+        }
+      ],
+      "rating": {
+        "initial_score": 90,
+        "rating": "A",
+        "current_score": 90,
+        "valid_from": "2026-01-01"
+      },
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "supplier",
+    "data": {
+      "idempotency_key": "demo-master-supplier-03",
+      "party_no": "DEMO-MD-PTY-03",
+      "supplier_no": "DEMO-MD-SUP-03",
+      "legal_name": "温州市恒达日用品有限公司",
+      "short_name": "恒达日用",
+      "contact": {
+        "contact_name": "叶志强",
+        "mobile": "13900002003"
+      },
+      "address": {
+        "address": "温州市瓯海区梧田街道月乐西街",
+        "contact_name": "叶志强"
+      },
+      "bank_account": {
+        "bank_name": "招商银行温州分行",
+        "account_number": "6222020200000003"
+      },
+      "settlement_mode": "prepayment",
+      "reconciliation_cycle": "none",
+      "payment_term_snapshot": "PREPAY_50",
+      "business_category": "节日福利",
+      "invoice_type": "vat_special",
+      "invoice_tax_rate": "0.130000",
+      "invoice_tax_rates": [
+        "0.130000"
+      ],
+      "signing_entity_party_id": "$company",
+      "payment_entity_party_id": "$company",
+      "maintainer_user_id": "$supplier_maintainer",
+      "capability_owners": [
+        {
+          "capability_code": "physical",
+          "owner_user_id": "$supplier_maintainer"
+        }
+      ],
+      "capability_codes": [
+        "physical"
+      ],
+      "qualifications": [
+        {
+          "qualification_type": "contract",
+          "certificate_no": "DEMO-HT-03",
+          "valid_from": "2026-01-01",
+          "valid_to": "2031-01-01",
+          "capability_codes": [
+            "physical"
+          ]
+        }
+      ],
+      "rating": {
+        "initial_score": 90,
+        "rating": "A",
+        "current_score": 90,
+        "valid_from": "2026-01-01"
+      },
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "supplier",
+    "data": {
+      "idempotency_key": "demo-master-supplier-04",
+      "party_no": "DEMO-MD-PTY-04",
+      "supplier_no": "DEMO-MD-SUP-04",
+      "legal_name": "东莞市宏盛包装有限公司",
+      "short_name": "宏盛包装",
+      "contact": {
+        "contact_name": "罗海燕",
+        "mobile": "13900002004"
+      },
+      "address": {
+        "address": "东莞市厚街镇家具大道168号",
+        "contact_name": "罗海燕"
+      },
+      "bank_account": {
+        "bank_name": "中国农业银行东莞厚街支行",
+        "account_number": "6222020200000004"
+      },
+      "settlement_mode": "prepayment",
+      "reconciliation_cycle": "none",
+      "payment_term_snapshot": "PREPAY_50",
+      "business_category": "节日福利",
+      "invoice_type": "vat_special",
+      "invoice_tax_rate": "0.130000",
+      "invoice_tax_rates": [
+        "0.130000"
+      ],
+      "signing_entity_party_id": "$company",
+      "payment_entity_party_id": "$company",
+      "maintainer_user_id": "$supplier_maintainer",
+      "capability_owners": [
+        {
+          "capability_code": "physical",
+          "owner_user_id": "$supplier_maintainer"
+        }
+      ],
+      "capability_codes": [
+        "physical"
+      ],
+      "qualifications": [
+        {
+          "qualification_type": "contract",
+          "certificate_no": "DEMO-HT-04",
+          "valid_from": "2026-01-01",
+          "valid_to": "2031-01-01",
+          "capability_codes": [
+            "physical"
+          ]
+        }
+      ],
+      "rating": {
+        "initial_score": 90,
+        "rating": "A",
+        "current_score": 90,
+        "valid_from": "2026-01-01"
+      },
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "supplier",
+    "data": {
+      "idempotency_key": "demo-master-supplier-05",
+      "party_no": "DEMO-MD-PTY-05",
+      "supplier_no": "DEMO-MD-SUP-05",
+      "legal_name": "泉州市正山茶业有限公司",
+      "short_name": "正山茶业",
+      "contact": {
+        "contact_name": "苏文斌",
+        "mobile": "13900002005"
+      },
+      "address": {
+        "address": "泉州市安溪县城厢镇茶都大道",
+        "contact_name": "苏文斌"
+      },
+      "bank_account": {
+        "bank_name": "中国银行泉州分行",
+        "account_number": "6222020200000005"
+      },
+      "settlement_mode": "prepayment",
+      "reconciliation_cycle": "none",
+      "payment_term_snapshot": "PREPAY_50",
+      "business_category": "节日福利",
+      "invoice_type": "vat_special",
+      "invoice_tax_rate": "0.130000",
+      "invoice_tax_rates": [
+        "0.130000"
+      ],
+      "signing_entity_party_id": "$company",
+      "payment_entity_party_id": "$company",
+      "maintainer_user_id": "$supplier_maintainer",
+      "capability_owners": [
+        {
+          "capability_code": "physical",
+          "owner_user_id": "$supplier_maintainer"
+        }
+      ],
+      "capability_codes": [
+        "physical"
+      ],
+      "qualifications": [
+        {
+          "qualification_type": "contract",
+          "certificate_no": "DEMO-HT-05",
+          "valid_from": "2026-01-01",
+          "valid_to": "2031-01-01",
+          "capability_codes": [
+            "physical"
+          ]
+        }
+      ],
+      "rating": {
+        "initial_score": 90,
+        "rating": "A",
+        "current_score": 90,
+        "valid_from": "2026-01-01"
+      },
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "supplier",
+    "data": {
+      "idempotency_key": "demo-master-supplier-06",
+      "party_no": "DEMO-MD-PTY-06",
+      "supplier_no": "DEMO-MD-SUP-06",
+      "legal_name": "成都市天府粮油贸易有限公司",
+      "short_name": "天府粮油",
+      "contact": {
+        "contact_name": "唐雪梅",
+        "mobile": "13900002006"
+      },
+      "address": {
+        "address": "成都市新都区物流大道66号",
+        "contact_name": "唐雪梅"
+      },
+      "bank_account": {
+        "bank_name": "中国工商银行成都新都支行",
+        "account_number": "6222020200000006"
+      },
+      "settlement_mode": "prepayment",
+      "reconciliation_cycle": "none",
+      "payment_term_snapshot": "PREPAY_50",
+      "business_category": "节日福利",
+      "invoice_type": "vat_special",
+      "invoice_tax_rate": "0.130000",
+      "invoice_tax_rates": [
+        "0.130000"
+      ],
+      "signing_entity_party_id": "$company",
+      "payment_entity_party_id": "$company",
+      "maintainer_user_id": "$supplier_maintainer",
+      "capability_owners": [
+        {
+          "capability_code": "physical",
+          "owner_user_id": "$supplier_maintainer"
+        }
+      ],
+      "capability_codes": [
+        "physical"
+      ],
+      "qualifications": [
+        {
+          "qualification_type": "contract",
+          "certificate_no": "DEMO-HT-06",
+          "valid_from": "2026-01-01",
+          "valid_to": "2031-01-01",
+          "capability_codes": [
+            "physical"
+          ]
+        }
+      ],
+      "rating": {
+        "initial_score": 90,
+        "rating": "A",
+        "current_score": 90,
+        "valid_from": "2026-01-01"
+      },
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "supplier",
+    "data": {
+      "idempotency_key": "demo-master-supplier-07",
+      "party_no": "DEMO-MD-PTY-07",
+      "supplier_no": "DEMO-MD-SUP-07",
+      "legal_name": "杭州市西湖龙井茶业有限公司",
+      "short_name": "西湖龙井茶业",
+      "contact": {
+        "contact_name": "金明",
+        "mobile": "13900002007"
+      },
+      "address": {
+        "address": "杭州市西湖区龙井路1号",
+        "contact_name": "金明"
+      },
+      "bank_account": {
+        "bank_name": "杭州银行湖滨支行",
+        "account_number": "6222020200000007"
+      },
+      "settlement_mode": "prepayment",
+      "reconciliation_cycle": "none",
+      "payment_term_snapshot": "PREPAY_50",
+      "business_category": "节日福利",
+      "invoice_type": "vat_special",
+      "invoice_tax_rate": "0.130000",
+      "invoice_tax_rates": [
+        "0.130000"
+      ],
+      "signing_entity_party_id": "$company",
+      "payment_entity_party_id": "$company",
+      "maintainer_user_id": "$supplier_maintainer",
+      "capability_owners": [
+        {
+          "capability_code": "physical",
+          "owner_user_id": "$supplier_maintainer"
+        }
+      ],
+      "capability_codes": [
+        "physical"
+      ],
+      "qualifications": [
+        {
+          "qualification_type": "contract",
+          "certificate_no": "DEMO-HT-07",
+          "valid_from": "2026-01-01",
+          "valid_to": "2031-01-01",
+          "capability_codes": [
+            "physical"
+          ]
+        }
+      ],
+      "rating": {
+        "initial_score": 90,
+        "rating": "A",
+        "current_score": 90,
+        "valid_from": "2026-01-01"
+      },
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "supplier",
+    "data": {
+      "idempotency_key": "demo-master-supplier-08",
+      "party_no": "DEMO-MD-PTY-08",
+      "supplier_no": "DEMO-MD-SUP-08",
+      "legal_name": "苏州市园林丝绸有限公司",
+      "short_name": "园林丝绸",
+      "contact": {
+        "contact_name": "沈怡",
+        "mobile": "13900002008"
+      },
+      "address": {
+        "address": "苏州市姑苏区平江路128号",
+        "contact_name": "沈怡"
+      },
+      "bank_account": {
+        "bank_name": "中国建设银行苏州姑苏支行",
+        "account_number": "6222020200000008"
+      },
+      "settlement_mode": "prepayment",
+      "reconciliation_cycle": "none",
+      "payment_term_snapshot": "PREPAY_50",
+      "business_category": "节日福利",
+      "invoice_type": "vat_special",
+      "invoice_tax_rate": "0.130000",
+      "invoice_tax_rates": [
+        "0.130000"
+      ],
+      "signing_entity_party_id": "$company",
+      "payment_entity_party_id": "$company",
+      "maintainer_user_id": "$supplier_maintainer",
+      "capability_owners": [
+        {
+          "capability_code": "physical",
+          "owner_user_id": "$supplier_maintainer"
+        }
+      ],
+      "capability_codes": [
+        "physical"
+      ],
+      "qualifications": [
+        {
+          "qualification_type": "contract",
+          "certificate_no": "DEMO-HT-08",
+          "valid_from": "2026-01-01",
+          "valid_to": "2031-01-01",
+          "capability_codes": [
+            "physical"
+          ]
+        }
+      ],
+      "rating": {
+        "initial_score": 90,
+        "rating": "A",
+        "current_score": 90,
+        "valid_from": "2026-01-01"
+      },
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "supplier",
+    "data": {
+      "idempotency_key": "demo-master-supplier-09",
+      "party_no": "DEMO-MD-PTY-09",
+      "supplier_no": "DEMO-MD-SUP-09",
+      "legal_name": "宁波市海味水产有限公司",
+      "short_name": "海味水产",
+      "contact": {
+        "contact_name": "朱斌",
+        "mobile": "13900002009"
+      },
+      "address": {
+        "address": "宁波市北仑区霞浦街道水产路",
+        "contact_name": "朱斌"
+      },
+      "bank_account": {
+        "bank_name": "宁波银行北仑支行",
+        "account_number": "6222020200000009"
+      },
+      "settlement_mode": "prepayment",
+      "reconciliation_cycle": "none",
+      "payment_term_snapshot": "PREPAY_50",
+      "business_category": "节日福利",
+      "invoice_type": "vat_special",
+      "invoice_tax_rate": "0.130000",
+      "invoice_tax_rates": [
+        "0.130000"
+      ],
+      "signing_entity_party_id": "$company",
+      "payment_entity_party_id": "$company",
+      "maintainer_user_id": "$supplier_maintainer",
+      "capability_owners": [
+        {
+          "capability_code": "physical",
+          "owner_user_id": "$supplier_maintainer"
+        }
+      ],
+      "capability_codes": [
+        "physical"
+      ],
+      "qualifications": [
+        {
+          "qualification_type": "contract",
+          "certificate_no": "DEMO-HT-09",
+          "valid_from": "2026-01-01",
+          "valid_to": "2031-01-01",
+          "capability_codes": [
+            "physical"
+          ]
+        }
+      ],
+      "rating": {
+        "initial_score": 90,
+        "rating": "A",
+        "current_score": 90,
+        "valid_from": "2026-01-01"
+      },
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "supplier",
+    "data": {
+      "idempotency_key": "demo-master-supplier-10",
+      "party_no": "DEMO-MD-PTY-10",
+      "supplier_no": "DEMO-MD-SUP-10",
+      "legal_name": "青岛市崂山矿泉水业有限公司",
+      "short_name": "崂山矿泉",
+      "contact": {
+        "contact_name": "吕娜",
+        "mobile": "13900002010"
+      },
+      "address": {
+        "address": "青岛市崂山区沙子口街道",
+        "contact_name": "吕娜"
+      },
+      "bank_account": {
+        "bank_name": "青岛银行崂山支行",
+        "account_number": "6222020200000010"
+      },
+      "settlement_mode": "prepayment",
+      "reconciliation_cycle": "none",
+      "payment_term_snapshot": "PREPAY_50",
+      "business_category": "节日福利",
+      "invoice_type": "vat_special",
+      "invoice_tax_rate": "0.130000",
+      "invoice_tax_rates": [
+        "0.130000"
+      ],
+      "signing_entity_party_id": "$company",
+      "payment_entity_party_id": "$company",
+      "maintainer_user_id": "$supplier_maintainer",
+      "capability_owners": [
+        {
+          "capability_code": "physical",
+          "owner_user_id": "$supplier_maintainer"
+        }
+      ],
+      "capability_codes": [
+        "physical"
+      ],
+      "qualifications": [
+        {
+          "qualification_type": "contract",
+          "certificate_no": "DEMO-HT-10",
+          "valid_from": "2026-01-01",
+          "valid_to": "2031-01-01",
+          "capability_codes": [
+            "physical"
+          ]
+        }
+      ],
+      "rating": {
+        "initial_score": 90,
+        "rating": "A",
+        "current_score": 90,
+        "valid_from": "2026-01-01"
+      },
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "supplier",
+    "data": {
+      "idempotency_key": "demo-master-supplier-11",
+      "party_no": "DEMO-MD-PTY-11",
+      "supplier_no": "DEMO-MD-SUP-11",
+      "legal_name": "北京市京华文具有限公司",
+      "short_name": "京华文具",
+      "contact": {
+        "contact_name": "高飞",
+        "mobile": "13900002011"
+      },
+      "address": {
+        "address": "北京市通州区马驹桥物流园",
+        "contact_name": "高飞"
+      },
+      "bank_account": {
+        "bank_name": "中国工商银行北京通州支行",
+        "account_number": "6222020200000011"
+      },
+      "settlement_mode": "prepayment",
+      "reconciliation_cycle": "none",
+      "payment_term_snapshot": "PREPAY_50",
+      "business_category": "节日福利",
+      "invoice_type": "vat_special",
+      "invoice_tax_rate": "0.130000",
+      "invoice_tax_rates": [
+        "0.130000"
+      ],
+      "signing_entity_party_id": "$company",
+      "payment_entity_party_id": "$company",
+      "maintainer_user_id": "$supplier_maintainer",
+      "capability_owners": [
+        {
+          "capability_code": "physical",
+          "owner_user_id": "$supplier_maintainer"
+        }
+      ],
+      "capability_codes": [
+        "physical"
+      ],
+      "qualifications": [
+        {
+          "qualification_type": "contract",
+          "certificate_no": "DEMO-HT-11",
+          "valid_from": "2026-01-01",
+          "valid_to": "2031-01-01",
+          "capability_codes": [
+            "physical"
+          ]
+        }
+      ],
+      "rating": {
+        "initial_score": 90,
+        "rating": "A",
+        "current_score": 90,
+        "valid_from": "2026-01-01"
+      },
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "supplier",
+    "data": {
+      "idempotency_key": "demo-master-supplier-12",
+      "party_no": "DEMO-MD-PTY-12",
+      "supplier_no": "DEMO-MD-SUP-12",
+      "legal_name": "上海市申城家纺有限公司",
+      "short_name": "申城家纺",
+      "contact": {
+        "contact_name": "宋雅",
+        "mobile": "13900002012"
+      },
+      "address": {
+        "address": "上海市青浦区华新镇华志路",
+        "contact_name": "宋雅"
+      },
+      "bank_account": {
+        "bank_name": "上海银行青浦支行",
+        "account_number": "6222020200000012"
+      },
+      "settlement_mode": "prepayment",
+      "reconciliation_cycle": "none",
+      "payment_term_snapshot": "PREPAY_50",
+      "business_category": "节日福利",
+      "invoice_type": "vat_special",
+      "invoice_tax_rate": "0.130000",
+      "invoice_tax_rates": [
+        "0.130000"
+      ],
+      "signing_entity_party_id": "$company",
+      "payment_entity_party_id": "$company",
+      "maintainer_user_id": "$supplier_maintainer",
+      "capability_owners": [
+        {
+          "capability_code": "physical",
+          "owner_user_id": "$supplier_maintainer"
+        }
+      ],
+      "capability_codes": [
+        "physical"
+      ],
+      "qualifications": [
+        {
+          "qualification_type": "contract",
+          "certificate_no": "DEMO-HT-12",
+          "valid_from": "2026-01-01",
+          "valid_to": "2031-01-01",
+          "capability_codes": [
+            "physical"
+          ]
+        }
+      ],
+      "rating": {
+        "initial_score": 90,
+        "rating": "A",
+        "current_score": 90,
+        "valid_from": "2026-01-01"
+      },
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "supplier",
+    "data": {
+      "idempotency_key": "demo-master-supplier-13",
+      "party_no": "DEMO-MD-PTY-13",
+      "supplier_no": "DEMO-MD-SUP-13",
+      "legal_name": "深圳市前海数码配件有限公司",
+      "short_name": "前海数码",
+      "contact": {
+        "contact_name": "梁宇",
+        "mobile": "13900002013"
+      },
+      "address": {
+        "address": "深圳市南山区前海桂湾片区",
+        "contact_name": "梁宇"
+      },
+      "bank_account": {
+        "bank_name": "招商银行深圳前海支行",
+        "account_number": "6222020200000013"
+      },
+      "settlement_mode": "prepayment",
+      "reconciliation_cycle": "none",
+      "payment_term_snapshot": "PREPAY_50",
+      "business_category": "节日福利",
+      "invoice_type": "vat_special",
+      "invoice_tax_rate": "0.130000",
+      "invoice_tax_rates": [
+        "0.130000"
+      ],
+      "signing_entity_party_id": "$company",
+      "payment_entity_party_id": "$company",
+      "maintainer_user_id": "$supplier_maintainer",
+      "capability_owners": [
+        {
+          "capability_code": "physical",
+          "owner_user_id": "$supplier_maintainer"
+        }
+      ],
+      "capability_codes": [
+        "physical"
+      ],
+      "qualifications": [
+        {
+          "qualification_type": "contract",
+          "certificate_no": "DEMO-HT-13",
+          "valid_from": "2026-01-01",
+          "valid_to": "2031-01-01",
+          "capability_codes": [
+            "physical"
+          ]
+        }
+      ],
+      "rating": {
+        "initial_score": 90,
+        "rating": "A",
+        "current_score": 90,
+        "valid_from": "2026-01-01"
+      },
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "supplier",
+    "data": {
+      "idempotency_key": "demo-master-supplier-14",
+      "party_no": "DEMO-MD-PTY-14",
+      "supplier_no": "DEMO-MD-SUP-14",
+      "legal_name": "中山市灯都照明有限公司",
+      "short_name": "灯都照明",
+      "contact": {
+        "contact_name": "谢婷",
+        "mobile": "13900002014"
+      },
+      "address": {
+        "address": "中山市古镇镇新兴大道",
+        "contact_name": "谢婷"
+      },
+      "bank_account": {
+        "bank_name": "中国农业银行中山古镇支行",
+        "account_number": "6222020200000014"
+      },
+      "settlement_mode": "prepayment",
+      "reconciliation_cycle": "none",
+      "payment_term_snapshot": "PREPAY_50",
+      "business_category": "节日福利",
+      "invoice_type": "vat_special",
+      "invoice_tax_rate": "0.130000",
+      "invoice_tax_rates": [
+        "0.130000"
+      ],
+      "signing_entity_party_id": "$company",
+      "payment_entity_party_id": "$company",
+      "maintainer_user_id": "$supplier_maintainer",
+      "capability_owners": [
+        {
+          "capability_code": "physical",
+          "owner_user_id": "$supplier_maintainer"
+        }
+      ],
+      "capability_codes": [
+        "physical"
+      ],
+      "qualifications": [
+        {
+          "qualification_type": "contract",
+          "certificate_no": "DEMO-HT-14",
+          "valid_from": "2026-01-01",
+          "valid_to": "2031-01-01",
+          "capability_codes": [
+            "physical"
+          ]
+        }
+      ],
+      "rating": {
+        "initial_score": 90,
+        "rating": "A",
+        "current_score": 90,
+        "valid_from": "2026-01-01"
+      },
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "supplier",
+    "data": {
+      "idempotency_key": "demo-master-supplier-15",
+      "party_no": "DEMO-MD-PTY-15",
+      "supplier_no": "DEMO-MD-SUP-15",
+      "legal_name": "佛山市顺德厨具有限公司",
+      "short_name": "顺德厨具",
+      "contact": {
+        "contact_name": "胡军",
+        "mobile": "13900002015"
+      },
+      "address": {
+        "address": "佛山市顺德区勒流街道工业路",
+        "contact_name": "胡军"
+      },
+      "bank_account": {
+        "bank_name": "中国建设银行佛山顺德支行",
+        "account_number": "6222020200000015"
+      },
+      "settlement_mode": "prepayment",
+      "reconciliation_cycle": "none",
+      "payment_term_snapshot": "PREPAY_50",
+      "business_category": "节日福利",
+      "invoice_type": "vat_special",
+      "invoice_tax_rate": "0.130000",
+      "invoice_tax_rates": [
+        "0.130000"
+      ],
+      "signing_entity_party_id": "$company",
+      "payment_entity_party_id": "$company",
+      "maintainer_user_id": "$supplier_maintainer",
+      "capability_owners": [
+        {
+          "capability_code": "physical",
+          "owner_user_id": "$supplier_maintainer"
+        }
+      ],
+      "capability_codes": [
+        "physical"
+      ],
+      "qualifications": [
+        {
+          "qualification_type": "contract",
+          "certificate_no": "DEMO-HT-15",
+          "valid_from": "2026-01-01",
+          "valid_to": "2031-01-01",
+          "capability_codes": [
+            "physical"
+          ]
+        }
+      ],
+      "rating": {
+        "initial_score": 90,
+        "rating": "A",
+        "current_score": 90,
+        "valid_from": "2026-01-01"
+      },
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "supplier",
+    "data": {
+      "idempotency_key": "demo-master-supplier-16",
+      "party_no": "DEMO-MD-PTY-16",
+      "supplier_no": "DEMO-MD-SUP-16",
+      "legal_name": "厦门市鼓浪屿工艺品有限公司",
+      "short_name": "鼓浪屿工艺",
+      "contact": {
+        "contact_name": "方洁",
+        "mobile": "13900002016"
+      },
+      "address": {
+        "address": "厦门市思明区湖滨南路",
+        "contact_name": "方洁"
+      },
+      "bank_account": {
+        "bank_name": "厦门银行思明支行",
+        "account_number": "6222020200000016"
+      },
+      "settlement_mode": "prepayment",
+      "reconciliation_cycle": "none",
+      "payment_term_snapshot": "PREPAY_50",
+      "business_category": "节日福利",
+      "invoice_type": "vat_special",
+      "invoice_tax_rate": "0.130000",
+      "invoice_tax_rates": [
+        "0.130000"
+      ],
+      "signing_entity_party_id": "$company",
+      "payment_entity_party_id": "$company",
+      "maintainer_user_id": "$supplier_maintainer",
+      "capability_owners": [
+        {
+          "capability_code": "physical",
+          "owner_user_id": "$supplier_maintainer"
+        }
+      ],
+      "capability_codes": [
+        "physical"
+      ],
+      "qualifications": [
+        {
+          "qualification_type": "contract",
+          "certificate_no": "DEMO-HT-16",
+          "valid_from": "2026-01-01",
+          "valid_to": "2031-01-01",
+          "capability_codes": [
+            "physical"
+          ]
+        }
+      ],
+      "rating": {
+        "initial_score": 90,
+        "rating": "A",
+        "current_score": 90,
+        "valid_from": "2026-01-01"
+      },
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据"
+    }
+  },
+  {
+    "kind": "product",
+    "data": {
+      "product_no": "DEMO-MD-P-01",
+      "product_kind": "PHYSICAL",
+      "name": "山野混合坚果礼盒",
+      "description": "1.2千克",
+      "specification": "1.2千克",
+      "category_id": "DEMO-MD-C-01",
+      "brand_id": "DEMO-MD-B-01",
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据",
+      "skus": [
+        {
+          "sku_no": "DEMO-MD-SKU-01",
+          "name": "山野混合坚果礼盒",
+          "base_unit_id": "DEMO-MD-U-PIECE",
+          "sales_visible_price_gross": "81.00"
+        }
+      ]
+    }
+  },
+  {
+    "kind": "product",
+    "data": {
+      "product_no": "DEMO-MD-P-02",
+      "product_kind": "PHYSICAL",
+      "name": "每日坚果分享装",
+      "description": "750克",
+      "specification": "750克",
+      "category_id": "DEMO-MD-C-02",
+      "brand_id": "DEMO-MD-B-02",
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据",
+      "skus": [
+        {
+          "sku_no": "DEMO-MD-SKU-02",
+          "name": "每日坚果分享装",
+          "base_unit_id": "DEMO-MD-U-PIECE",
+          "sales_visible_price_gross": "82.00"
+        }
+      ]
+    }
+  },
+  {
+    "kind": "product",
+    "data": {
+      "product_no": "DEMO-MD-P-03",
+      "product_kind": "PHYSICAL",
+      "name": "黄油曲奇礼盒",
+      "description": "608克",
+      "specification": "608克",
+      "category_id": "DEMO-MD-C-03",
+      "brand_id": "DEMO-MD-B-03",
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据",
+      "skus": [
+        {
+          "sku_no": "DEMO-MD-SKU-03",
+          "name": "黄油曲奇礼盒",
+          "base_unit_id": "DEMO-MD-U-PIECE",
+          "sales_visible_price_gross": "83.00"
+        }
+      ]
+    }
+  },
+  {
+    "kind": "product",
+    "data": {
+      "product_no": "DEMO-MD-P-04",
+      "product_kind": "PHYSICAL",
+      "name": "混合果干罐装",
+      "description": "500克",
+      "specification": "500克",
+      "category_id": "DEMO-MD-C-04",
+      "brand_id": "DEMO-MD-B-04",
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据",
+      "skus": [
+        {
+          "sku_no": "DEMO-MD-SKU-04",
+          "name": "混合果干罐装",
+          "base_unit_id": "DEMO-MD-U-PIECE",
+          "sales_visible_price_gross": "84.00"
+        }
+      ]
+    }
+  },
+  {
+    "kind": "product",
+    "data": {
+      "product_no": "DEMO-MD-P-05",
+      "product_kind": "PHYSICAL",
+      "name": "洽果香瓜子礼罐",
+      "description": "800克",
+      "specification": "800克",
+      "category_id": "DEMO-MD-C-05",
+      "brand_id": "DEMO-MD-B-05",
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据",
+      "skus": [
+        {
+          "sku_no": "DEMO-MD-SKU-05",
+          "name": "洽果香瓜子礼罐",
+          "base_unit_id": "DEMO-MD-U-PIECE",
+          "sales_visible_price_gross": "85.00"
+        }
+      ]
+    }
+  },
+  {
+    "kind": "product",
+    "data": {
+      "product_no": "DEMO-MD-P-06",
+      "product_kind": "PHYSICAL",
+      "name": "福记酥心糖礼盒",
+      "description": "1千克",
+      "specification": "1千克",
+      "category_id": "DEMO-MD-C-06",
+      "brand_id": "DEMO-MD-B-06",
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据",
+      "skus": [
+        {
+          "sku_no": "DEMO-MD-SKU-06",
+          "name": "福记酥心糖礼盒",
+          "base_unit_id": "DEMO-MD-U-PIECE",
+          "sales_visible_price_gross": "86.00"
+        }
+      ]
+    }
+  },
+  {
+    "kind": "product",
+    "data": {
+      "product_no": "DEMO-MD-P-07",
+      "product_kind": "PHYSICAL",
+      "name": "旺礼仙贝家庭装",
+      "description": "480克",
+      "specification": "480克",
+      "category_id": "DEMO-MD-C-07",
+      "brand_id": "DEMO-MD-B-07",
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据",
+      "skus": [
+        {
+          "sku_no": "DEMO-MD-SKU-07",
+          "name": "旺礼仙贝家庭装",
+          "base_unit_id": "DEMO-MD-U-PIECE",
+          "sales_visible_price_gross": "87.00"
+        }
+      ]
+    }
+  },
+  {
+    "kind": "product",
+    "data": {
+      "product_no": "DEMO-MD-P-08",
+      "product_kind": "PHYSICAL",
+      "name": "金穗调和油",
+      "description": "5升",
+      "specification": "5升",
+      "category_id": "DEMO-MD-C-08",
+      "brand_id": "DEMO-MD-B-08",
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据",
+      "skus": [
+        {
+          "sku_no": "DEMO-MD-SKU-08",
+          "name": "金穗调和油",
+          "base_unit_id": "DEMO-MD-U-PIECE",
+          "sales_visible_price_gross": "88.00"
+        }
+      ]
+    }
+  },
+  {
+    "kind": "product",
+    "data": {
+      "product_no": "DEMO-MD-P-09",
+      "product_kind": "PHYSICAL",
+      "name": "鲁味压榨花生油",
+      "description": "1.8升",
+      "specification": "1.8升",
+      "category_id": "DEMO-MD-C-09",
+      "brand_id": "DEMO-MD-B-01",
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据",
+      "skus": [
+        {
+          "sku_no": "DEMO-MD-SKU-09",
+          "name": "鲁味压榨花生油",
+          "base_unit_id": "DEMO-MD-U-PIECE",
+          "sales_visible_price_gross": "89.00"
+        }
+      ]
+    }
+  },
+  {
+    "kind": "product",
+    "data": {
+      "product_no": "DEMO-MD-P-10",
+      "product_kind": "PHYSICAL",
+      "name": "五常稻花香大米",
+      "description": "5千克",
+      "specification": "5千克",
+      "category_id": "DEMO-MD-C-10",
+      "brand_id": "DEMO-MD-B-02",
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据",
+      "skus": [
+        {
+          "sku_no": "DEMO-MD-SKU-10",
+          "name": "五常稻花香大米",
+          "base_unit_id": "DEMO-MD-U-PIECE",
+          "sales_visible_price_gross": "90.00"
+        }
+      ]
+    }
+  },
+  {
+    "kind": "product",
+    "data": {
+      "product_no": "DEMO-MD-P-11",
+      "product_kind": "PHYSICAL",
+      "name": "有机杂粮礼盒",
+      "description": "2.5千克",
+      "specification": "2.5千克",
+      "category_id": "DEMO-MD-C-01",
+      "brand_id": "DEMO-MD-B-03",
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据",
+      "skus": [
+        {
+          "sku_no": "DEMO-MD-SKU-11",
+          "name": "有机杂粮礼盒",
+          "base_unit_id": "DEMO-MD-U-PIECE",
+          "sales_visible_price_gross": "91.00"
+        }
+      ]
+    }
+  },
+  {
+    "kind": "product",
+    "data": {
+      "product_no": "DEMO-MD-P-12",
+      "product_kind": "PHYSICAL",
+      "name": "西湖龙井",
+      "description": "250克",
+      "specification": "250克",
+      "category_id": "DEMO-MD-C-02",
+      "brand_id": "DEMO-MD-B-04",
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据",
+      "skus": [
+        {
+          "sku_no": "DEMO-MD-SKU-12",
+          "name": "西湖龙井",
+          "base_unit_id": "DEMO-MD-U-PIECE",
+          "sales_visible_price_gross": "92.00"
+        }
+      ]
+    }
+  },
+  {
+    "kind": "product",
+    "data": {
+      "product_no": "DEMO-MD-P-13",
+      "product_kind": "PHYSICAL",
+      "name": "安溪铁观音礼盒",
+      "description": "500克",
+      "specification": "500克",
+      "category_id": "DEMO-MD-C-03",
+      "brand_id": "DEMO-MD-B-05",
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据",
+      "skus": [
+        {
+          "sku_no": "DEMO-MD-SKU-13",
+          "name": "安溪铁观音礼盒",
+          "base_unit_id": "DEMO-MD-U-PIECE",
+          "sales_visible_price_gross": "93.00"
+        }
+      ]
+    }
+  },
+  {
+    "kind": "product",
+    "data": {
+      "product_no": "DEMO-MD-P-14",
+      "product_kind": "PHYSICAL",
+      "name": "普洱熟茶饼",
+      "description": "357克",
+      "specification": "357克",
+      "category_id": "DEMO-MD-C-04",
+      "brand_id": "DEMO-MD-B-06",
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据",
+      "skus": [
+        {
+          "sku_no": "DEMO-MD-SKU-14",
+          "name": "普洱熟茶饼",
+          "base_unit_id": "DEMO-MD-U-PIECE",
+          "sales_visible_price_gross": "94.00"
+        }
+      ]
+    }
+  },
+  {
+    "kind": "product",
+    "data": {
+      "product_no": "DEMO-MD-P-15",
+      "product_kind": "PHYSICAL",
+      "name": "洗衣液家庭套装",
+      "description": "3千克×2",
+      "specification": "3千克×2",
+      "category_id": "DEMO-MD-C-05",
+      "brand_id": "DEMO-MD-B-07",
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据",
+      "skus": [
+        {
+          "sku_no": "DEMO-MD-SKU-15",
+          "name": "洗衣液家庭套装",
+          "base_unit_id": "DEMO-MD-U-PIECE",
+          "sales_visible_price_gross": "95.00"
+        }
+      ]
+    }
+  },
+  {
+    "kind": "product",
+    "data": {
+      "product_no": "DEMO-MD-P-16",
+      "product_kind": "PHYSICAL",
+      "name": "抽纸整箱",
+      "description": "24包",
+      "specification": "24包",
+      "category_id": "DEMO-MD-C-06",
+      "brand_id": "DEMO-MD-B-08",
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据",
+      "skus": [
+        {
+          "sku_no": "DEMO-MD-SKU-16",
+          "name": "抽纸整箱",
+          "base_unit_id": "DEMO-MD-U-PIECE",
+          "sales_visible_price_gross": "96.00"
+        }
+      ]
+    }
+  },
+  {
+    "kind": "product",
+    "data": {
+      "product_no": "DEMO-MD-P-17",
+      "product_kind": "PHYSICAL",
+      "name": "不锈钢保温杯",
+      "description": "480毫升",
+      "specification": "480毫升",
+      "category_id": "DEMO-MD-C-07",
+      "brand_id": "DEMO-MD-B-01",
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据",
+      "skus": [
+        {
+          "sku_no": "DEMO-MD-SKU-17",
+          "name": "不锈钢保温杯",
+          "base_unit_id": "DEMO-MD-U-PIECE",
+          "sales_visible_price_gross": "97.00"
+        }
+      ]
+    }
+  },
+  {
+    "kind": "product",
+    "data": {
+      "product_no": "DEMO-MD-P-18",
+      "product_kind": "PHYSICAL",
+      "name": "全棉床品四件套",
+      "description": "1.8米",
+      "specification": "1.8米",
+      "category_id": "DEMO-MD-C-08",
+      "brand_id": "DEMO-MD-B-02",
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据",
+      "skus": [
+        {
+          "sku_no": "DEMO-MD-SKU-18",
+          "name": "全棉床品四件套",
+          "base_unit_id": "DEMO-MD-U-PIECE",
+          "sales_visible_price_gross": "98.00"
+        }
+      ]
+    }
+  },
+  {
+    "kind": "product",
+    "data": {
+      "product_no": "DEMO-MD-P-19",
+      "product_kind": "PHYSICAL",
+      "name": "无线蓝牙耳机",
+      "description": "标准装",
+      "specification": "标准装",
+      "category_id": "DEMO-MD-C-09",
+      "brand_id": "DEMO-MD-B-03",
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据",
+      "skus": [
+        {
+          "sku_no": "DEMO-MD-SKU-19",
+          "name": "无线蓝牙耳机",
+          "base_unit_id": "DEMO-MD-U-PIECE",
+          "sales_visible_price_gross": "99.00"
+        }
+      ]
+    }
+  },
+  {
+    "kind": "product",
+    "data": {
+      "product_no": "DEMO-MD-P-20",
+      "product_kind": "PHYSICAL",
+      "name": "护眼台灯",
+      "description": "国AA级",
+      "specification": "国AA级",
+      "category_id": "DEMO-MD-C-10",
+      "brand_id": "DEMO-MD-B-04",
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据",
+      "skus": [
+        {
+          "sku_no": "DEMO-MD-SKU-20",
+          "name": "护眼台灯",
+          "base_unit_id": "DEMO-MD-U-PIECE",
+          "sales_visible_price_gross": "100.00"
+        }
+      ]
+    }
+  },
+  {
+    "kind": "product",
+    "data": {
+      "product_no": "DEMO-MD-P-21",
+      "product_kind": "PHYSICAL",
+      "name": "不粘炒锅",
+      "description": "32厘米",
+      "specification": "32厘米",
+      "category_id": "DEMO-MD-C-01",
+      "brand_id": "DEMO-MD-B-05",
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据",
+      "skus": [
+        {
+          "sku_no": "DEMO-MD-SKU-21",
+          "name": "不粘炒锅",
+          "base_unit_id": "DEMO-MD-U-PIECE",
+          "sales_visible_price_gross": "101.00"
+        }
+      ]
+    }
+  },
+  {
+    "kind": "product",
+    "data": {
+      "product_no": "DEMO-MD-P-22",
+      "product_kind": "PHYSICAL",
+      "name": "特级酱油礼盒",
+      "description": "500毫升×2",
+      "specification": "500毫升×2",
+      "category_id": "DEMO-MD-C-02",
+      "brand_id": "DEMO-MD-B-06",
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据",
+      "skus": [
+        {
+          "sku_no": "DEMO-MD-SKU-22",
+          "name": "特级酱油礼盒",
+          "base_unit_id": "DEMO-MD-U-PIECE",
+          "sales_visible_price_gross": "102.00"
+        }
+      ]
+    }
+  },
+  {
+    "kind": "product",
+    "data": {
+      "product_no": "DEMO-MD-P-23",
+      "product_kind": "PHYSICAL",
+      "name": "特级初榨橄榄油",
+      "description": "750毫升",
+      "specification": "750毫升",
+      "category_id": "DEMO-MD-C-03",
+      "brand_id": "DEMO-MD-B-07",
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据",
+      "skus": [
+        {
+          "sku_no": "DEMO-MD-SKU-23",
+          "name": "特级初榨橄榄油",
+          "base_unit_id": "DEMO-MD-U-PIECE",
+          "sales_visible_price_gross": "103.00"
+        }
+      ]
+    }
+  },
+  {
+    "kind": "product",
+    "data": {
+      "product_no": "DEMO-MD-P-24",
+      "product_kind": "PHYSICAL",
+      "name": "纯牛奶礼箱",
+      "description": "250毫升×12",
+      "specification": "250毫升×12",
+      "category_id": "DEMO-MD-C-04",
+      "brand_id": "DEMO-MD-B-08",
+      "effective_from": "2026-01-01",
+      "change_reason": "演示主数据",
+      "skus": [
+        {
+          "sku_no": "DEMO-MD-SKU-24",
+          "name": "纯牛奶礼箱",
+          "base_unit_id": "DEMO-MD-U-PIECE",
+          "sales_visible_price_gross": "104.00"
+        }
+      ]
+    }
+  }
+]

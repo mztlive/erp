@@ -42,6 +42,7 @@
 | 入口 | 用途 |
 | --- | --- |
 | [src/lib.rs](src/lib.rs) | 公开命名用例与模块总表 |
+| [src/demo_master_data](src/demo_master_data) | JSON 演示种子、实际 ID 登记与关联清理；执行要求见[演示主数据合同](../../../docs/demo-master-data-contract.md) |
 | [src/adapters/mod.rs](src/adapters/mod.rs) | 实际消费方适配器 |
 | [src/approval_dispatch/mod.rs](src/approval_dispatch/mod.rs) | ApprovalActionRegistry 与审批分派 |
 | [src/audit/mod.rs](src/audit/mod.rs) | run_audited |

@@ -4,9 +4,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use application_core::AuditActor;
-use erp_catalog::CatalogService;
+use erp_catalog::{CatalogExt, CatalogService};
 use erp_identity::{AccessControlExt, AccountCoreRepositoryExt, SharedRbacService};
-use erp_party::dto::company::SaveCompanyRequest;
 use erp_party::{PartyStatus, SensitiveDataCodec};
 use erp_warehouse::WarehouseService;
 use persistence_core::NoTransaction;
@@ -14,6 +13,7 @@ use persistence_core::NoTransaction;
 use super::ensure_dictionary::EnsureOutcome;
 use super::plan::{self, DemoCounts, DemoKind, DemoStep};
 use super::record::{self, DemoMasterRecord};
+use super::seed::SeedRequest;
 use super::{DemoMasterDataService, lifecycle};
 use crate::adapters::{party_service, scoped_catalog_service, warehouse_service};
 use crate::{CustomerProfileService, Error, Result, SupplierProfileService};
@@ -96,7 +96,12 @@ impl DemoMasterDataService {
             .filter_map(|record| record.kind().map(|kind| (kind, record.removed)))
             .collect::<Vec<_>>();
         let (active, removed) = plan::count_records(&rows);
-        Ok(DemoStatus { enabled: self.enabled, planned: plan::planned_counts(), active, removed })
+        Ok(DemoStatus {
+            enabled: self.enabled,
+            planned: plan::planned_counts(&plan::demo_steps()?),
+            active,
+            removed,
+        })
     }
 
     /// 生成或恢复下一批演示主数据。
@@ -112,13 +117,13 @@ impl DemoMasterDataService {
     /// 环境未开放或某条主数据写入失败时返回错误。已写入的条数会留在清单里。
     pub async fn apply_chunk(&self, actor: &AuditActor, cursor: u32) -> Result<DemoChunkReport> {
         self.ensure_enabled()?;
-        let steps = plan::demo_steps();
+        let steps = plan::demo_steps()?;
         let range = plan::apply_window(cursor as usize, steps.len());
-        let records = self.record_map().await?;
         let mut report = empty_report(range.end, steps.len());
         let company_party_id = self.company_party_id(actor, &mut report.notices).await?;
         let handler_user_id = self.warehouse_handler_id().await?;
         for step in &steps[range] {
+            let records = self.record_map().await?;
             let outcome = self
                 .create_record(
                     actor,
@@ -138,27 +143,24 @@ impl DemoMasterDataService {
     ///
     /// # 参数
     /// * `actor` - 当前操作人
-    /// * `purge` - 为 true 时先按外键图删除衍生单据。一次删除只在第一批传入 true。
     ///
     /// # 返回
     /// 返回本批删除条数。没有可删除记录时 `done` 为 true。
     ///
     /// # 错误
     /// 环境未开放或删除失败时返回错误。
-    pub async fn remove_chunk(&self, actor: &AuditActor, purge: bool) -> Result<DemoChunkReport> {
+    pub async fn remove_chunk(&self, actor: &AuditActor) -> Result<DemoChunkReport> {
         self.ensure_enabled()?;
-        let steps = plan::demo_steps();
-        let records = record::load_all(&self.db).await?;
+        let steps = plan::demo_steps()?;
+        let mut records = record::load_all(&self.db).await?;
+        self.refresh_related_ids(&mut records).await?;
         let active_keys = records
             .iter()
             .filter(|record| !record.removed)
             .map(|record| record.key.clone())
             .collect::<Vec<_>>();
-        let derived_removed = if purge {
-            super::derived::purge_derived(&self.db, &super::derived::master_ids(&records)).await?
-        } else {
-            0
-        };
+        let derived_removed =
+            super::derived::purge_derived(&self.db, super::derived::master_ids(&records), actor).await?;
         let batch = plan::removal_batch(&steps, &active_keys, plan::CHUNK_LEN);
         let by_key =
             records.iter().map(|record| (record.key.clone(), record.clone())).collect::<HashMap<_, _>>();
@@ -179,6 +181,16 @@ impl DemoMasterDataService {
         Ok(report)
     }
 
+    /// 拒绝在未开放演示功能的环境执行写入。
+    ///
+    /// # 参数
+    /// 无；读取当前环境开关。
+    ///
+    /// # 返回
+    /// 开放时返回空结果。
+    ///
+    /// # 错误
+    /// 未开放时返回禁止操作错误。
     pub(super) fn ensure_enabled(&self) -> Result<()> {
         if self.enabled {
             Ok(())
@@ -187,6 +199,7 @@ impl DemoMasterDataService {
         }
     }
 
+    /// 按 JSON 请求种类调用对应领域写入入口。
     async fn create_record(
         &self,
         actor: &AuditActor,
@@ -196,21 +209,24 @@ impl DemoMasterDataService {
         handler_user_id: Option<&str>,
         notices: &mut Vec<String>,
     ) -> Result<EnsureOutcome> {
-        match step.kind {
-            DemoKind::Unit => self.ensure_unit(actor, step).await,
-            DemoKind::Brand => self.ensure_brand(actor, step).await,
-            DemoKind::Category => self.ensure_category(actor, step).await,
-            DemoKind::Warehouse => self.ensure_warehouse(actor, step, handler_user_id).await,
-            DemoKind::Customer => self.ensure_customer(actor, step, notices).await,
-            DemoKind::Supplier => self.ensure_supplier(actor, step, company_party_id, notices).await,
-            DemoKind::Product => self.ensure_product(actor, step, records).await,
+        match &step.request {
+            SeedRequest::Unit(request) => self.ensure_unit(actor, step, request).await,
+            SeedRequest::Brand(request) => self.ensure_brand(actor, step, request).await,
+            SeedRequest::Category(request) => self.ensure_category(actor, step, request).await,
+            SeedRequest::Warehouse(request) => {
+                self.ensure_warehouse(actor, step, request, handler_user_id).await
+            },
+            SeedRequest::Customer(request) => self.ensure_customer(actor, step, request, notices).await,
+            SeedRequest::Supplier(request) => {
+                self.ensure_supplier(actor, step, request, company_party_id, notices).await
+            },
+            SeedRequest::Product(request) => self.ensure_product(actor, step, records, request).await,
         }
     }
 
+    /// 按登记的种类和实际 ID 删除主数据。
     async fn delete_record(&self, actor: &AuditActor, record: &DemoMasterRecord) -> Result<()> {
-        let Some(kind) = record.kind() else {
-            return Ok(());
-        };
+        let kind = record.kind().ok_or_else(|| Error::Internal("演示清单包含未知种类".into()))?;
         match kind {
             DemoKind::Unit => {
                 ignore_missing(self.catalog().unit_of_measure_delete(&record.entity_id, actor).await)?
@@ -232,6 +248,7 @@ impl DemoMasterDataService {
         Ok(())
     }
 
+    /// 按清单 ID 删除客户角色及关联主体。
     async fn delete_customer(&self, actor: &AuditActor, record: &DemoMasterRecord) -> Result<()> {
         match crate::delete_customer(
             self.db.clone(),
@@ -253,6 +270,7 @@ impl DemoMasterDataService {
         Ok(())
     }
 
+    /// 按清单 ID 删除供应商角色及关联主体。
     async fn delete_supplier(&self, actor: &AuditActor, record: &DemoMasterRecord) -> Result<()> {
         match crate::delete_supplier(self.db.clone(), record.entity_id.clone(), actor.clone()).await {
             Ok(()) | Err(Error::NotFound(_)) => {},
@@ -267,11 +285,44 @@ impl DemoMasterDataService {
         Ok(())
     }
 
+    /// 删除前读回商品当前及历史 SKU，并持久化清理根供重试使用。
+    async fn refresh_related_ids(&self, records: &mut [DemoMasterRecord]) -> Result<()> {
+        for record in records {
+            if record.kind().is_none()
+                || record.entity_id.trim().is_empty()
+                || record.related_ids.iter().any(|id| id.trim().is_empty())
+            {
+                return Err(Error::Internal("演示清单包含未知种类".into()));
+            }
+            if record.kind() != Some(DemoKind::Product) {
+                continue;
+            }
+            let skus = self
+                .db
+                .skus()
+                .find_many_by_field_including_deleted(
+                    "product_id",
+                    record.entity_id.clone(),
+                    &mut NoTransaction,
+                )
+                .await?;
+            for sku in skus {
+                if !record.related_ids.contains(&sku.base.id) {
+                    record.related_ids.push(sku.base.id);
+                }
+            }
+            record::save(&self.db, record).await?;
+        }
+        Ok(())
+    }
+
+    /// 按稳定种子键索引实际 ID 清单。
     async fn record_map(&self) -> Result<HashMap<String, DemoMasterRecord>> {
         let records = record::load_all(&self.db).await?;
         Ok(records.into_iter().map(|record| (record.key.clone(), record)).collect())
     }
 
+    /// 复用公司主体，缺失时读取基础 JSON 创建。
     async fn company_party_id(
         &self,
         actor: &AuditActor,
@@ -281,18 +332,7 @@ impl DemoMasterDataService {
             return Ok(Some(id));
         }
         match party_service(self.db.clone())
-            .create_company(
-                SaveCompanyRequest {
-                    party_no: "FSY".to_string(),
-                    version: None,
-                    legal_name: "北京福尚云科技有限公司".to_string(),
-                    short_name: Some("福尚云".to_string()),
-                    aliases: Vec::new(),
-                    unified_credit_code: Some("91110108MA01FSY01X".to_string()),
-                    status: PartyStatus::Active,
-                },
-                actor,
-            )
+            .create_company(super::spec::foundation_spec().company.clone(), actor)
             .await
         {
             Ok(company) => Ok(Some(company.id)),
@@ -304,6 +344,7 @@ impl DemoMasterDataService {
         }
     }
 
+    /// 读取已有启用公司主体。
     async fn active_company_id(&self) -> Result<Option<String>> {
         let page = party_service(self.db.clone())
             .company_list(&erp_party::dto::company::CompanyListParams {
@@ -316,29 +357,71 @@ impl DemoMasterDataService {
         Ok(page.items.first().map(|company| company.id.clone()))
     }
 
+    /// 解析基础 JSON 指定的仓储岗位账号。
     async fn warehouse_handler_id(&self) -> Result<Option<String>> {
         let login = super::spec::foundation_spec().warehouse_handler_account.as_str();
         let account = self.db.accounts().find_by_account(login, &mut NoTransaction).await?;
         Ok(account.map(|account| account.base.id))
     }
 
+    /// 装配带权限策略的商品服务。
+    ///
+    /// # 参数
+    /// 无；复用当前数据库与权限服务。
+    ///
+    /// # 返回
+    /// 返回商品领域服务。
+    ///
+    /// # 错误
+    /// 无。
     pub(super) fn catalog(&self) -> CatalogService {
         scoped_catalog_service(self.db.clone(), self.rbac.clone())
     }
 
+    /// 装配带权限策略的仓库服务。
+    ///
+    /// # 参数
+    /// 无；复用当前数据库与权限服务。
+    ///
+    /// # 返回
+    /// 返回仓库领域服务。
+    ///
+    /// # 错误
+    /// 无。
     pub(super) fn warehouses(&self) -> WarehouseService {
         warehouse_service(self.db.clone(), self.rbac.clone())
     }
 
+    /// 装配客户资料写入流程。
+    ///
+    /// # 参数
+    /// 无；复用当前数据库、密文编解码器与权限服务。
+    ///
+    /// # 返回
+    /// 返回客户资料流程。
+    ///
+    /// # 错误
+    /// 无。
     pub(super) fn customers(&self) -> CustomerProfileService {
         CustomerProfileService::new(self.db.clone(), Arc::clone(&self.sensitive)).with_rbac(self.rbac.clone())
     }
 
+    /// 装配供应商资料写入流程。
+    ///
+    /// # 参数
+    /// 无；复用当前数据库、密文编解码器与权限服务。
+    ///
+    /// # 返回
+    /// 返回供应商资料流程。
+    ///
+    /// # 错误
+    /// 无。
     pub(super) fn suppliers(&self) -> SupplierProfileService {
         SupplierProfileService::new(self.db.clone(), Arc::clone(&self.sensitive)).with_rbac(self.rbac.clone())
     }
 }
 
+/// 累计本批主数据创建或恢复结果。
 fn tally(report: &mut DemoChunkReport, outcome: EnsureOutcome) {
     match outcome {
         EnsureOutcome::Created => report.created += 1,
@@ -348,12 +431,14 @@ fn tally(report: &mut DemoChunkReport, outcome: EnsureOutcome) {
     }
 }
 
+/// 去重合并生成提示。
 fn push_notice(notices: &mut Vec<String>, text: String) {
     if !notices.iter().any(|item| item == &text) {
         notices.push(text);
     }
 }
 
+/// 初始化分批处理结果。
 fn empty_report(next_cursor: usize, total: usize) -> DemoChunkReport {
     DemoChunkReport {
         next_cursor: next_cursor as u32,
@@ -368,6 +453,7 @@ fn empty_report(next_cursor: usize, total: usize) -> DemoChunkReport {
     }
 }
 
+/// 将已不存在的字典视为删除完成。
 fn ignore_missing(result: erp_catalog::Result<()>) -> Result<()> {
     match result {
         Ok(()) => Ok(()),

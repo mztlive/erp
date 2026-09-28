@@ -4,6 +4,7 @@
 
 use std::sync::OnceLock;
 
+use erp_party::dto::company::SaveCompanyRequest;
 use erp_workflow::DocumentType;
 use serde::Deserialize;
 
@@ -11,6 +12,7 @@ use crate::{Error, Result};
 
 #[derive(Deserialize)]
 pub(super) struct FoundationFile {
+    pub company: SaveCompanyRequest,
     pub password: String,
     pub root_department: String,
     pub sales_department: String,

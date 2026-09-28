@@ -200,7 +200,7 @@ export function DemoMasterDataPage() {
                         <AlertDialogHeader>
                             <AlertDialogTitle>删除演示主数据</AlertDialogTitle>
                             <AlertDialogDescription>
-                                会删除这次生成的客户、供应商、商品、仓库和字典，以及引用它们的单据、审批和待办。演示商品自己的库存余额和流水会一并清掉。岗位账号、部门、已发布的审批流程，以及没有引用这批资料的单据会保留。再次生成会恢复同一批主数据。
+                                会删除这次生成的客户、供应商、商品、仓库和字典，以及引用它们的单据、审批和待办。演示商品自己的库存余额和流水会一并清掉。关联单据混有非演示商品时，会停止删除，请先处理混用单据。岗位账号、部门、已发布的审批流程，以及没有引用这批资料的单据会保留。再次生成会恢复同一批主数据。
                             </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>

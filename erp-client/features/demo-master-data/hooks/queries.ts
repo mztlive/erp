@@ -46,10 +46,8 @@ async function runRemove(
 ): Promise<number> {
     let removed = 0
     let derivedRemoved = 0
-    let purge = true
     for (;;) {
-        const report = await removeDemoMasterData(purge)
-        purge = false
+        const report = await removeDemoMasterData()
         removed += report.removed
         derivedRemoved += report.derived_removed
         onProgress(removed, derivedRemoved)

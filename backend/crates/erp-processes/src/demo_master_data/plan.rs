@@ -6,24 +6,11 @@ use std::collections::HashSet;
 
 use serde::Serialize;
 
+use super::seed::{self, SeedRequest};
+use crate::Result;
+
 /// 单次接口处理的主数据条数，避免一次请求写太久。
 pub(super) const CHUNK_LEN: usize = 8;
-
-const UNITS: &[(&str, &str, &str)] = &[
-    ("DEMO-MD-U-PIECE", "件", "件"),
-    ("DEMO-MD-U-BOX", "盒", "盒"),
-    ("DEMO-MD-U-CASE", "箱", "箱"),
-    ("DEMO-MD-U-SET", "套", "套"),
-    ("DEMO-MD-U-BOTTLE", "瓶", "瓶"),
-    ("DEMO-MD-U-BAG", "袋", "袋"),
-];
-
-const BRAND_COUNT: u16 = 8;
-const CATEGORY_COUNT: u16 = 10;
-const WAREHOUSE_COUNT: u16 = 6;
-const CUSTOMER_COUNT: u16 = 24;
-const SUPPLIER_COUNT: u16 = 16;
-const PRODUCT_COUNT: u16 = 24;
 
 /// 演示主数据种类。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -93,6 +80,7 @@ pub struct DemoCounts {
 }
 
 impl DemoCounts {
+    /// 取得对应种类的计数位置。
     fn slot(&mut self, kind: DemoKind) -> &mut u32 {
         match kind {
             DemoKind::Unit => &mut self.unit,
@@ -105,54 +93,53 @@ impl DemoCounts {
         }
     }
 
+    /// 增加一种主数据的计划数量。
     fn add(&mut self, kind: DemoKind) {
         *self.slot(kind) += 1;
     }
 }
 
-/// 一条待生成的演示主数据。
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// 一条已校验的 JSON 种子。
+#[derive(Clone)]
 pub(super) struct DemoStep {
-    /// 种类。
+    /// 数据种类。
     pub kind: DemoKind,
-    /// 种类内序号，从 1 开始。单位清单使用 0，身份在 `key`。
-    pub ordinal: u16,
-    /// 稳定身份。重复生成和删除都认这个值。
+    /// 业务编号或幂等键。
     pub key: String,
+    /// 复用领域创建请求的固定内容。
+    pub request: SeedRequest,
 }
 
-/// 按固定顺序展开全部演示主数据。
+/// 读取并校验嵌入程序的种子，按 JSON 顺序返回。
+///
+/// # 参数
+/// 无；读取内嵌 JSON。
 ///
 /// # 返回
-/// 先字典和仓库，再客户、供应商，最后商品。
-pub(super) fn demo_steps() -> Vec<DemoStep> {
-    let mut steps = Vec::new();
-    for (index, (code, _, _)) in UNITS.iter().enumerate() {
-        steps.push(DemoStep { kind: DemoKind::Unit, ordinal: (index as u16) + 1, key: (*code).to_string() });
-    }
-    push_numbered(&mut steps, DemoKind::Brand, BRAND_COUNT, brand_key);
-    push_numbered(&mut steps, DemoKind::Category, CATEGORY_COUNT, category_key);
-    push_numbered(&mut steps, DemoKind::Warehouse, WAREHOUSE_COUNT, warehouse_key);
-    push_numbered(&mut steps, DemoKind::Customer, CUSTOMER_COUNT, customer_key);
-    push_numbered(&mut steps, DemoKind::Supplier, SUPPLIER_COUNT, supplier_key);
-    push_numbered(&mut steps, DemoKind::Product, PRODUCT_COUNT, product_key);
-    steps
+/// 返回已完成字段和引用校验的种子清单。
+///
+/// # 错误
+/// JSON 或领域输入无效时返回错误。
+pub(super) fn demo_steps() -> Result<Vec<DemoStep>> {
+    seed::load(include_str!("master-data.json"))
 }
 
-/// 计划生成的各类条数。
+/// 从种子清单统计计划条数。
+///
+/// # 参数
+/// `steps` - 已校验的种子清单。
 ///
 /// # 返回
-/// 返回固定清单的条数，不读取数据库。
-pub fn planned_counts() -> DemoCounts {
-    DemoCounts {
-        unit: UNITS.len() as u32,
-        brand: u32::from(BRAND_COUNT),
-        category: u32::from(CATEGORY_COUNT),
-        warehouse: u32::from(WAREHOUSE_COUNT),
-        customer: u32::from(CUSTOMER_COUNT),
-        supplier: u32::from(SUPPLIER_COUNT),
-        product: u32::from(PRODUCT_COUNT),
+/// 返回各类计划数量。
+///
+/// # 错误
+/// 无。
+pub(super) fn planned_counts(steps: &[DemoStep]) -> DemoCounts {
+    let mut counts = DemoCounts::default();
+    for step in steps {
+        counts.add(step.kind);
     }
+    counts
 }
 
 /// 统计清单里仍在列表中和已删除的条数。
@@ -214,129 +201,4 @@ pub(super) fn removal_batch(steps: &[DemoStep], active_keys: &[String], limit: u
     }
     ordered.truncate(limit);
     ordered
-}
-
-/// 返回计量单位的名称和符号。
-pub(super) fn unit_spec(key: &str) -> Option<(&'static str, &'static str)> {
-    UNITS.iter().find(|item| item.0 == key).map(|item| (item.1, item.2))
-}
-
-/// 返回商品要引用的单位、品牌和分类身份。
-pub(super) fn product_links(ordinal: u16) -> (&'static str, String, String) {
-    let brand_ordinal = ((ordinal - 1) % BRAND_COUNT) + 1;
-    let category_ordinal = ((ordinal - 1) % CATEGORY_COUNT) + 1;
-    (UNITS[0].0, brand_key(brand_ordinal), category_key(category_ordinal))
-}
-
-pub(super) fn brand_key(ordinal: u16) -> String {
-    format!("DEMO-MD-B-{ordinal:02}")
-}
-
-pub(super) fn category_key(ordinal: u16) -> String {
-    format!("DEMO-MD-C-{ordinal:02}")
-}
-
-pub(super) fn warehouse_key(ordinal: u16) -> String {
-    format!("DEMO-MD-W-{ordinal:02}")
-}
-
-pub(super) fn customer_key(ordinal: u16) -> String {
-    format!("demo-master-customer-{ordinal:02}")
-}
-
-pub(super) fn supplier_key(ordinal: u16) -> String {
-    format!("demo-master-supplier-{ordinal:02}")
-}
-
-pub(super) fn product_key(ordinal: u16) -> String {
-    format!("DEMO-MD-P-{ordinal:02}")
-}
-
-pub(super) fn supplier_party_no(ordinal: u16) -> String {
-    format!("DEMO-MD-PTY-{ordinal:02}")
-}
-
-pub(super) fn supplier_no(ordinal: u16) -> String {
-    format!("DEMO-MD-SUP-{ordinal:02}")
-}
-
-pub(super) fn sku_no(ordinal: u16) -> String {
-    format!("DEMO-MD-SKU-{ordinal:02}")
-}
-
-fn push_numbered(steps: &mut Vec<DemoStep>, kind: DemoKind, count: u16, key_of: fn(u16) -> String) {
-    for ordinal in 1..=count {
-        steps.push(DemoStep { kind, ordinal, key: key_of(ordinal) });
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{
-        BRAND_COUNT, CATEGORY_COUNT, CUSTOMER_COUNT, DemoKind, PRODUCT_COUNT, SUPPLIER_COUNT, UNITS,
-        WAREHOUSE_COUNT, apply_window, count_records, demo_steps, planned_counts, removal_batch,
-    };
-
-    #[test]
-    fn plan_counts_and_order_cover_only_master_data() {
-        let steps = demo_steps();
-        let expected = UNITS.len()
-            + usize::from(BRAND_COUNT)
-            + usize::from(CATEGORY_COUNT)
-            + usize::from(WAREHOUSE_COUNT)
-            + usize::from(CUSTOMER_COUNT)
-            + usize::from(SUPPLIER_COUNT)
-            + usize::from(PRODUCT_COUNT);
-        assert_eq!(steps.len(), expected);
-        assert_eq!(planned_counts().customer, u32::from(CUSTOMER_COUNT));
-        assert_eq!(planned_counts().product, u32::from(PRODUCT_COUNT));
-        assert_eq!(steps.first().map(|step| step.kind), Some(DemoKind::Unit));
-        assert_eq!(steps.last().map(|step| step.kind), Some(DemoKind::Product));
-        let product_at = steps.iter().position(|step| step.kind == DemoKind::Product).unwrap();
-        let category_at = steps.iter().position(|step| step.kind == DemoKind::Category).unwrap();
-        assert!(category_at < product_at);
-        let mut keys = steps.iter().map(|step| step.key.as_str()).collect::<Vec<_>>();
-        keys.sort_unstable();
-        keys.dedup();
-        assert_eq!(keys.len(), steps.len());
-    }
-
-    #[test]
-    fn removal_only_walks_active_demo_keys_from_product_back_to_dictionary() {
-        let steps = demo_steps();
-        let unit = steps.iter().find(|step| step.kind == DemoKind::Unit).unwrap();
-        let product = steps.iter().find(|step| step.kind == DemoKind::Product).unwrap();
-        let inactive = steps.iter().find(|step| step.kind == DemoKind::Brand).unwrap();
-        let batch =
-            removal_batch(&steps, &[unit.key.clone(), product.key.clone(), "legacy-demo-key".to_string()], 8);
-        assert_eq!(batch.first().map(String::as_str), Some(product.key.as_str()));
-        assert!(batch.iter().any(|key| key == &unit.key));
-        assert!(!batch.iter().any(|key| key == &inactive.key));
-        assert!(batch.iter().any(|key| key == "legacy-demo-key"));
-        assert!(
-            batch.iter().position(|key| key == &product.key).unwrap()
-                < batch.iter().position(|key| key == &unit.key).unwrap()
-        );
-    }
-
-    #[test]
-    fn counts_keep_removed_rows_out_of_the_active_total() {
-        let (active, removed) = count_records(&[
-            (DemoKind::Customer, false),
-            (DemoKind::Customer, true),
-            (DemoKind::Product, false),
-        ]);
-        assert_eq!(active.customer, 1);
-        assert_eq!(removed.customer, 1);
-        assert_eq!(active.product, 1);
-        assert_eq!(removed.product, 0);
-    }
-
-    #[test]
-    fn apply_window_stops_at_the_end_of_the_plan() {
-        let len = demo_steps().len();
-        assert_eq!(apply_window(0, len), 0..8);
-        assert_eq!(apply_window(len - 3, len), (len - 3)..len);
-        assert_eq!(apply_window(len, len), len..len);
-    }
 }

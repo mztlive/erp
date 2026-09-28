@@ -14,24 +14,21 @@ mod ensure_supplier;
 mod ensure_warehouse;
 mod foundation;
 mod lifecycle;
-mod names;
 mod organization;
 mod plan;
-mod record;
-mod rename;
+mod repository;
+use repository::record;
+mod seed;
 mod service;
 mod spec;
 
 use std::sync::Arc;
 
-use erp_core::common::time::BusinessDate;
 use erp_identity::SharedRbacService;
 use erp_party::SensitiveDataCodec;
 pub use foundation::DemoFoundationReport;
 pub use record::ensure_indexes;
 pub use service::{ApplyDemoMasterDataRequest, DemoChunkReport, DemoStatus};
-
-use crate::{Error, Result};
 
 /// 演示主数据生成与删除。
 pub struct DemoMasterDataService {
@@ -39,12 +36,4 @@ pub struct DemoMasterDataService {
     pub(super) sensitive: Arc<SensitiveDataCodec>,
     pub(super) rbac: SharedRbacService,
     enabled: bool,
-}
-
-pub(super) fn demo_date() -> Result<BusinessDate> {
-    BusinessDate::from_ymd(2026, 1, 1).ok_or_else(|| Error::Internal("演示日期无效".to_string()))
-}
-
-pub(super) fn demo_date_end() -> Result<BusinessDate> {
-    BusinessDate::from_ymd(2031, 1, 1).ok_or_else(|| Error::Internal("演示日期无效".to_string()))
 }

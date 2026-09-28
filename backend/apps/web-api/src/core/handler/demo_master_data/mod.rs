@@ -2,7 +2,7 @@
 
 use application_core::AuditActor;
 use axum::Json;
-use axum::extract::{Extension, Query, State};
+use axum::extract::{Extension, State};
 use erp_processes::demo_master_data::{
     ApplyDemoMasterDataRequest, DemoChunkReport, DemoFoundationReport, DemoStatus,
 };
@@ -78,14 +78,6 @@ pub async fn demo_master_data_apply(
     Ok(ApiResponse::ok_with_data(report))
 }
 
-/// 删除请求是否先清理衍生单据。一次删除的第一批为 true。
-#[derive(Debug, serde::Deserialize)]
-pub struct RemoveDemoMasterDataParams {
-    /// 为 true 时按外键图删除衍生单据。
-    #[serde(default)]
-    purge: bool,
-}
-
 #[permission_macros::permission(
     group = "演示主数据",
     group_desc = "准备演示主数据、岗位账号和审批流程，并删除由此产生的单据",
@@ -98,15 +90,13 @@ pub struct RemoveDemoMasterDataParams {
 /// # 参数
 /// * `state` - 应用状态
 /// * `actor` - 已通过鉴权的操作人
-/// * `query` - `purge=true` 时先清理衍生单据
 ///
 /// # 返回
 /// 返回本批删除结果。
 pub async fn demo_master_data_remove(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
-    Query(query): Query<RemoveDemoMasterDataParams>,
 ) -> Result<DemoChunkReport> {
-    let report = state.demo_master_data_service().remove_chunk(&actor, query.purge).await?;
+    let report = state.demo_master_data_service().remove_chunk(&actor).await?;
     Ok(ApiResponse::ok_with_data(report))
 }

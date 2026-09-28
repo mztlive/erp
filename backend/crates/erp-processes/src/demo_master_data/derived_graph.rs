@@ -1,7 +1,7 @@
 //! 演示衍生数据的外键图。
 //!
 //! 只删除图上点名的集合和字段。主数据聚合自己的子表不在图里，随主数据软删除和恢复。
-//! 库存流水只按演示 SKU 删除，不按来源单据往上带，避免拆掉其他商品的余额。
+//! 库存按演示 SKU 或仓库定位；发现非演示 SKU 时整轮拒绝删除。
 
 /// 演示身份里会被业务单据引用的一类。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -14,6 +14,8 @@ pub(super) enum SeedKind {
     Supplier,
     /// SKU。
     Sku,
+    /// 仓库 ID。
+    Warehouse,
 }
 
 /// 一条外键。`seed` 为空时，字段匹配已经定位到的单据 ID。
@@ -37,6 +39,156 @@ pub(super) struct IdPull {
 }
 
 const EDGES: &[Edge] = &[
+    Edge { collection: "contracts", field: "customer_id", seed: Some(SeedKind::Customer), lift: None },
+    Edge { collection: "contract_revisions", field: "contract_id", seed: None, lift: None },
+    Edge { collection: "contracts", field: "settlement_party_id", seed: Some(SeedKind::Party), lift: None },
+    Edge { collection: "stock_balances", field: "warehouse_id", seed: Some(SeedKind::Warehouse), lift: None },
+    Edge {
+        collection: "stock_movements",
+        field: "warehouse_id",
+        seed: Some(SeedKind::Warehouse),
+        lift: None,
+    },
+    Edge {
+        collection: "stock_reservations",
+        field: "warehouse_id",
+        seed: Some(SeedKind::Warehouse),
+        lift: None,
+    },
+    Edge {
+        collection: "stock_adjustments",
+        field: "warehouse_id",
+        seed: Some(SeedKind::Warehouse),
+        lift: None,
+    },
+    Edge {
+        collection: "deliveries",
+        field: "warehouse_id",
+        seed: Some(SeedKind::Warehouse),
+        lift: Some("sales_order_id"),
+    },
+    Edge {
+        collection: "purchase_receipts",
+        field: "warehouse_id",
+        seed: Some(SeedKind::Warehouse),
+        lift: Some("purchase_order_id"),
+    },
+    Edge {
+        collection: "supplier_offerings",
+        field: "supplier_id",
+        seed: Some(SeedKind::Supplier),
+        lift: None,
+    },
+    Edge { collection: "supplier_offerings", field: "sku_id", seed: Some(SeedKind::Sku), lift: None },
+    Edge { collection: "supplier_offering_revisions", field: "supplier_offering_id", seed: None, lift: None },
+    Edge {
+        collection: "supplier_offering_availabilities",
+        field: "supplier_offering_id",
+        seed: None,
+        lift: None,
+    },
+    Edge {
+        collection: "supplier_order_actions",
+        field: "supplier_fulfillment_order_id",
+        seed: None,
+        lift: None,
+    },
+    Edge {
+        collection: "supplier_order_action_lines",
+        field: "supplier_order_action_id",
+        seed: None,
+        lift: None,
+    },
+    Edge {
+        collection: "supplier_refund_facts",
+        field: "supplier_fulfillment_order_id",
+        seed: None,
+        lift: None,
+    },
+    Edge {
+        collection: "supplier_refund_allocations",
+        field: "supplier_refund_fact_id",
+        seed: None,
+        lift: None,
+    },
+    Edge {
+        collection: "supplier_settlement_statements",
+        field: "supplier_id",
+        seed: Some(SeedKind::Supplier),
+        lift: None,
+    },
+    Edge { collection: "supplier_settlement_items", field: "statement_id", seed: None, lift: None },
+    Edge {
+        collection: "supplier_settlement_differences",
+        field: "statement_item_id",
+        seed: None,
+        lift: None,
+    },
+    Edge {
+        collection: "supplier_settlement_difference_evidence",
+        field: "statement_id",
+        seed: None,
+        lift: None,
+    },
+    Edge { collection: "sales_selection_prepare_tasks", field: "booklet_id", seed: None, lift: None },
+    Edge { collection: "sales_selection_sessions", field: "booklet_id", seed: None, lift: None },
+    Edge { collection: "sales_selection_idempotency", field: "booklet_id", seed: None, lift: None },
+    Edge { collection: "document_attachments", field: "document_id", seed: None, lift: None },
+    Edge {
+        collection: "sales_order_working_copy_lines",
+        field: "sku_id",
+        seed: Some(SeedKind::Sku),
+        lift: Some("working_copy_id"),
+    },
+    Edge {
+        collection: "purchase_order_submission_lines",
+        field: "sku_id",
+        seed: Some(SeedKind::Sku),
+        lift: Some("purchase_order_submission_id"),
+    },
+    Edge { collection: "stock_adjustment_lines", field: "stock_adjustment_id", seed: None, lift: None },
+    Edge { collection: "sales_return_cases", field: "sales_order_id", seed: None, lift: None },
+    Edge { collection: "sales_return_lines", field: "sales_return_case_id", seed: None, lift: None },
+    Edge { collection: "purchase_return_orders", field: "purchase_order_id", seed: None, lift: None },
+    Edge { collection: "purchase_return_lines", field: "purchase_return_order_id", seed: None, lift: None },
+    Edge { collection: "customer_refunds", field: "sales_return_case_id", seed: None, lift: None },
+    Edge { collection: "supplier_refunds", field: "purchase_return_order_id", seed: None, lift: None },
+    Edge { collection: "electronic_deliveries", field: "sales_order_line_id", seed: None, lift: None },
+    Edge { collection: "service_fulfillments", field: "sales_order_line_id", seed: None, lift: None },
+    Edge { collection: "receipt_allocations", field: "receivable_entry_id", seed: None, lift: None },
+    Edge { collection: "payment_allocations", field: "payable_entry_id", seed: None, lift: None },
+    Edge { collection: "invoices", field: "party_id", seed: Some(SeedKind::Party), lift: None },
+    Edge { collection: "invoices", field: "sales_invoice_request_id", seed: None, lift: None },
+    Edge { collection: "sales_invoice_allocations", field: "invoice_id", seed: None, lift: None },
+    Edge { collection: "purchase_invoice_allocations", field: "invoice_id", seed: None, lift: None },
+    Edge { collection: "receivable_entries", field: "source_document_id", seed: None, lift: None },
+    Edge { collection: "payable_entries", field: "source_document_id", seed: None, lift: None },
+    Edge { collection: "receivable_entry_offsets", field: "decrease_entry_id", seed: None, lift: None },
+    Edge { collection: "receivable_entry_offsets", field: "increase_entry_id", seed: None, lift: None },
+    Edge { collection: "payable_entry_offsets", field: "decrease_entry_id", seed: None, lift: None },
+    Edge { collection: "payable_entry_offsets", field: "increase_entry_id", seed: None, lift: None },
+    Edge { collection: "cost_allocations", field: "sales_order_id", seed: None, lift: None },
+    Edge {
+        collection: "purchase_line_sales_allocations",
+        field: "sales_order_revision_line_id",
+        seed: None,
+        lift: None,
+    },
+    Edge {
+        collection: "purchase_line_sales_allocations",
+        field: "purchase_order_revision_line_id",
+        seed: None,
+        lift: None,
+    },
+    Edge { collection: "sales_selection_display_items", field: "booklet_id", seed: None, lift: None },
+    Edge { collection: "sales_selection_pool_members", field: "booklet_id", seed: None, lift: None },
+    Edge {
+        collection: "sales_selection_proposal_display_lines",
+        field: "proposal_id",
+        seed: None,
+        lift: None,
+    },
+    Edge { collection: "sales_selection_proposal_sku_lines", field: "proposal_id", seed: None, lift: None },
     Edge { collection: "sales_orders", field: "customer_id", seed: Some(SeedKind::Customer), lift: None },
     Edge {
         collection: "sales_orders",
@@ -117,7 +269,12 @@ const EDGES: &[Edge] = &[
     Edge { collection: "stock_balances", field: "sku_id", seed: Some(SeedKind::Sku), lift: None },
     Edge { collection: "stock_movements", field: "sku_id", seed: Some(SeedKind::Sku), lift: None },
     Edge { collection: "stock_reservations", field: "sku_id", seed: Some(SeedKind::Sku), lift: None },
-    Edge { collection: "stock_adjustment_lines", field: "sku_id", seed: Some(SeedKind::Sku), lift: None },
+    Edge {
+        collection: "stock_adjustment_lines",
+        field: "sku_id",
+        seed: Some(SeedKind::Sku),
+        lift: Some("stock_adjustment_id"),
+    },
     Edge {
         collection: "sales_order_goods_service_line_revisions",
         field: "sku_id",
@@ -238,6 +395,10 @@ const EDGES: &[Edge] = &[
 ];
 
 const ID_PULLS: &[IdPull] = &[
+    IdPull { collection: "stock_adjustments", lift: None },
+    IdPull { collection: "sales_order_working_copies", lift: Some("sales_order_id") },
+    IdPull { collection: "purchase_order_submissions", lift: Some("purchase_order_id") },
+    IdPull { collection: "supplier_fulfillment_orders", lift: None },
     IdPull { collection: "sales_order_revision_lines", lift: Some("sales_order_revision_id") },
     IdPull { collection: "sales_order_revisions", lift: Some("sales_order_id") },
     IdPull { collection: "sales_order_submissions", lift: Some("sales_order_id") },
@@ -336,21 +497,6 @@ mod tests {
             assert!(edges().iter().all(|edge| edge.collection != name));
             assert!(id_pulls().iter().all(|pull| pull.collection != name));
         }
-    }
-
-    #[test]
-    fn stock_facts_match_demo_skus_without_following_source_documents() {
-        let movements =
-            edges().iter().filter(|edge| edge.collection == "stock_movements").collect::<Vec<_>>();
-        assert_eq!(movements.len(), 1);
-        assert_eq!(movements[0].field, "sku_id");
-        assert!(movements[0].lift.is_none());
-        let balances = edges().iter().find(|edge| edge.collection == "stock_balances").unwrap();
-        assert_eq!(balances.field, "sku_id");
-        assert!(
-            edges().iter().all(|edge| edge.field != "source_document_id" && edge.field != "last_movement_id")
-        );
-        assert!(id_pulls().iter().all(|pull| pull.lift != Some("source_document_id")));
     }
 
     #[test]

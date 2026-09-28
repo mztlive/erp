@@ -4,15 +4,14 @@ use application_core::AuditActor;
 use entity_core::{BaseModel, NOT_DELETED_TIMESTAMP};
 use erp_catalog::{
     CatalogExt, CreateProductBrandRequest, CreateProductCategoryRequest, CreateUnitOfMeasureRequest,
-    ProductKind, UpdateProductBrandRequest, UpdateProductCategoryRequest,
 };
 use persistence_core::NoTransaction;
 
 use super::DemoMasterDataService;
 use super::lifecycle::{self, DemoKindDictionary};
-use super::plan::{self, DemoStep};
+use super::plan::DemoStep;
 use super::record::{self, DemoMasterRecord};
-use crate::{Error, Result};
+use crate::Result;
 
 /// 一条演示主数据的处理结果。
 pub(super) enum EnsureOutcome {
@@ -27,60 +26,79 @@ pub(super) enum EnsureOutcome {
 }
 
 impl DemoMasterDataService {
-    pub(super) async fn ensure_unit(&self, actor: &AuditActor, step: &DemoStep) -> Result<EnsureOutcome> {
-        let (name, symbol) =
-            plan::unit_spec(&step.key).ok_or_else(|| Error::Internal("演示单位不存在".into()))?;
+    /// 读取单位种子并创建或恢复已登记记录。
+    ///
+    /// # 参数
+    /// `actor` - 操作人；`step` - 种子身份；`request` - 单位创建输入。
+    ///
+    /// # 返回
+    /// 返回创建、恢复或已存在结果。
+    ///
+    /// # 错误
+    /// 编号归属不符、领域校验或持久化失败时返回错误。
+    pub(super) async fn ensure_unit(
+        &self,
+        actor: &AuditActor,
+        step: &DemoStep,
+        request: &CreateUnitOfMeasureRequest,
+    ) -> Result<EnsureOutcome> {
         if let Some((id, live)) = self.lookup_unit(&step.key).await? {
             return self.adopt_coded(actor, step, DemoKindDictionary::Unit, id, live).await;
         }
-        let view = crate::create_unit_of_measure(
-            self.db.clone(),
-            CreateUnitOfMeasureRequest {
-                unit_code: step.key.clone(),
-                name: name.to_string(),
-                symbol: symbol.to_string(),
-                quantity_scale: 0,
-                status: None,
-            },
-            actor.clone(),
-        )
-        .await?;
+        let view = crate::create_unit_of_measure(self.db.clone(), request.clone(), actor.clone()).await?;
         self.remember(step, view.id, Vec::new()).await?;
         Ok(EnsureOutcome::Created)
     }
 
-    pub(super) async fn ensure_brand(&self, actor: &AuditActor, step: &DemoStep) -> Result<EnsureOutcome> {
+    /// 读取品牌种子并创建或恢复已登记记录。
+    ///
+    /// # 参数
+    /// `actor` - 操作人；`step` - 种子身份；`request` - 品牌创建输入。
+    ///
+    /// # 返回
+    /// 返回创建、恢复或已存在结果。
+    ///
+    /// # 错误
+    /// 编号归属不符、领域校验或持久化失败时返回错误。
+    pub(super) async fn ensure_brand(
+        &self,
+        actor: &AuditActor,
+        step: &DemoStep,
+        request: &CreateProductBrandRequest,
+    ) -> Result<EnsureOutcome> {
         if let Some((id, live)) = self.lookup_brand(&step.key).await? {
             return self.adopt_coded(actor, step, DemoKindDictionary::Brand, id, live).await;
         }
-        let view = self
-            .catalog()
-            .product_brand_create(CreateProductBrandRequest::new(step.key.clone(), step_label(step)), actor)
-            .await?;
+        let view = self.catalog().product_brand_create(request.clone(), actor).await?;
         self.remember(step, view.id, Vec::new()).await?;
         Ok(EnsureOutcome::Created)
     }
 
-    pub(super) async fn ensure_category(&self, actor: &AuditActor, step: &DemoStep) -> Result<EnsureOutcome> {
+    /// 读取分类种子并创建或恢复已登记记录。
+    ///
+    /// # 参数
+    /// `actor` - 操作人；`step` - 种子身份；`request` - 分类创建输入。
+    ///
+    /// # 返回
+    /// 返回创建、恢复或已存在结果。
+    ///
+    /// # 错误
+    /// 编号归属不符、领域校验或持久化失败时返回错误。
+    pub(super) async fn ensure_category(
+        &self,
+        actor: &AuditActor,
+        step: &DemoStep,
+        request: &CreateProductCategoryRequest,
+    ) -> Result<EnsureOutcome> {
         if let Some((id, live)) = self.lookup_category(&step.key).await? {
             return self.adopt_coded(actor, step, DemoKindDictionary::Category, id, live).await;
         }
-        let view = crate::create_product_category(
-            self.db.clone(),
-            CreateProductCategoryRequest {
-                category_code: step.key.clone(),
-                parent_category_id: None,
-                name: step_label(step),
-                product_kind: ProductKind::Physical,
-                status: None,
-            },
-            actor.clone(),
-        )
-        .await?;
+        let view = crate::create_product_category(self.db.clone(), request.clone(), actor.clone()).await?;
         self.remember(step, view.id, Vec::new()).await?;
         Ok(EnsureOutcome::Created)
     }
 
+    /// 校验实际 ID 归属后恢复已有字典。
     async fn adopt_coded(
         &self,
         actor: &AuditActor,
@@ -89,78 +107,15 @@ impl DemoMasterDataService {
         id: String,
         live: bool,
     ) -> Result<EnsureOutcome> {
+        record::ensure_owned(&self.db, &step.key, &id).await?;
         if !live {
             lifecycle::restore_dictionary(&self.db, actor, kind, &id).await?;
         }
-        self.refresh_dictionary_name(actor, step, kind, &id).await?;
         self.remember(step, id, Vec::new()).await?;
         Ok(if live { EnsureOutcome::Skipped } else { EnsureOutcome::Restored })
     }
 
-    async fn refresh_dictionary_name(
-        &self,
-        actor: &AuditActor,
-        step: &DemoStep,
-        kind: DemoKindDictionary,
-        id: &str,
-    ) -> Result<()> {
-        let name = step_label(step);
-        match kind {
-            DemoKindDictionary::Unit => Ok(()),
-            DemoKindDictionary::Brand => self.refresh_brand(actor, id, &name).await,
-            DemoKindDictionary::Category => self.refresh_category(actor, id, &name).await,
-        }
-    }
-
-    async fn refresh_brand(&self, actor: &AuditActor, id: &str, name: &str) -> Result<()> {
-        let Some(brand) =
-            self.db.product_brands().find_by_id_including_deleted(id, &mut NoTransaction).await?
-        else {
-            return Ok(());
-        };
-        if !brand.name.contains('演') {
-            return Ok(());
-        }
-        self.catalog()
-            .product_brand_update(
-                id,
-                UpdateProductBrandRequest {
-                    version: brand.base.version,
-                    name: Some(name.to_string()),
-                    status: None,
-                    logo_file_asset_id: None,
-                },
-                actor,
-            )
-            .await?;
-        Ok(())
-    }
-
-    async fn refresh_category(&self, actor: &AuditActor, id: &str, name: &str) -> Result<()> {
-        let Some(category) =
-            self.db.product_categories().find_by_id_including_deleted(id, &mut NoTransaction).await?
-        else {
-            return Ok(());
-        };
-        if !category.name.contains('演') {
-            return Ok(());
-        }
-        self.catalog()
-            .product_category_update(
-                id,
-                UpdateProductCategoryRequest {
-                    version: category.base.version,
-                    name: Some(name.to_string()),
-                    product_kind: None,
-                    status: None,
-                    parent_change: None,
-                },
-                actor,
-            )
-            .await?;
-        Ok(())
-    }
-
+    /// 按稳定单位编号读取包含软删除的数据。
     async fn lookup_unit(&self, key: &str) -> Result<Option<(String, bool)>> {
         Ok(coded_state(
             self.db
@@ -170,6 +125,7 @@ impl DemoMasterDataService {
         ))
     }
 
+    /// 按稳定品牌编号读取包含软删除的数据。
     async fn lookup_brand(&self, key: &str) -> Result<Option<(String, bool)>> {
         Ok(coded_state(
             self.db
@@ -179,6 +135,7 @@ impl DemoMasterDataService {
         ))
     }
 
+    /// 按稳定分类编号读取包含软删除的数据。
     async fn lookup_category(&self, key: &str) -> Result<Option<(String, bool)>> {
         Ok(coded_state(
             self.db
@@ -188,6 +145,16 @@ impl DemoMasterDataService {
         ))
     }
 
+    /// 登记本次实际写入的主键及关联 ID。
+    ///
+    /// # 参数
+    /// `step` - 种子身份；`entity_id` - 主键；`related_ids` - 从属记录主键。
+    ///
+    /// # 返回
+    /// 登记成功返回空结果。
+    ///
+    /// # 错误
+    /// 同一种子绑定了其他 ID 或数据库写入失败时返回错误。
     pub(super) async fn remember(
         &self,
         step: &DemoStep,
@@ -209,6 +176,7 @@ impl DemoMasterDataService {
     }
 }
 
+/// 提取字典记录的主键与有效状态。
 fn coded_state<T: Coded>(entity: Option<T>) -> Option<(String, bool)> {
     entity.map(|item| (item.identity(), item.base().deleted_at == NOT_DELETED_TIMESTAMP))
 }
@@ -235,6 +203,16 @@ coded!(erp_catalog::UnitOfMeasure);
 coded!(erp_catalog::ProductBrand);
 coded!(erp_catalog::ProductCategory);
 
+/// 读取 JSON 种子的显示名称。
+///
+/// # 参数
+/// `step` - 已校验的种子。
+///
+/// # 返回
+/// 返回种子显示名称的副本。
+///
+/// # 错误
+/// 无。
 pub(super) fn step_label(step: &DemoStep) -> String {
-    super::names::label(step).to_string()
+    step.request.label().to_string()
 }

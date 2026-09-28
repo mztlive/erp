@@ -6,8 +6,7 @@ use erp_customer::repository::customer::{
     CustomerAssignmentRepositoryExt, CustomerProfileCommandRepositoryExt,
 };
 use erp_customer::{
-    AddressType, AssignmentAction, AssignmentRole, CustomerAssignmentRequest, CustomerExt,
-    CustomerProfileAddressInput, CustomerProfileContactInput, SaveCustomerProfileRequest,
+    AssignmentAction, AssignmentRole, CustomerAssignmentRequest, CustomerExt, SaveCustomerProfileRequest,
 };
 use persistence_core::NoTransaction;
 
@@ -19,10 +18,21 @@ use crate::adapters::scoped_customer_assignment_service;
 use crate::{Error, Result};
 
 impl DemoMasterDataService {
+    /// 以销售岗位读取并执行客户种子。
+    ///
+    /// # 参数
+    /// `actor` - 操作人；`step` - 种子身份；`request` - 客户创建输入；`notices` - 跳过原因集合。
+    ///
+    /// # 返回
+    /// 返回客户创建、恢复或跳过结果。
+    ///
+    /// # 错误
+    /// 命令回执失效、领域写入或清单登记失败时返回错误。
     pub(super) async fn ensure_customer(
         &self,
         actor: &AuditActor,
         step: &DemoStep,
+        request: &SaveCustomerProfileRequest,
         notices: &mut Vec<String>,
     ) -> Result<EnsureOutcome> {
         if let Some(existing) = self.customer_command(&step.key).await? {
@@ -31,7 +41,7 @@ impl DemoMasterDataService {
         let Some(owner) = self.role_actor(&spec::foundation_spec().customer_owner_account).await? else {
             return Ok(EnsureOutcome::Notice("没有可用的销售账号，未生成客户".to_string()));
         };
-        let view = match self.customers().create(customer_request(step)?, &owner).await {
+        let view = match self.customers().create(request.clone(), &owner).await {
             Ok(view) => view,
             Err(Error::ValidationError(message) | Error::Forbidden(message)) => {
                 return Ok(EnsureOutcome::Notice(format!("未生成客户：{message}")));
@@ -53,6 +63,7 @@ impl DemoMasterDataService {
         Ok(if created { EnsureOutcome::Created } else { EnsureOutcome::Restored })
     }
 
+    /// 恢复命令回执绑定的客户并对齐销售负责人。
     async fn adopt_customer(
         &self,
         actor: &AuditActor,
@@ -73,18 +84,18 @@ impl DemoMasterDataService {
             lifecycle::restore_customer(&self.db, actor, customer_id).await?;
         }
         self.align_customer_owner(actor, customer_id, notices).await?;
-        let face = super::names::customer(step.ordinal);
-        self.rename_party_if_placeholder(actor, &party_id, face.legal_name, face.short_name).await?;
         record::save(&self.db, &customer_record(step, customer_id, &party_id)).await?;
         Ok(if live { EnsureOutcome::Skipped } else { EnsureOutcome::Restored })
     }
 
+    /// 按稳定幂等键定位此前创建的客户。
     async fn customer_command(&self, key: &str) -> Result<Option<String>> {
         let command =
             self.db.customer_profile_commands().find_by_idempotency_key(key, &mut NoTransaction).await?;
         Ok(command.map(|command| command.customer_id))
     }
 
+    /// 通过领域分配入口对齐演示客户的销售负责人。
     async fn align_customer_owner(
         &self,
         actor: &AuditActor,
@@ -123,36 +134,7 @@ impl DemoMasterDataService {
     }
 }
 
-fn customer_request(step: &DemoStep) -> Result<SaveCustomerProfileRequest> {
-    let ordinal = step.ordinal;
-    Ok(SaveCustomerProfileRequest {
-        idempotency_key: step.key.clone(),
-        expected_party_version: None,
-        expected_customer_version: None,
-        legal_name: super::names::customer(ordinal).legal_name.to_string(),
-        short_name: Some(super::names::customer(ordinal).short_name.to_string()),
-        unified_credit_code: None,
-        default_payment_term_id: None,
-        status: None,
-        owner_user_id: None,
-        contacts: Some(vec![
-            CustomerProfileContactInput::new(super::names::customer(ordinal).contact.to_string())
-                .with_mobile(super::names::customer(ordinal).phone.to_string())
-                .with_is_default(true),
-        ]),
-        addresses: Some(vec![CustomerProfileAddressInput {
-            existing_id: None,
-            address_type: AddressType::Operating,
-            contact_name: Some(super::names::customer(ordinal).contact.to_string()),
-            address: Some(super::names::customer(ordinal).address.to_string()),
-            is_default: true,
-        }]),
-        bank_accounts: None,
-        effective_from: super::demo_date()?,
-        change_reason: "演示主数据".to_string(),
-    })
-}
-
+/// 构造客户与主体实际 ID 的登记记录。
 fn customer_record(step: &DemoStep, customer_id: &str, party_id: &str) -> DemoMasterRecord {
     DemoMasterRecord {
         key: step.key.clone(),
@@ -164,6 +146,7 @@ fn customer_record(step: &DemoStep, customer_id: &str, party_id: &str) -> DemoMa
     }
 }
 
+/// 将已不存在的可选主体视为无需恢复。
 fn restore_optional(result: Result<()>) -> Result<()> {
     match result {
         Ok(()) | Err(Error::NotFound(_)) => Ok(()),
@@ -171,6 +154,7 @@ fn restore_optional(result: Result<()>) -> Result<()> {
     }
 }
 
+/// 合并不重复的业务提示。
 fn push_unique(notices: &mut Vec<String>, text: &str) {
     if !notices.iter().any(|item| item == text) {
         notices.push(text.to_string());

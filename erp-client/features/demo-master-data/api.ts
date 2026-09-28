@@ -63,10 +63,8 @@ export function applyDemoMasterData(cursor: number): Promise<DemoChunkReport> {
     )
 }
 
-export function removeDemoMasterData(purge: boolean): Promise<DemoChunkReport> {
-    const purgeFlag = purge ? "true" : "false"
-    return apiDelete<DemoChunkReport>(
-        `/admin/demo-master-data?purge=${purgeFlag}`,
-        { timeoutMs: REQUEST_TIMEOUT_MS },
-    )
+export function removeDemoMasterData(): Promise<DemoChunkReport> {
+    return apiDelete<DemoChunkReport>("/admin/demo-master-data", {
+        timeoutMs: REQUEST_TIMEOUT_MS,
+    })
 }
