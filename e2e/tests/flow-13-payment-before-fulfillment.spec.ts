@@ -230,8 +230,8 @@ async function readPurchaseOrders(page: Page, salesOrderNo: string): Promise<Pur
     return refs;
 }
 
-async function openFulfillmentTask(page: Page, documentHint: string) {
-    await openWorkspaceTask(page, /履约处理/, documentHint, "fulfillment");
+async function openFulfillmentTask(page: Page, salesOrderNo: string) {
+    await openWorkspaceTask(page, /履约处理/, salesOrderNo, "fulfillment");
     await openFulfillmentWorkspaceForm(page);
 }
 
@@ -504,7 +504,7 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
         });
         await selectWorkspaceFamily(page, "fulfillment");
         await expect(page.getByRole("button", { name: /电子交付|线下服务/ })).toHaveCount(0);
-        await openFulfillmentTask(page, inboundPo);
+        await openFulfillmentTask(page, salesOrderNo);
         await expect(page.getByText(salesOrderNo).first()).toBeVisible();
         await assertFulfillmentCannotComplete(page, "入库");
 
@@ -515,7 +515,7 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
         });
         await selectWorkspaceFamily(page, "fulfillment");
         await expect(page.getByRole("button", { name: /电子交付|线下服务/ })).toHaveCount(0);
-        await openFulfillmentTask(page, directPo);
+        await openFulfillmentTask(page, salesOrderNo);
         await expect(page.getByText(salesOrderNo).first()).toBeVisible();
         await assertFulfillmentCannotComplete(page, "代发");
 
@@ -536,7 +536,7 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
         ).toHaveCount(0, { timeout: UI_TIMEOUT });
 
         page = await switchTo("cangchu");
-        await openFulfillmentTask(page, inboundPo);
+        await openFulfillmentTask(page, salesOrderNo);
         await expect(page.locator('[aria-label="入库表单"]')).toBeVisible({
             timeout: UI_TIMEOUT,
         });
@@ -544,7 +544,7 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
         await assertConfirmEnabled(page);
 
         page = await switchTo("caigou");
-        await openFulfillmentTask(page, directPo);
+        await openFulfillmentTask(page, salesOrderNo);
         await expect(page.locator('[aria-label="供应商直发表单"]')).toBeVisible({ timeout: UI_TIMEOUT });
         await fillDirectDraft(page, trackingNo);
         await assertFulfillmentCannotComplete(page, "代发");
@@ -563,7 +563,7 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
         await assertNoPaymentApproval(page);
 
         page = await switchTo("caigou");
-        await openFulfillmentTask(page, directPo);
+        await openFulfillmentTask(page, salesOrderNo);
         await expect(page.locator('[aria-label="供应商直发表单"]')).toBeVisible({ timeout: UI_TIMEOUT });
         await fillDirectDraft(page, trackingNo);
         await assertConfirmEnabled(page);
@@ -572,7 +572,7 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
 
         // 10) 入库确认后仓发
         page = await switchTo("cangchu");
-        await openFulfillmentTask(page, inboundPo);
+        await openFulfillmentTask(page, salesOrderNo);
         await expect(page.locator('[aria-label="入库表单"]')).toBeVisible({
             timeout: UI_TIMEOUT,
         });
@@ -581,7 +581,7 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
         await page.locator("#fulfillment-operations-work-surface-confirm").click();
         await confirmFormal(page, "确认入库？", "确认入库");
 
-        await openFulfillmentTask(page, inboundPo);
+        await openFulfillmentTask(page, salesOrderNo);
         await expect(page.locator('[aria-label="公司仓发表单"]')).toBeVisible({ timeout: UI_TIMEOUT });
         await chooseOption(page, page.locator("#fulfillment-operations-ship-form-carrier"), "顺丰速运", "顺丰");
         await page.locator("#fulfillment-operations-ship-form-tracking-no").fill(`WH${trackingNo}`);

@@ -393,7 +393,7 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
 
         if (blocked) {
             page = await switchTo("fukuan")
-            await payOnlySupplierTask(page)
+            await payOnlySupplierTask(page, purchaseOrderNo)
         }
     }
 

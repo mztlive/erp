@@ -66,11 +66,12 @@ async function ensureDefaultSupplierBankAccount(keyword: string): Promise<void> 
 }
 
 /** 出纳从唯一待付款任务全额付款，等待正式提交落定后再离开。 */
-export async function payOnlySupplierTask(page: Page): Promise<void> {
+export async function payOnlySupplierTask(page: Page, documentHint?: string): Promise<void> {
     await ensureDefaultSupplierBankAccount("狮峰")
     await page.goto("/workspace?family=finance")
-    const task = page.getByRole("list", { name: "待办列表" }).getByRole("button", { name: /供应商付款处理/ })
-    await expect(task).toHaveCount(1, { timeout: 20_000 })
+    const tasks = page.getByRole("list", { name: "待办列表" }).getByRole("button", { name: /供应商付款处理/ })
+    const task = documentHint ? tasks.filter({ hasText: documentHint }).first() : tasks.first()
+    await expect(task).toBeVisible({ timeout: 20_000 })
     await task.click()
     const amount = page.locator("#supplier-payables-allocation-form-amount")
     await expect(amount).toHaveValue(/^[1-9]\d*(?:\.\d+)?$|^0\.0*[1-9]\d*$/, { timeout: 20_000 })

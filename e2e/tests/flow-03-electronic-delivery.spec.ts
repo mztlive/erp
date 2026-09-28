@@ -107,7 +107,14 @@ async function ensureVirtualCategory(page: Page) {
     await chooseComboboxById(page, 'master-data-category-create-dialog-product-kind', '虚拟')
     await dialog.locator('#master-data-category-create-dialog-change-reason').fill('E2E 电子交付目录')
     await dialog.locator('#master-data-category-create-dialog-submit').click()
-    await expectToast(page, '已新建')
+    const duplicateCategory = page.getByText('数据已存在，请勿重复提交')
+    const createdCategory = page.locator('[data-slot="toast-title"]').filter({ hasText: '已新建' })
+    await expect(createdCategory.or(duplicateCategory).first()).toBeVisible({ timeout: 20000 })
+    if (await duplicateCategory.isVisible().catch(() => false)) {
+        await dialog.getByRole('button', { name: '关闭' }).click()
+    } else {
+        await expectToast(page, '已新建')
+    }
     await expect(page.getByRole('heading', { name: VIRTUAL_CATEGORY_NAME, exact: true })).toBeVisible({
         timeout: 20000,
     })

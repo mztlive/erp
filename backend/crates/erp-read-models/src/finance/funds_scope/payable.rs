@@ -313,7 +313,7 @@ impl FundsAccess {
             Some(_) => purchase_whole(&authorization),
             None => authorization.funds.is_company(),
         };
-        let data = cut_payable_account_row(
+        let mut data = cut_payable_account_row(
             &PayableAccountRow {
                 id: account.base.id.clone(),
                 stable: account.stable.clone(),
@@ -332,6 +332,14 @@ impl FundsAccess {
             fact.as_ref(),
             whole,
         );
+        data.payment_recipient = crate::finance::payable::mapping::resolve_optional_payment_recipient_for_read(
+            &self.db,
+            &account.supplier_id,
+            executor,
+        )
+        .await?
+        .as_ref()
+        .map(crate::finance::payable::mapping::payment_recipient_view);
         let parts = vec![format!("{}:{}", account.base.id, account.base.version), row_facts.version_part()];
         Ok(FundsScopedResult {
             data,
@@ -366,5 +374,6 @@ pub(super) fn cut_payable_account_row(
         permission_limited: !whole,
         procurement_owner_user_id: fact.and_then(|order| order.owner_user_id.clone()),
         business_org_unit_id: fact.map(|order| order.business_org_unit_id.clone()),
+        payment_recipient: None,
     }
 }

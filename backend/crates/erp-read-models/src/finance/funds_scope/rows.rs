@@ -200,6 +200,9 @@ pub struct ScopedPayableAccountRow {
     pub procurement_owner_user_id: Option<String>,
     /// 来源采购单当前业务组织。
     pub business_org_unit_id: Option<String>,
+    /// 付款工作台需要的当前默认收款账户。列表不填，详情在能解析时返回。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub payment_recipient: Option<erp_finance::dto::payable::PaymentRecipientView>,
 }
 
 /// M09 供应商付款范围行：采购负责人与付款经办人分别查询。
@@ -809,6 +812,7 @@ mod tests {
                 permission_limited: true,
                 procurement_owner_user_id: Some("buyer-1".into()),
                 business_org_unit_id: Some("org-2".into()),
+                payment_recipient: None,
             }],
             "linked_purchase_owner",
             false,
