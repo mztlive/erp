@@ -1,5 +1,7 @@
 //! 演示主数据接口。
 
+use std::future::Future;
+
 use application_core::AuditActor;
 use axum::Json;
 use axum::extract::{Extension, State};
@@ -7,13 +9,14 @@ use erp_processes::demo_master_data::{
     ApplyDemoMasterDataRequest, DemoChunkReport, DemoFoundationReport, DemoStatus,
 };
 
+use super::work_item::assume_send;
 use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(
     group = "演示主数据",
-    group_desc = "准备演示主数据、岗位账号和审批流程，并删除由此产生的单据",
+    group_desc = "准备演示主数据、岗位账号、审批流程和默认责任规则，并删除由此产生的单据",
     desc = "查看演示主数据",
     resource = "demo_master_data",
     action = "read"
@@ -32,30 +35,32 @@ pub async fn demo_master_data_status(State(state): State<AppState>) -> Result<De
 
 #[permission_macros::permission(
     group = "演示主数据",
-    group_desc = "准备演示主数据、岗位账号和审批流程，并删除由此产生的单据",
-    desc = "准备岗位账号和审批流程",
+    group_desc = "准备演示主数据、岗位账号、审批流程和默认责任规则，并删除由此产生的单据",
+    desc = "准备岗位账号、审批流程和默认责任规则",
     resource = "demo_master_data",
     action = "apply"
 )]
-/// 补齐演示用的岗位账号和尚未发布的审批流程。
+/// 补齐演示用的岗位账号、尚未发布的审批流程，以及缺失的默认责任规则。
 ///
 /// # 参数
 /// * `state` - 应用状态
 /// * `actor` - 已通过鉴权的操作人
 ///
 /// # 返回
-/// 返回新建和已存在的数量。已有账号不改密码。
-pub async fn demo_master_data_foundation(
+/// 返回新建和已存在的数量。已有账号不改密码。已启用的默认责任规则保留现有负责人。
+pub fn demo_master_data_foundation(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
-) -> Result<DemoFoundationReport> {
-    let report = state.demo_master_data_service().ensure_foundation(&actor).await?;
-    Ok(ApiResponse::ok_with_data(report))
+) -> impl Future<Output = Result<DemoFoundationReport>> + Send {
+    assume_send(async move {
+        let report = state.demo_master_data_service().ensure_foundation(&actor).await?;
+        Ok(ApiResponse::ok_with_data(report))
+    })
 }
 
 #[permission_macros::permission(
     group = "演示主数据",
-    group_desc = "准备演示主数据、岗位账号和审批流程，并删除由此产生的单据",
+    group_desc = "准备演示主数据、岗位账号、审批流程和默认责任规则，并删除由此产生的单据",
     desc = "生成演示主数据",
     resource = "demo_master_data",
     action = "apply"
@@ -80,7 +85,7 @@ pub async fn demo_master_data_apply(
 
 #[permission_macros::permission(
     group = "演示主数据",
-    group_desc = "准备演示主数据、岗位账号和审批流程，并删除由此产生的单据",
+    group_desc = "准备演示主数据、岗位账号、审批流程和默认责任规则，并删除由此产生的单据",
     desc = "删除演示主数据",
     resource = "demo_master_data",
     action = "remove"

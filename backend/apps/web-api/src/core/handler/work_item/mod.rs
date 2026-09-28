@@ -26,7 +26,7 @@ use axum::{Extension, Json};
 ///
 /// # Errors
 /// None; errors come from `fut`.
-pub(super) fn assume_send<F>(fut: F) -> impl Future<Output = F::Output> + Send
+pub(crate) fn assume_send<F>(fut: F) -> impl Future<Output = F::Output> + Send
 where
     F: Future,
 {

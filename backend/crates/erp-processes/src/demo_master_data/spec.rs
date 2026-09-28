@@ -1,11 +1,11 @@
-//! 演示岗位、部门和审批链。脚本与接口共用本目录的 `dev-foundation.json`。
+//! 演示岗位、部门、审批链和默认责任规则。脚本与接口共用本目录的 `dev-foundation.json`。
 //!
 //! 规格必须放在 crate 内。web-api 镜像只复制 `backend/`，编译时读不到仓库根的 `scripts/`。
 
 use std::sync::OnceLock;
 
 use erp_party::dto::company::SaveCompanyRequest;
-use erp_workflow::DocumentType;
+use erp_workflow::{DocumentType, FinanceResponsibilityOperation};
 use serde::Deserialize;
 
 use crate::{Error, Result};
@@ -21,9 +21,19 @@ pub(super) struct FoundationFile {
     pub customer_owner_account: String,
     pub supplier_maintainer_account: String,
     pub warehouse_handler_account: String,
+    /// 默认采购调度人，取值是岗位规格键。
+    pub procurement_responsibility_owner: String,
+    pub finance_responsibilities: Vec<FinanceResponsibilitySpec>,
     pub accounts: Vec<AccountSpec>,
     pub departments: Vec<DepartmentSpec>,
     pub approvals: Vec<ApprovalSpec>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(super) struct FinanceResponsibilitySpec {
+    pub operation: FinanceResponsibilityOperation,
+    /// 岗位规格键。
+    pub owner: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -84,6 +94,8 @@ pub(super) fn document_type(code: &str) -> Result<DocumentType> {
 
 #[cfg(test)]
 mod tests {
+    use erp_workflow::FinanceResponsibilityOperation;
+
     use super::{document_type, foundation_spec};
 
     #[test]
@@ -133,6 +145,32 @@ mod tests {
             account_named(&spec.sales_leader_account).map(|account| account.role_id.as_str()),
             Some(spec.sales_leader_role_id.as_str())
         );
+    }
+
+    #[test]
+    fn default_responsibility_owners_are_the_procurement_and_finance_operators() {
+        let spec = foundation_spec();
+        let procurement =
+            account_by_login_key(&spec.procurement_responsibility_owner).expect("默认采购调度人");
+        assert_eq!(procurement.account, spec.supplier_maintainer_account);
+        assert_eq!(procurement.role_id, "role-procurement");
+
+        let operations = spec.finance_responsibilities.iter().map(|rule| rule.operation).collect::<Vec<_>>();
+        assert_eq!(
+            operations,
+            vec![
+                FinanceResponsibilityOperation::SupplierPayment,
+                FinanceResponsibilityOperation::SalesInvoice,
+            ]
+        );
+        let owners = spec
+            .finance_responsibilities
+            .iter()
+            .map(|rule| account_by_login_key(&rule.owner).expect("财务责任人"))
+            .collect::<Vec<_>>();
+        assert!(owners.iter().all(|owner| owner.role_id == "role-finance"));
+        assert_eq!(owners.iter().map(|owner| owner.key.as_str()).collect::<Vec<_>>(), ["payment", "invoice"]);
+        assert!(owners.iter().all(|owner| owner.key != "finance"));
     }
 
     fn account_named(login: &str) -> Option<&'static super::AccountSpec> {

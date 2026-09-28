@@ -8,6 +8,11 @@
   "customer_owner_account": "xiaoshou",
   "supplier_maintainer_account": "caigou",
   "warehouse_handler_account": "cangchu",
+  "procurement_responsibility_owner": "procurement",
+  "finance_responsibilities": [
+    {"operation": "SUPPLIER_PAYMENT", "owner": "payment"},
+    {"operation": "SALES_INVOICE", "owner": "invoice"}
+  ],
   "accounts": [
     {"key": "sales", "account": "xiaoshou", "name": "周晓彤", "role_id": "role-sales", "label": "周晓彤"},
     {"key": "salesLeader", "account": "lisiyong", "name": "李思勇", "role_id": "role-sales-leader", "label": "李思勇"},

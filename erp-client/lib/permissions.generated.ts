@@ -4975,7 +4975,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     },
     {
         name: "演示主数据",
-        description: "准备演示主数据、岗位账号和审批流程，并删除由此产生的单据",
+        description: "准备演示主数据、岗位账号、审批流程和默认责任规则，并删除由此产生的单据",
         permissions: [
             {
                 module: "admin",
@@ -5001,7 +5001,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 module: "admin",
                 method: "POST",
                 path: "/admin/demo-master-data/foundation",
-                description: "准备岗位账号和审批流程",
+                description: "准备岗位账号、审批流程和默认责任规则",
                 permission: {
                     resource: "demo_master_data",
                     action: "apply",

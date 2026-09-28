@@ -2,10 +2,12 @@
 /**
  * 开发开单底座：在业务数据已清空、web-api 已就绪后，补齐开单所需底座。
  *
- * 先按 §11 创建全部岗位账号，再写仓库、财务责任、客户与合同。
+ * 先按 §11 创建全部岗位账号，再写仓库、采购责任、财务责任、客户与合同。
  * 不写入销售单/采购单/库存/票款。供应商、商品与公司商品池由 seed-dev-catalog.mjs 补齐。
  * 仓库在主数据重置后由本脚本重建。
- * 付款与销项开票任务必须先有启用的财务责任规则，否则生产任务会失败关闭。
+ * 销售提交实物单前必须能解析默认采购调度人。付款与销项开票任务必须先有启用的财务责任规则，否则生产任务会失败关闭。
+ * 默认负责人读自 dev-foundation.json。已有启用默认规则但负责人不同时，本脚本改回规格负责人。
+ * 演示主数据接口只在缺少启用规则时创建，不改已有负责人。
  * 财务三人分责：caiwu 为财务总监，只审批采购单、资金单和库存调整，不得提交回款、退款或冲正；
  * fukuan 为出纳，执行付款任务并提交客户回款/退款/冲正；kaipiao 为默认开票负责人。
  * 供应商付款不得发布或启动独立审批。
@@ -23,16 +25,32 @@ import { ensureDevOrganization } from "./dev-organization-seed.mjs";
 import {
   ACCOUNTS,
   ADMIN,
+  FOUNDATION,
   call,
   ensureDevAccounts,
   login,
   printAccountDirectory,
 } from "./dev-seed-lib.mjs";
 
-const DEFAULT_FINANCE_RULES = [
-  { operation: "SUPPLIER_PAYMENT", label: "默认付款负责人", accountKey: "payment" },
-  { operation: "SALES_INVOICE", label: "默认开票负责人", accountKey: "invoice" },
-];
+const FINANCE_RULE_LABEL = {
+  SUPPLIER_PAYMENT: "默认付款负责人",
+  SALES_INVOICE: "默认开票负责人",
+};
+
+function financeRules() {
+  return FOUNDATION.finance_responsibilities.map((rule) => ({
+    operation: rule.operation,
+    label: FINANCE_RULE_LABEL[rule.operation] ?? rule.operation,
+    accountKey: rule.owner,
+  }));
+}
+
+function seededAccount(seeded, key, role) {
+  const owner = seeded[key];
+  if (!owner) throw new Error(`演示规格引用了不存在的${role} ${key}`);
+  return owner;
+}
+
 const WAREHOUSES = [
   {
     code: "BJ-TZ-01",
@@ -252,20 +270,24 @@ async function verifyWarehouseEligibility(adminToken, warehouseAccount) {
 /**
  * 校验财务账号具备付款与开票执行权限。
  */
-async function verifyFinanceEligibility(adminToken, people) {
+async function verifyFinanceEligibility(adminToken, seeded) {
   const options = await call("GET", "/admin/finance-responsibility-owner-options", {
     token: adminToken,
   });
   const rows = Array.isArray(options) ? options : [];
-  const paymentOption = rows.find((row) => row.user_id === people.payment.id);
-  if (!paymentOption?.supplier_payment_eligible) {
-    throw new Error("fukuan 不具备付款完整执行权限，无法配置默认付款负责人");
+  for (const rule of financeRules()) {
+    const owner = seededAccount(seeded, rule.accountKey, "财务责任人");
+    const option = rows.find((row) => row.user_id === owner.id);
+    const eligible =
+      rule.operation === "SUPPLIER_PAYMENT"
+        ? option?.supplier_payment_eligible
+        : rule.operation === "SALES_INVOICE"
+          ? option?.sales_invoice_eligible
+          : false;
+    if (!eligible) {
+      throw new Error(`${owner.account} 不具备${rule.label}所需的完整执行权限`);
+    }
   }
-  const invoiceOption = rows.find((row) => row.user_id === people.invoice.id);
-  if (!invoiceOption?.sales_invoice_eligible) {
-    throw new Error("kaipiao 不具备销项开票完整执行权限，无法配置默认开票负责人");
-  }
-  const financeOption = rows.find((row) => row.user_id === people.finance.id);
 }
 
 function findDefaultFinanceRule(rows, operation) {
@@ -273,11 +295,11 @@ function findDefaultFinanceRule(rows, operation) {
   return matches.find((row) => row.status === "active") ?? matches[0] ?? null;
 }
 
-async function ensureDefaultFinanceRules(adminToken, people) {
+async function ensureDefaultFinanceRules(adminToken, seeded) {
   const listed = await call("GET", "/admin/finance-responsibility-rules", { token: adminToken });
   const rows = Array.isArray(listed) ? listed : [];
-  for (const rule of DEFAULT_FINANCE_RULES) {
-    const owner = people[rule.accountKey];
+  for (const rule of financeRules()) {
+    const owner = seededAccount(seeded, rule.accountKey, "财务责任人");
     const existing = findDefaultFinanceRule(rows, rule.operation);
     if (existing?.status === "active" && existing.owner_user_id === owner.id) {
       console.log(`${rule.label}已是 ${owner.account}，跳过`);
@@ -310,7 +332,8 @@ async function ensureDefaultFinanceRules(adminToken, people) {
   }
 }
 
-async function ensureDefaultProcurementRule(adminToken, owner) {
+async function ensureDefaultProcurementRule(adminToken, seeded) {
+  const owner = seededAccount(seeded, FOUNDATION.procurement_responsibility_owner, "采购责任人");
   const path = "/admin/procurement-responsibility-rules";
   const rows = [];
   for (let page = 1; ; page += 1) {
@@ -407,14 +430,9 @@ async function main() {
 
   await verifyWarehouseEligibility(adminToken, seeded.warehouse);
   const warehouses = await ensureWarehouses(adminToken, seeded.warehouse.id);
-  const financePeople = {
-    finance: seeded.finance,
-    payment: seeded.payment,
-    invoice: seeded.invoice,
-  };
-  await verifyFinanceEligibility(adminToken, financePeople);
-  await ensureDefaultFinanceRules(adminToken, financePeople);
-  await ensureDefaultProcurementRule(adminToken, seeded.procurement);
+  await verifyFinanceEligibility(adminToken, seeded);
+  await ensureDefaultFinanceRules(adminToken, seeded);
+  await ensureDefaultProcurementRule(adminToken, seeded);
 
   let customer = await findCustomer(adminToken);
   if (customer) {
@@ -463,10 +481,13 @@ async function main() {
   );
   console.log("销售负责人: xiaoshou");
   console.log("库存调整经办: cangchu（caiwu 只审批）");
-  console.log("默认采购调度人: caigou");
+  console.log(`默认采购调度人: ${seeded[FOUNDATION.procurement_responsibility_owner].account}`);
   console.log("采购单审批人（财务总监）: caiwu");
-  console.log("默认付款任务负责人（出纳）: fukuan");
-  console.log("默认开票负责人: kaipiao");
+  for (const rule of financeRules()) {
+    const title =
+      rule.operation === "SUPPLIER_PAYMENT" ? "默认付款任务负责人（出纳）" : rule.label;
+    console.log(`${title}: ${seeded[rule.accountKey].account}`);
+  }
   console.log(
     "客户回款/退款/冲正经办: fukuan（出纳提交；caiwu 只审批，自己提交会因岗位分离失败）",
   );

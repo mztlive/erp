@@ -38,6 +38,8 @@ export type DemoFoundationReport = {
     approvals_published: number
     approvals_existing: number
     approvals_mismatched: number
+    responsibilities_created: number
+    responsibilities_existing: number
     notices: string[]
 }
 

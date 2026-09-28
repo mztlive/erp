@@ -1,7 +1,7 @@
 //! 系统管理中的演示主数据。
 //!
-//! 生成客户、供应商、商品、仓库和字典，并补齐岗位账号与审批流程。
-//! 删除时先清掉引用这批主数据的单据，再删主数据。账号和已发布审批流程保留。
+//! 生成客户、供应商、商品、仓库和字典，并补齐岗位账号、审批流程和默认责任规则。
+//! 删除时先清掉引用这批主数据的单据，再删主数据。账号、已发布审批流程和默认责任规则保留。
 
 mod accounts;
 mod approvals;
@@ -19,6 +19,7 @@ mod organization;
 mod plan;
 mod removal;
 mod repository;
+mod responsibility;
 use repository::record;
 mod seed;
 mod service;
