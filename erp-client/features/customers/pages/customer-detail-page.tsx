@@ -200,7 +200,7 @@ export function CustomerDetailPage({
                 >
                     <TabsList
                         variant="line"
-                        className="sticky top-0 z-10 w-full justify-start overflow-x-auto rounded-none border-b border-grid bg-card px-0"
+                        className="sticky top-0 z-10 w-full justify-start overflow-x-auto rounded-none border-b border-grid bg-card px-4"
                     >
                         {SECTION_NAV.map((item) => (
                             <TabsTrigger
@@ -214,10 +214,7 @@ export function CustomerDetailPage({
                         ))}
                     </TabsList>
 
-                    <TabsContent
-                        value="overview"
-                        className="px-3 pb-3 md:px-4 md:pb-4"
-                    >
+                    <TabsContent value="overview" className="pb-4">
                         <CustomerDetailOverviewTab
                             customer={customer}
                             refetch={() => void query.refetch()}
@@ -231,40 +228,28 @@ export function CustomerDetailPage({
                         />
                     </TabsContent>
 
-                    <TabsContent
-                        value="related"
-                        className="px-3 pb-3 md:px-4 md:pb-4"
-                    >
+                    <TabsContent value="related" className="pb-4">
                         <CustomerDetailRelatedTab
                             customer={customer}
                             refetch={() => void query.refetch()}
                         />
                     </TabsContent>
 
-                    <TabsContent
-                        value="settlement"
-                        className="px-3 pb-3 md:px-4 md:pb-4"
-                    >
+                    <TabsContent value="settlement" className="pb-4">
                         <CustomerDetailSettlementTab
                             customer={customer}
                             refetch={() => void query.refetch()}
                         />
                     </TabsContent>
 
-                    <TabsContent
-                        value="quality"
-                        className="px-3 pb-3 md:px-4 md:pb-4"
-                    >
+                    <TabsContent value="quality" className="pb-4">
                         <CustomerDetailQualityTab
                             customer={customer}
                             refetch={() => void query.refetch()}
                         />
                     </TabsContent>
 
-                    <TabsContent
-                        value="audit"
-                        className="px-3 pb-3 md:px-4 md:pb-4"
-                    >
+                    <TabsContent value="audit" className="pb-4">
                         <CustomerDetailAuditTab
                             customer={customer}
                             refetch={() => void query.refetch()}
