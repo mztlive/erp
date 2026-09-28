@@ -29,7 +29,7 @@ import {
     type Page,
 } from "@playwright/test"
 
-import { apiGet, apiLogin } from "../helpers/api"
+import { API_BASE, apiGet, apiLogin } from "../helpers/api"
 import { createCustomerViaUi } from "../helpers/customers"
 import { openLoggedInWorkspace } from "../helpers/login"
 import {
@@ -165,6 +165,58 @@ async function findSeededOfferingRow(page: Page) {
     return offeringRow
 }
 
+/**
+ * 九月种子写入时还没有维护人和主属组织。停止可供与恢复走同一校验，空责任两边都会拒绝。
+ * 交接是补责任的正式路径，目标是建档管理员及其主属组织。
+ */
+async function ensureSeededOfferingResponsibility() {
+    const token = await apiLogin("admin")
+    const listed = await apiGet<{
+        items?: Array<{
+            id: string
+            supplier_name?: string | null
+            sku_no?: string | null
+            maintainer_user_id?: string
+            business_org_unit_id?: string
+            version: number
+        }>
+    }>(token, "/admin/supplier-offerings", { q: SKU_NO, page: 1, page_size: 50 })
+    const rows = (listed.items ?? []).filter(
+        (row) => row.supplier_name === "杭州狮峰茶叶有限公司" && row.sku_no === SKU_NO,
+    )
+    if (rows.length !== 1) throw new Error(`杭州狮峰供给应为 1 条，实际 ${rows.length}`)
+    const offering = rows[0]
+    if (!offering) throw new Error("杭州狮峰供给不存在")
+    if (offering.maintainer_user_id?.trim() && offering.business_org_unit_id?.trim()) return
+    const org = await apiGet<{
+        people?: Array<{ id: string; account: string; active: boolean; own_org_unit_id?: string | null }>
+    }>(token, "/admin/org-units")
+    const admin = org.people?.find((person) => person.account === "admin" && person.active)
+    const orgId = admin?.own_org_unit_id?.trim()
+    if (!admin?.id || !orgId) throw new Error("建档管理员没有主属组织，无法交接供给")
+    await apiPost(token, `/admin/supplier-offerings/${encodeURIComponent(offering.id)}/handover`, {
+        target_user_id: admin.id,
+        target_org_unit_id: orgId,
+        reason: "E2E 补齐种子供给的维护人与主属组织",
+        expected_version: offering.version,
+        idempotency_key: `flow18-offering-handover-${offering.id}-v${offering.version}`,
+    })
+}
+
+async function apiPost(token: string, path: string, body: unknown) {
+    const response = await fetch(`${API_BASE}${path}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(15_000),
+    })
+    const text = await response.text()
+    const parsed = text ? (JSON.parse(text) as { success?: boolean; errorMessage?: string }) : null
+    if (!response.ok || parsed?.success === false) {
+        throw new Error(`API POST ${path} 失败（HTTP ${response.status}）: ${parsed?.errorMessage ?? text}`)
+    }
+}
+
 test("flow-18 停止可供后供给分配不得建采购单，必须走销售变更且禁止回到审批", async ({
     browser,
 }) => {
@@ -294,8 +346,9 @@ test("flow-18 停止可供后供给分配不得建采购单，必须走销售变
         await expect(page.getByRole("button", { name: "预览供给分配" })).toBeVisible()
 
         // 5) 供给分配确认前停止该 SKU 的有效供给。
-        // 采购岗位没有供给列表范围；种子供给的维护人是建档管理员。
+        // 采购岗位没有供给列表范围。旧种子没有责任字段时先交接给建档管理员。
         page = await switchTo("admin")
+        await ensureSeededOfferingResponsibility()
         const offeringRow = await findSeededOfferingRow(page)
         await expect(offeringRow.getByText("可供").first()).toBeVisible()
         const quantityBefore = (await offeringRow.locator("td").filter({ hasText: /数量/ }).first().innerText()).match(/数量\s*([\d.]+)/)?.[1]

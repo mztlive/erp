@@ -2,8 +2,9 @@
 
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
+use erp_core::AccountKind;
 use erp_identity::repository::prelude::*;
-use erp_identity::{AccessControlExt, Permission, SharedRbacService};
+use erp_identity::{AccessControlExt, Permission, SharedRbacService, subject};
 use erp_supply::{HandoverCandidateView, HandoverSupplierOfferingRequest, HandoverSupplierOfferingView};
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
@@ -105,7 +106,7 @@ pub async fn handover_candidates(
         if account.base.id == offering.maintainer_user_id || !account.is_active_backoffice() {
             continue;
         }
-        if !account_can_maintain(&rbac, &account.base.id).await? {
+        if !account_can_maintain(&rbac, account.kind, &account.base.id).await? {
             continue;
         }
         candidates.push(HandoverCandidateView {
@@ -187,7 +188,7 @@ async fn ensure_target_qualified(
     let Some(account) = db.accounts().find_by_id(target, executor).await? else {
         return Err(Error::Forbidden("目标账号不存在、已失效或不具备供给维护资格".into()));
     };
-    if !account.is_active_backoffice() || !account_can_maintain(rbac, target).await? {
+    if !account.is_active_backoffice() || !account_can_maintain(rbac, account.kind, target).await? {
         return Err(Error::Forbidden("目标账号不存在、已失效或不具备供给维护资格".into()));
     }
     Ok(())
@@ -197,16 +198,35 @@ async fn ensure_target_qualified(
 ///
 /// # 参数
 /// * `rbac` - RBAC 快照
-/// * `user_id` - 账号
+/// * `kind` - 账号类型；与路由鉴权一起组成 Casbin 主体
+/// * `user_id` - 账号 ID
 ///
 /// # 返回
 /// 具备维护资格时为 true。
 ///
 /// # 错误
 /// RBAC 判定失败时拒绝。
-async fn account_can_maintain(rbac: &SharedRbacService, user_id: &str) -> Result<bool> {
+///
+/// # 关键业务约束
+/// 主体必须是 `user:{kind}:{id}`。裸账号 ID 对不上已发布策略，交接会把合格维护人全部拒绝。
+async fn account_can_maintain(rbac: &SharedRbacService, kind: AccountKind, user_id: &str) -> Result<bool> {
     let permission = Permission::parse("supplier_offering:update").map_err(Error::from)?;
-    Ok(rbac.enforce(user_id, &permission).await?)
+    Ok(rbac.enforce(&maintainer_casbin_subject(kind, user_id), &permission).await?)
+}
+
+/// 供给维护资格使用与路由鉴权相同的 Casbin 主体。
+///
+/// # 参数
+/// * `kind` - 账号类型
+/// * `user_id` - 账号 ID
+///
+/// # 返回
+/// 返回 `user:{kind}:{id}`。
+///
+/// # 错误
+/// 无。
+fn maintainer_casbin_subject(kind: AccountKind, user_id: &str) -> String {
+    subject(kind, user_id)
 }
 
 /// 计算交接命令指纹，供幂等回放比对。
@@ -266,6 +286,14 @@ mod tests {
         let mut other_key = req.clone();
         other_key.idempotency_key = "key-2".into();
         assert_ne!(first, handover_fingerprint("actor", "offering-1", &other_key, "key-2").unwrap());
+    }
+
+    #[test]
+    fn maintainer_subject_includes_account_kind() {
+        let user_id = "user-1";
+        let casbin_subject = maintainer_casbin_subject(AccountKind::Admin, user_id);
+        assert_eq!(casbin_subject, format!("user:admin:{user_id}"));
+        assert_ne!(casbin_subject, user_id);
     }
 
     #[test]

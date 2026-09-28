@@ -55,7 +55,6 @@ import {
     openWorkspaceTask,
     pickCalendarDay,
     readHeaderDocumentNumber,
-    selectWorkspaceFamily,
 } from "../helpers/ui";
 
 test.describe.configure({ mode: "serial" });
@@ -180,18 +179,22 @@ async function confirmSupplierPaymentIfGated(page: Page): Promise<boolean> {
     );
 }
 
-async function submitSupplierPayment(page: Page, stamp: string) {
-    await openWorkspaceTask(page, "供应商付款处理", undefined, "finance");
-    await expect(page.getByLabel("付款金额").or(page.locator("#supplier-payables-allocation-form-amount"))).toBeVisible({
-        timeout: UI_TIMEOUT,
-    });
-    const payAmount = page.locator("#supplier-payables-allocation-form-amount");
-    if (await payAmount.count()) {
-        const current = await payAmount.inputValue();
-        if (!current) {
-            await payAmount.fill("1");
+async function fillDirectShipQuantity(page: Page) {
+    const shipQty = page.locator('[id^="fulfillment-operations-direct-form-quantity-"]').first();
+    if (await shipQty.count()) {
+        const current = await shipQty.inputValue();
+        if (!current || current === "0") {
+            await shipQty.fill(SALES_QTY);
         }
     }
+}
+
+async function submitSupplierPayment(page: Page, stamp: string, purchaseNo: string) {
+    await openWorkspaceTask(page, "供应商付款处理", purchaseNo, "finance");
+    await expect(page.getByText(purchaseNo).first()).toBeVisible({ timeout: UI_TIMEOUT });
+    const payAmount = page.locator("#supplier-payables-allocation-form-amount");
+    await expect(payAmount).toBeVisible({ timeout: UI_TIMEOUT });
+    await expect(payAmount).toHaveValue(/^[1-9]\d*(?:\.\d+)?$|^0\.0*[1-9]\d*$/);
     const bankRef = page.locator("#supplier-payables-allocation-form-bank-reference");
     if (await bankRef.count()) {
         await bankRef.fill(`BR${stamp}`);
@@ -201,12 +204,20 @@ async function submitSupplierPayment(page: Page, stamp: string) {
     const payDialog = page.getByRole("alertdialog").filter({ hasText: "确认付款" });
     await expect(payDialog).toBeVisible({ timeout: UI_TIMEOUT });
     await expect(payDialog.getByText("提交审批")).toHaveCount(0);
+    const committed = page.waitForResponse(
+        (response) =>
+            response.request().method() === "POST" &&
+            response.url().includes("/admin/supplier-payments/commit"),
+        { timeout: 60_000 },
+    );
     const confirm = payDialog.locator("#supplier-payables-payment-submit-confirm-confirm");
     if (await confirm.count()) {
         await confirm.click();
     } else {
         await payDialog.getByRole("button", { name: "确认付款" }).click();
     }
+    const response = await committed;
+    expect(response.ok(), await response.text()).toBe(true);
     await expect(payDialog).toBeHidden({ timeout: UI_TIMEOUT });
 }
 
@@ -431,7 +442,7 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
         await openFulfillmentWorkspaceForm(page);
         if (await confirmSupplierPaymentIfGated(page)) {
             page = await switchTo("fukuan");
-            await submitSupplierPayment(page, stamp);
+            await submitSupplierPayment(page, stamp, purchaseOrderNo);
             page = await switchTo("caigou");
             await openWorkspaceTask(page, "履约处理", customerName, "fulfillment");
             await openFulfillmentWorkspaceForm(page);
@@ -441,22 +452,17 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
         await expect(page.locator('[aria-label="供应商直发表单"]')).toBeVisible({ timeout: UI_TIMEOUT });
         await chooseOption(page, page.locator("#fulfillment-operations-direct-form-carrier"), "顺丰速运");
         await page.locator("#fulfillment-operations-direct-form-tracking-no").fill(trackingNo);
-        const shipQty = page.locator('[id^="fulfillment-operations-direct-form-quantity-"]').first();
-        if (await shipQty.count()) {
-            const current = await shipQty.inputValue();
-            if (!current || current === "0") {
-                await shipQty.fill(SALES_QTY);
-            }
-        }
+        await fillDirectShipQuantity(page);
         const confirmShip = page.locator("#fulfillment-operations-work-surface-confirm");
         if (!(await confirmShip.isEnabled().catch(() => false))) {
             page = await switchTo("fukuan");
-            await submitSupplierPayment(page, stamp);
+            await submitSupplierPayment(page, stamp, purchaseOrderNo);
             page = await switchTo("caigou");
             await openWorkspaceTask(page, "履约处理", customerName, "fulfillment");
             await openFulfillmentWorkspaceForm(page);
             await chooseOption(page, page.locator("#fulfillment-operations-direct-form-carrier"), "顺丰速运");
             await page.locator("#fulfillment-operations-direct-form-tracking-no").fill(trackingNo);
+            await fillDirectShipQuantity(page);
         }
         await expect(page.locator("#fulfillment-operations-work-surface-confirm")).toBeEnabled({
             timeout: UI_TIMEOUT,
@@ -689,11 +695,15 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
 
         // 17) 出纳完成供应商付款（若履约前未付完），形成原付款事实
         page = await switchTo("fukuan");
-        await page.goto("/workspace");
-        await selectWorkspaceFamily(page, "finance");
-        const payTask = page.getByRole("button", { name: /供应商付款处理/ });
+        await page.goto("/workspace?family=finance");
+        await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible({
+            timeout: UI_TIMEOUT,
+        });
+        const payTask = page
+            .getByRole("list", { name: "待办列表" })
+            .getByRole("button", { name: new RegExp(`供应商付款处理[\\s\\S]*${purchaseOrderNo}`) });
         if (await payTask.count()) {
-            await submitSupplierPayment(page, `${stamp}B`);
+            await submitSupplierPayment(page, `${stamp}B`, purchaseOrderNo);
         }
 
         // 18) 财务登记进项蓝票（红票依据）。进项登记入口在 W12，flow-07 由 caiwu 操作
