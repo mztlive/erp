@@ -549,6 +549,22 @@ async function uploadContract(
     await expect(page.getByRole("button", { name: `打开合同 ${input.contractNo}`, exact: true })).toBeVisible({ timeout: LONG })
 }
 
+// 负责销售是展示名，不是输入框：必须等于侧栏账号菜单里的当前用户，且不能停在占位文案。
+async function expectLoggedInSalesOwner(page: Page, timeout: number) {
+    const placeholders = ["加载当前用户…", "无法获取登录用户", "当前用户未就绪"]
+    const accountName = page.locator("#workspace-sidebar-account-trigger span.font-medium")
+    const ownerName = page.locator("#sales-orders-create-header-owner-name > span").nth(1)
+    await expect(accountName).toBeVisible({ timeout })
+    await expect(ownerName).toBeVisible({ timeout })
+    await expect(async () => {
+        const account = ((await accountName.textContent()) ?? "").trim()
+        const owner = ((await ownerName.textContent()) ?? "").trim()
+        expect(account).not.toBe("")
+        expect(owner).toBe(account)
+        expect(placeholders).not.toContain(owner)
+    }).toPass({ timeout })
+}
+
 async function createAndSubmitPhysicalSalesOrder(
     page: Page,
     input: { customerId: string; contractNo: string; legalName: string },
@@ -567,9 +583,7 @@ async function createAndSubmitPhysicalSalesOrder(
     await expect(page.getByText(new RegExp(`客户\\s+${input.legalName}`))).toBeVisible({
         timeout: LONG,
     })
-    await expect(page.locator("#sales-orders-create-header-owner-name")).not.toHaveValue("", {
-        timeout: LONG,
-    })
+    await expectLoggedInSalesOwner(page, LONG)
 
     await chooseOption(
         page,

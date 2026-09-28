@@ -136,6 +136,22 @@ async function clearWorkspaceSearch(page: Page) {
   }
 }
 
+// 负责销售是展示名，不是输入框：必须等于侧栏账号菜单里的当前用户，且不能停在占位文案。
+async function expectLoggedInSalesOwner(page: Page, timeout: number) {
+  const placeholders = ['加载当前用户…', '无法获取登录用户', '当前用户未就绪']
+  const accountName = page.locator('#workspace-sidebar-account-trigger span.font-medium')
+  const ownerName = page.locator('#sales-orders-create-header-owner-name > span').nth(1)
+  await expect(accountName).toBeVisible({ timeout })
+  await expect(ownerName).toBeVisible({ timeout })
+  await expect(async () => {
+    const account = ((await accountName.textContent()) ?? '').trim()
+    const owner = ((await ownerName.textContent()) ?? '').trim()
+    expect(account).not.toBe('')
+    expect(owner).toBe(account)
+    expect(placeholders).not.toContain(owner)
+  }).toPass({ timeout })
+}
+
 test.describe.configure({ mode: 'serial' })
 
 test('flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅推荐采购 → 服务履约 → 销售验收', async ({ browser }) => {
@@ -210,7 +226,7 @@ test('flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
       contractNo,
     )
     await expect(sales.page.getByText(legalName).first()).toBeVisible({ timeout: TIMEOUT })
-    await expect(sales.page.getByLabel('负责销售')).not.toHaveValue('', { timeout: TIMEOUT })
+    await expectLoggedInSalesOwner(sales.page, TIMEOUT)
     await chooseOption(sales.page, sales.page.locator('#sales-orders-create-header-welfare-scene'), '年节礼包')
     // 付款条件必填缺一不可，否则提交按钮保持禁用（与 flow-03 同款）。
     await chooseOption(
