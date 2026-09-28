@@ -190,16 +190,21 @@ export function InvoiceRequestPanel({
                                         {request.sales_order_no}
                                     </TableCell>
                                     <TableCell>
-                                        {request.data.invoice_title}
+                                        {request.data?.invoice_title || "—"}
                                     </TableCell>
                                     <TableCell>
                                         <MoneyValue
-                                            value={request.data.amount}
+                                            value={
+                                                request.data?.amount || "0.00"
+                                            }
                                         />
                                     </TableCell>
                                     <TableCell>
                                         <MoneyValue
-                                            value={request.invoiced_amount}
+                                            value={
+                                                request.invoiced_amount ||
+                                                "0.00"
+                                            }
                                         />
                                     </TableCell>
                                     <TableCell>

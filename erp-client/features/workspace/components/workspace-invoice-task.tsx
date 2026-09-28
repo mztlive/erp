@@ -36,6 +36,40 @@ type WorkspaceInvoiceTaskProps = Readonly<{
     onTaskCompleted?: (workItemId: string) => void
 }>
 
+/**
+ * 范围行只有销售单和行级金额，不一定带回应收子账。
+ * 已有子账必须一致；缺子账时用销售单核对，避免整页因缺字段关掉作业面。
+ */
+function approvedRequestMatches(
+    request: InvoiceRequest,
+    receivable: { accountId: string; salesOrderId: string },
+): boolean {
+    if (request.status !== "approved") return false
+    if (
+        request.receivable_account_id &&
+        request.receivable_account_id !== receivable.accountId
+    ) {
+        return false
+    }
+    if (
+        request.sales_order_id &&
+        request.sales_order_id !== receivable.salesOrderId
+    ) {
+        return false
+    }
+    return Boolean(request.receivable_account_id || request.sales_order_id)
+}
+
+function remainingApproved(amount: string, invoiced: string): string {
+    if (
+        !/^-?\d+(?:\.\d{1,2})?$/.test(amount) ||
+        !/^-?\d+(?:\.\d{1,2})?$/.test(invoiced)
+    ) {
+        return amount || "0.00"
+    }
+    return subtractFixed(amount, invoiced, { maxScale: 2, outputScale: 2 })
+}
+
 /** W01 开票作业面：任务身份锁定一个销售应收，登记销项发票不离开工作台。 */
 export function WorkspaceInvoiceTask({
     item,
@@ -148,8 +182,7 @@ export function WorkspaceInvoiceTask({
                     </AlertDescription>
                 </Alert>
             ) : !approvedRequest ||
-              approvedRequest.status !== "approved" ||
-              approvedRequest.receivable_account_id !== receivable.accountId ? (
+              !approvedRequestMatches(approvedRequest, receivable) ? (
                 <Alert variant="warning">
                     <AlertTitle>此任务没有可执行的已批准申请</AlertTitle>
                     <AlertDescription>
@@ -162,10 +195,9 @@ export function WorkspaceInvoiceTask({
                     item={item}
                     receivable={{
                         ...receivable,
-                        openInvoiceableTotal: subtractFixed(
-                            approvedRequest.data.amount,
-                            approvedRequest.invoiced_amount,
-                            { maxScale: 2, outputScale: 2 },
+                        openInvoiceableTotal: remainingApproved(
+                            approvedRequest.data?.amount || "0.00",
+                            approvedRequest.invoiced_amount || "0.00",
                         ),
                     }}
                     onTaskCompleted={onTaskCompleted}
@@ -281,10 +313,10 @@ function WorkspaceInvoiceSession({
                 </p>
                 <dl className="mt-3 grid gap-3 sm:grid-cols-2">
                     {[
-                        ["开票抬头", request.data.invoice_title],
-                        ["税号", request.data.tax_number],
-                        ["开票内容", request.data.invoice_content],
-                        ["申请事由", request.data.reason],
+                        ["开票抬头", request.data?.invoice_title || "—"],
+                        ["税号", request.data?.tax_number || "—"],
+                        ["开票内容", request.data?.invoice_content || "—"],
+                        ["申请事由", request.data?.reason || "—"],
                     ].map(([label, value]) => (
                         <div key={label}>
                             <dt className="text-muted-foreground">{label}</dt>

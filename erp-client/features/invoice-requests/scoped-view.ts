@@ -52,10 +52,14 @@ export async function fetchInvoiceRequestScopeDetail(
     id: string,
 ): Promise<ScopedInvoiceRequestWire | null> {
     try {
-        const result = await apiGet<FundsScopedInvoiceRequestResultWire>(
-            `/admin/sales-invoice-requests/${encodeURIComponent(id)}`,
-        )
-        return result.data
+        const result = await apiGet<
+            FundsScopedInvoiceRequestResultWire & Partial<ScopedInvoiceRequestWire>
+        >(`/admin/sales-invoice-requests/${encodeURIComponent(id)}`)
+        // 范围结果把行字段拍平在信封 data 上，没有再套一层 data。
+        if (typeof result?.id === "string" && result.request_no) {
+            return result as ScopedInvoiceRequestWire
+        }
+        return result?.data ?? null
     } catch (error) {
         if (
             typeof error === "object" &&
