@@ -14,9 +14,11 @@ mod ensure_supplier;
 mod ensure_warehouse;
 mod foundation;
 mod lifecycle;
+mod names;
 mod organization;
 mod plan;
 mod record;
+mod rename;
 mod service;
 mod spec;
 

@@ -238,6 +238,7 @@ pub(super) async fn restore_dictionary(
 }
 
 /// 字典恢复时区分三种集合。
+#[derive(Clone, Copy)]
 pub(super) enum DemoKindDictionary {
     /// 计量单位。
     Unit,

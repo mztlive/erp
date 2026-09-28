@@ -4,8 +4,8 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 use application_core::AuditActor;
-use erp_catalog::{CatalogExt, CreateProductRequest, ProductKind, ProductSkuInput};
-use erp_core::ids::{ProductBrandId, ProductCategoryId, UnitOfMeasureId};
+use erp_catalog::{CatalogExt, CreateProductRequest, ProductKind, ProductSkuInput, UpdateProductRequest};
+use erp_core::ids::{ProductBrandId, ProductCategoryId, SkuId, SkuRevisionId, UnitOfMeasureId};
 use erp_core::money::Amount;
 use persistence_core::NoTransaction;
 
@@ -55,8 +55,98 @@ impl DemoMasterDataService {
         if !live {
             lifecycle::restore_product_graph(&self.db, actor, id, &sku_ids).await?;
         }
+        self.refresh_product_name(actor, step, id).await?;
         self.remember_product(step, id.to_string(), sku_ids).await?;
         Ok(if live { EnsureOutcome::Skipped } else { EnsureOutcome::Restored })
+    }
+
+    async fn refresh_product_name(
+        &self,
+        actor: &AuditActor,
+        step: &DemoStep,
+        product_id: &str,
+    ) -> Result<()> {
+        let Some(product) =
+            self.db.products().find_by_id_including_deleted(product_id, &mut NoTransaction).await?
+        else {
+            return Ok(());
+        };
+        let Some(revision_id) = product.stable.current_revision_id.as_deref() else {
+            return Ok(());
+        };
+        let Some(revision) =
+            self.db.product_revisions().find_by_id_including_deleted(revision_id, &mut NoTransaction).await?
+        else {
+            return Ok(());
+        };
+        if !revision.name.contains('演') {
+            return Ok(());
+        }
+        let name = super::names::label(step);
+        let skus = self.product_sku_inputs(product_id, name).await?;
+        if skus.is_empty() {
+            return Ok(());
+        }
+        self.catalog()
+            .product_update(
+                product_id,
+                UpdateProductRequest {
+                    version: product.base.version,
+                    change_reason: Some("更新资料名称".to_string()),
+                    name: name.to_string(),
+                    description: Some(super::names::product_spec(step.ordinal).to_string()),
+                    specification: Some(super::names::product_spec(step.ordinal).to_string()),
+                    category_id: revision.category_id,
+                    brand_id: revision.brand_id,
+                    status: revision.status,
+                    effective_from: revision.effective_from,
+                    effective_to: revision.effective_to,
+                    carousel_media: Vec::new(),
+                    detail_media: Vec::new(),
+                    skus,
+                },
+                actor,
+            )
+            .await?;
+        Ok(())
+    }
+
+    async fn product_sku_inputs(&self, product_id: &str, name: &str) -> Result<Vec<ProductSkuInput>> {
+        let skus = self
+            .db
+            .skus()
+            .find_many_by_field_including_deleted("product_id", product_id.to_string(), &mut NoTransaction)
+            .await?;
+        let mut inputs = Vec::new();
+        for sku in skus {
+            if sku.base.deleted_at != entity_core::NOT_DELETED_TIMESTAMP {
+                continue;
+            }
+            let Some(revision_id) = sku.stable.current_revision_id.as_deref() else {
+                continue;
+            };
+            let Some(revision) =
+                self.db.sku_revisions().find_by_id_including_deleted(revision_id, &mut NoTransaction).await?
+            else {
+                continue;
+            };
+            inputs.push(ProductSkuInput {
+                sku_id: Some(SkuId::new(sku.base.id)),
+                expected_sku_revision_id: Some(SkuRevisionId::new(revision.base.id)),
+                reenable: false,
+                sku_no: sku.sku_no,
+                name: if revision.name.contains('演') { name.to_string() } else { revision.name },
+                base_unit_id: sku.base_unit_id,
+                barcode: revision.barcode,
+                main_image_asset_id: revision.source_main_image_asset_id,
+                weight_kg: revision.weight_kg,
+                volume_m3: revision.volume_m3,
+                sales_visible_price_gross: revision.sales_visible_price_gross,
+                market_price: revision.market_price,
+                spec_entries: Vec::new(),
+            });
+        }
+        Ok(inputs)
     }
 
     async fn sku_ids(&self, product_id: &str) -> Result<Vec<String>> {
@@ -76,7 +166,7 @@ impl DemoMasterDataService {
                 kind: step.kind.as_str().to_string(),
                 entity_id: id,
                 related_ids: sku_ids,
-                label: format!("演示礼盒{:02}", step.ordinal),
+                label: super::names::label(step).to_string(),
                 removed: false,
             },
         )
@@ -105,9 +195,9 @@ fn product_request(
         product_no: step.key.clone(),
         product_kind: ProductKind::Physical,
         maintainer_user_id: None,
-        name: format!("演示礼盒{:02}", step.ordinal),
-        description: Some("演示主数据".to_string()),
-        specification: Some("标准装".to_string()),
+        name: super::names::label(step).to_string(),
+        description: Some(super::names::product_spec(step.ordinal).to_string()),
+        specification: Some(super::names::product_spec(step.ordinal).to_string()),
         category_id: ProductCategoryId::new(category_id),
         brand_id: ProductBrandId::new(brand_id),
         status: None,
@@ -120,7 +210,7 @@ fn product_request(
             expected_sku_revision_id: None,
             reenable: false,
             sku_no: plan::sku_no(step.ordinal),
-            name: format!("演示礼盒{:02}", step.ordinal),
+            name: super::names::label(step).to_string(),
             base_unit_id: UnitOfMeasureId::new(unit_id),
             barcode: None,
             main_image_asset_id: None,

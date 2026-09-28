@@ -4,7 +4,7 @@ use application_core::AuditActor;
 use entity_core::{BaseModel, NOT_DELETED_TIMESTAMP};
 use erp_catalog::{
     CatalogExt, CreateProductBrandRequest, CreateProductCategoryRequest, CreateUnitOfMeasureRequest,
-    ProductKind,
+    ProductKind, UpdateProductBrandRequest, UpdateProductCategoryRequest,
 };
 use persistence_core::NoTransaction;
 
@@ -55,10 +55,7 @@ impl DemoMasterDataService {
         }
         let view = self
             .catalog()
-            .product_brand_create(
-                CreateProductBrandRequest::new(step.key.clone(), format!("演示品牌{:02}", step.ordinal)),
-                actor,
-            )
+            .product_brand_create(CreateProductBrandRequest::new(step.key.clone(), step_label(step)), actor)
             .await?;
         self.remember(step, view.id, Vec::new()).await?;
         Ok(EnsureOutcome::Created)
@@ -73,7 +70,7 @@ impl DemoMasterDataService {
             CreateProductCategoryRequest {
                 category_code: step.key.clone(),
                 parent_category_id: None,
-                name: format!("演示分类{:02}", step.ordinal),
+                name: step_label(step),
                 product_kind: ProductKind::Physical,
                 status: None,
             },
@@ -95,8 +92,73 @@ impl DemoMasterDataService {
         if !live {
             lifecycle::restore_dictionary(&self.db, actor, kind, &id).await?;
         }
+        self.refresh_dictionary_name(actor, step, kind, &id).await?;
         self.remember(step, id, Vec::new()).await?;
         Ok(if live { EnsureOutcome::Skipped } else { EnsureOutcome::Restored })
+    }
+
+    async fn refresh_dictionary_name(
+        &self,
+        actor: &AuditActor,
+        step: &DemoStep,
+        kind: DemoKindDictionary,
+        id: &str,
+    ) -> Result<()> {
+        let name = step_label(step);
+        match kind {
+            DemoKindDictionary::Unit => Ok(()),
+            DemoKindDictionary::Brand => self.refresh_brand(actor, id, &name).await,
+            DemoKindDictionary::Category => self.refresh_category(actor, id, &name).await,
+        }
+    }
+
+    async fn refresh_brand(&self, actor: &AuditActor, id: &str, name: &str) -> Result<()> {
+        let Some(brand) =
+            self.db.product_brands().find_by_id_including_deleted(id, &mut NoTransaction).await?
+        else {
+            return Ok(());
+        };
+        if !brand.name.contains('演') {
+            return Ok(());
+        }
+        self.catalog()
+            .product_brand_update(
+                id,
+                UpdateProductBrandRequest {
+                    version: brand.base.version,
+                    name: Some(name.to_string()),
+                    status: None,
+                    logo_file_asset_id: None,
+                },
+                actor,
+            )
+            .await?;
+        Ok(())
+    }
+
+    async fn refresh_category(&self, actor: &AuditActor, id: &str, name: &str) -> Result<()> {
+        let Some(category) =
+            self.db.product_categories().find_by_id_including_deleted(id, &mut NoTransaction).await?
+        else {
+            return Ok(());
+        };
+        if !category.name.contains('演') {
+            return Ok(());
+        }
+        self.catalog()
+            .product_category_update(
+                id,
+                UpdateProductCategoryRequest {
+                    version: category.base.version,
+                    name: Some(name.to_string()),
+                    product_kind: None,
+                    status: None,
+                    parent_change: None,
+                },
+                actor,
+            )
+            .await?;
+        Ok(())
     }
 
     async fn lookup_unit(&self, key: &str) -> Result<Option<(String, bool)>> {
@@ -174,15 +236,5 @@ coded!(erp_catalog::ProductBrand);
 coded!(erp_catalog::ProductCategory);
 
 pub(super) fn step_label(step: &DemoStep) -> String {
-    match step.kind {
-        plan::DemoKind::Unit => {
-            plan::unit_spec(&step.key).map(|(name, _)| name.to_string()).unwrap_or_else(|| step.key.clone())
-        },
-        plan::DemoKind::Brand => format!("演示品牌{:02}", step.ordinal),
-        plan::DemoKind::Category => format!("演示分类{:02}", step.ordinal),
-        plan::DemoKind::Warehouse => format!("演示仓库{:02}", step.ordinal),
-        plan::DemoKind::Customer => format!("演示客户{:02}有限公司", step.ordinal),
-        plan::DemoKind::Supplier => format!("演示供应商{:02}有限公司", step.ordinal),
-        plan::DemoKind::Product => format!("演示礼盒{:02}", step.ordinal),
-    }
+    super::names::label(step).to_string()
 }

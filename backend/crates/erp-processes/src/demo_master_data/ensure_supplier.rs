@@ -94,6 +94,10 @@ impl DemoMasterDataService {
     ) -> Result<EnsureOutcome> {
         let outcome = self.remember_created_supplier(actor, step, supplier_id).await?;
         self.align_supplier_maintainer(actor, step, supplier_id, notices).await?;
+        if let Some(party_id) = self.supplier_party_id(step).await? {
+            let face = super::names::supplier(step.ordinal);
+            self.rename_party_if_placeholder(actor, &party_id, face.legal_name, face.short_name).await?;
+        }
         Ok(outcome)
     }
 
@@ -132,6 +136,15 @@ impl DemoMasterDataService {
         Ok(())
     }
 
+    async fn supplier_party_id(&self, step: &DemoStep) -> Result<Option<String>> {
+        let party = self
+            .db
+            .parties()
+            .find_by_party_no_including_deleted(&plan::supplier_party_no(step.ordinal), &mut NoTransaction)
+            .await?;
+        Ok(party.map(|party| party.base.id))
+    }
+
     async fn supplier_command(&self, key: &str) -> Result<Option<String>> {
         let command =
             self.db.supplier_profile_commands().find_by_idempotency_key(key, &mut NoTransaction).await?;
@@ -145,6 +158,7 @@ fn supplier_request(
     company_party_id: &str,
 ) -> Result<SaveSupplierProfileRequest> {
     let ordinal = step.ordinal;
+    let face = super::names::supplier(ordinal);
     let date = super::demo_date()?;
     let rate = Rate::from_str("0.130000").map_err(|error| Error::Internal(error.to_string()))?;
     Ok(SaveSupplierProfileRequest {
@@ -153,30 +167,27 @@ fn supplier_request(
         supplier_no: Some(plan::supplier_no(ordinal)),
         expected_party_version: None,
         expected_supplier_version: None,
-        legal_name: format!("演示供应商{ordinal:02}有限公司"),
-        short_name: Some(format!("演示供应商{ordinal:02}")),
+        legal_name: face.legal_name.to_string(),
+        short_name: Some(face.short_name.to_string()),
         unified_credit_code: None,
-        contact: Some(SupplierProfileContactInput::new(
-            format!("演示联系人{ordinal:02}"),
-            format!("139{ordinal:08}"),
-        )),
+        contact: Some(SupplierProfileContactInput::new(face.contact.to_string(), face.phone.to_string())),
         clear_contact: false,
         address: Some(SupplierProfileAddressInput {
-            address: format!("演示供应商路{ordinal:02}号"),
-            contact_name: Some(format!("演示联系人{ordinal:02}")),
+            address: face.address.to_string(),
+            contact_name: Some(face.contact.to_string()),
         }),
         clear_address: false,
         tax_no: None,
         clear_tax_profile: false,
         bank_account: Some(SupplierProfileBankAccountInput {
-            bank_name: "演示银行".to_string(),
-            account_number: format!("622202000000{ordinal:04}"),
+            bank_name: super::names::supplier_bank(ordinal).to_string(),
+            account_number: format!("622202020000{ordinal:04}"),
         }),
         clear_bank_account: false,
         settlement_mode: SettlementMode::Prepayment,
         reconciliation_cycle: ReconciliationCycle::None,
         payment_term_snapshot: "PREPAY_50".to_string(),
-        business_category: Some("演示礼品".to_string()),
+        business_category: Some("节日福利".to_string()),
         invoice_type: InvoiceType::VatSpecial,
         invoice_tax_rate: Some(rate),
         invoice_tax_rates: Some(vec![rate]),
@@ -226,7 +237,7 @@ fn supplier_record(step: &DemoStep, supplier_id: &str, party_id: &str) -> DemoMa
         kind: step.kind.as_str().to_string(),
         entity_id: supplier_id.to_string(),
         related_ids: vec![party_id.to_string()],
-        label: format!("演示供应商{:02}有限公司", step.ordinal),
+        label: super::names::label(step).to_string(),
         removed: false,
     }
 }

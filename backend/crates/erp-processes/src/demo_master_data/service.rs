@@ -6,6 +6,7 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use erp_catalog::CatalogService;
 use erp_identity::{AccessControlExt, AccountCoreRepositoryExt, SharedRbacService};
+use erp_party::dto::company::SaveCompanyRequest;
 use erp_party::{PartyStatus, SensitiveDataCodec};
 use erp_warehouse::WarehouseService;
 use persistence_core::NoTransaction;
@@ -114,9 +115,9 @@ impl DemoMasterDataService {
         let steps = plan::demo_steps();
         let range = plan::apply_window(cursor as usize, steps.len());
         let records = self.record_map().await?;
-        let company_party_id = self.company_party_id().await?;
-        let handler_user_id = self.warehouse_handler_id().await?;
         let mut report = empty_report(range.end, steps.len());
+        let company_party_id = self.company_party_id(actor, &mut report.notices).await?;
+        let handler_user_id = self.warehouse_handler_id().await?;
         for step in &steps[range] {
             let outcome = self
                 .create_record(
@@ -271,7 +272,39 @@ impl DemoMasterDataService {
         Ok(records.into_iter().map(|record| (record.key.clone(), record)).collect())
     }
 
-    async fn company_party_id(&self) -> Result<Option<String>> {
+    async fn company_party_id(
+        &self,
+        actor: &AuditActor,
+        notices: &mut Vec<String>,
+    ) -> Result<Option<String>> {
+        if let Some(id) = self.active_company_id().await? {
+            return Ok(Some(id));
+        }
+        match party_service(self.db.clone())
+            .create_company(
+                SaveCompanyRequest {
+                    party_no: "FSY".to_string(),
+                    version: None,
+                    legal_name: "北京福尚云科技有限公司".to_string(),
+                    short_name: Some("福尚云".to_string()),
+                    aliases: Vec::new(),
+                    unified_credit_code: Some("91110108MA01FSY01X".to_string()),
+                    status: PartyStatus::Active,
+                },
+                actor,
+            )
+            .await
+        {
+            Ok(company) => Ok(Some(company.id)),
+            Err(erp_party::Error::ConflictError(message) | erp_party::Error::ValidationError(message)) => {
+                push_notice(notices, format!("未生成供应商：{message}"));
+                Ok(None)
+            },
+            Err(error) => Err(error.into()),
+        }
+    }
+
+    async fn active_company_id(&self) -> Result<Option<String>> {
         let page = party_service(self.db.clone())
             .company_list(&erp_party::dto::company::CompanyListParams {
                 keyword: None,

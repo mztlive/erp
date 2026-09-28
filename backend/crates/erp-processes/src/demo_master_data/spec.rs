@@ -62,8 +62,7 @@ pub(super) struct ApprovalNodeSpec {
 pub(super) fn foundation_spec() -> &'static FoundationFile {
     static SPEC: OnceLock<FoundationFile> = OnceLock::new();
     SPEC.get_or_init(|| {
-        serde_json::from_str(include_str!("dev-foundation.json"))
-            .expect("演示基础规格无法解析")
+        serde_json::from_str(include_str!("dev-foundation.json")).expect("演示基础规格无法解析")
     })
 }
 

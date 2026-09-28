@@ -73,6 +73,8 @@ impl DemoMasterDataService {
             lifecycle::restore_customer(&self.db, actor, customer_id).await?;
         }
         self.align_customer_owner(actor, customer_id, notices).await?;
+        let face = super::names::customer(step.ordinal);
+        self.rename_party_if_placeholder(actor, &party_id, face.legal_name, face.short_name).await?;
         record::save(&self.db, &customer_record(step, customer_id, &party_id)).await?;
         Ok(if live { EnsureOutcome::Skipped } else { EnsureOutcome::Restored })
     }
@@ -127,22 +129,22 @@ fn customer_request(step: &DemoStep) -> Result<SaveCustomerProfileRequest> {
         idempotency_key: step.key.clone(),
         expected_party_version: None,
         expected_customer_version: None,
-        legal_name: step_label(step),
-        short_name: Some(format!("演示客户{ordinal:02}")),
+        legal_name: super::names::customer(ordinal).legal_name.to_string(),
+        short_name: Some(super::names::customer(ordinal).short_name.to_string()),
         unified_credit_code: None,
         default_payment_term_id: None,
         status: None,
         owner_user_id: None,
         contacts: Some(vec![
-            CustomerProfileContactInput::new(format!("演示联系人{ordinal:02}"))
-                .with_mobile(format!("138{ordinal:08}"))
+            CustomerProfileContactInput::new(super::names::customer(ordinal).contact.to_string())
+                .with_mobile(super::names::customer(ordinal).phone.to_string())
                 .with_is_default(true),
         ]),
         addresses: Some(vec![CustomerProfileAddressInput {
             existing_id: None,
             address_type: AddressType::Operating,
-            contact_name: Some(format!("演示联系人{ordinal:02}")),
-            address: Some(format!("演示路{ordinal:02}号")),
+            contact_name: Some(super::names::customer(ordinal).contact.to_string()),
+            address: Some(super::names::customer(ordinal).address.to_string()),
             is_default: true,
         }]),
         bank_accounts: None,
