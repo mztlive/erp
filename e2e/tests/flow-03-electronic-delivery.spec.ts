@@ -108,7 +108,10 @@ async function ensureVirtualCategory(page: Page) {
     await dialog.locator('#master-data-category-create-dialog-change-reason').fill('E2E 电子交付目录')
     await dialog.locator('#master-data-category-create-dialog-submit').click()
     await expectToast(page, '已新建')
-    await expect(page.getByText(VIRTUAL_CATEGORY_NAME)).toBeVisible({ timeout: 20000 })
+    await expect(page.getByRole('heading', { name: VIRTUAL_CATEGORY_NAME, exact: true })).toBeVisible({
+        timeout: 20000,
+    })
+    await expect(page.getByLabel('分类路径').locator('[aria-current="page"]')).toHaveText(VIRTUAL_CATEGORY_NAME)
 }
 
 async function ensureVirtualProduct(page: Page) {

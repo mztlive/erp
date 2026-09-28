@@ -16,6 +16,13 @@ const owners = [
     { value: OWNER_A, label: LABEL_A },
     { value: OWNER_B, label: LABEL_B },
 ]
+/** 人员目录选项：姓名、账号分段拼接；非 active 才加停用标记。 */
+const directoryPeople = [
+    { id: OWNER_A, name: "张三", account: "zhang-a", status: "active" },
+    { id: OWNER_B, name: "张三", account: "zhang-b", status: "suspended" },
+]
+const PICKER_LABEL_A = "张三 · zhang-a"
+const PICKER_LABEL_B = "张三 · zhang-b（已停用）"
 
 type Kind = "customers" | "contracts" | "sales" | "purchases"
 
@@ -48,6 +55,36 @@ function paginate<T>(items: T[], url: string) {
         total: items.length,
         page,
         page_size: pageSize,
+    }
+}
+
+function peoplePayload(url: string) {
+    const params = new URL(url).searchParams
+    const idQuery = params.get("ids")
+    let items = directoryPeople.map((person) => ({ ...person, org_label: null }))
+    if (idQuery) {
+        const ids = new Set(idQuery.split(",").map((part) => part.trim()).filter(Boolean))
+        items = items.filter((person) => ids.has(person.id))
+    } else {
+        const q = (params.get("q") ?? "").trim().toLowerCase()
+        if (q) {
+            items = items.filter(
+                (person) =>
+                    person.name.toLowerCase().includes(q) ||
+                    person.account.toLowerCase().includes(q),
+            )
+        }
+    }
+    return {
+        items,
+        total: items.length,
+        page: 1,
+        page_size: 20,
+        scope_version: "s1-people-v1",
+        policy_version: 1,
+        organization_version: 1,
+        as_of: "2026-09-16T00:00:00Z",
+        empty_reason: null,
     }
 }
 
@@ -334,12 +371,34 @@ async function installMocks(page: Page, requests: { kind: Kind; url: string; own
     await context.route(/\/admin\/contracts(\?|$)/, (route) => fulfill("contracts", route))
     await context.route(/\/admin\/sales-orders(\?|$)/, (route) => fulfill("sales", route))
     await context.route(/\/admin\/purchase-orders(\?|$)/, (route) => fulfill("purchases", route))
+    await context.route(/\/admin\/(?:salespeople|procurement-people)(?:\/selected)?(?:\?|$)/, async (route) => {
+        const cors = {
+            "access-control-allow-origin": "*",
+            "access-control-allow-headers": "*",
+            "access-control-allow-methods": "GET,OPTIONS",
+        }
+        if (route.request().method() === "OPTIONS") {
+            await route.fulfill({ status: 204, headers: cors })
+            return
+        }
+        await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            headers: cors,
+            body: JSON.stringify(envelope(peoplePayload(route.request().url()))),
+        })
+    })
 }
 
 async function selectOwner(page: Page, inputId: string, userId: string) {
     await page.locator(`#${inputId}`).click()
-    await expect(page.getByText(LABEL_A, { exact: true }).first()).toBeVisible()
-    await expect(page.getByText(LABEL_B, { exact: true }).first()).toBeVisible()
+    const optionA = page.locator(`#${inputId}-option-${OWNER_A}`)
+    const optionB = page.locator(`#${inputId}-option-${OWNER_B}`)
+    await expect(optionA).toBeVisible()
+    await expect(optionB).toBeVisible()
+    await expect(optionA.getByText(PICKER_LABEL_A, { exact: true })).toBeVisible()
+    await expect(optionB.getByText(PICKER_LABEL_B, { exact: true })).toBeVisible()
+    await expect(optionB.getByText("已停用")).toBeVisible()
     await page.locator(`#${inputId}-option-${userId}`).click()
 }
 
