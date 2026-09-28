@@ -147,7 +147,7 @@ async function expectAllocationCannotCreatePurchase(page: Page, salesOrderNo: st
     await expect(dialogish(page, "确认供给分配")).toHaveCount(0)
 }
 
-/** 列表 q 匹配订货编码、公司 SKU 编号或当前 SKU 名称。种子 SKU 编号可唯一定位该供给。 */
+/** 同一 SKU 有多条示例供给。只认种子供应商杭州狮峰茶叶，避免点到周结/季结示例行。 */
 async function findSeededOfferingRow(page: Page) {
     await page.goto(`/procurement/supplier-offerings?q=${encodeURIComponent(SKU_NO)}`)
     await expect(page.getByRole("heading", { name: "供应商供给" })).toBeVisible({
@@ -156,8 +156,12 @@ async function findSeededOfferingRow(page: Page) {
     const offeringSearch = page.getByLabel("搜索供给")
     await offeringSearch.fill(SKU_NO)
     await offeringSearch.press("Enter")
-    const offeringRow = page.getByRole("row").filter({ hasText: SKU_NAME })
-    await expect(offeringRow.first()).toBeVisible({ timeout: UI_TIMEOUT })
+    const offeringRow = page
+        .getByRole("row")
+        .filter({ hasText: SKU_NAME })
+        .filter({ hasText: "杭州狮峰茶叶有限公司" })
+    await expect(offeringRow).toHaveCount(1, { timeout: UI_TIMEOUT })
+    await expect(offeringRow).toBeVisible({ timeout: UI_TIMEOUT })
     return offeringRow
 }
 
@@ -292,7 +296,7 @@ test("flow-18 停止可供后供给分配不得建采购单，必须走销售变
         // 5) 供给分配确认前停止该 SKU 的有效供给。
         // 采购岗位没有供给列表范围；种子供给的维护人是建档管理员。
         page = await switchTo("admin")
-        const offeringRow = (await findSeededOfferingRow(page)).filter({ hasText: "杭州狮峰茶叶有限公司" }).first()
+        const offeringRow = await findSeededOfferingRow(page)
         await expect(offeringRow.getByText("可供").first()).toBeVisible()
         const quantityBefore = (await offeringRow.locator("td").filter({ hasText: /数量/ }).first().innerText()).match(/数量\s*([\d.]+)/)?.[1]
         expect(quantityBefore).toBeTruthy()
