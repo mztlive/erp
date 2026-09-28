@@ -9,7 +9,7 @@
  *   本流程只匹配按钮「确认入库/确认发货」，状态徽标按代码「已过账」断言。
  * - 盘盈必须基于已有 stock_balance 行；空台账无法从 UI 创建余额维度
  *   （后端：请先建立期初或入库）。本流程在无余额时只插入数量为 0 的维度行，
- *   可用量仍由仓储盘盈 + 财务审批产生。
+ *   可用量仍由仓储盘盈 + 财务审批产生。仓储角色无库存默认范围时不渲染搜索框。
  * - 供给分配确认后采购单立即提交审批，状态为「审批中」，不会留下未提交草稿。
  * - 待办只在 /workspace 原地处理；供给分配嵌入 PurchaseOrderCreatePage。
  */
@@ -18,7 +18,11 @@ import path from "node:path"
 import { expect, test, type BrowserContext, type Locator, type Page } from "@playwright/test"
 
 import { createCustomerViaUi } from "../helpers/customers"
-import { ensureZeroBalanceDimension, singleSalesLineId } from "../helpers/inventory"
+import {
+    ensureWarehouseStockScope,
+    ensureZeroBalanceDimension,
+    singleSalesLineId,
+} from "../helpers/inventory"
 import { openLoggedInWorkspace } from "../helpers/login"
 import { payOnlySupplierTask } from "../helpers/payments"
 import { confirmSupplyAllocation, expandSourcingEditor } from "../helpers/sourcing"
@@ -64,6 +68,17 @@ async function searchAndSubmit(input: Locator, query: string) {
     await input.press("Enter")
 }
 
+async function searchInventoryLedger(
+    page: Page,
+    query: string,
+    view: "balance" | "reservation" = "balance",
+) {
+    const tab = page.locator(`#inventory-ledger-view-${view}`)
+    await expect(tab).toBeVisible({ timeout: TIMEOUT })
+    await tab.click()
+    await searchAndSubmit(page.locator("#inventory-ledger-search"), query)
+}
+
 function uniqueCreditCode(): string {
     const stamp = Date.now().toString()
     return `91E2E${stamp}`.replace(/[^0-9A-Za-z]/g, "0").padEnd(18, "0").slice(0, 18)
@@ -90,7 +105,7 @@ async function submitInventoryCountGain(page: Page) {
     await expect(page.getByRole("heading", { name: "库存台账" })).toBeVisible({
         timeout: TIMEOUT,
     })
-    await searchAndSubmit(page.getByLabel("搜索库存"), SKU_NO)
+    await searchInventoryLedger(page, SKU_NO)
     const warehouseRow = page.getByRole("row").filter({ hasText: WAREHOUSE_NAME })
     await expect(warehouseRow).toBeVisible({ timeout: TIMEOUT })
     await warehouseRow.getByRole("button", { name: "库存调整" }).click()
@@ -108,7 +123,7 @@ async function assertAvailableQuantity(page: Page, quantity: string) {
     await expect(page.getByRole("heading", { name: "库存台账" })).toBeVisible({
         timeout: TIMEOUT,
     })
-    await searchAndSubmit(page.getByLabel("搜索库存"), SKU_NO)
+    await searchInventoryLedger(page, SKU_NO)
     const row = page.getByRole("row").filter({ hasText: WAREHOUSE_NAME }).filter({ hasText: SKU_NO })
     await expect(row).toBeVisible({ timeout: TIMEOUT })
     await expect(row.locator('[data-column-id="available"] .num')).toHaveText(
@@ -242,8 +257,10 @@ async function confirmSplitAllocation(page: Page, salesOrderNo: string) {
 
 async function assertReservationAndPurchase(page: Page, salesOrderNo: string, salesLineId: string) {
     await page.goto(`${FRONTEND_BASE}/inventory?view=reservation`)
-    await page.getByRole("button", { name: /^销售预占(?: \d+)?$/ }).click()
-    await searchAndSubmit(page.getByLabel("搜索库存"), SKU_NO)
+    await expect(page.getByRole("heading", { name: "库存台账" })).toBeVisible({
+        timeout: TIMEOUT,
+    })
+    await searchInventoryLedger(page, SKU_NO, "reservation")
     const reserved = page.getByRole("row").filter({ hasText: salesLineId })
     await expect(reserved).toBeVisible({ timeout: TIMEOUT })
     await expect(reserved.locator('[data-column-id="qty"] .num')).toHaveText(`${STOCK_QTY} / ${STOCK_QTY}`)
@@ -384,6 +401,7 @@ test("同一销售明细拆分：库存直配 + 采购缺口", async ({ browser 
 
     // 2. 仓储盘盈少于销售数量的库存
     await ensureZeroBalanceDimension(WAREHOUSE_CODE, SKU_NO)
+    await ensureWarehouseStockScope(WAREHOUSE_CODE)
     const warehouse = await openLoggedInWorkspace(browser, "cangchu")
     try {
         await submitInventoryCountGain(warehouse.page)
@@ -463,8 +481,10 @@ test("同一销售明细拆分：库存直配 + 采购缺口", async ({ browser 
             quantity: PURCHASE_QTY,
         })
         await fulfillment.page.goto(`${FRONTEND_BASE}/inventory?view=reservation`)
-        await fulfillment.page.getByRole("button", { name: /^销售预占(?: \d+)?$/ }).click()
-        await searchAndSubmit(fulfillment.page.getByLabel("搜索库存"), SKU_NO)
+        await expect(fulfillment.page.getByRole("heading", { name: "库存台账" })).toBeVisible({
+            timeout: TIMEOUT,
+        })
+        await searchInventoryLedger(fulfillment.page, SKU_NO, "reservation")
         const purchasedReservation = fulfillment.page.getByRole("row").filter({ hasText: await singleSalesLineId(salesOrderId) }).filter({ hasText: "有效" })
         await expect(purchasedReservation).toBeVisible({ timeout: TIMEOUT })
         await expect(purchasedReservation.locator('[data-column-id="qty"] .num')).toHaveText(`${PURCHASE_QTY} / ${PURCHASE_QTY}`)

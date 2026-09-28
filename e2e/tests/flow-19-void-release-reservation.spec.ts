@@ -18,7 +18,7 @@ import {
 
 import { apiGet, apiLogin } from "../helpers/api";
 import { createCustomerViaUi } from "../helpers/customers";
-import { ensureZeroBalanceDimension } from "../helpers/inventory";
+import { ensureWarehouseStockScope, ensureZeroBalanceDimension } from "../helpers/inventory";
 import { openLoggedInWorkspace, type LoggedInSession } from "../helpers/login";
 import {
     ensureDefaultProcurementOwner,
@@ -176,7 +176,10 @@ async function searchInventory(page: Page, query: string) {
     await expect(page.getByRole("heading", { name: "库存台账" })).toBeVisible({
         timeout: UI_TIMEOUT,
     });
-    await page.locator("#inventory-ledger-view-balance").click();
+    // 列表查询返回前只有加载标题，余额按钮尚未挂载。
+    const balance = page.locator("#inventory-ledger-view-balance");
+    await expect(balance).toBeVisible({ timeout: UI_TIMEOUT });
+    await balance.click();
     const search = page.locator("#inventory-ledger-search");
     await expect(search).toBeVisible({ timeout: UI_TIMEOUT });
     await search.fill(query);
@@ -316,6 +319,7 @@ test("flow-19 已生效销售单禁止直接作废：预占和仓发草稿保持
         let page = await switchTo("admin");
         await ensureDefaultProcurementOwner(page);
         await ensureZeroBalanceDimension(WAREHOUSE_CODE, SKU_CODE);
+        await ensureWarehouseStockScope(WAREHOUSE_CODE);
 
         // 1) cangchu 盘盈准备指定仓库 + SKU 可用库存（不假设期初）
         page = await switchTo("cangchu");

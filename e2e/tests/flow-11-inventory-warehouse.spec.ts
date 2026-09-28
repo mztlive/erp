@@ -11,6 +11,7 @@
  * 2. 库存调整状态徽标是「已过账」；提交按钮是「提交审批 / 确认提交」，
  *    仓发按钮是「确认发货」，不用「过账」匹配按钮。
  * 3. 盘盈前准备零数量仓库/SKU 维度；实际盘盈数量必须由审批产生，不能预写可用库存。
+ *    仓储角色没有库存默认范围时台账不挂余额视图，需按仓库补上范围后按钮才会出现。
  * 4. 工作台队列类型：flow-01 用「待供给分配」搜索；后端 WorkItemType label
  *    为「供给分配」。选任务兼容两者。
  * 5. 销售单提交后页头徽标可能是「审批中」或「审核中」；商业状态生效后为「已生效」。
@@ -27,7 +28,11 @@ import {
 } from "@playwright/test";
 
 import { createCustomerViaUi } from "../helpers/customers";
-import { ensureZeroBalanceDimension, singleSalesLineId } from "../helpers/inventory";
+import {
+    ensureWarehouseStockScope,
+    ensureZeroBalanceDimension,
+    singleSalesLineId,
+} from "../helpers/inventory";
 import { openLoggedInWorkspace, type LoggedInSession } from "../helpers/login";
 import {
     ensureDefaultProcurementOwner,
@@ -118,7 +123,10 @@ async function searchInventory(page: Page, query: string) {
     await expect(page.getByRole("heading", { name: "库存台账" })).toBeVisible({
         timeout: UI_TIMEOUT,
     });
-    await page.locator("#inventory-ledger-view-balance").click();
+    // 列表查询返回前只有加载标题，余额按钮尚未挂载。
+    const balance = page.locator("#inventory-ledger-view-balance");
+    await expect(balance).toBeVisible({ timeout: UI_TIMEOUT });
+    await balance.click();
     const search = page.locator("#inventory-ledger-search");
     await expect(search).toBeVisible({ timeout: UI_TIMEOUT });
     await search.fill(query);
@@ -163,6 +171,7 @@ test("flow-11 现有库存仓发：盘盈 → 销售生效 → 纯库存供给�
         await ensureDefaultProcurementOwner(page);
 
         await ensureZeroBalanceDimension("BJ-TZ-01", SKU_CODE);
+        await ensureWarehouseStockScope("BJ-TZ-01");
 
         // 1) cangchu 盘盈准备指定仓库 + SKU 可用库存
         page = await switchTo("cangchu");
