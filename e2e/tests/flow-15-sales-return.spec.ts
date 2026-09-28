@@ -339,8 +339,13 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
         await expect(page.getByRole("heading", { name: "采购单", exact: true })).toBeVisible({
             timeout: UI_TIMEOUT,
         });
-        await expect(page.getByText(salesOrderNo)).toHaveCount(0);
-        await expect(page.getByText("供应商直发")).toHaveCount(0);
+        await expect(page.getByText(/共 \d+ 张采购单/)).toBeVisible({ timeout: UI_TIMEOUT });
+        await expect(
+            page
+                .locator("#procurement-orders-list-table")
+                .getByRole("row")
+                .filter({ hasText: salesOrderNo }),
+        ).toHaveCount(0);
 
         // 5) 采购确认：只通过，不选源
         await openWorkspaceTask(page, "销售单审批", salesOrderNo, "approval");
@@ -397,11 +402,17 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
         await expect(page.getByRole("heading", { name: "采购单", exact: true })).toBeVisible({
             timeout: UI_TIMEOUT,
         });
-        const poTable = page.locator("#procurement-orders-list-table");
-        await expect(poTable.getByText("供应商直发")).toBeVisible({ timeout: UI_TIMEOUT });
-        await expect(poTable.getByText("草稿")).toHaveCount(0);
+        const poSearch = page.locator("#procurement-orders-list-search");
+        await poSearch.fill(salesOrderNo);
+        await poSearch.press("Enter");
+        const poRow = page
+            .locator("#procurement-orders-list-table")
+            .getByRole("row")
+            .filter({ hasText: salesOrderNo });
+        await expect(poRow.getByText("供应商直发")).toBeVisible({ timeout: UI_TIMEOUT });
+        await expect(poRow.getByText("草稿")).toHaveCount(0);
         purchaseOrderNo = (
-            (await poTable.getByRole("button", { name: /打开采购单/ }).textContent()) ?? ""
+            (await poRow.getByRole("button", { name: /打开采购单/ }).textContent()) ?? ""
         ).trim();
         expect(purchaseOrderNo.length).toBeGreaterThan(0);
 

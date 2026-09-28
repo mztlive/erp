@@ -250,7 +250,13 @@ function findTargetBalance(rows: StockBalance[]): StockBalance | undefined {
     )
 }
 
-async function expectEmptyPurchaseAndFulfillment(): Promise<void> {
+type ProcurementLedgerTotals = {
+    purchaseOrders: number
+    receipts: number
+    deliveries: number
+}
+
+async function readPurchaseAndFulfillmentTotals(): Promise<ProcurementLedgerTotals> {
     const warehouseToken = await tokenOf("cangchu")
     const procurementToken = await tokenOf("caigou")
     const purchaseOrders = await apiGet<ApiPage<unknown>>(
@@ -258,21 +264,32 @@ async function expectEmptyPurchaseAndFulfillment(): Promise<void> {
         "/admin/purchase-orders",
         { page: 1, page_size: 20 },
     )
-    expect(purchaseOrders.total ?? (purchaseOrders.items ?? []).length).toBe(0)
-
     const receipts = await apiGet<ApiPage<unknown>>(
         warehouseToken,
         "/admin/purchase-receipts",
         { page: 1, page_size: 20 },
     )
-    expect(receipts.total ?? (receipts.items ?? []).length).toBe(0)
-
     const deliveries = await apiGet<ApiPage<unknown>>(
         warehouseToken,
         "/admin/deliveries",
         { page: 1, page_size: 20 },
     )
-    expect(deliveries.total ?? (deliveries.items ?? []).length).toBe(0)
+    return {
+        purchaseOrders: purchaseOrders.total ?? (purchaseOrders.items ?? []).length,
+        receipts: receipts.total ?? (receipts.items ?? []).length,
+        deliveries: deliveries.total ?? (deliveries.items ?? []).length,
+    }
+}
+
+function expectPurchaseAndFulfillmentUnchanged(
+    before: ProcurementLedgerTotals,
+    after: ProcurementLedgerTotals,
+): void {
+    expect(after.purchaseOrders, "库存调整不应新增采购单").toBeLessThanOrEqual(
+        before.purchaseOrders,
+    )
+    expect(after.receipts, "库存调整不应新增采购入库").toBeLessThanOrEqual(before.receipts)
+    expect(after.deliveries, "库存调整不应新增发货").toBeLessThanOrEqual(before.deliveries)
 }
 
 async function expectCaiwuCannotSubmit(browser: Browser): Promise<void> {
@@ -316,7 +333,7 @@ test("库存调整：盘盈、盘亏、损坏入账与驳回", async ({ browser 
 
     // 0. 财务不得自己提交库存调整（岗位分离）
     await expectCaiwuCannotSubmit(browser)
-    await expectEmptyPurchaseAndFulfillment()
+    const ledgerBefore = await readPurchaseAndFulfillmentTotals()
 
     await ensureZeroBalanceDimension(WAREHOUSE_CODE, SKU_NO)
 
@@ -496,7 +513,10 @@ test("库存调整：盘盈、盘亏、损坏入账与驳回", async ({ browser 
         "IN_APPROVAL",
     )
 
-    await expectEmptyPurchaseAndFulfillment()
+    expectPurchaseAndFulfillmentUnchanged(
+        ledgerBefore,
+        await readPurchaseAndFulfillmentTotals(),
+    )
     const instances = await apiGet<ApiPage<{ document_type?: string; status?: string }>>(
         await tokenOf("caiwu"),
         "/admin/approval-instances",

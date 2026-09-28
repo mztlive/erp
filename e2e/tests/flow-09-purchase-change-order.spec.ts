@@ -23,6 +23,7 @@ import {
     expectToast,
     openWorkspaceTask,
     pickCalendarDay,
+    readHeaderDocumentNumber,
     selectWorkspaceFamily,
 } from "../helpers/ui"
 
@@ -55,12 +56,18 @@ async function fillEmptyDatePickers(page: Page) {
     }
 }
 
+function taskButtonPattern(label: string, hint: string): RegExp {
+    const escaped = hint.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    return new RegExp(`${label}[\\s\\S]*${escaped}|${escaped}[\\s\\S]*${label}`)
+}
+
 async function approveWorkspaceTask(
     page: Page,
     taskName: RegExp,
     currentNode?: string | RegExp,
+    hint?: string,
 ) {
-    await openWorkspaceTask(page, taskName, undefined, "approval")
+    await openWorkspaceTask(page, taskName, hint, "approval")
     if (currentNode) {
         await expect(page.getByText(currentNode).first()).toBeVisible(VISIBLE)
     }
@@ -75,7 +82,10 @@ async function approveWorkspaceTask(
     )
     await approveCurrentDocument(page)
     expect((await decided).ok()).toBeTruthy()
-    await expect(page.getByRole("button", { name: taskName })).toHaveCount(0, VISIBLE)
+    const gone = hint
+        ? page.getByRole("button", { name: taskButtonPattern(taskName.source, hint) })
+        : page.getByRole("button", { name: taskName })
+    await expect(gone).toHaveCount(0, VISIBLE)
 }
 
 test("[flow-09] 采购单未入库未付款时走采购变更单并生效", async ({
@@ -85,6 +95,8 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
     const creditCode = `91${stamp}FLOW09XX`.replace(/[^0-9A-Za-z]/g, "").slice(0, 18).padEnd(18, "0")
     const legalName = `华润置地福利测试${stamp.slice(-8)}`
     const contractNo = `HT-FLOW09-${stamp.slice(-8)}`
+    let salesOrderNo = ""
+    let purchaseNo = ""
 
     // 1. 主数据：若无采购责任规则则由 admin 补默认调度人 caigou（否则销售提交被拦）
     {
@@ -190,6 +202,8 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
         await expect(
             sales.page.locator("header").getByText("审批中"),
         ).toBeVisible(VISIBLE)
+        salesOrderNo = await readHeaderDocumentNumber(sales.page)
+        expect(salesOrderNo.length).toBeGreaterThan(0)
     } finally {
         await sales.context.close()
     }
@@ -202,6 +216,7 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
                 procurement.page,
                 /销售单审批/,
                 "采购确认",
+                salesOrderNo,
             )
         } finally {
             await procurement.context.close()
@@ -212,7 +227,7 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
     {
         const procurement = await openLoggedInWorkspace(browser, "caigou")
         try {
-            await openWorkspaceTask(procurement.page, /待供给分配/, undefined, "procurement")
+            await openWorkspaceTask(procurement.page, /待供给分配/, salesOrderNo, "procurement")
             await expect(
                 procurement.page.getByRole("region", { name: "当前供给分配任务" }),
             ).toBeVisible(VISIBLE)
@@ -260,6 +275,22 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
                     hasText: /无需采购/,
                 }),
             ).toHaveCount(0)
+            await procurement.page.goto("/procurement/orders")
+            await expect(
+                procurement.page.getByRole("heading", { name: "采购单", exact: true }),
+            ).toBeVisible(VISIBLE)
+            const createdSearch = procurement.page.locator("#procurement-orders-list-search")
+            await createdSearch.fill(salesOrderNo)
+            await createdSearch.press("Enter")
+            const createdRow = procurement.page
+                .locator("#procurement-orders-list-table")
+                .getByRole("row")
+                .filter({ hasText: salesOrderNo })
+            await expect(createdRow).toHaveCount(1, VISIBLE)
+            purchaseNo = (
+                (await createdRow.getByRole("button", { name: /打开采购单/ }).textContent()) ?? ""
+            ).trim()
+            expect(purchaseNo.length).toBeGreaterThan(0)
         } finally {
             await procurement.context.close()
         }
@@ -273,6 +304,7 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
                 finance.page,
                 /采购单审批/,
                 "财务总监审批",
+                purchaseNo,
             )
         } finally {
             await finance.context.close()
@@ -286,8 +318,13 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
         await expect(
             procurement.page.getByRole("heading", { name: "采购单", exact: true }),
         ).toBeVisible(VISIBLE)
+        const poSearch = procurement.page.locator("#procurement-orders-list-search")
+        await poSearch.fill(purchaseNo)
+        await poSearch.press("Enter")
         const openPo = procurement.page.getByRole("button", {
-            name: /打开采购单/,
+            name: new RegExp(
+                `^打开采购单 ${purchaseNo.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+            ),
         })
         await expect(openPo).toBeVisible(VISIBLE)
         await openPo.click()

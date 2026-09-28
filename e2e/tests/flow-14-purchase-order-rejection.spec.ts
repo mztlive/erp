@@ -193,6 +193,15 @@ async function readDocumentNumber(page: Page): Promise<string> {
     return readHeaderDocumentNumber(page)
 }
 
+function documentTaskPattern(label: string, hints: readonly string[]): RegExp {
+    const parts = hints.filter((hint) => hint.length > 0).map((hint) => {
+        const escaped = hint.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+        return `${label}[\\s\\S]*${escaped}|${escaped}[\\s\\S]*${label}`
+    })
+    if (parts.length === 0) throw new Error(`缺少${label}的单据提示`)
+    return new RegExp(parts.join("|"))
+}
+
 function approvalPane(page: Page): Locator {
     return page.getByRole("region", { name: "当前任务", exact: true })
 }
@@ -524,15 +533,27 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
         await page.goto("/workspace")
         await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible(VISIBLE)
         await selectWorkspaceFamily(page, "fulfillment")
-        // 后端工作台搜索不匹配单号，填单号会把列表滤空导致断言恒成立；直接断言无履约任务。
-        await expect(page.getByRole("button", { name: /履约处理/ })).toHaveCount(0)
+        // 工作台搜索不匹配单号，填了会把列表滤空。驳回未生效的采购单不应给本单产生履约任务。
+        await expect(
+            page.getByRole("button", {
+                name: documentTaskPattern("履约处理", [
+                    snap.purchaseNo,
+                    salesOrderNo,
+                    customerName,
+                ]),
+            }),
+        ).toHaveCount(0)
 
         page = await switchTo("fukuan")
         await page.goto("/workspace")
         await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible(VISIBLE)
         await selectWorkspaceFamily(page, "finance")
-        // 后端工作台搜索不匹配单号，填单号会把列表滤空导致断言恒成立；直接断言无付款任务。
-        await expect(page.getByRole("button", { name: /供应商付款处理/ })).toHaveCount(0)
+        // 同上，不按搜索框断言；驳回未生效前本单不得出现付款任务。
+        await expect(
+            page.getByRole("button", {
+                name: documentTaskPattern("供应商付款处理", [snap.purchaseNo]),
+            }),
+        ).toHaveCount(0)
         await selectWorkspaceFamily(page, "approval")
         await expect(page.getByText("供应商付款单审批")).toHaveCount(0)
 
@@ -558,7 +579,11 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
         await page.goto("/workspace")
         await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible(VISIBLE)
         await selectWorkspaceFamily(page, "finance")
-        await expect(page.getByRole("button", { name: /供应商付款处理/ })).toBeVisible(VISIBLE)
+        await expect(
+            page.getByRole("button", {
+                name: documentTaskPattern("供应商付款处理", [snap.purchaseNo]),
+            }),
+        ).toBeVisible(VISIBLE)
 
         const effective = await fetchPurchaseCenter(caigouToken, snap.id)
         expect(String(effective.status)).toBe("EFFECTIVE")
