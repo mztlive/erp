@@ -177,31 +177,10 @@ async function ensureSalesOwner(adminToken, customerId, salesUserId) {
     return detail;
   }
   if (currentOwner && currentOwner.valid_from >= today) {
-    const collaborator = (detail.assignments ?? []).find((row) => {
-      if (row.assignment_role !== "COLLABORATOR" || row.user_id !== salesUserId) return false;
-      if (row.valid_from > today) return false;
-      return !row.valid_to || row.valid_to > today;
-    });
-    if (!collaborator) {
-      await call("POST", `/admin/customers/${encodeURIComponent(customerId)}/assignments`, {
-        token: adminToken,
-        body: {
-          action: "assign",
-          user_id: salesUserId,
-          assignment_role: "COLLABORATOR",
-          valid_from: today,
-          change_reason: "主数据初始化：同一天不能换 OWNER，改为协作销售",
-        },
-      });
-      console.warn(`当前负责销售不是 xiaoshou，同一天不能换 OWNER，已把 xiaoshou 设为协作销售`);
-    } else {
-      console.warn(
-        `当前负责销售不是 xiaoshou，且归属从 ${currentOwner.valid_from} 起生效，同一天不能换 OWNER`,
-      );
-    }
-    return call("GET", `/admin/customer-profiles/${encodeURIComponent(customerId)}`, {
-      token: adminToken,
-    });
+    console.warn(
+      `当前负责销售不是 xiaoshou，且归属从 ${currentOwner.valid_from} 起生效，同一天不能换负责销售`,
+    );
+    return detail;
   }
   await call("POST", `/admin/customers/${encodeURIComponent(customerId)}/assignments`, {
     token: adminToken,

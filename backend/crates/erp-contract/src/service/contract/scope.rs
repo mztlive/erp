@@ -140,7 +140,9 @@ async fn load_list_filter_and_search(
     let filter = list_filter(query, customer_ids, historical_contract_ids);
     let versions = db.contract().query_versions(&filter, executor).await?;
     if versions.len() > 10_000 {
-        return Err(Error::ValidationError("合同基础范围超过上限，请收窄客户、组织、合同号或状态条件".into()));
+        return Err(Error::ValidationError(
+            "合同基础范围超过上限，请收窄客户、组织、合同号或状态条件".into(),
+        ));
     }
     let ids = db.contract().list_customer_ids(&filter, executor).await?;
     let customer_facts =
@@ -182,7 +184,9 @@ async fn finish_list_snapshot(
     let result = db.contract().search_list(&filter, &search, executor).await?;
     let mut fingerprint = super::access::scope_fingerprint_input(&[], &[], versions.as_slice(), &[]);
     // 当前负责人不再收窄公共范围；其身份和显示事实仍须参与跨页版本。
-    let mut customer_facts = search.customers.iter()
+    let mut customer_facts = search
+        .customers
+        .iter()
         .map(|customer| (&customer.id, &customer.owner_id, &customer.number, &customer.owner))
         .collect::<Vec<_>>();
     customer_facts.sort_unstable();
@@ -198,7 +202,7 @@ async fn finish_list_snapshot(
         organization_version: 0,
         as_of: String::new(),
         empty_reason: None,
-        scope_summary: "合同当前客户主负责人、协作关系、负责人所属组织及合法单据参与",
+        scope_summary: "合同当前客户主负责人、负责人所属组织及合法单据参与",
         page: PageView { items, total, page: filter.page, page_size: filter.page_size },
         metrics: result.metrics.into_iter().next().unwrap_or_default(),
     };

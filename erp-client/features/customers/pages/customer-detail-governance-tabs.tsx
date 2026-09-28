@@ -22,11 +22,7 @@ import {
     CardTitle,
 } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
-import { toAutomationIdSegment } from "@/lib/automation-id"
-import type {
-    CustomerAssignmentView,
-    CustomerCenterView,
-} from "@/features/customers/types"
+import type { CustomerCenterView } from "@/features/customers/types"
 import { can } from "@/features/customers/pages/customer-detail-helpers"
 
 export function CustomerDetailQualityTab({
@@ -138,18 +134,16 @@ export function CustomerDetailAuditTab({
     customer,
     refetch,
     onManageAssignments,
-    onEndCollaboration,
 }: {
     customer: CustomerCenterView
     refetch: () => void
     onManageAssignments: () => void
-    onEndCollaboration: (target: CustomerAssignmentView) => void
 }) {
     return (
         <div className="space-y-4 pt-4">
             <DocumentSection
                 title="归属与审计"
-                description="每位客户只有一位负责销售；协作销售显示有效期"
+                description="每位客户只有一位负责销售"
                 action={
                     can(customer, "MANAGE_ASSIGNMENTS") ? (
                         <Button
@@ -192,7 +186,10 @@ export function CustomerDetailAuditTab({
                             </CardHeader>
                             <CardContent className="space-y-2 text-sm">
                                 {customer.assignments
-                                    .filter((a) => a.isCurrent)
+                                    .filter(
+                                        (a) =>
+                                            a.isCurrent && a.role === "OWNER",
+                                    )
                                     .map((a) => (
                                         <div
                                             key={a.id}
@@ -204,48 +201,19 @@ export function CustomerDetailAuditTab({
                                             <div>
                                                 <BusinessStatusBadge
                                                     context="list"
-                                                    label={
-                                                        a.role === "OWNER"
-                                                            ? "负责销售"
-                                                            : "协作销售"
-                                                    }
-                                                    tone={
-                                                        a.role === "OWNER"
-                                                            ? "info"
-                                                            : "neutral"
-                                                    }
+                                                    label="负责销售"
+                                                    tone="info"
                                                 />
                                                 <span className="ml-2 font-medium">
                                                     {a.userName}
                                                 </span>
                                             </div>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-xs text-muted-foreground">
-                                                    {a.effectiveFrom}
-                                                    {a.effectiveTo
-                                                        ? ` ~ ${a.effectiveTo}`
-                                                        : " 起"}
-                                                </span>
-                                                {a.role === "COLLABORATOR" &&
-                                                can(
-                                                    customer,
-                                                    "MANAGE_ASSIGNMENTS",
-                                                ) ? (
-                                                    <Button
-                                                        id={`customers-detail-audit-${toAutomationIdSegment(a.id)}-end-collaboration`}
-                                                        type="button"
-                                                        size="xs"
-                                                        variant="ghost"
-                                                        onClick={() =>
-                                                            onEndCollaboration(
-                                                                a,
-                                                            )
-                                                        }
-                                                    >
-                                                        结束协作
-                                                    </Button>
-                                                ) : null}
-                                            </div>
+                                            <span className="text-xs text-muted-foreground">
+                                                {a.effectiveFrom}
+                                                {a.effectiveTo
+                                                    ? ` ~ ${a.effectiveTo}`
+                                                    : " 起"}
+                                            </span>
                                         </div>
                                     ))}
                             </CardContent>

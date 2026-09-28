@@ -49,16 +49,7 @@ export function useCustomerDirectoryColumns(): ColumnDef<CustomerDirectoryItem>[
                 header: "负责销售",
                 meta: { label: "负责销售", width: "default" },
                 enableSorting: false,
-                cell: ({ row }) => (
-                    <div className="text-sm">
-                        <div>{row.original.ownerName}</div>
-                        {row.original.collaboratorCount > 0 ? (
-                            <div className="text-xs text-muted-foreground">
-                                协作 {row.original.collaboratorCount} 人
-                            </div>
-                        ) : null}
-                    </div>
-                ),
+                cell: ({ row }) => row.original.ownerName,
             },
             {
                 id: "status",

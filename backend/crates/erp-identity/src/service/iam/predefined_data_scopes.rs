@@ -235,7 +235,7 @@ fn apply_role_action_narrowing(
                 "purchase_order" | "payable_account" | "supplier_payment" | "purchase_invoice_allocation"
             ) =>
         {
-            *scope_types = vec![DataScopeType::SelfOwned, DataScopeType::Collaborative]
+            *scope_types = vec![DataScopeType::SelfOwned]
         },
         "role-procurement" if resource == "supplier" => *scope_types = vec![DataScopeType::SelfOwned],
         "role-procurement" if resource == "supplier_fulfillment_order" => {
@@ -332,7 +332,8 @@ mod tests {
         assert!(definitions("role-sales", "purchase_order", &["list"]).is_empty());
         let sales = definitions("role-sales", "sales_order", &["list", "update"]);
         assert!(sales.iter().all(|rule| rule.scope_type != DataScopeType::Company));
-        assert_eq!(sales.len(), 2);
+        assert_eq!(sales.len(), 1);
+        assert_eq!(sales[0].scope_type, DataScopeType::SelfOwned);
         let manager = definitions("role-sales-leader", "sales_order", &["list", "update"]);
         assert_eq!(manager[0].binding.target_mode, Some(ScopeTargetMode::ManagedOrgs));
         assert!(!manager[0].binding.actions.contains(&"update".into()));
@@ -363,7 +364,8 @@ mod tests {
     fn funds_defaults_follow_sales_or_procurement_responsibility() {
         for resource in ["receivable_account", "customer_receipt", "invoice", "sales_invoice_request"] {
             let sales = definitions("role-sales", resource, &["list", "detail"]);
-            assert_eq!(sales.len(), 2, "{resource} 销售默认本人加协作");
+            assert_eq!(sales.len(), 1, "{resource} 销售默认本人负责");
+            assert_eq!(sales[0].scope_type, DataScopeType::SelfOwned);
             assert!(definitions("role-procurement", resource, &["list", "detail"]).is_empty());
         }
         for resource in ["payable_account", "supplier_payment", "purchase_invoice_allocation"] {

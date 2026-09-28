@@ -58,7 +58,7 @@ impl CustomerAccess {
     /// 无动作权限返回 Forbidden；查询超限或组织关系非法时拒绝。
     ///
     /// # 关键业务约束
-    /// 主责与协作分别解释；组织范围按当前主负责人所属组织展开。
+    /// 只按当前负责销售解释；协作销售不纳入范围。组织范围按当前主负责人所属组织展开。
     pub async fn resolve(
         &self,
         actor: &AuditActor,
@@ -73,11 +73,10 @@ impl CustomerAccess {
             .find_active_assignments_for_user(actor.id(), as_of, executor)
             .await?;
         let mut owned = Vec::new();
-        let mut collaborating = Vec::new();
+        let collaborating = Vec::new();
         for assignment in assignments {
-            match assignment.assignment_role {
-                AssignmentRole::Owner => owned.push(assignment.customer_id.to_string()),
-                AssignmentRole::Collaborator => collaborating.push(assignment.customer_id.to_string()),
+            if assignment.assignment_role == AssignmentRole::Owner {
+                owned.push(assignment.customer_id.to_string());
             }
         }
         let owned = distinct_sorted_customer_ids(owned);
@@ -265,7 +264,7 @@ impl CustomerAccess {
     /// 超限或数据库读取失败时拒绝。
     ///
     /// # 关键业务约束
-    /// 历史参与必须来自归属事实，不得由创建人或业绩快照推导。
+    /// 历史参与必须来自负责销售归属，不得由创建人、业绩快照或协作销售推导。
     async fn historical_customers(&self, user: &str, executor: &mut dyn Executor) -> Result<Vec<String>> {
         let ids = self
             .db
@@ -273,6 +272,7 @@ impl CustomerAccess {
             .list_for_user(user, executor)
             .await?
             .into_iter()
+            .filter(|assignment| assignment.assignment_role == AssignmentRole::Owner)
             .map(|assignment| assignment.customer_id.to_string())
             .collect::<Vec<_>>();
         let ids = distinct_sorted_customer_ids(ids);

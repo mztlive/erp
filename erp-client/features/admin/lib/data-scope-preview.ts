@@ -13,7 +13,7 @@ const SCOPE_TYPE_EXPLAIN: Record<string, string> = {
     organization: "可查看指定组织范围内的单据。",
     team: "可查看所属团队范围内的单据。",
     self_owned: "可查看自己作为主责的单据。",
-    collaborative: "可查看自己作为协作人的单据。",
+    collaborative: "协作人不再据此看到客户、合同或销售单。",
 }
 
 /** 预览里的一条数据范围，只保留分组需要的字段。 */

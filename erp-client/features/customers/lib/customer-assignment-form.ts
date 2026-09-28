@@ -32,7 +32,7 @@ export function customerAssignmentDefaults(
     const today = todayBusinessDate()
     return {
         userId: "",
-        role: "COLLABORATOR",
+        role: "OWNER",
         effectiveFrom: today,
         effectiveTo: target
             ? target.effectiveFrom >= today

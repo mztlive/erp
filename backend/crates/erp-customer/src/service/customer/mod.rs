@@ -198,7 +198,7 @@ impl CustomerService {
     /// # 参数
     /// `scope` 必须由入口授权，`actor_user_id` 为当前登录用户。
     /// # 返回
-    /// 全量权限返回 None；受限范围返回当前有效归属集合（可为空）。
+    /// 全量权限返回 None；受限范围返回当前负责销售的客户（可为空）。协作销售不计入。
     /// # 错误
     /// 查询失败时返回仓储错误。
     pub async fn customer_ids_for_scope(
@@ -208,9 +208,9 @@ impl CustomerService {
     ) -> Result<Option<Vec<String>>> {
         let expected_role = match scope {
             CustomerScope::AllAuthorized => return Ok(None),
-            CustomerScope::Mine => Some(AssignmentRole::Owner),
-            CustomerScope::Collaborating => Some(AssignmentRole::Collaborator),
-            CustomerScope::Assigned => None,
+            CustomerScope::Mine | CustomerScope::Collaborating | CustomerScope::Assigned => {
+                Some(AssignmentRole::Owner)
+            },
         };
         let assignments = self
             .db

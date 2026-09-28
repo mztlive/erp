@@ -50,9 +50,7 @@ export function CustomerDetailPage({
     const state = useCustomerDetailState(customerId, section)
     const { query, customer, activeSection, editing, handleSectionChange } =
         state
-    const [assignmentDialog, setAssignmentDialog] = React.useState<{
-        target?: React.ComponentProps<typeof CustomerAssignmentDialog>["target"]
-    } | null>(null)
+    const [assignmentOpen, setAssignmentOpen] = React.useState(false)
 
     if (query.isPending) {
         return (
@@ -270,10 +268,7 @@ export function CustomerDetailPage({
                         <CustomerDetailAuditTab
                             customer={customer}
                             refetch={() => void query.refetch()}
-                            onManageAssignments={() => setAssignmentDialog({})}
-                            onEndCollaboration={(target) =>
-                                setAssignmentDialog({ target })
-                            }
+                            onManageAssignments={() => setAssignmentOpen(true)}
                         />
                     </TabsContent>
                 </Tabs>
@@ -281,11 +276,8 @@ export function CustomerDetailPage({
 
             <CustomerAssignmentDialog
                 customerId={customer.customerId}
-                open={assignmentDialog != null}
-                target={assignmentDialog?.target}
-                onOpenChange={(open) => {
-                    if (!open) setAssignmentDialog(null)
-                }}
+                open={assignmentOpen}
+                onOpenChange={setAssignmentOpen}
             />
 
             <DiscardConfirmDialog

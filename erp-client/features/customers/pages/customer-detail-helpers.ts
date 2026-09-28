@@ -36,32 +36,3 @@ export function ownerLabel(customer: CustomerCenterView): string {
     )
     return owner?.userName ?? "—"
 }
-
-export function collaboratorCount(customer: CustomerCenterView): number {
-    return customer.assignments.filter(
-        (a) => a.role === "COLLABORATOR" && a.isCurrent,
-    ).length
-}
-
-export function collaboratorSummary(customer: CustomerCenterView): string {
-    const cols = customer.assignments.filter(
-        (a) => a.role === "COLLABORATOR" && a.isCurrent,
-    )
-    if (cols.length === 0) return "无有效协作"
-    return cols
-        .map((c) => {
-            const period = c.effectiveTo
-                ? `${c.effectiveFrom} ~ ${c.effectiveTo}`
-                : `${c.effectiveFrom} 起`
-            return `${c.userName}（${period}）`
-        })
-        .join("；")
-}
-
-export function collaboratorShortNames(customer: CustomerCenterView): string {
-    const cols = customer.assignments.filter(
-        (a) => a.role === "COLLABORATOR" && a.isCurrent,
-    )
-    if (cols.length === 0) return "无"
-    return cols.map((c) => c.userName).join("、")
-}

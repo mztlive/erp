@@ -232,9 +232,9 @@ mod tests {
         let request: CustomerAssignmentRequest = serde_json::from_value(json!({
             "action": "assign",
             "user_id": "admin-2",
-            "assignment_role": "COLLABORATOR",
+            "assignment_role": "OWNER",
             "valid_from": "2026-08-08",
-            "change_reason": "联合跟进"
+            "change_reason": "换任"
         }))
         .unwrap();
         assert_eq!(request.action, AssignmentAction::Assign);
@@ -242,10 +242,19 @@ mod tests {
         match request.into_command().unwrap() {
             CustomerAssignmentCommand::Assign(command) => {
                 assert_eq!(command.user_id(), "admin-2");
-                assert_eq!(command.assignment_role(), AssignmentRole::Collaborator);
+                assert_eq!(command.assignment_role(), AssignmentRole::Owner);
             },
             CustomerAssignmentCommand::End(_) => panic!("assign 不得变成 End"),
         }
+        let collaborator: CustomerAssignmentRequest = serde_json::from_value(json!({
+            "action": "assign",
+            "user_id": "admin-2",
+            "assignment_role": "COLLABORATOR",
+            "valid_from": "2026-08-08",
+            "change_reason": "联合跟进"
+        }))
+        .unwrap();
+        assert!(collaborator.into_command().is_err());
 
         let end: CustomerAssignmentRequest = serde_json::from_value(json!({
             "action": "end",

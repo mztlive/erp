@@ -124,7 +124,7 @@ fn to_list_view(snapshot: CustomerSnapshot) -> CustomerListView {
         organization_version: snapshot.context.organization_version,
         as_of: snapshot.context.as_of.as_utc().to_rfc3339(),
         empty_reason: snapshot.no_scope.then_some("no_scope"),
-        scope_summary: "客户当前主负责人、协作关系及负责人所属组织范围",
+        scope_summary: "客户当前主负责人及负责人所属组织范围",
         ownership_basis: "current_customer_owner",
         data: application_core::PageView {
             items: snapshot.items,

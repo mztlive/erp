@@ -202,7 +202,7 @@ mod tests {
             organization_version: 4,
             as_of: "2026-09-23T00:00:00Z".to_string(),
             empty_reason: None,
-            scope_summary: "销售单当前负责人、业务组织及有效协作或参与范围",
+            scope_summary: "销售单当前负责人、业务组织及合法单据参与范围",
         };
         let json = serde_json::to_value(&view).unwrap();
         assert!(json.get("owner_options").is_none());

@@ -54,7 +54,7 @@ pub(crate) const PREDEFINED_ROLES: &[PredefinedRoleDef] = &[
     PredefinedRoleDef {
         id: "role-sales",
         name: "销售",
-        description: "客户、合同、销售单与客户验收；催回款只读；负责本人客户与协作客户相关单据。",
+        description: "客户、合同、销售单与客户验收；催回款只读；负责本人客户相关单据。",
         permissions: SALES_PERMISSIONS,
     },
     PredefinedRoleDef {

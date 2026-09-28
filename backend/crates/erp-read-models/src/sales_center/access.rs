@@ -5,8 +5,6 @@ use std::hash::{Hash, Hasher};
 
 use application_core::AuditActor;
 use erp_core::common::time::{BusinessDate, Instant};
-use erp_customer::repository::prelude::*;
-use erp_customer::{AssignmentRole, CustomerExt};
 use erp_identity::access_control::{ScopeClause, ScopedObject};
 use erp_identity::entity::organization::OrgTree;
 use erp_identity::repository::OrganizationRepository;
@@ -108,7 +106,7 @@ impl SalesAccess {
         } else {
             Vec::new()
         };
-        // 协作关系的有效日期变化也必须使跨页凭据失效，指纹不返回客户身份集合。
+        // 历史参与变化必须使跨页凭据失效。协作客户不再进入指纹。
         let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
         customers.hash(&mut fingerprint);
         history.hash(&mut fingerprint);
@@ -331,28 +329,14 @@ impl SalesAccess {
         }
         Ok(ids)
     }
-    /// 在授权事务内解析有效协作，空集合不得作为全量范围；超限整体拒绝。
+    /// 协作销售不再纳入销售单范围。空集合不得被调用方解释为全部客户。
     async fn collaborating_customers(
         &self,
-        user: &str,
-        as_of: BusinessDate,
-        executor: &mut dyn Executor,
+        _user: &str,
+        _as_of: BusinessDate,
+        _executor: &mut dyn Executor,
     ) -> Result<Vec<String>> {
-        let mut customers = self
-            .db
-            .customer_assignments()
-            .find_active_assignments_for_user(user, as_of, executor)
-            .await?
-            .into_iter()
-            .filter(|a| a.assignment_role == AssignmentRole::Collaborator)
-            .map(|a| a.customer_id.to_string())
-            .collect::<Vec<_>>();
-        customers.sort();
-        customers.dedup();
-        if customers.len() > 10_000 {
-            return Err(Error::ValidationError("协作范围超过查询上限，请收窄授权范围".into()));
-        }
-        Ok(customers)
+        Ok(Vec::new())
     }
 }
 

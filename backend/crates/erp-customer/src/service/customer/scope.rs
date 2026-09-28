@@ -14,7 +14,6 @@ use super::access::{ensure_limit, intersect_ids};
 use crate::dto::customer::{CustomerListQuery, CustomerScope, CustomerView, SortDir};
 use crate::error::{Error, Result};
 use crate::ports::{AccountFactPort, CustomerDataScopePort, CustomerResolvedScope, PartyFactPort};
-use crate::repository::customer_shared::distinct_sorted_customer_ids;
 use crate::repository::prelude::*;
 use crate::repository::scope::{CustomerReadScope, CustomerVersion};
 use crate::repository::{CustomerAccountFilter, CustomerExt};
@@ -581,15 +580,12 @@ async fn current_owner_customer_ids(
 ///
 /// # 关键业务约束
 /// 目录范围不是授权来源，不能把 AllAuthorized 解释为公司范围。
+/// `collaborating` 与 `assigned` 按当前主责解释，不再按协作销售展开。
 fn assignment_filter(scope: &CustomerReadScope, requested: CustomerScope) -> Option<Vec<String>> {
     match requested {
         CustomerScope::AllAuthorized => None,
-        CustomerScope::Mine => Some(scope.owned_customer_ids.clone()),
-        CustomerScope::Collaborating => Some(scope.collaborative_customer_ids.clone()),
-        CustomerScope::Assigned => {
-            let mut ids = scope.owned_customer_ids.clone();
-            ids.extend(scope.collaborative_customer_ids.iter().cloned());
-            Some(distinct_sorted_customer_ids(ids))
+        CustomerScope::Mine | CustomerScope::Collaborating | CustomerScope::Assigned => {
+            Some(scope.owned_customer_ids.clone())
         },
     }
 }
@@ -710,7 +706,8 @@ mod tests {
         };
         assert!(assignment_filter(&scope, CustomerScope::AllAuthorized).is_none());
         assert_eq!(assignment_filter(&scope, CustomerScope::Mine), Some(vec!["c-own".into()]));
-        assert_eq!(assignment_filter(&scope, CustomerScope::Collaborating), Some(vec!["c-collab".into()]));
+        assert_eq!(assignment_filter(&scope, CustomerScope::Collaborating), Some(vec!["c-own".into()]));
+        assert_eq!(assignment_filter(&scope, CustomerScope::Assigned), Some(vec!["c-own".into()]));
     }
 
     #[test]

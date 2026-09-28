@@ -29,13 +29,12 @@ export const exportCustomerDirectory = async (
         scopeVersion,
     })
     return buildListCsv([
-        ["客户编号", "客户名称", "状态", "负责销售", "协作人数"],
+        ["客户编号", "客户名称", "状态", "负责销售"],
         ...rows.map((row) => [
             row.customerNo,
             row.legalName,
             row.statusLabel.label,
             row.ownerName,
-            String(row.collaboratorCount),
         ]),
     ])
 }

@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use super::{SortDir, normalize_sort};
-use crate::entity::customer::{AssignmentRole, CustomerAccount, CustomerAccountStatus, CustomerAssignment};
+use crate::entity::customer::{CustomerAccount, CustomerAccountStatus, CustomerAssignment};
 use crate::error::{Error, Result};
 
 /// 客户角色列表允许的排序字段白名单（api-contract §4：Service 层校验）。
@@ -20,7 +20,7 @@ pub enum CustomerScope {
     /// 当前用户为负责销售的客户。
     #[default]
     Mine,
-    /// 当前用户为协作销售的客户。
+    /// 旧目录参数。列表按当前负责销售解释，不再按协作销售展开。
     Collaborating,
     /// 当前用户以负责或协作身份参与的全部客户。
     Assigned,
@@ -32,7 +32,7 @@ impl CustomerScope {
     /// 装配目录范围标签（纯展示规则下沉自 Service）。
     ///
     /// # 参数
-    /// * `assignments` - 同一客户的归属行
+    /// * `assignments` - 同一客户的归属行；协作销售不再生成目录标签
     /// * `owner_user_id` - 已解析的主负责人
     /// * `actor_user_id` - 当前账号
     /// * `requested` - 页面请求的目录范围
@@ -40,7 +40,7 @@ impl CustomerScope {
     /// # 返回
     /// 返回命中原因标签，保证包含请求范围。
     pub(crate) fn tags_for(
-        assignments: &[CustomerAssignment],
+        _assignments: &[CustomerAssignment],
         owner_user_id: Option<&str>,
         actor_user_id: &str,
         requested: Self,
@@ -48,11 +48,6 @@ impl CustomerScope {
         let mut scope_tags = Vec::new();
         if owner_user_id == Some(actor_user_id) {
             scope_tags.push(Self::Mine);
-        }
-        if assignments.iter().any(|assignment| {
-            assignment.assignment_role == AssignmentRole::Collaborator && assignment.user_id == actor_user_id
-        }) {
-            scope_tags.push(Self::Collaborating);
         }
         if !scope_tags.contains(&requested) {
             scope_tags.push(requested);

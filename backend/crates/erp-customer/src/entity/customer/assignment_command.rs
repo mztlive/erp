@@ -55,9 +55,10 @@ impl AssignCustomerAssignment {
     /// 返回已去除首尾空白、窗口合法的建立命令。
     ///
     /// # 错误
-    /// 销售人员或原因为空/超长，或结束日期不晚于开始日期时返回领域逻辑错误。
+    /// 销售人员或原因为空/超长、结束日期不晚于开始日期，或角色为协作销售时返回领域逻辑错误。
     ///
     /// # 关键业务约束
+    /// 新建归属只接受负责销售。协作销售不再授予可见范围，已有行仍可结束。
     /// 本命令不携带目标归属 ID 或乐观锁版本；那些字段属于结束动作。
     pub fn new(
         user_id: String,
@@ -66,6 +67,9 @@ impl AssignCustomerAssignment {
         valid_to: Option<BusinessDate>,
         change_reason: String,
     ) -> Result<Self> {
+        if assignment_role == AssignmentRole::Collaborator {
+            return Err(erp_core::Error::from("不再支持指定协作销售"));
+        }
         let user_id = normalize_user_id(user_id)?;
         let change_reason = normalize_change_reason(change_reason)?;
         ensure_window_valid(valid_from, valid_to)?;
@@ -223,18 +227,26 @@ mod tests {
 
     #[test]
     fn assign_normalizes_and_rejects_illegal_window() {
+        let rejected = AssignCustomerAssignment::new(
+            "sales-1".to_string(),
+            AssignmentRole::Collaborator,
+            date(2026, 8, 8),
+            None,
+            "联合跟进".to_string(),
+        );
+        assert!(matches!(rejected, Err(Error::LogicError(_))));
+
         let command = AssignCustomerAssignment::new(
             " sales-1 ".to_string(),
-            AssignmentRole::Collaborator,
+            AssignmentRole::Owner,
             date(2026, 8, 8),
             Some(date(2026, 12, 31)),
             " 联合跟进 ".to_string(),
         )
         .unwrap();
         assert_eq!(command.user_id(), "sales-1");
-        assert_eq!(command.assignment_role(), AssignmentRole::Collaborator);
-        assert_eq!(command.assignment_role().as_str(), "COLLABORATOR");
-        assert_eq!(AssignmentRole::Owner.as_str(), "OWNER");
+        assert_eq!(command.assignment_role(), AssignmentRole::Owner);
+        assert_eq!(command.assignment_role().as_str(), "OWNER");
         assert_eq!(command.change_reason(), "联合跟进");
 
         let assignment = command

@@ -7,11 +7,7 @@ export const SCOPE_LABELS: Record<CustomerScope, string> = {
     all_authorized: "全部有权客户",
 }
 
-export const SCOPE_ORDER: readonly CustomerScope[] = [
-    "mine",
-    "collaborating",
-    "all_authorized",
-]
+export const SCOPE_ORDER: readonly CustomerScope[] = ["mine", "all_authorized"]
 
 /** 无 `customer_scope:detail` 时隐藏全部有权客户口径。 */
 export function visibleCustomerScopes(
@@ -24,11 +20,7 @@ export function visibleCustomerScopes(
 export function parseCustomerScope(
     value: string | null | undefined,
 ): CustomerScope {
-    if (
-        value === "collaborating" ||
-        value === "all_authorized" ||
-        value === "mine"
-    ) {
+    if (value === "all_authorized" || value === "mine") {
         return value
     }
     return "mine"

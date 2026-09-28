@@ -81,8 +81,6 @@ impl ContractAccess {
         for assignment in assignments {
             if assignment.is_owner {
                 owned.push(assignment.customer_id);
-            } else {
-                collaborating.push(assignment.customer_id);
             }
         }
         owned.sort();

@@ -16,9 +16,6 @@ import { CustomerForm } from "@/features/customers/components/customer-form"
 import type { CustomerCenterView } from "@/features/customers/types"
 import {
     can,
-    collaboratorCount,
-    collaboratorShortNames,
-    collaboratorSummary,
     ownerLabel,
 } from "@/features/customers/pages/customer-detail-helpers"
 import { CustomerDetailContactSections } from "@/features/customers/pages/customer-detail-contact-sections"
@@ -79,25 +76,11 @@ export function CustomerDetailIdentityMeta({
 }: {
     customer: CustomerCenterView
 }) {
-    const collabCount = collaboratorCount(customer)
     return (
-        <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-            <span>
-                负责{" "}
-                <span className="font-medium text-foreground">
-                    {ownerLabel(customer)}
-                </span>
-            </span>
-            <span className="text-border" aria-hidden="true">
-                ·
-            </span>
-            <span title={collaboratorSummary(customer)}>
-                协作{" "}
-                <span className="font-medium text-foreground">
-                    {collabCount > 0
-                        ? `${collabCount} 人（${collaboratorShortNames(customer)}）`
-                        : "无"}
-                </span>
+        <span>
+            负责{" "}
+            <span className="font-medium text-foreground">
+                {ownerLabel(customer)}
             </span>
         </span>
     )

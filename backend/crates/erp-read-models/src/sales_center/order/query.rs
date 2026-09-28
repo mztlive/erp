@@ -168,7 +168,7 @@ impl SalesOrderReadService {
             organization_version: context.organizations.version,
             as_of: context.as_of.as_utc().to_rfc3339(),
             empty_reason: no_scope.then_some("no_scope"),
-            scope_summary: "销售单当前负责人、业务组织及有效协作或参与范围",
+            scope_summary: "销售单当前负责人、业务组织及合法单据参与范围",
             ownership_basis: "document_sales_owner",
             data: PageView { items, total: page.total, page: page.page, page_size: page.page_size },
         })

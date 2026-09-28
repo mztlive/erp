@@ -56,7 +56,7 @@
 | 角色权限 | Casbin 角色与资源动作权限 | 按同一角色证明动作与范围，复用现有权限版本机制 | [权限服务](../backend/crates/erp-identity/src/service/access_control/mod.rs) |
 | DataScope | 公司、组织、团队、本人负责、协作；角色／用户主体 | 类型明确的组织解析、资源动作绑定、管理关系与版本 | [范围模型](../backend/crates/erp-identity/src/entity/access_control/data_scope.rs) |
 | 组织覆盖 | 明确目标集合及交并运算 | 部门树、成员与管理关系；部门、结算主体和仓库目标必须类型化区分 | [范围集合](../backend/crates/erp-identity/src/entity/access_control/responsibility_scope.rs) |
-| 客户 | 有有效期的主负责人、协作关系 | 指定人员筛选、组织范围解析 | [客户归属](../backend/crates/erp-customer/src/entity/customer/customer_assignment.rs) |
+| 客户 | 有有效期的主负责人 | 指定人员筛选、组织范围解析 | [客户归属](../backend/crates/erp-customer/src/entity/customer/customer_assignment.rs) |
 | 合同 | 已按客户现任负责人筛选 | 姓名值改为人员 ID，明确当前跟进口径 | [合同查询](../backend/crates/erp-contract/src/repository/list_search.rs) |
 | 销售单 | 创建人查询；列表与详情存在不同负责人取值 | 明确单据负责销售，统一展示与筛选，区分编辑人 | [列表映射](../backend/crates/erp-read-models/src/sales_center/order/query.rs)、[详情取值](../backend/crates/erp-read-models/src/sales_center/order/status.rs) |
 | 采购单 | 显式采购责任 | 列表、指标、导出的采购负责人条件 | [采购列表 DTO](../backend/crates/erp-procurement/src/dto/purchase_order/query.rs) |
@@ -69,7 +69,7 @@
 
 | 编号 | 功能组 | 人员条件与责任事实 | 交付级别 | 本阶段状态 |
 | --- | --- | --- | --- | --- |
-| M01 | 客户 | 当前主负责人；协作销售独立筛选 | 核心 | 已完成（S1／S2；真实验收转跟踪） |
+| M01 | 客户 | 当前主负责人 | 核心 | 已完成（S1／S2；真实验收转跟踪） |
 | M02 | 合同 | 当前客户负责人作为当前跟进负责人；签约经办另列历史字段 | 核心 | 已完成（S1／S2；真实验收转跟踪） |
 | M03 | 选品册与销售方案 | 显式负责销售；方案继承对应册的责任关联 | 核心 | 已完成（S3；真实验收转跟踪） |
 | M04 | 销售单、销售变更与退货 | 单据负责销售；原单关联；当前处理人独立条件 | 核心 | 已完成（S1／S2／S3；真实验收转跟踪） |
@@ -204,7 +204,7 @@ result = visible_objects INTERSECT requested_filters
 
 | 对象 | 权威来源与形成规则 |
 | --- | --- |
-| 客户 | 复用有效期内的 `customer_assignment`；主负责人与协作身份分别解释 |
+| 客户 | 复用有效期内的 `customer_assignment`；按当前主负责人解释。协作销售不再扩大可见范围 |
 | 合同 | 当前跟进负责人来自客户当前主负责人；签约／上传经办仅作历史事实，不参与当前负责人兜底 |
 | 销售单 | 建立显式 `sales_owner_user_id` 与 `business_org_unit_id`；ERP 新单初始负责人取认证建单人，组织取其有效主属组织 |
 | 采购单 | 复用显式采购负责人，补业务组织归属；创建与改派按既有采购责任合同执行 |
