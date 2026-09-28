@@ -35,5 +35,6 @@ pub(crate) async fn ensure_indexes(db: &mongodb::Database) -> persistence_core::
     erp_supply::indexes::ensure(db).await?;
     erp_warehouse::indexes::ensure(db).await?;
     erp_workflow::indexes::ensure_work_item(db).await?;
+    crate::demo_master_data::ensure_indexes(db).await?;
     Ok(())
 }

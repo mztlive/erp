@@ -33,3 +33,7 @@ force_path_style = false
 # 密码为 6 到 32 个字符，不能使用示例占位值。
 # [bootstrap]
 # initial_admin_password = "replace-with-6-to-32-characters"
+
+# 可选。生产环境保持关闭。打开后才会允许生成或删除演示主数据。
+# [demo]
+# master_data = false

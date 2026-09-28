@@ -583,6 +583,19 @@ impl AppState {
         erp_processes::adapters::warehouse_service(self.db(), self.rbac())
     }
 
+    /// 演示主数据服务。是否允许写入由配置 `demo.master_data` 决定。
+    ///
+    /// # 返回
+    /// 返回绑定当前数据库和授权快照的服务。
+    pub fn demo_master_data_service(&self) -> erp_processes::demo_master_data::DemoMasterDataService {
+        erp_processes::demo_master_data::DemoMasterDataService::new(
+            self.db(),
+            self.sensitive_data(),
+            self.rbac(),
+            self.config_snapshot().demo.master_data_enabled(),
+        )
+    }
+
     /// Contract domain service with customer, identity, attachment and audit adapters.
     pub fn contract_service(&self) -> erp_contract::ContractService {
         erp_processes::adapters::scoped_contract_service(self.db(), self.rbac())

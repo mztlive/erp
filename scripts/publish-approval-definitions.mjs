@@ -41,104 +41,18 @@
  * 用法: node scripts/publish-approval-definitions.mjs
  * 环境变量: API_BASE（默认 http://127.0.0.1:10001）
  */
-import { ACCOUNTS, ADMIN, call, ensureDevAccounts, login } from "./dev-seed-lib.mjs";
+import { ACCOUNTS, ADMIN, FOUNDATION, call, ensureDevAccounts, login } from "./dev-seed-lib.mjs";
 
-const DEFINITIONS = [
-  {
-    type: "sales_order",
-    name: "销售单审批（实物及服务）",
-    submitter: "sales",
-    nodes: [{ node_name: "采购确认", display_order: 1, assignee: "procurement" }],
-  },
-  {
-    type: "voucher_sales_order",
-    name: "卡券销售单审批",
-    submitter: "sales",
-    nodes: [
-      { node_name: "销售领导审批商务条件", display_order: 1, assignee: "salesLeader" },
-      { node_name: "运营确认执行可行", display_order: 2, assignee: "operations" },
-      { node_name: "财务审批应收与配赠", display_order: 3, assignee: "finance" },
-    ],
-  },
-  {
-    type: "sales_change_order",
-    name: "销售变更单审批",
-    submitter: "sales",
-    nodes: [
-      { node_name: "采购确认履约影响", display_order: 1, assignee: "procurement" },
-      { node_name: "财务复核金额与应收", display_order: 2, assignee: "finance" },
-    ],
-  },
-  {
-    type: "purchase_order",
-    name: "采购单审批",
-    submitter: "procurement",
-    nodes: [{ node_name: "财务总监审批", display_order: 1, assignee: "finance" }],
-  },
-  {
-    type: "purchase_change_order",
-    name: "采购变更单审批",
-    submitter: "procurement",
-    nodes: [
-      { node_name: "仓储确认库存发货影响", display_order: 1, assignee: "warehouse" },
-      { node_name: "财务复核金额与应付", display_order: 2, assignee: "finance" },
-    ],
-  },
-  {
-    type: "stock_adjustment",
-    name: "库存调整单审批",
-    submitter: "warehouse",
-    nodes: [{ node_name: "财务审批成本影响", display_order: 1, assignee: "finance" }],
-  },
-  {
-    type: "sales_invoice_request",
-    name: "开票申请审批",
-    submitter: "sales",
-    nodes: [{ node_name: "财务审批开票金额与资料", display_order: 1, assignee: "finance" }],
-  },
-  {
-    type: "customer_receipt",
-    name: "客户回款单审批",
-    submitter: "payment",
-    nodes: [{ node_name: "财务总监审批入账", display_order: 1, assignee: "finance" }],
-  },
-  {
-    type: "customer_refund",
-    name: "客户退款单审批",
-    submitter: "payment",
-    nodes: [
-      { node_name: "销售领导确认退款依据", display_order: 1, assignee: "salesLeader" },
-      { node_name: "财务总监审批", display_order: 2, assignee: "finance" },
-    ],
-  },
-  {
-    type: "supplier_refund",
-    name: "供应商退款单审批",
-    submitter: "payment",
-    nodes: [
-      { node_name: "采购确认退款依据", display_order: 1, assignee: "procurement" },
-      { node_name: "财务总监审批", display_order: 2, assignee: "finance" },
-    ],
-  },
-  {
-    type: "receipt_reversal",
-    name: "回款冲正单审批",
-    submitter: "payment",
-    nodes: [
-      { node_name: "销售领导确认冲正依据", display_order: 1, assignee: "salesLeader" },
-      { node_name: "财务总监审批", display_order: 2, assignee: "finance" },
-    ],
-  },
-  {
-    type: "payment_reversal",
-    name: "付款冲正单审批",
-    submitter: "payment",
-    nodes: [
-      { node_name: "采购确认冲正依据", display_order: 1, assignee: "procurement" },
-      { node_name: "财务总监审批", display_order: 2, assignee: "finance" },
-    ],
-  },
-];
+const DEFINITIONS = FOUNDATION.approvals.map((definition) => ({
+  type: definition.document_type,
+  name: definition.name,
+  submitter: definition.submitter,
+  nodes: definition.nodes.map((node, index) => ({
+    node_name: node.name,
+    display_order: index + 1,
+    assignee: node.assignee,
+  })),
+}));
 
 async function findVersionId(adminToken, documentType, status) {
   const versions = await call("GET", `/admin/approval-processes/${documentType}/versions`, {

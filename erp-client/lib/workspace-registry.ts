@@ -7,6 +7,7 @@ import {
     FolderTreeIcon,
     GaugeIcon,
     HandshakeIcon,
+    DatabaseIcon,
     HistoryIcon,
     LayoutDashboardIcon,
     ListChecksIcon,
@@ -682,6 +683,13 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                     label: "组织与人员",
                     icon: UsersIcon,
                     requiredPermissions: ["admin:list", "org_unit:list"],
+                },
+                {
+                    routeId: "W19",
+                    href: "/system/demo-master-data",
+                    label: "演示主数据",
+                    icon: DatabaseIcon,
+                    requiredPermissions: ["demo_master_data:read"],
                 },
                 {
                     routeId: "W24",

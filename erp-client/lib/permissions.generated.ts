@@ -4943,4 +4943,50 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
         ],
     },
+    {
+        name: "演示主数据",
+        description: "准备演示主数据、岗位账号和审批流程，并删除由此产生的单据",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/demo-master-data",
+                description: "查看演示主数据",
+                permission: {
+                    resource: "demo_master_data",
+                    action: "read",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/demo-master-data",
+                description: "生成演示主数据",
+                permission: {
+                    resource: "demo_master_data",
+                    action: "apply",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/demo-master-data/foundation",
+                description: "准备岗位账号和审批流程",
+                permission: {
+                    resource: "demo_master_data",
+                    action: "apply",
+                },
+            },
+            {
+                module: "admin",
+                method: "DELETE",
+                path: "/admin/demo-master-data",
+                description: "删除演示主数据",
+                permission: {
+                    resource: "demo_master_data",
+                    action: "remove",
+                },
+            },
+        ],
+    },
 ]

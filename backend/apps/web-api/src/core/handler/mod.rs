@@ -10,6 +10,7 @@ pub mod contract;
 pub mod cost;
 pub mod customer;
 pub mod customer_quality;
+pub mod demo_master_data;
 pub mod document_registry;
 pub mod file_asset;
 pub mod fulfillment;

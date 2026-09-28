@@ -14,6 +14,7 @@ pub mod catalog;
 pub mod contract;
 pub mod customer;
 pub mod customer_profile;
+pub mod demo_master_data;
 pub mod finance_posting;
 pub mod import_apply;
 pub mod inventory_adjustment;

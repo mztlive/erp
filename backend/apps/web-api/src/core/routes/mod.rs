@@ -29,6 +29,7 @@ mod contract;
 mod cost;
 mod customer;
 mod customer_quality;
+mod demo_master_data;
 mod document_registry;
 mod file_asset;
 mod fulfillment;

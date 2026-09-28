@@ -18,7 +18,7 @@ struct PermissionMeta {
     action: Option<String>,
 }
 
-/// 权限扫描覆盖的业务域模块：既有 34 域加上独立的审批定义管理模块。
+/// 权限扫描覆盖的业务域模块：既有业务域、审批定义管理，以及演示主数据。
 const DOMAIN_MODULES: &[&str] = &[
     "organization",
     "source_registry",
@@ -52,6 +52,8 @@ const DOMAIN_MODULES: &[&str] = &[
     "supplier_fulfillment",
     "supplier_settlement",
     "integration_ops",
+    // 单文件不够，扫描 `handler/demo_master_data/mod.rs`。
+    "demo_master_data",
 ];
 
 #[derive(Debug, Clone)]

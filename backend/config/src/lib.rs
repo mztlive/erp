@@ -85,6 +85,29 @@ pub struct Config {
     /// 可选的首次超级管理员密码。缺省时不在启动时创建账号。
     #[serde(default)]
     pub bootstrap: BootstrapConfig,
+    /// 可选的演示数据开关。缺省时关闭，不生成也不删除演示主数据。
+    #[serde(default)]
+    pub demo: DemoConfig,
+}
+
+/// 演示主数据开关。
+///
+/// 只控制「系统管理」里的演示主数据按钮。关闭时接口拒绝写入。
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct DemoConfig {
+    /// 为 true 时允许生成和删除演示主数据。
+    #[serde(default)]
+    master_data: bool,
+}
+
+impl DemoConfig {
+    /// 返回当前环境是否允许操作演示主数据。
+    ///
+    /// # 返回
+    /// 配置显式打开时返回 `true`。
+    pub fn master_data_enabled(&self) -> bool {
+        self.master_data
+    }
 }
 
 /// 首次启动时创建超级管理员的可选配置。
@@ -660,6 +683,16 @@ force_path_style = true
         let config = Config::from_toml_str(&content).unwrap();
 
         assert_eq!(config.bootstrap.initial_admin_password(), None);
+    }
+
+    #[test]
+    fn demo_master_data_stays_closed_unless_explicitly_enabled() {
+        let closed = Config::from_toml_str(MINIMAL_CONFIG).unwrap();
+        assert!(!closed.demo.master_data_enabled());
+
+        let opened =
+            Config::from_toml_str(&format!("{MINIMAL_CONFIG}\n[demo]\nmaster_data = true\n")).unwrap();
+        assert!(opened.demo.master_data_enabled());
     }
 
     #[test]

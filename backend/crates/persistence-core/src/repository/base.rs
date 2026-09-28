@@ -238,6 +238,79 @@ where
         self.find_one_scoped(doc! { "id": id }, executor).await
     }
 
+    /// 按 ID 查找实体，包含已软删除记录。
+    ///
+    /// # 参数
+    /// * `id` - 标识符
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配实体；无匹配时返回 `None`。已软删除的记录也会返回。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn find_by_id_including_deleted(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<T>> {
+        mongo_ops::find_one(&self.collection(), doc! { "id": id }, executor).await
+    }
+
+    /// 按字段查找实体，包含已软删除记录。
+    ///
+    /// # 参数
+    /// * `field` - 字段名
+    /// * `value` - 字段值
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回第一条匹配实体；无匹配时返回 `None`。已软删除的记录也会返回。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn find_one_by_field_including_deleted<V>(
+        &self,
+        field: &str,
+        value: V,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<T>>
+    where
+        V: Into<mongodb::bson::Bson> + Send,
+    {
+        mongo_ops::find_one(&self.collection(), doc! { field: value.into() }, executor).await
+    }
+
+    /// 按字段查找全部实体，包含已软删除记录。
+    ///
+    /// # 参数
+    /// * `field` - 字段名
+    /// * `value` - 字段值
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配实体，包括已软删除记录。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn find_many_by_field_including_deleted<V>(
+        &self,
+        field: &str,
+        value: V,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<T>>
+    where
+        V: Into<mongodb::bson::Bson> + Send,
+    {
+        mongo_ops::find_many(
+            &self.collection(),
+            doc! { field: value.into() },
+            FindOptions::builder().build(),
+            executor,
+        )
+        .await
+    }
+
     /// 更新实体（带乐观锁）。
     ///
     /// # 参数

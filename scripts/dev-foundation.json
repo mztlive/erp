@@ -1,0 +1,45 @@
+{
+  "password": "123456",
+  "root_department": "总部",
+  "sales_department": "销售部",
+  "sales_leader_account": "lisiyong",
+  "sales_leader_role_id": "role-sales-leader",
+  "customer_owner_account": "xiaoshou",
+  "supplier_maintainer_account": "caigou",
+  "warehouse_handler_account": "cangchu",
+  "accounts": [
+    {"key": "sales", "account": "xiaoshou", "name": "销售", "role_id": "role-sales", "label": "销售"},
+    {"key": "salesLeader", "account": "lisiyong", "name": "销售领导", "role_id": "role-sales-leader", "label": "销售领导"},
+    {"key": "procurement", "account": "caigou", "name": "采购", "role_id": "role-procurement", "label": "采购"},
+    {"key": "operations", "account": "yunying", "name": "运营", "role_id": "role-operations", "label": "运营"},
+    {"key": "warehouse", "account": "cangchu", "name": "仓储", "role_id": "role-warehouse", "label": "仓储"},
+    {"key": "finance", "account": "caiwu", "name": "财务总监", "role_id": "role-finance", "label": "财务总监"},
+    {"key": "payment", "account": "fukuan", "name": "出纳", "role_id": "role-finance", "label": "出纳"},
+    {"key": "invoice", "account": "kaipiao", "name": "开票人", "role_id": "role-finance", "label": "开票人"},
+    {"key": "management", "account": "guanli", "name": "管理层", "role_id": "role-management", "label": "管理层"},
+    {"key": "sysadmin", "account": "xitong", "name": "系统管理员", "role_id": "role-sysadmin", "label": "系统管理员"}
+  ],
+  "departments": [
+    {"key": "sales", "name": "销售部", "accounts": ["xiaoshou", "lisiyong"]},
+    {"key": "procurement", "name": "采购部", "accounts": ["caigou"]},
+    {"key": "operations", "name": "运营部", "accounts": ["yunying"]},
+    {"key": "warehouse", "name": "仓储部", "accounts": ["cangchu"]},
+    {"key": "finance", "name": "财务部", "accounts": ["caiwu", "fukuan", "kaipiao"]},
+    {"key": "management", "name": "管理部", "accounts": ["guanli"]},
+    {"key": "sysadmin", "name": "系统管理部", "accounts": ["admin", "xitong"]}
+  ],
+  "approvals": [
+    {"document_type": "sales_order", "name": "销售单审批（实物及服务）", "submitter": "sales", "nodes": [{"name": "采购确认", "assignee": "procurement"}]},
+    {"document_type": "voucher_sales_order", "name": "卡券销售单审批", "submitter": "sales", "nodes": [{"name": "销售领导审批商务条件", "assignee": "salesLeader"}, {"name": "运营确认执行可行", "assignee": "operations"}, {"name": "财务审批应收与配赠", "assignee": "finance"}]},
+    {"document_type": "sales_change_order", "name": "销售变更单审批", "submitter": "sales", "nodes": [{"name": "采购确认履约影响", "assignee": "procurement"}, {"name": "财务复核金额与应收", "assignee": "finance"}]},
+    {"document_type": "purchase_order", "name": "采购单审批", "submitter": "procurement", "nodes": [{"name": "财务总监审批", "assignee": "finance"}]},
+    {"document_type": "purchase_change_order", "name": "采购变更单审批", "submitter": "procurement", "nodes": [{"name": "仓储确认库存发货影响", "assignee": "warehouse"}, {"name": "财务复核金额与应付", "assignee": "finance"}]},
+    {"document_type": "stock_adjustment", "name": "库存调整单审批", "submitter": "warehouse", "nodes": [{"name": "财务审批成本影响", "assignee": "finance"}]},
+    {"document_type": "sales_invoice_request", "name": "开票申请审批", "submitter": "sales", "nodes": [{"name": "财务审批开票金额与资料", "assignee": "finance"}]},
+    {"document_type": "customer_receipt", "name": "客户回款单审批", "submitter": "payment", "nodes": [{"name": "财务总监审批入账", "assignee": "finance"}]},
+    {"document_type": "customer_refund", "name": "客户退款单审批", "submitter": "payment", "nodes": [{"name": "销售领导确认退款依据", "assignee": "salesLeader"}, {"name": "财务总监审批", "assignee": "finance"}]},
+    {"document_type": "supplier_refund", "name": "供应商退款单审批", "submitter": "payment", "nodes": [{"name": "采购确认退款依据", "assignee": "procurement"}, {"name": "财务总监审批", "assignee": "finance"}]},
+    {"document_type": "receipt_reversal", "name": "回款冲正单审批", "submitter": "payment", "nodes": [{"name": "销售领导确认冲正依据", "assignee": "salesLeader"}, {"name": "财务总监审批", "assignee": "finance"}]},
+    {"document_type": "payment_reversal", "name": "付款冲正单审批", "submitter": "payment", "nodes": [{"name": "采购确认冲正依据", "assignee": "procurement"}, {"name": "财务总监审批", "assignee": "finance"}]}
+  ]
+}

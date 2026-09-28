@@ -29,3 +29,8 @@ force_path_style = false
 # 密码为 6 到 32 个字符，不能使用示例占位值。
 # [bootstrap]
 # initial_admin_password = "replace-with-6-to-32-characters"
+
+# 可选。打开后，超级管理员可在「系统管理 / 演示主数据」生成或删除一批主数据。
+# 关闭时按钮仍可见，但接口拒绝写入。不要在生产环境打开。
+# [demo]
+# master_data = false

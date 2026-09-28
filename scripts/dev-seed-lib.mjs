@@ -2,15 +2,24 @@
 /**
  * 开发种子共享库：HTTP 调用、岗位账号目录与幂等建号。
  *
+ * 账号、部门和审批链的规格在 dev-foundation.json，演示主数据接口读取同一份。
  * 账号对齐 docs/erp-phase-1.md §11 部门职责与预定义角色（role-sales 等）。
  * 财务按岗位分离拆成总监 / 出纳 / 开票人三个账号，共用 role-finance。
  * 超级管理员 admin 不在此创建，由 CLI init-admin 或本入口的 reset-db.sh 修复。
  *
  * 用法: 由 seed-dev-foundation.mjs / publish-approval-definitions.mjs 导入
  */
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 export const API_BASE = process.env.API_BASE || "http://127.0.0.1:10001";
 
-export const DEV_PASSWORD = "123456";
+export const FOUNDATION = JSON.parse(
+  readFileSync(join(dirname(fileURLToPath(import.meta.url)), "dev-foundation.json"), "utf8"),
+);
+
+export const DEV_PASSWORD = FOUNDATION.password;
 
 export const ADMIN = {
   account: "admin",
@@ -23,78 +32,18 @@ export const ADMIN = {
  *
  * key 同时用于审批定义的 assignee 引用。roleId 必须是启动时写入的预定义角色。
  */
-export const ACCOUNTS = {
-  sales: {
-    account: "xiaoshou",
-    password: DEV_PASSWORD,
-    name: "销售",
-    roleId: "role-sales",
-    label: "销售",
-  },
-  salesLeader: {
-    account: "lisiyong",
-    password: DEV_PASSWORD,
-    name: "销售领导",
-    roleId: "role-sales-leader",
-    label: "销售领导",
-  },
-  procurement: {
-    account: "caigou",
-    password: DEV_PASSWORD,
-    name: "采购",
-    roleId: "role-procurement",
-    label: "采购",
-  },
-  operations: {
-    account: "yunying",
-    password: DEV_PASSWORD,
-    name: "运营",
-    roleId: "role-operations",
-    label: "运营",
-  },
-  warehouse: {
-    account: "cangchu",
-    password: DEV_PASSWORD,
-    name: "仓储",
-    roleId: "role-warehouse",
-    label: "仓储",
-  },
-  finance: {
-    account: "caiwu",
-    password: DEV_PASSWORD,
-    name: "财务总监",
-    roleId: "role-finance",
-    label: "财务总监",
-  },
-  payment: {
-    account: "fukuan",
-    password: DEV_PASSWORD,
-    name: "出纳",
-    roleId: "role-finance",
-    label: "出纳",
-  },
-  invoice: {
-    account: "kaipiao",
-    password: DEV_PASSWORD,
-    name: "开票人",
-    roleId: "role-finance",
-    label: "开票人",
-  },
-  management: {
-    account: "guanli",
-    password: DEV_PASSWORD,
-    name: "管理层",
-    roleId: "role-management",
-    label: "管理层",
-  },
-  sysadmin: {
-    account: "xitong",
-    password: DEV_PASSWORD,
-    name: "系统管理员",
-    roleId: "role-sysadmin",
-    label: "系统管理员",
-  },
-};
+export const ACCOUNTS = Object.fromEntries(
+  FOUNDATION.accounts.map((account) => [
+    account.key,
+    {
+      account: account.account,
+      password: DEV_PASSWORD,
+      name: account.name,
+      roleId: account.role_id,
+      label: account.label,
+    },
+  ]),
+);
 
 /**
  * 调用 web-api 并解析统一响应信封。
