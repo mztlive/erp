@@ -532,7 +532,11 @@ export async function openWorkspaceTask(
     let searchedManaged = false
     if (!(await task.isVisible().catch(() => false))) {
         const managed = page.getByRole("button", { name: /^范围内待办/ }).first()
-        if (await managed.isVisible().catch(() => false)) {
+        const managedReady = await managed
+            .waitFor({ state: "visible", timeout: UI_TIMEOUT })
+            .then(() => true)
+            .catch(() => false)
+        if (managedReady) {
             const onManaged = (await managed.getAttribute("aria-pressed")) === "true"
             if (!onManaged) {
                 searchedManaged = true

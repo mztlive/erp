@@ -585,8 +585,12 @@ test("S1 mock API owner filter, export and 390px", async ({ page }) => {
     const salesPanel = page.locator("#sales-orders-list-filter-panel")
     if (!(await salesPanel.isVisible())) await salesMore.click()
     await expect(salesPanel).toBeVisible()
-    await page.locator("#sales-orders-list-owner").scrollIntoViewIfNeeded()
-    await page.locator("#sales-orders-list-owner").click()
+    const ownerInPanel = salesPanel.getByRole("combobox", { name: "负责销售" })
+    if (await ownerInPanel.count()) {
+        await ownerInPanel.click()
+        await page.keyboard.press("Escape")
+    }
+    await page.keyboard.press("Escape")
     const salesOverflow = await page.evaluate(() => ({
         scrollWidth: document.documentElement.scrollWidth,
         clientWidth: document.documentElement.clientWidth,

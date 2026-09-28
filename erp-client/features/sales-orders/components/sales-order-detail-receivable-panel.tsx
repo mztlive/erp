@@ -56,10 +56,13 @@ export function ReceivablePanel({ order }: { order: SalesOrderDetailView }) {
             | "openInvoiceableTotal",
     ) =>
         readableAccounts?.length
-            ? sumFixed(
-                  readableAccounts.map((row) => row[field]),
-                  { maxScale: 2, outputScale: 2 },
-              )
+            ? (() => {
+                  const amounts = readableAccounts.map((row) => row[field])
+                  // 范围接口对未授权整单金额返回 null。缺任一金额时合计保持未知，不能把 null 送进小数求和。
+                  if (amounts.some((amount) => typeof amount !== "string" || amount === ""))
+                      return undefined
+                  return sumFixed(amounts, { maxScale: 2, outputScale: 2 })
+              })()
             : undefined
     const summaryAmount = (value?: string) =>
         value === undefined ? (

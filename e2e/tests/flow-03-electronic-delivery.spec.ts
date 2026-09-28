@@ -352,8 +352,7 @@ async function pickVirtualSku(page: Page) {
     await page.locator("#sales-orders-create-line-items-add").click()
     const dialog = page.getByRole('dialog', { name: '添加商品' })
     await expect(dialog).toBeVisible({ timeout: 20000 })
-    await dialog.locator('#sales-orders-sku-picker-toolbar').getByRole('button', { name: '更多筛选' }).click()
-    await dialog.getByRole('radio', { name: '虚拟' }).click()
+    await chooseComboboxById(page, 'master-data-list-sellable-list-toolbar-kind', '虚拟')
     await dialog.locator('#master-data-list-sellable-list-toolbar-button-5').click()
     const empty = dialog.getByText('当前筛选无结果')
     if (await empty.isVisible().catch(() => false)) {

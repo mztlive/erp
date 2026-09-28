@@ -273,6 +273,7 @@ test.describe("flow-16 客户退款单", () => {
         const creditCode = `9111F16B${stamp}00000000000`.replace(/[^0-9A-Z]/g, "0").slice(0, 18)
         const contractNo = `HT-F16S-${stamp}`
         const extra: BrowserContext[] = []
+        let purchaseNo = ""
 
         try {
             // ── 1. 销售：客户 + 合同 + 销售单 ──
@@ -369,6 +370,8 @@ test.describe("flow-16 客户退款单", () => {
             // ── 3. 财务：采购单审批通过，形成应付 ──
             const caiwuPo = await openRole(browser, extra, "caiwu")
             await openWorkspaceTask(caiwuPo.page, "采购单审批", undefined, "approval")
+            purchaseNo = ((await caiwuPo.page.locator("body").innerText()).match(/PO-[0-9a-f]+/i) ?? [""])[0]
+            expect(purchaseNo.length).toBeGreaterThan(2)
             await confirmApprove(caiwuPo.page)
             await caiwuPo.page.goto("/finance/supplier-accounts")
             await expect(caiwuPo.page.getByRole("heading", { name: "供应商往来" })).toBeVisible({
@@ -484,7 +487,12 @@ test.describe("flow-16 客户退款单", () => {
             await expect(fukuanAssert.page.getByRole("heading", { name: "供应商往来" })).toBeVisible({
                 timeout: LONG,
             })
-            await expect(fukuanAssert.page.getByRole("row").filter({ hasText: /狮峰/ }).getByText("未结", { exact: true })).toBeVisible({ timeout: LONG })
+            await expect(
+                fukuanAssert.page
+                    .getByRole("row")
+                    .filter({ hasText: purchaseNo })
+                    .getByText("未结", { exact: true }),
+            ).toBeVisible({ timeout: LONG })
             await fukuanAssert.context.close()
         } finally {
             await Promise.allSettled(extra.map((context) => context.close()))

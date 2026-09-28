@@ -96,21 +96,20 @@ async function gotoHeading(page: Page, pathName: string, heading: string | RegEx
     })
 }
 
-async function assertInventoryUntouched(page: Page) {
+/** 代发不得给本单留下采购入库。全量套件里其他流程可以已有库存。 */
+async function assertInventoryUntouched(page: Page, documentHint: string) {
     await gotoHeading(page, "/inventory", "库存台账")
     await expect(page.getByRole("button", { name: /^余额(?: \d+)?$/ })).toBeVisible({
         timeout: 20000,
     })
-    await expect(
-        page.getByText(/当前仓库尚无 ERP 自有库存记录|尚未建立库存台账|没有符合条件的库存/),
-    ).toBeVisible({ timeout: 20000 })
-    await expect(page.getByText("采购入库")).toHaveCount(0)
+    const ownReceipt = page.getByRole("row").filter({ hasText: documentHint }).filter({ hasText: "采购入库" })
+    await expect(ownReceipt).toHaveCount(0)
 
     await page.locator("#inventory-ledger-view-movement").click()
-    await expect(page.getByText("采购入库")).toHaveCount(0)
+    await expect(page.getByRole("row").filter({ hasText: documentHint }).filter({ hasText: "采购入库" })).toHaveCount(0)
 
     await page.locator("#inventory-ledger-view-reservation").click()
-    await expect(page.getByText("采购入库")).toHaveCount(0)
+    await expect(page.getByRole("row").filter({ hasText: documentHint }).filter({ hasText: "采购入库" })).toHaveCount(0)
 }
 
 test("供应商直接发客户（代发）全流程", async ({ browser }) => {
@@ -374,7 +373,7 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
             timeout: 20000,
         })
         await expect(page.getByRole("button", { name: /入库/ })).toHaveCount(0)
-        await assertInventoryUntouched(page)
+        await assertInventoryUntouched(page, salesOrderNo)
     }
 
     // ── 10. 若先款门槛拦住直发，出纳先完成付款任务 ──
@@ -450,7 +449,7 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
     // ── 13. 终态断言：自有库存无变化、无采购入库单、无入仓履约 ──
     {
         page = await switchTo("caigou")
-        await assertInventoryUntouched(page)
+        await assertInventoryUntouched(page, salesOrderNo)
         await gotoHeading(page, "/procurement/orders", "采购单")
         const poRow = purchaseOrderRow(page, salesOrderNo)
         await expect(poRow.getByText("实物 / 供应商直发", { exact: true })).toBeVisible({
@@ -466,7 +465,7 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
             timeout: 20000,
         })
         await expect(page.getByRole("button", { name: /入库/ })).toHaveCount(0)
-        await assertInventoryUntouched(page)
+        await assertInventoryUntouched(page, salesOrderNo)
     }
     {
         page = await switchTo("xiaoshou")

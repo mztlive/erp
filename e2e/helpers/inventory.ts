@@ -141,7 +141,8 @@ export async function ensureZeroBalanceDimension(
             updated_at: NumberLong(${now}),
             on_hand_quantity: NumberDecimal("0"), reserved_quantity: NumberDecimal("0"), available_quantity: NumberDecimal("0")
           }});
-        }`;
+        }
+        target.stock_reservations.deleteMany({warehouse_id: key.warehouse_id, sku_id: key.sku_id});`;
   try {
     execFileSync("mongosh", ["--norc", "--quiet", settings.uri, "--eval", script], {
       stdio: "pipe",

@@ -302,7 +302,11 @@ async function completeFulfillment(
         timeout: TIMEOUT,
     })
     await selectWorkspaceFamily(page, "fulfillment")
-    const tasks = page.getByRole("button", { name: /履约处理/ })
+    const managed = page.getByRole("button", { name: /^范围内待办/ }).first()
+    if (await managed.isVisible().catch(() => false) && (await managed.getAttribute("aria-pressed")) !== "true") {
+        await managed.click()
+    }
+    const tasks = page.getByRole("button", { name: new RegExp(`履约处理[\\s\\S]*${salesOrderNo}|${salesOrderNo}[\\s\\S]*履约处理`) })
     const empty = page.getByText(/当前没有待处理事项|当前筛选没有待办|范围内没有待办/)
     await expect(tasks.first().or(empty).first()).toBeVisible({ timeout: TIMEOUT })
     const wanted = kind === "入库" ? "入库表单" : "公司仓发表单"

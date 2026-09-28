@@ -332,9 +332,24 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
             await openWorkspaceTask(page, /履约处理/, purchaseOrderNo, "fulfillment");
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
-            // 卡片有时只有客户名和销售单号，没有采购单号。只在没找到该任务时改用本单号，不点第一条履约。
             if (!message.includes("工作台未找到任务") || !salesOrderNo) throw error;
-            await openWorkspaceTask(page, /履约处理/, salesOrderNo, "fulfillment");
+            const list = page.getByRole("list", { name: "待办列表" });
+            const candidates = list.getByRole("button", { name: new RegExp(salesOrderNo) });
+            const count = await candidates.count();
+            if (count === 0) throw error;
+            let opened = false;
+            for (let index = 0; index < count; index += 1) {
+                await candidates.nth(index).click();
+                await openFulfillmentWorkspaceForm(page);
+                if (await page.getByText(purchaseOrderNo).count()) {
+                    opened = true;
+                    break;
+                }
+                await page.goto("/workspace?family=fulfillment");
+                await selectWorkspaceFamily(page, "fulfillment");
+            }
+            if (!opened) throw error;
+            return;
         }
         await openFulfillmentWorkspaceForm(page);
     };
