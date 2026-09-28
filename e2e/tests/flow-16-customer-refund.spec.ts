@@ -301,9 +301,28 @@ test.describe("flow-16 客户退款单", () => {
             })
             await expect(caigou.page.getByText("将创建采购单")).toBeVisible({ timeout: TIMEOUT })
             await expandSourcingEditor(caigou.page)
-            const warehouse = caigou.page
-                .locator('[id^="procurement-orders-create-row-"][id$="-warehouse"]')
-                .first()
+            const sourcing = caigou.page.locator('[id$="-sourcing-option"]')
+            await expect(sourcing.first()).toBeVisible({ timeout: TIMEOUT })
+            let purchase = sourcing.first()
+            const sourcingCount = await sourcing.count()
+            let sawWarehousePurchase = false
+            for (let index = 0; index < sourcingCount; index += 1) {
+                const combo = sourcing.nth(index)
+                if (!(await combo.isVisible().catch(() => false))) continue
+                const shown = ((await combo.inputValue().catch(() => "")) || "").replace(/\s+/g, " ")
+                if (/入仓/.test(shown) && !/可用/.test(shown)) {
+                    purchase = combo
+                    sawWarehousePurchase = true
+                    break
+                }
+            }
+            if (!sawWarehousePurchase) {
+                await chooseOption(caigou.page, purchase, /入仓/, "入仓")
+            }
+            const purchaseId = await purchase.getAttribute("id")
+            const purchasePrefix = purchaseId?.replace(/-sourcing-option$/, "")
+            expect(purchasePrefix, `未能读取入仓履约方案身份: ${purchaseId}`).toBeTruthy()
+            const warehouse = caigou.page.locator(`#${purchasePrefix}-warehouse`)
             await expect(warehouse).toBeVisible({ timeout: TIMEOUT })
             await warehouse.click()
             await warehouse.fill("BJ-TZ-01")
@@ -317,9 +336,34 @@ test.describe("flow-16 客户退款单", () => {
             await expect(preview).toBeVisible({ timeout: TIMEOUT })
             await expect(preview.getByText("本次全部由现有库存满足")).toHaveCount(0)
             await preview.locator("#procurement-orders-create-preview-confirm").click()
-            await expect(caigou.page.getByText(/已创建 1 张采购单并提交审批|已将缺口拆成/)).toBeVisible({
-                timeout: LONG,
+            const allocated = /已创建 1 张采购单并提交审批|已将缺口拆成/
+            const created = caigou.page.getByText(allocated)
+            const stale = caigou.page.getByRole("alert").filter({
+                hasText: "可分配供给数量已更新，请刷新后重试",
             })
+            await expect(created.or(stale)).toBeVisible({ timeout: LONG })
+            if (await stale.isVisible().catch(() => false)) {
+                await expect(preview).toBeHidden({ timeout: TIMEOUT })
+                const refreshedSourcing = caigou.page.locator('[id$="-sourcing-option"]:visible').first()
+                await chooseOption(caigou.page, refreshedSourcing, /入仓/, "入仓")
+                const refreshedWarehouse = caigou.page
+                    .locator('[id^="procurement-orders-create-row-"][id$="-warehouse"]:visible')
+                    .first()
+                await expect(refreshedWarehouse).toBeVisible({ timeout: TIMEOUT })
+                await refreshedWarehouse.click()
+                await refreshedWarehouse.fill("BJ-TZ-01")
+                const refreshedOption = caigou.page
+                    .getByRole("option", { name: /BJ-TZ-01|北京通州/ })
+                    .first()
+                await expect(refreshedOption).toBeVisible({ timeout: TIMEOUT })
+                await refreshedOption.click({ force: true })
+                await caigou.page.locator("#procurement-orders-create-preview").click()
+                const refreshedPreview = caigou.page.getByRole("dialog", { name: "预览供给分配" })
+                await expect(refreshedPreview).toBeVisible({ timeout: TIMEOUT })
+                await expect(refreshedPreview.getByText("本次全部由现有库存满足")).toHaveCount(0)
+                await refreshedPreview.locator("#procurement-orders-create-preview-confirm").click()
+                await expect(created).toBeVisible({ timeout: LONG })
+            }
             await caigou.context.close()
 
             // ── 3. 财务：采购单审批通过，形成应付 ──
