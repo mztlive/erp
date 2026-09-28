@@ -17,10 +17,11 @@ import { expect, type Locator, type Page } from "@playwright/test"
  * 生产 id / 文案：
  * - toast：`[data-slot="toast"]` / `[data-slot="toast-title"]`，关闭按钮 aria-label「关闭提示」
  * - combobox：字段 id 落在 input 上，选项 `#${id}-option-<value>`，`[data-slot="combobox-item"]`
- * - 日历：`[data-slot="calendar"]`，日期 `#${id}-calendar-month-YYYY-MM-01-day-YYYY-MM-DD`
+ * - 日历：刚打开的 `[data-slot="popover-content"]` 内的 `[data-slot="calendar"]`，
+ *   日期 `#${id}-calendar-month-YYYY-MM-01-day-YYYY-MM-DD`
  * - 工作台：heading「我的工作台」、`#workspace-family-filter-trigger`、
  *   `#workspace-family-nav-{all|approval|procurement|fulfillment|finance|exception}`、
- *   list「待办列表」、region「当前工作台任务」
+ *   list「待办列表」、范围按钮「待我处理 / 范围内待办」、region「当前工作台任务」
  * - 审批：按钮「同意审批」/「通过」、对话框「确认通过」、`[id$="-decision-dialog-submit"]`
  */
 
@@ -252,36 +253,63 @@ export async function pickCalendarDay(
     isoDate: string,
 ): Promise<void> {
     await expect(trigger).toBeVisible({ timeout: UI_TIMEOUT })
+    const fieldId = await trigger.getAttribute("id")
     await trigger.click()
-    const calendar = page.locator('[data-slot="calendar"]:visible')
+
+    const opened = page
+        .locator('[data-slot="popover-content"]:visible')
+        .filter({ has: page.locator('[data-slot="calendar"]') })
+    // 同一页可能还有未关掉的日历，或外层浮层套着日期浮层。优先当前字段、且自身不再嵌套浮层的那一个。
+    const owned = fieldId
+        ? opened.filter({ has: page.locator(`[id^="${fieldId}-calendar"]`) })
+        : opened
+    const popover = owned
+        .filter({ hasNot: page.locator('[data-slot="popover-content"]') })
+        .last()
+    // 范围日历可能并排两个月，各有一个 calendar。先收窄到浮层再 first，避免 strict mode。
+    const calendar = popover.locator('[data-slot="calendar"]').first()
     await expect(calendar).toBeVisible({ timeout: UI_TIMEOUT })
 
-    const dayById = calendar.locator(`[id$="-day-${isoDate}"]`).first()
-    const fieldId = await trigger.getAttribute("id")
-    let nextMonth = calendar
+    const dayButtonsById = fieldId
+        ? popover.locator(`[id^="${fieldId}-calendar"][id$="-day-${isoDate}"]`)
+        : popover.locator(`[id$="-day-${isoDate}"]`)
+    const clickIsoDay = async (): Promise<boolean> => {
+        const total = await dayButtonsById.count()
+        let outsideFallback: Locator | undefined
+        for (let index = 0; index < total; index += 1) {
+            const button = dayButtonsById.nth(index)
+            if (!(await button.isVisible().catch(() => false))) continue
+            if ((await button.getAttribute("aria-disabled")) === "true") continue
+            if ((await button.getAttribute("data-outside")) === "true") {
+                outsideFallback ??= button
+                continue
+            }
+            await button.click()
+            return true
+        }
+        if (!outsideFallback) return false
+        await outsideFallback.click()
+        return true
+    }
+
+    let nextMonth = popover
         .locator('[id$="-next-month"]')
         .or(
-            calendar.getByRole("button", {
+            popover.getByRole("button", {
                 name: /next month|go to the next month|下个月|下一月/i,
             }),
         )
     if (fieldId) {
         nextMonth = nextMonth
-            .or(page.locator(`#${fieldId}-calendar-next-month`))
-            .or(page.locator(`#${fieldId}-next-month`))
+            .or(popover.locator(`#${fieldId}-calendar-next-month`))
+            .or(popover.locator(`#${fieldId}-next-month`))
     }
     nextMonth = nextMonth.first()
 
     for (let i = 0; i < 18; i += 1) {
-        if (await dayById.isVisible().catch(() => false)) {
-            const disabled = await dayById.getAttribute("aria-disabled")
-            if (disabled !== "true") {
-                await dayById.click()
-                return
-            }
-        }
+        if (await clickIsoDay()) return
         const target = new Date(`${isoDate}T00:00:00`)
-        const caption = await calendar.innerText()
+        const caption = await popover.innerText()
         const monthTokens = [
             `${target.getMonth() + 1}月`,
             MONTH_NAMES_EN[target.getMonth()]!,
@@ -297,13 +325,10 @@ export async function pickCalendarDay(
         break
     }
 
-    if (await dayById.isVisible().catch(() => false)) {
-        await dayById.click()
-        return
-    }
+    if (await clickIsoDay()) return
 
     const day = String(new Date(`${isoDate}T00:00:00`).getDate())
-    const dayButtons = calendar.getByRole("button", { name: day })
+    const dayButtons = popover.getByRole("button", { name: day })
     const total = await dayButtons.count()
     for (let i = 0; i < total; i += 1) {
         const button = dayButtons.nth(i)
@@ -453,10 +478,7 @@ export async function selectWorkspaceFamily(
 }
 
 function workspaceTaskButtons(page: Page): Locator {
-    return page
-        .getByRole("list", { name: "待办列表" })
-        .getByRole("button")
-        .or(page.getByRole("button", { name: /审批|分配|履约|付款|开票|调整/ }))
+    return page.getByRole("list", { name: "待办列表" }).getByRole("button")
 }
 
 function workspaceTaskLocator(
@@ -464,35 +486,29 @@ function workspaceTaskLocator(
     typeLabel: string | RegExp,
     hint?: string,
 ): Locator {
-    const buttons = workspaceTaskButtons(page)
+    const list = page.getByRole("list", { name: "待办列表" })
     const label = `(?:${labelSource(typeLabel)})`
-    return hint
-        ? buttons
-              .filter({
-                  hasText: new RegExp(
-                      `${label}[\\s\\S]*${escapeRe(hint)}|${escapeRe(hint)}[\\s\\S]*${label}`,
-                  ),
-              })
-              .or(
-                  page.getByRole("button", {
-                      name: new RegExp(
-                          `${label}[\\s\\S]*${escapeRe(hint)}|${escapeRe(hint)}[\\s\\S]*${label}`,
-                      ),
-                  }),
-              )
-              .first()
-        : buttons
-              .filter({ hasText: new RegExp(label) })
-              .or(page.getByRole("button", { name: new RegExp(label) }))
-              .first()
+    const pattern = hint
+        ? new RegExp(
+              `${label}[\\s\\S]*${escapeRe(hint)}|${escapeRe(hint)}[\\s\\S]*${label}`,
+          )
+        : new RegExp(label)
+    // 只匹配列表内任务。页级「审批|履约」会误中范围页签「我发起的审批」。
+    return list
+        .getByRole("button", { name: pattern })
+        .or(list.getByRole("button").filter({ hasText: pattern }))
+        .first()
 }
 
 /**
  * 打开 W01 待办。不要往 `#workspace-queue-toolbar-search-input` 填单号/往来方，
  * 后端搜索不匹配这些字段，会把列表滤空。
  *
+ * 默认口径是待我处理。列表里没有带 hint 的任务时，再点「范围内待办」重找。
+ * 任务已经在待我处理中则不切换口径。有 hint 时不改点同类型第一条。
+ *
  * `typeLabel` 可以是「销售单审批」或 `待供给分配|供给分配` 这种正则源。
- * `hint` 匹配 aria-label（单号）或可见文本（客户名）。
+ * `hint` 匹配可访问名称（单号、往来方）或可见文本。
  */
 export async function openWorkspaceTask(
     page: Page,
@@ -512,10 +528,25 @@ export async function openWorkspaceTask(
     )
     await expect(list.or(empty).first()).toBeVisible({ timeout: UI_TIMEOUT })
 
-    const union = workspaceTaskLocator(page, typeLabel, hint)
+    const task = workspaceTaskLocator(page, typeLabel, hint)
+    let searchedManaged = false
+    if (!(await task.isVisible().catch(() => false))) {
+        const managed = page.getByRole("button", { name: /^范围内待办/ }).first()
+        if (await managed.isVisible().catch(() => false)) {
+            const onManaged = (await managed.getAttribute("aria-pressed")) === "true"
+            if (!onManaged) {
+                searchedManaged = true
+                await managed.click()
+                await expect(managed).toHaveAttribute("aria-pressed", "true", {
+                    timeout: UI_TIMEOUT,
+                })
+            }
+        }
+    }
+
     try {
-        await expect(union).toBeVisible({ timeout: UI_TIMEOUT })
-        await union.click()
+        await expect(task).toBeVisible({ timeout: UI_TIMEOUT })
+        await task.click()
     } catch {
         const labels = await workspaceTaskButtons(page)
             .evaluateAll((nodes) =>
@@ -523,8 +554,9 @@ export async function openWorkspaceTask(
             )
             .catch(() => [] as string[])
         const emptyText = (await empty.first().innerText().catch(() => "")).trim()
+        const scopeNote = searchedManaged ? "（已查看待我处理与范围内待办）" : ""
         throw new Error(
-            `工作台未找到任务: ${String(typeLabel)}${hint ? ` / ${hint}` : ""}\n现有: ${labels.filter(Boolean).join(" | ") || emptyText || "（空）"}`,
+            `工作台未找到任务: ${String(typeLabel)}${hint ? ` / ${hint}` : ""}${scopeNote}\n现有: ${labels.filter(Boolean).join(" | ") || emptyText || "（空）"}`,
         )
     }
     await expect(page.getByRole("region", { name: "当前工作台任务" })).toBeVisible({

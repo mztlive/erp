@@ -43,6 +43,8 @@ const SKU_KEYWORD = "龙井";
 const SKU_NAME = "狮峰明前龙井礼盒";
 const WAREHOUSE_NAME = "北京通州仓";
 const WAREHOUSE_CODE = "BJ-TZ-01";
+/** 采购入库卡往来方是供应商法定名称，不是销售客户。 */
+const RECEIPT_SUPPLIER = "杭州狮峰茶叶有限公司";
 const SALES_QTY = "2";
 
 type LoginName =
@@ -275,7 +277,7 @@ test("flow-01 外部采购入仓后由公司仓库发货", async ({ browser }) =
 
         // 7) 先履约后付款：仓储入库 → 仓发。若供给是先款条件，则先由出纳确认付款
         page = await switchTo("cangchu");
-        await openWorkspaceTask(page, "履约处理", customerName, "fulfillment");
+        await openWorkspaceTask(page, "履约处理", RECEIPT_SUPPLIER, "fulfillment");
         let receiptForm = await openFulfillmentWorkspaceForm(page);
         const gate = page.locator("#prepayment-gate");
         if (
@@ -285,7 +287,7 @@ test("flow-01 外部采购入仓后由公司仓库发货", async ({ browser }) =
             page = await switchTo("fukuan");
             await payOnlySupplierTask(page);
             page = await switchTo("cangchu");
-            await openWorkspaceTask(page, "履约处理", customerName, "fulfillment");
+            await openWorkspaceTask(page, "履约处理", RECEIPT_SUPPLIER, "fulfillment");
             receiptForm = await openFulfillmentWorkspaceForm(page);
         }
         await expect(receiptForm.locator('[aria-label="入库表单"]')).toBeVisible({
@@ -312,7 +314,7 @@ test("flow-01 外部采购入仓后由公司仓库发货", async ({ browser }) =
             page = await switchTo("fukuan");
             await payOnlySupplierTask(page);
             page = await switchTo("cangchu");
-            await openWorkspaceTask(page, "履约处理", customerName, "fulfillment");
+            await openWorkspaceTask(page, "履约处理", RECEIPT_SUPPLIER, "fulfillment");
             receiptForm = await openFulfillmentWorkspaceForm(page);
         }
         await expect(page.locator("#fulfillment-operations-work-surface-confirm")).toBeEnabled({
@@ -329,6 +331,7 @@ test("flow-01 外部采购入仓后由公司仓库发货", async ({ browser }) =
             if (await continueShip.count()) {
                 await continueShip.click();
             } else {
+                // 仓发卡往来方仍是客户，不能沿用入库的供应商 hint。
                 await openWorkspaceTask(page, "履约处理", customerName, "fulfillment");
             }
         }
