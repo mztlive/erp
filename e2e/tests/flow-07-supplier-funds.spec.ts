@@ -35,6 +35,7 @@ import {
     expectToast,
     openWorkspaceTask,
     pickCalendarDay,
+    readHeaderDocumentNumber,
     selectWorkspaceFamily,
 } from "../helpers/ui"
 
@@ -110,6 +111,11 @@ async function approveOpenTask(page: Page, nodeName?: string | RegExp): Promise<
     await approveCurrentDocument(page);
 }
 
+function taskNameWithHint(label: string, hint: string): RegExp {
+    const escaped = hint.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`${label}[\\s\\S]*${escaped}|${escaped}[\\s\\S]*${label}`);
+}
+
 async function assertNoSupplierPaymentApproval(page: Page): Promise<void> {
     await expect(page.getByText("供应商付款单审批")).toHaveCount(0);
     await expect(page.getByText("SupplierPayment")).toHaveCount(0);
@@ -153,6 +159,8 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
         firstAmount: "",
         restAmount: "",
     };
+    let salesOrderNo = "";
+    let purchaseNo = "";
 
     // ── 1. 销售：客户 + 合同 + 销售单提交 ────────────────────────────────
     await loginViaUi(page, "xiaoshou");
@@ -241,16 +249,18 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
         timeout: 20_000,
     });
     await expect(page.getByText("审批中").first()).toBeVisible({ timeout: 20_000 });
+    salesOrderNo = await readHeaderDocumentNumber(page);
+    expect(salesOrderNo.length).toBeGreaterThan(0);
     // ── 2. 采购：销售单通过 → 供给分配创建采购单并立即提交审批 ──────────
     const caigou = await openRole(browser, "caigou");
     const caigouPage = caigou.page;
-    await openWorkspaceTask(caigouPage, /销售单审批/, undefined, "approval");
+    await openWorkspaceTask(caigouPage, /销售单审批/, salesOrderNo, "approval");
     await expect(caigouPage.getByRole("button", { name: /^(通过|同意审批)$/ })).toBeVisible({
         timeout: 20_000,
     });
     await approveOpenTask(caigouPage);
 
-    await openWorkspaceTask(caigouPage, /待供给分配/, undefined, "procurement");
+    await openWorkspaceTask(caigouPage, /待供给分配/, salesOrderNo, "procurement");
     await expect(caigouPage.getByRole("heading", { name: "供给分配" })).toBeVisible({
         timeout: 20_000,
     });
@@ -279,7 +289,7 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
                 .isVisible()
                 .catch(() => false))
         ) {
-            await openWorkspaceTask(caigouPage, /待供给分配/, undefined, "procurement")
+            await openWorkspaceTask(caigouPage, /待供给分配/, salesOrderNo, "procurement")
             await expect(caigouPage.getByRole("heading", { name: "供给分配" })).toBeVisible({
                 timeout: 20_000,
             })
@@ -311,23 +321,44 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
     if (sourced !== true) throw new Error("供给分配多次尝试仍未提交成功")
     await expectToast(caigouPage, /已创建 1 张采购单并提交审批|已将缺口拆成/);
 
+    await caigouPage.goto("/procurement/orders");
+    await expect(caigouPage.getByRole("heading", { name: "采购单", exact: true })).toBeVisible({
+        timeout: 20_000,
+    });
+    const poSearch = caigouPage.locator("#procurement-orders-list-search");
+    await poSearch.fill(salesOrderNo);
+    await poSearch.press("Enter");
+    const poRow = caigouPage
+        .locator("#procurement-orders-list-table")
+        .getByRole("row")
+        .filter({ hasText: salesOrderNo });
+    await expect(poRow).toHaveCount(1, { timeout: 20_000 });
+    purchaseNo = ((await poRow.getByRole("button", { name: /打开采购单/ }).textContent()) ?? "").trim();
+    expect(purchaseNo.length).toBeGreaterThan(0);
+
     await gotoWorkspace(caigouPage);
     await caigouPage.getByRole("button", { name: /^我发起的/ }).click();
-    await expect(caigouPage.getByText("采购单审批").first()).toBeVisible({ timeout: 20_000 });
+    await expect(
+        caigouPage.getByRole("button", { name: taskNameWithHint("采购单审批", purchaseNo) }),
+    ).toBeVisible({ timeout: 20_000 });
     await assertNoSupplierPaymentApproval(caigouPage);
 
     // ── 3. 财务总监：采购单审批通过，形成应付；不得出现付款审批 ────────
     const caiwu = await openRole(browser, "caiwu");
     const caiwuPage = caiwu.page;
-    await openWorkspaceTask(caiwuPage, /采购单审批/, undefined, "approval");
+    await openWorkspaceTask(caiwuPage, /采购单审批/, purchaseNo, "approval");
     await approveOpenTask(caiwuPage);
 
     await gotoWorkspace(caiwuPage);
     await selectWorkspaceFamily(caiwuPage, "finance");
-    await expect(caiwuPage.getByRole("button", { name: /供应商付款处理/ })).toHaveCount(0);
+    await expect(
+        caiwuPage.getByRole("button", { name: taskNameWithHint("供应商付款处理", purchaseNo) }),
+    ).toHaveCount(0);
     await selectWorkspaceFamily(caiwuPage, "approval");
     await assertNoSupplierPaymentApproval(caiwuPage);
-    await expect(caiwuPage.getByRole("button", { name: /采购单审批/ })).toHaveCount(0);
+    await expect(
+        caiwuPage.getByRole("button", { name: taskNameWithHint("采购单审批", purchaseNo) }),
+    ).toHaveCount(0);
 
     await caiwuPage.goto("/finance/supplier-accounts");
     await expect(caiwuPage.getByRole("heading", { name: "供应商往来" })).toBeVisible({
@@ -345,7 +376,7 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
     await assertNoSupplierPaymentApproval(fukuanPage);
     await expect(fukuanPage.getByRole("button", { name: /单据审批|付款冲正审批/ })).toHaveCount(0);
 
-    await openWorkspaceTask(fukuanPage, /供应商付款处理/, undefined, "finance");
+    await openWorkspaceTask(fukuanPage, /供应商付款处理/, purchaseNo, "finance");
     await expect(fukuanPage.getByRole("heading", { name: /向.+付款/ })).toBeVisible({
         timeout: 20_000,
     });
@@ -429,7 +460,9 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
 
     await gotoWorkspace(fukuanPage);
     await selectWorkspaceFamily(fukuanPage, "finance");
-    await expect(fukuanPage.getByRole("button", { name: /供应商付款处理/ })).toHaveCount(0, {
+    await expect(
+        fukuanPage.getByRole("button", { name: taskNameWithHint("供应商付款处理", purchaseNo) }),
+    ).toHaveCount(0, {
         timeout: 20_000,
     });
     await assertNoSupplierPaymentApproval(fukuanPage);
@@ -598,7 +631,9 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
 
     await gotoWorkspace(fukuanPage);
     await selectWorkspaceFamily(fukuanPage, "finance");
-    await expect(fukuanPage.getByRole("button", { name: /供应商付款处理/ })).toBeVisible({
+    await expect(
+        fukuanPage.getByRole("button", { name: taskNameWithHint("供应商付款处理", purchaseNo) }),
+    ).toBeVisible({
         timeout: 20_000,
     });
     await assertNoSupplierPaymentApproval(fukuanPage);

@@ -431,7 +431,9 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
         await poSearch.fill(salesOrderNo);
         await poSearch.press("Enter");
         await expect(page.getByText(/0 条|当前没有/)).toBeVisible({ timeout: UI_TIMEOUT });
-        await expect(page.getByText(salesOrderNo)).toHaveCount(0);
+        await expect(
+            page.locator("#procurement-orders-list-table").getByText(salesOrderNo),
+        ).toHaveCount(0);
 
         await openWorkspaceTask(page, /销售单审批/, salesOrderNo, "approval");
         await expect(page.getByRole("button", { name: "预览供给分配" })).toHaveCount(0);

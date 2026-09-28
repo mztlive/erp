@@ -82,6 +82,13 @@ function contractPdf(): { name: string; mimeType: string; buffer: Buffer } {
     }
 }
 
+function purchaseOrderRow(page: Page, salesOrderNo: string) {
+    return page
+        .locator("#procurement-orders-list-table")
+        .getByRole("row")
+        .filter({ hasText: salesOrderNo })
+}
+
 async function gotoHeading(page: Page, pathName: string, heading: string | RegExp) {
     await page.goto(pathName)
     await expect(page.getByRole("heading", { name: heading })).toBeVisible({
@@ -328,13 +335,15 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
     // ── 7. 采购单已提交审批：履约责任=供应商直发；不得留草稿 ──
     {
         await gotoHeading(page, "/procurement/orders", "采购单")
-        const poTable = page.locator("#procurement-orders-list-table")
-        await expect(page.getByText("1 条").first()).toBeVisible({ timeout: 20000 })
-        await expect(poTable.getByText("实物 / 供应商直发", { exact: true })).toBeVisible({ timeout: 20000 })
-        await expect(poTable.getByText("草稿")).not.toBeVisible()
-        await expect(poTable.getByText("审批中")).toBeVisible({ timeout: 20000 })
+        const poRow = purchaseOrderRow(page, salesOrderNo)
+        await expect(poRow).toBeVisible({ timeout: 20000 })
+        await expect(poRow.getByText("实物 / 供应商直发", { exact: true })).toBeVisible({
+            timeout: 20000,
+        })
+        await expect(poRow.getByText("审批中")).toBeVisible({ timeout: 20000 })
+        await expect(poRow.getByText("草稿")).toHaveCount(0)
         purchaseOrderNo = (
-            (await poTable.getByRole("button", { name: /打开采购单/ }).textContent()) ?? ""
+            (await poRow.getByRole("button", { name: /打开采购单/ }).textContent()) ?? ""
         ).trim()
         expect(purchaseOrderNo.length).toBeGreaterThan(0)
     }
@@ -351,10 +360,12 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
     {
         page = await switchTo("caigou")
         await gotoHeading(page, "/procurement/orders", "采购单")
-        const poTable = page.locator("#procurement-orders-list-table")
-        await expect(poTable.getByText("已生效")).toBeVisible({ timeout: 20000 })
-        await expect(poTable.getByText("实物 / 供应商直发", { exact: true })).toBeVisible({ timeout: 20000 })
-        await expect(poTable.getByText(purchaseOrderNo).first()).toBeVisible()
+        const poRow = purchaseOrderRow(page, salesOrderNo)
+        await expect(poRow.getByText("已生效")).toBeVisible({ timeout: 20000 })
+        await expect(poRow.getByText("实物 / 供应商直发", { exact: true })).toBeVisible({
+            timeout: 20000,
+        })
+        await expect(poRow.getByText(purchaseOrderNo).first()).toBeVisible()
     }
     {
         page = await switchTo("cangchu")
@@ -441,10 +452,12 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
         page = await switchTo("caigou")
         await assertInventoryUntouched(page)
         await gotoHeading(page, "/procurement/orders", "采购单")
-        const poTable = page.locator("#procurement-orders-list-table")
-        await expect(poTable.getByText("实物 / 供应商直发", { exact: true })).toBeVisible({ timeout: 20000 })
-        await expect(poTable.getByText("已生效")).toBeVisible({ timeout: 20000 })
-        await expect(poTable.getByText(purchaseOrderNo).first()).toBeVisible({ timeout: 20000 })
+        const poRow = purchaseOrderRow(page, salesOrderNo)
+        await expect(poRow.getByText("实物 / 供应商直发", { exact: true })).toBeVisible({
+            timeout: 20000,
+        })
+        await expect(poRow.getByText("已生效")).toBeVisible({ timeout: 20000 })
+        await expect(poRow.getByText(purchaseOrderNo).first()).toBeVisible({ timeout: 20000 })
     }
     {
         page = await switchTo("cangchu")
