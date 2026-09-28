@@ -119,13 +119,6 @@ export function ProductsListPage() {
         supplierOfferingsError: state.supplierOfferingsQuery.isError,
         onUpdateProductListing: state.updateProductListing,
         onSupplyProduct: state.setSupplyProduct,
-        onAddSupply: (product) => {
-            state.setSupplyProduct(null)
-            openSupply(
-                product,
-                state.productSkusByProduct.get(product.stableId) ?? [],
-            )
-        },
         onDisableTarget: state.setDisableTarget,
     })
     const hasActiveFilters =
