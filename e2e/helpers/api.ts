@@ -33,7 +33,7 @@ const tokenCache = new Map<string, Promise<string>>()
 
 /**
  * 按账号缓存的 API token。整个 Playwright worker 内同账号只登录一次：
- * 每次登录都要跑一遍 Argon2，且后端按账号限流（每 60 秒 5 次），撞限会让 UI 登录多等 35 秒。
+ * 每次登录都要跑一遍 Argon2。同一来源 60 秒内超过 20 次仍会让 UI 登录多等 35 秒。
  * 需要验证登录本身或撤权后必须重新签发 token 的场景，直接用 `apiLogin`。
  */
 export function apiToken(identity: LoginIdentity): Promise<string> {

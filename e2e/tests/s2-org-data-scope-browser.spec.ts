@@ -75,7 +75,7 @@ async function apiToken(key: string): Promise<string> {
             try {
                 return await apiLogin(loginName(key))
             } catch (error) {
-                // 后端登录限流为每账号每 60 秒 5 次；验收跨多次运行可能撞限，等待窗口滑过后重试一次。
+                // 同一来源 60 秒内登录超过 20 次会返回 429；验收跨多次运行可能撞限，等待窗口滑过后重试一次。
                 if (error instanceof Error && error.message.includes("429")) {
                     await new Promise((resolve) => setTimeout(resolve, 65_000))
                     return apiLogin(loginName(key))

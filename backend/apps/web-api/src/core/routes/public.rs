@@ -9,7 +9,6 @@ use crate::core::handler::auth;
 use crate::core::rate_limit::RateLimiter;
 
 const LOGIN_ATTEMPTS_PER_SOURCE: usize = 20;
-const LOGIN_ATTEMPTS_PER_SOURCE_ACCOUNT: usize = 5;
 const EMERGENCY_GLOBAL_LOGIN_ATTEMPTS: usize = 600;
 const LOGIN_RATE_WINDOW: Duration = Duration::from_secs(60);
 const MAX_CONCURRENT_LOGINS: usize = 4;
@@ -33,11 +32,11 @@ pub fn routes(app_state: AppState) -> Router<AppState> {
 /// 创建公开登录入口使用的进程内限流器。
 ///
 /// # 返回值
-/// 返回每个“登录域 + TCP peer IP”20 次/60 秒、每个来源与账号组合 5 次/60 秒、
-/// 全局应急熔断 600 次/60 秒、并发 4 个请求的限流器。
+/// 返回每个“登录域 + TCP peer IP”20 次/60 秒、全局应急熔断 600 次/60 秒、
+/// 并发 4 个请求的限流器。同一来源上的账号不再单独计数。
 fn login_limiter() -> RateLimiter {
-    RateLimiter::with_key_limits(
-        &[LOGIN_ATTEMPTS_PER_SOURCE, LOGIN_ATTEMPTS_PER_SOURCE_ACCOUNT],
+    RateLimiter::new(
+        LOGIN_ATTEMPTS_PER_SOURCE,
         EMERGENCY_GLOBAL_LOGIN_ATTEMPTS,
         LOGIN_RATE_WINDOW,
         MAX_CONCURRENT_LOGINS,
@@ -58,40 +57,20 @@ mod tests {
     use tower::Service;
 
     use super::{
-        EMERGENCY_GLOBAL_LOGIN_ATTEMPTS, LOGIN_ATTEMPTS_PER_SOURCE, LOGIN_ATTEMPTS_PER_SOURCE_ACCOUNT,
-        MAX_LOGIN_REQUEST_BYTES, login_body_limit, login_limiter,
+        EMERGENCY_GLOBAL_LOGIN_ATTEMPTS, LOGIN_ATTEMPTS_PER_SOURCE, MAX_LOGIN_REQUEST_BYTES,
+        login_body_limit, login_limiter,
     };
     use crate::core::rate_limit::Error as RateLimitError;
 
     #[test]
-    fn login_policy_limits_one_source_account_combination() {
+    fn login_policy_allows_repeated_account_until_source_cap() {
         let limiter = login_limiter();
         let source = "backoffice|192.0.2.1";
-        let source_account = "backoffice|192.0.2.1|account01";
-        for _ in 0..LOGIN_ATTEMPTS_PER_SOURCE_ACCOUNT {
-            drop(limiter.admit_hierarchy(&[source, source_account]).unwrap());
+        for _ in 0..LOGIN_ATTEMPTS_PER_SOURCE {
+            drop(limiter.admit(source).unwrap());
         }
 
-        assert!(matches!(
-            limiter.admit_hierarchy(&[source, source_account]),
-            Err(RateLimitError::KeyExceeded { .. })
-        ));
-    }
-
-    #[test]
-    fn login_policy_limits_account_rotation_from_one_source() {
-        let limiter = login_limiter();
-        let source = "backoffice|192.0.2.1";
-        for index in 0..LOGIN_ATTEMPTS_PER_SOURCE {
-            let source_account = format!("{source}|account-{index}");
-            drop(limiter.admit_hierarchy(&[source, &source_account]).unwrap());
-        }
-
-        let next_source_account = format!("{source}|next-account");
-        assert!(matches!(
-            limiter.admit_hierarchy(&[source, &next_source_account]),
-            Err(RateLimitError::KeyExceeded { .. })
-        ));
+        assert!(matches!(limiter.admit(source), Err(RateLimitError::KeyExceeded { .. })));
     }
 
     #[test]
@@ -99,12 +78,11 @@ mod tests {
         let limiter = login_limiter();
         for index in 0..EMERGENCY_GLOBAL_LOGIN_ATTEMPTS {
             let source = format!("backoffice|192.0.2.{index}");
-            let source_account = format!("{source}|account-{index}");
-            drop(limiter.admit_hierarchy(&[&source, &source_account]).unwrap());
+            drop(limiter.admit(&source).unwrap());
         }
 
         assert!(matches!(
-            limiter.admit_hierarchy(&["backoffice|198.51.100.1", "backoffice|198.51.100.1|next-account"]),
+            limiter.admit("backoffice|198.51.100.1"),
             Err(RateLimitError::GlobalExceeded { .. })
         ));
     }

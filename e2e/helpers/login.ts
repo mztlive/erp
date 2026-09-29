@@ -41,7 +41,7 @@ export async function loginViaUi(
     await page.locator("#governance-auth-login-submit").click()
 
     const loginError = page.getByRole("alert").filter({ hasText: "无法登录" })
-    // 后端登录限流为每账号每 60 秒 5 次；多会话流程可能撞限，等待窗口滑过后重试。
+    // 同一来源 60 秒内登录超过 20 次会返回「频繁」；等待窗口滑过后重试。
     for (let attempt = 0; ; attempt += 1) {
         try {
             await page.waitForURL((url) => !url.pathname.startsWith("/login"), {

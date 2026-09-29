@@ -23,9 +23,8 @@ pub(crate) async fn login(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     Json(request): Json<AuthRequest>,
 ) -> Result<AuthResponse> {
-    let (source_key, source_account_key) =
-        super::login_rate_keys(super::BACKOFFICE_LOGIN_REALM, peer.ip(), &request.account);
-    let _permit = limiter.admit_hierarchy(&[&source_key, &source_account_key])?;
+    let source_key = super::login_source_key(super::BACKOFFICE_LOGIN_REALM, peer.ip());
+    let _permit = limiter.admit(&source_key)?;
     info!("Backoffice login attempt");
 
     let authentication = BackofficeAuthService::new(state.db()).authenticate(&request).await;

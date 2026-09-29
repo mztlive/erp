@@ -102,21 +102,6 @@ impl RateLimiter {
         self.admit_at(key, Instant::now())
     }
 
-    /// 为多层 key 原子预留窗口配额与一个全局并发槽位。
-    ///
-    /// # 参数
-    /// * `keys` - 与构造时 `key_limits` 顺序和数量一致、且互不相同的层级 key
-    ///
-    /// # 返回值
-    /// 返回必须持有到请求处理结束的并发许可。
-    ///
-    /// # 错误
-    /// 任一层 key 或全局窗口超限、并发槽位已满、key 结构不匹配或计数状态不可用时
-    /// 返回错误；失败不会部分占用其他层级配额。
-    pub(crate) fn admit_hierarchy(&self, keys: &[&str]) -> Result<OwnedSemaphorePermit, Error> {
-        self.admit_hierarchy_at(keys, Instant::now())
-    }
-
     /// 在显式时间点执行准入，便于确定性验证窗口边界。
     fn admit_at(&self, key: &str, now: Instant) -> Result<OwnedSemaphorePermit, Error> {
         self.admit_hierarchy_at(&[key], now)
@@ -301,7 +286,11 @@ mod tests {
     fn hierarchy_rejects_mismatched_or_duplicate_keys() {
         let limiter = RateLimiter::with_key_limits(&[2, 1], 4, Duration::from_secs(60), 2);
 
-        assert!(matches!(limiter.admit_hierarchy(&["source-a"]), Err(Error::Unavailable)));
-        assert!(matches!(limiter.admit_hierarchy(&["source-a", "source-a"]), Err(Error::Unavailable)));
+        let now = Instant::now();
+        assert!(matches!(limiter.admit_hierarchy_at(&["source-a"], now), Err(Error::Unavailable)));
+        assert!(matches!(
+            limiter.admit_hierarchy_at(&["source-a", "source-a"], now),
+            Err(Error::Unavailable)
+        ));
     }
 }
