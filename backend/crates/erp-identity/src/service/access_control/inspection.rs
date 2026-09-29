@@ -1,0 +1,131 @@
+//! 只读身份检查；先证明检查人的公司配置读取边界，再解析目标账号。
+use std::result::Result as StdResult;
+
+use application_core::AuditActor;
+use mongodb::Database;
+use persistence_core::Executor;
+
+use crate::access_control::DataScopeSubjectType;
+use crate::dto::inspection::{AccessInspectionRequest, AccessInspectionView};
+use crate::repository::access_control::data_scope::DataScopeRepositoryExt;
+use crate::service::access_control::resolve::{AuthorizedDataScope, DataScopeService};
+use crate::{AccessControlExt, Error, Permission, Result, RoleRepositoryExt, SharedRbacService};
+
+/// 为跨域单据检查提供经授权的目标身份；不能作为登录或操作令牌。
+pub struct InspectedAccess {
+    pub actor: Option<AuditActor>,
+    pub view: AccessInspectionView,
+}
+
+/// 复用真实 DataScope 解析，不维护另一套鉴权算法。
+#[derive(Clone)]
+pub struct AccessInspectionService {
+    db: Database,
+    rbac: SharedRbacService,
+}
+
+impl AccessInspectionService {
+    /// 绑定身份数据与权限服务。
+    /// # 参数
+    /// * `db` - 身份数据库。
+    /// * `rbac` - 现有 RBAC 服务。
+    /// # 返回
+    /// 无 I/O 的检查服务。
+    /// # 错误
+    /// 无。
+    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
+        Self { db, rbac }
+    }
+
+    /// 在调用方读取事务内检查账号和操作范围。
+    /// # 参数
+    /// * `operator` - 发起检查的管理员。
+    /// * `request` - 目标账号与业务动作。
+    /// * `executor` - 当前读取事务。
+    /// # 返回
+    /// 服务端解析结果或明确的账号／操作拒绝原因。
+    /// # 错误
+    /// 检查人越权、参数错误、数据库或配置错误继续向上传递。
+    pub async fn inspect(
+        &self,
+        operator: &AuditActor,
+        request: &AccessInspectionRequest,
+        executor: &mut dyn Executor,
+    ) -> Result<InspectedAccess> {
+        request.validate()?;
+        self.authorize(operator, executor).await?;
+        let account = self
+            .db
+            .accounts()
+            .find_by_id(&request.user_id, executor)
+            .await?
+            .filter(|account| account.is_active_backoffice());
+        let Some(account) = account else {
+            return Ok(denied("账号", "账号不存在或未启用，请核对人员账号状态。"));
+        };
+        let actor = AuditActor::new(account.base.id.clone(), account.secret.account().into(), account.kind);
+        let result = DataScopeService::new(self.db.clone(), self.rbac.clone())
+            .resolve(&actor, &request.resource, &request.action, executor)
+            .await;
+        match result {
+            Ok(access) => {
+                let mut view = AccessInspectionView::from_access(&access);
+                self.explain_relations(&actor, &access, &mut view, executor).await?;
+                Ok(InspectedAccess { view, actor: Some(actor) })
+            },
+            Err(Error::Forbidden(_)) => {
+                Ok(denied("操作权限", "没有启用角色提供本操作的完整权限，请检查人员角色及操作权限。"))
+            },
+            Err(error) => Err(error),
+        }
+    }
+
+    /// 读取本操作的合格角色规则，为缺失部门关系提供可操作原因。
+    async fn explain_relations(
+        &self,
+        actor: &AuditActor,
+        access: &AuthorizedDataScope,
+        view: &mut AccessInspectionView,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let required = [Permission::parse(format!("{}:{}", access.resource, access.action))?];
+        let snapshot = self.rbac.role_permission_snapshot(actor.kind(), actor.id(), &required).await?;
+        self.rbac.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
+        let ids = snapshot.granting_role_ids_for_all(&required);
+        let roles = self.db.roles().enabled_roles(&ids, executor).await?;
+        let rules =
+            self.db.data_scopes().list_by_subjects(DataScopeSubjectType::Role, &ids, executor).await?;
+        for rule in &rules {
+            if let Some(role) = roles.iter().find(|role| role.base.id == rule.subject_id) {
+                view.explain_relation(access, rule, &role.name);
+            }
+        }
+        Ok(())
+    }
+
+    /// 检查能力要求同角色提供账号、角色、范围及公司组织读取边界。
+    async fn authorize(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<()> {
+        let permissions = ["admin:list", "role:list", "data_scope:list"]
+            .into_iter()
+            .map(Permission::parse)
+            .collect::<StdResult<Vec<_>, _>>()?;
+        let access = DataScopeService::new(self.db.clone(), self.rbac.clone())
+            .resolve_permissions(actor, "org_unit", "list", &permissions, executor)
+            .await?;
+        if !access.scope.role_clauses.iter().any(|scope| scope.company)
+            || access.scope.user_limit.as_ref().is_some_and(|limit| !limit.company)
+        {
+            return Err(Error::Forbidden(
+                "检查他人权限需要公司范围的组织读取及账号、角色、数据范围读取权限".into(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// 拒绝时不生成可供对象读取使用的目标身份。
+fn denied(layer: &str, message: &str) -> InspectedAccess {
+    let mut view = AccessInspectionView::default();
+    view.push(layer, "blocked", message);
+    InspectedAccess { actor: None, view }
+}

@@ -38,8 +38,9 @@ export function useOrganizationStateQuery(enabled = true) {
     })
 }
 
-export function useDataScopesQuery(url: DataScopeUrlState) {
+export function useDataScopesQuery(url: DataScopeUrlState, enabled = true) {
     return useQuery({
+        enabled,
         queryKey: dataScopeKeys.list(url),
         queryFn: () => fetchDataScopes(url),
     })

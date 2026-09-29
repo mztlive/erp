@@ -2,6 +2,7 @@
 
 import { SearchIcon } from "lucide-react"
 
+import { roleCapabilitySummary } from "../../lib/role-summary"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
     InputGroup,
@@ -48,7 +49,7 @@ export function RoleOptionsPanel({
             </InputGroup>
             <div
                 data-invalid={invalid || undefined}
-                className="flex max-h-44 flex-col gap-0.5 overflow-y-auto rounded-lg border border-border p-1.5 data-[invalid]:border-destructive"
+                className="flex max-h-80 flex-col gap-0.5 overflow-y-auto rounded-lg border border-border p-1.5 data-[invalid]:border-destructive"
             >
                 {filtered.length === 0 ? (
                     <p className="px-2 py-3 text-center text-xs text-muted-foreground">
@@ -61,6 +62,7 @@ export function RoleOptionsPanel({
                         return (
                             <label
                                 key={role.id}
+                                htmlFor={`${id}-option-${segment}`}
                                 className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1.5 text-sm hover:bg-muted/40"
                             >
                                 <Checkbox
@@ -71,8 +73,18 @@ export function RoleOptionsPanel({
                                     }
                                     aria-label={role.name}
                                 />
-                                <span className="min-w-0 truncate">
-                                    {role.name}
+                                <span className="min-w-0">
+                                    <span className="block font-medium">
+                                        {role.name}
+                                    </span>
+                                    <span className="mt-1 block text-xs leading-5 text-muted-foreground">
+                                        {roleCapabilitySummary(
+                                            role.permissions,
+                                        )}
+                                    </span>
+                                    <span className="block text-xs text-muted-foreground">
+                                        适用数据范围将在人员资料中核对。
+                                    </span>
                                 </span>
                             </label>
                         )

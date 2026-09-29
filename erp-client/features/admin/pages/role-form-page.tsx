@@ -27,6 +27,7 @@ import {
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
 import { SubjectScopesPanel } from "@/features/organization/components/subject-scopes-panel"
+import { RoleAccessMatrix } from "../components/roles/role-access-matrix"
 import { PermissionOptionsPanel } from "@/features/admin/components/roles/permission-panel"
 import {
     CopyRolePermissions,
@@ -73,7 +74,13 @@ const WILDCARD_CODE = "*:*"
  *
  * @param roleId 编辑目标角色 ID；null 表示新建。
  */
-export function RoleFormPage({ roleId }: { roleId: string | null }) {
+export function RoleFormPage({
+    roleId,
+    returnTo,
+}: {
+    roleId: string | null
+    returnTo?: string
+}) {
     const router = useRouter()
     const rolesQuery = useRolesQuery()
     const adminsQuery = useAdminsQuery()
@@ -160,6 +167,7 @@ export function RoleFormPage({ roleId }: { roleId: string | null }) {
         <RoleForm
             key={roleId ?? "new"}
             role={role}
+            returnTo={returnTo}
             otherRoles={(rolesQuery.data ?? []).filter(
                 (candidate) => candidate.id !== roleId,
             )}
@@ -173,15 +181,25 @@ function RoleForm({
     role,
     otherRoles,
     boundAccounts,
+    returnTo,
 }: {
     role: AdminRole | null
     otherRoles: readonly AdminRole[]
     boundAccounts: number | null
+    returnTo?: string
 }) {
     const router = useRouter()
+    const returnHref =
+        returnTo?.startsWith("/system/accounts/") &&
+        !returnTo.includes("?") &&
+        !returnTo.includes("#")
+            ? returnTo
+            : ROLES_LIST_HREF
     const { createRole, updateRole, isCreating, isUpdating } =
         useRoleMutations()
     const { data: profile } = useAccountProfileQuery()
+    const [editor, setEditor] = React.useState<"guided" | "advanced">("guided")
+    const [savedMessage, setSavedMessage] = React.useState<string | null>(null)
     const [scopesOpen, setScopesOpen] = React.useState(false)
     const [submitError, setSubmitError] = React.useState<string | null>(null)
     const [editingName, setEditingName] = React.useState(role === null)
@@ -216,8 +234,23 @@ function RoleForm({
                         id: role.id,
                         payload: { name: value.name.trim(), permissions },
                     })
-                else await createRole({ name: value.name.trim(), permissions })
-                router.push(ROLES_LIST_HREF)
+                else {
+                    const createdId = await createRole({
+                        name: value.name.trim(),
+                        permissions,
+                    })
+                    router.replace(
+                        `/system/roles/${encodeURIComponent(createdId)}/edit`,
+                    )
+                    return
+                }
+                form.reset({
+                    name: value.name.trim(),
+                    permissions: value.permissions,
+                })
+                setSavedMessage(
+                    "操作权限已保存。请继续核对下方各项操作的数据范围；保存权限不代表范围已配置完成。",
+                )
             } catch (error) {
                 setSubmitError(getErrorMessage(error, "操作失败，请重试。"))
             }
@@ -234,7 +267,7 @@ function RoleForm({
             removed.length > 0
         )
             setConfirmLeave(true)
-        else router.push(ROLES_LIST_HREF)
+        else router.push(returnHref)
     }
 
     return (
@@ -256,7 +289,9 @@ function RoleForm({
                             type="button"
                             variant="ghost"
                             size="icon-sm"
-                            aria-label="返回角色列表"
+                            aria-label={
+                                returnTo ? "返回人员资料" : "返回角色列表"
+                            }
                             disabled={pending}
                             onClick={leave}
                         >
@@ -318,7 +353,7 @@ function RoleForm({
                                             disabled={dirty || pending}
                                             onClick={() => setScopesOpen(true)}
                                         >
-                                            数据范围 · 能看哪些数据
+                                            查看全部范围规则
                                         </Button>
                                     </div>
                                 )
@@ -381,6 +416,32 @@ function RoleForm({
                         )}
                     </div>
                 )}
+                <div className="flex flex-wrap items-center gap-2 border-b pb-3">
+                    <Button
+                        id="role-editor-guided"
+                        type="button"
+                        variant={editor === "guided" ? "secondary" : "ghost"}
+                        onClick={() => setEditor("guided")}
+                    >
+                        业务操作与范围
+                    </Button>
+                    <Button
+                        id="role-editor-advanced"
+                        type="button"
+                        variant={editor === "advanced" ? "secondary" : "ghost"}
+                        onClick={() => setEditor("advanced")}
+                    >
+                        全部操作权限
+                    </Button>
+                    <p className="text-xs text-muted-foreground">
+                        系统配置及未使用数据范围的操作在「全部操作权限」中维护。
+                    </p>
+                </div>
+                {savedMessage && (
+                    <p role="status" className="py-3 text-sm text-emerald-700">
+                        {savedMessage}
+                    </p>
+                )}
                 {hasWildcard && (
                     <Alert variant="info" className="mb-3 shrink-0">
                         <ShieldAlertIcon aria-hidden="true" />
@@ -393,35 +454,54 @@ function RoleForm({
                 <form.AppField name="permissions">
                     {(field) => (
                         <Field
-                            className="min-h-0 flex-1 gap-0"
+                            className="flex min-h-0 flex-1 flex-col gap-0"
                             data-invalid={
                                 !field.state.meta.isValid || undefined
                             }
                         >
-                            <PermissionOptionsPanel
-                                id="governance-admin-role-form-permissions"
-                                selected={
-                                    hasWildcard
-                                        ? [...PERMISSION_BY_CODE.keys()]
-                                        : field.state.value
-                                }
-                                initial={
-                                    hasWildcard
-                                        ? [...PERMISSION_BY_CODE.keys()]
-                                        : initialSelected
-                                }
-                                preservedCodes={preservedCodes}
-                                view={view}
-                                onViewChange={setView}
-                                disabled={pending || hasWildcard}
-                                onChange={(next) => {
-                                    field.handleChange(next)
-                                    void form.validateField(
-                                        "permissions",
-                                        "change",
-                                    )
-                                }}
-                            />
+                            {editor === "guided" ? (
+                                <RoleAccessMatrix
+                                    role={role}
+                                    permissions={[
+                                        ...preservedCodes,
+                                        ...field.state.value,
+                                    ]}
+                                    savedPermissions={role?.permissions ?? []}
+                                    disabled={pending || hasWildcard}
+                                    onChange={(next) =>
+                                        field.handleChange(
+                                            next.filter((code) =>
+                                                PERMISSION_BY_CODE.has(code),
+                                            ),
+                                        )
+                                    }
+                                />
+                            ) : (
+                                <PermissionOptionsPanel
+                                    id="governance-admin-role-form-permissions"
+                                    selected={
+                                        hasWildcard
+                                            ? [...PERMISSION_BY_CODE.keys()]
+                                            : field.state.value
+                                    }
+                                    initial={
+                                        hasWildcard
+                                            ? [...PERMISSION_BY_CODE.keys()]
+                                            : initialSelected
+                                    }
+                                    preservedCodes={preservedCodes}
+                                    view={view}
+                                    onViewChange={setView}
+                                    disabled={pending || hasWildcard}
+                                    onChange={(next) => {
+                                        field.handleChange(next)
+                                        void form.validateField(
+                                            "permissions",
+                                            "change",
+                                        )
+                                    }}
+                                />
+                            )}
                             {!field.state.meta.isValid && (
                                 <FieldError
                                     errors={toFieldErrors(
@@ -604,7 +684,7 @@ function RoleForm({
                         <Button
                             id="governance-admin-role-form-discard"
                             type="button"
-                            onClick={() => router.push(ROLES_LIST_HREF)}
+                            onClick={() => router.push(returnHref)}
                         >
                             放弃并返回
                         </Button>

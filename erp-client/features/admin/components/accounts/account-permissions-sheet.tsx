@@ -17,20 +17,12 @@ import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
 import { useOrganizationStateQuery } from "@/features/organization/hooks/queries"
 import { isRelationActive, unitLabel } from "@/features/organization/lib/tree"
-import { DataScopeGroupList } from "../data-scope-group-list"
 import { useRolesQuery } from "../../hooks/queries"
 import { useAccountPermissionScopes } from "../../hooks/use-account-permission-scopes"
 import { accountPermissionGroups } from "../../lib/account-permission-preview"
-import { groupDataScopes } from "../../lib/data-scope-preview"
+import { ScopeRulesView } from "@/features/organization/components/scope-rules-view"
 import type { AdminAccount } from "../../types"
 
-const SCOPE_LABEL: Record<string, string> = {
-    company: "公司级",
-    organization: "组织",
-    team: "团队",
-    self_owned: "本人负责",
-    collaborative: "协作参与",
-}
 const id = "governance-admin-account-permissions"
 
 /** 账号页原地只读预览；沿用公司商品池的窄栏、分隔区块与固定页脚。 */
@@ -89,9 +81,6 @@ export function AccountPermissionsSheet({
                 ),
             }))
             .filter((group) => group.items.length) ?? []
-    const roleName = (roleId: string) =>
-        rolesQuery.data?.find((role) => role.id === roleId)?.name ??
-        "角色信息待确认"
     return (
         <QuickPreviewSheet
             idPrefix={`${id}-sheet`}
@@ -131,7 +120,7 @@ export function AccountPermissionsSheet({
                         onClick={onAdjustRoles}
                         disabled={!account}
                     >
-                        调整账号角色
+                        打开人员资料
                     </Button>
                 </>
             }
@@ -363,22 +352,10 @@ export function AccountPermissionsSheet({
                             正在读取数据范围…
                         </p>
                     ) : scopesQuery.data.length ? (
-                        <DataScopeGroupList
-                            groups={groupDataScopes(
-                                scopesQuery.data.map((scope) => ({
-                                    scopeType: scope.scope_type,
-                                    targetLabel:
-                                        SCOPE_LABEL[scope.scope_type] ??
-                                        "其它范围",
-                                    resource: scope.resource,
-                                    scopeTargets: scope.scope_targets,
-                                    sourceLabel:
-                                        scope.subject_type === "user"
-                                            ? "账号直接配置"
-                                            : roleName(scope.subject_id),
-                                })),
-                            )}
-                            alwaysShowSource
+                        <ScopeRulesView
+                            rules={scopesQuery.data}
+                            roles={rolesQuery.data ?? []}
+                            units={organization.data?.units ?? []}
                         />
                     ) : (
                         <p className="text-xs leading-5 text-muted-foreground">

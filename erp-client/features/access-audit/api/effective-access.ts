@@ -29,6 +29,10 @@ function toDataScopeGrant(
         actions: scope.actions,
         scopeType: scope.scope_type,
         scopeTargets: scope.scope_targets,
+        targetDimension: scope.target_dimension,
+        targetMode: scope.target_mode,
+        includeDescendants: scope.include_descendants,
+        enabled: scope.enabled,
     }
 }
 

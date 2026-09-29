@@ -5,6 +5,7 @@ import * as React from "react"
 export type RoleOption = {
     id: string
     name: string
+    permissions?: readonly string[]
 }
 
 /** 角色选项关键词过滤：名称或 ID 命中即保留；空关键词返回原数组（引用不变）。 */

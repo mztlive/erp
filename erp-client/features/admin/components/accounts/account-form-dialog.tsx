@@ -89,7 +89,11 @@ export function AccountFormDialog({
     onAdjustDepartment?: () => void
     mode: "create" | "edit"
     account: AccountDraft | null
-    roleOptions: readonly { id: string; name: string }[]
+    roleOptions: readonly {
+        id: string
+        name: string
+        permissions?: readonly string[]
+    }[]
     onOpenChange: (open: boolean) => void
     id?: string
 }) {
@@ -193,7 +197,7 @@ export function AccountFormDialog({
                     {!isEdit && onCreated ? (
                         <p className="text-sm text-muted-foreground">
                             第 1
-                            步：创建账号并选择角色。创建成功后，继续分配所属部门。
+                            步：创建账号并选择角色。创建后进入人员资料，继续设置部门、管理范围并核对权限。
                         </p>
                     ) : null}
                     <FieldGroup className="gap-4">
@@ -228,7 +232,7 @@ export function AccountFormDialog({
                                     id={`${id}-name`}
                                     label="姓名"
                                     required
-                                    placeholder="管理员姓名"
+                                    placeholder="人员姓名"
                                 />
                             )}
                         />

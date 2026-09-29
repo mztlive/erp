@@ -203,6 +203,10 @@ type AccessGrantView = Readonly<{
     scopeType?: string
     /** 组织 / 团队等显式目标；本人负责、协作参与为空。 */
     scopeTargets?: readonly string[]
+    targetDimension?: string
+    targetMode?: string | null
+    includeDescendants?: boolean | null
+    enabled?: boolean
 }>
 
 type AccessExplanationView = Readonly<{

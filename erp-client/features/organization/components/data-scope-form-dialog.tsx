@@ -2,72 +2,49 @@
 
 import * as React from "react"
 import { z } from "zod"
-
-import { MultiOptionCombobox } from "@/components/business/multi-option-combobox"
-import { useAppForm } from "@/components/form"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { useAppForm, toFieldErrors } from "@/components/form"
 import { Button } from "@/components/ui/button"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
-    DialogFooter,
     DialogHeader,
     DialogTitle,
+    DialogDescription,
 } from "@/components/ui/dialog"
-import { Field, FieldLabel } from "@/components/ui/field"
+import { MultiOptionCombobox } from "@/components/business/multi-option-combobox"
+import { Field, FieldLabel, FieldError } from "@/components/ui/field"
 import { actionLabel, resourceLabel } from "@/lib/permission-catalog"
-import {
-    DIMENSION_LABEL,
-    SCOPE_TYPE_LABEL,
-    scopeTypeLabel,
-    TARGET_MODE_LABEL,
-} from "@/features/organization/lib/labels"
+import { hasPermission } from "@/lib/permissions"
+import { getErrorMessage } from "@/lib/api/errors"
 import {
     registeredResources,
     validateCreateDataScope,
-} from "@/features/organization/lib/scope-payload"
+} from "../lib/scope-payload"
 import type {
     CreateDataScopeInput,
-    DataScopeType,
     OrganizationStateView,
     ScopeDimension,
-    ScopeTargetMode,
-} from "@/features/organization/types"
+} from "../types"
 import { ScopeTargetPicker } from "./scope-target-picker"
-import { getErrorPresentation } from "@/lib/api/errors"
 
 const schema = z.object({
     subjectType: z.enum(["role", "user"]),
-    subjectId: z.string().min(1, "请选择主体"),
-    scopeType: z.enum([
-        "company",
-        "organization",
-        "team",
+    subjectId: z.string().min(1, "请选择角色或人员"),
+    resource: z.string().min(1, "请选择业务"),
+    actions: z.array(z.string()).min(1, "请选择操作"),
+    range: z.enum([
         "self_owned",
+        "own_org",
+        "managed_orgs",
+        "explicit",
+        "company",
         "collaborative",
     ]),
-    resource: z.string().min(1, "请选择资源"),
-    actions: z.array(z.string()).min(1, "请选择动作"),
-    targetDimension: z.enum(["internal_org", "settlement_party", "warehouse"]),
-    targetMode: z.enum(["explicit", "own_org", "managed_orgs", "none"]),
-    includeDescendants: z.enum(["true", "false", "none"]),
-    scopeTargets: z.array(z.string()),
+    dimension: z.enum(["internal_org", "warehouse", "settlement_party"]),
+    descendants: z.boolean(),
+    targets: z.array(z.string()),
 })
-
-type Draft = z.infer<typeof schema>
-
-const DEFAULT_DRAFT: Draft = {
-    subjectType: "role",
-    subjectId: "",
-    scopeType: "company",
-    resource: "",
-    actions: [],
-    targetDimension: "internal_org",
-    targetMode: "none",
-    includeDescendants: "none",
-    scopeTargets: [],
-}
 
 export function DataScopeFormDialog({
     open,
@@ -79,9 +56,10 @@ export function DataScopeFormDialog({
     onSubmit,
     subject,
     embedded = false,
+    initialResource = "",
+    initialActions = [],
+    permissions,
 }: {
-    embedded?: boolean
-    subject?: { type: "role" | "user"; id: string; label: string }
     open: boolean
     onOpenChange: (open: boolean) => void
     roles: OrganizationStateView["roles"]
@@ -89,398 +67,471 @@ export function DataScopeFormDialog({
     units: OrganizationStateView["units"]
     submitting: boolean
     onSubmit: (input: CreateDataScopeInput) => Promise<void>
+    subject?: { type: "role" | "user"; id: string; label: string }
+    embedded?: boolean
+    initialResource?: string
+    initialActions?: string[]
+    permissions?: readonly string[]
 }) {
-    const subjectType = subject?.type
-    const subjectId = subject?.id
-    const resources = React.useMemo(() => registeredResources(), [])
-    const [actionError, setActionError] = React.useState<string | null>(null)
+    const [error, setError] = React.useState<string | null>(null)
+    const resources = registeredResources()
+    const initialKey = initialActions.join("|")
+    const defaults = React.useMemo(
+        () =>
+            ({
+                subjectType: subject?.type ?? "role",
+                subjectId: subject?.id ?? "",
+                resource: initialResource,
+                actions: initialKey ? initialKey.split("|") : [],
+                range:
+                    initialResource &&
+                    registeredResources().find(
+                        (item) => item.resource === initialResource,
+                    )?.dimensions[0] !== "internal_org"
+                        ? "explicit"
+                        : "self_owned",
+                dimension:
+                    registeredResources().find(
+                        (item) => item.resource === initialResource,
+                    )?.dimensions[0] ?? "internal_org",
+                descendants: false,
+                targets: [],
+            }) as z.infer<typeof schema>,
+        [subject?.type, subject?.id, initialResource, initialKey],
+    )
     const form = useAppForm({
-        defaultValues: {
-            ...DEFAULT_DRAFT,
-            ...(subjectType && subjectId ? { subjectType, subjectId } : {}),
-        },
+        defaultValues: defaults,
         validators: { onChange: schema },
         onSubmit: async ({ value }) => {
-            const needsTargets =
-                value.scopeType === "organization" || value.scopeType === "team"
+            const targeted = ["explicit", "own_org", "managed_orgs"].includes(
+                value.range,
+            )
             const input: CreateDataScopeInput = {
                 subjectType: value.subjectType,
                 subjectId: value.subjectId,
-                scopeType: value.scopeType as DataScopeType,
                 resource: value.resource,
                 actions: value.actions,
-                targetDimension: value.targetDimension as ScopeDimension,
-                targetMode: needsTargets
-                    ? value.targetDimension === "internal_org"
-                        ? (value.targetMode as ScopeTargetMode)
-                        : "explicit"
+                scopeType: targeted
+                    ? "organization"
+                    : (value.range as
+                          | "company"
+                          | "self_owned"
+                          | "collaborative"),
+                targetDimension: value.dimension,
+                targetMode: targeted
+                    ? (value.range as "explicit" | "own_org" | "managed_orgs")
                     : null,
                 includeDescendants:
-                    !needsTargets ||
-                    value.targetDimension !== "internal_org" ||
-                    value.targetMode === "managed_orgs" ||
-                    value.includeDescendants === "none"
-                        ? null
-                        : value.includeDescendants === "true",
-                scopeTargets: needsTargets ? value.scopeTargets : [],
+                    targeted &&
+                    value.dimension === "internal_org" &&
+                    value.range !== "managed_orgs"
+                        ? value.descendants
+                        : null,
+                scopeTargets: value.range === "explicit" ? value.targets : [],
             }
             const invalid = validateCreateDataScope(input)
             if (invalid) {
-                setActionError(invalid)
+                setError(invalid)
                 return
             }
             try {
-                setActionError(null)
+                setError(null)
                 await onSubmit(input)
                 onOpenChange(false)
-            } catch (error) {
-                setActionError(getErrorPresentation(error).description)
+            } catch (failure) {
+                setError(getErrorMessage(failure, "保存失败，请重试"))
             }
         },
     })
-
     React.useEffect(() => {
-        if (!open) return
-        setActionError(null)
-        form.reset({
-            ...DEFAULT_DRAFT,
-            ...(subjectType && subjectId ? { subjectType, subjectId } : {}),
-        })
-    }, [open, form, subjectType, subjectId])
-
+        if (open) {
+            form.reset(defaults)
+            setError(null)
+        }
+    }, [open, defaults, form])
     const content = (
         <>
             {embedded ? (
-                <div className="space-y-2">
-                    <h3 className="font-medium">添加数据范围</h3>
-                    <p className="text-sm text-muted-foreground">
-                        选择业务、操作和可访问的数据。
-                    </p>
-                </div>
+                <h3 className="font-medium">添加操作适用范围</h3>
             ) : (
                 <DialogHeader>
-                    <DialogTitle>添加数据范围</DialogTitle>
+                    <DialogTitle>添加操作适用范围</DialogTitle>
                     <DialogDescription>
-                        选择业务、操作和可访问的数据。个人范围限制只能收窄已有授权。
+                        选择业务、操作以及允许访问的数据。个人限制只能收窄已有授权。
                     </DialogDescription>
                 </DialogHeader>
             )}
             <form
-                className="min-w-0 space-y-4"
+                className="space-y-4"
                 onSubmit={(event) => {
                     event.preventDefault()
                     void form.handleSubmit()
                 }}
             >
                 {subject ? (
-                    <p className="text-sm font-medium">
-                        {subject.type === "role" ? "角色" : "人员"}：
+                    <p className="text-sm">
+                        {subject.type === "role" ? "角色" : "个人限制"}：
                         {subject.label}
                     </p>
                 ) : (
                     <>
-                        <form.AppField
-                            name="subjectType"
-                            children={(field) => (
+                        <form.AppField name="subjectType">
+                            {(field) => (
                                 <field.SelectField
                                     id="organization-scope-subject-type"
                                     label="配置对象"
+                                    allowClear={false}
+                                    onValueChange={() =>
+                                        form.setFieldValue("subjectId", "")
+                                    }
                                     options={[
-                                        { value: "role", label: "角色" },
+                                        { value: "role", label: "角色授权" },
                                         {
                                             value: "user",
-                                            label: "用户上限",
+                                            label: "个人范围限制（只能收窄）",
                                         },
                                     ]}
                                 />
                             )}
-                        />
+                        </form.AppField>
                         <form.Subscribe
                             selector={(state) => state.values.subjectType}
-                            children={(subjectType) => (
-                                <form.AppField
-                                    name="subjectId"
-                                    children={(field) => (
+                        >
+                            {(type) => (
+                                <form.AppField name="subjectId">
+                                    {(field) => (
                                         <field.SelectField
                                             id="organization-scope-subject"
                                             label="角色或人员"
                                             options={
-                                                subjectType === "user"
-                                                    ? people.map((person) => ({
-                                                          value: person.id,
-                                                          label: `${person.label}（${person.account}）`,
-                                                      }))
-                                                    : roles.map((role) => ({
+                                                type === "role"
+                                                    ? roles.map((role) => ({
                                                           value: role.id,
                                                           label: role.name,
+                                                      }))
+                                                    : people.map((person) => ({
+                                                          value: person.id,
+                                                          label: `${person.label}（${person.account}）`,
                                                       }))
                                             }
                                         />
                                     )}
-                                />
+                                </form.AppField>
                             )}
-                        />
+                        </form.Subscribe>
                     </>
                 )}
-                <form.AppField
-                    name="resource"
-                    children={(field) => (
-                        <field.SelectField
-                            id="organization-scope-resource"
-                            label="业务"
-                            options={resources.map((item) => ({
-                                value: item.resource,
-                                label: resourceLabel(item.resource),
-                            }))}
-                        />
+                <form.AppField name="resource">
+                    {(field) => (
+                        <Field>
+                            <FieldLabel htmlFor="organization-scope-resource">
+                                业务
+                            </FieldLabel>
+                            <select
+                                id="organization-scope-resource"
+                                className="h-10 w-full rounded-md border bg-background px-3"
+                                value={field.state.value}
+                                onChange={(event) => {
+                                    const resource = event.target.value
+                                    field.handleChange(resource)
+                                    form.setFieldValue("actions", [])
+                                    const dimension =
+                                        resources.find(
+                                            (item) =>
+                                                item.resource === resource,
+                                        )?.dimensions[0] ?? "internal_org"
+                                    form.setFieldValue("dimension", dimension)
+                                    form.setFieldValue(
+                                        "range",
+                                        dimension === "internal_org"
+                                            ? "self_owned"
+                                            : "explicit",
+                                    )
+                                    form.setFieldValue("targets", [])
+                                }}
+                            >
+                                <option value="">请选择业务</option>
+                                {resources
+                                    .filter(
+                                        (item) =>
+                                            !permissions ||
+                                            item.actions.some((action) =>
+                                                hasPermission(
+                                                    permissions,
+                                                    `${item.resource}:${action}`,
+                                                ),
+                                            ),
+                                    )
+                                    .map((item) => (
+                                        <option
+                                            key={item.resource}
+                                            value={item.resource}
+                                        >
+                                            {resourceLabel(item.resource)}
+                                        </option>
+                                    ))}
+                            </select>
+                            <FieldError
+                                errors={toFieldErrors(field.state.meta.errors)}
+                            />
+                        </Field>
                     )}
-                />
-                <form.Subscribe
-                    selector={(state) => state.values.resource}
-                    children={(resource) => {
-                        const actions =
-                            resources.find((item) => item.resource === resource)
-                                ?.actions ?? []
-                        return (
-                            <form.AppField
-                                name="actions"
-                                children={(field) => (
-                                    <Field>
-                                        <FieldLabel htmlFor="organization-scope-actions">
-                                            动作
-                                        </FieldLabel>
-                                        <MultiOptionCombobox
-                                            id="organization-scope-actions"
-                                            aria-label="动作"
-                                            value={field.state.value}
-                                            options={actions.map((action) => ({
+                </form.AppField>
+                <form.Subscribe selector={(state) => state.values.resource}>
+                    {(resource) => (
+                        <form.AppField name="actions">
+                            {(field) => (
+                                <Field>
+                                    <FieldLabel htmlFor="organization-scope-actions">
+                                        允许的操作
+                                    </FieldLabel>
+                                    <MultiOptionCombobox
+                                        id="organization-scope-actions"
+                                        aria-label="允许的操作"
+                                        value={field.state.value}
+                                        onValueChange={field.handleChange}
+                                        options={(
+                                            resources.find(
+                                                (item) =>
+                                                    item.resource === resource,
+                                            )?.actions ?? []
+                                        )
+                                            .filter(
+                                                (action) =>
+                                                    !permissions ||
+                                                    hasPermission(
+                                                        permissions,
+                                                        `${resource}:${action}`,
+                                                    ),
+                                            )
+                                            .map((action) => ({
                                                 value: action,
                                                 label: actionLabel(action),
                                             }))}
-                                            onValueChange={(ids) =>
-                                                field.handleChange(ids)
-                                            }
-                                            placeholder="选择动作"
-                                        />
+                                        placeholder="选择已授予的操作"
+                                    />
+                                    <FieldError
+                                        errors={toFieldErrors(
+                                            field.state.meta.errors,
+                                        )}
+                                    />
+                                </Field>
+                            )}
+                        </form.AppField>
+                    )}
+                </form.Subscribe>
+                <form.Subscribe selector={(state) => state.values.resource}>
+                    {(resource) => {
+                        const dimensions = resources.find(
+                            (item) => item.resource === resource,
+                        )?.dimensions ?? ["internal_org"]
+                        return dimensions.length > 1 ? (
+                            <form.AppField name="dimension">
+                                {(field) => (
+                                    <Field>
+                                        <FieldLabel htmlFor="organization-scope-dimension">
+                                            本条规则限制什么
+                                        </FieldLabel>
+                                        <select
+                                            id="organization-scope-dimension"
+                                            className="h-10 w-full rounded-md border bg-background px-3"
+                                            value={field.state.value}
+                                            onChange={(event) => {
+                                                field.handleChange(
+                                                    event.target
+                                                        .value as ScopeDimension,
+                                                )
+                                                form.setFieldValue(
+                                                    "range",
+                                                    event.target.value ===
+                                                        "internal_org"
+                                                        ? "self_owned"
+                                                        : "explicit",
+                                                )
+                                                form.setFieldValue(
+                                                    "targets",
+                                                    [],
+                                                )
+                                            }}
+                                        >
+                                            {dimensions.map((dimension) => (
+                                                <option
+                                                    key={dimension}
+                                                    value={dimension}
+                                                >
+                                                    {dimension ===
+                                                    "internal_org"
+                                                        ? "负责人及部门"
+                                                        : dimension ===
+                                                            "warehouse"
+                                                          ? "允许的仓库"
+                                                          : "允许的结算主体"}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <p className="text-xs text-muted-foreground">
+                                            本业务需要同时满足各项范围；可以分条配置，公司范围覆盖适用维度。
+                                        </p>
                                     </Field>
                                 )}
-                            />
-                        )
+                            </form.AppField>
+                        ) : null
                     }}
-                />
+                </form.Subscribe>
                 <form.Subscribe
                     selector={(state) => ({
-                        dimension: state.values.targetDimension,
+                        dimension: state.values.dimension,
                         resource: state.values.resource,
                     })}
-                    children={({ dimension, resource }) => (
-                        <form.AppField
-                            name="scopeType"
-                            children={(field) => (
+                >
+                    {({ dimension, resource }) => (
+                        <form.AppField name="range">
+                            {(field) => (
                                 <field.SelectField
                                     id="organization-scope-type"
-                                    label="范围类型"
-                                    options={Object.keys(SCOPE_TYPE_LABEL)
-                                        .filter(
-                                            (value) =>
-                                                ![
-                                                    "settlement_party",
-                                                    "warehouse",
-                                                ].includes(resource) ||
-                                                [
-                                                    "company",
-                                                    "organization",
-                                                ].includes(value),
-                                        )
-                                        .map((value) => ({
-                                            value,
-                                            label: scopeTypeLabel(
-                                                value as DataScopeType,
-                                                dimension,
-                                            ),
-                                        }))}
+                                    label="允许访问哪些数据"
+                                    options={[
+                                        ...(dimension === "internal_org"
+                                            ? [
+                                                  {
+                                                      value: "self_owned",
+                                                      label: "本人负责",
+                                                  },
+                                                  {
+                                                      value: "own_org",
+                                                      label: "本人所属部门",
+                                                  },
+                                                  {
+                                                      value: "managed_orgs",
+                                                      label: "本人管理的部门",
+                                                  },
+                                              ]
+                                            : []),
+                                        {
+                                            value: "explicit",
+                                            label:
+                                                dimension === "internal_org"
+                                                    ? "指定部门"
+                                                    : dimension === "warehouse"
+                                                      ? "指定仓库"
+                                                      : "指定结算主体",
+                                        },
+                                        { value: "company", label: "公司范围" },
+                                        ...(dimension === "internal_org" &&
+                                        ![
+                                            "customer",
+                                            "contract",
+                                            "sales_order",
+                                            "sales_person",
+                                            "procurement_person",
+                                            "business_person",
+                                            "person_query_qualification",
+                                        ].includes(resource)
+                                            ? [
+                                                  {
+                                                      value: "collaborative",
+                                                      label: "符合业务规则的协作参与",
+                                                  },
+                                              ]
+                                            : []),
+                                    ]}
                                 />
                             )}
-                        />
+                        </form.AppField>
                     )}
-                />
-                <form.AppField
-                    name="targetDimension"
-                    children={(field) => (
-                        <field.SelectField
-                            id="organization-scope-dimension"
-                            label="目标维度"
-                            options={Object.entries(DIMENSION_LABEL).map(
-                                ([value, label]) => ({
-                                    value,
-                                    label,
-                                }),
+                </form.Subscribe>
+                <form.Subscribe selector={(state) => state.values}>
+                    {(value) => (
+                        <>
+                            {value.range === "explicit" && (
+                                <form.AppField name="targets">
+                                    {(field) => (
+                                        <Field>
+                                            <FieldLabel htmlFor="organization-scope-targets">
+                                                允许的目标
+                                            </FieldLabel>
+                                            <ScopeTargetPicker
+                                                dimension={value.dimension}
+                                                units={units}
+                                                value={field.state.value}
+                                                onChange={field.handleChange}
+                                            />
+                                        </Field>
+                                    )}
+                                </form.AppField>
                             )}
-                        />
+                            {value.dimension === "internal_org" &&
+                                ["explicit", "own_org"].includes(
+                                    value.range,
+                                ) && (
+                                    <form.AppField name="descendants">
+                                        {(field) => (
+                                            <label
+                                                className="flex items-center gap-2 text-sm"
+                                                htmlFor="organization-scope-descendants"
+                                            >
+                                                <input
+                                                    id="organization-scope-descendants"
+                                                    type="checkbox"
+                                                    checked={field.state.value}
+                                                    onChange={(event) =>
+                                                        field.handleChange(
+                                                            event.target
+                                                                .checked,
+                                                        )
+                                                    }
+                                                />
+                                                包含下级部门
+                                            </label>
+                                        )}
+                                    </form.AppField>
+                                )}
+                            {value.range === "managed_orgs" && (
+                                <p className="rounded-md bg-muted p-3 text-sm">
+                                    每位使用该角色的人员还需设置管理部门；下级范围沿用对应管理关系。保存本规则不会自动建立管理关系。
+                                </p>
+                            )}
+                            {value.range === "company" && (
+                                <p className="text-sm text-amber-700">
+                                    公司范围会扩大所选操作的适用数据。新增较窄规则不会覆盖已有的公司范围。
+                                </p>
+                            )}
+                        </>
                     )}
-                />
-                <form.Subscribe
-                    selector={(state) => state.values.scopeType}
-                    children={(scopeType) =>
-                        scopeType === "organization" || scopeType === "team" ? (
-                            <>
-                                <form.Subscribe
-                                    selector={(state) =>
-                                        state.values.targetDimension
-                                    }
-                                    children={(dimension) =>
-                                        dimension === "internal_org" ? (
-                                            <form.AppField
-                                                name="targetMode"
-                                                children={(field) => (
-                                                    <field.SelectField
-                                                        id="organization-scope-mode"
-                                                        label="目标模式"
-                                                        options={Object.entries(
-                                                            TARGET_MODE_LABEL,
-                                                        ).map(
-                                                            ([
-                                                                value,
-                                                                label,
-                                                            ]) => ({
-                                                                value,
-                                                                label,
-                                                            }),
-                                                        )}
-                                                    />
-                                                )}
-                                            />
-                                        ) : (
-                                            <p className="text-sm text-muted-foreground">
-                                                仅授权下方指定的
-                                                {dimension === "warehouse"
-                                                    ? "仓库"
-                                                    : "结算主体"}
-                                                。
-                                            </p>
-                                        )
-                                    }
-                                />
-                                <form.Subscribe
-                                    selector={(state) =>
-                                        state.values.targetDimension ===
-                                        "internal_org"
-                                            ? state.values.targetMode
-                                            : "explicit"
-                                    }
-                                    children={(mode) =>
-                                        mode === "explicit" ? (
-                                            <form.AppField
-                                                name="scopeTargets"
-                                                children={(field) => (
-                                                    <Field>
-                                                        <FieldLabel htmlFor="organization-scope-targets">
-                                                            授权目标
-                                                        </FieldLabel>
-                                                        <form.Subscribe
-                                                            selector={(state) =>
-                                                                state.values
-                                                                    .targetDimension
-                                                            }
-                                                            children={(
-                                                                dimension,
-                                                            ) => (
-                                                                <ScopeTargetPicker
-                                                                    dimension={
-                                                                        dimension
-                                                                    }
-                                                                    value={
-                                                                        field
-                                                                            .state
-                                                                            .value
-                                                                    }
-                                                                    units={
-                                                                        units
-                                                                    }
-                                                                    onChange={
-                                                                        field.handleChange
-                                                                    }
-                                                                />
-                                                            )}
-                                                        />
-                                                    </Field>
-                                                )}
-                                            />
-                                        ) : null
-                                    }
-                                />
-                                <form.Subscribe
-                                    selector={(state) => ({
-                                        mode: state.values.targetMode,
-                                        dimension: state.values.targetDimension,
-                                    })}
-                                    children={({ mode, dimension }) =>
-                                        dimension === "internal_org" &&
-                                        (mode === "explicit" ||
-                                            mode === "own_org") ? (
-                                            <form.AppField
-                                                name="includeDescendants"
-                                                children={(field) => (
-                                                    <field.SelectField
-                                                        id="organization-scope-descendants"
-                                                        label="是否包含下级"
-                                                        options={[
-                                                            {
-                                                                value: "false",
-                                                                label: "仅本级",
-                                                            },
-                                                            {
-                                                                value: "true",
-                                                                label: "含下级",
-                                                            },
-                                                        ]}
-                                                    />
-                                                )}
-                                            />
-                                        ) : null
-                                    }
-                                />
-                            </>
-                        ) : null
-                    }
-                />
-                {actionError ? (
+                </form.Subscribe>
+                {error && (
                     <Alert variant="destructive">
-                        <AlertTitle>无法保存</AlertTitle>
-                        <AlertDescription>{actionError}</AlertDescription>
+                        <AlertDescription>{error}</AlertDescription>
                     </Alert>
-                ) : null}
-                <DialogFooter className="flex min-w-0 flex-wrap justify-end gap-2">
+                )}
+                <div className="flex justify-end gap-2">
                     <Button
                         id="organization-scope-cancel"
                         type="button"
                         variant="outline"
+                        disabled={submitting}
                         onClick={() => onOpenChange(false)}
                     >
                         取消
                     </Button>
-                    <Button
-                        id="organization-scope-submit"
-                        type="submit"
-                        disabled={submitting}
-                    >
-                        保存范围
-                    </Button>
-                </DialogFooter>
+                    <form.AppForm>
+                        <form.SubmitButton
+                            id="organization-scope-submit"
+                            label="保存范围"
+                            disabled={submitting}
+                        />
+                    </form.AppForm>
+                </div>
             </form>
         </>
     )
-    if (embedded)
-        return (
-            <section className="space-y-4" aria-label="添加数据范围">
-                {content}
-            </section>
-        )
-    return (
+    return embedded ? (
+        content
+    ) : (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
-                className="max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-xl overflow-x-hidden overflow-y-auto"
-                closeButtonId="organization-scope-dialog-close"
+                className="max-h-[88vh] w-[calc(100vw-1.5rem)] overflow-x-hidden overflow-y-auto sm:max-w-xl"
+                closeButtonId="organization-scope-close"
             >
                 {content}
             </DialogContent>

@@ -1,4 +1,7 @@
-import type { CreateDataScopeInput } from "@/features/organization/types"
+import type {
+    CreateDataScopeInput,
+    ScopeDimension,
+} from "@/features/organization/types"
 
 const RESOURCE_ACTION_PATTERN = /^[a-z0-9_]{1,128}$/
 const STABLE_ID_PATTERN = /^[A-Za-z0-9._-]{1,128}$/
@@ -7,6 +10,7 @@ const STABLE_ID_PATTERN = /^[A-Za-z0-9._-]{1,128}$/
 const WIRED_CONSUMERS: ReadonlyArray<{
     resource: string
     actions: readonly string[]
+    dimensions: readonly ScopeDimension[]
 }> = [
     {
         resource: "approval_instance",
@@ -18,24 +22,63 @@ const WIRED_CONSUMERS: ReadonlyArray<{
             "cancel_blocked",
             "upgrade_binding",
         ],
+        dimensions: ["internal_org", "warehouse", "settlement_party"],
     },
     {
         resource: "stock_adjustment",
         actions: ["list", "detail", "create", "update", "submit"],
+        dimensions: ["warehouse"],
     },
-    { resource: "stock_balance", actions: ["list", "detail"] },
-    { resource: "stock_movement", actions: ["list"] },
-    { resource: "stock_reservation", actions: ["list"] },
-    { resource: "customer_refund", actions: ["submit"] },
-    { resource: "supplier_refund", actions: ["submit"] },
-    { resource: "supplier_settlement_statement", actions: ["confirm"] },
-    { resource: "work_item", actions: ["manage"] },
-    { resource: "org_unit", actions: ["list", "manage"] },
+    {
+        resource: "stock_balance",
+        actions: ["list", "detail"],
+        dimensions: ["warehouse"],
+    },
+    {
+        resource: "stock_movement",
+        actions: ["list"],
+        dimensions: ["warehouse"],
+    },
+    {
+        resource: "stock_reservation",
+        actions: ["list"],
+        dimensions: ["warehouse"],
+    },
+    {
+        resource: "customer_refund",
+        actions: ["submit"],
+        dimensions: ["settlement_party"],
+    },
+    {
+        resource: "supplier_refund",
+        actions: ["submit"],
+        dimensions: ["settlement_party"],
+    },
+    {
+        resource: "supplier_settlement_statement",
+        actions: ["list", "detail", "create", "update", "submit", "confirm"],
+        dimensions: ["internal_org"],
+    },
+    {
+        resource: "work_item",
+        actions: ["manage"],
+        dimensions: ["internal_org"],
+    },
+    {
+        resource: "org_unit",
+        actions: ["list", "manage"],
+        dimensions: ["internal_org"],
+    },
     {
         resource: "customer",
         actions: ["list", "detail", "create", "update", "delete"],
+        dimensions: ["internal_org"],
     },
-    { resource: "contract", actions: ["list", "detail", "create", "update"] },
+    {
+        resource: "contract",
+        actions: ["list", "detail", "create", "update"],
+        dimensions: ["internal_org"],
+    },
     {
         resource: "sales_order",
         actions: [
@@ -47,6 +90,7 @@ const WIRED_CONSUMERS: ReadonlyArray<{
             "submit",
             "cancel_approval",
         ],
+        dimensions: ["internal_org"],
     },
     {
         resource: "purchase_order",
@@ -59,15 +103,141 @@ const WIRED_CONSUMERS: ReadonlyArray<{
             "submit",
             "cancel_approval",
         ],
+        dimensions: ["internal_org"],
     },
-    { resource: "cost_entry", actions: ["list", "detail"] },
-    { resource: "cost_allocation", actions: ["list"] },
-    { resource: "sales_person", actions: ["list"] },
-    { resource: "procurement_person", actions: ["list"] },
-    { resource: "business_person", actions: ["list"] },
-    { resource: "person_query_qualification", actions: ["manage"] },
-    { resource: "settlement_party", actions: ["list"] },
-    { resource: "warehouse", actions: ["list"] },
+    {
+        resource: "cost_entry",
+        actions: ["list", "detail"],
+        dimensions: ["internal_org"],
+    },
+    {
+        resource: "cost_allocation",
+        actions: ["list"],
+        dimensions: ["internal_org"],
+    },
+    {
+        resource: "sales_selection_booklet",
+        actions: [
+            "list",
+            "get",
+            "create",
+            "maintain",
+            "prepare",
+            "publish",
+            "copy_link",
+            "rotate_link",
+            "close",
+            "revoke",
+            "void",
+        ],
+        dimensions: ["internal_org"],
+    },
+    {
+        resource: "sales_selection_proposal",
+        actions: ["list", "get"],
+        dimensions: ["internal_org"],
+    },
+    {
+        resource: "receivable_account",
+        actions: ["list", "detail"],
+        dimensions: ["internal_org"],
+    },
+    {
+        resource: "customer_receipt",
+        actions: ["list", "detail"],
+        dimensions: ["internal_org"],
+    },
+    {
+        resource: "invoice",
+        actions: ["list", "detail"],
+        dimensions: ["internal_org"],
+    },
+    {
+        resource: "sales_invoice_request",
+        actions: ["list", "detail"],
+        dimensions: ["internal_org"],
+    },
+    {
+        resource: "payable_account",
+        actions: ["list", "detail"],
+        dimensions: ["internal_org"],
+    },
+    {
+        resource: "supplier_payment",
+        actions: ["list", "detail"],
+        dimensions: ["internal_org"],
+    },
+    {
+        resource: "purchase_invoice_allocation",
+        actions: ["list"],
+        dimensions: ["internal_org"],
+    },
+    {
+        resource: "integration_error_task",
+        actions: ["list", "detail", "create"],
+        dimensions: ["internal_org"],
+    },
+    {
+        resource: "reconciliation_difference",
+        actions: ["list", "detail", "create", "decide"],
+        dimensions: ["internal_org"],
+    },
+    {
+        resource: "supplier",
+        actions: ["list", "detail", "create", "update", "delete"],
+        dimensions: ["internal_org"],
+    },
+    {
+        resource: "product",
+        actions: ["list", "detail", "create", "update"],
+        dimensions: ["internal_org"],
+    },
+    {
+        resource: "supplier_offering",
+        actions: ["list", "create", "update"],
+        dimensions: ["internal_org"],
+    },
+    {
+        resource: "supplier_fulfillment_order",
+        actions: [
+            "list",
+            "detail",
+            "investigate",
+            "complete",
+            "submit",
+            "cancel",
+            "refund",
+            "reject",
+            "handover",
+        ],
+        dimensions: ["internal_org"],
+    },
+    {
+        resource: "person_query_qualification",
+        actions: ["manage"],
+        dimensions: ["internal_org"],
+    },
+    {
+        resource: "settlement_party",
+        actions: ["list"],
+        dimensions: ["settlement_party"],
+    },
+    { resource: "warehouse", actions: ["list"], dimensions: ["warehouse"] },
+    {
+        resource: "business_person",
+        actions: ["list"],
+        dimensions: ["internal_org"],
+    },
+    {
+        resource: "sales_person",
+        actions: ["list"],
+        dimensions: ["internal_org"],
+    },
+    {
+        resource: "procurement_person",
+        actions: ["list"],
+        dimensions: ["internal_org"],
+    },
 ]
 
 export function isRegisteredIdentifier(value: string): boolean {
@@ -90,11 +260,13 @@ export function isWiredResourceAction(
 export function registeredResources(): Array<{
     resource: string
     actions: string[]
+    dimensions: readonly ScopeDimension[]
 }> {
     // 内部复合管理动作没有独立 HTTP 路由，准入以真实消费者登记为准。
-    return WIRED_CONSUMERS.map(({ resource, actions }) => ({
+    return WIRED_CONSUMERS.map(({ resource, actions, dimensions }) => ({
         resource,
         actions: [...actions].sort(),
+        dimensions,
     }))
 }
 

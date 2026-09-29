@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import type { ColumnDef } from "@tanstack/react-table"
 import {
@@ -143,9 +144,13 @@ export function AccountsPage() {
                 header: "账号",
                 cell: ({ row }) => (
                     <div className="min-w-[9rem]">
-                        <div className="font-medium">
+                        <Link
+                            id={`account-open-${toAutomationIdSegment(row.original.id)}`}
+                            className="font-medium hover:text-primary"
+                            href={`/system/accounts/${encodeURIComponent(row.original.id)}`}
+                        >
                             {row.original.name || row.original.account}
-                        </div>
+                        </Link>
                         <div className="mt-1 text-xs text-muted-foreground">
                             {row.original.account}
                         </div>
@@ -503,8 +508,11 @@ export function AccountsPage() {
                 open={permissionsOpen}
                 onOpenChange={setPermissionsOpen}
                 onAdjustRoles={() => {
-                    editAfterPermissionsClose.current = true
                     setPermissionsOpen(false)
+                    if (permissionAccount)
+                        router.push(
+                            `/system/accounts/${encodeURIComponent(permissionAccount.id)}`,
+                        )
                 }}
                 onClosed={() => {
                     if (
@@ -534,52 +542,31 @@ export function AccountsPage() {
                             ? (accountForm.account?.id ?? "edit")
                             : "create"
                     }
-                    onCreated={
-                        canManageOrganization
-                            ? (accountName) => {
-                                  setSetupMessage(
-                                      "账号已创建，正在准备分配部门。",
-                                  )
-                                  void Promise.all([
-                                      adminsQuery.refetch(),
-                                      organizationQuery.refetch(),
-                                  ])
-                                      .then(([accounts, organization]) => {
-                                          const created = accounts.data?.find(
-                                              (account) =>
-                                                  account.account ===
-                                                  accountName,
-                                          )
-                                          if (
-                                              !created ||
-                                              !organization.data?.people.some(
-                                                  (person) =>
-                                                      person.id === created.id,
-                                              ) ||
-                                              organization.isError
-                                          ) {
-                                              setSetupMessage(
-                                                  "账号已创建，部门信息暂不可用。请刷新后点击该账号的「调整部门」完成分配，无需重复创建账号。",
-                                              )
-                                              return
-                                          }
-                                          setSetupMessage(
-                                              "账号已创建。请分配所属部门；取消后也可在列表中继续调整。",
-                                          )
-                                          setDepartmentDraft({
-                                              ...EMPTY_CHANGE_DRAFT,
-                                              operation: "transfer_member",
-                                              userId: created.id,
-                                          })
-                                      })
-                                      .catch(() =>
-                                          setSetupMessage(
-                                              "账号已创建，请在列表中点击「调整部门」完成分配。",
-                                          ),
-                                      )
-                              }
-                            : undefined
-                    }
+                    onCreated={(accountName) => {
+                        setSetupMessage(
+                            "账号已创建，正在打开人员资料继续配置。",
+                        )
+                        void adminsQuery
+                            .refetch()
+                            .then((result) => {
+                                const created = result.data?.find(
+                                    (row) => row.account === accountName,
+                                )
+                                if (created)
+                                    router.push(
+                                        `/system/accounts/${encodeURIComponent(created.id)}`,
+                                    )
+                                else
+                                    setSetupMessage(
+                                        "账号已创建。请刷新列表并点击姓名继续配置，无需重复创建账号。",
+                                    )
+                            })
+                            .catch(() =>
+                                setSetupMessage(
+                                    "账号已创建，请刷新列表后点击姓名继续配置。",
+                                ),
+                            )
+                    }}
                     departmentLabel={
                         accountForm.account && organizationQuery.data
                             ? (() => {

@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { OrganizationAccessImpact } from "./organization-access-impact"
 import { z } from "zod"
 
 import { BatchImpactPreview, BusinessDiffPanel } from "@/components/business"
@@ -444,6 +445,15 @@ export function OrganizationChangeDialog({
                             />
                         )}
                     />
+
+                    <form.Subscribe selector={(state) => state.values}>
+                        {(values) => (
+                            <OrganizationAccessImpact
+                                draft={values}
+                                view={view}
+                            />
+                        )}
+                    </form.Subscribe>
 
                     {actionError ? (
                         <Alert variant="destructive">

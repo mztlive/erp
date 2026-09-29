@@ -8,7 +8,16 @@ use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::response::ApiResponse;
 
-/// 创建角色并写入 Casbin 权限策略。
+/// 创建角色并写入 Casbin 权限策略，返回角色身份用于继续配置范围。
+///
+/// # 参数
+/// * `state` - 应用状态。
+/// * `actor` - 已认证操作人。
+/// * `req` - 名称和操作权限。
+/// # 返回
+/// 新角色 ID；客户端继续打开该角色编辑页。
+/// # 错误
+/// 参数、授权或持久化校验失败时返回统一错误。
 #[permission_macros::permission(
     group = "角色管理",
     group_desc = "系统角色和权限配置",
@@ -20,11 +29,11 @@ pub async fn create_role(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateRoleParams>,
-) -> Result<()> {
+) -> Result<String> {
     req.validate()?;
-    state.rbac().create_role(req, actor).await?;
+    let role = state.rbac().create_role(req, actor).await?;
 
-    Ok(ApiResponse::<()>::ok())
+    Ok(ApiResponse::ok_with_data(role.base.id.to_string()))
 }
 
 /// 查询全部角色及其 Casbin 权限策略。

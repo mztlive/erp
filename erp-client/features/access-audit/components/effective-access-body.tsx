@@ -4,12 +4,9 @@ import { BusinessEmptyState, BusinessFailureState } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { DataScopeGroupList } from "@/features/admin/components/data-scope-group-list"
+import { ScopeRulesView } from "@/features/organization/components/scope-rules-view"
 import { useEffectiveAccessQuery } from "@/features/access-audit/hooks/queries"
-import {
-    groupDataScopes,
-    permissionPreview,
-} from "@/features/access-audit/lib/effective-access-preview"
+import { permissionPreview } from "@/features/access-audit/lib/effective-access-preview"
 import type { RoleRow } from "@/features/access-audit/types"
 
 type EffectiveAccessBodyProps = {
@@ -95,7 +92,7 @@ function DataScopeSection({
             </section>
         )
     }
-    const groups = groupDataScopes(query.data?.dataScopes ?? [])
+    const groups = query.data?.dataScopes ?? []
     return (
         <section className="space-y-3">
             <h3 className="font-medium">数据范围</h3>
@@ -107,9 +104,25 @@ function DataScopeSection({
                     尚未配置数据范围，不代表可访问全部数据。
                 </p>
             ) : (
-                <DataScopeGroupList
-                    groups={groups}
-                    subjectLabel={subjectLabel}
+                <ScopeRulesView
+                    rules={groups.map((row) => ({
+                        id: row.id,
+                        subject_type:
+                            row.sourceType === "USER" ? "user" : "role",
+                        subject_id: row.sourceLabel,
+                        resource: row.resource ?? "",
+                        actions: row.actions ? [...row.actions] : undefined,
+                        scope_type: row.scopeType ?? "",
+                        scope_targets: [...(row.scopeTargets ?? [])],
+                        target_dimension: row.targetDimension,
+                        target_mode: row.targetMode,
+                        include_descendants: row.includeDescendants,
+                        enabled: row.enabled,
+                    }))}
+                    roles={groups.map((row) => ({
+                        id: row.sourceLabel,
+                        name: row.sourceLabel || subjectLabel,
+                    }))}
                 />
             )}
         </section>

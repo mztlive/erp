@@ -80,12 +80,12 @@ export function OrganizationUnitPanel({
                         </span>
                     </div>
                     <p className="mt-0.5 text-xs text-muted-foreground">
-                        主属成员{" "}
+                        部门成员{" "}
                         <span className="num text-foreground">
                             {node.members.length}
                         </span>{" "}
                         人<span className="mx-1.5 text-border">/</span>
-                        管理授权{" "}
+                        管理此部门的人员{" "}
                         <span className="num text-foreground">
                             {node.management.length}
                         </span>{" "}
@@ -216,7 +216,7 @@ export function OrganizationUnitPanel({
                                             <Link
                                                 id={`organization-member-${toAutomationIdSegment(member.id)}-account`}
                                                 className="wrap-anywhere hover:text-primary"
-                                                href={`/system/accounts?q=${encodeURIComponent(view.people.find((person) => person.id === member.user_id)?.account ?? "")}`}
+                                                href={`/system/accounts/${encodeURIComponent(member.user_id)}`}
                                             >
                                                 {personLabel(
                                                     view.people,
@@ -298,7 +298,7 @@ export function OrganizationUnitPanel({
                                 className="size-4 text-muted-foreground"
                                 aria-hidden="true"
                             />
-                            管理授权{" "}
+                            管理此部门的人员{" "}
                             <span className="num text-xs text-muted-foreground">
                                 {node.management.length}
                             </span>
@@ -320,13 +320,13 @@ export function OrganizationUnitPanel({
                                     data-icon="inline-start"
                                     aria-hidden="true"
                                 />
-                                设置管理部门
+                                添加管理此部门的人员
                             </Button>
                         ) : null}
                     </div>
                     {node.management.length === 0 ? (
                         <p className="rounded-lg bg-muted/30 px-4 py-8 text-center text-sm leading-6 text-muted-foreground">
-                            当前没有显式管理授权。部门负责人身份不会自动获得组织配置权。
+                            当前没有显式管理此部门的人员。部门负责人身份不会自动获得组织配置权。
                         </p>
                     ) : (
                         <ul className="min-w-0 divide-y divide-border">

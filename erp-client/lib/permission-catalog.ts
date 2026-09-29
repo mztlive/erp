@@ -79,6 +79,7 @@ export function isDangerousAction(action: string): boolean {
 
 /** 动作中文名；界面一律用这里的措辞，不展示英文动作名。 */
 const ACTION_LABEL: Record<string, string> = {
+    remove: "移除",
     list: "查看列表",
     get: "查看详情",
     copy_link: "复制链接",

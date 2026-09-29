@@ -56,8 +56,8 @@ export const deleteAdmin = (id: string): Promise<void> =>
     apiDelete<void>(`/admin/admins/${id}`)
 
 /** 创建角色并写入 Casbin 权限策略。 */
-export const createRole = (payload: CreateRolePayload): Promise<void> =>
-    apiPost<void>("/admin/roles", payload)
+export const createRole = (payload: CreateRolePayload): Promise<string> =>
+    apiPost<string>("/admin/roles", payload)
 
 /** 更新角色名称与权限策略。 */
 export const updateRole = (

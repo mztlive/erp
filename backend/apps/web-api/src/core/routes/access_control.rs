@@ -131,6 +131,14 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/access-check",
+            with_permission(
+                post(access_control::inspection::inspect),
+                rbac,
+                access_control::inspection::inspect_permission_key(),
+            ),
+        )
+        .route(
             "/audit-events",
             with_permission(
                 get(access_control::audit_event_list),

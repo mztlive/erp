@@ -1087,6 +1087,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "POST",
+                path: "/admin/access-check",
+                description: "检查人员访问权限",
+                permission: {
+                    resource: "data_scope",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
                 method: "GET",
                 path: "/admin/audit-events",
                 description: "查询审计事件列表",

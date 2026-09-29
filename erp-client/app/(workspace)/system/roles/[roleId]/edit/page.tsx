@@ -12,9 +12,12 @@ export const metadata: Metadata = {
  */
 export default async function SystemRoleEditRoutePage({
     params,
+    searchParams,
 }: {
     params: Promise<{ roleId: string }>
+    searchParams: Promise<{ returnTo?: string }>
 }) {
     const { roleId } = await params
-    return <RoleFormPage roleId={roleId} />
+    const { returnTo } = await searchParams
+    return <RoleFormPage roleId={roleId} returnTo={returnTo} />
 }
