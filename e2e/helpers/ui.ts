@@ -587,6 +587,7 @@ export async function approveCurrentDocument(page: Page): Promise<void> {
         .locator('[id$="-decision-dialog-submit"]')
         .or(dialog.getByRole("button", { name: "确认通过" }))
         .first()
+    await page.locator('[data-slot="toast-close"]').click({ timeout: 1_000 }).catch(() => undefined)
     await confirm.click()
     await expect(dialog).toBeHidden({ timeout: UI_TIMEOUT })
 }

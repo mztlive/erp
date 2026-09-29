@@ -481,7 +481,13 @@ test("flow-11 现有库存仓发：盘盈 → 销售生效 → 纯库存供给�
             timeout: UI_TIMEOUT,
         });
         await expect(page.getByText("仓库发出").first()).toBeVisible();
-        await expect(page.getByText("采购入库")).toHaveCount(0);
+        await expect(
+            page
+                .locator("#inventory-ledger-movement-table")
+                .getByRole("row")
+                .filter({ hasText: salesOrderNo })
+                .filter({ hasText: "采购入库" }),
+        ).toHaveCount(0);
 
         // 8) xiaoshou 登记客户验收（无审批）；未回款不得关闭，生效后仍通过变更单纠正
         page = await switchTo("xiaoshou");

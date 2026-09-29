@@ -362,11 +362,21 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
             await openFulfillmentWorkspaceForm(page);
             const dialog = page.getByRole("dialog", { name: "处理履约" });
             if (cardLabel.includes(purchaseOrderNo)) return true;
-            const source = dialog.locator('[aria-label="来源单据"]');
-            const sourceReady = await source
+            const inboundForm = dialog.locator('[aria-label="入库表单"]');
+            const directForm = dialog.locator('[aria-label="供应商直发表单"]');
+            const formReady = await inboundForm
+                .or(directForm)
+                .first()
                 .waitFor({ state: "visible", timeout: UI_TIMEOUT })
                 .then(() => true)
                 .catch(() => false);
+            const formText = formReady
+                ? ((await dialog.innerText().catch(() => "")) || "").replace(/\s+/g, " ")
+                : "";
+            if (formText.includes(purchaseOrderNo)) return true;
+            if (formReady && salesOrderNo && cardLabel.includes(salesOrderNo)) return true;
+            const source = dialog.locator('[aria-label="来源单据"]');
+            const sourceReady = await source.isVisible().catch(() => false);
             if (!sourceReady) continue;
             const sourceText = (await source.innerText()).replace(/\s+/g, " ");
             if (sourceText.includes(purchaseOrderNo)) return true;

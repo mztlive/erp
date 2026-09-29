@@ -178,6 +178,8 @@ async function ensureSeededOfferingResponsibility() {
             sku_no?: string | null
             maintainer_user_id?: string
             business_org_unit_id?: string
+            availability_status?: string
+            available_quantity?: string | null
             version: number
         }>
     }>(token, "/admin/supplier-offerings", { q: SKU_NO, page: 1, page_size: 50 })
@@ -187,23 +189,37 @@ async function ensureSeededOfferingResponsibility() {
     if (rows.length !== 1) throw new Error(`杭州狮峰供给应为 1 条，实际 ${rows.length}`)
     const offering = rows[0]
     if (!offering) throw new Error("杭州狮峰供给不存在")
-    if (offering.maintainer_user_id?.trim() && offering.business_org_unit_id?.trim()) return
-    const org = await apiGet<{
-        people?: Array<{ id: string; account: string; active: boolean; own_org_unit_id?: string | null }>
-    }>(token, "/admin/org-units")
-    const admin = org.people?.find((person) => person.account === "admin" && person.active)
-    const orgId = admin?.own_org_unit_id?.trim()
-    if (!admin?.id || !orgId) throw new Error("建档管理员没有主属组织，无法交接供给")
-    await apiPost(token, `/admin/supplier-offerings/${encodeURIComponent(offering.id)}/handover`, {
-        target_user_id: admin.id,
-        target_org_unit_id: orgId,
-        reason: "E2E 补齐种子供给的维护人与主属组织",
-        expected_version: offering.version,
-        idempotency_key: `flow18-offering-handover-${offering.id}-v${offering.version}`,
+    let version = offering.version
+    if (!offering.maintainer_user_id?.trim() || !offering.business_org_unit_id?.trim()) {
+        const org = await apiGet<{
+            people?: Array<{ id: string; account: string; active: boolean; own_org_unit_id?: string | null }>
+        }>(token, "/admin/org-units")
+        const admin = org.people?.find((person) => person.account === "admin" && person.active)
+        const orgId = admin?.own_org_unit_id?.trim()
+        if (!admin?.id || !orgId) throw new Error("建档管理员没有主属组织，无法交接供给")
+        const handed = await apiPost<{ version?: number }>(
+            token,
+            `/admin/supplier-offerings/${encodeURIComponent(offering.id)}/handover`,
+            {
+                target_user_id: admin.id,
+                target_org_unit_id: orgId,
+                reason: "E2E 补齐种子供给的维护人与主属组织",
+                expected_version: version,
+                idempotency_key: `flow18-offering-handover-${offering.id}-v${version}`,
+            },
+        )
+        version = handed.version ?? version + 1
+    }
+    if ((offering.availability_status ?? "AVAILABLE") === "AVAILABLE") return
+    await apiPost(token, `/admin/supplier-offerings/${encodeURIComponent(offering.id)}/availability`, {
+        availability_status: "AVAILABLE",
+        available_quantity: offering.available_quantity ?? undefined,
+        change_reason: "E2E 恢复种子供给可供，避免上一次停止供应残留",
+        idempotency_key: `flow18-offering-available-${offering.id}-v${version}`,
     })
 }
 
-async function apiPost(token: string, path: string, body: unknown) {
+async function apiPost<T>(token: string, path: string, body: unknown): Promise<T> {
     const response = await fetch(`${API_BASE}${path}`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -211,16 +227,20 @@ async function apiPost(token: string, path: string, body: unknown) {
         signal: AbortSignal.timeout(15_000),
     })
     const text = await response.text()
-    const parsed = text ? (JSON.parse(text) as { success?: boolean; errorMessage?: string }) : null
+    const parsed = text
+        ? (JSON.parse(text) as { success?: boolean; errorMessage?: string; data?: T })
+        : null
     if (!response.ok || parsed?.success === false) {
         throw new Error(`API POST ${path} 失败（HTTP ${response.status}）: ${parsed?.errorMessage ?? text}`)
     }
+    return parsed?.data as T
 }
 
 test("flow-18 停止可供后供给分配不得建采购单，必须走销售变更且禁止回到审批", async ({
     browser,
 }) => {
     test.setTimeout(FLOW_TIMEOUT)
+    await ensureSeededOfferingResponsibility()
     const stamp = Date.now().toString(36).toUpperCase()
     const customerName = `E2E供给失效客户${stamp}`
     const contractNo = `HT-E2E-18-${stamp}`

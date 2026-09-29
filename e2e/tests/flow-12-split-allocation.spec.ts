@@ -102,7 +102,7 @@ function pdfUpload(): { name: string; mimeType: string; buffer: Buffer } | strin
     }
 }
 
-async function submitInventoryCountGain(page: Page) {
+async function submitInventoryCountGain(page: Page): Promise<string> {
     await page.goto(`${FRONTEND_BASE}/inventory`)
     await expect(page.getByRole("heading", { name: "库存台账" })).toBeVisible({
         timeout: TIMEOUT,
@@ -116,8 +116,11 @@ async function submitInventoryCountGain(page: Page) {
     await chooseOption(page, dialog.getByLabel("原因类型"), /盘盈/)
     await dialog.getByLabel(/调整数量/).fill(STOCK_QTY)
     await dialog.getByLabel("原因说明").fill("E2E flow-12 盘盈准备少于销售数量的库存")
+    const adjustmentNo = (await dialog.locator("span.num").filter({ hasText: /^TZ/ }).innerText()).trim()
+    expect(adjustmentNo.length, "发起弹窗应显示本张调整单号").toBeGreaterThan(2)
     await dialog.getByRole("button", { name: "提交审批" }).click()
     await expect(page.getByText("调整已提交审批")).toBeVisible({ timeout: TIMEOUT })
+    return adjustmentNo
 }
 
 async function assertAvailableQuantity(page: Page, quantity: string) {
@@ -455,6 +458,7 @@ test("同一销售明细拆分：库存直配 + 采购缺口", async ({ browser 
     const contractNo = `HT-E2E-12-${Date.now()}`
     let salesOrderNo = ""
     let salesOrderId = ""
+    let adjustmentNo = ""
     let purchaseNo = ""
 
     // 1. 销售创建客户（合同在建单时上传）
@@ -479,15 +483,16 @@ test("同一销售明细拆分：库存直配 + 采购缺口", async ({ browser 
     await ensureWarehouseStockScope(WAREHOUSE_CODE)
     const warehouse = await openLoggedInWorkspace(browser, "cangchu")
     try {
-        await submitInventoryCountGain(warehouse.page)
+        adjustmentNo = await submitInventoryCountGain(warehouse.page)
     } finally {
         await closeSession(warehouse)
     }
 
-    // 3. 财务审批库存调整，可用量生效
+    // 3. 财务审批这一张盘盈。无单号会通过队列里另一张库存调整单。
     const financeAdj = await openLoggedInWorkspace(browser, "caiwu")
     try {
-        await openWorkspaceTask(financeAdj.page, "库存调整单审批", undefined, "approval")
+        await openWorkspaceTask(financeAdj.page, "库存调整单审批", adjustmentNo, "approval")
+        await expect(financeAdj.page.getByRole("region", { name: "当前工作台任务" })).toContainText(adjustmentNo)
         await approveCurrentDocument(financeAdj.page)
     } finally {
         await closeSession(financeAdj)

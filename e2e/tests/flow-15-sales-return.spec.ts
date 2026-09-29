@@ -718,8 +718,8 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
         await chooseOption(
             page,
             pickSupplier.locator("#supplier-payables-pick-supplier-select"),
-            /杭州狮峰茶叶有限公司/,
-            "狮峰",
+            /狮峰/,
+            SUPPLIER_SHORT,
         );
         const confirmSupplier = pickSupplier.locator("#supplier-payables-pick-supplier-confirm");
         await expect(confirmSupplier).toBeEnabled({ timeout: UI_TIMEOUT });

@@ -53,7 +53,11 @@ export async function loginViaUi(
                 const detail = (await loginError.textContent())?.trim() ?? "无法登录"
                 if (detail.includes("频繁") && attempt < 2) {
                     await page.waitForTimeout(35_000)
-                    await page.locator("#governance-auth-login-submit").click()
+                    await page
+                        .locator('[data-slot="toast-close"]')
+                        .click({ timeout: 1_000 })
+                        .catch(() => undefined)
+                    await page.locator("#governance-auth-login-submit").click({ force: true })
                     continue
                 }
                 throw new Error(`UI 登录失败 (${cred.account}): ${detail}`)
