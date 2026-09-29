@@ -179,63 +179,132 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
 
     /// 创建财务责任规则并记录审计。
     ///
+    /// # 参数
+    /// * `request` - 规则匹配范围与负责人
+    /// * `actor` - 当前操作人
+    ///
+    /// # 返回
+    /// 返回经编译器验证为 `Send` 的 future，完成后取得新规则视图。
+    ///
     /// # 错误
     /// 匹配范围、往来方、负责人资格、唯一性或事务写入不满足时返回错误。
-    pub async fn create_finance_responsibility_rule(
+    #[expect(
+        clippy::manual_async_fn,
+        reason = "显式 Send 返回边界用于验证嵌套异步调用，避免调用方的高阶生命周期推导失败"
+    )]
+    pub fn create_finance_responsibility_rule(
         self,
         request: CreateFinanceResponsibilityRuleRequest,
         actor: AuditActor,
-    ) -> Result<FinanceResponsibilityRuleView> {
-        let data = request.into_data();
-        let probe = self.validate_finance_rule_data(&data, true, false, &mut NoTransaction).await?;
-        let policy_revision =
-            self.authorize_finance_owner_eligibility(probe.operation, &probe.owner_user_id).await?;
-        let rule =
-            FinanceResponsibilityRule::new(next_id(), data.clone(), actor.id()).map_err(Error::Logic)?;
-        let audit = PreparedWorkflowAudit::resource(
-            actor.clone(),
-            "finance_responsibility_rule.create",
-            "finance_responsibility_rule",
-            rule.base.id.clone(),
-        )?;
-        let db = self.db.clone();
-        let rbac = self.auth.clone();
-        let audit_port = Arc::clone(&self.audit);
-        let rule = rbac
-            .clone()
-            .run_authorized_policy_transaction(policy_revision, move |executor| {
-                let service = WorkItemService::new(db.clone(), rbac.clone());
-                let data = data.clone();
-                let rule = rule.clone();
-                let audit = audit.clone();
-                let audit_port = Arc::clone(&audit_port);
-                Box::pin(async move {
-                    service.validate_finance_rule_data(&data, true, true, executor).await?;
-                    db.finance_responsibility_rules().create(&rule, executor).await?;
-                    audit_port.persist(&audit, executor).await?;
-                    Ok::<FinanceResponsibilityRule, crate::error::Error>(rule)
+    ) -> impl Future<Output = Result<FinanceResponsibilityRuleView>> + Send {
+        async move {
+            let data = request.into_data();
+            let probe = self.validate_finance_rule_data(&data, true, false, &mut NoTransaction).await?;
+            let policy_revision =
+                self.authorize_finance_owner_eligibility(probe.operation, &probe.owner_user_id).await?;
+            let rule =
+                FinanceResponsibilityRule::new(next_id(), data.clone(), actor.id()).map_err(Error::Logic)?;
+            let audit = PreparedWorkflowAudit::resource(
+                actor.clone(),
+                "finance_responsibility_rule.create",
+                "finance_responsibility_rule",
+                rule.base.id.clone(),
+            )?;
+            let db = self.db.clone();
+            let rbac = self.auth.clone();
+            let audit_port = Arc::clone(&self.audit);
+            let rule = rbac
+                .clone()
+                .run_authorized_policy_transaction(policy_revision, move |executor| {
+                    let service = WorkItemService::new(db.clone(), rbac.clone());
+                    let data = data.clone();
+                    let rule = rule.clone();
+                    let audit = audit.clone();
+                    let audit_port = Arc::clone(&audit_port);
+                    Box::pin(async move {
+                        service.validate_finance_rule_data(&data, true, true, executor).await?;
+                        db.finance_responsibility_rules().create(&rule, executor).await?;
+                        audit_port.persist(&audit, executor).await?;
+                        Ok::<FinanceResponsibilityRule, crate::error::Error>(rule)
+                    })
                 })
-            })
-            .await?;
-        self.single_finance_responsibility_view(rule).await
+                .await?;
+            self.single_finance_responsibility_view(rule).await
+        }
     }
 
     /// 整项更新财务责任规则并记录审计。
     ///
+    /// # 参数
+    /// * `id` - 规则 ID
+    /// * `request` - 预期版本与完整规则配置
+    /// * `actor` - 当前操作人
+    ///
+    /// # 返回
+    /// 返回经编译器验证为 `Send` 的 future，完成后取得更新后的规则视图。
+    ///
     /// # 错误
     /// 规则不存在、版本冲突、往来方或负责人资格不满足时返回错误。
-    pub async fn update_finance_responsibility_rule(
+    #[expect(
+        clippy::manual_async_fn,
+        reason = "显式 Send 返回边界用于验证嵌套异步调用，避免调用方的高阶生命周期推导失败"
+    )]
+    pub fn update_finance_responsibility_rule(
         self,
         id: String,
         request: UpdateFinanceResponsibilityRuleRequest,
         actor: AuditActor,
-    ) -> Result<FinanceResponsibilityRuleView> {
-        let (version, data) = request.into_parts();
-        let probe = self.validate_finance_rule_data(&data, false, false, &mut NoTransaction).await?;
+    ) -> impl Future<Output = Result<FinanceResponsibilityRuleView>> + Send {
+        async move {
+            let (version, data) = request.into_parts();
+            let policy_revision = self.finance_rule_update_revision(&id, version, &data).await?;
+            let audit = PreparedWorkflowAudit::resource(
+                actor.clone(),
+                "finance_responsibility_rule.update",
+                "finance_responsibility_rule",
+                id.to_string(),
+            )?;
+            let db = self.db.clone();
+            let rbac = self.auth.clone();
+            let audit_port = Arc::clone(&self.audit);
+            let id = id.to_string();
+            let updated_by = actor.id().to_string();
+            let rule = rbac
+                .clone()
+                .run_authorized_policy_transaction(policy_revision, move |executor| {
+                    let service = WorkItemService::new(db.clone(), rbac.clone());
+                    let data = data.clone();
+                    let id = id.clone();
+                    let updated_by = updated_by.clone();
+                    let audit = audit.clone();
+                    let audit_port = Arc::clone(&audit_port);
+                    Box::pin(async move {
+                        let rule =
+                            service.update_finance_rule(&id, version, data, updated_by, executor).await?;
+                        audit_port.persist(&audit, executor).await?;
+                        Ok::<FinanceResponsibilityRule, crate::error::Error>(rule)
+                    })
+                })
+                .await?;
+            self.single_finance_responsibility_view(rule).await
+        }
+    }
+
+    /// 校验更新请求，并取得事务必须重验的授权策略版本。
+    ///
+    /// # 错误
+    /// 规则不存在、版本冲突、资格校验或授权查询失败时返回错误。
+    async fn finance_rule_update_revision(
+        &self,
+        id: &str,
+        version: u64,
+        data: &FinanceResponsibilityRuleData,
+    ) -> Result<u64> {
+        let probe = self.validate_finance_rule_data(data, false, false, &mut NoTransaction).await?;
         let current = self
             .db
             .finance_responsibility_rules()
-            .find_by_id(&id, &mut NoTransaction)
+            .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("财务责任规则不存在".to_string()))?;
         if current.base.version != version {
@@ -249,70 +318,58 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             || probe.owner_user_id != current.owner_user_id
             || probe.operation != current.operation;
         self.validate_finance_rule_data(
-            &data,
+            data,
             counterparty_must_be_eligible,
             owner_must_be_eligible,
             &mut NoTransaction,
         )
         .await?;
-        let policy_revision = if owner_must_be_eligible {
-            self.authorize_finance_owner_eligibility(probe.operation, &probe.owner_user_id).await?
+        if owner_must_be_eligible {
+            self.authorize_finance_owner_eligibility(probe.operation, &probe.owner_user_id).await
         } else {
-            self.auth.current_policy_revision().await?
-        };
-        let audit = PreparedWorkflowAudit::resource(
-            actor.clone(),
-            "finance_responsibility_rule.update",
-            "finance_responsibility_rule",
-            id.to_string(),
-        )?;
-        let db = self.db.clone();
-        let rbac = self.auth.clone();
-        let audit_port = Arc::clone(&self.audit);
-        let id = id.to_string();
-        let updated_by = actor.id().to_string();
-        let rule = rbac
-            .clone()
-            .run_authorized_policy_transaction(policy_revision, move |executor| {
-                let service = WorkItemService::new(db.clone(), rbac.clone());
-                let data = data.clone();
-                let id = id.clone();
-                let updated_by = updated_by.clone();
-                let audit = audit.clone();
-                let audit_port = Arc::clone(&audit_port);
-                Box::pin(async move {
-                    let mut rule = db
-                        .finance_responsibility_rules()
-                        .find_by_id(&id, executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("财务责任规则不存在".to_string()))?;
-                    if rule.base.version != version {
-                        return Err(Error::ConflictError("财务责任规则版本已变化".to_string()));
-                    }
-                    let probe = service.validate_finance_rule_data(&data, false, false, executor).await?;
-                    let counterparty_must_be_eligible = probe.status.is_active()
-                        || probe.operation != rule.operation
-                        || probe.scope != rule.scope
-                        || probe.counterparty_id != rule.counterparty_id;
-                    let owner_must_be_eligible = probe.status.is_active()
-                        || probe.owner_user_id != rule.owner_user_id
-                        || probe.operation != rule.operation;
-                    service
-                        .validate_finance_rule_data(
-                            &data,
-                            counterparty_must_be_eligible,
-                            owner_must_be_eligible,
-                            executor,
-                        )
-                        .await?;
-                    rule.update(data, updated_by).map_err(Error::Logic)?;
-                    db.finance_responsibility_rules().update(&mut rule, executor).await?;
-                    audit_port.persist(&audit, executor).await?;
-                    Ok::<FinanceResponsibilityRule, crate::error::Error>(rule)
-                })
-            })
-            .await?;
-        self.single_finance_responsibility_view(rule).await
+            self.auth.current_policy_revision().await
+        }
+    }
+
+    /// 在调用方事务内重验版本与资格，并更新财务责任规则。
+    ///
+    /// # 错误
+    /// 规则不存在、版本冲突、资格校验或仓储更新失败时返回错误。
+    async fn update_finance_rule(
+        &self,
+        id: &str,
+        version: u64,
+        data: FinanceResponsibilityRuleData,
+        updated_by: String,
+        executor: &mut dyn Executor,
+    ) -> Result<FinanceResponsibilityRule> {
+        let mut rule = self
+            .db
+            .finance_responsibility_rules()
+            .find_by_id(id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("财务责任规则不存在".to_string()))?;
+        if rule.base.version != version {
+            return Err(Error::ConflictError("财务责任规则版本已变化".to_string()));
+        }
+        let probe = self.validate_finance_rule_data(&data, false, false, executor).await?;
+        let counterparty_must_be_eligible = probe.status.is_active()
+            || probe.operation != rule.operation
+            || probe.scope != rule.scope
+            || probe.counterparty_id != rule.counterparty_id;
+        let owner_must_be_eligible = probe.status.is_active()
+            || probe.owner_user_id != rule.owner_user_id
+            || probe.operation != rule.operation;
+        self.validate_finance_rule_data(
+            &data,
+            counterparty_must_be_eligible,
+            owner_must_be_eligible,
+            executor,
+        )
+        .await?;
+        rule.update(data, updated_by).map_err(Error::Logic)?;
+        self.db.finance_responsibility_rules().update(&mut rule, executor).await?;
+        Ok(rule)
     }
 
     /// 列出可作为付款或销项开票负责人的有效管理账号。

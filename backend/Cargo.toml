@@ -163,8 +163,12 @@ zip = { version = "2.4.2", default-features = false, features = ["deflate"] }
 debug = "line-tables-only"
 incremental = true
 
+# 第三方依赖在 dev 也开优化：argon2、bson/serde、mongodb 驱动、casbin 在 opt-level 0 下
+# 会把登录与每个请求拖慢数倍（本地联调与 E2E 都跑 dev 二进制）。依赖只在版本变化时重编，
+# 工作区 crate 仍不优化，增量编译速度不受影响。
 [profile.dev.package."*"]
 debug = false
+opt-level = 2
 
 [profile.debugging]
 inherits = "dev"

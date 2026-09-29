@@ -1,5 +1,7 @@
 import { expect, type Locator, type Page } from "@playwright/test"
 
+import { takeFreshWorkspace } from "./login"
+
 /**
  * 通用 UI 操作。spec 不要再复制 expectToast / chooseOption / pickCalendarDay /
  * openWorkspaceTask / approveCurrentDocument。
@@ -104,6 +106,8 @@ export async function expectToast(
 
 /**
  * 关闭当前全部可关闭的悬浮提示。
+ * 只处理可见的关闭按钮：已隐藏的 toast 不会挡点击。直接派发 click，不等可操作性：
+ * 退场动画中或被弹窗遮罩盖住的 toast 真实点击会一直等到超时，而这里只需要它关掉。
  */
 export async function dismissToasts(page: Page): Promise<void> {
     await page.mouse.move(8, 8).catch(() => undefined)
@@ -111,9 +115,10 @@ export async function dismissToasts(page: Page): Promise<void> {
         const dismiss = page
             .locator('[data-slot="toast"]')
             .getByRole("button", { name: "关闭提示", includeHidden: true })
+            .filter({ visible: true })
             .first()
         if (!(await dismiss.count())) return
-        await dismiss.click({ timeout: 5_000 }).catch(() => undefined)
+        await dismiss.dispatchEvent("click", undefined, { timeout: 1_000 }).catch(() => undefined)
     }
 }
 
@@ -379,18 +384,42 @@ export function salesOrderMetric(page: Page, metricLabel: string) {
 }
 
 /**
+ * 可有可无的中间步骤（如二次确认框）与后续结果谁先出现。
+ * `optional` 先可见返回 true；`settled`（结果元素或请求 Promise）先到返回 false；都没到则 timeout 后返回 false。
+ * 不要用 `isVisible({ timeout })` 做这件事：Playwright 忽略该 timeout，立即返回。
+ */
+export async function optionalStepVisible(
+    optional: Locator,
+    settled: Locator | Promise<unknown>,
+    timeout = UI_TIMEOUT,
+): Promise<boolean> {
+    const shown = optional
+        .first()
+        .waitFor({ state: "visible", timeout })
+        .then(
+            () => true,
+            () => false,
+        )
+    const done = (
+        settled instanceof Promise
+            ? settled
+            : settled.first().waitFor({ state: "visible", timeout })
+    ).then(
+        () => false,
+        () => false,
+    )
+    return Promise.race([shown, done])
+}
+
+/**
  * 工作台履约任务先展示摘要，点「处理履约」后才打开表单对话框。
+ * 对话框和「处理履约」按钮谁先出现走哪条，不固定等待。
  */
 export async function openFulfillmentWorkspaceForm(page: Page) {
     const dialog = page.getByRole("dialog", { name: "处理履约" })
-    try {
-        await expect(dialog).toBeVisible({ timeout: 2_000 })
-        return dialog
-    } catch {
-        // 摘要页需要先点「处理履约」才打开表单对话框。
-    }
     const trigger = page.getByRole("button", { name: "处理履约" })
-    await expect(trigger).toBeVisible({ timeout: UI_TIMEOUT })
+    await expect(dialog.or(trigger).first()).toBeVisible({ timeout: UI_TIMEOUT })
+    if (await dialog.isVisible()) return dialog
     await trigger.click({ force: true })
     await expect(dialog).toBeVisible({ timeout: UI_TIMEOUT })
     return dialog
@@ -504,6 +533,9 @@ function workspaceTaskLocator(
  * 打开 W01 待办。不要往 `#workspace-queue-toolbar-search-input` 填单号/往来方，
  * 后端搜索不匹配这些字段，会把列表滤空。
  *
+ * 页面若是 `openLoggedInWorkspace` 刚整页加载、之后没发过写请求的工作台，就不再 goto；
+ * 其余情况都硬导航，保证待办是最新的。
+ *
  * 默认口径是待我处理。列表里没有带 hint 的任务、且
  * `#workspace-queue-scope-managed` 可见且未按下时，再点「范围内待办」重找。
  * 没有 `work_item:manage` 的账号不渲染该按钮，不得空等。
@@ -520,7 +552,10 @@ export async function openWorkspaceTask(
 ): Promise<void> {
     const key = family ? workspaceFamilyKey(family) : undefined
     const href = !key || key === "all" ? "/workspace" : `/workspace?family=${key}`
-    await page.goto(href)
+    // 切角色刚整页加载过的工作台直接用，只在页内切任务类型；否则硬导航重新拉待办。
+    if (!takeFreshWorkspace(page)) {
+        await page.goto(href)
+    }
     await expectWorkspace(page)
     if (family) await selectWorkspaceFamily(page, family)
 
@@ -587,7 +622,7 @@ export async function approveCurrentDocument(page: Page): Promise<void> {
         .locator('[id$="-decision-dialog-submit"]')
         .or(dialog.getByRole("button", { name: "确认通过" }))
         .first()
-    await page.locator('[data-slot="toast-close"]').click({ timeout: 1_000 }).catch(() => undefined)
+    await dismissToasts(page)
     await confirm.click()
     await expect(dialog).toBeHidden({ timeout: UI_TIMEOUT })
 }

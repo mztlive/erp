@@ -69,14 +69,14 @@ function uniqueCreditCode(): string {
 }
 
 async function stableGoto(page: Page, href: string) {
-  // 开发热更新或上一个导航未落定会中断 goto（ERR_ABORTED）：短等待后重试，最多 3 次。
+  // 上一个导航未落定会中断 goto（ERR_ABORTED）：等当前导航落定后重试，最多 3 次。
   for (let i = 0; ; i += 1) {
     try {
       await page.goto(href)
       return
     } catch (error) {
       if (i >= 2) throw error
-      await page.waitForTimeout(2_000)
+      await page.waitForLoadState('domcontentloaded').catch(() => undefined)
     }
   }
 }
@@ -286,10 +286,10 @@ test('flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
     // 批量交期 toast 常盖住确认按钮：先清 toast 再点，盖住不散时走 DOM 派发。
     // 确认点按后对话框关闭即提交成功：透过 settled 提前返回，避免对已卸载按钮重试。
     const submitDialog = sales.page.getByRole('dialog', { name: '提交销售单' })
-    await clickWithoutToastOverlay(sales.page, sales.page.locator('#sales-orders-submit-confirm-confirm'), async () => {
-      await sales.page.waitForURL(/\/sales\/orders\/[^/?]+/, { timeout: 2_000 }).catch(() => undefined)
-      return !/\/sales\/orders\?mode=create/.test(sales.page.url())
-    })
+    // settled 只做即时判断：第一次点按前页面必然还在新建页，等 URL 只会白等。
+    await clickWithoutToastOverlay(sales.page, sales.page.locator('#sales-orders-submit-confirm-confirm'), async () =>
+      !/\/sales\/orders\?mode=create/.test(sales.page.url()),
+    )
     await expect(submitDialog).toBeHidden({ timeout: TIMEOUT })
     await sales.page.waitForURL(/\/sales\/orders\/[^/?]+/, { timeout: TIMEOUT })
     await expect(sales.page.getByText('审批中').first()).toBeVisible({ timeout: TIMEOUT })
@@ -322,19 +322,15 @@ test('flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
     await approveCurrentDocument(procurement.page)
 
     await sales.page.goto(`/sales/orders/${salesOrderId}`)
-    // 审批通过后生效异步落定：刷新轮询直到出现已生效，最长约 2 分钟。
+    // 审批通过后生效若尚未落定：短间隔刷新重查，生效即走，最长约 2 分钟。
     const identity = sales.page.getByRole('heading', { name: legalName }).locator('xpath=..')
-    let effective = false
-    for (let i = 0; i < 12; i += 1) {
-      await sales.page.reload()
+    await expect(async () => {
       await expect(sales.page.getByRole('heading', { name: legalName })).toBeVisible({ timeout: TIMEOUT })
-      if (await identity.getByText('已生效').count()) {
-        effective = true
-        break
+      if (!(await identity.getByText('已生效').count())) {
+        await sales.page.reload()
+        throw new Error('销售单尚未生效')
       }
-      await sales.page.waitForTimeout(10_000)
-    }
-    expect(effective).toBe(true)
+    }).toPass({ timeout: 120_000, intervals: [500, 1_000, 2_000] })
     await expect(identity.getByText('已生效')).toBeVisible({ timeout: TIMEOUT })
     await expect(identity.getByText('已关闭')).toHaveCount(0)
     await expect(sales.page.locator('#sales-orders-detail-start-change')).toBeVisible()
@@ -443,7 +439,10 @@ test('flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
         const serviceDay = procurement.page.locator(`button[id$="-day-${todayIso}"]:not([disabled])`).first()
         for (let round = 0; round < 4; round += 1) {
           await procurement.page.locator('#fulfillment-operations-service-form-service-time').click({ force: true })
-          if (await serviceDay.isVisible({ timeout: 5_000 }).catch(() => false)) break
+          const opened = await serviceDay
+            .waitFor({ state: 'visible', timeout: 5_000 })
+            .then(() => true, () => false)
+          if (opened) break
         }
         await expect(serviceDay).toBeVisible({ timeout: 10_000 })
         await serviceDay.click({ force: true })

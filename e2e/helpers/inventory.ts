@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { API_BASE, apiGet, apiLogin } from "./api";
+import { API_BASE, apiGet, apiToken } from "./api";
 
 type StockScopeRow = {
   enabled?: boolean;
@@ -62,7 +62,7 @@ function scopeCovers(row: StockScopeRow, actions: readonly string[], warehouseId
  * 余额视图和搜索框都不会挂载。按仓库显式补上本流程要用的范围。
  */
 export async function ensureWarehouseStockScope(warehouseCode: string): Promise<void> {
-  const token = await apiLogin("admin");
+  const token = await apiToken("admin");
   const warehouses = await apiGet<{ items: Array<{ id: string; warehouse_code: string }> }>(
     token,
     "/admin/warehouses",
@@ -100,7 +100,7 @@ export async function ensureZeroBalanceDimension(
   warehouseCode: string,
   skuNo: string,
 ): Promise<void> {
-  const token = await apiLogin("cangchu");
+  const token = await apiToken("cangchu");
   const warehouses = await apiGet<{ items: Array<{ id: string; warehouse_code: string }> }>(
     token,
     "/admin/warehouses",
@@ -156,7 +156,7 @@ export async function ensureZeroBalanceDimension(
 /** 预占台账按稳定销售明细标识展示；从本次销售单读取该标识，避免匹配其他单据。 */
 export async function singleSalesLineId(salesOrderId: string): Promise<string> {
   const order = await apiGet<{ lines: Array<{ id: string }> }>(
-    await apiLogin("xiaoshou"), `/admin/sales-orders/${salesOrderId}`,
+    await apiToken("xiaoshou"), `/admin/sales-orders/${salesOrderId}`,
   );
   if (order.lines.length !== 1 || !order.lines[0].id) {
     throw new Error(`销售单 ${salesOrderId} 必须且仅有一条明细`);

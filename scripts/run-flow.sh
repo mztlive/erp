@@ -15,6 +15,9 @@
 #   E2E_ALLOW_REMOTE_RESET=1 bash scripts/run-flow.sh e2e/tests/xxx.spec.ts  # 远程开发库需显式放行
 #   E2E_HEADED=1 bash scripts/run-flow.sh e2e/tests/xxx.spec.ts  # 有界面观察浏览器操作
 #   E2E_HEADED=1 E2E_SLOW_MO=500 bash scripts/run-flow.sh e2e/tests/xxx.spec.ts  # 有界面 + 慢动作
+#   E2E_FRONTEND=dev bash scripts/run-flow.sh ...   # 改连 next dev（3000）；默认连生产构建（3100）
+#   E2E_FRONT_BUILD=1 bash scripts/run-flow.sh ...  # 强制重建前端（默认按源码时间戳自动判断）
+#   E2E_TRACE=1 bash scripts/run-flow.sh ...        # 录制 trace，结束后自动输出慢步骤分析
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -23,6 +26,7 @@ E2E_DIR="${REPO_ROOT}/e2e"
 RESET="${E2E_RESET:-1}"
 HEADED="${E2E_HEADED:-0}"
 SLOW_MO="${E2E_SLOW_MO:-}"
+TRACE="${E2E_TRACE:-0}"
 PREFLIGHT_DONE=0
 
 if [[ ! -f "${E2E_DIR}/playwright.config.ts" ]]; then
@@ -96,6 +100,15 @@ prepare_env() {
     fi
 }
 
+# E2E_TRACE=1 时分析本次 test-results 里的 trace（Playwright 每次运行前会清空 test-results）。
+report_trace() {
+    if [[ "${TRACE}" == "1" ]]; then
+        echo ""
+        echo "-- trace 慢步骤分析 --"
+        (cd "${E2E_DIR}" && node scripts/trace-slow-steps.mjs) || true
+    fi
+}
+
 run_one() {
     local spec_abs
     local spec_arg
@@ -120,8 +133,14 @@ run_one() {
         echo "-- 慢动作: E2E_SLOW_MO=${SLOW_MO}ms（playwright.config launchOptions.slowMo） --"
         export E2E_SLOW_MO
     fi
+    if [[ "${TRACE}" == "1" ]]; then
+        pw_args+=(--trace on)
+    fi
     echo "-- 执行 playwright: ${pw_args[*]} --"
-    (cd "${E2E_DIR}" && npx playwright test "${pw_args[@]}")
+    local status=0
+    (cd "${E2E_DIR}" && npx playwright test "${pw_args[@]}") || status=$?
+    report_trace
+    return "${status}"
 }
 
 if [[ "${1:-}" == "all" ]]; then
@@ -144,8 +163,14 @@ if [[ "${1:-}" == "all" ]]; then
         echo "-- 慢动作: E2E_SLOW_MO=${SLOW_MO}ms（playwright.config launchOptions.slowMo） --"
         export E2E_SLOW_MO
     fi
+    if [[ "${TRACE}" == "1" ]]; then
+        pw_args+=(--trace on)
+    fi
     echo "-- 执行 playwright: ${pw_args[*]} --"
-    (cd "${E2E_DIR}" && npx playwright test "${pw_args[@]}")
+    status=0
+    (cd "${E2E_DIR}" && npx playwright test "${pw_args[@]}") || status=$?
+    report_trace
+    exit "${status}"
 else
     [[ -n "${1:-}" ]] || { echo "用法: bash scripts/run-flow.sh <spec 文件|all>" >&2; exit 2; }
     run_one "$1"

@@ -23,11 +23,8 @@ import { chooseOption, expectToast, UI_TIMEOUT } from "./ui"
  * 已存在则直接返回。
  */
 export async function ensureDefaultProcurementOwner(page: Page): Promise<void> {
-    await page.goto("/master-data/procurement-responsibilities")
-    await expect(page.getByRole("heading", { name: "采购责任规则" })).toBeVisible({
-        timeout: UI_TIMEOUT,
-    })
-    await page
+    // 先挂监听再导航：列表请求常在标题出现前就已返回，事后再等只会空等到超时。
+    const rulesLoaded = page
         .waitForResponse(
             (response) =>
                 response.request().method() === "GET" &&
@@ -35,6 +32,11 @@ export async function ensureDefaultProcurementOwner(page: Page): Promise<void> {
             { timeout: UI_TIMEOUT },
         )
         .catch(() => undefined)
+    await page.goto("/master-data/procurement-responsibilities")
+    await expect(page.getByRole("heading", { name: "采购责任规则" })).toBeVisible({
+        timeout: UI_TIMEOUT,
+    })
+    await rulesLoaded
 
     await expect(
         page

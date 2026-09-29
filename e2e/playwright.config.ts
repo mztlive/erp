@@ -1,5 +1,6 @@
 import { defineConfig, devices } from "@playwright/test"
 
+import { FRONTEND_BASE_URL } from "./helpers/env"
 import { headedChromeArgs, isHeadedRun } from "./helpers/headed"
 
 const slowMoRaw = process.env.E2E_SLOW_MO
@@ -13,6 +14,7 @@ const launchOptions = {
 
 /**
  * 流程 E2E 配置。服务启停与清库由 scripts/run-flow.sh 负责，这里不拉 webServer。
+ * 前端地址见 helpers/env.ts：默认连生产构建（3100），E2E_FRONTEND=dev 时连 next dev（3000）。
  * E2E_SLOW_MO 毫秒数写入 Chromium launchOptions.slowMo，供有界面慢动作观察。
  * 有头（--headed / E2E_HEADED=1）取消 viewport 模拟并最大化窗口，避免固定 1440×900 把窗口缩小。
  */
@@ -28,7 +30,7 @@ export default defineConfig({
     reporter: [["list"], ["html", { open: "never" }]],
     outputDir: "test-results",
     use: {
-        baseURL: process.env.E2E_BASE_URL ?? "http://localhost:3000",
+        baseURL: FRONTEND_BASE_URL,
         locale: "zh-CN",
         timezoneId: "Asia/Shanghai",
         viewport,

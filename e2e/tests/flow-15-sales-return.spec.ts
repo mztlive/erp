@@ -53,6 +53,7 @@ import {
     expectToast,
     openFulfillmentWorkspaceForm,
     openWorkspaceTask,
+    optionalStepVisible,
     pickCalendarDay,
     readHeaderDocumentNumber,
 } from "../helpers/ui";
@@ -787,11 +788,9 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
         const supplierRefundConfirm = page.getByRole("alertdialog", {
             name: /确认提交退款|提交退款/,
         });
-        try {
-            await expect(supplierRefundConfirm).toBeVisible({ timeout: 5_000 });
+        // 确认框与提交响应谁先到走哪条；prepareRefundDraft 直接提交时不弹确认框。
+        if (await optionalStepVisible(supplierRefundConfirm, supplierRefundCommitted)) {
             await page.locator("#supplier-payables-refund-submit-confirm-confirm").click();
-        } catch {
-            // prepareRefundDraft 已直接提交。
         }
         const supplierRefundResponse = await supplierRefundCommitted;
         expect(supplierRefundResponse.ok()).toBeTruthy();

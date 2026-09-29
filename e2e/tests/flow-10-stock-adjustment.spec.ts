@@ -19,10 +19,9 @@
  */
 import { expect, test, type Browser, type Locator, type Page } from "@playwright/test"
 
-import { apiGet, apiLogin } from "../helpers/api"
-import { headedContextOptions } from "../helpers/headed"
+import { apiGet, apiToken } from "../helpers/api"
 import { ensureZeroBalanceDimension } from "../helpers/inventory"
-import { loginViaUi, openLoggedInWorkspace } from "../helpers/login"
+import { openLoggedInWorkspace } from "../helpers/login"
 import { approveCurrentDocument, openWorkspaceTask } from "../helpers/ui"
 
 test.describe.configure({ mode: "serial" })
@@ -197,15 +196,8 @@ async function expectOnHandUi(page: Page, expected: number): Promise<void> {
     }
 }
 
-const apiTokens = new Map<string, Promise<string>>()
-
-async function tokenOf(kind: "cangchu" | "caiwu" | "caigou" | "admin"): Promise<string> {
-    let token = apiTokens.get(kind)
-    if (!token) {
-        token = apiLogin(kind)
-        apiTokens.set(kind, token)
-    }
-    return token
+function tokenOf(kind: "cangchu" | "caiwu" | "caigou" | "admin"): Promise<string> {
+    return apiToken(kind)
 }
 
 async function listBalances(token: string): Promise<StockBalance[]> {
@@ -293,22 +285,17 @@ function expectPurchaseAndFulfillmentUnchanged(
 }
 
 async function expectCaiwuCannotSubmit(browser: Browser): Promise<void> {
-    const context = await browser.newContext(headedContextOptions())
-    const page = await context.newPage()
-    try {
-        await loginViaUi(page, "caiwu")
-        await expectHeading(page, "我的工作台")
-        await expect(page.getByRole("link", { name: "库存台账" })).toHaveCount(0)
-        await page.goto("/inventory")
-        await expect(
-            page.getByText(/当前角色未配置仓库数据范围|权限已收回/).first(),
-        ).toBeVisible(VISIBLE)
-        await expect(page.getByRole("button", { name: "库存调整" })).toHaveCount(0)
-        await expect(page.getByRole("button", { name: "发起库存调整" })).toHaveCount(0)
-        await expect(page.getByRole("button", { name: "提交审批" })).toHaveCount(0)
-    } finally {
-        await context.close()
-    }
+    // 走会话池：不为负向检查另开上下文重新登录（每次登录都跑 Argon2 且计入账号限流）。
+    const { page } = await openLoggedInWorkspace(browser, "caiwu")
+    await expectHeading(page, "我的工作台")
+    await expect(page.getByRole("link", { name: "库存台账" })).toHaveCount(0)
+    await page.goto("/inventory")
+    await expect(
+        page.getByText(/当前角色未配置仓库数据范围|权限已收回/).first(),
+    ).toBeVisible(VISIBLE)
+    await expect(page.getByRole("button", { name: "库存调整" })).toHaveCount(0)
+    await expect(page.getByRole("button", { name: "发起库存调整" })).toHaveCount(0)
+    await expect(page.getByRole("button", { name: "提交审批" })).toHaveCount(0)
 
     const financeToken = await tokenOf("caiwu")
     const apiBase = process.env.API_BASE || "http://127.0.0.1:10001"

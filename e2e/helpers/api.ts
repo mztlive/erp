@@ -29,6 +29,27 @@ export async function apiLogin(identity: LoginIdentity): Promise<string> {
     return token
 }
 
+const tokenCache = new Map<string, Promise<string>>()
+
+/**
+ * 按账号缓存的 API token。整个 Playwright worker 内同账号只登录一次：
+ * 每次登录都要跑一遍 Argon2，且后端按账号限流（每 60 秒 5 次），撞限会让 UI 登录多等 35 秒。
+ * 需要验证登录本身或撤权后必须重新签发 token 的场景，直接用 `apiLogin`。
+ */
+export function apiToken(identity: LoginIdentity): Promise<string> {
+    const cred = resolveAccount(identity)
+    const key = `${cred.account}\u0000${cred.password}`
+    let cached = tokenCache.get(key)
+    if (!cached) {
+        cached = apiLogin(cred).catch((error: unknown) => {
+            tokenCache.delete(key)
+            throw error
+        })
+        tokenCache.set(key, cached)
+    }
+    return cached
+}
+
 /**
  * GET 已认证接口，返回信封 data。query 为扁平对象，空值跳过。
  */

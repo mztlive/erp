@@ -20,6 +20,7 @@ import path from "node:path"
 import { expect, test, type BrowserContext, type Locator, type Page } from "@playwright/test"
 
 import { createCustomerViaUi } from "../helpers/customers"
+import { FRONTEND_BASE_URL } from "../helpers/env"
 import {
     ensureWarehouseStockScope,
     ensureZeroBalanceDimension,
@@ -39,7 +40,7 @@ import {
     selectWorkspaceFamily,
 } from "../helpers/ui"
 
-const FRONTEND_BASE = process.env.E2E_BASE_URL ?? "http://localhost:3000"
+const FRONTEND_BASE = FRONTEND_BASE_URL
 const TIMEOUT = 20_000
 
 const SKU_NO = "TEA-SF-LJ-250"

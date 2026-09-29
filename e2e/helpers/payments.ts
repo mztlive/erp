@@ -4,14 +4,14 @@ import { fileURLToPath } from "node:url"
 
 import { expect, type Page } from "@playwright/test"
 
-import { apiGet, apiLogin } from "./api"
+import { apiGet, apiToken } from "./api"
 
 /**
  * 付款任务要求供应商主体有唯一当前默认收款账户。
  * 供应商主体不能走通用 Party 银行账户接口，种子里也没有这行，这里按主体补一条。
  */
 async function ensureDefaultSupplierBankAccount(keyword: string): Promise<void> {
-    const token = await apiLogin("admin")
+    const token = await apiToken("admin")
     const suppliers = await apiGet<{
         items?: Array<{ party_id?: string; legal_name?: string }>
     }>(token, "/admin/suppliers", { keyword, page: 1, page_size: 5 })

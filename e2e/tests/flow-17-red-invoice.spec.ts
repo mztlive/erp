@@ -31,7 +31,7 @@ import {
     type Page,
 } from "@playwright/test"
 
-import { apiGet, apiLogin } from "../helpers/api"
+import { apiGet, apiToken } from "../helpers/api"
 import { createCustomerViaUi } from "../helpers/customers"
 import { headedAwareViewport } from "../helpers/headed"
 import { submitSalesInvoiceRequest } from "../helpers/invoices"
@@ -394,7 +394,7 @@ async function assertNoInvoiceApprovalUi(scope: Page | Locator) {
 }
 
 async function assertNoInvoiceApprovalInstances(login: string) {
-    const token = await apiLogin(login)
+    const token = await apiToken(login)
     for (const view of ["mine", "started", "managed"] as const) {
         const listed = await apiGet<{ items?: Array<{ document_type?: string }> }>(
             token,

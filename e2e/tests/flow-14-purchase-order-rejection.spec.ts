@@ -30,7 +30,7 @@ import {
     type Page,
 } from "@playwright/test"
 
-import { apiGet, apiLogin } from "../helpers/api"
+import { apiGet, apiToken } from "../helpers/api"
 import { createCustomerViaUi } from "../helpers/customers"
 import { openLoggedInWorkspace } from "../helpers/login"
 import {
@@ -145,8 +145,8 @@ function uniqueCreditCode(stamp: string): string {
     return raw.slice(0, 18).padEnd(18, "0")
 }
 
-async function helperToken(login: LoginName): Promise<string> {
-    return apiLogin(login)
+function helperToken(login: LoginName): Promise<string> {
+    return apiToken(login)
 }
 
 async function helperGet<T>(token: string, apiPath: string): Promise<T> {

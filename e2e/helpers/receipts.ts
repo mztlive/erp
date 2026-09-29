@@ -1,5 +1,7 @@
 import { expect, type Page } from "@playwright/test"
 
+import { optionalStepVisible } from "./ui"
+
 const TIMEOUT = 20_000
 const LONG = 40_000
 
@@ -157,13 +159,11 @@ export async function submitCustomerRefundRequest(
     )
     await page.locator("#customer-receivables-refund-request-submit").click()
     const confirm = page.getByRole("alertdialog", { name: /确认提交退款|提交退款/ })
-    try {
-        await expect(confirm).toBeVisible({ timeout: 5_000 })
+    // 确认框与提交响应谁先到走哪条；prepareRefundDraft 直接提交时不弹确认框。
+    if (await optionalStepVisible(confirm, committed)) {
         await page
             .locator("#customer-receivables-refund-submit-confirm-dialog-confirm")
             .click({ force: true })
-    } catch {
-        // prepareRefundDraft 已直接提交。
     }
     const response = await committed
     expect(response.ok(), await response.text()).toBeTruthy()
@@ -213,13 +213,11 @@ export async function submitReceiptReversalRequest(
     )
     await page.locator("#customer-receivables-reversal-request-submit").click()
     const confirm = page.getByRole("alertdialog", { name: /确认提交冲正|提交冲正/ })
-    try {
-        await expect(confirm).toBeVisible({ timeout: 5_000 })
+    // 确认框与提交响应谁先到走哪条；prepareReversalDraft 直接提交时不弹确认框。
+    if (await optionalStepVisible(confirm, committed)) {
         await page
             .locator("#customer-receivables-reversal-submit-confirm-dialog-confirm")
             .click({ force: true })
-    } catch {
-        // prepareReversalDraft 已直接提交。
     }
     const response = await committed
     expect(response.ok(), await response.text()).toBeTruthy()

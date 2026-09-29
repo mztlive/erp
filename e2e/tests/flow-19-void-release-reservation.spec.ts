@@ -16,7 +16,7 @@ import {
     type Page,
 } from "@playwright/test";
 
-import { apiGet, apiLogin } from "../helpers/api";
+import { apiGet, apiToken } from "../helpers/api";
 import { createCustomerViaUi } from "../helpers/customers";
 import { ensureWarehouseStockScope, ensureZeroBalanceDimension } from "../helpers/inventory";
 import { openLoggedInWorkspace, type LoggedInSession } from "../helpers/login";
@@ -198,15 +198,8 @@ async function assertBalanceNumbers(
     await expect(row).toContainText(expected.available);
 }
 
-const apiTokens = new Map<LoginName, Promise<string>>();
-
-async function tokenOf(login: LoginName): Promise<string> {
-    let token = apiTokens.get(login);
-    if (!token) {
-        token = apiLogin(login);
-        apiTokens.set(login, token);
-    }
-    return token;
+function tokenOf(login: LoginName): Promise<string> {
+    return apiToken(login);
 }
 
 async function listBalances(token: string): Promise<StockBalance[]> {

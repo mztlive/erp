@@ -1,6 +1,7 @@
 //! 开放任务转交、候选人资格与岗位分离。
 
 use std::collections::HashSet;
+use std::future::Future;
 
 use application_core::{AuditActor, CommandReceipt};
 use persistence_core::{Executor, NoTransaction};
@@ -151,59 +152,73 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
 
     /// 受控转交开放任务。
     ///
+    /// # 参数
+    /// * `id` - 待转交任务 ID
+    /// * `req` - 目标责任人、预期版本与幂等键
+    /// * `actor` - 当前操作人
+    ///
+    /// # 返回
+    /// 返回经编译器验证为 `Send` 的 future，完成后取得转交结果或版本冲突。
+    ///
     /// # 错误
     /// 缺少任务管理权限、目标资格无法证明、审批受阻或任务版本陈旧时返回错误。
-    pub async fn reassign(
+    #[expect(
+        clippy::manual_async_fn,
+        reason = "显式 Send 返回边界用于验证嵌套异步调用，避免调用方的高阶生命周期推导失败"
+    )]
+    pub fn reassign(
         self,
         id: String,
         req: ReassignWorkItemRequest,
         actor: AuditActor,
-    ) -> Result<WorkItemMutationOutcome> {
-        let managed_access = self.managed_access(&actor).await?;
-        let item = self.load(id.clone()).await?;
-        ensure_generic_work_item_mutation(&item)?;
-        req.validate()?;
-        let idempotency_key = required_text(&req.idempotency_key, "幂等键不能为空")?;
-        let action = "work_item.reassign";
-        let target_user_id = required_text(&req.target_user_id, "目标用户不能为空")?;
-        let reason = required_text(&req.reason, "转交原因不能为空")?;
-        let expected_task_version = expected_task_version(&req.expected_task_version)?;
-        let version = expected_task_version.to_string();
-        let receipt = CommandReceipt::from_resource_parts(
-            IDEMPOTENCY_AUDIT_PREFIX,
-            actor.id(),
-            action,
-            "work_item",
-            &id,
-            &idempotency_key,
-            [version, target_user_id.clone(), reason.clone()],
-        )?;
-        if let Some(replayed) = self.idempotent_replay(&receipt, &id).await? {
-            ensure_generic_work_item_mutation(&replayed)?;
-            return self.applied_outcome(replayed, &actor).await;
-        }
-        if item.base.version != expected_task_version {
-            return self.conflict_outcome(&id, WorkItemConflictKind::Version, &actor).await;
-        }
-        ensure_item_in_managed_scope(&item, &managed_access)?;
-        let authorization =
-            self.assignment_authorization_snapshot(&actor, &target_user_id, &item, true).await?;
-        let updated = self
-            .reassign_with_assignment_policy_audit(AssignmentPolicyAuditInput {
-                item,
-                expected_task_version,
-                target_user_id,
-                actor: &actor,
-                receipt,
-                audit_detail: reason,
-                authorization,
-            })
-            .await?;
-        match updated {
-            WorkItemWriteOutcome::Updated(item) => self.applied_outcome(*item, &actor).await,
-            WorkItemWriteOutcome::VersionConflict => {
-                self.conflict_outcome(&id, WorkItemConflictKind::Version, &actor).await
-            },
+    ) -> impl Future<Output = Result<WorkItemMutationOutcome>> + Send {
+        async move {
+            let managed_access = self.managed_access(&actor).await?;
+            let item = self.load(id.clone()).await?;
+            ensure_generic_work_item_mutation(&item)?;
+            req.validate()?;
+            let idempotency_key = required_text(&req.idempotency_key, "幂等键不能为空")?;
+            let action = "work_item.reassign";
+            let target_user_id = required_text(&req.target_user_id, "目标用户不能为空")?;
+            let reason = required_text(&req.reason, "转交原因不能为空")?;
+            let expected_task_version = expected_task_version(&req.expected_task_version)?;
+            let version = expected_task_version.to_string();
+            let receipt = CommandReceipt::from_resource_parts(
+                IDEMPOTENCY_AUDIT_PREFIX,
+                actor.id(),
+                action,
+                "work_item",
+                &id,
+                &idempotency_key,
+                [version, target_user_id.clone(), reason.clone()],
+            )?;
+            if let Some(replayed) = self.idempotent_replay(&receipt, &id).await? {
+                ensure_generic_work_item_mutation(&replayed)?;
+                return self.applied_outcome(replayed, &actor).await;
+            }
+            if item.base.version != expected_task_version {
+                return self.conflict_outcome(&id, WorkItemConflictKind::Version, &actor).await;
+            }
+            ensure_item_in_managed_scope(&item, &managed_access)?;
+            let authorization =
+                self.assignment_authorization_snapshot(&actor, &target_user_id, &item, true).await?;
+            let updated = self
+                .reassign_with_assignment_policy_audit(AssignmentPolicyAuditInput {
+                    item,
+                    expected_task_version,
+                    target_user_id,
+                    actor: &actor,
+                    receipt,
+                    audit_detail: reason,
+                    authorization,
+                })
+                .await?;
+            match updated {
+                WorkItemWriteOutcome::Updated(item) => self.applied_outcome(*item, &actor).await,
+                WorkItemWriteOutcome::VersionConflict => {
+                    self.conflict_outcome(&id, WorkItemConflictKind::Version, &actor).await
+                },
+            }
         }
     }
 

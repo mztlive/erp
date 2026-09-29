@@ -1,7 +1,5 @@
 //! 演示主数据接口。
 
-use std::future::Future;
-
 use application_core::AuditActor;
 use axum::Json;
 use axum::extract::{Extension, State};
@@ -9,7 +7,6 @@ use erp_processes::demo_master_data::{
     ApplyDemoMasterDataRequest, DemoChunkReport, DemoFoundationReport, DemoStatus,
 };
 
-use super::work_item::assume_send;
 use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::response::ApiResponse;
@@ -48,14 +45,15 @@ pub async fn demo_master_data_status(State(state): State<AppState>) -> Result<De
 ///
 /// # 返回
 /// 返回新建和已存在的数量。已有账号不改密码，但姓名会同步为演示人名。已启用的默认责任规则保留现有负责人。
-pub fn demo_master_data_foundation(
+///
+/// # 错误
+/// 演示功能未开放、授权不足或基础数据准备失败时返回错误。
+pub async fn demo_master_data_foundation(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
-) -> impl Future<Output = Result<DemoFoundationReport>> + Send {
-    assume_send(async move {
-        let report = state.demo_master_data_service().ensure_foundation(&actor).await?;
-        Ok(ApiResponse::ok_with_data(report))
-    })
+) -> Result<DemoFoundationReport> {
+    let report = state.demo_master_data_service().ensure_foundation(&actor).await?;
+    Ok(ApiResponse::ok_with_data(report))
 }
 
 #[permission_macros::permission(

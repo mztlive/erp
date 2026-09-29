@@ -1,6 +1,7 @@
 //! 把演示岗位放进部门，并让销售领导管理销售部。已符合的关系不重复写入。
 
 use std::collections::HashMap;
+use std::future::Future;
 
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
@@ -22,26 +23,44 @@ struct OrgSnap {
 
 impl DemoMasterDataService {
     /// 按规格补齐部门和成员。账号已在其他部门时改到规格部门。
-    pub(super) async fn ensure_departments(
+    ///
+    /// # 参数
+    /// * `actor` - 当前操作人
+    /// * `user_ids` - 演示岗位与账号 ID 的映射
+    /// * `notices` - 本次组织调整的提示记录
+    ///
+    /// # 返回
+    /// 返回经编译器验证为 `Send` 的 future，完成后部门、成员与管理关系符合规格。
+    ///
+    /// # 错误
+    /// 组织查询、调整或规格关系校验失败时返回错误。
+    #[expect(
+        clippy::manual_async_fn,
+        reason = "显式 Send 返回边界用于验证嵌套异步调用，避免调用方的高阶生命周期推导失败"
+    )]
+    pub(super) fn ensure_departments(
         &self,
         actor: &AuditActor,
         user_ids: &HashMap<String, String>,
         notices: &mut Vec<String>,
-    ) -> Result<()> {
-        let spec = spec::foundation_spec();
-        let mut snap = self.org_snapshot(actor).await?;
-        let root_id = self.ensure_root(actor, &mut snap).await?;
-        let mut changed = false;
-        for department in &spec.departments {
-            let unit_id = self.ensure_department(actor, &mut snap, &root_id, department).await?;
-            changed |= self.seat_members(actor, &mut snap, &unit_id, department, user_ids, notices).await?;
+    ) -> impl Future<Output = Result<()>> + Send {
+        async move {
+            let spec = spec::foundation_spec();
+            let mut snap = self.org_snapshot(actor).await?;
+            let root_id = self.ensure_root(actor, &mut snap).await?;
+            let mut changed = false;
+            for department in &spec.departments {
+                let unit_id = self.ensure_department(actor, &mut snap, &root_id, department).await?;
+                changed |=
+                    self.seat_members(actor, &mut snap, &unit_id, department, user_ids, notices).await?;
+            }
+            let sales_id = unit_id(&snap, &spec.sales_department, Some(&root_id))?;
+            changed |= self.ensure_sales_management(actor, &mut snap, &sales_id, user_ids).await?;
+            if changed {
+                notices.push("已按演示部门放置岗位账号".to_string());
+            }
+            Ok(())
         }
-        let sales_id = unit_id(&snap, &spec.sales_department, Some(&root_id))?;
-        changed |= self.ensure_sales_management(actor, &mut snap, &sales_id, user_ids).await?;
-        if changed {
-            notices.push("已按演示部门放置岗位账号".to_string());
-        }
-        Ok(())
     }
 
     async fn org_snapshot(&self, actor: &AuditActor) -> Result<OrgSnap> {

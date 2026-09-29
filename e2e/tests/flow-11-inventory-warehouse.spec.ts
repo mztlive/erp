@@ -27,7 +27,7 @@ import {
     type Page,
 } from "@playwright/test";
 
-import { apiGet, apiLogin } from "../helpers/api";
+import { apiGet, apiToken } from "../helpers/api";
 import { createCustomerViaUi } from "../helpers/customers";
 import {
     ensureWarehouseStockScope,
@@ -167,7 +167,7 @@ async function expectThisSalesOrderHasNoPurchaseOrder(
             .filter({ hasText: salesOrderNo }),
     ).toHaveCount(0);
     const listed = await apiGet<{ items?: unknown[]; total?: number }>(
-        await apiLogin("caigou"),
+        await apiToken("caigou"),
         "/admin/purchase-orders",
         { sales_order_id: salesOrderId, page: 1, page_size: 20 },
     );

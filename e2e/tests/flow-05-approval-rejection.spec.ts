@@ -221,10 +221,10 @@ async function submitSalesOrder(page: Page, quantity: string): Promise<OrderSnap
   const confirm = page.getByRole('dialog', { name: '提交销售单' })
   await expect(confirm).toBeVisible(VISIBLE)
   // 批量交期 toast 常盖住确认按钮：先清 toast 再点，盖住不散时走 DOM 派发。
-  await clickWithoutToastOverlay(page, confirm.locator('#sales-orders-submit-confirm-confirm'), async () => {
-    await page.waitForURL(/\/sales\/orders\/[^/?]+/, { timeout: 2_000 }).catch(() => undefined)
-    return !/\/sales\/orders\?mode=create/.test(page.url())
-  })
+  // settled 只做即时判断：第一次点按前页面必然还在新建页，等 URL 只会白等。
+  await clickWithoutToastOverlay(page, confirm.locator('#sales-orders-submit-confirm-confirm'), async () =>
+    !/\/sales\/orders\?mode=create/.test(page.url()),
+  )
   await expect(page).toHaveURL(/\/sales\/orders\/[^/?]+/, VISIBLE)
   const id = page.url().split('/').pop()?.split('?')[0] ?? ''
   expect(id.length).toBeGreaterThan(8)
@@ -364,7 +364,6 @@ async function withdrawApproval(page: Page, order: OrderSnapshot): Promise<void>
   await dialog.locator('#sales-orders-detail-cancel-approval-confirm').click()
   // 成功 toast 仅展示数秒，点按超时（按钮随框卸载）后再断言必错过：以框关闭 + 回到可编辑草稿为准。
   await expect(dialog).toBeHidden(VISIBLE)
-  await expect(page.getByText('审批已撤回').first()).toBeVisible({ timeout: 5_000 }).catch(() => undefined)
   // 撤回后就地进入草稿编辑：标题是客户名，不再有「编辑销售单 / 业务信息」。
   await expect(page.getByText('草稿').first()).toBeVisible(VISIBLE)
   await expect(page.getByRole('heading', { name: '基本信息', exact: true })).toBeVisible(VISIBLE)

@@ -28,12 +28,13 @@ import {
 import { createCustomerViaUi } from "../helpers/customers";
 import { headedAwareViewport } from "../helpers/headed";
 import { loginViaUi, openLoggedInWorkspace } from "../helpers/login";
-import { expandSourcingEditor } from "../helpers/sourcing"
+import { confirmSupplyAllocation, expandSourcingEditor } from "../helpers/sourcing"
 import {
     approveCurrentDocument,
     chooseOption,
     expectToast,
     openWorkspaceTask,
+    optionalStepVisible,
     pickCalendarDay,
     readHeaderDocumentNumber,
     selectWorkspaceFamily,
@@ -277,49 +278,7 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
     await expect(warehouseInput).toBeVisible({ timeout: 20_000 })
     await chooseOption(caigouPage, warehouseInput, /BJ-TZ-01|北京通州/, "BJ-TZ-01")
     await expect(missingWarehouse).toHaveCount(0, { timeout: 20_000 })
-    // 创建依据接口每次后台重取完成都会强制关闭预览框
-    // （setPreviewOpen(false) 副作用）：预览→二次确认必须在同一次开启窗口内
-    // 快速点完。紧凑循环：重开→快点→判定，最多 12 次。提交带幂等键。
-    let sourced: boolean | null = null
-    const previewDialog = () => caigouPage.getByRole("dialog", { name: "预览供给分配" })
-    for (let attempt = 0; attempt < 12 && sourced !== true; attempt += 1) {
-        if (
-            !(await caigouPage
-                .getByRole("heading", { name: "供给分配" })
-                .isVisible()
-                .catch(() => false))
-        ) {
-            await openWorkspaceTask(caigouPage, /待供给分配/, salesOrderNo, "procurement")
-            await expect(caigouPage.getByRole("heading", { name: "供给分配" })).toBeVisible({
-                timeout: 20_000,
-            })
-        }
-        if (await previewDialog().isVisible({ timeout: 2_000 }).catch(() => false)) {
-            const postPromise = caigouPage
-                .waitForResponse(
-                    (res) =>
-                        res.request().method() === "POST" &&
-                        res.url().includes("/admin/purchase-orders/from-sourcing"),
-                    { timeout: 15_000 },
-                )
-                .then(
-                    (res) => res.ok(),
-                    () => null,
-                )
-            await previewDialog()
-                .locator("#procurement-orders-create-preview-confirm")
-                .click({ force: true, timeout: 3_000 })
-                .catch(() => undefined)
-            sourced = await postPromise
-            continue
-        }
-        await caigouPage
-            .locator("#procurement-orders-create-preview")
-            .click({ force: true, timeout: 5_000 })
-            .catch(() => undefined)
-    }
-    if (sourced !== true) throw new Error("供给分配多次尝试仍未提交成功")
-    await expectToast(caigouPage, /已创建 1 张采购单并提交审批|已将缺口拆成/);
+    await confirmSupplyAllocation(caigouPage, /已创建 1 张采购单并提交审批|已将缺口拆成/)
 
     await caigouPage.goto("/procurement/orders");
     await expect(caigouPage.getByRole("heading", { name: "采购单", exact: true })).toBeVisible({
@@ -581,17 +540,18 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
             .fill("caiwu不得提交冲正");
         await reverseDlg.locator("#supplier-payables-reversal-request-submit").click();
         const reverseConfirm = caiwuPage.getByRole("dialog").filter({ hasText: /提交冲正|确认提交/ });
-        try {
-            await expect(reverseConfirm).toBeVisible({ timeout: 8_000 });
+        const deniedText = /冲正失败|岗位分离|不得|不能提交|禁止|提交人/;
+        // 确认层与失败提示谁先出现走哪条：确认层未打开时，失败提示已在请求弹窗或页面横幅。
+        // 竞速只认请求弹窗和横幅里的提示，避免页面上本来就有的「提交人」等字样让确认层被跳过。
+        const deniedInPlace = reverseDlg
+            .getByText(deniedText)
+            .or(caiwuPage.getByRole("alert").filter({ hasText: deniedText }));
+        if (await optionalStepVisible(reverseConfirm, deniedInPlace, 8_000)) {
             await reverseConfirm
                 .locator("#supplier-payables-reversal-submit-confirm-confirm")
                 .click();
-        } catch {
-            // 确认层未打开时，失败提示应已出现在请求弹窗或页面横幅。
         }
-        await expect(
-            caiwuPage.getByText(/冲正失败|岗位分离|不得|不能提交|禁止|提交人/).first(),
-        ).toBeVisible({ timeout: 20_000 });
+        await expect(caiwuPage.getByText(deniedText).first()).toBeVisible({ timeout: 20_000 });
         await caiwuPage.keyboard.press("Escape");
     }
 
@@ -612,7 +572,8 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
     const reversalSubmit = fukuanPage.getByRole("alertdialog", {
         name: /确认提交冲正|提交冲正/,
     });
-    if (await reversalSubmit.isVisible({ timeout: 5_000 }).catch(() => false)) {
+    const reversalSubmitted = fukuanPage.getByText(/冲正已提交审批/);
+    if (await optionalStepVisible(reversalSubmit, reversalSubmitted)) {
         await reversalSubmit
             .locator("#supplier-payables-reversal-submit-confirm-confirm")
             .click();

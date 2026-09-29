@@ -133,10 +133,9 @@ async function openExistingVirtualCategory(page: Page) {
 }
 
 async function ensureVirtualCategory(page: Page) {
-    await page.goto('/master-data/categories')
-    await expect(page.getByRole('heading', { name: '商品分类', exact: true })).toBeVisible({ timeout: 20000 })
     // 分类树在标题之后加载，先等列表接口返回再判断，避免重复创建触发 409。
-    await page
+    // 先挂监听再导航：请求常在标题出现前就已返回，事后再等只会空等到超时。
+    const categoriesLoaded = page
         .waitForResponse(
             (response) =>
                 response.request().method() === 'GET' &&
@@ -144,6 +143,9 @@ async function ensureVirtualCategory(page: Page) {
             { timeout: 20000 },
         )
         .catch(() => undefined)
+    await page.goto('/master-data/categories')
+    await expect(page.getByRole('heading', { name: '商品分类', exact: true })).toBeVisible({ timeout: 20000 })
+    await categoriesLoaded
     const nav = page.getByRole('complementary', { name: '分类导航' })
     await expect(nav.getByText('正在加载分类…')).toBeHidden({ timeout: 20000 })
     if ((await virtualCategoryTreeItem(page).count()) === 1) {
@@ -185,8 +187,7 @@ async function ensureVirtualProduct(page: Page) {
     const search = page.locator('#master-data-products-list-toolbar-search-input')
     if (await search.count()) {
         await search.fill(VIRTUAL_PRODUCT_NO)
-        await search.press('Enter')
-        await page
+        const searched = page
             .waitForResponse(
                 (response) =>
                     response.request().method() === 'GET' &&
@@ -194,6 +195,8 @@ async function ensureVirtualProduct(page: Page) {
                 { timeout: 20000 },
             )
             .catch(() => undefined)
+        await search.press('Enter')
+        await searched
     }
     if (await page.getByText(VIRTUAL_PRODUCT_NAME).count()) {
         await page.getByText(VIRTUAL_PRODUCT_NAME).first().click()
@@ -263,12 +266,8 @@ async function ensureVirtualProduct(page: Page) {
 }
 
 async function ensureVirtualOfferingAndListing(page: Page) {
-    await page.goto('/procurement/supplier-offerings')
-    await expect(page.getByRole('heading', { name: '供应商供给' })).toBeVisible({
-        timeout: 20000,
-    })
-    // 供给列表在标题之后加载，先等列表接口返回再判断，避免重复登记。
-    await page
+    // 供给列表在标题之后加载，先等列表接口返回再判断，避免重复登记。先挂监听再导航。
+    const offeringsLoaded = page
         .waitForResponse(
             (response) =>
                 response.request().method() === 'GET' &&
@@ -276,6 +275,11 @@ async function ensureVirtualOfferingAndListing(page: Page) {
             { timeout: 20000 },
         )
         .catch(() => undefined)
+    await page.goto('/procurement/supplier-offerings')
+    await expect(page.getByRole('heading', { name: '供应商供给' })).toBeVisible({
+        timeout: 20000,
+    })
+    await offeringsLoaded
     if (!(await page.getByText(VIRTUAL_SKU_NO).count())) {
         await page.locator('#supplier-offerings-page-create').click()
         const dialog = page.getByRole('dialog', { name: '添加供给' })

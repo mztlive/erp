@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "test:e2e": "playwright test --workers=1",
-    "test:e2e:list": "playwright test --list"
+    "test:e2e:list": "playwright test --list",
+    "trace:slow": "node scripts/trace-slow-steps.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",

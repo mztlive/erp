@@ -2,45 +2,11 @@
 //!
 //! 已删除 start-processing / release-to-team / claim。通用写接口拒绝审批任务。
 
-use std::future::Future;
-use std::pin::Pin;
-use std::task::{Context, Poll};
-
 use application_core::AuditActor;
 use axum::extract::{Path, Query, State};
 use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Response};
 use axum::{Extension, Json};
-
-/// Wrap a future so axum can treat it as `Send`.
-///
-/// Nested `async fn` captures of `&T` trip rustc HRTB even when `T: Sync`.
-/// The wrapped work still runs on the request worker; this does not spawn
-/// another task or change business behavior.
-///
-/// # Parameters
-/// * `fut` - handler body future
-///
-/// # Returns
-/// The same output, with a `Send` future type.
-///
-/// # Errors
-/// None; errors come from `fut`.
-pub(crate) fn assume_send<F>(fut: F) -> impl Future<Output = F::Output> + Send
-where
-    F: Future,
-{
-    struct SendFut<F>(F);
-    unsafe impl<F> Send for SendFut<F> {}
-    impl<F: Future> Future for SendFut<F> {
-        type Output = F::Output;
-        fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-            unsafe { Pin::new_unchecked(&mut self.get_unchecked_mut().0) }.poll(cx)
-        }
-    }
-    SendFut(fut)
-}
-
 use erp_processes::adapters::workflow::{work_item_service, workflow_auth};
 use erp_read_models::{
     FulfillmentQueueListParams, FulfillmentQueuePageView, WorkItemListParams, WorkItemPageView,
@@ -401,19 +367,27 @@ pub async fn work_item_reassign_candidates(
 ///
 /// 审批任务必须失败关闭。
 ///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 当前操作人
+/// * `headers` - 请求追踪等响应上下文
+/// * `id` - 任务 ID
+/// * `req` - 责任动作请求
+///
 /// # 返回
 /// 返回责任已更新的同一任务。
-pub fn work_item_reassign(
+///
+/// # 错误
+/// 授权不足、目标资格不符、版本冲突或任务转交失败时返回错误。
+pub async fn work_item_reassign(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     headers: HeaderMap,
     Path(id): Path<String>,
     Json(req): Json<ReassignWorkItemRequest>,
-) -> impl Future<Output = WorkItemActionResult> + Send {
-    assume_send(async move {
-        let outcome = work_item_service(state.db(), state.rbac()).reassign(id, req, actor.clone()).await?;
-        work_item_action_response(state, actor, outcome, headers).await
-    })
+) -> WorkItemActionResult {
+    let outcome = work_item_service(state.db(), state.rbac()).reassign(id, req, actor.clone()).await?;
+    work_item_action_response(state, actor, outcome, headers).await
 }
 
 #[permission_macros::permission(
@@ -427,19 +401,27 @@ pub fn work_item_reassign(
 ///
 /// 审批任务必须失败关闭。
 ///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 当前操作人
+/// * `headers` - 请求追踪等响应上下文
+/// * `id` - 任务 ID
+/// * `req` - 责任动作请求
+///
 /// # 返回
 /// 返回已关闭任务的只读事实。
-pub fn work_item_close(
+///
+/// # 错误
+/// 授权不足、任务不允许关闭、版本冲突或任务关闭失败时返回错误。
+pub async fn work_item_close(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     headers: HeaderMap,
     Path(id): Path<String>,
     Json(req): Json<CloseWorkItemRequest>,
-) -> impl Future<Output = WorkItemActionResult> + Send {
-    assume_send(async move {
-        let outcome = work_item_service(state.db(), state.rbac()).close(id, req, actor.clone()).await?;
-        work_item_action_response(state, actor, outcome, headers).await
-    })
+) -> WorkItemActionResult {
+    let outcome = work_item_service(state.db(), state.rbac()).close(id, req, actor.clone()).await?;
+    work_item_action_response(state, actor, outcome, headers).await
 }
 
 #[cfg(test)]

@@ -424,10 +424,10 @@ async function createAndSubmitPhysicalSalesOrder(
     await expect(page.getByRole("dialog").getByRole("heading", { name: "提交销售单" })).toBeVisible({
         timeout: TIMEOUT,
     })
-    await clickWithoutToastOverlay(page, page.locator("#sales-orders-submit-confirm-confirm"), async () => {
-        await page.waitForURL(/\/sales\/orders\/[^/?#]+/, { timeout: 2_000 }).catch(() => undefined)
-        return !/\/sales\/orders\?mode=create/.test(page.url())
-    })
+    // settled 只做即时判断：第一次点按前页面必然还在新建页，等 URL 只会白等。
+    await clickWithoutToastOverlay(page, page.locator("#sales-orders-submit-confirm-confirm"), async () =>
+        !/\/sales\/orders\?mode=create/.test(page.url()),
+    )
     await expect(page).toHaveURL(/\/sales\/orders\/[^/?#]+/, { timeout: LONG })
     await expect(page.getByText("审批中", { exact: true }).first()).toBeVisible({ timeout: LONG })
 

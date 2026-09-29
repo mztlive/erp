@@ -97,6 +97,7 @@ export function PurchaseOrderCreatePage({
     const [submissionUnknown, setSubmissionUnknown] = React.useState(false)
     const retrySubmissionRef = React.useRef<(() => Promise<void>) | null>(null)
     const [previewOpen, setPreviewOpen] = React.useState(false)
+    const [linesResetToken, setLinesResetToken] = React.useState(0)
     const [sourcePaper, setSourcePaper] = React.useState<{
         id: string
         title: string
@@ -211,6 +212,7 @@ export function PurchaseOrderCreatePage({
                         router.replace("/procurement/orders")
                     } else {
                         await basesQuery.refetch()
+                        setLinesResetToken((token) => token + 1)
                     }
                     return
                 }
@@ -220,6 +222,7 @@ export function PurchaseOrderCreatePage({
                     createIntentRef.current = null
                     if (result.code === "CONFLICT") {
                         await basesQuery.refetch()
+                        setLinesResetToken((token) => token + 1)
                     }
                     setActionError({
                         title: "供给分配失败",
@@ -261,6 +264,11 @@ export function PurchaseOrderCreatePage({
     const selectedOrder = workspace.find(
         (order) => order.salesOrderId === selectedSalesOrderId,
     )
+    const selectedOrderRef = React.useRef(selectedOrder)
+    selectedOrderRef.current = selectedOrder
+    const selectedOrderKey = selectedOrder
+        ? `${selectedOrder.salesOrderId}:${selectedOrder.workItemId}`
+        : ""
     const writeLines = React.useCallback(
         (next: SourcingLineInput[]) => {
             form.setFieldValue("lines", next)
@@ -292,10 +300,12 @@ export function PurchaseOrderCreatePage({
 
     React.useEffect(() => {
         // URL 已带 salesOrderId 时选中项首屏就是最终值，必须等创建依据到达后再写默认明细。
+        // 只在切换单据或本页主动重取（部分保存、冲突）后重写；后台重取（窗口聚焦、缓存失效）
+        // 不得冲掉用户已填的分配，也不得关掉打开中的预览。
         if (basesQuery.isPending) return
-        writeLines(buildDefaultSourcingLines(selectedOrder))
+        writeLines(buildDefaultSourcingLines(selectedOrderRef.current))
         setPreviewOpen(false)
-    }, [basesQuery.isPending, selectedOrder, writeLines])
+    }, [basesQuery.isPending, selectedOrderKey, linesResetToken, writeLines])
 
     const lines = useStore(form.store, (state) => state.values.lines)
     const previews = React.useMemo(

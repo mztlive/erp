@@ -48,7 +48,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 跑单个流程：`bash scripts/run-flow.sh e2e/tests/flow-01-sales-warehouse.spec.ts`；跑全部：`bash scripts/run-flow.sh all`。
   - 每次运行都会先清空业务数据（保留账号、主数据和已发布审批定义）。
   - `E2E_RESET=0` 跳过清库；`E2E_HEADED=1` 有界面；`E2E_SLOW_MO=500` 慢动作。
-- `ensure-services.sh` 会复用已在运行的 web-api 和 next dev。**改了后端代码要先执行 `bash scripts/restart-backend.sh --build`**，否则 E2E 跑的是旧二进制。
+- `ensure-services.sh` 会复用已在运行的 web-api。**改了后端代码要先执行 `bash scripts/restart-backend.sh --build`**，否则 E2E 跑的是旧二进制。
+- 查流程慢在哪：`E2E_TRACE=1 bash scripts/run-flow.sh <spec>` 录 trace 并自动运行 `e2e/scripts/trace-slow-steps.mjs`，输出被吞掉的超时、按代码位置汇总的耗时和最慢单步。也可在 `e2e/` 下对已有 trace 执行 `npm run trace:slow [-- <trace.zip|目录>]`。
+- E2E 前端默认跑生产构建（standalone，`http://127.0.0.1:3100`，日志 `logs/next-e2e.log`），不占开发用的 3000；源码比构建新时自动 `next build` 并重启。`E2E_FRONT_BUILD=1` 强制重建，`E2E_FRONTEND=dev` 改连 next dev（3000）。
 - 新库初始化或全量种子：`E2E_RESET=1 bash scripts/reset-db.sh`。开发开单准备（同时清空目录主数据后重建）：`E2E_RESET=1 bash scripts/prepare-dev.sh`。目标是远程开发库时还要加 `E2E_ALLOW_REMOTE_RESET=1`。
 - 种子岗位账号密码均为 `123456`：`admin` 超管、`xiaoshou` 周晓彤（销售）、`lisiyong` 李思勇（销售领导）、`caigou` 陈国平（采购）、`yunying` 林晓燕（运营）、`cangchu` 赵卫东（仓储）、`caiwu` 王慧敏（财务总监，只审批）、`fukuan` 孙立新（出纳）、`kaipiao` 吴倩（开票）、`guanli` 郑远山（管理层）、`xitong` 何建明（系统管理员）。审批链见 `scripts/prepare-dev.sh` 头注释。
 - 运行日志和 PID 写在根目录 `logs/`。

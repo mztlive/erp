@@ -40,6 +40,7 @@ import {
     chooseOption,
     expectToast,
     openWorkspaceTask,
+    optionalStepVisible,
     pickCalendarDay,
     readHeaderDocumentNumber,
     salesOrderAmountSummary,
@@ -423,7 +424,7 @@ test.describe("flow-16 客户退款单", () => {
             const supplierRefundCommitted = fukuanPay.page.waitForResponse(response => response.request().method() === "POST" && response.url().includes("/admin/supplier-refunds"))
             await fukuanPay.page.locator("#supplier-payables-refund-request-submit").click()
             const refundConfirm = fukuanPay.page.getByRole("alertdialog", { name: /提交退款|确认提交/ })
-            if (await refundConfirm.isVisible({ timeout: 5_000 }).catch(() => false)) {
+            if (await optionalStepVisible(refundConfirm, supplierRefundCommitted)) {
                 await fukuanPay.page.locator("#supplier-payables-refund-submit-confirm-confirm").click()
             }
             const supplierRefundResponse = await supplierRefundCommitted
@@ -824,12 +825,11 @@ async function assertCaiwuCannotSubmitCustomerRefund(page: Page, receiptNo: stri
         .fill("财务总监不得提交自己的退款")
     await page.locator("#customer-receivables-refund-request-submit").click()
     const confirm = page.locator("#customer-receivables-refund-submit-confirm-dialog-confirm")
-    if (await confirm.isVisible({ timeout: TIMEOUT }).catch(() => false)) {
+    const denied = page.getByText(/提交人不得审批自己的单据|当前账号没有执行此操作的权限/)
+    if (await optionalStepVisible(confirm, denied, TIMEOUT)) {
         await confirm.click()
     }
-    await expect(
-        page.getByText(/提交人不得审批自己的单据|当前账号没有执行此操作的权限/).first(),
-    ).toBeVisible({ timeout: LONG })
+    await expect(denied.first()).toBeVisible({ timeout: LONG })
 }
 
 async function assertCaiwuCannotSubmitSupplierRefund(page: Page) {
@@ -854,10 +854,9 @@ async function assertCaiwuCannotSubmitSupplierRefund(page: Page) {
     )
     await page.locator("#supplier-payables-refund-request-submit").click()
     const confirm = page.locator("#supplier-payables-refund-submit-confirm-confirm")
-    if (await confirm.isVisible({ timeout: TIMEOUT }).catch(() => false)) {
+    const denied = page.getByText(/提交人不得审批自己的单据|当前账号没有执行此操作的权限/)
+    if (await optionalStepVisible(confirm, denied, TIMEOUT)) {
         await confirm.click()
     }
-    await expect(
-        page.getByText(/提交人不得审批自己的单据|当前账号没有执行此操作的权限/).first(),
-    ).toBeVisible({ timeout: LONG })
+    await expect(denied.first()).toBeVisible({ timeout: LONG })
 }

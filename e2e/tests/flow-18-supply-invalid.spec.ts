@@ -29,7 +29,7 @@ import {
     type Page,
 } from "@playwright/test"
 
-import { API_BASE, apiGet, apiLogin } from "../helpers/api"
+import { API_BASE, apiGet, apiToken } from "../helpers/api"
 import { createCustomerViaUi } from "../helpers/customers"
 import { openLoggedInWorkspace } from "../helpers/login"
 import {
@@ -170,7 +170,7 @@ async function findSeededOfferingRow(page: Page) {
  * 交接是补责任的正式路径，目标是建档管理员及其主属组织。
  */
 async function ensureSeededOfferingResponsibility() {
-    const token = await apiLogin("admin")
+    const token = await apiToken("admin")
     const listed = await apiGet<{
         items?: Array<{
             id: string
@@ -418,7 +418,7 @@ test("flow-18 停止可供后供给分配不得建采购单，必须走销售变
         await expect(page.locator("#inventory-ledger-reservation-table").getByText(salesOrderNo)).toHaveCount(0)
 
         const reservations = await apiGet<{ total: number }>(
-            await apiLogin("cangchu"), "/admin/stock-reservations", { page: 1, page_size: 20 },
+            await apiToken("cangchu"), "/admin/stock-reservations", { page: 1, page_size: 20 },
         )
         expect(reservations.total).toBe(0)
 
