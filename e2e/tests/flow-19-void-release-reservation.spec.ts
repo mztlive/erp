@@ -359,13 +359,22 @@ test("flow-19 已生效销售单禁止直接作废：预占和仓发草稿保持
         await adjustDialog
             .locator("#inventory-adjustment-dialog-note")
             .fill("flow-19 作废释放预占盘盈");
+        const adjustmentNo = (
+            await adjustDialog.locator("span.num").filter({ hasText: /^TZ/ }).innerText()
+        ).trim();
+        expect(adjustmentNo.length, "发起弹窗应显示本张调整单号").toBeGreaterThan(2);
         await adjustDialog.locator("#inventory-adjustment-dialog-submit").click();
-        await expect(page.getByText("调整已提交审批").first()).toBeVisible({ timeout: UI_TIMEOUT });
+        const submitted = page
+            .locator('[data-slot="formal-action-result"]')
+            .filter({ hasText: "调整已提交审批" });
+        await expect(submitted).toBeVisible({ timeout: UI_TIMEOUT });
+        await expect(submitted).toContainText(`单号 ${adjustmentNo}`);
         await expect(adjustDialog).toBeHidden({ timeout: UI_TIMEOUT });
 
-        // 2) caiwu 审批库存调整，余额才增加
+        // 2) caiwu 审批这一张盘盈。无单号会通过队列里另一张库存调整单。
         page = await switchTo("caiwu");
-        await openWorkspaceTask(page, "库存调整单审批", undefined, "approval");
+        await openWorkspaceTask(page, "库存调整单审批", adjustmentNo, "approval");
+        await expect(page.getByRole("region", { name: "当前工作台任务" })).toContainText(adjustmentNo);
         await approveCurrentDocument(page);
 
         page = await switchTo("cangchu");
