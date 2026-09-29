@@ -165,6 +165,7 @@ export function DataScopeFormDialog({
                 className="space-y-4"
                 onSubmit={(event) => {
                     event.preventDefault()
+                    event.stopPropagation()
                     void form.handleSubmit()
                 }}
             >

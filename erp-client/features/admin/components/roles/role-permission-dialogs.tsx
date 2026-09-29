@@ -18,7 +18,8 @@ import {
     permissionLabel,
     selectedItemsByGroup,
 } from "@/features/admin/lib/permission-catalog"
-import { diffPermissions } from "@/features/admin/lib/permission-editor"
+import { permissionChanges } from "@/features/admin/lib/role-workbench"
+import { hasPermission } from "@/lib/permissions"
 import type { AdminRole } from "@/features/admin/types"
 
 export function CopyRolePermissions({
@@ -133,7 +134,21 @@ export function RolePermissionReview({
     name: string
     initialName: string
 }) {
-    const { added, removed } = diffPermissions(selected, initial)
+    const changes = permissionChanges(initial, selected)
+    const added = changes
+        .filter((change) => change.allowed)
+        .map((change) => change.code)
+    const removed = changes
+        .filter((change) => !change.allowed)
+        .map((change) => change.code)
+    const authorizationModeChanged = [...initial, ...selected].some(
+        (code) =>
+            code.includes("*") &&
+            initial.includes(code) !== selected.includes(code),
+    )
+    const selectedActions = [...PERMISSION_BY_CODE.keys()].filter((code) =>
+        hasPermission(selected, code),
+    )
     const titles: Record<PermissionReviewMode, string> = {
         changes: "本次变更",
         selected: "已授权权限",
@@ -176,7 +191,13 @@ export function RolePermissionReview({
                                 title={`移除权限（${removed.length}）`}
                                 codes={removed}
                             />
-                            {!nameChanged &&
+                            {authorizationModeChanged && (
+                                <p className="text-sm text-muted-foreground">
+                                    授权方式已调整。切换为自选操作后，今后新增的操作需要另行授予。
+                                </p>
+                            )}
+                            {!authorizationModeChanged &&
+                                !nameChanged &&
                                 added.length === 0 &&
                                 removed.length === 0 && (
                                     <p className="text-sm text-muted-foreground">
@@ -190,14 +211,14 @@ export function RolePermissionReview({
                     )}
                     {mode === "selected" && !preservedCodes.includes("*:*") && (
                         <PermissionList
-                            title={`已授权 ${selected.length} 项`}
-                            codes={selected}
+                            title={`已授权 ${selectedActions.length} 项`}
+                            codes={selectedActions}
                         />
                     )}
                     {mode === "dangerous" && (
                         <PermissionList
                             title="请逐项核对"
-                            codes={selected.filter(
+                            codes={selectedActions.filter(
                                 (code) =>
                                     PERMISSION_BY_CODE.get(code)?.dangerous,
                             )}
@@ -209,7 +230,7 @@ export function RolePermissionReview({
                             !preservedCodes.includes("*:*"))) && (
                         <>
                             <p className="text-sm text-muted-foreground">
-                                以下授权不在当前可勾选列表中，本次保存将原样保留。需要调整时，请由权限管理员核对授权来源。
+                                以下为当前保留的特殊授权。业务的「全部操作」可返回业务配置切换为「自选操作」；其他特殊授权须由权限管理员核对。
                             </p>
                             <ul className="space-y-2 text-sm">
                                 {preservedCodes.map((code) => (
