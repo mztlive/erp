@@ -20,6 +20,7 @@ pub(super) struct FoundationFile {
     pub sales_leader_role_id: String,
     pub customer_owner_account: String,
     pub supplier_maintainer_account: String,
+    pub product_maintainer_account: String,
     pub warehouse_handler_account: String,
     /// 默认采购调度人，取值是岗位规格键。
     pub procurement_responsibility_owner: String,
@@ -141,6 +142,12 @@ mod tests {
         }));
         assert!(account_named(&spec.customer_owner_account).is_some());
         assert!(account_named(&spec.supplier_maintainer_account).is_some());
+        let product_maintainer = account_named(&spec.product_maintainer_account).expect("商品维护岗位");
+        assert_eq!(product_maintainer.account, "caigou");
+        assert_eq!(product_maintainer.role_id, "role-procurement");
+        assert!(spec.departments.iter().any(|department| {
+            department.accounts.iter().any(|account| account == &spec.product_maintainer_account)
+        }));
         assert_eq!(
             account_named(&spec.sales_leader_account).map(|account| account.role_id.as_str()),
             Some(spec.sales_leader_role_id.as_str())

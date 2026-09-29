@@ -7,6 +7,7 @@
   "sales_leader_role_id": "role-sales-leader",
   "customer_owner_account": "xiaoshou",
   "supplier_maintainer_account": "caigou",
+  "product_maintainer_account": "caigou",
   "warehouse_handler_account": "cangchu",
   "procurement_responsibility_owner": "procurement",
   "finance_responsibilities": [

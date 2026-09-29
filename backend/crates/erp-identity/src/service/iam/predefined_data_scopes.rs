@@ -237,7 +237,9 @@ fn apply_role_action_narrowing(
         {
             *scope_types = vec![DataScopeType::SelfOwned]
         },
-        "role-procurement" if resource == "supplier" => *scope_types = vec![DataScopeType::SelfOwned],
+        "role-procurement" if matches!(resource, "supplier" | "product") => {
+            *scope_types = vec![DataScopeType::SelfOwned]
+        },
         "role-procurement" if resource == "supplier_fulfillment_order" => {
             *scope_types = vec![DataScopeType::SelfOwned]
         },
@@ -337,6 +339,20 @@ mod tests {
         let manager = definitions("role-sales-leader", "sales_order", &["list", "update"]);
         assert_eq!(manager[0].binding.target_mode, Some(ScopeTargetMode::ManagedOrgs));
         assert!(!manager[0].binding.actions.contains(&"update".into()));
+    }
+
+    #[test]
+    fn procurement_products_grant_only_owned_objects_for_each_catalog_action() {
+        let (_, actions) = RESOURCE_ACTIONS.iter().find(|(resource, _)| *resource == "product").unwrap();
+        let rules = definitions("role-procurement", "product", actions);
+        assert_eq!(rules.len(), 1);
+        let rule = &rules[0];
+        assert_eq!(rule.scope_type, DataScopeType::SelfOwned);
+        assert_eq!(rule.binding.resource, "product");
+        assert_eq!(rule.binding.actions, ["list", "detail", "create", "update"]);
+        assert_eq!(rule.binding.target_dimension, ScopeDimension::InternalOrg);
+        assert!(rule.scope_targets.is_empty());
+        assert!(definitions("role-procurement", "contract", &["list"]).is_empty());
     }
 
     #[test]
