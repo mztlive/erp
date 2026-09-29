@@ -304,9 +304,10 @@ async function ensureVirtualOfferingAndListing(page: Page) {
         await dialog.locator('#supplier-offerings-dialog-register-available-quantity').fill('1000')
         await dialog.locator('#supplier-offerings-dialog-register-submit').click()
         // 主数据在重置间保留，供给可能已登记：成功与重复均为合法结果。
-        await expect(
-            page.getByText('供给已添加').first().or(page.getByText('已登记供给')),
-        ).toBeVisible({ timeout: 20000 })
+        // 重复时提示和表单说明各有一句「已登记供给」，合并定位后再取第一条。
+        await expect(page.getByText(/供给已添加|已登记供给/).first()).toBeVisible({
+            timeout: 20000,
+        })
         if (await page.getByText('已登记供给').count()) {
             // 409 本身证明供给已存在，直接复用，不依赖列表分页可见性。
             await dialog.getByRole('button', { name: '关闭' }).first().click()

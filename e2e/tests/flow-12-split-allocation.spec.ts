@@ -362,11 +362,15 @@ async function completeFulfillment(
     }
     const wanted = kind === "入库" ? "入库表单" : "公司仓发表单"
     const marker = kind === "入库" ? purchaseNo : salesOrderNo
+    const listedLabels = await readFulfillmentLabels(page)
     const total = await tasks.count()
     let opened = false
     for (let index = 0; index < total; index += 1) {
         await closeFulfillmentDialog(page)
-        await tasks.nth(index).click()
+        const card = tasks.nth(index)
+        // 处理履约是模态框，打开后待办列表不再可访问。单号必须在点击前从任务卡读走。
+        const cardLabel = `${(await card.getAttribute("aria-label")) ?? ""} ${(await card.innerText().catch(() => "")) || ""}`
+        await card.click()
         await openFulfillmentWorkspaceForm(page)
         const dialog = page.getByRole("dialog", { name: "处理履约" })
         const loaded = dialog.locator(
@@ -376,18 +380,22 @@ async function completeFulfillment(
         if (!loadedReady) continue
         const form = dialog.locator(`[aria-label="${wanted}"]`)
         if (!(await form.isVisible().catch(() => false))) continue
-        const markerReady = await dialog
+        const dialogHasMarker = await dialog
             .getByText(marker)
             .first()
-            .waitFor({ state: "visible", timeout: TIMEOUT })
-            .then(() => true)
+            .isVisible()
             .catch(() => false)
-        if (!markerReady) continue
+        // 仓发来源单号靠任务卡识别。仓储没有销售单详情，作业面补全不到 XS 号，不会把内部 id 印上表单。
+        const customerName = extra?.customerName ?? ""
+        const cardHasMarker =
+            cardLabel.includes(marker) ||
+            (kind === "仓发" && customerName.length > 0 && cardLabel.includes(customerName))
+        if (!dialogHasMarker && !cardHasMarker) continue
         opened = true
         break
     }
     if (!opened) {
-        throw new Error(`未找到${kind}履约表单（${marker}）\n现有: ${await readFulfillmentLabels(page)}`)
+        throw new Error(`未找到${kind}履约表单（${marker}）\n现有: ${listedLabels}`)
     }
     await expect(page.locator(`[aria-label="${wanted}"]`)).toBeVisible({ timeout: TIMEOUT })
     if (kind === "入库") {
@@ -546,7 +554,8 @@ test("同一销售明细拆分：库存直配 + 采购缺口", async ({ browser 
     // 采购供应商为先款 50%，入库前由出纳完成正式付款。
     const payment = await openLoggedInWorkspace(browser, "fukuan")
     try {
-        await payOnlySupplierTask(payment.page)
+        // 全量里其他采购单也会留下付款待办。不带本单号会付掉别的单，先款门禁继续禁用确认入库。
+        await payOnlySupplierTask(payment.page, purchaseNo)
     } finally {
         await closeSession(payment)
     }

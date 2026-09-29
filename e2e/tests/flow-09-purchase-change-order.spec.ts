@@ -447,9 +447,10 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
             await expect(
                 procurement.page.getByText("尚未形成应付（需审批通过）。"),
             ).toHaveCount(0)
-            await expect(procurement.page.getByText("已付并核销")).toBeVisible(
-                VISIBLE,
-            )
+            // 侧栏金额和票款摘要都会写「已付并核销」。摘要这一处才是本单票款。
+            await expect(
+                procurement.page.getByLabel("采购票款摘要").getByText(/已付并核销/),
+            ).toBeVisible(VISIBLE)
             await procurement.page.getByRole("tab", { name: "概览" }).click()
             await expect(procurement.page.getByText("未付")).toBeVisible(VISIBLE)
             await expect(procurement.page.getByText("未开始")).toBeVisible(VISIBLE)

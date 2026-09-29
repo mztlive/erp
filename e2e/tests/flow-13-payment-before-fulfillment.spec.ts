@@ -165,7 +165,13 @@ async function chooseSourcing(
     if (await expand.isVisible().catch(() => false)) await expand.click();
     const sourcing = row.locator('[id$="-sourcing-option"]');
     await expect(sourcing).toBeVisible({ timeout: UI_TIMEOUT });
-    await chooseOption(page, sourcing, option, option.includes("直发") ? "直发" : "入仓");
+    // 选项很多时第一次点击可能打在重绘前的条目上，下拉仍开着且值是空的。再选一次。
+    let attempt = 0;
+    await expect(async () => {
+        attempt += 1;
+        if (attempt > 1) await page.keyboard.press("Escape");
+        await chooseOption(page, sourcing, option, option.includes("直发") ? "直发" : "入仓");
+    }).toPass({ timeout: UI_TIMEOUT * 2 });
     if (warehouse) {
         const warehouseInput = row.locator('[id$="-warehouse"]');
         await expect(warehouseInput).toBeVisible({ timeout: UI_TIMEOUT });
@@ -174,6 +180,17 @@ async function chooseSourcing(
     } else {
         await expect(row.locator('[id$="-warehouse"]')).toHaveCount(0);
     }
+}
+
+function supplierPaymentTasks(page: Page, purchaseNo: string) {
+    const list = page.getByRole("list", { name: "待办列表" });
+    const escaped = purchaseNo.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const pattern = new RegExp(
+        `供应商付款处理[\\s\\S]*${escaped}|${escaped}[\\s\\S]*供应商付款处理`,
+    );
+    return list
+        .getByRole("button", { name: pattern })
+        .or(list.getByRole("button").filter({ hasText: pattern }));
 }
 
 async function assertNoPaymentApproval(page: Page) {
@@ -374,13 +391,33 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
                 ? ((await dialog.innerText().catch(() => "")) || "").replace(/\s+/g, " ")
                 : "";
             if (formText.includes(purchaseOrderNo)) return true;
-            if (formReady && salesOrderNo && cardLabel.includes(salesOrderNo)) return true;
+            if (
+                formReady &&
+                salesOrderNo &&
+                cardLabel.includes(salesOrderNo) &&
+                ((await directForm.isVisible().catch(() => false)) ||
+                    (await inboundForm.isVisible().catch(() => false)))
+            ) {
+                const openedDirect = await directForm.isVisible().catch(() => false);
+                const openedInbound = await inboundForm.isVisible().catch(() => false);
+                const wantedDirect = cardLabel.includes("直发") || formText.includes("供应商直发");
+                const wantedInbound = cardLabel.includes("入库") || formText.includes("采购入库") || formText.includes(purchaseOrderNo);
+                if ((openedDirect && wantedDirect) || (openedInbound && wantedInbound)) return true;
+            }
+            const ship = dialog.locator('[aria-label="公司仓发表单"]');
+            // 仓储看不到销售单详情，仓发表单补不出 XS 号。任务卡上已有来源销售单，表单本身仍必须是公司仓发。
+            if (
+                salesOrderNo &&
+                cardLabel.includes(salesOrderNo) &&
+                (await ship.isVisible().catch(() => false))
+            ) {
+                return true;
+            }
             const source = dialog.locator('[aria-label="来源单据"]');
             const sourceReady = await source.isVisible().catch(() => false);
             if (!sourceReady) continue;
             const sourceText = (await source.innerText()).replace(/\s+/g, " ");
             if (sourceText.includes(purchaseOrderNo)) return true;
-            const ship = dialog.locator('[aria-label="公司仓发表单"]');
             const otherPurchase = /PO-/.test(sourceText) && !sourceText.includes(purchaseOrderNo);
             if (
                 salesOrderNo &&
@@ -400,7 +437,8 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
         await openFulfillmentWorkspaceForm(page);
         const dialog = page.getByRole("dialog", { name: "处理履约" });
         await expect(dialog.locator('[aria-label="公司仓发表单"]')).toBeVisible({ timeout: UI_TIMEOUT });
-        await expect(dialog.getByText(salesOrderNo).first()).toBeVisible({ timeout: UI_TIMEOUT });
+        const reopenedLabel = `${(await tasks.nth(shipFallback).getAttribute("aria-label")) ?? ""} ${(await tasks.nth(shipFallback).innerText().catch(() => "")) || ""}`;
+        expect(reopenedLabel.includes(salesOrderNo) || (await dialog.innerText()).includes(salesOrderNo)).toBeTruthy();
         return true;
     };
 
@@ -614,7 +652,10 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
         await selectWorkspaceFamily(page, "fulfillment");
         await expect(page.getByRole("button", { name: /电子交付|线下服务/ })).toHaveCount(0);
         await openFulfillmentTask(page, directPo);
-        await expect(page.getByText(directPo).first()).toBeVisible();
+        // 采购单号是 PO- 加内部 id。履约来源摘要会丢掉这种单号，改用来源销售单和直发品名确认是这一张。
+        await expect(page.locator('[aria-label="供应商直发表单"]')).toBeVisible();
+        await expect(page.locator('[aria-label="来源单据"]')).toContainText(salesOrderNo);
+        await expect(page.getByText(SKU_DIRECT).first()).toBeVisible();
         await assertFulfillmentCannotComplete(page, "代发");
 
         // 8) 出纳先付清入仓采购单：仅入库门禁放开，代发仍阻断
@@ -627,11 +668,9 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
             timeout: UI_TIMEOUT,
         });
         await selectWorkspaceFamily(page, "finance");
-        await expect(
-            page.getByRole("button", {
-                name: new RegExp(`供应商付款处理[\\s\\S]*${inboundPo.slice(0, 10)}`),
-            }),
-        ).toHaveCount(0, { timeout: UI_TIMEOUT });
+        await expect(supplierPaymentTasks(page, inboundPo)).toHaveCount(0, {
+            timeout: UI_TIMEOUT,
+        });
 
         page = await switchTo("cangchu");
         await openFulfillmentTask(page, inboundPo);
@@ -655,7 +694,11 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
             timeout: UI_TIMEOUT,
         });
         await selectWorkspaceFamily(page, "finance");
-        await expect(page.getByRole("button", { name: /供应商付款处理/ })).toHaveCount(0, {
+        // 全量会留下其他单据的付款待办。本流程只要求这两张采购单的付款任务已关闭。
+        await expect(supplierPaymentTasks(page, directPo)).toHaveCount(0, {
+            timeout: UI_TIMEOUT,
+        });
+        await expect(supplierPaymentTasks(page, inboundPo)).toHaveCount(0, {
             timeout: UI_TIMEOUT,
         });
         await assertNoPaymentApproval(page);

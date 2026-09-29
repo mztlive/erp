@@ -243,16 +243,18 @@ test("销项与进项红票按 Invoice 强类型命令登记，不进审批且�
         await expectNotClosed(page)
 
         // ── 6. 开票人：W12 登记进项蓝票（与付款分轨，不进审批）────────
+        const purchaseNo = await purchaseNoForSalesOrder(order.id)
         const purchaseGross = await registerPurchaseInvoice(kaipiao.page, {
             supplier: SUPPLIER_SHORT,
             invoiceNo: purchaseInvoiceNo,
+            purchaseNo,
         })
         expect(Number(purchaseGross)).toBeGreaterThan(0)
         await assertNoInvoiceApprovalUi(kaipiao.page)
 
         await kaipiao.page.getByRole("button", { name: /^应付台账(?: \d+)?$/ }).click()
         await expect(kaipiao.page.getByText(/狮峰/).first()).toBeVisible({ timeout: LONG })
-        const payableRow = kaipiao.page.getByRole("row").filter({ hasText: /狮峰/ }).first()
+        const payableRow = kaipiao.page.getByRole("row").filter({ hasText: purchaseNo })
         await expect(payableRow).toBeVisible({ timeout: LONG })
         await expect(payableRow.getByText(formatMoneyish(purchaseGross)).first()).toBeVisible({
             timeout: LONG,
@@ -283,8 +285,8 @@ test("销项与进项红票按 Invoice 强类型命令登记，不进审批且�
         await expect(redRow.getByText("已登记")).toBeVisible({ timeout: LONG })
 
         await kaipiao.page.getByRole("button", { name: /^应付台账(?: \d+)?$/ }).click()
-        await expect(kaipiao.page.getByText(/狮峰/).first()).toBeVisible({ timeout: LONG })
-        const restoredPayable = kaipiao.page.getByRole("row").filter({ hasText: /狮峰/ }).first()
+        await expect(kaipiao.page.getByText(purchaseNo).first()).toBeVisible({ timeout: LONG })
+        const restoredPayable = kaipiao.page.getByRole("row").filter({ hasText: purchaseNo })
         await expect(restoredPayable.locator('[data-column-id="tracks"]')).toContainText(
             /收票\s*[¥￥]?\s*0\.00/, { timeout: LONG },
         )
@@ -735,9 +737,26 @@ async function issueSalesRedInvoice(
 
 // ─── 进项发票 / 进项红票 ──────────────────────────────────────────────────
 
+async function purchaseNoForSalesOrder(salesOrderId: string): Promise<string> {
+    const listed = await apiGet<
+        | { items?: Array<{ purchase_no?: string }> }
+        | Array<{ purchase_no?: string }>
+    >(await apiToken("caigou"), "/admin/purchase-orders", {
+        sales_order_id: salesOrderId,
+        page: 1,
+        page_size: 20,
+    })
+    const rows = Array.isArray(listed) ? listed : (listed.items ?? [])
+    const numbers = rows.map((row) => row.purchase_no?.trim() ?? "").filter((no) => no.length > 0)
+    if (numbers.length !== 1) {
+        throw new Error(`本销售单应有 1 张采购单，实际 ${numbers.length}：${numbers.join(", ")}`)
+    }
+    return numbers[0] ?? ""
+}
+
 async function registerPurchaseInvoice(
     page: Page,
-    input: { supplier: string; invoiceNo: string },
+    input: { supplier: string; invoiceNo: string; purchaseNo: string },
 ) {
     await page.goto("/finance/supplier-accounts")
     await waitHeading(page, "供应商往来")
@@ -748,27 +767,47 @@ async function registerPurchaseInvoice(
     await expect(supplierInput).toBeVisible({ timeout: TIMEOUT })
     await supplierInput.click()
     await supplierInput.fill(input.supplier)
-    const supplierOption = page.getByRole("option", { name: /狮峰/ })
+    const supplierOption = page
+        .locator('[id^="supplier-payables-pick-supplier-select-option-"]')
+        .filter({ hasText: "杭州狮峰茶叶有限公司" })
     await expect(supplierOption.first()).toBeVisible({ timeout: LONG })
     await supplierOption.first().click()
-    await pickSupplier.locator("#supplier-payables-pick-supplier-confirm").click()
+    const confirmSupplier = pickSupplier.locator("#supplier-payables-pick-supplier-confirm")
+    await expect(confirmSupplier).toBeEnabled({ timeout: TIMEOUT })
+    await confirmSupplier.click()
     await expect(page.getByRole("heading", { name: "登记进项发票" })).toBeVisible({
         timeout: LONG,
     })
     await assertNoInvoiceApprovalUi(page)
     await expect(page.getByRole("button", { name: "提交审批" })).toHaveCount(0)
 
-    const poolSelect = page
-        .locator('[id^="supplier-payables-allocation-pool-row-"][id$="-select"]')
-        .first()
-    await expect(poolSelect).toBeVisible({ timeout: LONG })
-    if (!(await poolSelect.isChecked())) {
-        await page.locator("#supplier-payables-allocation-pool-select-all").click()
+    // 共享套件里同供应商有多笔应付。全选后只填表头税额，提交会一直禁用。只核销本采购单。
+    const poolSection = page.locator('section[aria-label="同供应商待核销池"]')
+    const poolChecks = poolSection.locator('[role="checkbox"][aria-label^="选择"]')
+    await expect(poolChecks.first()).toBeVisible({ timeout: LONG })
+    const poolCount = await poolChecks.count()
+    let matched = 0
+    for (let index = 0; index < poolCount; index += 1) {
+        const box = poolChecks.nth(index)
+        const label = (await box.getAttribute("aria-label")) ?? ""
+        const want = label.includes(input.purchaseNo)
+        const checked = (await box.getAttribute("aria-checked")) === "true"
+        if (want) matched += 1
+        if (want && !checked) await box.click()
+        if (!want && checked) await box.click()
+    }
+    if (matched !== 1) {
+        const labels: string[] = []
+        for (let index = 0; index < poolCount; index += 1) {
+            labels.push((await poolChecks.nth(index).getAttribute("aria-label")) ?? "")
+        }
+        throw new Error(
+            `进项池应只有本采购单 ${input.purchaseNo} 一行，实际匹配 ${matched}：${labels.join(" | ")}`,
+        )
     }
     await page.locator("#supplier-payables-allocation-pool-fill-all").click()
-    const allocatedInput = page
-        .locator('[id^="supplier-payables-allocation-pool-row-"][id$="-amount"]')
-        .first()
+    const allocatedInput = poolSection.locator('[id$="-amount"]')
+    await expect(allocatedInput).toHaveCount(1)
     await expect(allocatedInput).toHaveValue(/.+/, { timeout: TIMEOUT })
     const gross = parseAmount(await allocatedInput.inputValue())
     const { net, tax } = splitGross(gross)
@@ -776,6 +815,9 @@ async function registerPurchaseInvoice(
     await page.locator("#supplier-payables-allocation-form-invoice-no").fill(input.invoiceNo)
     await page.locator("#supplier-payables-allocation-form-net-amount").fill(net)
     await page.locator("#supplier-payables-allocation-form-tax-amount").fill(tax)
+    await expect(page.locator("#supplier-payables-allocation-form-submit")).toBeEnabled({
+        timeout: TIMEOUT,
+    })
     await page.locator("#supplier-payables-allocation-form-submit").click()
     const invoiceConfirm = page.getByRole("alertdialog").filter({
         hasText: "确认登记进项发票并核销",

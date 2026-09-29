@@ -445,27 +445,29 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
     await caiwuPage.locator("#supplier-payables-header-register-invoice").click();
     const pickSupplier = caiwuPage.getByRole("dialog", { name: /选择供应商 · 登记进项发票/ });
     await expect(pickSupplier).toBeVisible({ timeout: 20_000 });
-    await chooseOption(
-        caiwuPage,
-        pickSupplier.locator("#supplier-payables-pick-supplier-select"),
-        /狮峰/,
-        SUPPLIER_SHORT,
-    );
-    await pickSupplier.locator("#supplier-payables-pick-supplier-confirm").click();
+    // 下拉回车会在供应商 id 写入前关掉对话框，确认按钮一直禁用然后被拆掉。只点选项，再等确认可用。
+    const supplierInput = pickSupplier.locator("#supplier-payables-pick-supplier-select");
+    await expect(supplierInput).toBeVisible({ timeout: 20_000 });
+    await supplierInput.click();
+    await supplierInput.fill(SUPPLIER_SHORT);
+    const supplierOption = caiwuPage
+        .locator('[id^="supplier-payables-pick-supplier-select-option-"]')
+        .filter({ hasText: "杭州狮峰茶叶有限公司" });
+    await expect(supplierOption.first()).toBeVisible({ timeout: 20_000 });
+    await supplierOption.first().click();
+    const confirmSupplier = pickSupplier.locator("#supplier-payables-pick-supplier-confirm");
+    await expect(confirmSupplier).toBeEnabled({ timeout: 20_000 });
+    await confirmSupplier.click();
     await expect(caiwuPage.getByRole("heading", { name: "登记进项发票" })).toBeVisible({
         timeout: 20_000,
     });
     await expect(caiwuPage.getByRole("button", { name: "提交审批" })).toHaveCount(0);
-    // 池内可能混入开放余额为 0 的历史目标：全选会将其勾上，其 0 金额
-    // 触发"分配金额须为正数"导致提交永久禁用。逐行勾选，只保留正余额行。
-    // （测试 id 挂在 Radix 内层隐藏 input 上，直接点击会因视口外超时；
-    // 状态从隐藏 input 读，點擊落在可访问的复选框按钮上。）
+    // 池内会混入其他采购单和零余额目标。多行一起核销时必须逐笔填税额，
+    // 只填表头税额会让提交一直禁用。只保留本采购单的正余额行。
+    // Base UI 把 id 放在隐藏 input 上，aria-label「选择 采购单号」在可见复选框上。
     const poolSection = caiwuPage.locator('section[aria-label="同供应商待核销池"]');
-    const poolBoxInputs = poolSection.locator(
-        '[id^="supplier-payables-allocation-pool-row-"][id$="-select"]',
-    );
-    const poolChecks = poolSection.getByRole("checkbox");
-    await expect(poolBoxInputs.first()).toBeVisible({ timeout: 20_000 });
+    const poolChecks = poolSection.locator('[role="checkbox"][aria-label^="选择"]');
+    await expect(poolChecks.first()).toBeVisible({ timeout: 20_000 });
     const checkCount = await poolChecks.count();
     for (let i = 0; i < checkCount; i += 1) {
         if ((await poolChecks.nth(i).getAttribute("aria-checked")) !== "true") {
@@ -481,17 +483,18 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
                 value: (el as HTMLInputElement).value,
             })),
         );
-    const selectIds = await poolBoxInputs.evaluateAll((els) => els.map((el) => el.id));
     let grossCents = 0;
     for (const cell of amountCells) {
-        const selectId = cell.id.replace(/-amount$/, "-select");
-        const choiceLabel = (await poolSection.locator(`#${selectId}`).getAttribute("aria-label")) ?? "";
+        const input = poolSection.locator(`[id="${cell.id}"]`);
+        const card = input.locator("xpath=ancestor::div[.//*[@role='checkbox']][1]");
+        const choiceLabel =
+            (await card.locator('[role="checkbox"]').first().getAttribute("aria-label")) ?? "";
         const cents = Math.round(Number(parseAmount(cell.value || "0")) * 100);
         const belongsToOrder = choiceLabel.includes(purchaseNo);
         if (!belongsToOrder || cents <= 0) {
-            const index = selectIds.indexOf(selectId);
-            if (index >= 0 && (await poolChecks.nth(index).getAttribute("aria-checked")) === "true") {
-                await poolChecks.nth(index).click();
+            const box = card.locator('[role="checkbox"]').first();
+            if ((await box.getAttribute("aria-checked")) === "true") {
+                await box.click();
             }
             continue;
         }

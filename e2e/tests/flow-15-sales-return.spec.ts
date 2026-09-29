@@ -716,12 +716,16 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
         await page.locator("#supplier-payables-header-register-invoice").click();
         const pickSupplier = page.getByRole("dialog", { name: /选择供应商 · 登记进项发票/ });
         await expect(pickSupplier).toBeVisible({ timeout: UI_TIMEOUT });
-        await chooseOption(
-            page,
-            pickSupplier.locator("#supplier-payables-pick-supplier-select"),
-            /狮峰/,
-            SUPPLIER_SHORT,
-        );
+        // 下拉回车会把仍打开的弹层交给对话框，确认按钮还没写上供应商就被拆掉。只点选项，再等确认可用。
+        const supplierInput = pickSupplier.locator("#supplier-payables-pick-supplier-select");
+        await expect(supplierInput).toBeVisible({ timeout: UI_TIMEOUT });
+        await supplierInput.click();
+        await supplierInput.fill(SUPPLIER_SHORT);
+        const supplierOption = page
+            .locator('[id^="supplier-payables-pick-supplier-select-option-"]')
+            .filter({ hasText: "杭州狮峰茶叶有限公司" });
+        await expect(supplierOption.first()).toBeVisible({ timeout: UI_TIMEOUT });
+        await supplierOption.first().click();
         const confirmSupplier = pickSupplier.locator("#supplier-payables-pick-supplier-confirm");
         await expect(confirmSupplier).toBeEnabled({ timeout: UI_TIMEOUT });
         await confirmSupplier.click();
@@ -729,22 +733,33 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
             timeout: UI_TIMEOUT,
         });
         await expect(page.getByRole("button", { name: "提交审批" })).toHaveCount(0);
+        // 核销池是卡片，不是表格行。可见复选框的名称是「选择 采购单号」。多行一起核销必须逐笔填税额。
         const poolSection = page.locator('section[aria-label="同供应商待核销池"]');
-        const orderRow = poolSection.getByRole("row").filter({ hasText: purchaseOrderNo });
-        await expect(orderRow).toBeVisible({ timeout: UI_TIMEOUT });
-        const orderCheck = orderRow.getByRole("checkbox");
-        if ((await orderCheck.getAttribute("aria-checked")) !== "true") {
-            await orderCheck.click();
+        const poolChecks = poolSection.locator('[role="checkbox"][aria-label^="选择"]');
+        await expect(poolChecks.first()).toBeVisible({ timeout: UI_TIMEOUT });
+        const poolCount = await poolChecks.count();
+        let matched = 0;
+        for (let index = 0; index < poolCount; index += 1) {
+            const box = poolChecks.nth(index);
+            const label = (await box.getAttribute("aria-label")) ?? "";
+            const want = label.includes(purchaseOrderNo);
+            const checked = (await box.getAttribute("aria-checked")) === "true";
+            if (want) matched += 1;
+            if (want && !checked) await box.click();
+            if (!want && checked) await box.click();
         }
-        const otherChecks = poolSection.getByRole("row").filter({ hasNotText: purchaseOrderNo }).getByRole("checkbox");
-        const otherCount = await otherChecks.count();
-        for (let index = 0; index < otherCount; index += 1) {
-            if ((await otherChecks.nth(index).getAttribute("aria-checked")) === "true") {
-                await otherChecks.nth(index).click();
+        if (matched !== 1) {
+            const labels: string[] = [];
+            for (let index = 0; index < poolCount; index += 1) {
+                labels.push((await poolChecks.nth(index).getAttribute("aria-label")) ?? "");
             }
+            throw new Error(
+                `进项池应只有本采购单 ${purchaseOrderNo} 一行，实际匹配 ${matched}：${labels.join(" | ")}`,
+            );
         }
         await page.locator("#supplier-payables-allocation-pool-fill-all").click();
-        const allocatedInput = orderRow.locator('[id$="-amount"]');
+        const allocatedInput = poolSection.locator('[id$="-amount"]');
+        await expect(allocatedInput).toHaveCount(1);
         await expect(allocatedInput).toHaveValue(/.+/, { timeout: UI_TIMEOUT });
         const allocated = await allocatedInput.inputValue();
         const grossCents = Math.round(Number(allocated) * 100);
@@ -754,6 +769,9 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
         await page.locator("#supplier-payables-allocation-form-net-amount").fill((netCents / 100).toFixed(2));
         await page.locator("#supplier-payables-allocation-form-tax-amount").fill(((grossCents - netCents) / 100).toFixed(2));
         await page.locator("#supplier-payables-allocation-form-invoice-no").fill(purchaseInvoiceNo);
+        await expect(page.locator("#supplier-payables-allocation-form-submit")).toBeEnabled({
+            timeout: UI_TIMEOUT,
+        });
         await page.locator("#supplier-payables-allocation-form-submit").click();
         const invoiceConfirm = page.getByRole("alertdialog").filter({
             hasText: "确认登记进项发票并核销",

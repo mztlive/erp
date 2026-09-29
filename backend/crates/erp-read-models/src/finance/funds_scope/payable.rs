@@ -425,6 +425,7 @@ pub(super) fn cut_payable_account_row(
         settled_total: whole_amount(whole, row.settled_total),
         open_total: whole_amount(whole, row.open_total),
         open_invoiceable_total: whole_amount(whole, row.open_invoiceable_total),
+        invoiced_total: whole_amount(whole, row.invoiced_total),
         permission_limited: !whole,
         procurement_owner_user_id: fact.and_then(|order| order.owner_user_id.clone()),
         business_org_unit_id: fact.map(|order| order.business_org_unit_id.clone()),
@@ -481,17 +482,22 @@ mod tests {
         };
         let whole = cut_payable_account_row(&sample_row(), Some(&fact), true);
         assert_eq!(whole.open_invoiceable_total, Some(amount("85.00")));
+        assert_eq!(whole.invoiced_total, Some(amount("15.00")));
         assert_eq!(whole.open_total, Some(amount("80.00")));
         assert!(!whole.permission_limited);
         let whole_json = serde_json::to_value(&whole).expect("整单行必须可序列化");
         assert_eq!(whole_json["open_invoiceable_total"], "85.00");
+        assert_eq!(whole_json["invoiced_total"], "15.00");
 
         let partial = cut_payable_account_row(&sample_row(), Some(&fact), false);
         assert_eq!(partial.open_invoiceable_total, None);
+        assert_eq!(partial.invoiced_total, None);
         assert_eq!(partial.open_total, None);
         assert!(partial.permission_limited);
         let partial_json = serde_json::to_value(&partial).expect("部分授权行必须可序列化");
         assert!(partial_json.get("open_invoiceable_total").is_some());
         assert!(partial_json["open_invoiceable_total"].is_null());
+        assert!(partial_json.get("invoiced_total").is_some());
+        assert!(partial_json["invoiced_total"].is_null());
     }
 }

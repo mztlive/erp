@@ -31,6 +31,7 @@ import {
 
 import { API_BASE, apiGet, apiToken } from "../helpers/api"
 import { createCustomerViaUi } from "../helpers/customers"
+import { singleSalesLineId } from "../helpers/inventory"
 import { openLoggedInWorkspace } from "../helpers/login"
 import {
     ensureDefaultProcurementOwner,
@@ -179,6 +180,7 @@ async function ensureSeededOfferingResponsibility() {
             maintainer_user_id?: string
             business_org_unit_id?: string
             availability_status?: string
+            availability_version?: number
             available_quantity?: string | null
             version: number
         }>
@@ -189,7 +191,7 @@ async function ensureSeededOfferingResponsibility() {
     if (rows.length !== 1) throw new Error(`杭州狮峰供给应为 1 条，实际 ${rows.length}`)
     const offering = rows[0]
     if (!offering) throw new Error("杭州狮峰供给不存在")
-    let version = offering.version
+    const version = offering.version
     if (!offering.maintainer_user_id?.trim() || !offering.business_org_unit_id?.trim()) {
         const org = await apiGet<{
             people?: Array<{ id: string; account: string; active: boolean; own_org_unit_id?: string | null }>
@@ -197,7 +199,7 @@ async function ensureSeededOfferingResponsibility() {
         const admin = org.people?.find((person) => person.account === "admin" && person.active)
         const orgId = admin?.own_org_unit_id?.trim()
         if (!admin?.id || !orgId) throw new Error("建档管理员没有主属组织，无法交接供给")
-        const handed = await apiPost<{ version?: number }>(
+        await apiPost(
             token,
             `/admin/supplier-offerings/${encodeURIComponent(offering.id)}/handover`,
             {
@@ -208,15 +210,118 @@ async function ensureSeededOfferingResponsibility() {
                 idempotency_key: `flow18-offering-handover-${offering.id}-v${version}`,
             },
         )
-        version = handed.version ?? version + 1
     }
     if ((offering.availability_status ?? "AVAILABLE") === "AVAILABLE") return
-    await apiPost(token, `/admin/supplier-offerings/${encodeURIComponent(offering.id)}/availability`, {
-        availability_status: "AVAILABLE",
-        available_quantity: offering.available_quantity ?? undefined,
-        change_reason: "E2E 恢复种子供给可供，避免上一次停止供应残留",
-        idempotency_key: `flow18-offering-available-${offering.id}-v${version}`,
+    await postAvailability(
+        token,
+        offering,
+        "AVAILABLE",
+        "E2E 恢复种子供给可供，避免上一次停止供应残留",
+        "flow18-offering-available",
+    )
+}
+
+type SkuOffering = {
+    id: string
+    supplier_name?: string | null
+    sku_no?: string | null
+    maintainer_user_id?: string
+    business_org_unit_id?: string
+    availability_status?: string
+    availability_version?: number
+    available_quantity?: string | null
+    version: number
+}
+
+async function listSkuOfferings(): Promise<SkuOffering[]> {
+    const listed = await apiGet<{ items?: SkuOffering[] }>(await apiToken("admin"), "/admin/supplier-offerings", {
+        q: SKU_NO,
+        page: 1,
+        page_size: 50,
     })
+    return (listed.items ?? []).filter((row) => row.sku_no === SKU_NO)
+}
+
+/**
+ * 同一 SKU 还有周结/季结等可供。只停杭州狮峰时，供给分配会改配到其余供应商并仍创建采购单。
+ * 负向断言前把其余可供也停掉；缺责任的先交接，否则停止接口会拒绝。
+ */
+async function stopOtherAvailableOfferings(exceptSupplierName: string): Promise<string[]> {
+    const token = await apiToken("admin")
+    const org = await apiGet<{
+        people?: Array<{ id: string; account: string; active: boolean; own_org_unit_id?: string | null }>
+    }>(token, "/admin/org-units")
+    const admin = org.people?.find((person) => person.account === "admin" && person.active)
+    const orgId = admin?.own_org_unit_id?.trim()
+    if (!admin?.id || !orgId) throw new Error("建档管理员没有主属组织，无法停止其余供给")
+    const stopped: string[] = []
+    for (const offering of await listSkuOfferings()) {
+        if (offering.supplier_name === exceptSupplierName) continue
+        if ((offering.availability_status ?? "AVAILABLE") !== "AVAILABLE") continue
+        if (!offering.maintainer_user_id?.trim() || !offering.business_org_unit_id?.trim()) {
+            await apiPost(
+                token,
+                `/admin/supplier-offerings/${encodeURIComponent(offering.id)}/handover`,
+                {
+                    target_user_id: admin.id,
+                    target_org_unit_id: orgId,
+                    reason: "E2E 补齐其余供给的维护人，才能停止可供",
+                    expected_version: offering.version,
+                    idempotency_key: `flow18-other-handover-${offering.id}-v${offering.version}`,
+                },
+            )
+        }
+        await postAvailability(
+            token,
+            offering,
+            "STOPPED",
+            "E2E 停止同 SKU 其余可供，避免停一条后仍能改配建采购单",
+            "flow18-other-stop",
+        )
+        stopped.push(offering.id)
+    }
+    return stopped
+}
+
+async function restoreOfferingsAvailable(ids: readonly string[]) {
+    if (ids.length === 0) return
+    const token = await apiToken("admin")
+    const rows = await listSkuOfferings()
+    for (const id of ids) {
+        const offering = rows.find((row) => row.id === id)
+        if (!offering || (offering.availability_status ?? "AVAILABLE") === "AVAILABLE") continue
+        await postAvailability(
+            token,
+            offering,
+            "AVAILABLE",
+            "E2E 恢复同 SKU 其余供给可供",
+            "flow18-other-available",
+        )
+    }
+}
+
+/**
+ * 可供幂等键必须用 availability_version。供给 version 不随停止/恢复变化，
+ * 旧键重放会返回成功却不改当前状态。
+ */
+async function postAvailability(
+    token: string,
+    offering: { id: string; available_quantity?: string | null; availability_version?: number },
+    status: "AVAILABLE" | "STOPPED",
+    reason: string,
+    keyPrefix: string,
+) {
+    const marker = offering.availability_version ?? Date.now()
+    await apiPost(token, `/admin/supplier-offerings/${encodeURIComponent(offering.id)}/availability`, {
+        availability_status: status,
+        available_quantity: offering.available_quantity ?? undefined,
+        change_reason: reason,
+        idempotency_key: `${keyPrefix}-${offering.id}-av${marker}`,
+    })
+    const current = (await listSkuOfferings()).find((row) => row.id === offering.id)
+    if ((current?.availability_status ?? "") !== status) {
+        throw new Error(`供给 ${offering.id} 状态仍是 ${current?.availability_status ?? "空"}，期望 ${status}`)
+    }
 }
 
 async function apiPost<T>(token: string, path: string, body: unknown): Promise<T> {
@@ -249,6 +354,7 @@ test("flow-18 停止可供后供给分配不得建采购单，必须走销售变
     let salesOrderId = ""
     let salesOrderNo = ""
     let restoreSupply = false
+    let stoppedOtherIds: string[] = []
 
     const switchTo = async (login: LoginName) => {
         await session?.context.close()
@@ -392,15 +498,19 @@ test("flow-18 停止可供后供给分配不得建采购单，必须走销售变
         await expect(offeringRow.getByText("可供", { exact: true })).toHaveCount(0)
         const quantityAfter = (await offeringRow.locator("td").filter({ hasText: /数量/ }).first().innerText()).match(/数量\s*([\d.]+)/)?.[1]
         expect(quantityAfter).toBe(quantityBefore)
+        stoppedOtherIds = await stopOtherAvailableOfferings("杭州狮峰茶叶有限公司")
 
         // 6) 负向：供给分配不得创建采购单，不得预览确认，不得虚增库存预留
         page = await switchTo("caigou")
         await expectAllocationCannotCreatePurchase(page, salesOrderNo)
         await expectNoPurchaseOrders(page, salesOrderNo)
 
+        // 不带销售单打开时，页面会落到队列里另一张待分配单。本单已在上面确认无法建采购单。
         await page.goto("/procurement/orders?mode=create")
-        await expect(page.getByText("当前没有待分配供给", { exact: true })).toBeVisible({ timeout: UI_TIMEOUT })
-        await expect(page.getByRole("button", { name: "预览供给分配" })).toHaveCount(0)
+        await expect(page.getByRole("heading", { name: "供给分配", exact: true })).toBeVisible({
+            timeout: UI_TIMEOUT,
+        })
+        await expect(page.getByText(salesOrderNo)).toHaveCount(0)
 
         // 7) 仓储侧：不得虚增库存预占
         page = await switchTo("cangchu")
@@ -417,8 +527,11 @@ test("flow-18 停止可供后供给分配不得建采购单，必须走销售变
         await inventorySearch.press("Enter")
         await expect(page.locator("#inventory-ledger-reservation-table").getByText(salesOrderNo)).toHaveCount(0)
 
+        // 列表含其他单据已消耗的预占。本单停止可供后不得出现自己的预占。
         const reservations = await apiGet<{ total: number }>(
-            await apiToken("cangchu"), "/admin/stock-reservations", { page: 1, page_size: 20 },
+            await apiToken("cangchu"),
+            "/admin/stock-reservations",
+            { page: 1, page_size: 20, sales_order_line_id: await singleSalesLineId(salesOrderId) },
         )
         expect(reservations.total).toBe(0)
 
@@ -551,22 +664,9 @@ test("flow-18 停止可供后供给分配不得建采购单，必须走销售变
         await expectNoPurchaseOrders(page, salesOrderNo)
     } finally {
         try {
-            // reset 保留供给主数据，负向用例必须恢复原先的可供状态，避免污染后续流程。
-            if (restoreSupply) {
-                const page = await switchTo("admin")
-                const row = await findSeededOfferingRow(page)
-                await row.getByRole("button", { name: /操作/ }).click()
-                await page.getByRole("menuitem", { name: "更新可供" }).click()
-                const dialog = page.getByRole("dialog", { name: "更新当前可供情况" })
-                await expect(dialog).toBeVisible({ timeout: UI_TIMEOUT })
-                await chooseOption(page, dialog.locator("#supplier-offerings-dialog-availability-status"), "可供")
-                await dialog.locator("#supplier-offerings-dialog-availability-reason").fill("E2E flow-18 清理：恢复测试前可供状态")
-                await dialog.getByRole("button", { name: "保存可供情况" }).click()
-                await expect(dialog).toBeHidden({ timeout: UI_TIMEOUT })
-                await expect(row.getByText("可供", { exact: true })).toBeVisible({ timeout: UI_TIMEOUT })
-                await page.goto(`/master-data/sellable-items?q=${encodeURIComponent(SKU_NAME)}`)
-                await expect(page.getByRole("row").filter({ hasText: SKU_NAME })).toBeVisible({ timeout: UI_TIMEOUT })
-            }
+            // reset 保留供给主数据。清理走与开场相同的可供接口，避免下拉回车把对话框直接提交关掉。
+            if (stoppedOtherIds.length > 0) await restoreOfferingsAvailable(stoppedOtherIds)
+            if (restoreSupply) await ensureSeededOfferingResponsibility()
         } finally {
             await session?.context.close()
         }

@@ -220,6 +220,8 @@ pub struct ScopedPayableAccountRow {
     pub open_total: Option<Amount>,
     /// 剩余可收票额度；部分授权为 null，整单资格返回真实余额。
     pub open_invoiceable_total: Option<Amount>,
+    /// 已收票合计；部分授权为 null，整单资格返回真实已收票额。
+    pub invoiced_total: Option<Amount>,
     /// 部分受限时为 true。
     pub permission_limited: bool,
     /// 来源采购单当前采购负责人。
@@ -859,6 +861,7 @@ mod tests {
                 settled_total: None,
                 open_total: None,
                 open_invoiceable_total: None,
+                invoiced_total: None,
                 permission_limited: true,
                 procurement_owner_user_id: Some("buyer-1".into()),
                 business_org_unit_id: Some("org-2".into()),

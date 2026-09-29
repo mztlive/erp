@@ -169,10 +169,13 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
             new RegExp(legalName),
             legalName,
         )
-        await expect(dialog.locator("#card-contracts-upload-settlement-party")).toHaveValue(
-            new RegExp(legalName),
-            { timeout: 20000 },
-        )
+        const settlement = dialog.locator("#card-contracts-upload-settlement-party")
+        const settlementName = new RegExp(legalName)
+        // 远程主体详情未核对时输入框显示「已选对象（当前不可用）」。这时按客户名再选一次结算主体。
+        if (!(settlementName.test(await settlement.inputValue()))) {
+            await chooseOption(page, settlement, settlementName, legalName)
+        }
+        await expect(settlement).toHaveValue(settlementName, { timeout: 20000 })
         const submit = dialog.locator("#card-contracts-upload-submit")
         await expect(submit).toBeEnabled({ timeout: 20000 })
         const uploaded = page.waitForResponse(

@@ -131,10 +131,11 @@ function comboboxOption(
     inputId: string | null,
     option: string | RegExp,
 ): Locator {
-    const byRole = page.getByRole("option", { name: option })
-    const bySlot = page.locator('[data-slot="combobox-item"]').filter({ hasText: option })
+    const popup = visibleComboboxPopup(page)
+    const byRole = popup.getByRole("option", { name: option })
+    const bySlot = popup.locator('[data-slot="combobox-item"]').filter({ hasText: option })
     if (!inputId) return byRole.or(bySlot).first()
-    const byId = page.locator(`[id^="${inputId}-option-"]`).filter({ hasText: option })
+    const byId = popup.locator(`[id^="${inputId}-option-"]`).filter({ hasText: option })
     return byId.or(byRole).or(bySlot).first()
 }
 
@@ -204,7 +205,21 @@ export async function chooseOption(
         await listed.click({ force: true }).catch(() => undefined)
     }
     if (await popup.isVisible().catch(() => false)) {
-        await page.keyboard.press("Enter")
+        // 过滤词和选项全文不一致时，Enter 会清空输入且不选中。只确认当前高亮的目标项。
+        const highlighted = popup.locator("[data-highlighted]").first()
+        const highlightedText = ((await highlighted.innerText().catch(() => "")) || "")
+            .replace(/\s+/g, " ")
+            .trim()
+        const matches =
+            typeof option === "string"
+                ? highlightedText.length > 0 &&
+                  (highlightedText.includes(option) || option.includes(highlightedText))
+                : highlightedText.length > 0 && option.test(highlightedText)
+        if (matches) {
+            await highlighted.click().catch(async () => {
+                await page.keyboard.press("Enter")
+            })
+        }
     }
 
     if (typeof option === "string") {
@@ -420,8 +435,15 @@ export async function openFulfillmentWorkspaceForm(page: Page) {
     const trigger = page.getByRole("button", { name: "处理履约" })
     await expect(dialog.or(trigger).first()).toBeVisible({ timeout: UI_TIMEOUT })
     if (await dialog.isVisible()) return dialog
-    await trigger.click({ force: true })
-    await expect(dialog).toBeVisible({ timeout: UI_TIMEOUT })
+    // 入库详情比仓发高，按钮会落在任务面板滚动区外。force 点击不滚动，坐标打在按钮外面。
+    // 点开任务后详情会重绘，刚解析到的按钮可能在滚动前脱离文档，所以重试到对话框出现。
+    await expect(async () => {
+        if (await dialog.isVisible()) return
+        const button = page.getByRole("button", { name: "处理履约" })
+        await button.scrollIntoViewIfNeeded({ timeout: 5_000 })
+        await button.click({ timeout: 5_000 })
+        await expect(dialog).toBeVisible({ timeout: 5_000 })
+    }).toPass({ timeout: UI_TIMEOUT })
     return dialog
 }
 
