@@ -5,7 +5,10 @@ import type {
 } from "@/features/organization/types"
 
 export type OrganizationChangeDraft = {
-    operation: OrganizationOperation["operation"]
+    operation: Exclude<
+        OrganizationOperation["operation"],
+        "update_person_profile"
+    >
     name: string
     parentId: string
     kind: OrgUnitKind

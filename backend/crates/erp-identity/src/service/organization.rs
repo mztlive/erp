@@ -2,6 +2,7 @@
 
 mod access;
 mod bootstrap;
+mod profile;
 
 use std::sync::Arc;
 
@@ -113,41 +114,58 @@ impl OrganizationService {
         preview: bool,
     ) -> Result<OrganizationChangeReceipt> {
         request.validate()?;
+        if !preview
+            && matches!(&request.change,
+            OrganizationOperation::UpdatePersonProfile { profile } if profile.role_ids.is_some())
+        {
+            return self.save_profile_roles(actor, request).await;
+        }
         let this = self.clone();
         let actor = actor.clone();
-        let id = id_generator::next_id();
         self.db
             .client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let access = this.access(&actor, "manage", executor).await?;
-                    let repository = OrganizationRepository::new(&this.db);
-                    let receipt_id = format!("{}:{}", actor.id(), request.idempotency_key);
-                    let existing = repository.receipt(&receipt_id, executor).await?;
-                    if existing.is_none() {
-                        this.ensure_change(&request.change, &access, executor).await?;
-                        if this.rbac.current_policy_revision().await? != access.policy_version {
-                            return Err(Error::ConflictError("授权版本已变化，请刷新后重试".into()));
-                        }
-                    }
-                    let (mut receipt, persist) = prepare_organization_change(
-                        preview,
-                        existing,
-                        request,
-                        &access,
-                        &id,
-                        actor.id(),
-                        // 持久化按秒截断，同秒内重复调岗由实体守卫拒绝，避免纳秒精度截断后产生零长有效期。
-                        Instant::from_unix_secs(Instant::now().unix_secs()),
-                    )?;
-                    if persist {
-                        repository.save(&mut receipt, executor).await?;
-                    }
-                    Ok::<_, Error>(receipt)
-                })
+                Box::pin(async move { this.execute_change(&actor, request, preview, executor).await })
             })
             .await
+    }
+
+    /// 同一事务完成授权、资料、组织关系及幂等回执，不自行开启事务。
+    async fn execute_change(
+        &self,
+        actor: &AuditActor,
+        request: OrganizationChangeRequest,
+        preview: bool,
+        executor: &mut dyn Executor,
+    ) -> Result<OrganizationChangeReceipt> {
+        let access = self.profile_access(actor, &request.change, executor).await?;
+        let repository = OrganizationRepository::new(&self.db);
+        let receipt_id = format!("{}:{}", actor.id(), request.idempotency_key);
+        let existing = repository.receipt(&receipt_id, executor).await?;
+        if existing.is_none() {
+            self.ensure_change(&request.change, &access, executor).await?;
+            self.update_profile_name(&request.change, false, executor).await?;
+            if self.rbac.current_policy_revision().await? != access.policy_version {
+                return Err(Error::ConflictError("授权版本已变化，请刷新后重试".into()));
+            }
+        }
+        let (mut receipt, persist) = prepare_organization_change(
+            preview,
+            existing,
+            request,
+            &access,
+            &id_generator::next_id(),
+            actor.id(),
+            Instant::from_unix_secs(Instant::now().unix_secs()),
+        )?;
+        if persist {
+            self.update_profile_name(&receipt.request.change, true, executor).await?;
+            self.assign_profile_roles(actor, &receipt.request.change, access.policy_version, executor)
+                .await?;
+            repository.save(&mut receipt, executor).await?;
+        }
+        Ok(receipt)
     }
 
     /// 解析组织配置资源，部门管理身份不代替管理动作。
@@ -170,6 +188,24 @@ impl OrganizationService {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         access::ensure_targets(change, access)?;
+        if let OrganizationOperation::UpdatePersonProfile { profile } = change {
+            self.ensure_account(&profile.user_id, executor).await?;
+            let roles = self.rbac.role_ids(erp_core::AccountKind::Admin, &profile.user_id).await?;
+            profile.validate_roles(&roles, &access.organizations, access.as_of)?;
+            for operation in profile.operations(&access.organizations)? {
+                if let OrganizationOperation::GrantManagement { role_id, .. } = &operation {
+                    self.ensure_management_role(
+                        profile.role_ids.as_deref().unwrap_or(&roles),
+                        role_id,
+                        executor,
+                    )
+                    .await?;
+                } else {
+                    Box::pin(self.ensure_change(&operation, access, executor)).await?;
+                }
+            }
+            return Ok(());
+        }
         match change {
             OrganizationOperation::TransferMember { user_id, .. } => {
                 self.ensure_account(user_id, executor).await?;
@@ -177,16 +213,7 @@ impl OrganizationService {
             OrganizationOperation::GrantManagement { user_id, role_id, .. } => {
                 self.ensure_account(user_id, executor).await?;
                 let roles = self.rbac.role_ids(erp_core::AccountKind::Admin, user_id).await?;
-                if !roles.contains(role_id)
-                    || self
-                        .db
-                        .roles()
-                        .enabled_roles(std::slice::from_ref(role_id), executor)
-                        .await?
-                        .is_empty()
-                {
-                    return Err(Error::ValidationError("接收人必须持有有效的指定角色".into()));
-                }
+                self.ensure_management_role(&roles, role_id, executor).await?;
             },
             OrganizationOperation::DisableUnit { org_unit_id } => {
                 self.ensure_no_unsettled(org_unit_id, executor).await?

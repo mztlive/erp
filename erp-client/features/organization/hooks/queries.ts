@@ -64,6 +64,7 @@ export function useSubmitOrganizationChangeMutation() {
             await queryClient.invalidateQueries({
                 queryKey: organizationKeys.all,
             })
+            await queryClient.invalidateQueries({ queryKey: ["admin"] })
         },
     })
 }

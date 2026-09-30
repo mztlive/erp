@@ -6,6 +6,7 @@ use erp_core::common::time::Instant;
 use serde::{Deserialize, Serialize};
 
 use super::organization::*;
+use super::person_profile_change::PersonProfileChange;
 use crate::{Error, Result};
 
 /// 同一事务读取的组织事实集合。
@@ -21,6 +22,9 @@ pub struct OrganizationState {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "operation", rename_all = "snake_case", deny_unknown_fields)]
 pub enum OrganizationOperation {
+    UpdatePersonProfile {
+        profile: PersonProfileChange,
+    },
     CreateUnit {
         name: String,
         parent_id: Option<String>,
@@ -171,6 +175,11 @@ impl OrganizationState {
         at: Instant,
     ) -> Result<()> {
         match change {
+            OrganizationOperation::UpdatePersonProfile { profile } => {
+                for (index, operation) in profile.operations(self)?.iter().enumerate() {
+                    self.apply(operation, &format!("{id}-{index}"), actor, reason, at)?;
+                }
+            },
             OrganizationOperation::CreateUnit { .. }
             | OrganizationOperation::MoveUnit { .. }
             | OrganizationOperation::RenameUnit { .. } => self.change_unit(change, id, actor, reason)?,
@@ -411,6 +420,47 @@ mod tests {
             reason: "组织调整".into(),
             change,
         }
+    }
+
+    #[test]
+    fn profile_changes_membership_and_management_once_or_fails_whole_plan() {
+        use crate::entity::person_profile_change::PersonManagementChange;
+        let before = state();
+        let profile = PersonProfileChange {
+            user_id: "sales".into(),
+            expected_name: "姓名".into(),
+            expected_role_ids: None,
+            role_ids: None,
+            name: Some("新姓名".into()),
+            org_unit_id: Some("two".into()),
+            remove_management_ids: vec![],
+            add_management: vec![PersonManagementChange {
+                role_id: "sales-role".into(),
+                org_unit_id: "two".into(),
+                include_descendants: true,
+                valid_to: None,
+            }],
+        };
+        let change = request(OrganizationOperation::UpdatePersonProfile { profile: profile.clone() });
+        let after = before.changed(&change, "id", "admin", Instant::from_unix_secs(10)).unwrap();
+        assert_eq!(after.version, before.version + 1);
+        assert_eq!(after.own_org("sales", Instant::from_unix_secs(10)).unwrap(), Some("two"));
+        assert_eq!(after.management.len(), 1);
+        assert_ne!(after.management[0].base.id, after.memberships[1].base.id);
+        let mut invalid = profile;
+        invalid.add_management[0].org_unit_id = "missing".into();
+        assert!(
+            before
+                .changed(
+                    &request(OrganizationOperation::UpdatePersonProfile { profile: invalid }),
+                    "id",
+                    "admin",
+                    Instant::from_unix_secs(10)
+                )
+                .is_err()
+        );
+        assert_eq!(before.own_org("sales", Instant::from_unix_secs(10)).unwrap(), Some("one"));
+        assert!(before.management.is_empty());
     }
 
     #[test]

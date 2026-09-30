@@ -58,6 +58,14 @@ pub(crate) fn ensure_targets(change: &OrganizationOperation, access: &Authorized
     let state = &access.organizations;
     let mut targets = Vec::<Option<&str>>::new();
     match change {
+        UpdatePersonProfile { profile } => {
+            if !covers(access, state.own_org(&profile.user_id, access.as_of)?) {
+                return Err(Error::Forbidden("人员超出组织配置管理边界".into()));
+            }
+            for operation in profile.operations(state)? {
+                ensure_targets(&operation, access)?;
+            }
+        },
         CreateUnit { parent_id, .. } => targets.push(parent_id.as_deref()),
         MoveUnit { org_unit_id, parent_id } => {
             targets.push(parent_id.as_deref());
@@ -298,6 +306,65 @@ mod tests {
             reason: "组织调整".into(),
             change,
         }
+    }
+
+    /// 合并命令必须检查每一项边界，回放必须匹配完整载荷。
+    #[test]
+    fn profile_change_checks_all_targets_and_replay_payload() {
+        use crate::entity::person_profile_change::PersonProfileChange;
+        let change = OrganizationOperation::UpdatePersonProfile {
+            profile: PersonProfileChange {
+                user_id: "sales".into(),
+                expected_name: "原姓名".into(),
+                expected_role_ids: None,
+                role_ids: None,
+                name: Some("新姓名".into()),
+                org_unit_id: Some("two".into()),
+                remove_management_ids: vec![],
+                add_management: vec![],
+            },
+        };
+        let limited = access_with(
+            ResolvedScope {
+                role_clauses: vec![ScopeClause {
+                    org_unit_ids: ["one".into()].into(),
+                    ..ScopeClause::default()
+                }],
+                user_limit: None,
+            },
+            state(),
+        );
+        assert!(matches!(ensure_targets(&change, &limited), Err(Error::Forbidden(_))));
+        let access = company_access(state());
+        let request = request(change);
+        let (receipt, persist) = prepare_organization_change(
+            false,
+            None,
+            request.clone(),
+            &access,
+            "new",
+            "admin",
+            Instant::from_unix_secs(10),
+        )
+        .unwrap();
+        assert!(persist);
+        let current = company_access(receipt.after.clone());
+        let (_, persist) = prepare_organization_change(
+            false,
+            Some(receipt.clone()),
+            request.clone(),
+            &current,
+            "unused",
+            "admin",
+            Instant::from_unix_secs(20),
+        )
+        .unwrap();
+        assert!(!persist);
+        let mut altered = request;
+        if let OrganizationOperation::UpdatePersonProfile { profile } = &mut altered.change {
+            profile.name = Some("另一个姓名".into());
+        }
+        assert!(matches!(replay(receipt, &altered, &current), Err(Error::ConflictError(_))));
     }
 
     /// 预览不写入，提交才要求持久化；二者都重验期望版本。

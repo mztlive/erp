@@ -13,3 +13,5 @@ pub use account_core::*;
 pub use auth::*;
 pub use rbac::*;
 pub use role::*;
+
+pub mod person_profile_change;

@@ -83,7 +83,11 @@ export function impactChanges(
     const afterMemberships = membershipKey(receipt.after)
     for (const item of receipt.before.memberships) {
         const key = `${item.user_id}:${item.org_unit_id}:${item.valid_from}`
-        if (afterMemberships.has(key)) continue
+        const updated = receipt.after.memberships.find(
+            (row) => row.id === item.id,
+        )
+        if (afterMemberships.has(key) && updated?.valid_to === item.valid_to)
+            continue
         changes.push({
             id: `member-end-${item.id}`,
             field: resolvePerson(people, item.user_id),
@@ -107,7 +111,11 @@ export function impactChanges(
 
     const afterGrants = managementKey(receipt.after)
     for (const item of receipt.before.management) {
-        if (afterGrants.has(item.id)) continue
+        const updated = receipt.after.management.find(
+            (row) => row.id === item.id,
+        )
+        if (afterGrants.has(item.id) && updated?.valid_to === item.valid_to)
+            continue
         changes.push({
             id: `grant-end-${item.id}`,
             field: `${resolvePerson(people, item.user_id)} · ${resolveRole(roles, item.role_id)}`,

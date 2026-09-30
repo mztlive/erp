@@ -1,6 +1,15 @@
 "use client"
 import * as React from "react"
 import { BusinessFailureState } from "@/components/business"
+import { Input } from "@/components/ui/input"
+import {
+    Table,
+    TableHeader,
+    TableBody,
+    TableHead,
+    TableRow,
+    TableCell,
+} from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { actionLabel, resourceLabel } from "@/lib/permission-catalog"
 import { toAutomationIdSegment } from "@/lib/automation-id"
@@ -30,6 +39,7 @@ export function PersonalBusinessPermissions({
     onDraftChange: (draft: PersonalGrantDraft | null) => void
 }) {
     const query = usePersonScopes(userId, canRead)
+    const [search, setSearch] = React.useState("")
     const [editing, setEditing] = React.useState<string | null>(
         draft?.values.resource ?? null,
     )
@@ -50,14 +60,38 @@ export function PersonalBusinessPermissions({
                     (business) => business.resource === editing,
                 )))
 
+    const businesses =
+        query.data?.businesses.filter(
+            (business) =>
+                business.resource === editing ||
+                resourceLabel(business.resource).includes(search.trim()),
+        ) ?? []
     return (
-        <section className="space-y-4 rounded-lg border p-5 text-sm">
-            <div className="space-y-1">
-                <h2 className="font-semibold">业务数据范围</h2>
-                <p className="text-xs text-muted-foreground">
-                    选择要调整的业务，为{name}
-                    设置可以处理哪些数据。未设置的操作暂不能访问业务数据。
-                </p>
+        <section className="min-w-0 space-y-3 text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="space-y-1">
+                    <h2 className="font-semibold">
+                        业务数据范围
+                        {query.isSuccess && (
+                            <span className="ml-2 text-xs font-normal text-muted-foreground">
+                                {query.data.businesses.length} 项业务
+                            </span>
+                        )}
+                    </h2>
+                    <p className="text-xs text-muted-foreground">
+                        未设置的操作暂不能访问数据。点击业务行右侧按钮，为{name}
+                        设置范围。
+                    </p>
+                </div>
+                <Input
+                    id="person-scope-search"
+                    type="search"
+                    aria-label="搜索业务"
+                    placeholder="搜索业务"
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    className="h-8 w-full sm:w-56"
+                />
             </div>
             {notice && (
                 <p role="status" className="rounded-md bg-muted p-3">
@@ -123,138 +157,181 @@ export function PersonalBusinessPermissions({
                             ，请先保存或取消，再调整其他业务。
                         </p>
                     )}
-                    <div className="divide-y">
-                        <div
-                            className="hidden gap-4 pb-2 text-xs text-muted-foreground md:grid md:grid-cols-[minmax(6rem,1fr)_minmax(0,2fr)_minmax(0,2fr)_6rem]"
-                            aria-hidden="true"
-                        >
-                            <span>业务</span>
-                            <span>已有操作权限</span>
-                            <span>当前数据范围</span>
-                            <span className="text-right">设置</span>
-                        </div>
-                        {query.data.businesses.map((business) => {
-                            const data = query.data!
-                            const scopes = business.actions.map((action) =>
-                                data.items.find(
-                                    (item) =>
-                                        item.resource === business.resource &&
-                                        item.action === action,
-                                ),
-                            )
-                            const mixed =
-                                new Set(
-                                    scopes.map((scope) =>
-                                        JSON.stringify(scope?.expression),
+                    <Table className="min-w-[640px] table-fixed">
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead className="w-[16%]">业务</TableHead>
+                                <TableHead className="w-[36%]">
+                                    已有操作权限
+                                </TableHead>
+                                <TableHead>当前数据范围</TableHead>
+                                <TableHead className="w-28 text-right">
+                                    设置
+                                </TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {!businesses.length && (
+                                <TableRow>
+                                    <TableCell
+                                        colSpan={4}
+                                        className="py-8 text-center text-muted-foreground"
+                                    >
+                                        没有匹配的业务，请修改搜索内容。
+                                    </TableCell>
+                                </TableRow>
+                            )}
+                            {businesses.map((business) => {
+                                const data = query.data!
+                                const scopes = business.actions.map((action) =>
+                                    data.items.find(
+                                        (item) =>
+                                            item.resource ===
+                                                business.resource &&
+                                            item.action === action,
                                     ),
-                                ).size > 1
-                            const saved = scopes.some(Boolean)
-                            const segment = toAutomationIdSegment(
-                                business.resource,
-                            )
-                            return (
-                                <div
-                                    key={business.resource}
-                                    className="space-y-3 py-4"
-                                >
-                                    <div className="grid items-start gap-3 md:grid-cols-[minmax(6rem,1fr)_minmax(0,2fr)_minmax(0,2fr)_6rem] md:gap-4">
-                                        <h3 className="font-medium">
-                                            {resourceLabel(business.resource)}
-                                        </h3>
-                                        <p className="text-xs leading-6 text-muted-foreground">
-                                            {business.actions
-                                                .map(actionLabel)
-                                                .join("、")}
-                                        </p>
-                                        {mixed ? (
-                                            <details className="text-xs leading-6">
-                                                <summary
-                                                    id={`person-scope-${segment}-details`}
-                                                    className="cursor-pointer font-medium"
-                                                >
-                                                    按操作分别设置 · 展开查看
-                                                </summary>
-                                                <ul className="mt-2 space-y-1 text-muted-foreground">
-                                                    {business.actions.map(
-                                                        (action, index) => (
-                                                            <li key={action}>
-                                                                {actionLabel(
-                                                                    action,
-                                                                )}
-                                                                ：
-                                                                {personScopeDescription(
-                                                                    scopes[
-                                                                        index
-                                                                    ],
-                                                                    labels,
-                                                                )}
-                                                            </li>
-                                                        ),
-                                                    )}
-                                                </ul>
-                                            </details>
-                                        ) : (
-                                            <p
-                                                className={`text-xs leading-6 ${saved ? "" : "text-amber-700"}`}
-                                            >
-                                                {personScopeDescription(
-                                                    scopes[0],
-                                                    labels,
+                                )
+                                const mixed =
+                                    new Set(
+                                        scopes.map((scope) =>
+                                            JSON.stringify(scope?.expression),
+                                        ),
+                                    ).size > 1
+                                const saved = scopes.some(Boolean)
+                                const segment = toAutomationIdSegment(
+                                    business.resource,
+                                )
+                                return (
+                                    <React.Fragment key={business.resource}>
+                                        <TableRow>
+                                            <TableCell className="whitespace-normal font-medium">
+                                                {resourceLabel(
+                                                    business.resource,
                                                 )}
-                                            </p>
-                                        )}
-                                        {canCreate && (
-                                            <Button
-                                                id={`person-scope-${segment}-edit`}
-                                                variant="outline"
-                                                size="sm"
-                                                className="w-fit md:justify-self-end"
-                                                disabled={
-                                                    Boolean(editing) || !ready
-                                                }
-                                                onClick={() => {
-                                                    setNotice(null)
-                                                    setEditing(
-                                                        business.resource,
-                                                    )
-                                                }}
-                                            >
-                                                {saved
-                                                    ? "修改范围"
-                                                    : "设置范围"}
-                                            </Button>
-                                        )}
-                                    </div>
-                                    {editing === business.resource &&
-                                        ready &&
-                                        canCreate && (
-                                            <PersonalGrantForm
-                                                key={business.resource}
-                                                userId={userId}
-                                                resource={business.resource}
-                                                name={name}
-                                                data={data}
-                                                units={units}
-                                                draft={draft}
-                                                onDraftChange={onDraftChange}
-                                                onDone={() => {
-                                                    onDraftChange(null)
-                                                    setEditing(null)
-                                                }}
-                                                onSaved={() =>
-                                                    setNotice(
-                                                        `${name}的${resourceLabel(business.resource)}数据范围已保存。`,
-                                                    )
-                                                }
-                                                onReload={() =>
-                                                    void query.refetch()
-                                                }
-                                            />
-                                        )}
-                                </div>
-                            )
-                        })}
-                    </div>
+                                            </TableCell>
+                                            <TableCell className="whitespace-normal text-xs leading-5 text-muted-foreground">
+                                                {business.actions
+                                                    .map(actionLabel)
+                                                    .join("、")}
+                                            </TableCell>
+                                            <TableCell className="whitespace-normal">
+                                                {mixed ? (
+                                                    <details className="text-xs leading-6">
+                                                        <summary
+                                                            id={`person-scope-${segment}-details`}
+                                                            className="cursor-pointer font-medium"
+                                                        >
+                                                            按操作分别设置 ·
+                                                            展开查看
+                                                        </summary>
+                                                        <ul className="mt-2 space-y-1 text-muted-foreground">
+                                                            {business.actions.map(
+                                                                (
+                                                                    action,
+                                                                    index,
+                                                                ) => (
+                                                                    <li
+                                                                        key={
+                                                                            action
+                                                                        }
+                                                                    >
+                                                                        {actionLabel(
+                                                                            action,
+                                                                        )}
+                                                                        ：
+                                                                        {personScopeDescription(
+                                                                            scopes[
+                                                                                index
+                                                                            ],
+                                                                            labels,
+                                                                        )}
+                                                                    </li>
+                                                                ),
+                                                            )}
+                                                        </ul>
+                                                    </details>
+                                                ) : (
+                                                    <p
+                                                        className={`text-xs leading-6 ${saved ? "" : "text-amber-700"}`}
+                                                    >
+                                                        {personScopeDescription(
+                                                            scopes[0],
+                                                            labels,
+                                                        )}
+                                                    </p>
+                                                )}
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                {canCreate && (
+                                                    <Button
+                                                        id={`person-scope-${segment}-edit`}
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="h-7"
+                                                        disabled={
+                                                            Boolean(editing) ||
+                                                            !ready
+                                                        }
+                                                        onClick={() => {
+                                                            setNotice(null)
+                                                            setEditing(
+                                                                business.resource,
+                                                            )
+                                                        }}
+                                                    >
+                                                        {saved
+                                                            ? "修改范围"
+                                                            : "设置范围"}
+                                                    </Button>
+                                                )}
+                                            </TableCell>
+                                        </TableRow>
+                                        {editing === business.resource &&
+                                            ready &&
+                                            canCreate && (
+                                                <TableRow className="hover:bg-transparent">
+                                                    <TableCell
+                                                        colSpan={4}
+                                                        className="whitespace-normal p-3"
+                                                    >
+                                                        <PersonalGrantForm
+                                                            key={
+                                                                business.resource
+                                                            }
+                                                            userId={userId}
+                                                            resource={
+                                                                business.resource
+                                                            }
+                                                            name={name}
+                                                            data={data}
+                                                            units={units}
+                                                            draft={draft}
+                                                            onDraftChange={
+                                                                onDraftChange
+                                                            }
+                                                            onDone={() => {
+                                                                onDraftChange(
+                                                                    null,
+                                                                )
+                                                                setEditing(null)
+                                                            }}
+                                                            onSaved={() =>
+                                                                setNotice(
+                                                                    `${name}的${resourceLabel(business.resource)}数据范围已保存。`,
+                                                                )
+                                                            }
+                                                            onReload={() =>
+                                                                void query.refetch()
+                                                            }
+                                                        />
+                                                    </TableCell>
+                                                </TableRow>
+                                            )}
+                                    </React.Fragment>
+                                )
+                            })}
+                        </TableBody>
+                    </Table>
                 </>
             )}
         </section>

@@ -35,6 +35,7 @@ export const OPERATION_LABEL: Record<
     OrganizationOperation["operation"],
     string
 > = {
+    update_person_profile: "保存人员资料",
     create_unit: "新建组织",
     move_unit: "移动组织",
     rename_unit: "重命名组织",

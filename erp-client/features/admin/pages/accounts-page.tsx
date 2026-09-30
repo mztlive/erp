@@ -192,7 +192,7 @@ export function AccountsPage() {
             <ListWorkspaceHeader
                 eyebrow="系统"
                 title="组织与人员"
-                description="点击人员姓名，统一管理资料、角色与数据范围。"
+                description="点击人员行，统一管理资料、角色与数据范围。"
             >
                 <div className="flex flex-wrap items-center gap-2">
                     <Button
@@ -292,6 +292,14 @@ export function AccountsPage() {
                         columns={columns}
                         data={rows}
                         getRowId={(row) => row.id}
+                        rowLabel={(row) =>
+                            `打开${row.name || row.account}的人员资料`
+                        }
+                        onRowOpen={(row) =>
+                            router.push(
+                                `/system/accounts/${encodeURIComponent(row.id)}`,
+                            )
+                        }
                         rowCount={rows.length}
                         layout="flush"
                         loading={adminsQuery.isPending}
