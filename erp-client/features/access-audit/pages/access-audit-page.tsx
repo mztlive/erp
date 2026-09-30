@@ -33,7 +33,7 @@ import type { RoleRow } from "@/features/access-audit/types"
 /**
  * 权限配置：角色权限。
  *
- * 数据范围不再是并列页签——它是角色的属性，列表给摘要、整行点击看来源。
+ * 列表与侧栏只展示角色操作权限；人员数据范围在人员资料维护。
  * 用户授权不在这里：账号的角色绑定在账号管理中维护。
  */
 export function AccessAuditPage() {
@@ -46,7 +46,7 @@ export function AccessAuditPage() {
                 <ListWorkspaceHeader
                     eyebrow="系统"
                     title="角色与权限"
-                    description="管理角色的操作权限、数据范围与绑定账号。"
+                    description="管理角色的操作权限，查看关联人员。"
                 />
                 <FormalActionResult
                     status="blocked"
@@ -100,7 +100,7 @@ export function AccessAuditPage() {
             <ListWorkspaceHeader
                 eyebrow="系统"
                 title="角色与权限"
-                description="管理角色的操作权限、数据范围与绑定账号。"
+                description="管理角色的操作权限，查看关联人员。"
             >
                 <div className="flex flex-wrap items-center gap-2">
                     {hasPermission(

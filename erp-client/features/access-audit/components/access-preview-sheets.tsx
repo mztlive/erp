@@ -14,8 +14,6 @@ import {
 import type { RoleRow } from "@/features/access-audit/types"
 
 const EFFECTIVE_SHEET_PREFIX = "access-preview-effective-access"
-const SELLABLE_PREVIEW_WIDTH =
-    "data-[side=right]:sm:w-[460px] data-[side=right]:sm:max-w-[460px]"
 
 type AccessPreviewSheetsProps = {
     explainSubject: { type: "ROLE" | "USER"; id: string } | null
@@ -56,7 +54,6 @@ function AccessPreviewSheets({
                     if (!open) closeExplain()
                 }}
                 size="preview"
-                contentClassName={SELLABLE_PREVIEW_WIDTH}
                 onOpenChangeComplete={(open) => {
                     if (!open) restoreRowFocus()
                 }}

@@ -25,7 +25,6 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
-import { RoleAccessMatrix } from "../components/roles/role-access-matrix"
 import { PermissionOptionsPanel } from "@/features/admin/components/roles/permission-panel"
 import {
     CopyRolePermissions,
@@ -196,7 +195,6 @@ function RoleForm({
             : ROLES_LIST_HREF
     const { createRole, updateRole, isCreating, isUpdating } =
         useRoleMutations()
-    const [editor, setEditor] = React.useState<"guided" | "advanced">("guided")
     const [savedMessage, setSavedMessage] = React.useState<string | null>(null)
     const [submitError, setSubmitError] = React.useState<string | null>(null)
     const [editingName, setEditingName] = React.useState(role === null)
@@ -209,7 +207,7 @@ function RoleForm({
     const { initialSelected, preservedCodes } = React.useMemo(() => {
         const all = [...new Set(role?.permissions ?? [])]
         return {
-            initialSelected: all.filter((code) => PERMISSION_BY_CODE.has(code)),
+            initialSelected: all,
             preservedCodes: all.filter((code) => !PERMISSION_BY_CODE.has(code)),
         }
     }, [role])
@@ -244,21 +242,19 @@ function RoleForm({
                     permissions: value.permissions,
                 })
                 setSavedMessage(
-                    "岗位操作权限已保存，对使用此岗位的人员生效。请到人员资料为每位使用者设置数据范围。",
+                    "角色操作权限已保存，对使用此角色的人员生效。每个人的数据范围请到人员资料中设置。",
                 )
             } catch (error) {
                 setSubmitError(getErrorMessage(error, "操作失败，请重试。"))
             }
         },
     })
-    const [scopeDirty, setScopeDirty] = React.useState(false)
     const leave = () => {
         const { added, removed } = diffPermissions(
             form.state.values.permissions,
             role?.permissions ?? [],
         )
         if (
-            scopeDirty ||
             form.state.values.name.trim() !== (role?.name ?? "") ||
             added.length > 0 ||
             removed.length > 0
@@ -276,7 +272,6 @@ function RoleForm({
                 className="flex min-h-0 flex-1 flex-col"
                 onSubmit={(event) => {
                     event.preventDefault()
-                    if (scopeDirty) return
                     void form.handleSubmit()
                 }}
             >
@@ -330,34 +325,30 @@ function RoleForm({
                                 : "设置名称与操作权限"}
                         </span>
                     </div>
-                    {editor === "advanced" && (
-                        <form.Subscribe
-                            selector={(state) => state.values.permissions}
-                        >
-                            {(permissions) => (
-                                <CopyRolePermissions
-                                    roles={otherRoles}
-                                    disabled={hasWildcard || pending}
-                                    currentCount={permissions.length}
-                                    onCopy={(codes) => {
-                                        form.setFieldValue("permissions", [
-                                            ...form.state.values.permissions.filter(
-                                                (code) =>
-                                                    !PERMISSION_BY_CODE.has(
-                                                        code,
-                                                    ),
-                                            ),
-                                            ...codes,
-                                        ])
-                                        void form.validateField(
-                                            "permissions",
-                                            "change",
-                                        )
-                                    }}
-                                />
-                            )}
-                        </form.Subscribe>
-                    )}
+                    <form.Subscribe
+                        selector={(state) => state.values.permissions}
+                    >
+                        {(permissions) => (
+                            <CopyRolePermissions
+                                roles={otherRoles}
+                                disabled={hasWildcard || pending}
+                                currentCount={permissions.length}
+                                onCopy={(codes) => {
+                                    form.setFieldValue("permissions", [
+                                        ...form.state.values.permissions.filter(
+                                            (code) =>
+                                                !PERMISSION_BY_CODE.has(code),
+                                        ),
+                                        ...codes,
+                                    ])
+                                    void form.validateField(
+                                        "permissions",
+                                        "change",
+                                    )
+                                }}
+                            />
+                        )}
+                    </form.Subscribe>
                 </header>
                 {editingName && (
                     <div className="flex shrink-0 items-start gap-2 pb-4">
@@ -398,18 +389,8 @@ function RoleForm({
                 )}
                 <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b pb-4">
                     <p className="text-sm text-muted-foreground">
-                        统一设置这个岗位能做什么、能处理谁的数据。
+                        设置此角色可以执行的操作。每个人可以处理哪些数据，请到人员资料中设置。
                     </p>
-                    {editor === "advanced" && (
-                        <Button
-                            id="role-editor-guided"
-                            type="button"
-                            variant="outline"
-                            onClick={() => setEditor("guided")}
-                        >
-                            返回业务配置
-                        </Button>
-                    )}
                 </div>
                 {savedMessage && (
                     <p role="status" className="py-3 text-sm text-emerald-700">
@@ -433,52 +414,32 @@ function RoleForm({
                                 !field.state.meta.isValid || undefined
                             }
                         >
-                            {editor === "guided" ? (
-                                <RoleAccessMatrix
-                                    role={role}
-                                    onScopeDirtyChange={setScopeDirty}
-                                    permissions={field.state.value}
-                                    savedPermissions={role?.permissions ?? []}
-                                    disabled={pending || hasWildcard}
-                                    onChange={field.handleChange}
-                                    onOpenAdvanced={() => setEditor("advanced")}
-                                />
-                            ) : (
-                                <PermissionOptionsPanel
-                                    id="governance-admin-role-form-permissions"
-                                    selected={
-                                        hasWildcard
-                                            ? [...PERMISSION_BY_CODE.keys()]
-                                            : field.state.value
-                                    }
-                                    initial={
-                                        hasWildcard
-                                            ? [...PERMISSION_BY_CODE.keys()]
-                                            : initialSelected
-                                    }
-                                    preservedCodes={field.state.value.filter(
-                                        (code) => !PERMISSION_BY_CODE.has(code),
-                                    )}
-                                    view={view}
-                                    onViewChange={setView}
-                                    disabled={pending || hasWildcard}
-                                    onChange={(next) => {
-                                        field.handleChange([
-                                            ...field.state.value.filter(
-                                                (code) =>
-                                                    !PERMISSION_BY_CODE.has(
-                                                        code,
-                                                    ),
-                                            ),
-                                            ...next,
-                                        ])
-                                        void form.validateField(
-                                            "permissions",
-                                            "change",
-                                        )
-                                    }}
-                                />
-                            )}
+                            <PermissionOptionsPanel
+                                id="governance-admin-role-form-permissions"
+                                selected={
+                                    hasWildcard
+                                        ? [...PERMISSION_BY_CODE.keys()]
+                                        : field.state.value
+                                }
+                                initial={
+                                    hasWildcard
+                                        ? [...PERMISSION_BY_CODE.keys()]
+                                        : initialSelected
+                                }
+                                preservedCodes={field.state.value.filter(
+                                    (code) => !PERMISSION_BY_CODE.has(code),
+                                )}
+                                view={view}
+                                onViewChange={setView}
+                                disabled={pending || hasWildcard}
+                                onChange={(next) => {
+                                    field.handleChange(next)
+                                    void form.validateField(
+                                        "permissions",
+                                        "change",
+                                    )
+                                }}
+                            />
                             {!field.state.meta.isValid && (
                                 <FieldError
                                     errors={toFieldErrors(
@@ -525,25 +486,23 @@ function RoleForm({
                         return (
                             <>
                                 <UnsavedRefreshGuard
-                                    dirty={(dirty || scopeDirty) && !pending}
+                                    dirty={dirty && !pending}
                                 />
                                 <footer className="sticky bottom-0 z-10 flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-border bg-card py-3">
                                     <div className="flex min-w-0 flex-wrap items-center gap-x-1 gap-y-1 text-xs text-muted-foreground [&_button]:px-1.5 [&_button]:text-xs">
-                                        {editor === "advanced" && (
-                                            <Button
-                                                id="governance-admin-role-form-review-selected"
-                                                type="button"
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() =>
-                                                    setReview("selected")
-                                                }
-                                            >
-                                                {hasWildcard
-                                                    ? "全部权限"
-                                                    : `已勾选 ${values.permissions.length} 项`}
-                                            </Button>
-                                        )}
+                                        <Button
+                                            id="governance-admin-role-form-review-selected"
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() =>
+                                                setReview("selected")
+                                            }
+                                        >
+                                            {hasWildcard
+                                                ? "全部权限"
+                                                : `已勾选 ${values.permissions.length} 项`}
+                                        </Button>
                                         <Button
                                             id="governance-admin-role-form-review-changes"
                                             type="button"
@@ -551,33 +510,29 @@ function RoleForm({
                                             size="sm"
                                             onClick={() => setReview("changes")}
                                         >
-                                            {scopeDirty
-                                                ? "有未保存的数据范围选择"
-                                                : dirty
-                                                  ? `有 ${effectiveChanges.length || 1} 项未保存调整`
-                                                  : "暂无变更"}
+                                            {dirty
+                                                ? `有 ${effectiveChanges.length || 1} 项未保存调整`
+                                                : "暂无变更"}
                                         </Button>
-                                        {editor === "advanced" &&
-                                            dangerous > 0 && (
-                                                <Button
-                                                    id="governance-admin-role-form-review-dangerous"
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    className="text-destructive"
-                                                    onClick={() =>
-                                                        setReview("dangerous")
-                                                    }
-                                                >
-                                                    <ShieldAlertIcon
-                                                        className="size-3.5"
-                                                        aria-hidden="true"
-                                                    />
-                                                    高风险 {dangerous} 项
-                                                </Button>
-                                            )}
-                                        {editor === "advanced" &&
-                                            currentPreserved.length > 0 &&
+                                        {dangerous > 0 && (
+                                            <Button
+                                                id="governance-admin-role-form-review-dangerous"
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                className="text-destructive"
+                                                onClick={() =>
+                                                    setReview("dangerous")
+                                                }
+                                            >
+                                                <ShieldAlertIcon
+                                                    className="size-3.5"
+                                                    aria-hidden="true"
+                                                />
+                                                高风险 {dangerous} 项
+                                            </Button>
+                                        )}
+                                        {currentPreserved.length > 0 &&
                                             !hasWildcard && (
                                                 <Button
                                                     id="governance-admin-role-form-review-preserved"
@@ -613,7 +568,6 @@ function RoleForm({
                                                 }
                                                 disabled={
                                                     pending ||
-                                                    scopeDirty ||
                                                     (role !== null && !dirty)
                                                 }
                                             />

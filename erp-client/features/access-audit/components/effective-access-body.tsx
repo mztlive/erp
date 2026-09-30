@@ -14,6 +14,51 @@ type EffectiveAccessBodyProps = {
     previewRole?: RoleRow | null
 }
 
+function RolePermissionOverview({
+    preview,
+    disabled,
+}: {
+    preview: ReturnType<typeof permissionPreview>
+    disabled: boolean
+}) {
+    return (
+        <div className="space-y-6 text-sm">
+            <section className="space-y-3">
+                <h3 className="font-medium">操作权限</h3>
+                <p className="text-muted-foreground">
+                    {preview.allPermissions
+                        ? "拥有全部业务与系统操作权限。"
+                        : preview.count > 0
+                          ? `已配置 ${preview.count} 项操作，覆盖 ${preview.groups.length} 个模块。`
+                          : "尚未配置操作权限。"}
+                </p>
+                {!preview.allPermissions && preview.groups.length > 0 && (
+                    <dl className="grid grid-cols-2 gap-x-5 gap-y-3">
+                        {preview.groups.map((group) => (
+                            <div
+                                key={group.name}
+                                className="flex min-w-0 items-baseline justify-between gap-2"
+                            >
+                                <dt className="min-w-0 break-words">
+                                    {group.name}
+                                </dt>
+                                <dd className="num shrink-0 text-xs text-muted-foreground">
+                                    {group.count} 项
+                                </dd>
+                            </div>
+                        ))}
+                    </dl>
+                )}
+            </section>
+            <p className="border-t border-border pt-4 text-xs leading-5 text-muted-foreground">
+                {disabled
+                    ? "此角色已停用，当前不会向关联人员授予操作权限。"
+                    : "角色操作权限由所有关联人员共用，修改后会对这些人员生效。"}
+            </p>
+        </div>
+    )
+}
+
 function PermissionLead({
     preview,
 }: {
@@ -99,9 +144,7 @@ function DataScopeSection({
             </p>
             {groups.length === 0 ? (
                 <p className="text-xs leading-5 text-muted-foreground">
-                    {query.data?.subject.type === "ROLE"
-                        ? "角色只设置操作权限，请在人员资料中设置数据范围。"
-                        : "尚未配置数据范围，不代表可访问全部数据。"}
+                    尚未配置数据范围，不代表可访问全部数据。
                 </p>
             ) : (
                 <div className="space-y-3 text-xs">
@@ -161,6 +204,14 @@ function EffectiveAccessBody({ query, previewRole }: EffectiveAccessBodyProps) {
         previewRole,
         grants: query.data?.moduleAndActionGrants ?? [],
     })
+    if (previewRole || query.data?.subject.type === "ROLE") {
+        return (
+            <RolePermissionOverview
+                preview={preview}
+                disabled={previewRole?.status === "disabled"}
+            />
+        )
+    }
     const denied = query.data?.deniedOrBlocked ?? []
     const blockers = query.data?.actionBlockers ?? []
 
@@ -202,7 +253,7 @@ function EffectiveAccessBody({ query, previewRole }: EffectiveAccessBodyProps) {
                         查询范围
                     </h3>
                     <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                        以上为当前角色的操作权限与数据范围配置。具体业务操作是否允许，以执行时的权限校验为准。
+                        以上为当前人员的操作权限与数据范围配置。具体业务操作是否允许，以执行时的权限校验为准。
                     </p>
                 </section>
             ) : null}

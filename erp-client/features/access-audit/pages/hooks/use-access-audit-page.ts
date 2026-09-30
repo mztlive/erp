@@ -207,9 +207,13 @@ function useAccessAuditPage(surface: "access" | "audit" = "access") {
     )
 
     const pageQuery = useAccessListQuery(listQuery)
+    const hasRolePreview =
+        view === "roles" &&
+        explainSubject?.type === "ROLE" &&
+        pageQuery.data?.roles.some((role) => role.id === explainSubject.id)
     const effectiveQuery = useEffectiveAccessQuery(
-        explainSubject?.type ?? null,
-        explainSubject?.id ?? null,
+        hasRolePreview ? null : (explainSubject?.type ?? null),
+        hasRolePreview ? null : (explainSubject?.id ?? null),
     )
     const eventQuery = useAuditEventQuery(eventOpenId)
     // 账号表单角色选项：仅当前操作者可分配的角色（API 层失败时回落全部角色）

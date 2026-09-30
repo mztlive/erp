@@ -230,7 +230,7 @@ export function RolePermissionReview({
                             !preservedCodes.includes("*:*"))) && (
                         <>
                             <p className="text-sm text-muted-foreground">
-                                以下为当前保留的特殊授权。业务的「全部操作」可返回业务配置切换为「自选操作」；其他特殊授权须由权限管理员核对。
+                                以下为当前保留的特殊授权。关闭此窗口后，可直接在对应模块取消不需要的操作；跨业务授权覆盖的操作只读，其他特殊授权须由权限管理员核对。
                             </p>
                             <ul className="space-y-2 text-sm">
                                 {preservedCodes.map((code) => (

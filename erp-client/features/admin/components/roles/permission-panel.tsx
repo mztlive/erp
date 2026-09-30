@@ -2,6 +2,7 @@
 
 import { SearchIcon, ShieldAlertIcon } from "lucide-react"
 
+import { OptionCombobox } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
     InputGroup,
@@ -11,9 +12,12 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
+import { hasPermission } from "@/lib/permissions"
+import { selectResourceActions } from "@/features/admin/lib/role-workbench"
 import { usePermissionPanel } from "@/features/admin/hooks/use-permission-panel"
 import {
     actionLabel,
+    PERMISSION_BY_CODE,
     permissionLabel,
     permissionGroupSegment,
     type PermissionMatrixGroup,
@@ -50,14 +54,35 @@ export function PermissionOptionsPanel({
     className,
     id = "governance-admin-permission-panel",
 }: PermissionOptionsPanelProps) {
-    const panel = usePermissionPanel(selected, initial, view)
+    const knownCodes = [...PERMISSION_BY_CODE.keys()]
+    const effectiveSelected = knownCodes.filter((code) =>
+        hasPermission(selected, code),
+    )
+    const effectiveInitial = knownCodes.filter((code) =>
+        hasPermission(initial, code),
+    )
+    const crossResourceCodes = selected.filter((code) => code.startsWith("*:"))
+    const panel = usePermissionPanel(effectiveSelected, effectiveInitial, view)
     const toggleCodes = (codes: readonly string[], next: boolean) => {
         if (disabled) return
-        const drop = new Set(codes)
+        const editableCodes = codes.filter(
+            (code) => !hasPermission(crossResourceCodes, code),
+        )
+        let current = [...selected]
+        for (const resource of new Set(
+            editableCodes.map((code) => code.split(":")[0]),
+        )) {
+            current = selectResourceActions(
+                current,
+                resource,
+                knownCodes.filter((code) => code.startsWith(`${resource}:`)),
+            )
+        }
+        const drop = new Set(editableCodes)
         onChange(
             next
-                ? [...new Set([...selected, ...codes])]
-                : selected.filter((code) => !drop.has(code)),
+                ? [...new Set([...current, ...editableCodes])]
+                : current.filter((code) => !drop.has(code)),
         )
     }
     const areas = [
@@ -89,27 +114,20 @@ export function PermissionOptionsPanel({
                     </TabsList>
                 </Tabs>
                 <div className="flex w-full min-w-0 items-center gap-2 sm:ml-auto sm:w-auto">
-                    <select
+                    <OptionCombobox
                         id={`${id}-view`}
                         aria-label="权限显示范围"
-                        className="h-9 rounded-lg border border-input bg-background px-2 text-sm focus-visible:outline-2 focus-visible:outline-ring"
+                        className="w-36 shrink-0"
+                        inputClassName="h-9"
                         value={view}
-                        onChange={(event) =>
-                            onViewChange(event.target.value as PermissionView)
-                        }
-                    >
-                        {Object.entries(PERMISSION_VIEWS).map(
-                            ([value, label]) => (
-                                <option
-                                    id={`${id}-view-${value}`}
-                                    key={value}
-                                    value={value}
-                                >
-                                    {label}
-                                </option>
-                            ),
+                        options={Object.entries(PERMISSION_VIEWS).map(
+                            ([value, label]) => ({ value, label }),
                         )}
-                    </select>
+                        allowClear={false}
+                        onValueChange={(next) =>
+                            next && onViewChange(next as PermissionView)
+                        }
+                    />
                     <InputGroup className="min-w-0 flex-1 sm:w-64 sm:flex-none">
                         <InputGroupAddon>
                             <SearchIcon aria-hidden="true" />
@@ -224,8 +242,9 @@ export function PermissionOptionsPanel({
                             id={`${id}-group-${permissionGroupSegment(panel.activeGroup.name)}`}
                             group={panel.activeGroup}
                             selectedSet={panel.selectedSet}
-                            initial={initial}
+                            initial={effectiveInitial}
                             preservedCodes={preservedCodes}
+                            crossResourceCodes={crossResourceCodes}
                             filtered={
                                 view !== "all" ||
                                 panel.keyword.trim().length > 0
@@ -268,6 +287,7 @@ function PermissionSection({
     selectedSet,
     initial,
     preservedCodes,
+    crossResourceCodes,
     filtered,
     disabled,
     onToggle,
@@ -277,6 +297,7 @@ function PermissionSection({
     selectedSet: ReadonlySet<string>
     initial: readonly string[]
     preservedCodes: readonly string[]
+    crossResourceCodes: readonly string[]
     filtered: boolean
     disabled: boolean
     onToggle: (codes: readonly string[], next: boolean) => void
@@ -284,10 +305,13 @@ function PermissionSection({
 }) {
     const specialPermissions = preservedCodes.filter(
         (code) =>
-            code === "*:*" ||
+            code.startsWith("*:") ||
             group.rows.some((row) => code.startsWith(`${row.resource}:`)),
     )
     const initialSet = new Set(initial)
+    const editableCodes = group.codes.filter(
+        (code) => !hasPermission(crossResourceCodes, code),
+    )
     const selectedCount = group.codes.filter((code) =>
         selectedSet.has(code),
     ).length
@@ -314,7 +338,8 @@ function PermissionSection({
                         size="sm"
                         variant="ghost"
                         disabled={
-                            disabled || selectedCount === group.codes.length
+                            disabled ||
+                            editableCodes.every((code) => selectedSet.has(code))
                         }
                         onClick={() => onToggle(group.codes, true)}
                     >
@@ -325,7 +350,10 @@ function PermissionSection({
                         type="button"
                         size="sm"
                         variant="ghost"
-                        disabled={disabled || selectedCount === 0}
+                        disabled={
+                            disabled ||
+                            !editableCodes.some((code) => selectedSet.has(code))
+                        }
                         onClick={() => onToggle(group.codes, false)}
                     >
                         {filtered ? "清除匹配项" : "清除本模块"}
@@ -336,7 +364,7 @@ function PermissionSection({
                 <p className="mb-3 rounded-md bg-muted px-3 py-2 text-xs leading-5 text-muted-foreground">
                     另有特殊授权：
                     {specialPermissions.map(permissionLabel).join("、")}
-                    。调整下方单项勾选不会撤销这些授权。
+                    。调整本业务的单项权限会将该业务的全部操作改为自选操作；跨业务授权覆盖的操作只读，其他特殊授权保留。
                 </p>
             )}
             <div className="divide-y divide-border border-y border-border">
@@ -356,6 +384,9 @@ function PermissionSection({
                             {row.cells.flatMap((item) => {
                                 if (!item) return []
                                 const checked = selectedSet.has(item.code)
+                                const readOnly =
+                                    disabled ||
+                                    hasPermission(crossResourceCodes, item.code)
                                 const changed =
                                     checked !== initialSet.has(item.code)
                                 const checkboxId = `${id}-cell-${toAutomationIdSegment(item.code)}`
@@ -374,7 +405,7 @@ function PermissionSection({
                                             checked
                                                 ? "border-border bg-muted/40"
                                                 : "border-transparent",
-                                            disabled &&
+                                            readOnly &&
                                                 "cursor-default opacity-60",
                                         )}
                                     >
@@ -382,7 +413,7 @@ function PermissionSection({
                                             id={checkboxId}
                                             type="checkbox"
                                             checked={checked}
-                                            disabled={disabled}
+                                            disabled={readOnly}
                                             aria-label={`${row.label} · ${actionLabel(item.action)}`}
                                             className="size-4 shrink-0 accent-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                                             onChange={(event) =>

@@ -12,7 +12,7 @@ import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { AccessColumnsInput } from "@/features/access-audit/hooks/access-columns-input"
 import type { RoleRow } from "@/features/access-audit/types"
 
-/** 角色列表按身份、操作权限、数据范围、关联账号组织，详细来源沿用行预览。 */
+/** 角色列表展示身份、操作权限和关联账号，模块权限摘要沿用行预览。 */
 function useRoleColumns({
     router,
     rowFocusRef,
