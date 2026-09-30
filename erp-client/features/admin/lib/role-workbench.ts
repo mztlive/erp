@@ -96,3 +96,25 @@ export function meaningfulScope(row: DataScopeRecord) {
         )
     )
 }
+
+/** 与身份域 department_grant_resource 对齐；其他业务不承诺自动本人范围。 */
+export function hasOwnScopeDefault(resource: string) {
+    return [
+        "customer",
+        "contract",
+        "sales_order",
+        "purchase_order",
+        "cost_entry",
+        "cost_allocation",
+        "sales_selection_booklet",
+        "sales_selection_proposal",
+        "receivable_account",
+        "customer_receipt",
+        "invoice",
+        "sales_invoice_request",
+        "payable_account",
+        "supplier_payment",
+        "purchase_invoice_allocation",
+        "supplier_settlement_statement",
+    ].includes(resource)
+}

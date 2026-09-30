@@ -18,6 +18,8 @@ import { hasPermission } from "@/lib/permissions"
 import { useOrganizationStateQuery } from "@/features/organization/hooks/queries"
 import { isRelationActive, unitLabel } from "@/features/organization/lib/tree"
 import { useRolesQuery } from "../../hooks/queries"
+import { usePersonalGrants } from "../../hooks/use-personal-business-grants"
+import { actionLabel, resourceLabel } from "@/lib/permission-catalog"
 import { useAccountPermissionScopes } from "../../hooks/use-account-permission-scopes"
 import { accountPermissionGroups } from "../../lib/account-permission-preview"
 import { ScopeRulesView } from "@/features/organization/components/scope-rules-view"
@@ -61,6 +63,12 @@ export function AccountPermissionsSheet({
                 ),
         ) ?? []
     const scopesQuery = useAccountPermissionScopes(account, open)
+    const personalGrants = usePersonalGrants(
+        account?.id ?? "",
+        open &&
+            Boolean(account) &&
+            hasPermission(profile.data?.permissions, "data_scope:list"),
+    )
     const [keyword, setKeyword] = React.useState("")
     React.useEffect(() => {
         if (open) setKeyword("")
@@ -171,6 +179,53 @@ export function AccountPermissionsSheet({
                         </>
                     )}
                 </section>
+                {hasPermission(
+                    profile.data?.permissions,
+                    "data_scope:list",
+                ) && (
+                    <section className="space-y-2 border-b pb-6">
+                        <h3 className="font-medium">此人的附加业务范围</h3>
+                        {personalGrants.isError ? (
+                            <BusinessFailureState
+                                id="account-permissions-grants-retry"
+                                error={personalGrants.error}
+                                onRetry={() => void personalGrants.refetch()}
+                            />
+                        ) : personalGrants.isPending ? (
+                            <p className="text-xs">正在读取…</p>
+                        ) : personalGrants.data.items.length ? (
+                            personalGrants.data.items.map((grant) => (
+                                <p key={grant.id} className="text-xs leading-5">
+                                    {resourceLabel(grant.resource)} ·{" "}
+                                    {grant.org_unit_ids
+                                        .map((orgId) =>
+                                            unitLabel(
+                                                organization.data?.units ?? [],
+                                                orgId,
+                                            ),
+                                        )
+                                        .join("、")}
+                                    {grant.include_descendants
+                                        ? "（含下级）"
+                                        : ""}{" "}
+                                    ·{" "}
+                                    {grant.active_actions.length
+                                        ? grant.active_actions
+                                              .map(actionLabel)
+                                              .join("、")
+                                        : "依据角色或操作已失效"}
+                                </p>
+                            ))
+                        ) : (
+                            <p className="text-xs text-muted-foreground">
+                                没有单独扩大的业务范围。
+                            </p>
+                        )}
+                        <p className="text-xs text-muted-foreground">
+                            附加范围仍受个人限制及业务条件约束。需要调整时，打开人员资料中的“业务权限”。
+                        </p>
+                    </section>
+                )}
                 {rolesQuery.isError ? (
                     <BusinessFailureState
                         error={rolesQuery.error}

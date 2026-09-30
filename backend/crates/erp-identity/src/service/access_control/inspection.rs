@@ -8,6 +8,7 @@ use persistence_core::Executor;
 use crate::access_control::DataScopeSubjectType;
 use crate::dto::inspection::{AccessInspectionRequest, AccessInspectionView};
 use crate::repository::access_control::data_scope::DataScopeRepositoryExt;
+use crate::repository::access_control::personal_grant::PersonalBusinessGrantRepositoryExt;
 use crate::service::access_control::resolve::{AuthorizedDataScope, DataScopeService};
 use crate::{AccessControlExt, Error, Permission, Result, RoleRepositoryExt, SharedRbacService};
 
@@ -95,6 +96,19 @@ impl AccessInspectionService {
         let roles = self.db.roles().enabled_roles(&ids, executor).await?;
         let rules =
             self.db.data_scopes().list_by_subjects(DataScopeSubjectType::Role, &ids, executor).await?;
+        let grants = self
+            .db
+            .personal_business_grants()
+            .for_person(actor.id(), Some(&access.resource), executor)
+            .await?;
+        let eligible = roles.iter().map(|role| role.base.id.clone()).collect::<Vec<_>>();
+        if grants.iter().any(|grant| grant.applies(actor.id(), &eligible, &access.resource, &access.action)) {
+            view.push(
+                "个人业务扩展",
+                "passed",
+                "本操作存在同一有效角色支持的部门扩展授权，已与角色范围合并；仍受个人限制及业务条件约束。",
+            );
+        }
         for rule in &rules {
             if let Some(role) = roles.iter().find(|role| role.base.id == rule.subject_id) {
                 view.explain_relation(access, rule, &role.name);

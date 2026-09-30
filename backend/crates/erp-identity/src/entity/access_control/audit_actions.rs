@@ -8,6 +8,8 @@ pub const AUDIT_ACTIONS: &[(&str, &str)] = &[
     ("data_scope.create", "数据范围 · 新建"),
     ("data_scope.replace", "数据范围 · 替换"),
     ("data_scope.delete", "数据范围 · 删除"),
+    ("personal_business_grant.create", "个人业务范围 · 授权"),
+    ("personal_business_grant.revoke", "个人业务范围 · 撤销"),
     ("user_role.assign", "用户角色 · 授权"),
     ("user_role.revoke", "用户角色 · 撤权"),
     ("person_query_qualification.change", "人员查询资格 · 维护"),

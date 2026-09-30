@@ -28,9 +28,14 @@ import {
 import { isRelationActive, unitLabel } from "@/features/organization/lib/tree"
 import { accountSetupTasks } from "../lib/account-setup"
 import { AccessCheckPanel } from "../components/accounts/access-check-panel"
+import { PersonalBusinessPermissions } from "../components/accounts/personal-business-permissions"
+import { usePersonalGrantDraft } from "../hooks/use-personal-grant-draft"
+import { usePersonalGrants } from "../hooks/use-personal-business-grants"
 import { permissionLabel } from "../lib/permission-catalog"
 
 export function AccountDetailPage({ accountId }: { accountId: string }) {
+    const { draft: businessDraft, setDraft: setBusinessDraft } =
+        usePersonalGrantDraft(accountId)
     const accounts = useAdminsQuery()
     const roles = useRolesQuery()
     const options = useAssignableRolesQuery()
@@ -40,6 +45,7 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
         hasPermission(profile.data?.permissions, permission)
     const org = useOrganizationStateQuery(can("org_unit:list"))
     const scopes = useAccountPermissionScopes(account, can("data_scope:list"))
+    const personalGrants = usePersonalGrants(accountId, can("data_scope:list"))
     const preview = usePreviewOrganizationChangeMutation()
     const submit = useSubmitOrganizationChangeMutation()
     const [editing, setEditing] = React.useState(false)
@@ -80,8 +86,17 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                 isRelationActive(row.valid_from, row.valid_to, org.data.asOf),
         ) ?? []
     const tasks =
-        roles.isSuccess && scopes.isSuccess && org.isSuccess
-            ? accountSetupTasks(account, roles.data, scopes.data, org.data)
+        roles.isSuccess &&
+        scopes.isSuccess &&
+        org.isSuccess &&
+        personalGrants.isSuccess
+            ? accountSetupTasks(
+                  account,
+                  roles.data,
+                  scopes.data,
+                  org.data,
+                  personalGrants.data.items,
+              )
             : null
     const begin = (
         operation: OrganizationChangeDraft["operation"],
@@ -203,7 +218,20 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                     </p>
                 )}
             </section>
-            <section className="grid gap-5 rounded-lg border p-5 md:grid-cols-2">
+            <PersonalBusinessPermissions
+                key={accountId}
+                userId={accountId}
+                draft={businessDraft}
+                onDraftChange={setBusinessDraft}
+                name={account.name}
+                scopes={scopes.data ?? []}
+                units={org.data?.units ?? []}
+                ready={scopes.isSuccess && org.isSuccess}
+                canRead={can("data_scope:list")}
+                canCreate={can("data_scope:create") && can("org_unit:manage")}
+                canRevoke={can("data_scope:delete") && can("org_unit:manage")}
+            />
+            <section className="space-y-5 rounded-lg border p-5">
                 <div className="space-y-3">
                     <h2 className="font-semibold">所属部门</h2>
                     <p className="text-sm">
@@ -235,8 +263,16 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                         </Button>
                     )}
                 </div>
-                <div className="space-y-3">
-                    <h2 className="font-semibold">此人管理的部门</h2>
+                <details className="space-y-3 border-t pt-4">
+                    <summary
+                        id="account-detail-management-expand"
+                        className="cursor-pointer text-sm font-medium"
+                    >
+                        高级：部门管理关系
+                    </summary>
+                    <p className="text-xs leading-5 text-muted-foreground">
+                        仅用于角色默认范围已选择“本人管理的部门”的规则。只扩大某项业务的数据范围，请使用上方“扩大数据范围”。
+                    </p>
                     {org.isError ? (
                         <BusinessFailureState
                             error={org.error}
@@ -309,12 +345,12 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                             设置此人管理的部门
                         </Button>
                     )}
-                </div>
+                </details>
             </section>
             <section className="space-y-4 rounded-lg border p-5">
                 <h2 className="font-semibold">角色与操作权限</h2>
                 <p className="text-xs text-muted-foreground">
-                    修改角色会影响所有使用该角色的人员。为个人增加限制请使用高级范围配置。
+                    修改角色会影响所有使用该角色的人员。仅为此人增加部门范围，请使用上方“扩大数据范围”；个人限制在下方独立管理。
                 </p>
                 {roles.isError ? (
                     <BusinessFailureState
@@ -356,8 +392,13 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                     })
                 )}
             </section>
-            <section className="space-y-3 rounded-lg border p-5">
-                <h2 className="font-semibold">每项操作的数据范围</h2>
+            <details className="space-y-3 rounded-lg border p-5">
+                <summary
+                    id="account-detail-scope-details"
+                    className="cursor-pointer text-sm font-medium"
+                >
+                    高级：角色默认范围与个人限制
+                </summary>
                 {!can("data_scope:list") ? (
                     <p>没有查看数据范围的权限。</p>
                 ) : scopes.isError ? (
@@ -384,7 +425,7 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                 >
                     管理个人范围限制（高级）
                 </Link>
-            </section>
+            </details>
             {can("data_scope:list") && (
                 <AccessCheckPanel accountId={accountId} />
             )}

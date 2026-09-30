@@ -25,6 +25,14 @@ export const AUDIT_ACTION_OPTIONS = [
         label: "数据范围 · 删除",
     },
     {
+        value: "personal_business_grant.create",
+        label: "个人业务范围 · 授权",
+    },
+    {
+        value: "personal_business_grant.revoke",
+        label: "个人业务范围 · 撤销",
+    },
+    {
         value: "user_role.assign",
         label: "用户角色 · 授权",
     },

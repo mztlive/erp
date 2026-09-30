@@ -4,6 +4,7 @@ mod seed;
 
 mod authorize;
 mod command;
+mod default_scopes;
 mod enforcer;
 mod policy;
 mod query;

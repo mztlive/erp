@@ -75,6 +75,7 @@ pub(crate) fn page_params(
 pub mod audit_event;
 pub mod data_scope;
 pub mod permission;
+pub mod personal_grant;
 pub mod user_role;
 
 pub use audit_event::{AuditEventListParams, AuditEventView};

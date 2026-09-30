@@ -4,6 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use erp_core::common::time::Instant;
 
+use super::personal_grant::PersonalBusinessGrant;
 use super::{DataScope, DataScopeSubjectType, DataScopeType, ScopeDimension, ScopeTargetMode};
 use crate::Result;
 use crate::entity::organization::{OrgManagementAssignment, OrgMembership, OrgTree};
@@ -145,6 +146,27 @@ impl ScopeResolution<'_> {
         let rules = self.rules_for(DataScopeSubjectType::User, self.user_id);
         let user_limit = (!rules.is_empty()).then(|| self.clause(&rules, None)).transpose()?;
         Ok((ResolvedScope { role_clauses, user_limit }, role_scopes))
+    }
+
+    /// 将人员扩展规则加入其依据角色，保留个人上限与同角色证据。
+    /// # 参数
+    /// * `grants` - 独立个人扩展授权。
+    /// # 返回
+    /// 合并后的范围及逐角色证据。
+    /// # 错误
+    /// 非法部门或规则拒绝；非当前人员及不合格角色的授权不参与。
+    pub fn resolve_with_grants(
+        &self,
+        grants: &[PersonalBusinessGrant],
+    ) -> Result<(ResolvedScope, BTreeMap<String, ScopeClause>)> {
+        let mut rules = self.rules.to_vec();
+        for grant in grants
+            .iter()
+            .filter(|grant| grant.applies(self.user_id, self.eligible_role_ids, self.resource, self.action))
+        {
+            rules.push(grant.as_role_scope()?);
+        }
+        ScopeResolution { rules: &rules, ..*self }.resolve_with_roles()
     }
 
     /// 只提取当前资源动作、主体、状态均匹配的规则。

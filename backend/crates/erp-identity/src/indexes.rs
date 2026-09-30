@@ -69,6 +69,19 @@ pub async fn ensure_authorization(db: &Database) -> Result<()> {
         person_query_qualification_indexes(),
     )
     .await?;
+    create_indexes(
+        db,
+        <Database as AccessControlExt>::PERSONAL_BUSINESS_GRANTS,
+        vec![
+            unique_index("uk_personal_business_grants_id", doc! { "id": 1 }),
+            named_index(
+                "idx_personal_grants_user_resource",
+                doc! { "user_id": 1, "resource": 1, "deleted_at": 1 },
+            ),
+            named_index("idx_personal_grants_role", doc! { "role_id": 1, "deleted_at": 1 }),
+        ],
+    )
+    .await?;
     ensure_organizations(db).await?;
     Ok(())
 }

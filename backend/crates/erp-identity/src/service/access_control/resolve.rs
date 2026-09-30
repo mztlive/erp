@@ -11,6 +11,7 @@ use crate::access_control::{DataScopeSubjectType, ResolvedScope, ScopeClause, Sc
 use crate::entity::organization::OrgTree;
 use crate::entity::organization_change::OrganizationState;
 use crate::repository::OrganizationRepository;
+use crate::repository::access_control::personal_grant::PersonalBusinessGrantRepositoryExt;
 use crate::repository::prelude::*;
 use crate::{AccessControlExt, Error, Permission, Result, SharedRbacService};
 
@@ -205,6 +206,7 @@ impl DataScopeService {
         state.own_org(user, at)?;
         let tree = OrgTree::new(&state.units)?;
         let registration = super::consumers::registration(resource, action)?;
+        let grants = self.db.personal_business_grants().for_person(user, Some(resource), executor).await?;
         ScopeResolution {
             user_id: user,
             eligible_role_ids: roles,
@@ -217,7 +219,7 @@ impl DataScopeService {
             tree: &tree,
             as_of: at,
         }
-        .resolve_with_roles()
+        .resolve_with_grants(&grants)
     }
 }
 

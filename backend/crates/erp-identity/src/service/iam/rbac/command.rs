@@ -4,6 +4,7 @@ use application_core::AuditActor;
 use persistence_core::NoTransaction;
 
 use super::authorize::{ensure_role_deletable, ensure_role_mutable};
+use super::default_scopes::initialize_defaults;
 use super::policy::{permission_pairs, permissions_for_role, role_key, role_or_not_found};
 use super::{AuthorizedRoleUpdate, RbacService};
 use crate::AccessControlExt;
@@ -145,6 +146,8 @@ impl RbacService {
         audit: Option<PreparedResourceAudit>,
         expected_revision: Option<u64>,
     ) -> Result<Role> {
+        let previous = self.direct_role_permissions(role_id).await?;
+        let next = PermissionSet::new(permissions.clone());
         let role_id = role_id.to_string();
         let role_key = role_key(&role_id);
         let permissions = permission_pairs(permissions);
@@ -155,6 +158,9 @@ impl RbacService {
             Box::pin(async move {
                 let mut role = role_or_not_found(db.roles().find_by_id(&role_id, executor).await?)?;
                 db.roles().update(&mut role, executor).await?;
+                if expected_revision.is_some() && !role.system {
+                    initialize_defaults(&db, &role_id, &previous, &next, executor).await?;
+                }
                 policy_store.replace_role_permissions(&role_key, &permissions, executor).await?;
                 if let Some(audit) = audit {
                     audit_port.persist(&audit, executor).await?;
@@ -176,6 +182,8 @@ impl RbacService {
         audit: Option<PreparedResourceAudit>,
         expected_revision: Option<u64>,
     ) -> Result<Role> {
+        let initialize = audit.is_some() && !data.system;
+        let next = PermissionSet::new(permissions.clone());
         let role = Role::new(id, data)?;
         let db = self.db.clone();
         let policy_store = self.policy_store.clone();
@@ -185,6 +193,10 @@ impl RbacService {
         self.run_policy_transaction_at_revision(expected_revision, move |executor| {
             Box::pin(async move {
                 db.roles().create(&role, executor).await?;
+                if initialize {
+                    initialize_defaults(&db, &role.base.id, &PermissionSet::new(vec![]), &next, executor)
+                        .await?;
+                }
                 policy_store.replace_role_permissions(&role_key, &permissions, executor).await?;
                 if let Some(audit) = audit {
                     audit_port.persist(&audit, executor).await?;
@@ -210,6 +222,8 @@ impl RbacService {
         policy_revision: u64,
         audit: PreparedResourceAudit,
     ) -> Result<Role> {
+        let previous = self.direct_role_permissions(&role.base.id).await?;
+        let next = permissions.clone();
         role.update(RoleUpdate { name: Some(name), ..Default::default() })?;
         let db = self.db.clone();
         let policy_store = self.policy_store.clone();
@@ -218,6 +232,9 @@ impl RbacService {
         self.run_authorized_audited_policy_transaction(policy_revision, audit, move |executor| {
             Box::pin(async move {
                 db.roles().update(&mut role, executor).await?;
+                if !role.system {
+                    initialize_defaults(&db, &role.base.id, &previous, &next, executor).await?;
+                }
                 policy_store.replace_role_permissions(&role_key, &permissions, executor).await?;
                 Ok::<Role, Error>(role)
             })

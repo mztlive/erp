@@ -1115,6 +1115,36 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                     action: "list",
                 },
             },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/personal-business-grants/{user_id}",
+                description: "查看数据范围",
+                permission: {
+                    resource: "data_scope",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/personal-business-grants/{user_id}",
+                description: "创建数据范围",
+                permission: {
+                    resource: "data_scope",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/personal-business-grants/{user_id}/{id}/revoke",
+                description: "删除数据范围",
+                permission: {
+                    resource: "data_scope",
+                    action: "delete",
+                },
+            },
         ],
     },
     {

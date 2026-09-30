@@ -128,6 +128,21 @@ impl Pagination for DataScopeFilter {
 /// 数据范围集合仓储的域特有查询。
 #[allow(async_fn_in_trait)]
 pub trait DataScopeRepositoryExt {
+    /// 是否保存过该角色动作范围，包括撤销历史。
+    /// # 参数
+    /// 角色、资源、动作及调用方执行器。
+    /// # 返回
+    /// 是否存在配置历史。
+    /// # 错误
+    /// 查询失败时返回错误。
+    async fn has_role_action_history(
+        &self,
+        role_id: &str,
+        resource: &str,
+        action: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<bool>;
+
     /// 查询主体资源的全部配置留痕，包含撤销记录，防止初始化恢复授权。
     ///
     /// # 错误
@@ -234,6 +249,22 @@ pub trait DataScopeRepositoryExt {
 }
 
 impl DataScopeRepositoryExt for Repository<'_, DataScope> {
+    async fn has_role_action_history(
+        &self,
+        role_id: &str,
+        resource: &str,
+        action: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        Ok(mongo_ops::find_one(
+            &self.collection().clone_with_type::<Document>(),
+            doc! { "subject_type": "role", "subject_id": role_id, "resource": resource, "actions": action },
+            executor,
+        )
+        .await?
+        .is_some())
+    }
+
     async fn has_subject_resource_history(
         &self,
         role_id: &str,

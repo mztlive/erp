@@ -25,6 +25,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
         .merge(organization_routes(rbac))
         .merge(permission_routes(rbac))
         .merge(scope_routes(rbac))
+        .merge(personal_grant_routes(rbac))
         .merge(binding_routes(rbac))
         .merge(inspection_routes(rbac))
         .merge(people_routes(rbac))
@@ -236,6 +237,35 @@ fn people_routes(rbac: &SharedRbacService) -> Router<AppState> {
                 get(access_control::person_directory::list_selected_business_people),
                 rbac,
                 access_control::person_directory::list_selected_business_people_permission_key(),
+            ),
+        )
+}
+
+/// 人员业务扩展授权使用现有范围配置动作，并在领域层重验公司配置边界。
+fn personal_grant_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
+        .route(
+            "/personal-business-grants/{user_id}",
+            with_permission(
+                get(access_control::personal_grant::list),
+                rbac,
+                access_control::personal_grant::list_permission_key(),
+            ),
+        )
+        .route(
+            "/personal-business-grants/{user_id}",
+            with_permission(
+                post(access_control::personal_grant::create),
+                rbac,
+                access_control::personal_grant::create_permission_key(),
+            ),
+        )
+        .route(
+            "/personal-business-grants/{user_id}/{id}/revoke",
+            with_permission(
+                post(access_control::personal_grant::revoke),
+                rbac,
+                access_control::personal_grant::revoke_permission_key(),
             ),
         )
 }

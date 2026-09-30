@@ -257,3 +257,111 @@ fn missing_required_dimension_denies_and_independent_dimensions_intersect() {
     facts.org_unit_id = Some("warehouse");
     assert!(!both.covers(&facts));
 }
+
+fn personal_grant() -> PersonalBusinessGrant {
+    use crate::entity::access_control::personal_grant::{PersonalBusinessGrantData, PersonalBusinessGrantId};
+    PersonalBusinessGrant::new(
+        PersonalBusinessGrantId::new("grant"),
+        "alice",
+        PersonalBusinessGrantData {
+            role_id: "sales".into(),
+            resource: "sales_order".into(),
+            actions: vec!["detail".into(), "update".into()],
+            org_unit_ids: vec!["one".into()],
+            include_descendants: true,
+        },
+    )
+    .unwrap()
+}
+
+#[test]
+fn personal_department_grant_extends_only_matching_user_business_action_and_role() {
+    let nodes = vec![node("one", None), node("child", Some("one")), node("two", None)];
+    let tree = OrgTree::new(&nodes).unwrap();
+    let roles = vec!["sales".into()];
+    let rules = vec![rule(DataScopeSubjectType::Role, "sales", DataScopeType::SelfOwned, None, &[])];
+    let grants = vec![personal_grant()];
+    let input = ScopeResolution {
+        user_id: "alice",
+        eligible_role_ids: &roles,
+        resource: "sales_order",
+        action: "detail",
+        required_dimensions: &[ScopeDimension::InternalOrg],
+        rules: &rules,
+        memberships: &[],
+        management: &[],
+        tree: &tree,
+        as_of: Instant::from_unix_secs(10),
+    };
+    let (scope, evidence) = input.resolve_with_grants(&grants).unwrap();
+    assert!(scope.allows(&object("one"), false));
+    assert!(scope.allows(&object("child"), false));
+    assert!(!scope.allows(&object("two"), false));
+    assert!(evidence["sales"].org_unit_ids.contains("one"));
+    let mut owned = object("two");
+    owned.owned = true;
+    assert!(scope.allows(&owned, false));
+    assert!(
+        !ScopeResolution { user_id: "bob", ..input }
+            .resolve_with_grants(&grants)
+            .unwrap()
+            .0
+            .allows(&object("one"), false)
+    );
+    assert!(
+        !ScopeResolution { resource: "purchase_order", ..input }
+            .resolve_with_grants(&grants)
+            .unwrap()
+            .0
+            .allows(&object("one"), false)
+    );
+    assert!(
+        !ScopeResolution { action: "delete", ..input }
+            .resolve_with_grants(&grants)
+            .unwrap()
+            .0
+            .allows(&object("one"), false)
+    );
+    let other_roles = vec!["other".into()];
+    assert!(
+        !ScopeResolution { eligible_role_ids: &other_roles, ..input }
+            .resolve_with_grants(&grants)
+            .unwrap()
+            .0
+            .allows(&object("one"), false)
+    );
+    assert!(ScopeResolution { eligible_role_ids: &[], ..input }.resolve_with_grants(&grants).is_err());
+}
+
+#[test]
+fn personal_limit_still_intersects_and_revocation_restores_default() {
+    let nodes = vec![node("one", None), node("two", None)];
+    let tree = OrgTree::new(&nodes).unwrap();
+    let roles = vec!["sales".into()];
+    let rules = vec![
+        rule(DataScopeSubjectType::Role, "sales", DataScopeType::SelfOwned, None, &[]),
+        rule(DataScopeSubjectType::User, "alice", DataScopeType::SelfOwned, None, &[]),
+    ];
+    let input = ScopeResolution {
+        user_id: "alice",
+        eligible_role_ids: &roles,
+        resource: "sales_order",
+        action: "detail",
+        required_dimensions: &[ScopeDimension::InternalOrg],
+        rules: &rules,
+        memberships: &[],
+        management: &[],
+        tree: &tree,
+        as_of: Instant::from_unix_secs(10),
+    };
+    assert!(!input.resolve_with_grants(&[personal_grant()]).unwrap().0.allows(&object("one"), false));
+    let mut revoked = personal_grant();
+    revoked.base.deleted_at = 10;
+    let (scope, evidence) =
+        ScopeResolution { rules: &rules[..1], ..input }.resolve_with_grants(&[revoked]).unwrap();
+    assert!(!scope.allows(&object("one"), false));
+    assert!(evidence["sales"].self_owned);
+    let mut owned = object("two");
+    owned.owned = true;
+    assert!(scope.allows(&owned, false));
+}

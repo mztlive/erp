@@ -1,3 +1,4 @@
+import type { PersonalBusinessGrant } from "../api/personal-business-grants"
 import { hasPermission } from "@/lib/permissions"
 import { resourceLabel, actionLabel } from "@/lib/permission-catalog"
 import { registeredResources } from "@/features/organization/lib/scope-payload"
@@ -19,6 +20,7 @@ export function accountSetupTasks(
     roles: readonly AdminRole[],
     scopes: readonly ScopeRule[],
     org: OrganizationStateView,
+    additions: readonly PersonalBusinessGrant[] = [],
 ): SetupTask[] {
     const tasks: SetupTask[] = []
     if (account.role_ids.length === 0) {
@@ -52,6 +54,19 @@ export function accountSetupTasks(
                         hasPermission(
                             role.permissions,
                             `${resource.resource}:${action}`,
+                        ) &&
+                        !additions.some(
+                            (grant) =>
+                                grant.user_id === account.id &&
+                                grant.role_id === roleId &&
+                                grant.resource === resource.resource &&
+                                grant.active_actions.includes(action) &&
+                                grant.org_unit_ids.some((id) =>
+                                    org.units.some(
+                                        (unit) =>
+                                            unit.id === id && unit.enabled,
+                                    ),
+                                ),
                         ) &&
                         !rules.some(
                             (rule) =>

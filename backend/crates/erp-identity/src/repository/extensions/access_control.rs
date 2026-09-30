@@ -13,11 +13,17 @@ use crate::repository::access_control::{
 };
 use crate::repository::owned::{
     AccountCoreRepository, AuditEventRepository, DataScopeRepository, PermissionRepository,
-    PersonQueryQualificationRepository, RoleRepository, UserRoleRepository,
+    PersonQueryQualificationRepository, PersonalBusinessGrantRepository, RoleRepository, UserRoleRepository,
 };
 
 /// 访问控制域仓储访问器。
 pub trait AccessControlExt {
+    /// 独立个人业务扩展授权集合。
+    const PERSONAL_BUSINESS_GRANTS: &'static str = "personal_business_grants";
+    /// 获取个人业务授权仓储。
+    /// # 返回
+    /// 本领域集合仓储。
+    fn personal_business_grants(&self) -> PersonalBusinessGrantRepository<'_>;
     /// `permission` 集合名。
     const PERMISSIONS: &'static str = "permissions";
     /// `user_role` 集合名。
@@ -88,6 +94,9 @@ pub trait AccessControlExt {
 }
 
 impl AccessControlExt for Database {
+    fn personal_business_grants(&self) -> PersonalBusinessGrantRepository<'_> {
+        PersonalBusinessGrantRepository::new(self, Self::PERSONAL_BUSINESS_GRANTS)
+    }
     type PermissionFilter = PermissionFilter;
     type DataScopeFilter = DataScopeFilter;
     type AuditEventFilter = AuditEventFilter;
