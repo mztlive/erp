@@ -5,12 +5,10 @@ use application_core::AuditActor;
 use mongodb::Database;
 use persistence_core::Executor;
 
-use crate::access_control::DataScopeSubjectType;
 use crate::dto::inspection::{AccessInspectionRequest, AccessInspectionView};
-use crate::repository::access_control::data_scope::DataScopeRepositoryExt;
-use crate::repository::access_control::personal_grant::PersonalBusinessGrantRepositoryExt;
+use crate::repository::access_control::person_scope::PersonDataScopeRepositoryExt;
 use crate::service::access_control::resolve::{AuthorizedDataScope, DataScopeService};
-use crate::{AccessControlExt, Error, Permission, Result, RoleRepositoryExt, SharedRbacService};
+use crate::{AccessControlExt, Error, Permission, Result, SharedRbacService};
 
 /// 为跨域单据检查提供经授权的目标身份；不能作为登录或操作令牌。
 pub struct InspectedAccess {
@@ -89,30 +87,23 @@ impl AccessInspectionService {
         view: &mut AccessInspectionView,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let required = [Permission::parse(format!("{}:{}", access.resource, access.action))?];
-        let snapshot = self.rbac.role_permission_snapshot(actor.kind(), actor.id(), &required).await?;
-        self.rbac.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
-        let ids = snapshot.granting_role_ids_for_all(&required);
-        let roles = self.db.roles().enabled_roles(&ids, executor).await?;
-        let rules =
-            self.db.data_scopes().list_by_subjects(DataScopeSubjectType::Role, &ids, executor).await?;
-        let grants = self
+        let configs = self
             .db
-            .personal_business_grants()
-            .for_person(actor.id(), Some(&access.resource), executor)
+            .person_data_scopes()
+            .for_person(actor.id(), Some(&access.resource), Some(&access.action), executor)
             .await?;
-        let eligible = roles.iter().map(|role| role.base.id.clone()).collect::<Vec<_>>();
-        if grants.iter().any(|grant| grant.applies(actor.id(), &eligible, &access.resource, &access.action)) {
+        if configs.is_empty() {
             view.push(
-                "个人业务扩展",
-                "passed",
-                "本操作存在同一有效角色支持的部门扩展授权，已与角色范围合并；仍受个人限制及业务条件约束。",
+                "人员数据范围",
+                "blocked",
+                "本操作尚未配置数据范围，请进入人员资料设置；角色仅提供操作权限。",
             );
-        }
-        for rule in &rules {
-            if let Some(role) = roles.iter().find(|role| role.base.id == rule.subject_id) {
-                view.explain_relation(access, rule, &role.name);
-            }
+        } else {
+            view.push(
+                "人员数据范围",
+                "passed",
+                "已按此人、本业务、本操作的唯一范围配置检查；部门关系不授予操作权限。",
+            );
         }
         Ok(())
     }

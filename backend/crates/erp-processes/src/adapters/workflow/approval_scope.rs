@@ -33,19 +33,7 @@ impl WorkflowScopePredicate for Predicate {
         )
     }
     fn allows_role(&self, role: &str, object: &WorkflowScopeObject) -> bool {
-        let Some(clause) = self.0.role_scopes.get(role) else {
-            return false;
-        };
-        let org = object.business_org_unit_id.as_deref();
-        let target = ScopedObject {
-            owned: object.owner_user_id == self.0.user_id,
-            collaborating: false,
-            historical_read_participant: false,
-            org_unit_id: org,
-            settlement_party_id: object.settlement_party_id.as_deref(),
-            warehouse_id: object.warehouse_id.as_deref(),
-        };
-        clause.covers(&target) && self.0.scope.user_limit.as_ref().is_none_or(|limit| limit.covers(&target))
+        self.0.role_scopes.contains_key(role) && self.allows(object)
     }
 }
 
@@ -140,7 +128,8 @@ mod tests {
             ScopeClause { warehouse_ids: BTreeSet::from(["other".into()]), ..Default::default() },
         );
         predicate.0.role_scopes.insert("other-role".into(), predicate.0.scope.role_clauses[0].clone());
-        assert!(!predicate.allows_role("finance", &warehouse));
+        assert!(predicate.allows_role("finance", &warehouse));
+        assert!(!predicate.allows_role("missing-role", &warehouse));
         assert!(predicate.allows_role("other-role", &warehouse));
         predicate.0.scope.user_limit = Some(ScopeClause::default());
         assert!(!predicate.allows(&warehouse));

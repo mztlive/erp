@@ -35,8 +35,9 @@ use crate::entity::access_control::{
 use crate::ports::ScopeTargetPort;
 use crate::repository::prelude::*;
 pub mod consumers;
-mod personal_grant;
-mod personal_grant_query;
+mod person_scope;
+pub mod person_scope_migration;
+mod person_scope_query;
 mod query;
 mod replacement;
 pub mod resolve;

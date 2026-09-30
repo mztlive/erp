@@ -1,7 +1,5 @@
 //! S2 首次授权清单；范围身份固定，重跑不恢复已撤销记录。
 
-use super::SharedRbacService;
-use crate::Result;
 use crate::access_control::{
     DataScopeData, DataScopeSubjectType, DataScopeType, ScopeBinding, ScopeDimension, ScopeTargetMode,
 };
@@ -65,48 +63,6 @@ pub(crate) const RESOURCE_ACTIONS: &[(&str, &[&str])] = &[
     ("sales_person", &["list"]),
     ("procurement_person", &["list"]),
 ];
-
-/// 首次初始化显式岗位清单；没有条目的岗位不获得兜底范围。
-///
-/// # 错误
-/// 任一资源初始化失败时返回错误，日志携带角色及资源定位信息。
-pub async fn ensure_predefined_role_data_scopes(rbac: &SharedRbacService) -> Result<()> {
-    for role in [
-        "role-sales",
-        "role-sales-leader",
-        "role-procurement",
-        "role-operations",
-        "role-warehouse",
-        "role-finance",
-        "role-management",
-        "role-sysadmin",
-    ] {
-        seed_role(rbac, role).await?;
-    }
-    Ok(())
-}
-
-/// 按清单初始化指定岗位，已有配置或撤销记录均保留。
-///
-/// # 错误
-/// 模型校验或事务写入失败时返回错误。
-pub(crate) async fn seed_role(rbac: &SharedRbacService, role: &str) -> Result<()> {
-    let manifest = RESOURCE_ACTIONS
-        .iter()
-        .map(|(resource, actions)| (*resource, definitions(role, resource, actions)))
-        .collect::<Vec<_>>();
-    for (_, definitions) in &manifest {
-        for data in definitions {
-            validate_binding(&data.binding)?;
-        }
-    }
-    for (resource, definitions) in manifest {
-        if !definitions.is_empty() {
-            rbac.seed_data_scope_manifest(role, resource, definitions).await?;
-        }
-    }
-    Ok(())
-}
 
 /// 明确岗位、资源与动作的默认规则，RBAC 仍独立决定实际动作权限。
 fn definitions(role: &str, resource: &str, actions: &[&str]) -> Vec<DataScopeData> {

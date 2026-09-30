@@ -25,9 +25,6 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
-import { useAccountProfileQuery } from "@/features/auth/queries"
-import { hasPermission } from "@/lib/permissions"
-import { SubjectScopesPanel } from "@/features/organization/components/subject-scopes-panel"
 import { RoleAccessMatrix } from "../components/roles/role-access-matrix"
 import { PermissionOptionsPanel } from "@/features/admin/components/roles/permission-panel"
 import {
@@ -199,10 +196,8 @@ function RoleForm({
             : ROLES_LIST_HREF
     const { createRole, updateRole, isCreating, isUpdating } =
         useRoleMutations()
-    const { data: profile } = useAccountProfileQuery()
     const [editor, setEditor] = React.useState<"guided" | "advanced">("guided")
     const [savedMessage, setSavedMessage] = React.useState<string | null>(null)
-    const [scopesOpen, setScopesOpen] = React.useState(false)
     const [submitError, setSubmitError] = React.useState<string | null>(null)
     const [editingName, setEditingName] = React.useState(role === null)
     const [review, setReview] = React.useState<PermissionReviewMode | null>(
@@ -249,7 +244,7 @@ function RoleForm({
                     permissions: value.permissions,
                 })
                 setSavedMessage(
-                    "岗位操作权限已保存，对使用此岗位的人员生效。数据范围按页面显示的已保存规则执行。",
+                    "岗位操作权限已保存，对使用此岗位的人员生效。请到人员资料为每位使用者设置数据范围。",
                 )
             } catch (error) {
                 setSubmitError(getErrorMessage(error, "操作失败，请重试。"))
@@ -335,40 +330,6 @@ function RoleForm({
                                 : "设置名称与操作权限"}
                         </span>
                     </div>
-                    {editor === "advanced" &&
-                    role &&
-                    hasPermission(profile?.permissions, "data_scope:list") ? (
-                        <form.Subscribe selector={(state) => state.values}>
-                            {(values) => {
-                                const changes = diffPermissions(
-                                    values.permissions,
-                                    role?.permissions ?? [],
-                                )
-                                const dirty =
-                                    changes.added.length > 0 ||
-                                    changes.removed.length > 0 ||
-                                    values.name.trim() !== role.name
-                                return (
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        {dirty ? (
-                                            <span className="text-xs text-muted-foreground">
-                                                保存角色后可配置数据范围
-                                            </span>
-                                        ) : null}
-                                        <Button
-                                            id="role-form-data-scopes"
-                                            type="button"
-                                            variant="outline"
-                                            disabled={dirty || pending}
-                                            onClick={() => setScopesOpen(true)}
-                                        >
-                                            查看全部范围规则
-                                        </Button>
-                                    </div>
-                                )
-                            }}
-                        </form.Subscribe>
-                    ) : null}
                     {editor === "advanced" && (
                         <form.Subscribe
                             selector={(state) => state.values.permissions}
@@ -673,27 +634,6 @@ function RoleForm({
                     }}
                 </form.Subscribe>
             </form>
-            {role ? (
-                <Dialog open={scopesOpen} onOpenChange={setScopesOpen}>
-                    <DialogContent
-                        className="max-h-[88vh] overflow-y-auto sm:max-w-2xl"
-                        closeButtonId="role-scopes-close"
-                    >
-                        <DialogHeader>
-                            <DialogTitle>{role.name} · 数据范围</DialogTitle>
-                            <DialogDescription>
-                                为该角色配置业务数据范围，保存后对关联账号生效。
-                            </DialogDescription>
-                        </DialogHeader>
-                        {scopesOpen ? (
-                            <SubjectScopesPanel
-                                roleId={role.id}
-                                roleName={role.name}
-                            />
-                        ) : null}
-                    </DialogContent>
-                </Dialog>
-            ) : null}
             <Dialog open={confirmLeave} onOpenChange={setConfirmLeave}>
                 <DialogContent closeButtonId="governance-admin-role-form-leave-close">
                     <DialogHeader>

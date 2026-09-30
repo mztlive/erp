@@ -95,15 +95,14 @@ impl AccessInspectionView {
             view.push(
                 "业务数据范围",
                 "passed",
-                "已解析角色默认或个人业务扩展范围；具体单据仍需按责任、个人限制及业务条件判断。",
+                "已解析此人本操作的数据范围；具体单据仍需满足业务状态及审批条件。",
             );
         } else {
-            view.push("业务数据范围", "review", "没有产生有效角色范围。请检查对应角色的范围、所属部门及该角色的管理部门；合法历史读取需按具体单据判断。");
-        }
-        if access.scope.user_limit.is_some() {
-            view.push("个人范围限制", "review", "存在个人限制，最终结果须与其求交；它不会授予额外权限。");
-        } else {
-            view.push("个人范围限制", "passed", "未配置个人范围限制，不额外收窄角色授权。");
+            view.push(
+                "业务数据范围",
+                "review",
+                "未产生有效人员范围，请检查人员资料中本业务本操作的范围及所属部门。",
+            );
         }
         view
     }
@@ -207,12 +206,12 @@ mod tests {
         access.scope.user_limit = Some(ScopeClause { company: true, ..ScopeClause::default() });
         let view = AccessInspectionView::from_access(&access);
         assert_eq!(view.steps[1].status, "review");
-        assert_eq!(view.steps[2].status, "review");
+        assert_eq!(view.steps.len(), 2);
         assert_eq!(view.scope_version.as_deref(), Some("v1"));
         access.scope.role_clauses.push(ScopeClause { self_owned: true, ..ScopeClause::default() });
         let view = AccessInspectionView::from_access(&access);
         assert_eq!(view.steps[1].status, "passed");
-        assert_eq!(view.steps[2].status, "review");
+        assert_eq!(view.steps.len(), 2);
     }
 
     #[test]

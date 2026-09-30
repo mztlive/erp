@@ -7,7 +7,7 @@ use crate::entity::rbac::Permission;
 use crate::entity::role::{Role, RoleData};
 use crate::error::{Error, Result};
 
-/// 确保 root 角色存在、拥有全量权限，且空范围时具备公司级 DataScope。
+/// 确保 root 角色存在且拥有全量操作权限。
 ///
 /// # 参数
 /// * `rbac` - 共享 RBAC 服务
@@ -16,12 +16,11 @@ use crate::error::{Error, Result};
 /// 返回当前生效的超级管理员角色。
 ///
 /// # 错误
-/// 角色、Casbin policy 或公司级数据范围写入失败时返回错误。
+/// 角色或 Casbin policy 写入失败时返回错误。
 ///
 /// # 业务约束
-/// 角色元数据与 `*:*` policy 仍按固定 root ID 修复。公司级范围只在角色尚无任何生效
-/// `data_scope` 时写入，供工作台 `managed` 队列与指定责任任务证明组织覆盖；管理员已
-/// 配置或软删除的范围不覆盖、不重建。
+/// 角色元数据与 `*:*` policy 按固定 root ID 修复；不写入或恢复业务数据范围。
+/// 内建超级管理员的组织配置权由治理规则提供，不依赖业务人员范围初始化。
 pub async fn ensure_root_role(rbac: &SharedRbacService) -> Result<Role> {
     let root_permission = Permission::parse("*:*")?;
     let mut attempts = 0;
@@ -32,25 +31,7 @@ pub async fn ensure_root_role(rbac: &SharedRbacService) -> Result<Role> {
             result => break result?,
         }
     };
-    ensure_root_company_data_scope(rbac).await?;
     Ok(role)
-}
-
-/// 若超级管理员角色尚无生效数据范围，则补齐公司级范围。
-///
-/// # 参数
-/// * `rbac` - 共享 RBAC 服务
-///
-/// # 返回值
-/// 检查或写入完成后返回 `Ok(())`。
-///
-/// # 错误
-/// 范围构造失败，或非冲突的 MongoDB 写入失败时返回错误。
-///
-/// # 业务约束
-/// `*:*` 不能替代 DataScope。角色无显式范围时工作台管理队列失败关闭为无组织覆盖。
-async fn ensure_root_company_data_scope(rbac: &SharedRbacService) -> Result<()> {
-    super::super::predefined_data_scopes::seed_role(rbac, ROOT_ROLE_ID).await
 }
 
 /// 执行一次可重入的 root 角色校验或修复。
@@ -66,7 +47,7 @@ async fn ensure_root_company_data_scope(rbac: &SharedRbacService) -> Result<()> 
 /// 角色读取、Enforcer 刷新、policy 解析或创建/修复写入失败时返回错误。
 ///
 /// # 业务约束
-/// 本方法不处理 DataScope；公司级范围由 [`ensure_root_role`] 在角色稳定后单独补齐。
+/// 本方法不处理 DataScope，不得通过角色修复补齐业务范围。
 async fn ensure_root_role_once(rbac: &SharedRbacService, root_permission: &Permission) -> Result<Role> {
     if let Some(role) = rbac.db.roles().find_by_id_including_deleted(ROOT_ROLE_ID, &mut NoTransaction).await?
     {

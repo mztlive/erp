@@ -1,7 +1,10 @@
 // 有效权限解释读路径：按 ROLE / USER 主体组装来源视图，不合并前端数据。
 
 import { apiGet } from "@/lib/api"
-import { fetchCompleteList } from "@/lib/collect-pages"
+import {
+    fetchPersonScopes,
+    personScopeDescription,
+} from "@/features/admin/api/person-data-scopes"
 import type { EffectiveAccessView } from "@/features/access-audit/types"
 import type {
     BackendAdmin,
@@ -36,20 +39,6 @@ function toDataScopeGrant(
     }
 }
 
-async function fetchSubjectDataScopes(
-    subjectType: "role" | "user",
-    subjectId: string,
-): Promise<BackendDataScope[]> {
-    const page = await fetchCompleteList<BackendDataScope>(
-        "/admin/data-scopes",
-        {
-            subject_type: subjectType,
-            subject_id: subjectId,
-        },
-    )
-    return page.items
-}
-
 export async function fetchEffectiveAccess(
     subjectType: "ROLE" | "USER",
     subjectId: string,
@@ -61,7 +50,7 @@ export async function fetchEffectiveAccess(
         const roles = await apiGet<BackendRole[]>("/admin/roles")
         const role = roles.find((candidate) => candidate.id === subjectId)
         if (!role) return null
-        const scopes = await fetchSubjectDataScopes("role", subjectId)
+        const scopes: BackendDataScope[] = []
         const asOf = instantToIso(role.created_at) ?? ""
         return {
             subject: { type: "ROLE", id: role.id, label: role.name },
@@ -103,7 +92,7 @@ export async function fetchEffectiveAccess(
         userRoles = []
     }
 
-    const scopes = await fetchSubjectDataScopes("user", subjectId)
+    const scopes = await fetchPersonScopes(subjectId)
     const asOf = instantToIso(admin.created_at) ?? ""
     const sourceLabel = admin.name || admin.account
     return {
@@ -121,9 +110,17 @@ export async function fetchEffectiveAccess(
             sourceType: "USER_ROLE",
             sourceLabel: roleNameById.get(roleId) ?? roleId,
         })),
-        dataScopes: scopes.map((scope) =>
-            toDataScopeGrant(scope, "USER", sourceLabel),
-        ),
+        dataScopes: scopes.items.map((scope) => ({
+            id: scope.id,
+            layer: "DATA_SCOPE" as const,
+            layerLabel: "人员数据范围",
+            targetLabel: personScopeDescription(scope),
+            capability: scope.resource,
+            sourceType: "USER",
+            sourceLabel,
+            resource: scope.resource,
+            actions: [scope.action],
+        })),
         fieldPolicies: [],
         historicalParticipantRules: [],
         deniedOrBlocked: userRoles

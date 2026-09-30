@@ -52,6 +52,7 @@ impl DemoMasterDataService {
         };
         let accounts = self.ensure_accounts(actor, &mut report).await?;
         self.ensure_departments(actor, &accounts.by_login, &mut report.notices).await?;
+        self.ensure_person_scopes(actor, &accounts.by_login).await?;
         self.ensure_approvals(actor, &accounts, &mut report).await?;
         self.ensure_responsibilities(actor, &accounts, &mut report).await?;
         Ok(report)

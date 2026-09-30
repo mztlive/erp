@@ -5,6 +5,7 @@ edition = "2024"
 autotests = false
 
 [dependencies]
+serde_json = { workspace = true }
 clap = { workspace = true }
 config = { workspace = true }
 erp-identity = { workspace = true }

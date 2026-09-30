@@ -68,7 +68,7 @@ paths:
     get:
       operationId: cost_scope_detail
       summary: 当前授权范围内的成本详情
-      description: 同角色证明 cost_entry:detail 与 sales_order:list，再对两种资源的范围及个人上限求交。两种范围均为未收窄 Company 时允许整笔读取；其他情况只返回可见分配份额。
+      description: 同角色证明 cost_entry:detail 与 sales_order:list 的操作资格，再对当前人员这两个资源动作的唯一范围求交。两种有效范围均为完整 Company 时允许整笔读取；其他情况只返回可见分配份额。角色不提供数据范围，未配置人员范围不得回退全量。
       parameters:
         - $ref: '#/components/parameters/Id'
       responses:

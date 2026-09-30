@@ -9,6 +9,9 @@ use crate::entity::rbac::RoleId;
 const NAME_MAX_LEN: usize = 32;
 const DESCRIPTION_MAX_LEN: usize = 256;
 
+/// 不可通过普通角色管理接口分配的内建超级管理员角色。
+pub const ROOT_ROLE_ID: &str = "role-root";
+
 /// 角色创建数据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RoleData {

@@ -2,434 +2,532 @@
 import * as React from "react"
 import { useStore } from "@tanstack/react-form"
 import { z } from "zod"
+import { useAppForm, toFieldErrors } from "@/components/form"
 import { FieldError } from "@/components/ui/field"
-import { toFieldErrors, useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ScopeTargetPicker } from "@/features/organization/components/scope-target-picker"
-import {
-    scopeDescription,
-    type ScopeRule,
-} from "@/features/organization/lib/scope-description"
 import type { OrgUnit } from "@/features/organization/types"
 import { actionLabel, resourceLabel } from "@/lib/permission-catalog"
-import { toAutomationIdSegment } from "@/lib/automation-id"
 import { getErrorMessage } from "@/lib/api/errors"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { PersonalGrantDraft } from "../../hooks/use-personal-grant-draft"
-import { usePersonalGrantMutations } from "../../hooks/use-personal-business-grants"
-import type {
-    PersonalGrantList,
-    PersonalGrantInput,
-} from "../../api/personal-business-grants"
-
-const grantSchema = z.object({
-    role_id: z.string().min(1, "请选择依据角色"),
-    resource: z.string().min(1, "请选择业务"),
-    actions: z.array(z.string()).min(1, "至少选择一项操作"),
-    org_unit_ids: z.array(z.string()).min(1, "至少选择一个部门"),
-    include_descendants: z.boolean(),
-})
+import { useSavePersonScope } from "../../hooks/use-person-data-scopes"
+import {
+    personScopeDescription,
+    personScopeDefaults,
+    type PersonScopeInput,
+    type PersonScopeList,
+    type PersonScopeTerm,
+} from "../../api/person-data-scopes"
 
 export function PersonalGrantForm({
     userId,
     name,
     data,
-    scopes,
     units,
-    onDone,
-    onReload,
     draft,
     onDraftChange,
+    onDone,
+    onReload,
 }: {
     userId: string
+    name: string
+    data: PersonScopeList
+    units: OrgUnit[]
     draft: PersonalGrantDraft | null
     onDraftChange: (draft: PersonalGrantDraft | null) => void
-    name: string
-    data: PersonalGrantList
-    scopes: readonly ScopeRule[]
-    units: OrgUnit[]
     onDone: () => void
     onReload: () => void
 }) {
-    const { create } = usePersonalGrantMutations(userId)
-    const [error, setError] = React.useState<string | null>(null)
-    const [discard, setDiscard] = React.useState(false)
-    // Keep the original snapshot through selection; a concurrent change must produce a conflict.
+    const save = useSavePersonScope(userId)
     const [initialDraft] = React.useState(draft)
-    const [policyVersion] = React.useState(
+    const [version] = React.useState(
         draft?.policyVersion ?? data.policy_version,
     )
-    const snapshot = data
-    const changedVersion = data.policy_version !== policyVersion
-    const firstRole = snapshot.roles[0]
-    const [defaults] = React.useState<PersonalGrantInput>(() => ({
-        role_id: firstRole?.id ?? "",
+    const [error, setError] = React.useState<string | null>(null)
+    const [defaults] = React.useState<PersonScopeInput>({
+        confirmed: true,
         resource: "",
+        dimension: "internal_org",
         actions: [],
-        org_unit_ids: [],
+        mode: "self",
+        org_ids: [],
+        warehouse_ids: [],
+        settlement_ids: [],
         include_descendants: false,
-    }))
+    })
+    const stale = version !== data.policy_version
+    const schema = z
+        .object({
+            confirmed: z.boolean().refine((v) => v, "请明确选择新的范围"),
+            resource: z.string().min(1, "请选择业务"),
+            dimension: z.enum([
+                "internal_org",
+                "warehouse",
+                "settlement_party",
+            ]),
+            actions: z.array(z.string()).min(1, "请选择操作"),
+            mode: z.enum(["self", "own_org", "explicit", "company"]),
+            org_ids: z.array(z.string()),
+            warehouse_ids: z.array(z.string()),
+            settlement_ids: z.array(z.string()),
+            include_descendants: z.boolean(),
+        })
+        .superRefine((value, ctx) => {
+            const chosen = data.businesses.find(
+                (b) => b.resource === value.resource,
+            )
+            const business = chosen
+                ? {
+                      ...chosen,
+                      dimensions:
+                          chosen.resource === "approval_instance"
+                              ? [value.dimension]
+                              : chosen.dimensions,
+                  }
+                : undefined
+            if (!business) return
+            if (value.mode === "company") return
+            for (const dimension of business.resource === "approval_instance"
+                ? [value.dimension]
+                : business.dimensions) {
+                const field =
+                    dimension === "internal_org"
+                        ? "org_ids"
+                        : dimension === "warehouse"
+                          ? "warehouse_ids"
+                          : "settlement_ids"
+                if (
+                    (dimension !== "internal_org" ||
+                        value.mode === "explicit") &&
+                    !value[field].length
+                )
+                    ctx.addIssue({
+                        code: "custom",
+                        path: [field],
+                        message: "请选择范围目标",
+                    })
+            }
+        })
     const form = useAppForm({
         defaultValues: initialDraft?.values ?? defaults,
-        validators: { onSubmit: grantSchema },
+        validators: { onSubmit: schema },
         onSubmit: async ({ value }) => {
-            if (changedVersion) {
-                setError("权限配置已变化，草稿已保留。请刷新配置后重新选择。")
+            if (stale) {
+                setError("权限配置已变化，草稿已保留。请刷新后重新核对。")
                 return
             }
+            const chosen = data.businesses.find(
+                (b) => b.resource === value.resource,
+            )
+            const business = chosen
+                ? {
+                      ...chosen,
+                      dimensions:
+                          chosen.resource === "approval_instance"
+                              ? [value.dimension]
+                              : chosen.dimensions,
+                  }
+                : undefined
+            if (!business) return
+            const terms: PersonScopeTerm[] =
+                value.mode === "company"
+                    ? [
+                          {
+                              scope_type: "company",
+                              target_dimension: business.dimensions[0],
+                              target_mode: null,
+                              include_descendants: null,
+                              scope_targets: [],
+                          },
+                      ]
+                    : (business.resource === "approval_instance"
+                          ? [value.dimension]
+                          : business.dimensions
+                      ).map((d) => ({
+                          scope_type:
+                              d === "internal_org" && value.mode === "self"
+                                  ? "self_owned"
+                                  : "organization",
+                          target_dimension: d,
+                          target_mode:
+                              d === "internal_org" && value.mode === "self"
+                                  ? null
+                                  : d === "internal_org" &&
+                                      value.mode === "own_org"
+                                    ? "own_org"
+                                    : "explicit",
+                          include_descendants:
+                              d === "internal_org" && value.mode !== "self"
+                                  ? value.include_descendants
+                                  : null,
+                          scope_targets:
+                              d === "internal_org"
+                                  ? value.mode === "explicit"
+                                      ? value.org_ids
+                                      : []
+                                  : d === "warehouse"
+                                    ? value.warehouse_ids
+                                    : value.settlement_ids,
+                      }))
             setError(null)
             try {
-                await create.mutateAsync({
-                    grant: value,
-                    version: policyVersion,
+                await save.mutateAsync({
+                    resource: value.resource,
+                    actions: value.actions,
+                    terms,
+                    version,
                 })
                 onDone()
-            } catch (failure) {
-                setError(getErrorMessage(failure, "授权未保存，请刷新后重试。"))
+            } catch (e) {
+                setError(getErrorMessage(e, "保存失败，请刷新后重试"))
             }
         },
     })
-    const value = useStore(form.store, (state) => state.values)
-    const changed = useStore(form.store, (state) => !state.isDefaultValue)
-    const dirty = changed || initialDraft !== null
+    const value = useStore(form.store, (s) => s.values)
+    const chosen = data.businesses.find((b) => b.resource === value.resource)
+    const business = chosen
+        ? {
+              ...chosen,
+              dimensions:
+                  chosen.resource === "approval_instance"
+                      ? [value.dimension]
+                      : chosen.dimensions,
+          }
+        : undefined
     React.useEffect(() => {
-        onDraftChange({ values: value, policyVersion })
-    }, [value, policyVersion, onDraftChange])
-    const role = snapshot.roles.find((item) => item.id === value.role_id)
-    const business = role?.resources.find(
-        (item) => item.resource === value.resource,
-    )
-    const current = scopes.filter(
-        (rule) =>
-            rule.subject_type === "role" &&
-            rule.subject_id === value.role_id &&
-            rule.resource === value.resource &&
-            rule.enabled !== false,
-    )
-    const limits = scopes.filter(
-        (rule) =>
-            rule.subject_type === "user" &&
-            rule.resource === value.resource &&
-            rule.enabled !== false,
-    )
-    const additions = snapshot.items.filter(
-        (item) =>
-            item.role_id === value.role_id &&
-            item.resource === value.resource &&
-            item.active_actions.length,
-    )
-    const targetLabels = value.org_unit_ids
-        .map((id) => units.find((unit) => unit.id === id)?.name ?? "部门待确认")
-        .join("、")
+        onDraftChange({ values: value, policyVersion: version })
+    }, [value, version, onDraftChange])
+    const leave = () => {
+        if (window.confirm("数据范围尚未保存，确定放弃选择？")) onDone()
+    }
     return (
         <form
             className="space-y-4 rounded-md border bg-muted/20 p-4 text-sm"
-            onSubmit={(event) => {
-                event.preventDefault()
-                event.stopPropagation()
+            onSubmit={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
                 void form.handleSubmit()
             }}
         >
-            <h3 className="font-semibold">给{name}扩大业务数据范围</h3>
-            {changedVersion && (
-                <div role="status" className="space-y-2 text-xs text-amber-700">
-                    <p>
-                        权限配置已变化，已保留你的选择。请重新读取配置再授权，原草稿不会自动套用新版本。
-                    </p>
+            <h3 className="font-semibold">设置{name}的数据范围</h3>
+            {stale && (
+                <div role="status" className="text-xs text-amber-700">
+                    配置已变化，当前草稿不能直接保存。
                     <Button
-                        id="personal-grant-stale-refresh"
+                        id="person-scope-reload"
                         type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setDiscard(true)}
+                        variant="link"
+                        onClick={() => {
+                            if (window.confirm("放弃当前草稿并刷新配置？")) {
+                                onDone()
+                                onReload()
+                            }
+                        }}
                     >
-                        刷新配置后重新选择
+                        刷新配置
                     </Button>
                 </div>
             )}
-            <div className="grid gap-3 sm:grid-cols-2">
-                <label className="space-y-1.5" htmlFor="personal-grant-role">
-                    <span>操作权限来自</span>
-                    <select
-                        id="personal-grant-role"
-                        aria-describedby="personal-grant-role-error"
-                        className="h-control w-full rounded-md border bg-background px-2"
-                        value={value.role_id}
-                        disabled={create.isPending}
-                        onChange={(event) => {
-                            form.setFieldValue("role_id", event.target.value)
-                            form.setFieldValue("resource", "")
-                            form.setFieldValue("actions", [])
-                            form.setFieldValue("org_unit_ids", [])
-                            form.setFieldValue("include_descendants", false)
-                        }}
-                    >
-                        {snapshot.roles.map((item) => (
-                            <option key={item.id} value={item.id}>
-                                {item.name}
-                            </option>
-                        ))}
-                    </select>
-                    <form.Field name="role_id">
-                        {(field) => (
-                            <FieldError
-                                id="personal-grant-role-error"
-                                errors={toFieldErrors(field.state.meta.errors)}
-                            />
-                        )}
-                    </form.Field>
-                </label>
-                <label
-                    className="space-y-1.5"
-                    htmlFor="personal-grant-resource"
-                >
-                    <span>选择业务</span>
-                    <select
-                        id="personal-grant-resource"
-                        aria-describedby="personal-grant-resource-error"
-                        className="h-control w-full rounded-md border bg-background px-2"
-                        value={value.resource}
-                        disabled={create.isPending}
-                        onChange={(event) => {
-                            form.setFieldValue("resource", event.target.value)
-                            form.setFieldValue("actions", [])
-                            form.setFieldValue("org_unit_ids", [])
-                            form.setFieldValue("include_descendants", false)
-                        }}
-                    >
-                        <option value="">请选择业务</option>
-                        {role?.resources.map((item) => (
-                            <option key={item.resource} value={item.resource}>
-                                {resourceLabel(item.resource)}
-                            </option>
-                        ))}
-                    </select>
-                    <form.Field name="resource">
-                        {(field) => (
-                            <FieldError
-                                id="personal-grant-resource-error"
-                                errors={toFieldErrors(field.state.meta.errors)}
-                            />
-                        )}
-                    </form.Field>
-                </label>
-            </div>
+            <form.Field name="resource">
+                {(field) => (
+                    <div className="space-y-2">
+                        <label htmlFor="person-scope-business">业务</label>
+                        <select
+                            id="person-scope-business"
+                            className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                            value={field.state.value}
+                            onChange={(e) => {
+                                field.handleChange(e.target.value)
+                                const next = personScopeDefaults(
+                                    data,
+                                    e.target.value,
+                                )
+                                for (const key of Object.keys(
+                                    next,
+                                ) as (keyof PersonScopeInput)[]) {
+                                    form.setFieldValue(key, next[key])
+                                }
+                            }}
+                        >
+                            <option value="">请选择业务</option>
+                            {data.businesses.map((b) => (
+                                <option key={b.resource} value={b.resource}>
+                                    {resourceLabel(b.resource)}
+                                </option>
+                            ))}
+                        </select>
+                        <FieldError
+                            errors={toFieldErrors(field.state.meta.errors)}
+                        />
+                    </div>
+                )}
+            </form.Field>
             {business && (
                 <>
-                    <div className="space-y-1 text-xs leading-5 text-muted-foreground">
-                        <p>角色共有范围：</p>
-                        {current.length ? (
-                            current.map((rule) => (
-                                <p key={rule.id}>
-                                    {rule.actions?.map(actionLabel).join("、")}
-                                    ：{scopeDescription(rule, units)}
-                                </p>
-                            ))
-                        ) : (
-                            <p>
-                                该角色尚未配置此业务范围，不默认视为本人或全部数据。
-                            </p>
+                    {!value.confirmed && (
+                        <p role="status" className="text-xs text-amber-700">
+                            当前各操作范围不同或包含迁移条件。请选择本次的新范围，保存会统一所选操作。
+                        </p>
+                    )}
+                    <form.Field name="confirmed">
+                        {(field) => (
+                            <FieldError
+                                errors={toFieldErrors(field.state.meta.errors)}
+                            />
                         )}
-                        {additions.length > 0 && (
-                            <p>
-                                此人已有附加范围：
-                                {additions
-                                    .map(
-                                        (item) =>
-                                            `${item.org_unit_ids.map((id) => units.find((unit) => unit.id === id)?.name ?? "部门待确认").join("、")}（${item.active_actions.map(actionLabel).join("、")}）`,
-                                    )
-                                    .join("；")}
-                            </p>
-                        )}
-                        {limits.length > 0 && (
-                            <p>
-                                个人限制：
-                                {limits
-                                    .map(
-                                        (rule) =>
-                                            `${rule.actions?.map(actionLabel).join("、")}：${scopeDescription(rule, units)}`,
-                                    )
-                                    .join("；")}
-                                。扩大后的范围仍受这些限制约束。
-                            </p>
-                        )}
-                    </div>
-                    <fieldset className="space-y-2" disabled={create.isPending}>
-                        <legend className="mb-2 font-medium">适用操作</legend>
-                        <div className="flex flex-wrap gap-x-5 gap-y-3">
-                            {business.actions.map((action) => (
-                                <label
-                                    key={action}
-                                    className="flex items-center gap-2"
-                                    htmlFor={`personal-grant-action-${toAutomationIdSegment(action)}`}
-                                >
-                                    <Checkbox
-                                        id={`personal-grant-action-${toAutomationIdSegment(action)}`}
-                                        checked={value.actions.includes(action)}
-                                        onCheckedChange={(checked) =>
+                    </form.Field>
+                    {business.resource === "approval_instance" && (
+                        <form.Field name="dimension">
+                            {(field) => (
+                                <div>
+                                    <label htmlFor="person-scope-dimension">
+                                        审批范围维度
+                                    </label>
+                                    <select
+                                        id="person-scope-dimension"
+                                        className="ml-3 rounded border p-2 text-sm"
+                                        value={field.state.value}
+                                        onChange={(e) => {
+                                            const d = e.target
+                                                .value as PersonScopeInput["dimension"]
+                                            field.handleChange(d)
                                             form.setFieldValue(
-                                                "actions",
-                                                checked
-                                                    ? [...value.actions, action]
-                                                    : value.actions.filter(
-                                                          (item) =>
-                                                              item !== action,
-                                                      ),
+                                                "mode",
+                                                d === "internal_org"
+                                                    ? "self"
+                                                    : "explicit",
                                             )
-                                        }
-                                    />
-                                    {actionLabel(action)}
-                                </label>
-                            ))}
-                        </div>
+                                        }}
+                                    >
+                                        <option value="internal_org">
+                                            业务部门/负责人
+                                        </option>
+                                        <option value="warehouse">仓库</option>
+                                        <option value="settlement_party">
+                                            结算主体
+                                        </option>
+                                    </select>
+                                </div>
+                            )}
+                        </form.Field>
+                    )}
+                    <details className="space-y-3">
+                        <summary
+                            id="person-scope-actions-expand"
+                            className="cursor-pointer"
+                        >
+                            适用操作：
+                            {value.actions.length === business.actions.length
+                                ? "此业务全部已有操作"
+                                : value.actions.map(actionLabel).join("、") ||
+                                  "未选择"}{" "}
+                            · 按操作区分
+                        </summary>
                         <form.Field name="actions">
                             {(field) => (
-                                <FieldError
-                                    errors={toFieldErrors(
-                                        field.state.meta.errors,
-                                    )}
-                                />
+                                <div className="flex flex-wrap gap-4">
+                                    {business.actions.map((action) => (
+                                        <label
+                                            key={action}
+                                            className="flex items-center gap-2"
+                                        >
+                                            <Checkbox
+                                                id={`person-scope-action-${toAutomationIdSegment(action)}`}
+                                                checked={field.state.value.includes(
+                                                    action,
+                                                )}
+                                                onCheckedChange={(checked) =>
+                                                    field.handleChange(
+                                                        checked
+                                                            ? [
+                                                                  ...field.state
+                                                                      .value,
+                                                                  action,
+                                                              ]
+                                                            : field.state.value.filter(
+                                                                  (a) =>
+                                                                      a !==
+                                                                      action,
+                                                              ),
+                                                    )
+                                                }
+                                            />
+                                            {actionLabel(action)}
+                                        </label>
+                                    ))}
+                                    <FieldError
+                                        errors={toFieldErrors(
+                                            field.state.meta.errors,
+                                        )}
+                                    />
+                                </div>
                             )}
                         </form.Field>
-                        <p className="text-xs text-muted-foreground">
-                            只能选择该人员通过此角色已拥有的操作；扩大范围不会增加新操作。
-                        </p>
-                    </fieldset>
-                    <div className="space-y-2">
-                        <p className="font-medium">允许处理的部门</p>
-                        <ScopeTargetPicker
-                            id="personal-grant-departments"
-                            dimension="internal_org"
-                            value={value.org_unit_ids}
-                            onChange={(ids) =>
-                                form.setFieldValue("org_unit_ids", ids)
-                            }
-                            units={units.filter((unit) => unit.enabled)}
-                            disabled={create.isPending}
-                        />
-                        <form.Field name="org_unit_ids">
-                            {(field) => (
-                                <FieldError
-                                    errors={toFieldErrors(
-                                        field.state.meta.errors,
-                                    )}
-                                />
-                            )}
-                        </form.Field>
-                        <label
-                            className="flex items-center gap-2"
-                            htmlFor="personal-grant-descendants"
-                        >
-                            <Checkbox
-                                id="personal-grant-descendants"
-                                checked={value.include_descendants}
-                                disabled={create.isPending}
-                                onCheckedChange={(checked) =>
-                                    form.setFieldValue(
-                                        "include_descendants",
-                                        checked === true,
-                                    )
-                                }
-                            />
-                            包含下级部门
-                        </label>
-                    </div>
-                    <div
-                        className="space-y-1 rounded-md bg-muted p-3 text-xs leading-5"
-                        aria-live="polite"
-                    >
-                        <p className="font-medium">保存后的效果</p>
-                        {value.actions.length && value.org_unit_ids.length ? (
-                            <p>
-                                在原有范围上，为{name}增加{targetLabels}
-                                {value.include_descendants
-                                    ? "及其下级部门"
-                                    : ""}
-                                的{resourceLabel(value.resource)}范围，适用于
-                                {value.actions.map(actionLabel).join("、")}。
+                    </details>
+                    <div className="space-y-1 text-xs text-muted-foreground">
+                        {value.actions.map((action) => (
+                            <p key={action}>
+                                当前{actionLabel(action)}：
+                                {personScopeDescription(
+                                    data.items.find(
+                                        (s) =>
+                                            s.resource === value.resource &&
+                                            s.action === action,
+                                    ),
+                                    new Map(units.map((u) => [u.id, u.name])),
+                                )}
                             </p>
-                        ) : (
-                            <p>选择操作和部门后显示授权效果。</p>
-                        )}
-                        <p>
-                            其他人员及其他业务不变。个人限制、关联单据范围、审批资格和业务状态仍按原规则检查。
-                        </p>
+                        ))}
                     </div>
+                    <form.Field name="mode">
+                        {(field) => (
+                            <fieldset className="space-y-2">
+                                <legend className="mb-2 font-medium">
+                                    可以处理哪些数据？
+                                </legend>
+                                {(
+                                    [
+                                        ["self", "本人负责"],
+                                        ["own_org", "自己所属部门"],
+                                        [
+                                            "explicit",
+                                            business.dimensions.includes(
+                                                "internal_org",
+                                            )
+                                                ? "指定部门"
+                                                : "指定对象",
+                                        ],
+                                        ["company", "公司范围"],
+                                    ] as const
+                                )
+                                    .filter(
+                                        ([mode]) =>
+                                            business.dimensions.includes(
+                                                "internal_org",
+                                            ) ||
+                                            !["self", "own_org"].includes(mode),
+                                    )
+                                    .map(([mode, label]) => (
+                                        <label
+                                            htmlFor={`person-scope-mode-${mode}`}
+                                            key={mode}
+                                            className="flex items-center gap-2"
+                                        >
+                                            <input
+                                                id={`person-scope-mode-${mode}`}
+                                                type="radio"
+                                                name="person-scope-mode"
+                                                checked={
+                                                    value.confirmed &&
+                                                    field.state.value === mode
+                                                }
+                                                onChange={() => {
+                                                    field.handleChange(mode)
+                                                    form.setFieldValue(
+                                                        "confirmed",
+                                                        true,
+                                                    )
+                                                }}
+                                            />
+                                            {label}
+                                        </label>
+                                    ))}
+                            </fieldset>
+                        )}
+                    </form.Field>
+                    {value.mode !== "company" &&
+                        business.dimensions.map((dimension) => {
+                            if (
+                                dimension === "internal_org" &&
+                                value.mode !== "explicit"
+                            )
+                                return null
+                            const key =
+                                dimension === "internal_org"
+                                    ? "org_ids"
+                                    : dimension === "warehouse"
+                                      ? "warehouse_ids"
+                                      : "settlement_ids"
+                            return (
+                                <form.Field key={dimension} name={key}>
+                                    {(field) => (
+                                        <div className="space-y-2">
+                                            <p>
+                                                {dimension === "internal_org"
+                                                    ? "部门"
+                                                    : dimension === "warehouse"
+                                                      ? "仓库"
+                                                      : "结算主体"}
+                                            </p>
+                                            <ScopeTargetPicker
+                                                id={`person-scope-target-${dimension}`}
+                                                dimension={dimension}
+                                                value={field.state.value}
+                                                onChange={field.handleChange}
+                                                units={units}
+                                            />
+                                            <FieldError
+                                                errors={toFieldErrors(
+                                                    field.state.meta.errors,
+                                                )}
+                                            />
+                                        </div>
+                                    )}
+                                </form.Field>
+                            )
+                        })}
+                    {business.dimensions.includes("internal_org") &&
+                        ["explicit", "own_org"].includes(value.mode) && (
+                            <form.Field name="include_descendants">
+                                {(field) => (
+                                    <label
+                                        htmlFor="person-scope-descendants"
+                                        className="flex items-center gap-2"
+                                    >
+                                        <Checkbox
+                                            id="person-scope-descendants"
+                                            checked={field.state.value}
+                                            onCheckedChange={(v) =>
+                                                field.handleChange(v === true)
+                                            }
+                                        />
+                                        包含下级部门
+                                    </label>
+                                )}
+                            </form.Field>
+                        )}
+                    <p className="text-xs text-muted-foreground">
+                        保存后替换此人所选操作的范围。其他操作、其他人员保持原配置；业务状态及审批资格仍需满足。
+                    </p>
                 </>
             )}
             {error && (
-                <div
-                    role="alert"
-                    className="space-y-2 text-xs text-destructive"
+                <p role="alert" className="text-xs text-destructive">
+                    {error}
+                </p>
+            )}
+            <div className="flex gap-2">
+                <Button
+                    id="person-scope-save"
+                    size="sm"
+                    type="submit"
+                    disabled={save.isPending || stale}
                 >
-                    <p>{error}</p>
-                    <Button
-                        id="personal-grant-refresh"
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={create.isPending}
-                        onClick={() => {
-                            setDiscard(true)
-                        }}
-                    >
-                        刷新配置后重新选择
-                    </Button>
-                </div>
-            )}
-            {discard ? (
-                <div className="flex flex-wrap items-center gap-2 text-xs">
-                    <span>放弃未保存的选择？</span>
-                    <Button
-                        id="personal-grant-discard-confirm"
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                            onReload()
-                            onDone()
-                        }}
-                    >
-                        放弃选择
-                    </Button>
-                    <Button
-                        id="personal-grant-discard-cancel"
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setDiscard(false)}
-                    >
-                        继续编辑
-                    </Button>
-                </div>
-            ) : (
-                <div className="flex gap-2">
-                    <Button
-                        id="personal-grant-save"
-                        type="submit"
-                        size="sm"
-                        disabled={
-                            create.isPending ||
-                            changedVersion ||
-                            !value.resource ||
-                            !value.actions.length ||
-                            !value.org_unit_ids.length
-                        }
-                    >
-                        {create.isPending ? "保存中…" : "确认授权"}
-                    </Button>
-                    <Button
-                        id="personal-grant-cancel"
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={create.isPending}
-                        onClick={() => (dirty ? setDiscard(true) : onDone())}
-                    >
-                        取消
-                    </Button>
-                </div>
-            )}
+                    {save.isPending ? "保存中…" : "保存数据范围"}
+                </Button>
+                <Button
+                    id="person-scope-cancel"
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                    disabled={save.isPending}
+                    onClick={leave}
+                >
+                    取消
+                </Button>
+            </div>
         </form>
     )
 }

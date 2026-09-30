@@ -27,6 +27,7 @@ pub(super) const AUDIT_EVENTS: &str = <mongodb::Database as AccessControlExt>::A
 pub mod audit_event;
 pub mod data_scope;
 pub mod permission;
+pub mod person_scope;
 pub mod personal_grant;
 
 pub use audit_event::{AuditEventFilter, AuditEventRepositoryExt, AuditEventRow};

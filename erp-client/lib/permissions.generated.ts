@@ -1028,46 +1028,6 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "GET",
-                path: "/admin/data-scopes",
-                description: "查询数据范围列表",
-                permission: {
-                    resource: "data_scope",
-                    action: "list",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/data-scopes",
-                description: "创建数据范围",
-                permission: {
-                    resource: "data_scope",
-                    action: "create",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/data-scopes/replace",
-                description: "创建数据范围",
-                permission: {
-                    resource: "data_scope",
-                    action: "create",
-                },
-            },
-            {
-                module: "admin",
-                method: "DELETE",
-                path: "/admin/data-scopes/{id}",
-                description: "删除数据范围",
-                permission: {
-                    resource: "data_scope",
-                    action: "delete",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
                 path: "/admin/user-roles",
                 description: "查询用户角色绑定",
                 permission: {
@@ -1118,7 +1078,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "GET",
-                path: "/admin/personal-business-grants/{user_id}",
+                path: "/admin/person-data-scopes/{user_id}",
                 description: "查看数据范围",
                 permission: {
                     resource: "data_scope",
@@ -1127,22 +1087,12 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
-                method: "POST",
-                path: "/admin/personal-business-grants/{user_id}",
+                method: "PUT",
+                path: "/admin/person-data-scopes/{user_id}",
                 description: "创建数据范围",
                 permission: {
                     resource: "data_scope",
                     action: "create",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/personal-business-grants/{user_id}/{id}/revoke",
-                description: "删除数据范围",
-                permission: {
-                    resource: "data_scope",
-                    action: "delete",
                 },
             },
         ],

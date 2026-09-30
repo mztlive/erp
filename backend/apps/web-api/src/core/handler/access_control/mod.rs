@@ -5,14 +5,12 @@
 
 pub mod inspection;
 pub mod person_directory;
-pub mod scope_replacement;
 
 use application_core::AuditActor;
 use axum::extract::{Path, Query, State};
 use axum::{Extension, Json};
 use erp_identity::{
-    AssignUserRoleRequest, AuditEventListParams, AuditEventView, CreateDataScopeRequest,
-    CreatePermissionRequest, DataScopeListParams, DataScopeListView, DataScopeView, PageView,
+    AssignUserRoleRequest, AuditEventListParams, AuditEventView, CreatePermissionRequest, PageView,
     PermissionListParams, PermissionView, RevokeUserRoleRequest, UpdatePermissionRequest, UserRoleListParams,
     UserRoleView,
 };
@@ -129,90 +127,6 @@ pub async fn permission_delete(
 #[permission_macros::permission(
     group = "权限与审计",
     group_desc = "权限目录、数据范围、用户授权与审计查询",
-    desc = "查询数据范围列表",
-    resource = "data_scope",
-    action = "list"
-)]
-/// 查询数据范围列表（携带 `subject_id` 时按主体查询）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已认证操作人
-/// * `query` - 分页与筛选参数（`subject_type`/`scope_type`/`subject_id`/`resource`/`action`/`scope_version`）
-///
-/// # 返回
-/// 分页项与范围、权限、组织版本、时点和空集原因信封。
-///
-/// # 错误
-/// 参数非法、范围版本变化或仓储失败时返回统一错误。
-///
-/// # 关键业务约束
-/// 范围按资源、动作筛选；禁止通配符和显示名身份。版本字段只出现在信封上。
-pub async fn data_scope_list(
-    State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
-    Query(params): Query<DataScopeListParams>,
-) -> Result<DataScopeListView> {
-    let page = scope_configuration(state.db(), state.rbac()).data_scope_list(&actor, &params).await?;
-
-    Ok(ApiResponse::ok_with_data(page))
-}
-
-#[permission_macros::permission(
-    group = "权限与审计",
-    group_desc = "权限目录、数据范围、用户授权与审计查询",
-    desc = "创建数据范围",
-    resource = "data_scope",
-    action = "create"
-)]
-/// 创建数据范围（同主体同范围类型唯一）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求（`{ subject_type, subject_id, scope_type, scope_targets }`）
-///
-/// # 返回
-/// 返回新建的数据范围视图。
-pub async fn data_scope_create(
-    State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
-    Json(req): Json<CreateDataScopeRequest>,
-) -> Result<DataScopeView> {
-    let view = scope_configuration(state.db(), state.rbac()).create_data_scope(req, &actor).await?;
-
-    Ok(ApiResponse::ok_with_data(view))
-}
-
-#[permission_macros::permission(
-    group = "权限与审计",
-    group_desc = "权限目录、数据范围、用户授权与审计查询",
-    desc = "删除数据范围",
-    resource = "data_scope",
-    action = "delete"
-)]
-/// 删除数据范围（软删除）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 数据范围 ID
-///
-/// # 返回
-/// 无返回值。
-pub async fn data_scope_delete(
-    State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
-    Path(id): Path<String>,
-) -> Result<()> {
-    scope_configuration(state.db(), state.rbac()).delete_data_scope(&id, &actor).await?;
-
-    Ok(ApiResponse::ok())
-}
-
-#[permission_macros::permission(
-    group = "权限与审计",
-    group_desc = "权限目录、数据范围、用户授权与审计查询",
     desc = "查询用户角色绑定",
     resource = "user_role",
     action = "list"
@@ -312,4 +226,4 @@ pub async fn audit_event_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-pub mod personal_grant;
+pub mod person_scope;

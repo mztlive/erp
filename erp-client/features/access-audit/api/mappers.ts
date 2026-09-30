@@ -55,6 +55,7 @@ function governancePolicies(): AccessGovernancePolicyView {
 }
 
 const SCOPE_TYPE_LABEL: Record<BackendDataScope["scope_type"], string> = {
+    expression: "人员数据范围",
     company: "公司级",
     organization: "组织",
     team: "团队",
@@ -186,7 +187,10 @@ function toScopeRow(
         subjectId: scope.subject_id,
         subjectLabel: labelById.get(scope.subject_id) ?? scope.subject_id,
         scopeType: scope.scope_type.toUpperCase(),
-        scopeTypeLabel: SCOPE_TYPE_LABEL[scope.scope_type] ?? scope.scope_type,
+        scopeTypeLabel:
+            scope.summary ??
+            SCOPE_TYPE_LABEL[scope.scope_type] ??
+            scope.scope_type,
         scopeTargets:
             scope.scope_targets.length > 0
                 ? scope.scope_targets.join("、")

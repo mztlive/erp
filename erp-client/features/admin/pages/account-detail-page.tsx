@@ -12,9 +12,7 @@ import {
     useRolesQuery,
     useAssignableRolesQuery,
 } from "../hooks/queries"
-import { useAccountPermissionScopes } from "../hooks/use-account-permission-scopes"
 import { AccountFormDialog } from "../components/accounts/account-form-dialog"
-import { ScopeRulesView } from "@/features/organization/components/scope-rules-view"
 import { OrganizationChangeDialog } from "@/features/organization/components/organization-change-dialog"
 import {
     useOrganizationStateQuery,
@@ -26,11 +24,10 @@ import {
     type OrganizationChangeDraft,
 } from "@/features/organization/lib/change-payload"
 import { isRelationActive, unitLabel } from "@/features/organization/lib/tree"
-import { accountSetupTasks } from "../lib/account-setup"
 import { AccessCheckPanel } from "../components/accounts/access-check-panel"
 import { PersonalBusinessPermissions } from "../components/accounts/personal-business-permissions"
 import { usePersonalGrantDraft } from "../hooks/use-personal-grant-draft"
-import { usePersonalGrants } from "../hooks/use-personal-business-grants"
+
 import { permissionLabel } from "../lib/permission-catalog"
 
 export function AccountDetailPage({ accountId }: { accountId: string }) {
@@ -44,8 +41,6 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
     const can = (permission: string) =>
         hasPermission(profile.data?.permissions, permission)
     const org = useOrganizationStateQuery(can("org_unit:list"))
-    const scopes = useAccountPermissionScopes(account, can("data_scope:list"))
-    const personalGrants = usePersonalGrants(accountId, can("data_scope:list"))
     const preview = usePreviewOrganizationChangeMutation()
     const submit = useSubmitOrganizationChangeMutation()
     const [editing, setEditing] = React.useState(false)
@@ -85,19 +80,6 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                 row.user_id === accountId &&
                 isRelationActive(row.valid_from, row.valid_to, org.data.asOf),
         ) ?? []
-    const tasks =
-        roles.isSuccess &&
-        scopes.isSuccess &&
-        org.isSuccess &&
-        personalGrants.isSuccess
-            ? accountSetupTasks(
-                  account,
-                  roles.data,
-                  scopes.data,
-                  org.data,
-                  personalGrants.data.items,
-              )
-            : null
     const begin = (
         operation: OrganizationChangeDraft["operation"],
         roleId = "",
@@ -157,66 +139,11 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                             : "核对所属部门"}
                     </li>
                     <li>3. 已分配 {account.role_ids.length} 个角色</li>
-                    <li>4. 核对操作范围及管理关系</li>
+                    <li>4. 设置此人的业务数据范围</li>
                 </ol>
-                {tasks === null ? (
-                    <p className="text-sm text-amber-700">
-                        配置尚未完整读取或没有查看权限，不能据此判断已经开通完成。
-                    </p>
-                ) : tasks.length ? (
-                    <ul className="space-y-3">
-                        {tasks.map((task) => (
-                            <li
-                                key={task.key}
-                                className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted/40 p-3 text-sm"
-                            >
-                                <span>{task.message}</span>
-                                {task.kind === "role" && task.roleId ? (
-                                    <Link
-                                        id={`account-setup-${toAutomationIdSegment(task.key)}`}
-                                        className="font-medium text-primary"
-                                        href={`/system/roles/${encodeURIComponent(task.roleId)}/edit?returnTo=${encodeURIComponent(`/system/accounts/${accountId}`)}`}
-                                    >
-                                        配置该角色
-                                    </Link>
-                                ) : task.kind === "role" ? (
-                                    can("admin:update") && (
-                                        <Button
-                                            id={`account-setup-${toAutomationIdSegment(task.key)}`}
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => setEditing(true)}
-                                        >
-                                            分配角色
-                                        </Button>
-                                    )
-                                ) : (
-                                    can("org_unit:manage") && (
-                                        <Button
-                                            id={`account-setup-${toAutomationIdSegment(task.key)}`}
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() =>
-                                                begin(
-                                                    task.kind === "management"
-                                                        ? "grant_management"
-                                                        : "transfer_member",
-                                                    task.roleId,
-                                                )
-                                            }
-                                        >
-                                            继续设置
-                                        </Button>
-                                    )
-                                )}
-                            </li>
-                        ))}
-                    </ul>
-                ) : (
-                    <p className="text-sm">
-                        已核对操作与范围配置，未发现上述缺项。具体单据能否操作，请使用下方访问检查；涉及历史参与、状态和命令内容的条件仍需业务校验。
-                    </p>
-                )}
+                <p className="text-xs text-muted-foreground">
+                    先分配角色，再在下方为此人的业务操作设置数据范围。未配置的操作显示“待设置”。
+                </p>
             </section>
             <PersonalBusinessPermissions
                 key={accountId}
@@ -224,12 +151,10 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                 draft={businessDraft}
                 onDraftChange={setBusinessDraft}
                 name={account.name}
-                scopes={scopes.data ?? []}
                 units={org.data?.units ?? []}
-                ready={scopes.isSuccess && org.isSuccess}
+                ready={org.isSuccess}
                 canRead={can("data_scope:list")}
                 canCreate={can("data_scope:create") && can("org_unit:manage")}
-                canRevoke={can("data_scope:delete") && can("org_unit:manage")}
             />
             <section className="space-y-5 rounded-lg border p-5">
                 <div className="space-y-3">
@@ -271,7 +196,7 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                         高级：部门管理关系
                     </summary>
                     <p className="text-xs leading-5 text-muted-foreground">
-                        仅用于角色默认范围已选择“本人管理的部门”的规则。只扩大某项业务的数据范围，请使用上方“扩大数据范围”。
+                        部门管理关系用于登记组织职责，不授予业务操作或数据范围。此人的业务范围在上方单独设置。
                     </p>
                     {org.isError ? (
                         <BusinessFailureState
@@ -350,7 +275,7 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
             <section className="space-y-4 rounded-lg border p-5">
                 <h2 className="font-semibold">角色与操作权限</h2>
                 <p className="text-xs text-muted-foreground">
-                    修改角色会影响所有使用该角色的人员。仅为此人增加部门范围，请使用上方“扩大数据范围”；个人限制在下方独立管理。
+                    修改角色操作权限会影响所有使用者。此人的数据范围在上方独立设置。
                 </p>
                 {roles.isError ? (
                     <BusinessFailureState
@@ -377,7 +302,7 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                                         href={`/system/roles/${encodeURIComponent(roleId)}/edit?returnTo=${encodeURIComponent(`/system/accounts/${accountId}`)}`}
                                         className="text-sm text-primary"
                                     >
-                                        查看角色操作与范围
+                                        查看角色操作权限
                                     </Link>
                                 </div>
                                 <p className="text-sm text-muted-foreground">
@@ -392,40 +317,6 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                     })
                 )}
             </section>
-            <details className="space-y-3 rounded-lg border p-5">
-                <summary
-                    id="account-detail-scope-details"
-                    className="cursor-pointer text-sm font-medium"
-                >
-                    高级：角色默认范围与个人限制
-                </summary>
-                {!can("data_scope:list") ? (
-                    <p>没有查看数据范围的权限。</p>
-                ) : scopes.isError ? (
-                    <BusinessFailureState
-                        error={scopes.error}
-                        onRetry={() => void scopes.refetch()}
-                        id="account-detail-scopes-retry"
-                    />
-                ) : scopes.isPending ? (
-                    <p role="status">正在读取范围…</p>
-                ) : scopes.data.length ? (
-                    <ScopeRulesView
-                        rules={scopes.data}
-                        roles={roles.data}
-                        units={org.data?.units}
-                    />
-                ) : (
-                    <p>尚未配置范围，不代表可以访问全部数据。</p>
-                )}
-                <Link
-                    id="account-detail-personal-limit"
-                    className="text-sm text-primary"
-                    href={`/system/organization/scopes?subjectType=user&subjectId=${encodeURIComponent(accountId)}`}
-                >
-                    管理个人范围限制（高级）
-                </Link>
-            </details>
             {can("data_scope:list") && (
                 <AccessCheckPanel accountId={accountId} />
             )}

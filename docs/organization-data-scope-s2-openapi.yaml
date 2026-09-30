@@ -12,7 +12,7 @@
       "operationId": "organization_scope_list"
       "tags": ["组织管理"]
       "summary": "读取配置边界内的组织、人员和关系"
-      "description": "要求 org_unit:list。有动作权限但无角色范围时返回空数组并标记 no_scope；不得泄露边界外组织事实。"
+      "description": "要求 org_unit:list。有动作权限但未配置当前人员此动作的数据范围或范围结果为空时返回空数组并标记 no_scope；不得泄露边界外组织事实。"
       "responses":
         "200":
           "description": "成功；使用统一 ApiResponse 信封。"

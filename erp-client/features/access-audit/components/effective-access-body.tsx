@@ -4,7 +4,7 @@ import { BusinessEmptyState, BusinessFailureState } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { ScopeRulesView } from "@/features/organization/components/scope-rules-view"
+import { resourceLabel, actionLabel } from "@/lib/permission-catalog"
 import { useEffectiveAccessQuery } from "@/features/access-audit/hooks/queries"
 import { permissionPreview } from "@/features/access-audit/lib/effective-access-preview"
 import type { RoleRow } from "@/features/access-audit/types"
@@ -56,10 +56,8 @@ function PermissionLead({
 
 function DataScopeSection({
     query,
-    subjectLabel,
 }: {
     query: EffectiveAccessBodyProps["query"]
-    subjectLabel: string
 }) {
     if (query.isPending) {
         return (
@@ -97,33 +95,28 @@ function DataScopeSection({
         <section className="space-y-3">
             <h3 className="font-medium">数据范围</h3>
             <p className="text-xs leading-5 text-muted-foreground">
-                在已有操作权限的前提下，限制能看到哪些单据。
+                在已有操作权限的前提下，决定可以处理哪些数据。
             </p>
             {groups.length === 0 ? (
                 <p className="text-xs leading-5 text-muted-foreground">
-                    尚未配置数据范围，不代表可访问全部数据。
+                    {query.data?.subject.type === "ROLE"
+                        ? "角色只设置操作权限，请在人员资料中设置数据范围。"
+                        : "尚未配置数据范围，不代表可访问全部数据。"}
                 </p>
             ) : (
-                <ScopeRulesView
-                    rules={groups.map((row) => ({
-                        id: row.id,
-                        subject_type:
-                            row.sourceType === "USER" ? "user" : "role",
-                        subject_id: row.sourceLabel,
-                        resource: row.resource ?? "",
-                        actions: row.actions ? [...row.actions] : undefined,
-                        scope_type: row.scopeType ?? "",
-                        scope_targets: [...(row.scopeTargets ?? [])],
-                        target_dimension: row.targetDimension,
-                        target_mode: row.targetMode,
-                        include_descendants: row.includeDescendants,
-                        enabled: row.enabled,
-                    }))}
-                    roles={groups.map((row) => ({
-                        id: row.sourceLabel,
-                        name: row.sourceLabel || subjectLabel,
-                    }))}
-                />
+                <div className="space-y-3 text-xs">
+                    {groups.map((row) => (
+                        <div key={row.id}>
+                            <p className="font-medium">
+                                {resourceLabel(row.resource ?? "")} ·{" "}
+                                {row.actions?.map(actionLabel).join("、")}
+                            </p>
+                            <p className="mt-1 text-muted-foreground">
+                                {row.targetLabel}
+                            </p>
+                        </div>
+                    ))}
+                </div>
             )}
         </section>
     )
@@ -168,14 +161,13 @@ function EffectiveAccessBody({ query, previewRole }: EffectiveAccessBodyProps) {
         previewRole,
         grants: query.data?.moduleAndActionGrants ?? [],
     })
-    const subjectLabel = previewRole?.name ?? query.data?.subject.label ?? ""
     const denied = query.data?.deniedOrBlocked ?? []
     const blockers = query.data?.actionBlockers ?? []
 
     return (
         <div className="space-y-6 text-sm">
             <PermissionLead preview={preview} />
-            <DataScopeSection query={query} subjectLabel={subjectLabel} />
+            <DataScopeSection query={query} />
 
             {denied.length > 0 || blockers.length > 0 ? (
                 <section className="space-y-3 border-t border-border pt-6">

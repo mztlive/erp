@@ -2,6 +2,7 @@
 ///
 /// 该模块承载账号服务以及 Casbin RBAC 边界。
 mod account;
+#[cfg(test)]
 pub(crate) mod predefined_data_scopes;
 mod predefined_roles;
 mod rbac;

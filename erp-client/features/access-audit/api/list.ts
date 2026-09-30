@@ -1,4 +1,5 @@
-// 聚合列表读路径：roles + admins + data-scopes + audit-events + permissions。
+import { personScopeRows } from "./person-scopes"
+// 人员范围仅在人员和范围视图读取，角色管理不依赖人员范围配置权限。
 // field policies 后端无资源：返回空列表并登记 gap，不造业务数据。
 
 import { fetchCompleteList } from "@/lib/collect-pages"
@@ -14,8 +15,6 @@ import type {
 import type {
     BackendAdmin,
     BackendAuditEvent,
-    BackendDataScope,
-    BackendPermission,
     BackendRole,
 } from "./backend-types"
 import {
@@ -35,57 +34,49 @@ export async function fetchAccessList(
     const gp = governancePolicies()
     const permissionVersion = `pv-live`
 
-    const [roles, admins, scopesPage, auditPage, permsPage] = await Promise.all(
-        [
-            apiGet<BackendRole[]>("/admin/roles"),
-            apiGet<BackendAdmin[]>("/admin/admins"),
-            apiGet<Page<BackendDataScope>>("/admin/data-scopes", {
-                page: 1,
-                page_size: 100,
-                subject_type:
-                    query.subjectType === "ROLE"
-                        ? "role"
-                        : query.subjectType === "USER"
-                          ? "user"
-                          : undefined,
-                subject_id: query.subjectId,
-            }),
-            (query.view === "audit"
-                ? fetchCompleteList<BackendAuditEvent>
-                : apiGet<Page<BackendAuditEvent>>)("/admin/audit-events", {
-                q: query.q?.trim() || undefined,
-                keyword_actions: auditKeywordActions(query.q),
-                event_id: query.eventId,
-                trace_id: query.traceId,
-                created_from: auditDate(query.from),
-                created_before: auditDate(query.to, true),
-                page: 1,
-                page_size: 1,
-                actor_id: query.actorId,
-                action_type: query.action,
-                object_id: query.objectId,
-                result: query.result as BackendAuditEvent["result"] | undefined,
-            }),
-            apiGet<Page<BackendPermission>>("/admin/permissions", {
-                page: 1,
-                page_size: 50,
-            }),
-        ],
-    )
+    const [roles, admins, auditPage] = await Promise.all([
+        apiGet<BackendRole[]>("/admin/roles"),
+        apiGet<BackendAdmin[]>("/admin/admins"),
+        (query.view === "audit"
+            ? fetchCompleteList<BackendAuditEvent>
+            : apiGet<Page<BackendAuditEvent>>)("/admin/audit-events", {
+            q: query.q?.trim() || undefined,
+            keyword_actions: auditKeywordActions(query.q),
+            event_id: query.eventId,
+            trace_id: query.traceId,
+            created_from: auditDate(query.from),
+            created_before: auditDate(query.to, true),
+            page: 1,
+            page_size: 1,
+            actor_id: query.actorId,
+            action_type: query.action,
+            object_id: query.objectId,
+            result: query.result as BackendAuditEvent["result"] | undefined,
+        }),
+    ])
 
+    const scopeItems =
+        (query.view !== "users" && query.view !== "scopes") ||
+        query.subjectType === "ROLE"
+            ? []
+            : await personScopeRows(
+                  query.subjectId ? [query.subjectId] : admins.map((a) => a.id),
+              )
+    const scopesPage = { items: scopeItems, total: scopeItems.length }
     const roleNameById = new Map(roles.map((r) => [r.id, r.name]))
     const labelById = new Map<string, string>([
         ...roles.map((r) => [r.id, r.name] as const),
         ...admins.map((a) => [a.id, a.name || a.account] as const),
     ])
 
-    // 数据范围按主体 ID 关联到角色/账号行，账号再并入其角色的范围。
+    // 人员范围只关联账号，不从角色继承。
     const scopeTextBySubject = new Map<string, string[]>()
     for (const scope of scopesPage.items) {
-        const label =
-            scope.scope_targets.length > 0
-                ? `${SCOPE_TYPE_LABEL[scope.scope_type] ?? scope.scope_type}（${scope.scope_targets.join("、")}）`
-                : (SCOPE_TYPE_LABEL[scope.scope_type] ?? scope.scope_type)
+        const label = scope.summary
+            ? scope.summary
+            : scope.scope_targets.length > 0
+              ? `${SCOPE_TYPE_LABEL[scope.scope_type] ?? scope.scope_type}（${scope.scope_targets.join("、")}）`
+              : (SCOPE_TYPE_LABEL[scope.scope_type] ?? scope.scope_type)
         const bucket = scopeTextBySubject.get(scope.subject_id)
         if (bucket) bucket.push(label)
         else scopeTextBySubject.set(scope.subject_id, [label])
@@ -117,12 +108,7 @@ export async function fetchAccessList(
         ),
     )
     let userRows = admins.map((a) =>
-        toUserRow(
-            a,
-            roleNameById,
-            permissionVersion,
-            scopeSummaryFor(a.id, ...a.role_ids),
-        ),
+        toUserRow(a, roleNameById, permissionVersion, scopeSummaryFor(a.id)),
     )
     let scopeRows = scopesPage.items.map((s) =>
         toScopeRow(s, labelById, permissionVersion),
@@ -194,8 +180,6 @@ export async function fetchAccessList(
             message: "字段粒度策略未配置：字段策略只读，不可提交变更。",
         },
     ]
-
-    void permsPage
 
     return {
         view: query.view,

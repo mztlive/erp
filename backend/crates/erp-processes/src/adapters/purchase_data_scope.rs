@@ -337,6 +337,81 @@ mod equivalence_tests {
     }
 
     #[test]
+    fn explicit_person_choices_match_list_filters_without_extra_history() {
+        use entity_core::BaseModel;
+        use erp_identity::access_control::{DataScopeType, ScopeDimension, ScopeTargetMode};
+        use erp_identity::entity::access_control::person_scope::{
+            PersonDataScope, PersonScopeExpression, PersonScopeTerm,
+        };
+        use erp_identity::entity::organization::{OrgUnit, OrgUnitKind};
+        use erp_identity::entity::organization_change::OrganizationState;
+        use erp_identity::service::access_control::resolve::AuthorizedDataScope;
+        let state = OrganizationState {
+            units: vec![
+                OrgUnit::new(
+                    "org-a".into(),
+                    "Sales".into(),
+                    None,
+                    OrgUnitKind::Department,
+                    "admin".into(),
+                    "test".into(),
+                )
+                .unwrap(),
+            ],
+            ..Default::default()
+        };
+        for kind in [DataScopeType::SelfOwned, DataScopeType::Organization, DataScopeType::Company] {
+            let explicit = kind == DataScopeType::Organization;
+            let config = PersonDataScope {
+                base: BaseModel::fake(),
+                user_id: "actor".into(),
+                resource: "purchase_order".into(),
+                action: "detail".into(),
+                expression: PersonScopeExpression {
+                    history_read: false,
+                    condition: None,
+                    alternatives: vec![vec![PersonScopeTerm {
+                        scope_type: kind,
+                        target_dimension: ScopeDimension::InternalOrg,
+                        target_mode: explicit.then_some(ScopeTargetMode::Explicit),
+                        include_descendants: explicit.then_some(false),
+                        scope_targets: if explicit { vec!["org-a".into()] } else { vec![] },
+                    }]],
+                },
+            };
+            let scope = config.resolve(&state, &[ScopeDimension::InternalOrg], true, Instant::now()).unwrap();
+            let access = map_access(AuthorizedDataScope {
+                user_id: "actor".into(),
+                resource: "purchase_order".into(),
+                action: "detail".into(),
+                scope,
+                role_scopes: Default::default(),
+                organizations: state.clone(),
+                policy_version: 1,
+                scope_version: "v1".into(),
+                as_of: Instant::now(),
+            })
+            .unwrap();
+            let query = purchase_scope(&access, "actor", vec!["history".into()]);
+            for (id, owned, department) in
+                [("owned", true, "org-b"), ("department", false, "org-a"), ("history", false, "org-b")]
+            {
+                let object = PurchaseScopeObject {
+                    owned,
+                    collaborating: false,
+                    historical_read_participant: id == "history",
+                    org_unit_id: Some(department.into()),
+                };
+                let document = json!({"id": id, "customer_id": id, "owner_user_id": if owned {"actor"} else {"other"}, "business_org_unit_id": department});
+                assert_eq!(evaluate_object(&access, &object).unwrap(), matches(&query.document(), &document));
+                if id == "history" {
+                    assert_eq!(evaluate_object(&access, &object).unwrap(), kind == DataScopeType::Company);
+                }
+            }
+        }
+    }
+
+    #[test]
     fn public_object_decision_matches_compiled_conditions() {
         let ids = (0..16).map(|i| format!("o-{i}")).collect::<Vec<_>>();
         let selected = |bit| {

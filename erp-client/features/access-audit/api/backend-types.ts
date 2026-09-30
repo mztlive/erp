@@ -29,6 +29,7 @@ type BackendPermission = {
 }
 
 type BackendDataScope = {
+    summary?: string
     id: string
     subject_type: "role" | "user"
     subject_id: string
@@ -38,6 +39,7 @@ type BackendDataScope = {
         | "team"
         | "self_owned"
         | "collaborative"
+        | "expression"
     scope_targets: string[]
     target_dimension?: string
     target_mode?: string | null

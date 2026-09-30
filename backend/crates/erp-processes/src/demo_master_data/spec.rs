@@ -4,6 +4,8 @@
 
 use std::sync::OnceLock;
 
+use erp_identity::access_control::{DataScopeType, ScopeDimension, ScopeTargetMode};
+use erp_identity::entity::access_control::person_scope::PersonScopeTerm;
 use erp_party::dto::company::SaveCompanyRequest;
 use erp_workflow::{DocumentType, FinanceResponsibilityOperation};
 use serde::Deserialize;
@@ -91,6 +93,30 @@ pub(super) fn foundation_spec() -> &'static FoundationFile {
 /// 代码不在单据类型表中时返回错误。
 pub(super) fn document_type(code: &str) -> Result<DocumentType> {
     DocumentType::try_from_code(code).map_err(|error| Error::Internal(error.to_string()))
+}
+
+/// 演示范围配置的固定输入选择。
+pub(super) struct DemoPersonScope;
+impl DemoPersonScope {
+    /// 演示岗位初始选择；跨维度业务明确使用公司范围。
+    pub(super) fn term(login: &str, dimensions: &[ScopeDimension]) -> PersonScopeTerm {
+        let internal = dimensions == [ScopeDimension::InternalOrg];
+        let own = internal && matches!(login, "xiaoshou" | "caigou" | "yunying");
+        let department = internal && login == "lisiyong";
+        PersonScopeTerm {
+            scope_type: if own {
+                DataScopeType::SelfOwned
+            } else if department {
+                DataScopeType::Organization
+            } else {
+                DataScopeType::Company
+            },
+            target_dimension: dimensions[0],
+            target_mode: department.then_some(ScopeTargetMode::OwnOrg),
+            include_descendants: department.then_some(true),
+            scope_targets: vec![],
+        }
+    }
 }
 
 #[cfg(test)]

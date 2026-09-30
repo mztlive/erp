@@ -16,6 +16,7 @@ mod foundation;
 mod lifecycle;
 mod master_graph;
 mod organization;
+mod person_scopes;
 mod plan;
 mod removal;
 mod repository;

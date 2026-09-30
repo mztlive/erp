@@ -19,8 +19,22 @@ pub struct Cli {
 pub enum Command {
     /// 创建或修复系统超级管理员。
     InitAdmin(InitAdminArgs),
+    /// 预览人员数据范围迁移；--apply 显式写入。
+    MigratePersonScopes(MigrateScopeArgs),
     /// 重置已有管理员密码，不改角色。
     ResetPassword(ResetPasswordArgs),
+}
+
+/// 明确人员的迁移参数。
+#[derive(Debug, Args)]
+pub struct MigrateScopeArgs {
+    #[arg(long)]
+    pub user_id: String,
+    #[arg(long)]
+    pub apply: bool,
+    /// 预览报告中的策略版本，应用时必填。
+    #[arg(long, requires = "apply")]
+    pub expected_policy_version: Option<u64>,
 }
 
 /// 初始化超级管理员参数。
@@ -132,7 +146,7 @@ mod tests {
                 assert_eq!(args.name, "System Admin");
                 assert_eq!(args.password.as_deref(), Some("secret1"));
             },
-            Command::ResetPassword(_) => panic!("应解析为 init-admin"),
+            _ => panic!("应解析为 init-admin"),
         }
     }
 
@@ -145,8 +159,36 @@ mod tests {
                 assert_eq!(args.account, "admin");
                 assert!(args.password.is_none());
             },
-            Command::InitAdmin(_) => panic!("应解析为 reset-password"),
+            _ => panic!("应解析为 reset-password"),
         }
+    }
+
+    #[test]
+    fn migration_version_requires_explicit_apply() {
+        assert!(
+            Cli::try_parse_from([
+                "cli",
+                "migrate-person-scopes",
+                "--user-id",
+                "alice",
+                "--expected-policy-version",
+                "1"
+            ])
+            .is_err()
+        );
+        assert!(Cli::try_parse_from(["cli", "migrate-person-scopes", "--user-id", "alice"]).is_ok());
+        assert!(
+            Cli::try_parse_from([
+                "cli",
+                "migrate-person-scopes",
+                "--user-id",
+                "alice",
+                "--apply",
+                "--expected-policy-version",
+                "1"
+            ])
+            .is_ok()
+        );
     }
 
     #[test]

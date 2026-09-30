@@ -4,7 +4,6 @@ mod seed;
 
 mod authorize;
 mod command;
-mod default_scopes;
 mod enforcer;
 mod policy;
 mod query;
@@ -37,9 +36,8 @@ use tokio::sync::{Mutex, OnceCell, RwLock};
 
 use crate::MongoCasbinAdapter;
 use crate::entity::rbac::{Permission, PermissionSet};
+pub use crate::entity::role::ROOT_ROLE_ID;
 use crate::ports::IdentityAuditPort;
-
-pub const ROOT_ROLE_ID: &str = "role-root";
 const ROOT_ROLE_NAME: &str = "超级管理员";
 const ROLE_PREFIX: &str = "role:";
 const ROOT_ROLE_INIT_ATTEMPTS: usize = 3;

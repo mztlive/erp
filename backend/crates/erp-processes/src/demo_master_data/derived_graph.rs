@@ -415,6 +415,8 @@ const KEPT: &[&str] = &[
     "permissions",
     "user_roles",
     "data_scopes",
+    "person_data_scopes",
+    "personal_business_grants",
     "audit_events",
     "audit_logs",
     "approval_process_definitions",

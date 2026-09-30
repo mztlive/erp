@@ -82,6 +82,7 @@ pub async fn ensure_authorization(db: &Database) -> Result<()> {
         ],
     )
     .await?;
+    ensure_person_scopes(db).await?;
     ensure_organizations(db).await?;
     Ok(())
 }
@@ -274,6 +275,26 @@ async fn remove_obsolete_scope_index(db: &Database) -> Result<()> {
     if collection.list_index_names().await?.iter().any(|name| name == "uk_data_scopes_subject_scope") {
         collection.drop_index("uk_data_scopes_subject_scope").await?;
     }
+    Ok(())
+}
+
+/// 确保人员范围唯一键；迁移应用在事务前调用，预览不得调用。
+/// # 参数
+/// 目标数据库。
+/// # 返回
+/// 新集合索引就绪。
+/// # 错误
+/// 重复数据或DDL失败拒绝迁移。
+pub async fn ensure_person_scopes(db: &Database) -> Result<()> {
+    create_indexes(
+        db,
+        <Database as AccessControlExt>::PERSON_DATA_SCOPES,
+        vec![
+            unique_index("uk_person_scope_id", doc! { "id": 1 }),
+            unique_index("uk_person_scope_action", doc! { "user_id": 1, "resource": 1, "action": 1 }),
+        ],
+    )
+    .await?;
     Ok(())
 }
 

@@ -19,6 +19,7 @@ use crate::entity::rbac::RoleIdSet;
 use crate::error::Result;
 use crate::ports::PreparedResourceAudit;
 use crate::repository::prelude::*;
+use crate::service::access_control::person_scope_migration::seed_company;
 use crate::service::account_support::{account_of_kind, apply_account_update, ensure_account_available};
 use crate::service::auth::password;
 use crate::service::iam::{AuthorizedAccountManagement, AuthorizedRoleGrant, SharedRbacService};
@@ -378,6 +379,7 @@ impl AdminService {
                 Box::pin(async move {
                     db.accounts().create(&account, executor).await?;
                     rbac.assign_system_roles(AccountKind::Admin, &account_id, role_ids, executor).await?;
+                    seed_company(&db, &account_id, executor).await?;
                     Ok::<AccountCore, crate::error::Error>(account)
                 })
             })

@@ -106,7 +106,7 @@ impl AccessInspectionReadService {
                 view.push(
                     "具体单据范围",
                     "blocked",
-                    "该人员不能执行此操作。请核对角色范围、个人限制、当前负责人和有效历史参与资格。",
+                    "该人员不能执行此操作。请核对人员范围、该操作的数据范围、当前负责人和有效历史参与资格。",
                 );
             },
             Err(error) => return Err(error),

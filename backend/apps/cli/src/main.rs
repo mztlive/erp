@@ -3,6 +3,7 @@
 //! 本 crate 只装配身份领域已有账号用例，禁止依赖 `web-api`。
 
 mod indexes;
+mod migrate_scopes;
 
 mod args;
 mod error;
@@ -42,6 +43,7 @@ async fn run() -> Result<()> {
     init_tracing();
     let cli = Cli::parse();
     match cli.command {
+        Command::MigratePersonScopes(args) => migrate_scopes::run(&cli.config_path, args).await,
         Command::InitAdmin(args) => init_admin::run(&cli.config_path, args).await,
         Command::ResetPassword(args) => reset_password::run(&cli.config_path, args).await,
     }

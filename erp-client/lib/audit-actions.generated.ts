@@ -25,6 +25,14 @@ export const AUDIT_ACTION_OPTIONS = [
         label: "数据范围 · 删除",
     },
     {
+        value: "person_data_scope.migrate",
+        label: "人员业务范围 · 迁移",
+    },
+    {
+        value: "person_data_scope.replace",
+        label: "人员业务范围 · 设置",
+    },
+    {
         value: "personal_business_grant.create",
         label: "个人业务范围 · 授权",
     },

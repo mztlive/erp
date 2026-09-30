@@ -67,19 +67,6 @@ function useRoleColumns({
                 },
             },
             {
-                id: "scope",
-                header: "数据范围",
-                size: 180,
-                cell: ({ row }) => (
-                    <span
-                        className="block max-w-[16rem] truncate text-sm"
-                        title={row.original.dataScopeSummary}
-                    >
-                        {row.original.dataScopeSummary}
-                    </span>
-                ),
-            },
-            {
                 id: "accounts",
                 header: "绑定账号",
                 size: 130,

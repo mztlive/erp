@@ -212,6 +212,7 @@ const RESOURCE_LABEL_OVERRIDES: Record<string, string> = {
     permission: "权限定义",
     data_scope: "数据范围",
     personal_business_grant: "个人业务授权",
+    person_data_scope: "人员数据范围",
     org_unit: "内部组织",
     person_query_qualification: "人员查询资格",
     approval_process: "审批流程",

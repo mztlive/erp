@@ -13,11 +13,16 @@ use crate::repository::access_control::{
 };
 use crate::repository::owned::{
     AccountCoreRepository, AuditEventRepository, DataScopeRepository, PermissionRepository,
-    PersonQueryQualificationRepository, PersonalBusinessGrantRepository, RoleRepository, UserRoleRepository,
+    PersonDataScopeRepository, PersonQueryQualificationRepository, PersonalBusinessGrantRepository,
+    RoleRepository, UserRoleRepository,
 };
 
 /// 访问控制域仓储访问器。
 pub trait AccessControlExt {
+    /// 人员唯一有效范围集合。
+    const PERSON_DATA_SCOPES: &'static str = "person_data_scopes";
+    /// 获取人员范围仓储。
+    fn person_data_scopes(&self) -> PersonDataScopeRepository<'_>;
     /// 独立个人业务扩展授权集合。
     const PERSONAL_BUSINESS_GRANTS: &'static str = "personal_business_grants";
     /// 获取个人业务授权仓储。
@@ -94,6 +99,9 @@ pub trait AccessControlExt {
 }
 
 impl AccessControlExt for Database {
+    fn person_data_scopes(&self) -> PersonDataScopeRepository<'_> {
+        PersonDataScopeRepository::new(self, Self::PERSON_DATA_SCOPES)
+    }
     fn personal_business_grants(&self) -> PersonalBusinessGrantRepository<'_> {
         PersonalBusinessGrantRepository::new(self, Self::PERSONAL_BUSINESS_GRANTS)
     }

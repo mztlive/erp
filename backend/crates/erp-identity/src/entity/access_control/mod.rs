@@ -15,11 +15,13 @@
 pub mod audit_actions;
 pub mod audit_event;
 pub mod data_scope;
+pub(crate) mod governance;
 pub mod permission;
+pub mod person_scope;
+pub(crate) mod person_scope_migration;
 pub mod personal_grant;
 pub mod resolved_scope;
 pub mod responsibility_scope;
-pub(crate) mod role_defaults;
 pub use resolved_scope::{ResolvedScope, ScopeClause, ScopeResolution, ScopedObject};
 pub mod scope_binding;
 pub(crate) mod scope_replacement;

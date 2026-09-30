@@ -1,33 +1,15 @@
 "use client"
-
-import * as React from "react"
 import Link from "next/link"
-import { ArrowUpRightIcon, SearchIcon } from "lucide-react"
-
-import { BusinessFailureState, QuickPreviewSheet } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
+import { QuickPreviewSheet, BusinessFailureState } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import {
-    InputGroup,
-    InputGroupAddon,
-    InputGroupInput,
-} from "@/components/ui/input-group"
-import { toAutomationIdSegment } from "@/lib/automation-id"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
-import { useOrganizationStateQuery } from "@/features/organization/hooks/queries"
-import { isRelationActive, unitLabel } from "@/features/organization/lib/tree"
-import { useRolesQuery } from "../../hooks/queries"
-import { usePersonalGrants } from "../../hooks/use-personal-business-grants"
 import { actionLabel, resourceLabel } from "@/lib/permission-catalog"
-import { useAccountPermissionScopes } from "../../hooks/use-account-permission-scopes"
-import { accountPermissionGroups } from "../../lib/account-permission-preview"
-import { ScopeRulesView } from "@/features/organization/components/scope-rules-view"
+import { useRolesQuery } from "../../hooks/queries"
+import { usePersonScopes } from "../../hooks/use-person-data-scopes"
+import { personScopeDescription } from "../../api/person-data-scopes"
+import { permissionLabel } from "../../lib/permission-catalog"
 import type { AdminAccount } from "../../types"
-
-const id = "governance-admin-account-permissions"
-
-/** 账号页原地只读预览；沿用公司商品池的窄栏、分隔区块与固定页脚。 */
 export function AccountPermissionsSheet({
     account,
     open,
@@ -41,391 +23,106 @@ export function AccountPermissionsSheet({
     onClosed: () => void
     onAdjustRoles: () => void
 }) {
-    const rolesQuery = useRolesQuery()
+    const roles = useRolesQuery()
     const profile = useAccountProfileQuery()
-    const canReadOrganization = hasPermission(
-        profile.data?.permissions,
-        "org_unit:list",
-    )
-    const organization = useOrganizationStateQuery(open && canReadOrganization)
-    const person = organization.data?.people.find(
-        (item) => item.id === account?.id,
-    )
-    const management =
-        organization.data?.management.filter(
-            (item) =>
-                item.user_id === account?.id &&
-                account?.role_ids.includes(item.role_id) &&
-                isRelationActive(
-                    item.valid_from,
-                    item.valid_to,
-                    organization.data!.asOf,
-                ),
-        ) ?? []
-    const scopesQuery = useAccountPermissionScopes(account, open)
-    const personalGrants = usePersonalGrants(
+    const scopes = usePersonScopes(
         account?.id ?? "",
-        open &&
-            Boolean(account) &&
-            hasPermission(profile.data?.permissions, "data_scope:list"),
+        open && hasPermission(profile.data?.permissions, "data_scope:list"),
     )
-    const [keyword, setKeyword] = React.useState("")
-    React.useEffect(() => {
-        if (open) setKeyword("")
-    }, [account?.id, open])
-    const preview =
-        account && rolesQuery.data
-            ? accountPermissionGroups(account, rolesQuery.data)
-            : null
-    const q = keyword.trim().toLowerCase()
-    const groups =
-        preview?.groups
-            .map((group) => ({
-                ...group,
-                items: group.items.filter((item) =>
-                    `${group.name} ${item.label} ${item.sources.map((source) => source.name).join(" ")}`
-                        .toLowerCase()
-                        .includes(q),
-                ),
-            }))
-            .filter((group) => group.items.length) ?? []
     return (
         <QuickPreviewSheet
-            idPrefix={`${id}-sheet`}
+            idPrefix="governance-admin-account-permissions-sheet"
             open={open}
             onOpenChange={onOpenChange}
-            onOpenChangeComplete={(isOpen) => {
-                if (!isOpen) onClosed()
+            onOpenChangeComplete={(v) => {
+                if (!v) onClosed()
             }}
             size="preview"
-            contentClassName="data-[side=right]:sm:w-[460px] data-[side=right]:sm:max-w-[460px]"
-            title={
-                account
-                    ? `${account.name || account.account}的权限`
-                    : "账号权限"
-            }
-            identity={account ? `登录账号：${account.account}` : undefined}
-            description="查看角色授予的操作权限与数据范围配置。"
-            summary={
-                <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="secondary">只读</Badge>
-                    <span className="text-xs text-muted-foreground">
-                        已分配 {account?.role_ids.length ?? 0} 个角色
-                    </span>
-                </div>
-            }
+            title={`${account?.name ?? "人员"}的权限`}
+            description="角色提供操作权限，数据范围由人员独立配置。"
             footer={
                 <>
                     <Button
-                        id={`${id}-close`}
+                        id="account-permission-close"
                         variant="outline"
                         onClick={() => onOpenChange(false)}
                     >
                         关闭
                     </Button>
                     <Button
-                        id={`${id}-adjust-roles`}
+                        id="account-permission-role-edit"
                         onClick={onAdjustRoles}
-                        disabled={!account}
                     >
-                        打开人员资料
+                        调整角色
                     </Button>
                 </>
             }
         >
-            <div className="space-y-6 text-sm">
-                <section className="space-y-2 border-b pb-6">
-                    <h3 className="font-medium">部门与管理职责</h3>
-                    {!canReadOrganization ? (
-                        <p>没有查看部门的权限。</p>
-                    ) : organization.isError ? (
-                        <BusinessFailureState
-                            id="account-permissions-organization-retry"
-                            title="部门信息加载失败"
-                            error={organization.error}
-                            onRetry={() => {
-                                void organization.refetch()
-                            }}
-                        />
-                    ) : !organization.data ? (
-                        <p>正在加载部门…</p>
-                    ) : (
-                        <>
-                            <p>
-                                所属部门：
-                                {!person
-                                    ? "不在可查看范围"
-                                    : person.own_org_unit_id
-                                      ? unitLabel(
-                                            organization.data.units,
-                                            person.own_org_unit_id,
-                                        )
-                                      : "未分配部门"}
-                            </p>
-                            <p>
-                                管理部门：
-                                {management.length
-                                    ? management
-                                          .map(
-                                              (item) =>
-                                                  `${unitLabel(organization.data!.units, item.org_unit_id)}${item.include_descendants ? "（含下级）" : ""}`,
-                                          )
-                                          .join("、")
-                                    : "当前可查看范围内未配置"}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                                下方按业务查看角色范围与个人限制。部门成员身份本身不授予业务权限。
-                            </p>
-                        </>
-                    )}
-                </section>
-                {hasPermission(
-                    profile.data?.permissions,
-                    "data_scope:list",
-                ) && (
-                    <section className="space-y-2 border-b pb-6">
-                        <h3 className="font-medium">此人的附加业务范围</h3>
-                        {personalGrants.isError ? (
-                            <BusinessFailureState
-                                id="account-permissions-grants-retry"
-                                error={personalGrants.error}
-                                onRetry={() => void personalGrants.refetch()}
-                            />
-                        ) : personalGrants.isPending ? (
-                            <p className="text-xs">正在读取…</p>
-                        ) : personalGrants.data.items.length ? (
-                            personalGrants.data.items.map((grant) => (
-                                <p key={grant.id} className="text-xs leading-5">
-                                    {resourceLabel(grant.resource)} ·{" "}
-                                    {grant.org_unit_ids
-                                        .map((orgId) =>
-                                            unitLabel(
-                                                organization.data?.units ?? [],
-                                                orgId,
-                                            ),
-                                        )
-                                        .join("、")}
-                                    {grant.include_descendants
-                                        ? "（含下级）"
-                                        : ""}{" "}
-                                    ·{" "}
-                                    {grant.active_actions.length
-                                        ? grant.active_actions
-                                              .map(actionLabel)
-                                              .join("、")
-                                        : "依据角色或操作已失效"}
-                                </p>
-                            ))
-                        ) : (
-                            <p className="text-xs text-muted-foreground">
-                                没有单独扩大的业务范围。
-                            </p>
-                        )}
-                        <p className="text-xs text-muted-foreground">
-                            附加范围仍受个人限制及业务条件约束。需要调整时，打开人员资料中的“业务权限”。
-                        </p>
-                    </section>
-                )}
-                {rolesQuery.isError ? (
-                    <BusinessFailureState
-                        error={rolesQuery.error}
-                        title="角色权限加载失败"
-                        action={
-                            <Button
-                                id={`${id}-retry`}
-                                variant="outline"
-                                onClick={() => void rolesQuery.refetch()}
-                            >
-                                重试
-                            </Button>
-                        }
-                    />
-                ) : !preview ? (
-                    <div
-                        role="status"
-                        className="py-6 text-sm text-muted-foreground"
-                    >
-                        正在读取角色权限…
-                    </div>
-                ) : (
-                    <>
-                        <section className="border-b border-border pb-6">
-                            <h3 className="text-xs font-medium text-muted-foreground">
-                                角色授予的操作权限
-                            </h3>
-                            <p className="mt-2 text-[32px] font-semibold leading-10 tracking-tight">
-                                {preview.allPermissions ? (
-                                    "全部操作权限"
-                                ) : (
-                                    <>
-                                        <span className="num">
-                                            {preview.permissionCount}
-                                        </span>
-                                        <span className="ml-2 text-sm font-normal text-muted-foreground">
-                                            项
-                                        </span>
-                                    </>
-                                )}
-                            </p>
-                            <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                                {preview.allPermissions
-                                    ? "包含全权角色授权。"
-                                    : `覆盖 ${preview.groups.length} 个模块，同一权限按一项展示。`}
-                                实际访问仍受数据范围和业务状态限制。
-                            </p>
-                            {preview.missingRoleCount > 0 ? (
-                                <p
-                                    role="status"
-                                    className="mt-2 text-xs text-warning"
-                                >
-                                    有 {preview.missingRoleCount}{" "}
-                                    个角色未返回，当前展示不完整。
-                                </p>
-                            ) : null}
-                        </section>
-                        <section className="space-y-3 border-b border-border pb-6">
-                            <h3 className="font-medium">操作权限</h3>
-                            <InputGroup>
-                                <InputGroupAddon>
-                                    <SearchIcon aria-hidden="true" />
-                                </InputGroupAddon>
-                                <InputGroupInput
-                                    id={`${id}-search`}
-                                    type="search"
-                                    value={keyword}
-                                    onChange={(event) =>
-                                        setKeyword(event.target.value)
-                                    }
-                                    placeholder="搜索模块、操作或来源角色"
-                                    aria-label="搜索账号权限"
-                                />
-                            </InputGroup>
-                            {groups.length ? (
-                                <div className="divide-y divide-border">
-                                    {groups.map((group) => (
-                                        <details
-                                            key={group.name}
-                                            open={q ? true : undefined}
-                                            className="group py-3"
-                                        >
-                                            <summary
-                                                id={`${id}-group-${Array.from(group.name, (character) => character.codePointAt(0)!.toString(16)).join("-")}`}
-                                                className="cursor-pointer text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2"
-                                            >
-                                                {group.name}
-                                                <span className="num ml-2 text-xs font-normal text-muted-foreground">
-                                                    {group.items.length} 项
-                                                </span>
-                                            </summary>
-                                            <ul className="mt-3 space-y-4">
-                                                {group.items.map((item) => (
-                                                    <li
-                                                        key={item.code}
-                                                        className="space-y-1"
-                                                    >
-                                                        <p className="break-words text-[13px]">
-                                                            {item.label}
-                                                        </p>
-                                                        <p className="text-xs leading-5 text-muted-foreground">
-                                                            来源：
-                                                            {item.sources
-                                                                .map(
-                                                                    (source) =>
-                                                                        source.name,
-                                                                )
-                                                                .join("、")}
-                                                        </p>
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        </details>
-                                    ))}
-                                </div>
-                            ) : (
-                                <p className="py-3 text-xs text-muted-foreground">
-                                    {q
-                                        ? "没有匹配的权限，请更换关键词。"
-                                        : "当前角色未配置操作权限。"}
-                                </p>
-                            )}
-                        </section>
-                        <section className="space-y-3 border-b border-border pb-6">
-                            <h3 className="font-medium">已分配角色</h3>
-                            <p className="text-xs leading-5 text-muted-foreground">
-                                修改角色权限会影响绑定该角色的所有账号。
-                            </p>
-                            <ul className="space-y-3">
-                                {preview.assigned.map((role) => (
-                                    <li
-                                        key={role.id}
-                                        className="flex items-center justify-between gap-4"
-                                    >
-                                        <span>{role.name}</span>
-                                        <Link
-                                            id={`${id}-role-${toAutomationIdSegment(role.id)}-edit`}
-                                            href={`/system/roles/${role.id}/edit`}
-                                            className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2"
-                                        >
-                                            编辑角色权限
-                                            <ArrowUpRightIcon
-                                                className="size-3.5"
-                                                aria-hidden="true"
-                                            />
-                                        </Link>
-                                    </li>
-                                ))}
-                            </ul>
-                            {!account?.role_ids.length ? (
-                                <p className="text-xs text-muted-foreground">
-                                    尚未分配角色。
-                                </p>
-                            ) : null}
-                        </section>
-                    </>
-                )}
+            <div className="space-y-5 text-sm">
                 <section className="space-y-3">
-                    <h3 className="font-medium">数据范围</h3>
-                    {scopesQuery.isError ? (
-                        <div className="space-y-2">
-                            <p className="text-xs text-muted-foreground">
-                                数据范围读取失败，不能据此判断为没有限制。
-                            </p>
-                            <Button
-                                id={`${id}-scopes-retry`}
-                                variant="outline"
-                                size="sm"
-                                onClick={() => void scopesQuery.refetch()}
-                            >
-                                重试数据范围
-                            </Button>
-                        </div>
-                    ) : scopesQuery.isPending ? (
-                        <p
-                            role="status"
-                            className="text-xs text-muted-foreground"
-                        >
-                            正在读取数据范围…
-                        </p>
-                    ) : scopesQuery.data.length ? (
-                        <ScopeRulesView
-                            rules={scopesQuery.data}
-                            roles={rolesQuery.data ?? []}
-                            units={organization.data?.units ?? []}
+                    <h3 className="font-semibold">角色与操作权限</h3>
+                    {roles.isError ? (
+                        <BusinessFailureState
+                            error={roles.error}
+                            onRetry={() => void roles.refetch()}
                         />
                     ) : (
-                        <p className="text-xs leading-5 text-muted-foreground">
-                            未查询到账号或角色的数据范围配置，不代表可访问全部数据。
-                        </p>
+                        account?.role_ids.map((id) => {
+                            const role = roles.data?.find((r) => r.id === id)
+                            return (
+                                <div key={id}>
+                                    <p>{role?.name ?? "角色待确认"}</p>
+                                    <p className="mt-1 text-xs text-muted-foreground">
+                                        {role?.permissions
+                                            .map(permissionLabel)
+                                            .join("、")}
+                                    </p>
+                                </div>
+                            )
+                        })
                     )}
                 </section>
-                <section className="border-t border-border pt-6">
-                    <h3 className="text-xs font-medium text-muted-foreground">
-                        查询范围
-                    </h3>
-                    <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                        以上展示当前账号的角色授权与数据范围配置，具体业务操作是否允许，以执行时的权限校验为准。
-                    </p>
+                <section className="space-y-3">
+                    <h3 className="font-semibold">此人的数据范围</h3>
+                    {scopes.isError ? (
+                        <BusinessFailureState
+                            error={scopes.error}
+                            onRetry={() => void scopes.refetch()}
+                        />
+                    ) : scopes.data ? (
+                        scopes.data.businesses.map((b) => (
+                            <div key={b.resource}>
+                                <p>{resourceLabel(b.resource)}</p>
+                                {b.actions.map((a) => (
+                                    <p
+                                        className="mt-1 text-xs text-muted-foreground"
+                                        key={a}
+                                    >
+                                        {actionLabel(a)}：
+                                        {personScopeDescription(
+                                            scopes.data.items.find(
+                                                (s) =>
+                                                    s.resource === b.resource &&
+                                                    s.action === a,
+                                            ),
+                                        )}
+                                    </p>
+                                ))}
+                            </div>
+                        ))
+                    ) : (
+                        <p className="text-xs">范围未读取或无查看权限。</p>
+                    )}
                 </section>
+                {account && (
+                    <Link
+                        id="account-permission-details"
+                        className="text-primary"
+                        href={`/system/accounts/${encodeURIComponent(account.id)}`}
+                    >
+                        进入人员资料设置范围
+                    </Link>
+                )}
             </div>
         </QuickPreviewSheet>
     )

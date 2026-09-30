@@ -262,3 +262,5 @@ mod tests {
 }
 
 pub mod inspection;
+
+pub mod person_scope;

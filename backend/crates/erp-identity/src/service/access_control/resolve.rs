@@ -7,11 +7,13 @@ use erp_core::common::time::Instant;
 use mongodb::Database;
 use persistence_core::Executor;
 
-use crate::access_control::{DataScopeSubjectType, ResolvedScope, ScopeClause, ScopeResolution};
-use crate::entity::organization::OrgTree;
+use crate::access_control::{ResolvedScope, ScopeClause};
+use crate::entity::access_control::governance::root_organization_scope;
+use crate::entity::access_control::person_scope::PersonDataScope;
 use crate::entity::organization_change::OrganizationState;
+use crate::entity::role::Role;
 use crate::repository::OrganizationRepository;
-use crate::repository::access_control::personal_grant::PersonalBusinessGrantRepositoryExt;
+use crate::repository::access_control::person_scope::PersonDataScopeRepositoryExt;
 use crate::repository::prelude::*;
 use crate::{AccessControlExt, Error, Permission, Result, SharedRbacService};
 
@@ -21,7 +23,7 @@ pub struct AuthorizedDataScope {
     pub resource: String,
     pub action: String,
     pub scope: ResolvedScope,
-    /// 已通过同角色完整动作权限证明的条款。
+    /// 已通过同角色完整动作权限证明的角色键；值不参与范围计算。
     pub role_scopes: BTreeMap<String, ScopeClause>,
     pub organizations: OrganizationState,
     pub policy_version: u64,
@@ -120,20 +122,19 @@ impl DataScopeService {
             .accounts()
             .find_by_id(actor.id(), executor)
             .await?
-            .filter(|a| a.is_active_backoffice())
+            .filter(|a| a.is_active_backoffice() && a.kind == actor.kind())
             .ok_or_else(|| Error::Forbidden("账号已失效".into()))?;
         let snapshot = self.rbac.role_permission_snapshot(actor.kind(), actor.id(), &required).await?;
         self.rbac.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
         let role_ids = snapshot.granting_role_ids_for_all(&required);
         let roles = self.db.roles().enabled_roles(&role_ids, executor).await?;
-        let eligible = roles.iter().map(|role| role.base.id.clone()).collect::<Vec<_>>();
-        if eligible.is_empty() {
+        if roles.is_empty() {
             return Err(Error::Forbidden("没有该资源动作权限".into()));
         }
         let as_of = Instant::now();
         let state = self.scope_organizations(actor.id(), resource, as_of, executor).await?;
         let (scope, role_scopes) =
-            self.resolved(actor.id(), &eligible, (resource, action), &state, as_of, executor).await?;
+            self.resolved(actor.id(), &roles, (resource, action), &state, as_of, executor).await?;
         let fingerprint = format!(
             "{}:{}:{}:{}:{}:{:?}:{:?}",
             account.base.version,
@@ -185,41 +186,30 @@ impl DataScopeService {
     async fn resolved(
         &self,
         user: &str,
-        roles: &[String],
+        roles: &[Role],
         resource_action: (&str, &str),
         state: &OrganizationState,
         at: Instant,
         executor: &mut dyn Executor,
     ) -> Result<(ResolvedScope, BTreeMap<String, ScopeClause>)> {
         let (resource, action) = resource_action;
-        if self.db.data_scopes().has_legacy_user_limit(user, executor).await? {
-            return Err(Error::ValidationError("账号存在未迁移的个人范围上限，请先显式迁移配置".into()));
-        }
-        let mut rules =
-            self.db.data_scopes().list_by_subjects(DataScopeSubjectType::Role, roles, executor).await?;
-        rules
-            .extend(self.db.data_scopes().list_by_subject(DataScopeSubjectType::User, user, executor).await?);
-        for rule in rules.iter().filter(|rule| rule.binding.applies(resource, action)) {
-            super::consumers::validate_binding(&rule.binding)?;
-            super::consumers::validate_scope_type(&rule.binding.resource, rule.scope_type)?;
+        let registration = super::consumers::registration(resource, action)?;
+        let qualifications =
+            roles.iter().map(|role| (role.base.id.clone(), ScopeClause::default())).collect();
+        if let Some(scope) = root_organization_scope(roles, resource, action) {
+            return Ok((scope, qualifications));
         }
         state.own_org(user, at)?;
-        let tree = OrgTree::new(&state.units)?;
-        let registration = super::consumers::registration(resource, action)?;
-        let grants = self.db.personal_business_grants().for_person(user, Some(resource), executor).await?;
-        ScopeResolution {
-            user_id: user,
-            eligible_role_ids: roles,
-            resource,
-            action,
-            required_dimensions: registration.required_dimensions,
-            rules: &rules,
-            memberships: &state.memberships,
-            management: &state.management,
-            tree: &tree,
-            as_of: at,
-        }
-        .resolve_with_grants(&grants)
+        let configs =
+            self.db.person_data_scopes().for_person(user, Some(resource), Some(action), executor).await?;
+        let scope = match configs.first() {
+            Some(config) => {
+                config.resolve(state, registration.required_dimensions, registration.allows_history, at)?
+            },
+            None => PersonDataScope::denied(),
+        };
+        // 此映射只证明同角色完整动作资格；业务范围完全取自人员配置。
+        Ok((scope, qualifications))
     }
 }
 

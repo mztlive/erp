@@ -14,3 +14,6 @@ pub type PermissionRepository<'a> =
     persistence_core::Repository<'a, crate::entity::access_control::Permission>;
 pub type RoleRepository<'a> = persistence_core::Repository<'a, crate::entity::Role>;
 pub type UserRoleRepository<'a> = persistence_core::Repository<'a, crate::entity::access_control::UserRole>;
+
+pub type PersonDataScopeRepository<'a> =
+    persistence_core::Repository<'a, crate::entity::access_control::person_scope::PersonDataScope>;

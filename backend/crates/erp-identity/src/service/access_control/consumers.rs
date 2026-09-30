@@ -8,7 +8,7 @@ use crate::error::{Error, Result};
 /// 工作流按审批动作、任务管理及结算复核分别准入。采购变更单及退货沿 `purchase_order`
 /// 资源动作接入，不单独登记平行资源。
 /// 初始化清单见 `predefined_data_scopes`，不得当作本表替代。
-const WIRED_CONSUMERS: &[(&str, &[&str], &[ScopeDimension])] = &[
+pub(crate) const WIRED_CONSUMERS: &[(&str, &[&str], &[ScopeDimension])] = &[
     (
         "approval_instance",
         &["read", "decide", "resume", "cancel", "cancel_blocked", "upgrade_binding"],
