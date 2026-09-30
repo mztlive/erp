@@ -947,7 +947,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     },
     {
         name: "组织管理",
-        description: "内部组织、成员与管理关系",
+        description: "内部组织与成员",
         permissions: [
             {
                 module: "admin",

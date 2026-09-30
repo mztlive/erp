@@ -46,7 +46,7 @@ export function AccessCheckPanel({ accountId }: { accountId: string }) {
     })
     return (
         <section
-            className="space-y-4 rounded-lg border p-5"
+            className="space-y-4 text-sm"
             aria-labelledby="account-access-check-title"
         >
             <h2 id="account-access-check-title" className="font-semibold">

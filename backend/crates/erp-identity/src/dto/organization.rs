@@ -103,7 +103,7 @@ impl OrganizationStateView {
             organization_version: version,
             as_of,
             empty_reason: no_scope.then_some("no_scope"),
-            scope_summary: "组织配置边界内的内部组织、成员与管理关系",
+            scope_summary: "组织配置边界内的内部组织与成员",
             ownership_basis: "org_unit_configuration",
         }
     }

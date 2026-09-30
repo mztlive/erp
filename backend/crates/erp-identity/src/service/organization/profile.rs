@@ -10,7 +10,6 @@ use crate::entity::organization_change::{
     OrganizationChangeReceipt, OrganizationChangeRequest, OrganizationOperation,
 };
 use crate::repository::OrganizationRepository;
-use crate::repository::prelude::*;
 use crate::service::access_control::resolve::{AuthorizedDataScope, DataScopeService};
 use crate::{AccessControlExt, Error, Permission, Result};
 
@@ -96,21 +95,6 @@ impl OrganizationService {
             .into_role_grant()
             .ok_or_else(|| Error::ValidationError("缺少角色授予上下文".into()))?;
         self.rbac.assign_roles(AccountKind::Admin, &profile.user_id, grant, executor).await
-    }
-
-    /// 管理关系使用本次保存后的角色集，并核验角色仍启用。
-    pub(super) async fn ensure_management_role(
-        &self,
-        roles: &[String],
-        role: &String,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        if !roles.contains(role)
-            || self.db.roles().enabled_roles(std::slice::from_ref(role), executor).await?.is_empty()
-        {
-            return Err(Error::ValidationError("接收人必须持有有效的指定角色".into()));
-        }
-        Ok(())
     }
 
     /// 预览校验姓名版本与值，提交时加入组织关系所在事务。

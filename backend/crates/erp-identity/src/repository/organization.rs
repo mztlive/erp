@@ -87,14 +87,6 @@ impl<'a> OrganizationRepository<'a> {
             executor,
         )
         .await?;
-        save_changed(
-            self.db,
-            ORG_MANAGEMENT,
-            &receipt.before.management,
-            &mut receipt.after.management,
-            executor,
-        )
-        .await?;
         Repository::new(self.db, ORG_CHANGES).create(receipt, executor).await
     }
 

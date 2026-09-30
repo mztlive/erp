@@ -1,4 +1,5 @@
-//! S2 首次授权清单；范围身份固定，重跑不恢复已撤销记录。
+//! 旧 S2 角色范围合同的测试样本；本模块仅在 cfg(test) 编译。
+//! 不用于账号或种子初始化，ManagedOrgs 仅保留旧规则样本，运行时必须重设人员范围。
 
 use crate::access_control::{
     DataScopeData, DataScopeSubjectType, DataScopeType, ScopeBinding, ScopeDimension, ScopeTargetMode,
@@ -253,7 +254,7 @@ fn person_directory_definitions(role: &str, resource: &str, actions: &[&str]) ->
     vec![definition(role, resource, &granted, scope_type)]
 }
 
-/// 构造清单中的单条规范化输入；动态管理范围必须显式授予管理关系才产生目标。
+/// 构造旧清单的测试输入；ManagedOrgs 不得重新用于当前人员授权。
 fn definition(role: &str, resource: &str, actions: &[&str], scope_type: DataScopeType) -> DataScopeData {
     DataScopeData {
         subject_type: DataScopeSubjectType::Role,

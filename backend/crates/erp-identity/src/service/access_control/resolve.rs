@@ -214,22 +214,15 @@ impl DataScopeService {
 }
 
 /// 有效期边界没有写入也会改变授权，必须纳入跨页版本。
-fn active_relations(state: &OrganizationState, at: Instant) -> (Vec<String>, Vec<String>) {
+fn active_relations(state: &OrganizationState, at: Instant) -> Vec<String> {
     let mut members = state
         .memberships
         .iter()
         .filter(|item| !item.base.is_deleted() && item.validity.contains(at))
         .map(|item| item.base.id.clone())
         .collect::<Vec<_>>();
-    let mut managers = state
-        .management
-        .iter()
-        .filter(|item| !item.base.is_deleted() && item.validity.contains(at))
-        .map(|item| item.base.id.clone())
-        .collect::<Vec<_>>();
     members.sort();
-    managers.sort();
-    (members, managers)
+    members
 }
 
 /// 只有完成接线的资源可配置 v2，禁止将新规则交给旧解释器。
@@ -249,4 +242,45 @@ fn active_relations(state: &OrganizationState, at: Instant) -> (Vec<String>, Vec
 pub(super) fn ensure_resource(resource: &str, action: &str) -> Result<()> {
     super::consumers::registration(resource, action)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use entity_core::BaseModel;
+
+    use super::*;
+    use crate::entity::organization::{OrgManagementAssignment, OrgMembership, OrgValidity};
+
+    /// 只有主属关系的生效边界影响范围版本，旧管理关系不再激活授权。
+    #[test]
+    fn authorization_relations_ignore_historical_management() {
+        let mut state = OrganizationState::default();
+        state.memberships.push(OrgMembership {
+            base: BaseModel::new("membership".into()),
+            user_id: "alice".into(),
+            org_unit_id: "one".into(),
+            validity: OrgValidity {
+                valid_from: Instant::from_unix_secs(1),
+                valid_to: Some(Instant::from_unix_secs(30)),
+            },
+            changed_by: "admin".into(),
+            reason: "调岗".into(),
+        });
+        state.management.push(OrgManagementAssignment {
+            base: BaseModel::new("legacy".into()),
+            user_id: "alice".into(),
+            org_unit_id: "two".into(),
+            role_id: "old".into(),
+            include_descendants: true,
+            validity: OrgValidity {
+                valid_from: Instant::from_unix_secs(1),
+                valid_to: Some(Instant::from_unix_secs(10)),
+            },
+            granted_by: "admin".into(),
+            reason: "历史".into(),
+        });
+        assert_eq!(active_relations(&state, Instant::from_unix_secs(5)), vec!["membership"]);
+        assert_eq!(active_relations(&state, Instant::from_unix_secs(15)), vec!["membership"]);
+        assert!(active_relations(&state, Instant::from_unix_secs(30)).is_empty());
+    }
 }

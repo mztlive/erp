@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { PencilIcon } from "lucide-react"
+import { KeyRoundIcon, PencilIcon } from "lucide-react"
 import {
     AccountProfileEditor,
     type AccountProfileSnapshot,
@@ -34,7 +34,7 @@ import {
 } from "../hooks/queries"
 import { AccountFormDialog } from "../components/accounts/account-form-dialog"
 import { useOrganizationStateQuery } from "@/features/organization/hooks/queries"
-import { isRelationActive, unitLabel } from "@/features/organization/lib/tree"
+import { unitLabel } from "@/features/organization/lib/tree"
 import { AccessCheckPanel } from "../components/accounts/access-check-panel"
 import { PersonalBusinessPermissions } from "../components/accounts/personal-business-permissions"
 import { usePersonalGrantDraft } from "../hooks/use-personal-grant-draft"
@@ -89,12 +89,6 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
             </PageScaffold>
         )
     const person = org.data?.people.find((row) => row.id === account.id)
-    const grants =
-        org.data?.management.filter(
-            (row) =>
-                row.user_id === accountId &&
-                isRelationActive(row.valid_from, row.valid_to, org.data.asOf),
-        ) ?? []
     const departmentLabel = org.isError
         ? "部门加载失败"
         : !can("org_unit:list")
@@ -124,7 +118,7 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                     </>
                 }
                 secondaryActions={
-                    (can("admin:update") || can("admin:delete")) && (
+                    can("admin:delete") && (
                         <DropdownMenu>
                             <DropdownMenuTrigger
                                 id="account-detail-more"
@@ -133,14 +127,6 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                                 更多
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                                {can("admin:update") && (
-                                    <DropdownMenuItem
-                                        id="account-detail-password"
-                                        onClick={() => setEditing("password")}
-                                    >
-                                        修改密码
-                                    </DropdownMenuItem>
-                                )}
                                 {can("admin:delete") && (
                                     <DropdownMenuItem
                                         id="account-detail-delete"
@@ -200,6 +186,14 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                         >
                             数据范围
                         </TabsTrigger>
+                        {can("data_scope:list") && (
+                            <TabsTrigger
+                                id="account-detail-check-tab"
+                                value="check"
+                            >
+                                访问检查
+                            </TabsTrigger>
+                        )}
                     </TabsList>
                     <TabsContent
                         value="basic"
@@ -215,6 +209,9 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                                         org.data?.organizationVersion
                                     }
                                     canName={can("admin:update")}
+                                    onPasswordChange={() =>
+                                        setEditing("password")
+                                    }
                                     assignableRoles={options.data ?? []}
                                     roleLabels={roles.data ?? []}
                                     rolesReady={options.isSuccess}
@@ -300,112 +297,91 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                                             )}
                                         </dd>
                                     </div>
-                                </dl>
-                                <div className="space-y-2 border-t pt-3">
-                                    <h3 className="font-medium">已分配角色</h3>
-                                    {roles.isError ? (
-                                        <BusinessFailureState
-                                            error={roles.error}
-                                            onRetry={() => void roles.refetch()}
-                                            id="account-detail-roles-retry"
-                                        />
-                                    ) : !account.role_ids.length ? (
-                                        <p className="text-muted-foreground">
-                                            尚未分配角色，请点击账号资料旁的铅笔进行设置。
-                                        </p>
-                                    ) : (
-                                        <ul className="flex flex-wrap gap-2">
-                                            {account.role_ids.map((roleId) => {
-                                                const role = roles.data?.find(
-                                                    (row) => row.id === roleId,
-                                                )
-                                                return (
-                                                    <li
-                                                        key={roleId}
-                                                        className="inline-flex flex-wrap items-center gap-3 rounded-md border border-grid px-3 py-1.5"
-                                                    >
-                                                        <span className="font-medium">
-                                                            {role?.name ??
-                                                                "角色信息待确认"}
-                                                        </span>
-                                                        {can("role:list") && (
-                                                            <Link
-                                                                id={`account-detail-role-${toAutomationIdSegment(roleId)}`}
-                                                                href={`/system/roles/${encodeURIComponent(roleId)}/edit?returnTo=${encodeURIComponent(`/system/accounts/${accountId}`)}`}
-                                                                className="text-xs text-muted-foreground hover:underline"
-                                                            >
-                                                                查看权限
-                                                            </Link>
-                                                        )}
-                                                    </li>
-                                                )
-                                            })}
-                                        </ul>
-                                    )}
-                                    <p className="text-xs text-muted-foreground">
-                                        角色决定可以执行哪些操作；可处理哪些数据在“数据范围”中设置。
-                                    </p>
-                                </div>
-                                <div className="space-y-2 border-t pt-3">
-                                    <h3 className="font-medium">
-                                        部门管理关系
-                                    </h3>
-                                    {org.isError ? (
-                                        <BusinessFailureState
-                                            id="account-profile-org-retry"
-                                            error={org.error}
-                                            onRetry={() => void org.refetch()}
-                                        />
-                                    ) : !can("org_unit:list") ? (
-                                        <p className="text-muted-foreground">
-                                            无部门查看权限
-                                        </p>
-                                    ) : !org.isSuccess ? (
-                                        <p className="text-muted-foreground">
-                                            正在读取部门管理关系…
-                                        </p>
-                                    ) : grants.length ? (
-                                        <ul className="divide-y">
-                                            {grants.map((grant) => (
-                                                <li
-                                                    key={grant.id}
-                                                    className="flex flex-wrap gap-x-6 gap-y-1 py-2"
+                                    <div>
+                                        <dt className="text-xs text-muted-foreground">
+                                            角色
+                                        </dt>
+                                        <dd className="mt-1">
+                                            {roles.isError ? (
+                                                <BusinessFailureState
+                                                    error={roles.error}
+                                                    onRetry={() =>
+                                                        void roles.refetch()
+                                                    }
+                                                    id="account-detail-roles-retry"
+                                                />
+                                            ) : !account.role_ids.length ? (
+                                                <p className="text-muted-foreground">
+                                                    尚未分配角色，请点击账号资料旁的铅笔进行设置。
+                                                </p>
+                                            ) : (
+                                                <ul className="flex flex-wrap gap-2">
+                                                    {account.role_ids.map(
+                                                        (roleId) => {
+                                                            const role =
+                                                                roles.data?.find(
+                                                                    (row) =>
+                                                                        row.id ===
+                                                                        roleId,
+                                                                )
+                                                            return (
+                                                                <li
+                                                                    key={roleId}
+                                                                    className="inline-flex items-center gap-2"
+                                                                >
+                                                                    <span className="font-medium">
+                                                                        {role?.name ??
+                                                                            "角色信息待确认"}
+                                                                    </span>
+                                                                    {can(
+                                                                        "role:list",
+                                                                    ) && (
+                                                                        <Link
+                                                                            id={`account-detail-role-${toAutomationIdSegment(roleId)}`}
+                                                                            href={`/system/roles/${encodeURIComponent(roleId)}/edit?returnTo=${encodeURIComponent(`/system/accounts/${accountId}`)}`}
+                                                                            className="text-xs text-muted-foreground hover:underline"
+                                                                        >
+                                                                            查看权限
+                                                                        </Link>
+                                                                    )}
+                                                                </li>
+                                                            )
+                                                        },
+                                                    )}
+                                                </ul>
+                                            )}
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt className="text-xs text-muted-foreground">
+                                            登录密码
+                                        </dt>
+                                        <dd className="mt-1">
+                                            {can("admin:update") ? (
+                                                <Button
+                                                    id="account-detail-password"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() =>
+                                                        setEditing("password")
+                                                    }
                                                 >
-                                                    <span>
-                                                        {unitLabel(
-                                                            org.data.units,
-                                                            grant.org_unit_id,
-                                                        )}
-                                                    </span>
-                                                    <span className="text-muted-foreground">
-                                                        {roles.data?.find(
-                                                            (role) =>
-                                                                role.id ===
-                                                                grant.role_id,
-                                                        )?.name ??
-                                                            "角色信息待确认"}{" "}
-                                                        ·{" "}
-                                                        {grant.include_descendants
-                                                            ? "含下级"
-                                                            : "仅本级"}
-                                                    </span>
-                                                    <span className="text-xs text-muted-foreground">
-                                                        {grant.valid_to
-                                                            ? `有效期至 ${formatDateTime(new Date(grant.valid_to * 1000).toISOString(), "full")}`
-                                                            : "长期有效"}
-                                                    </span>
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    ) : (
-                                        <p className="text-muted-foreground">
-                                            当前可见范围内没有部门管理关系。
-                                        </p>
-                                    )}
-                                    <p className="text-xs text-muted-foreground">
-                                        仅登记组织管理职责；业务数据范围在“数据范围”中设置。
-                                    </p>
-                                </div>
+                                                    <KeyRoundIcon data-icon="inline-start" />
+                                                    修改密码
+                                                </Button>
+                                            ) : (
+                                                "无修改权限"
+                                            )}
+                                        </dd>
+                                    </div>
+                                </dl>
+                                {org.isError && (
+                                    <BusinessFailureState
+                                        id="account-profile-org-retry"
+                                        error={org.error}
+                                        onRetry={() => void org.refetch()}
+                                    />
+                                )}
                             </section>
                         )}
                     </TabsContent>
@@ -435,20 +411,16 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                                 onRetry={() => void org.refetch()}
                             />
                         )}
-                        {can("data_scope:list") && (
-                            <details className="border-t border-grid pt-3">
-                                <summary
-                                    id="account-detail-check-expand"
-                                    className="cursor-pointer text-sm font-medium"
-                                >
-                                    访问检查
-                                </summary>
-                                <div className="mt-4">
-                                    <AccessCheckPanel accountId={accountId} />
-                                </div>
-                            </details>
-                        )}
                     </TabsContent>
+                    {can("data_scope:list") && (
+                        <TabsContent
+                            value="check"
+                            keepMounted
+                            className="p-4 data-[hidden]:hidden"
+                        >
+                            <AccessCheckPanel accountId={accountId} />
+                        </TabsContent>
+                    )}
                 </Tabs>
             </div>
             {editing && (

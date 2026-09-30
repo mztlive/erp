@@ -39,7 +39,7 @@ fn covers(access: &AuthorizedDataScope, id: Option<&str>) -> bool {
     )
 }
 
-/// 组织移动和包含下级授权须覆盖整个相关子树；调岗同时检查原组织和新组织。
+/// 组织移动须覆盖整个相关子树；调岗同时检查原组织和新组织。
 ///
 /// # 参数
 /// * `change` - 待执行的组织命令
@@ -49,10 +49,10 @@ fn covers(access: &AuthorizedDataScope, id: Option<&str>) -> bool {
 /// 目标均在配置边界内时成功。
 ///
 /// # 错误
-/// 目标超出管理边界时返回 `Forbidden`；缺失管理关系返回 `NotFound`。
+/// 目标超出配置边界时返回 `Forbidden`；旧管理关系命令返回 `ValidationError`。
 ///
 /// # 关键业务约束
-/// 越界目标不得部分生效；部门负责人身份不代替配置动作。
+/// 越界目标不得部分生效；所属部门不代替配置动作。
 pub(crate) fn ensure_targets(change: &OrganizationOperation, access: &AuthorizedDataScope) -> Result<()> {
     use OrganizationOperation::*;
     let state = &access.organizations;
@@ -62,7 +62,7 @@ pub(crate) fn ensure_targets(change: &OrganizationOperation, access: &Authorized
             if !covers(access, state.own_org(&profile.user_id, access.as_of)?) {
                 return Err(Error::Forbidden("人员超出组织配置管理边界".into()));
             }
-            for operation in profile.operations(state)? {
+            for operation in profile.operations()? {
                 ensure_targets(&operation, access)?;
             }
         },
@@ -77,22 +77,8 @@ pub(crate) fn ensure_targets(change: &OrganizationOperation, access: &Authorized
             targets.push(state.own_org(user_id, access.as_of)?);
         },
         EndMembership { user_id } => targets.push(state.own_org(user_id, access.as_of)?),
-        GrantManagement { org_unit_id, include_descendants, .. } => {
-            targets.push(Some(org_unit_id));
-            if *include_descendants {
-                add_subtree_targets(state, org_unit_id, &mut targets)?;
-            }
-        },
-        RevokeManagement { assignment_id } => {
-            let grant = state
-                .management
-                .iter()
-                .find(|g| g.base.id == *assignment_id)
-                .ok_or_else(|| Error::NotFound("管理关系不存在".into()))?;
-            targets.push(Some(&grant.org_unit_id));
-            if grant.include_descendants {
-                add_subtree_targets(state, &grant.org_unit_id, &mut targets)?;
-            }
+        GrantManagement { .. } | RevokeManagement { .. } => {
+            return Err(Error::ValidationError("部门管理关系已停用，请在人员数据范围中设置授权".into()));
         },
     }
     if targets.into_iter().any(|id| !covers(access, id)) {

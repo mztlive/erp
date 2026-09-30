@@ -6,8 +6,8 @@ use erp_core::common::time::Instant;
 
 use super::personal_grant::PersonalBusinessGrant;
 use super::{DataScope, DataScopeSubjectType, DataScopeType, ScopeDimension, ScopeTargetMode};
-use crate::Result;
-use crate::entity::organization::{OrgManagementAssignment, OrgMembership, OrgTree};
+use crate::entity::organization::{OrgMembership, OrgTree};
+use crate::{Error, Result};
 
 #[cfg(test)]
 #[path = "resolved_scope_tests.rs"]
@@ -33,7 +33,6 @@ pub struct ScopeResolution<'a> {
     pub required_dimensions: &'a [ScopeDimension],
     pub rules: &'a [DataScope],
     pub memberships: &'a [OrgMembership],
-    pub management: &'a [OrgManagementAssignment],
     pub tree: &'a OrgTree<'a>,
     pub as_of: Instant,
 }
@@ -137,14 +136,14 @@ impl ScopeResolution<'_> {
         let mut role_scopes = BTreeMap::new();
         for role_id in self.eligible_role_ids {
             let rules = self.rules_for(DataScopeSubjectType::Role, role_id);
-            let clause = self.clause(&rules, Some(role_id))?;
+            let clause = self.clause(&rules)?;
             if clause != ScopeClause::default() && clause.complete(self.required_dimensions) {
                 role_scopes.insert(role_id.clone(), clause.clone());
                 role_clauses.push(clause);
             }
         }
         let rules = self.rules_for(DataScopeSubjectType::User, self.user_id);
-        let user_limit = (!rules.is_empty()).then(|| self.clause(&rules, None)).transpose()?;
+        let user_limit = (!rules.is_empty()).then(|| self.clause(&rules)).transpose()?;
         Ok((ResolvedScope { role_clauses, user_limit }, role_scopes))
     }
 
@@ -183,7 +182,7 @@ impl ScopeResolution<'_> {
     }
 
     /// 汇总同一主体的同维度正向范围。
-    fn clause(&self, rules: &[&DataScope], role_id: Option<&str>) -> Result<ScopeClause> {
+    fn clause(&self, rules: &[&DataScope]) -> Result<ScopeClause> {
         let mut clause = ScopeClause::default();
         for rule in rules {
             rule.binding.validate(rule.scope_type, &rule.scope_targets)?;
@@ -191,18 +190,16 @@ impl ScopeResolution<'_> {
                 DataScopeType::Company => clause.company = true,
                 DataScopeType::SelfOwned => clause.self_owned = true,
                 DataScopeType::Collaborative => clause.collaborative = true,
-                DataScopeType::Organization | DataScopeType::Team => {
-                    self.add_targets(&mut clause, rule, role_id)?
-                },
+                DataScopeType::Organization | DataScopeType::Team => self.add_targets(&mut clause, rule)?,
             }
         }
         Ok(clause)
     }
 
     /// 按类型添加目标，不将内部组织身份写入仓库或结算主体集合。
-    fn add_targets(&self, clause: &mut ScopeClause, rule: &DataScope, role_id: Option<&str>) -> Result<()> {
+    fn add_targets(&self, clause: &mut ScopeClause, rule: &DataScope) -> Result<()> {
         match rule.binding.target_dimension {
-            ScopeDimension::InternalOrg => clause.org_unit_ids.extend(self.org_targets(rule, role_id)?),
+            ScopeDimension::InternalOrg => clause.org_unit_ids.extend(self.org_targets(rule)?),
             ScopeDimension::SettlementParty => {
                 clause.settlement_party_ids.extend(rule.scope_targets.iter().cloned())
             },
@@ -211,8 +208,8 @@ impl ScopeResolution<'_> {
         Ok(())
     }
 
-    /// 解析动态组织，管理关系只能由自身绑定的合格角色激活。
-    fn org_targets(&self, rule: &DataScope, role_id: Option<&str>) -> Result<BTreeSet<String>> {
+    /// 解析本人及指定组织，旧管理部门模式必须显式迁移。
+    fn org_targets(&self, rule: &DataScope) -> Result<BTreeSet<String>> {
         let mut result = BTreeSet::new();
         let descendants = rule.binding.include_descendants.unwrap_or(false);
         match rule.binding.target_mode {
@@ -229,15 +226,7 @@ impl ScopeResolution<'_> {
                 }
             },
             Some(ScopeTargetMode::ManagedOrgs) => {
-                for grant in self.management.iter().filter(|g| {
-                    !g.base.is_deleted() && g.user_id == self.user_id && g.validity.contains(self.as_of)
-                }) {
-                    if self.eligible_role_ids.contains(&grant.role_id)
-                        && role_id.is_none_or(|id| id == grant.role_id)
-                    {
-                        result.extend(self.tree.expand(&grant.org_unit_id, grant.include_descendants)?);
-                    }
-                }
+                return Err(Error::ValidationError("旧管理部门范围必须重新配置为人员数据范围".into()));
             },
             None => {},
         }

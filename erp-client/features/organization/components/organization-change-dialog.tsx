@@ -27,16 +27,10 @@ import {
 import { impactChanges, impactCounts } from "@/features/organization/lib/impact"
 import {
     KIND_LABEL,
-    MANAGEMENT_GRANT_NOTICE,
     OPERATION_LABEL,
     ORGANIZATION_BOUNDARY_NOTICE,
 } from "@/features/organization/lib/labels"
-import {
-    isRelationActive,
-    personLabel,
-    roleLabel,
-    unitLabel,
-} from "@/features/organization/lib/tree"
+import { unitLabel } from "@/features/organization/lib/tree"
 import type {
     OrganizationChangeReceipt,
     OrganizationStateView,
@@ -67,9 +61,7 @@ const schema = z
     })
     .superRefine((draft, context) => {
         if (
-            ["transfer_member", "grant_management", "end_membership"].includes(
-                draft.operation,
-            ) &&
+            ["transfer_member", "end_membership"].includes(draft.operation) &&
             !draft.userId
         )
             context.addIssue({
@@ -77,20 +69,17 @@ const schema = z
                 path: ["userId"],
                 message: "请选择人员",
             })
-        if (
-            ["transfer_member", "grant_management"].includes(draft.operation) &&
-            !draft.orgUnitId
-        )
+        if (draft.operation === "transfer_member" && !draft.orgUnitId)
             context.addIssue({
                 code: "custom",
                 path: ["orgUnitId"],
                 message: "请选择部门",
             })
-        if (draft.operation === "grant_management" && !draft.roleId)
+        if (["grant_management", "revoke_management"].includes(draft.operation))
             context.addIssue({
                 code: "custom",
-                path: ["roleId"],
-                message: "请选择人员持有的角色",
+                path: ["operation"],
+                message: "部门管理关系已停用，请在人员资料中设置数据范围。",
             })
     })
 
@@ -195,17 +184,6 @@ export function OrganizationChangeDialog({
             value: person.id,
             label: `${person.label}（${person.account}） · ${person.own_org_unit_id ? unitLabel(view.units, person.own_org_unit_id) : "未分配部门"}`,
         }))
-    const roleOptions = view.roles
-        .filter((role) => role.enabled)
-        .map((role) => ({ value: role.id, label: role.name }))
-    const assignmentOptions = view.management
-        .filter((item) =>
-            isRelationActive(item.valid_from, item.valid_to, view.asOf),
-        )
-        .map((item) => ({
-            value: item.id,
-            label: `${personLabel(view.people, item.user_id)} · ${roleLabel(view.roles, item.role_id)} · ${unitLabel(view.units, item.org_unit_id)}`,
-        }))
     const changes = receipt ? impactChanges(receipt, view) : []
     const counts = impactCounts(changes)
 
@@ -309,8 +287,7 @@ export function OrganizationChangeDialog({
                                 {operation === "move_unit" ||
                                 operation === "rename_unit" ||
                                 operation === "disable_unit" ||
-                                operation === "transfer_member" ||
-                                operation === "grant_management" ? (
+                                operation === "transfer_member" ? (
                                     <form.AppField
                                         name="orgUnitId"
                                         children={(field) => (
@@ -328,8 +305,7 @@ export function OrganizationChangeDialog({
                                     />
                                 ) : null}
                                 {operation === "transfer_member" ||
-                                operation === "end_membership" ||
-                                operation === "grant_management" ? (
+                                operation === "end_membership" ? (
                                     <form.AppField
                                         name="userId"
                                         children={(field) => (
@@ -338,63 +314,6 @@ export function OrganizationChangeDialog({
                                                 label="人员"
                                                 disabled={Boolean(draft.userId)}
                                                 options={peopleOptions}
-                                            />
-                                        )}
-                                    />
-                                ) : null}
-                                {operation === "grant_management" ? (
-                                    <>
-                                        <p className="text-sm text-muted-foreground">
-                                            {MANAGEMENT_GRANT_NOTICE}
-                                        </p>
-                                        <form.AppField
-                                            name="roleId"
-                                            children={(field) => (
-                                                <field.SelectField
-                                                    id="organization-change-role"
-                                                    label="角色"
-                                                    options={roleOptions}
-                                                />
-                                            )}
-                                        />
-                                        <form.AppField
-                                            name="includeDescendants"
-                                            children={(field) => (
-                                                <field.SelectField
-                                                    id="organization-change-descendants"
-                                                    label="是否包含下级"
-                                                    options={[
-                                                        {
-                                                            value: "false",
-                                                            label: "仅本级",
-                                                        },
-                                                        {
-                                                            value: "true",
-                                                            label: "含下级",
-                                                        },
-                                                    ]}
-                                                />
-                                            )}
-                                        />
-                                        <form.AppField
-                                            name="validTo"
-                                            children={(field) => (
-                                                <field.DateTimeField
-                                                    id="organization-change-valid-to"
-                                                    label="有效期结束（可选）"
-                                                />
-                                            )}
-                                        />
-                                    </>
-                                ) : null}
-                                {operation === "revoke_management" ? (
-                                    <form.AppField
-                                        name="assignmentId"
-                                        children={(field) => (
-                                            <field.SelectField
-                                                id="organization-change-assignment"
-                                                label="管理授权"
-                                                options={assignmentOptions}
                                             />
                                         )}
                                     />

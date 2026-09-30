@@ -144,7 +144,6 @@ impl PersonDataScope {
             required_dimensions: dimensions,
             rules: &rules,
             memberships: &state.memberships,
-            management: &[],
             tree: &tree,
             as_of: at,
         }

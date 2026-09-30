@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 pub(crate) use bootstrap::ensure_home_department;
+use erp_core::AccountKind;
 use erp_core::common::time::Instant;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
@@ -50,13 +51,13 @@ impl OrganizationService {
     /// 无读取动作、失效账号或快照不一致时拒绝。
     ///
     /// # 关键业务约束
-    /// 缺范围返回空集并标记 `no_scope`；部门负责人身份不代替 `org_unit:list`。
+    /// 缺范围返回空集并标记 `no_scope`；所属部门不代替 `org_unit:list`。
     pub async fn state(&self, actor: &AuditActor) -> Result<OrganizationStateView> {
         let mut no_tx = NoTransaction;
         let access = self.access(actor, "list", &mut no_tx).await?;
         let visible = visible_state(access.organizations.clone(), &access);
         let people = people_for(&self.db, &visible, access.as_of, &mut no_tx).await?;
-        let roles = roles_for(&self.db, &visible, &mut no_tx).await?;
+        let roles = roles_for(&self.db, &mut no_tx).await?;
         Ok(OrganizationStateView::compose(
             visible,
             access.scope_version.clone(),
@@ -168,7 +169,7 @@ impl OrganizationService {
         Ok(receipt)
     }
 
-    /// 解析组织配置资源，部门管理身份不代替管理动作。
+    /// 解析组织配置资源；所属部门与操作权限分别校验。
     async fn access(
         &self,
         actor: &AuditActor,
@@ -190,30 +191,16 @@ impl OrganizationService {
         access::ensure_targets(change, access)?;
         if let OrganizationOperation::UpdatePersonProfile { profile } = change {
             self.ensure_account(&profile.user_id, executor).await?;
-            let roles = self.rbac.role_ids(erp_core::AccountKind::Admin, &profile.user_id).await?;
-            profile.validate_roles(&roles, &access.organizations, access.as_of)?;
-            for operation in profile.operations(&access.organizations)? {
-                if let OrganizationOperation::GrantManagement { role_id, .. } = &operation {
-                    self.ensure_management_role(
-                        profile.role_ids.as_deref().unwrap_or(&roles),
-                        role_id,
-                        executor,
-                    )
-                    .await?;
-                } else {
-                    Box::pin(self.ensure_change(&operation, access, executor)).await?;
-                }
+            let roles = self.rbac.role_ids(AccountKind::Admin, &profile.user_id).await?;
+            profile.validate_roles(&roles)?;
+            for operation in profile.operations()? {
+                Box::pin(self.ensure_change(&operation, access, executor)).await?;
             }
             return Ok(());
         }
         match change {
             OrganizationOperation::TransferMember { user_id, .. } => {
                 self.ensure_account(user_id, executor).await?;
-            },
-            OrganizationOperation::GrantManagement { user_id, role_id, .. } => {
-                self.ensure_account(user_id, executor).await?;
-                let roles = self.rbac.role_ids(erp_core::AccountKind::Admin, user_id).await?;
-                self.ensure_management_role(&roles, role_id, executor).await?;
             },
             OrganizationOperation::DisableUnit { org_unit_id } => {
                 self.ensure_no_unsettled(org_unit_id, executor).await?
@@ -231,7 +218,7 @@ impl OrganizationService {
         Ok(())
     }
 
-    /// 成员与管理关系只授予有效后台账号。
+    /// 成员关系只授予有效后台账号。
     async fn ensure_account(&self, user: &str, executor: &mut dyn Executor) -> Result<()> {
         if self.db.accounts().find_by_id(user, executor).await?.is_none_or(|a| !a.is_active_backoffice()) {
             return Err(Error::ValidationError("接收人不是有效后台账号".into()));
@@ -259,7 +246,7 @@ async fn people_for(
     as_of: Instant,
     executor: &mut dyn Executor,
 ) -> Result<Vec<OrgPersonView>> {
-    let accounts = db.accounts().list_by_kind(erp_core::AccountKind::Admin, executor).await?;
+    let accounts = db.accounts().list_by_kind(AccountKind::Admin, executor).await?;
     let mut people = Vec::with_capacity(accounts.len());
     for account in &accounts {
         people.push(OrgPersonView {
@@ -274,32 +261,19 @@ async fn people_for(
     Ok(people)
 }
 
-/// 读取管理授权展示与可选角色（借用可见状态，只克隆可见子集）。
+/// 读取账号资料的可选角色，不因旧管理关系补入失效角色。
 ///
 /// # 参数
 /// * `db` - 数据库句柄（只借用，不克隆 client/actor）
-/// * `visible` - 当前可管理组织事实（借用）
 /// * `executor` - 调用方事务执行器
 ///
 /// # 返回
-/// 启用角色及现有管理关系引用的角色名称；排序与去重语义不变。
+/// 按名称稳定排序的启用角色。
 ///
 /// # 错误
 /// 角色读取失败时返回错误。
-async fn roles_for(
-    db: &Database,
-    visible: &OrganizationState,
-    executor: &mut dyn Executor,
-) -> Result<Vec<OrgRoleView>> {
-    let mut roles = db.roles().list_enabled(executor).await?;
-    let known = roles.iter().map(|role| role.base.id.clone()).collect::<std::collections::BTreeSet<_>>();
-    let extra = visible
-        .management
-        .iter()
-        .map(|item| item.role_id.clone())
-        .filter(|id| !known.contains(id))
-        .collect::<Vec<_>>();
-    roles.extend(db.roles().roles_by_ids(&extra, executor).await?);
+async fn roles_for(db: &Database, executor: &mut dyn Executor) -> Result<Vec<OrgRoleView>> {
+    let roles = db.roles().list_enabled(executor).await?;
     let mut views = roles
         .into_iter()
         .map(|role| OrgRoleView { id: role.base.id, name: role.name, enabled: !role.disabled })

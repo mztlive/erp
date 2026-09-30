@@ -15,6 +15,7 @@ pub struct OrganizationState {
     pub version: u64,
     pub units: Vec<OrgUnit>,
     pub memberships: Vec<OrgMembership>,
+    /// 旧管理关系审计快照；不参与当前授权与组织变更约束。
     pub management: Vec<OrgManagementAssignment>,
 }
 
@@ -48,6 +49,7 @@ pub enum OrganizationOperation {
     EndMembership {
         user_id: String,
     },
+    /// 仅保留历史请求读取；新写入由请求校验拒绝。
     GrantManagement {
         user_id: String,
         role_id: String,
@@ -55,6 +57,7 @@ pub enum OrganizationOperation {
         include_descendants: bool,
         valid_to: Option<Instant>,
     },
+    /// 仅保留历史请求读取；新写入由请求校验拒绝。
     RevokeManagement {
         assignment_id: String,
     },
@@ -96,6 +99,16 @@ impl OrganizationChangeRequest {
     /// # 错误
     /// 空白、过长或包含非安全字符的幂等键拒绝。
     pub fn validate(&self) -> Result<()> {
+        match &self.change {
+            OrganizationOperation::GrantManagement { .. }
+            | OrganizationOperation::RevokeManagement { .. } => {
+                return Err(Error::ValidationError("部门管理关系已停用，请在人员数据范围中设置授权".into()));
+            },
+            OrganizationOperation::UpdatePersonProfile { profile } => {
+                profile.operations()?;
+            },
+            _ => {},
+        }
         if self.idempotency_key.is_empty()
             || self.idempotency_key.len() > 128
             || !self.idempotency_key.bytes().all(|b| b.is_ascii_alphanumeric() || b"_-".contains(&b))
@@ -176,7 +189,7 @@ impl OrganizationState {
     ) -> Result<()> {
         match change {
             OrganizationOperation::UpdatePersonProfile { profile } => {
-                for (index, operation) in profile.operations(self)?.iter().enumerate() {
+                for (index, operation) in profile.operations()?.iter().enumerate() {
                     self.apply(operation, &format!("{id}-{index}"), actor, reason, at)?;
                 }
             },
@@ -192,11 +205,9 @@ impl OrganizationState {
             OrganizationOperation::EndMembership { user_id } => {
                 self.end_membership(user_id, actor, reason, at)?
             },
-            OrganizationOperation::GrantManagement { .. } => {
-                self.grant_management(change, id, actor, reason, at)?
-            },
-            OrganizationOperation::RevokeManagement { assignment_id } => {
-                self.revoke_management(assignment_id, at)?
+            OrganizationOperation::GrantManagement { .. }
+            | OrganizationOperation::RevokeManagement { .. } => {
+                return Err(Error::ValidationError("部门管理关系已停用，请在人员数据范围中设置授权".into()));
             },
         }
         Ok(())
@@ -244,42 +255,6 @@ impl OrganizationState {
         Ok(())
     }
 
-    /// 新建按角色绑定的管理关系，并校验组织可用性和 UTC 有效期。
-    fn grant_management(
-        &mut self,
-        change: &OrganizationOperation,
-        id: &str,
-        actor: &str,
-        reason: &str,
-        at: Instant,
-    ) -> Result<()> {
-        match change {
-            OrganizationOperation::GrantManagement {
-                user_id,
-                role_id,
-                org_unit_id,
-                include_descendants,
-                valid_to,
-            } => {
-                self.ensure_enabled(org_unit_id)?;
-                let validity = OrgValidity { valid_from: at, valid_to: *valid_to };
-                validity.validate()?;
-                self.management.push(OrgManagementAssignment {
-                    base: BaseModel::new(id.into()),
-                    user_id: user_id.clone(),
-                    role_id: role_id.clone(),
-                    org_unit_id: org_unit_id.clone(),
-                    include_descendants: *include_descendants,
-                    validity,
-                    granted_by: actor.into(),
-                    reason: reason.into(),
-                });
-            },
-            _ => return Err(Error::Internal("错误的管理关系命令".into())),
-        }
-        Ok(())
-    }
-
     /// 加载可用节点并保存此次操作人和原因。
     fn unit_mut(&mut self, id: &str, actor: &str, reason: &str) -> Result<&mut OrgUnit> {
         self.ensure_enabled(id)?;
@@ -293,19 +268,15 @@ impl OrganizationState {
         Ok(unit)
     }
 
-    /// 停用前必须结束有效或未来成员、管理及下级关系；业务未结事实由 Service 的 Port 补验。
+    /// 停用前必须结束有效或未来成员及下级关系；业务未结事实由 Service 的 Port 补验。
     fn disable(&mut self, id: &str, actor: &str, reason: &str, at: Instant) -> Result<()> {
         let pending_members = self
             .memberships
             .iter()
             .any(|m| m.org_unit_id == id && m.validity.valid_to.is_none_or(|end| end > at));
-        let pending_managers = self
-            .management
-            .iter()
-            .any(|m| m.org_unit_id == id && m.validity.valid_to.is_none_or(|end| end > at));
         let children = self.units.iter().any(|u| u.enabled && u.parent_id.as_deref() == Some(id));
-        if pending_members || pending_managers || children {
-            return Err(Error::ConflictError("组织仍有成员、管理关系或有效下级，请先完成交接".into()));
+        if pending_members || children {
+            return Err(Error::ConflictError("组织仍有成员或有效下级，请先完成交接".into()));
         }
         self.unit_mut(id, actor, reason)?.enabled = false;
         Ok(())
@@ -348,20 +319,6 @@ impl OrganizationState {
             membership.changed_by = actor.into();
             membership.reason = reason.into();
         }
-        Ok(())
-    }
-
-    /// 撤销管理关系并保留授权留痕。
-    fn revoke_management(&mut self, id: &str, at: Instant) -> Result<()> {
-        let grant = self
-            .management
-            .iter_mut()
-            .find(|m| m.base.id == id)
-            .ok_or_else(|| Error::NotFound("管理关系不存在".into()))?;
-        if !grant.validity.contains(at) || grant.validity.valid_from >= at {
-            return Err(Error::ConflictError("管理关系未生效、已结束或刚刚生效".into()));
-        }
-        grant.validity.valid_to = Some(at);
         Ok(())
     }
 
@@ -423,8 +380,7 @@ mod tests {
     }
 
     #[test]
-    fn profile_changes_membership_and_management_once_or_fails_whole_plan() {
-        use crate::entity::person_profile_change::PersonManagementChange;
+    fn profile_changes_membership_once_or_fails_whole_plan() {
         let before = state();
         let profile = PersonProfileChange {
             user_id: "sales".into(),
@@ -434,21 +390,15 @@ mod tests {
             name: Some("新姓名".into()),
             org_unit_id: Some("two".into()),
             remove_management_ids: vec![],
-            add_management: vec![PersonManagementChange {
-                role_id: "sales-role".into(),
-                org_unit_id: "two".into(),
-                include_descendants: true,
-                valid_to: None,
-            }],
+            add_management: vec![],
         };
         let change = request(OrganizationOperation::UpdatePersonProfile { profile: profile.clone() });
         let after = before.changed(&change, "id", "admin", Instant::from_unix_secs(10)).unwrap();
         assert_eq!(after.version, before.version + 1);
         assert_eq!(after.own_org("sales", Instant::from_unix_secs(10)).unwrap(), Some("two"));
-        assert_eq!(after.management.len(), 1);
-        assert_ne!(after.management[0].base.id, after.memberships[1].base.id);
+        assert!(after.management.is_empty());
         let mut invalid = profile;
-        invalid.add_management[0].org_unit_id = "missing".into();
+        invalid.org_unit_id = Some("missing".into());
         assert!(
             before
                 .changed(
@@ -502,6 +452,57 @@ mod tests {
         assert_eq!(before.version, 1);
         assert!(before.units[0].enabled);
         assert_eq!(before.units[0].parent_id, None);
+    }
+
+    /// 已停用的管理命令仍可读取审计，但预览、提交与回放入口均不得重新执行。
+    #[test]
+    fn legacy_management_commands_deserialize_but_cannot_change_state() {
+        let before = state();
+        for operation in [
+            OrganizationOperation::GrantManagement {
+                user_id: "sales".into(),
+                role_id: "role".into(),
+                org_unit_id: "one".into(),
+                include_descendants: false,
+                valid_to: None,
+            },
+            OrganizationOperation::RevokeManagement { assignment_id: "old".into() },
+        ] {
+            let request = request(operation);
+            let encoded = serde_json::to_string(&request).unwrap();
+            let decoded = serde_json::from_str::<OrganizationChangeRequest>(&encoded).unwrap();
+            assert_eq!(decoded, request);
+            assert!(matches!(decoded.validate(), Err(Error::ValidationError(_))));
+            assert!(before.changed(&decoded, "id", "admin", Instant::from_unix_secs(10)).is_err());
+        }
+        assert_eq!(before.version, 1);
+        assert!(before.management.is_empty());
+    }
+
+    /// 历史管理关系不得继续阻止普通部门停用，历史本身保留不变。
+    #[test]
+    fn historical_management_does_not_block_department_disable() {
+        let mut before = state();
+        before.management.push(OrgManagementAssignment {
+            base: BaseModel::new("legacy".into()),
+            user_id: "sales".into(),
+            role_id: "old-role".into(),
+            org_unit_id: "two".into(),
+            include_descendants: true,
+            validity: OrgValidity { valid_from: Instant::from_unix_secs(1), valid_to: None },
+            granted_by: "admin".into(),
+            reason: "历史".into(),
+        });
+        let after = before
+            .changed(
+                &request(OrganizationOperation::DisableUnit { org_unit_id: "two".into() }),
+                "id",
+                "admin",
+                Instant::from_unix_secs(10),
+            )
+            .unwrap();
+        assert!(!after.units[1].enabled);
+        assert_eq!(after.management, before.management);
     }
 
     #[test]

@@ -1,4 +1,6 @@
 "use client"
+
+import { KeyRoundIcon } from "lucide-react"
 import * as React from "react"
 import { useStore } from "@tanstack/react-form"
 import { z } from "zod"
@@ -14,9 +16,8 @@ import {
     usePreviewOrganizationChangeMutation,
     useSubmitOrganizationChangeMutation,
 } from "@/features/organization/hooks/queries"
-import { isRelationActive, unitLabel } from "@/features/organization/lib/tree"
+import { unitLabel } from "@/features/organization/lib/tree"
 import { impactChanges } from "@/features/organization/lib/impact"
-import { shanghaiDateTimeToUnix } from "@/features/organization/lib/change-payload"
 import type {
     OrganizationChangeReceipt,
     OrganizationChangeRequest,
@@ -28,24 +29,10 @@ export type AccountProfileSnapshot = {
     account: AdminAccount
     view: OrganizationStateView | undefined
 }
-const additionSchema = z.object({
-    key: z.string(),
-    roleId: z.string().min(1, "请选择角色"),
-    unitId: z.string().min(1, "请选择部门"),
-    descendants: z.enum(["true", "false"]),
-    validTo: z
-        .string()
-        .refine(
-            (value) => !value || shanghaiDateTimeToUnix(value) !== null,
-            "有效期格式不正确",
-        ),
-})
 const schema = z.object({
     name: z.string().trim().min(1, "请输入姓名").max(64, "姓名最多64字"),
     roleIds: z.array(z.string()),
     unitId: z.string(),
-    removed: z.array(z.string()),
-    additions: z.array(additionSchema),
     reason: z.string().max(1000),
 })
 type Values = z.infer<typeof schema>
@@ -57,6 +44,7 @@ export function AccountProfileEditor({
     snapshot,
     currentVersion,
     canName,
+    onPasswordChange,
     assignableRoles,
     roleLabels,
     rolesReady,
@@ -65,6 +53,7 @@ export function AccountProfileEditor({
 }: {
     snapshot: AccountProfileSnapshot
     currentVersion: number | undefined
+    onPasswordChange: () => void
     canName: boolean
     assignableRoles: readonly RoleOption[]
     roleLabels: readonly RoleOption[]
@@ -74,12 +63,6 @@ export function AccountProfileEditor({
 }) {
     const { account, view } = snapshot
     const person = view?.people.find((person) => person.id === account.id)
-    const grants =
-        view?.management.filter(
-            (grant) =>
-                grant.user_id === account.id &&
-                isRelationActive(grant.valid_from, grant.valid_to, view.asOf),
-        ) ?? []
     const preview = usePreviewOrganizationChangeMutation()
     const submit = useSubmitOrganizationChangeMutation()
     const admin = useAdminMutations()
@@ -111,13 +94,6 @@ export function AccountProfileEditor({
                     value.unitId !== (person?.own_org_unit_id ?? "")
                         ? value.unitId
                         : null,
-                remove_management_ids: value.removed,
-                add_management: value.additions.map((row) => ({
-                    role_id: row.roleId,
-                    org_unit_id: row.unitId,
-                    include_descendants: row.descendants === "true",
-                    valid_to: shanghaiDateTimeToUnix(row.validTo),
-                })),
             },
         },
     })
@@ -126,8 +102,6 @@ export function AccountProfileEditor({
             name: account.name,
             roleIds: account.role_ids,
             unitId: person?.own_org_unit_id ?? "",
-            removed: [],
-            additions: [],
             reason: "",
         } as Values,
         validators: { onChange: schema },
@@ -142,9 +116,7 @@ export function AccountProfileEditor({
                     return
                 }
                 const organizationChanged =
-                    value.unitId !== (person?.own_org_unit_id ?? "") ||
-                    value.removed.length > 0 ||
-                    value.additions.length > 0
+                    value.unitId !== (person?.own_org_unit_id ?? "")
                 if (
                     (organizationChanged && !canOrganization) ||
                     (value.name.trim() !== account.name && !canName) ||
@@ -153,24 +125,6 @@ export function AccountProfileEditor({
                 ) {
                     setError(
                         "当前权限已变化，不能保存这些修改。草稿已保留，请联系管理员或取消编辑。",
-                    )
-                    return
-                }
-                const missingRole =
-                    grants.some(
-                        (grant) =>
-                            !value.removed.includes(grant.id) &&
-                            !value.roleIds.includes(grant.role_id),
-                    ) ||
-                    value.additions.some(
-                        (grant) => !value.roleIds.includes(grant.roleId),
-                    )
-                if (
-                    missingRole &&
-                    !sameRoles(value.roleIds, account.role_ids)
-                ) {
-                    setError(
-                        "部门管理关系使用了未选择的角色，请同时移除该关系或保留角色。",
                     )
                     return
                 }
@@ -226,9 +180,7 @@ export function AccountProfileEditor({
     const changed =
         !sameRoles(values.roleIds, account.role_ids) ||
         values.name.trim() !== account.name ||
-        values.unitId !== (person?.own_org_unit_id ?? "") ||
-        values.removed.length > 0 ||
-        values.additions.length > 0
+        values.unitId !== (person?.own_org_unit_id ?? "")
     const confirmed =
         receipt && view && previewed === JSON.stringify(build(values))
     React.useEffect(() => {
@@ -269,10 +221,6 @@ export function AccountProfileEditor({
         view?.units
             .filter((unit) => unit.enabled)
             .map((unit) => ({ value: unit.id, label: unit.name })) ?? []
-    const roleOptions =
-        view?.roles
-            .filter((role) => role.enabled && values.roleIds.includes(role.id))
-            .map((role) => ({ value: role.id, label: role.name })) ?? []
     return (
         <form
             className="space-y-4 text-sm"
@@ -329,221 +277,109 @@ export function AccountProfileEditor({
                             />
                         )}
                     </form.AppField>
-                </div>
-                <form.AppField name="roleIds" mode="array">
-                    {(field) => (
-                        <section className="space-y-2 border-t pt-3">
-                            <h3 className="font-medium">已分配角色</h3>
-                            <p className="text-xs text-muted-foreground">
-                                角色决定可以执行哪些操作；可处理哪些数据在“数据范围”中设置。
+                    {canName && (
+                        <div>
+                            <p className="mb-2 text-xs text-muted-foreground">
+                                登录密码
                             </p>
-                            {!rolesReady && canName && (
-                                <p
-                                    role="status"
-                                    className="text-muted-foreground"
-                                >
-                                    角色选项尚未就绪，暂不能调整角色。
-                                </p>
-                            )}
-                            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                                {[
-                                    ...assignableRoles,
-                                    ...account.role_ids
-                                        .filter(
-                                            (id) =>
-                                                !assignableRoles.some(
-                                                    (role) => role.id === id,
-                                                ),
-                                        )
-                                        .map((id) => ({
-                                            id,
-                                            name:
-                                                roleLabels.find(
-                                                    (role) => role.id === id,
-                                                )?.name ?? "角色信息待确认",
-                                        })),
-                                ].map((role) => (
-                                    <label
-                                        key={role.id}
-                                        id={`account-profile-role-label-${toAutomationIdSegment(role.id)}`}
-                                        htmlFor={`account-profile-role-option-${toAutomationIdSegment(role.id)}`}
-                                        className="flex items-center gap-2 rounded-md border px-3 py-2"
-                                    >
-                                        <Checkbox
-                                            id={`account-profile-role-option-${toAutomationIdSegment(role.id)}`}
-                                            disabled={!canName || !rolesReady}
-                                            checked={field.state.value.includes(
-                                                role.id,
-                                            )}
-                                            onCheckedChange={(checked) =>
-                                                field.handleChange(
-                                                    checked
-                                                        ? [
-                                                              ...field.state
-                                                                  .value,
-                                                              role.id,
-                                                          ]
-                                                        : field.state.value.filter(
-                                                              (id) =>
-                                                                  id !==
-                                                                  role.id,
-                                                          ),
-                                                )
-                                            }
-                                        />
-                                        <span>{role.name}</span>
-                                    </label>
-                                ))}
-                            </div>
-                            {!field.state.value.length && (
-                                <p role="alert" className="text-destructive">
-                                    至少选择一个角色。
-                                </p>
-                            )}
-                        </section>
-                    )}
-                </form.AppField>
-                <section className="space-y-2 border-t pt-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                        <h3 className="font-medium">部门管理关系</h3>
-                        {canOrganization && (
                             <Button
-                                id="account-profile-management-add"
+                                id="account-profile-password"
                                 type="button"
                                 variant="outline"
                                 size="sm"
-                                disabled={!roleOptions.length}
-                                onClick={() =>
-                                    form.pushFieldValue("additions", {
-                                        key: crypto.randomUUID(),
-                                        unitId: "",
-                                        roleId:
-                                            roleOptions.length === 1
-                                                ? roleOptions[0].value
-                                                : "",
-                                        descendants: "false",
-                                        validTo: "",
-                                    })
-                                }
+                                onClick={onPasswordChange}
                             >
-                                添加管理部门
+                                <KeyRoundIcon data-icon="inline-start" />
+                                修改密码
                             </Button>
-                        )}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                        登记此人负责管理的部门。业务数据访问范围仍在“数据范围”设置。
-                    </p>
-                    {!grants.length && !values.additions.length && (
-                        <p className="py-2 text-muted-foreground">
-                            当前可见范围内没有部门管理关系。
-                        </p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                                密码单独保存。
+                            </p>
+                        </div>
                     )}
-                    {grants.map((grant) => (
-                        <div
-                            key={grant.id}
-                            className="flex flex-wrap items-center justify-between gap-2 border-b py-2"
-                        >
-                            <span
-                                className={
-                                    values.removed.includes(grant.id)
-                                        ? "text-muted-foreground line-through"
-                                        : ""
-                                }
-                            >
-                                {unitLabel(view!.units, grant.org_unit_id)} ·{" "}
-                                {view!.roles.find(
-                                    (role) => role.id === grant.role_id,
-                                )?.name ?? "角色信息待确认"}{" "}
-                                ·{" "}
-                                {grant.include_descendants
-                                    ? "含下级"
-                                    : "仅本级"}
-                            </span>
-                            {canOrganization && (
-                                <Button
-                                    id={`account-profile-management-remove-${toAutomationIdSegment(grant.id)}`}
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() =>
-                                        form.setFieldValue(
-                                            "removed",
-                                            values.removed.includes(grant.id)
-                                                ? values.removed.filter(
-                                                      (id) => id !== grant.id,
-                                                  )
-                                                : [...values.removed, grant.id],
-                                        )
-                                    }
-                                >
-                                    {values.removed.includes(grant.id)
-                                        ? "撤销移除"
-                                        : "移除"}
-                                </Button>
-                            )}
-                        </div>
-                    ))}
-                    {values.additions.map((row, index) => (
-                        <div
-                            key={row.key}
-                            className="grid items-end gap-3 rounded-md border p-3 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_8rem_1fr_auto]"
-                        >
-                            <form.AppField name={`additions[${index}].unitId`}>
-                                {(field) => (
-                                    <field.SelectField
-                                        id={`account-profile-unit-${row.key}`}
-                                        label="管理部门"
-                                        options={unitOptions}
-                                        required
-                                    />
+                    <form.AppField name="roleIds" mode="array">
+                        {(field) => (
+                            <section className="space-y-2 sm:col-span-2 xl:col-span-3">
+                                <h3 className="text-xs text-muted-foreground">
+                                    角色
+                                </h3>
+                                <p className="text-xs text-muted-foreground">
+                                    角色决定可以执行哪些操作；可处理哪些数据在“数据范围”中设置。
+                                </p>
+                                {!rolesReady && canName && (
+                                    <p
+                                        role="status"
+                                        className="text-muted-foreground"
+                                    >
+                                        角色选项尚未就绪，暂不能调整角色。
+                                    </p>
                                 )}
-                            </form.AppField>
-                            <form.AppField name={`additions[${index}].roleId`}>
-                                {(field) => (
-                                    <field.SelectField
-                                        id={`account-profile-role-${row.key}`}
-                                        label="任职角色"
-                                        options={roleOptions}
-                                        required
-                                    />
+                                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                                    {[
+                                        ...assignableRoles,
+                                        ...account.role_ids
+                                            .filter(
+                                                (id) =>
+                                                    !assignableRoles.some(
+                                                        (role) =>
+                                                            role.id === id,
+                                                    ),
+                                            )
+                                            .map((id) => ({
+                                                id,
+                                                name:
+                                                    roleLabels.find(
+                                                        (role) =>
+                                                            role.id === id,
+                                                    )?.name ?? "角色信息待确认",
+                                            })),
+                                    ].map((role) => (
+                                        <label
+                                            key={role.id}
+                                            id={`account-profile-role-label-${toAutomationIdSegment(role.id)}`}
+                                            htmlFor={`account-profile-role-option-${toAutomationIdSegment(role.id)}`}
+                                            className="flex items-center gap-2 rounded-md border px-3 py-2"
+                                        >
+                                            <Checkbox
+                                                id={`account-profile-role-option-${toAutomationIdSegment(role.id)}`}
+                                                disabled={
+                                                    !canName || !rolesReady
+                                                }
+                                                checked={field.state.value.includes(
+                                                    role.id,
+                                                )}
+                                                onCheckedChange={(checked) =>
+                                                    field.handleChange(
+                                                        checked
+                                                            ? [
+                                                                  ...field.state
+                                                                      .value,
+                                                                  role.id,
+                                                              ]
+                                                            : field.state.value.filter(
+                                                                  (id) =>
+                                                                      id !==
+                                                                      role.id,
+                                                              ),
+                                                    )
+                                                }
+                                            />
+                                            <span>{role.name}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                                {!field.state.value.length && (
+                                    <p
+                                        role="alert"
+                                        className="text-destructive"
+                                    >
+                                        至少选择一个角色。
+                                    </p>
                                 )}
-                            </form.AppField>
-                            <form.AppField
-                                name={`additions[${index}].descendants`}
-                            >
-                                {(field) => (
-                                    <field.SelectField
-                                        id={`account-profile-descendants-${row.key}`}
-                                        label="管理层级"
-                                        options={[
-                                            { value: "false", label: "仅本级" },
-                                            { value: "true", label: "含下级" },
-                                        ]}
-                                        allowClear={false}
-                                    />
-                                )}
-                            </form.AppField>
-                            <form.AppField name={`additions[${index}].validTo`}>
-                                {(field) => (
-                                    <field.DateTimeField
-                                        id={`account-profile-expiry-${row.key}`}
-                                        label="有效期至（可选）"
-                                    />
-                                )}
-                            </form.AppField>
-                            <Button
-                                id={`account-profile-draft-remove-${row.key}`}
-                                type="button"
-                                variant="ghost"
-                                onClick={() =>
-                                    form.removeFieldValue("additions", index)
-                                }
-                            >
-                                移除
-                            </Button>
-                        </div>
-                    ))}
-                </section>
+                            </section>
+                        )}
+                    </form.AppField>
+                </div>
                 {canOrganization && (
                     <form.AppField name="reason">
                         {(field) => (
@@ -590,16 +426,14 @@ export function AccountProfileEditor({
                         </p>
                     )}
                     {view &&
-                        (values.unitId !== (person?.own_org_unit_id ?? "") ||
-                            values.removed.length > 0 ||
-                            values.additions.length > 0) && (
+                        values.unitId !== (person?.own_org_unit_id ?? "") && (
                             <BusinessDiffPanel
-                                title="部门关系变更"
+                                title="所属部门变更"
                                 changes={impactChanges(receipt, view)}
                             />
                         )}
                     <p className="text-xs text-muted-foreground">
-                        所属部门变更会影响“本人所属部门”范围；不会改派单据。姓名、角色与部门关系将一起保存。
+                        所属部门变更会影响“本人所属部门”范围；不会改派单据。姓名、角色与所属部门将一起保存。
                     </p>
                 </div>
             )}

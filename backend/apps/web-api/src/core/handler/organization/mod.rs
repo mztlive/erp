@@ -27,7 +27,7 @@ use crate::core::response::ApiResponse;
 /// 缺范围返回空集并标记 `no_scope`；组织配置权不授予业务执行权。
 #[permission_macros::permission(
     group = "组织管理",
-    group_desc = "内部组织、成员与管理关系",
+    group_desc = "内部组织与成员",
     desc = "查询组织",
     resource = "org_unit",
     action = "list"
@@ -53,10 +53,10 @@ pub async fn list(
 /// 版本、边界或业务约束失败时返回统一错误。
 ///
 /// # 关键业务约束
-/// 组织配置权不授予业务执行权；部门负责人身份不代替 `org_unit:manage`。
+/// 组织配置权不授予业务执行权；所属部门不代替 `org_unit:manage`。
 #[permission_macros::permission(
     group = "组织管理",
-    group_desc = "内部组织、成员与管理关系",
+    group_desc = "内部组织与成员",
     desc = "管理组织",
     resource = "org_unit",
     action = "manage"
@@ -85,10 +85,10 @@ pub async fn preview(
 /// 冲突及越权不产生部分变更。
 ///
 /// # 关键业务约束
-/// 事务内重验授权、版本、成员及管理关系资格；不自动改派任务。
+/// 事务内重验授权、版本和成员资格；不自动改派任务。
 #[permission_macros::permission(
     group = "组织管理",
-    group_desc = "内部组织、成员与管理关系",
+    group_desc = "内部组织与成员",
     desc = "管理组织",
     resource = "org_unit",
     action = "manage"

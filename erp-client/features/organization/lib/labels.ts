@@ -47,10 +47,7 @@ export const OPERATION_LABEL: Record<
 }
 
 export const ORGANIZATION_BOUNDARY_NOTICE =
-    "组织配置只调整内部组织、成员与管理关系，不会改派任务，也不会授予销售、采购或审批等业务执行权。"
-
-export const MANAGEMENT_GRANT_NOTICE =
-    "管理授权必须显式指定角色和组织，不能因为对方是部门负责人就自动获得组织配置权。"
+    "组织配置只调整内部组织和成员归属，不会改派任务，也不会授予销售、采购或审批等业务执行权。"
 
 export const PAGE_NARROW_CLASS = "min-w-0 max-w-full overflow-x-hidden"
 

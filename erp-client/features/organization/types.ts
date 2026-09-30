@@ -70,13 +70,6 @@ export type PersonProfileChange = {
     role_ids?: string[] | null
     name: string | null
     org_unit_id: string | null
-    remove_management_ids: string[]
-    add_management: {
-        role_id: string
-        org_unit_id: string
-        include_descendants: boolean
-        valid_to: number | null
-    }[]
 }
 export type OrganizationOperation =
     | { operation: "update_person_profile"; profile: PersonProfileChange }

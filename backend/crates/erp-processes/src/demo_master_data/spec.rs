@@ -17,8 +17,11 @@ pub(super) struct FoundationFile {
     pub company: SaveCompanyRequest,
     pub password: String,
     pub root_department: String,
+    #[cfg(test)]
     pub sales_department: String,
+    #[cfg(test)]
     pub sales_leader_account: String,
+    #[cfg(test)]
     pub sales_leader_role_id: String,
     pub customer_owner_account: String,
     pub supplier_maintainer_account: String,

@@ -20,15 +20,14 @@ function fixture(initial = {}) {
       state.memberships = state.memberships.map((row) => row.user_id === change.user_id && row.valid_to == null ? { ...row, valid_to: 100 } : row);
       state.memberships.push({ ...change, id, valid_from: 100, valid_to: null });
     }
-    if (change.operation === "grant_management") state.management.push({ ...change, id, valid_from: 100 });
-    if (change.operation === "revoke_management") state.management = state.management.map((row) => row.id === change.assignment_id ? { ...row, valid_to: 100 } : row);
+    assert.ok(["create_unit", "transfer_member"].includes(change.operation), "组织种子只能维护部门与成员");
     state.version += 1;
     return { after: structuredClone(state) };
   };
   return { transport, writes, state: () => state };
 }
 
-test("首次补齐全部岗位部门、11 个账号和销售领导管理部门；重跑零写入", async () => {
+test("首次补齐全部岗位部门与 11 个账号归属；重跑零写入", async () => {
   const api = fixture();
   await ensureDevOrganization("test", { transport: api.transport, accounts, now: 100 });
   assert.equal(api.state().units.length, 8);
@@ -37,9 +36,7 @@ test("首次补齐全部岗位部门、11 个账号和销售领导管理部门�
     const unit = api.state().units.find((row) => row.name === spec.name);
     assert.deepEqual(api.state().memberships.filter((row) => row.org_unit_id === unit.id).map((row) => row.user_id).sort(), spec.accounts.map((account) => `u-${account}`).sort());
   }
-  assert.equal(api.state().management[0].role_id, "role-sales-leader");
-  assert.equal(api.state().management[0].org_unit_id, api.state().units.find((row) => row.name === "销售部").id);
-  assert.equal(api.state().management[0].include_descendants, true);
+  assert.deepEqual(api.state().management, []);
   const before = api.writes.length;
   await ensureDevOrganization("test", { transport: api.transport, accounts, now: 100 });
   assert.equal(api.writes.length, before);
@@ -70,4 +67,14 @@ test("预览冲突立即停止，不提交也不重试", async () => {
   };
   await assert.rejects(ensureDevOrganization("test", { transport, accounts, now: 100 }), /组织版本已变化/);
   assert.equal(calls, 2);
+});
+
+
+test("组织初始化不依赖销售领导角色且保留旧管理历史", async () => {
+  const legacy = { id: "legacy-grant", user_id: "u-lisiyong", role_id: "old-role", org_unit_id: "old-department", include_descendants: true, valid_from: 0, valid_to: null };
+  const api = fixture({ management: [legacy] });
+  await ensureDevOrganization("test", { transport: api.transport, accounts: accounts.map((account) => ({ ...account, role_ids: [] })), now: 100 });
+  assert.deepEqual(api.state().management, [legacy]);
+  assert.equal(api.state().memberships.length, 11);
+  assert.ok(api.writes.every(({ change }) => ["create_unit", "transfer_member"].includes(change.operation)));
 });

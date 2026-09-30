@@ -1,4 +1,4 @@
-/** 开发/E2E 组织种子：通过组织变更用例维护部门、主属关系与销售管理关系。 */
+/** 开发/E2E 组织种子：通过组织变更用例维护部门与主属关系。 */
 import { randomUUID } from "node:crypto";
 import { call, FOUNDATION, listAdmins } from "./dev-seed-lib.mjs";
 
@@ -44,13 +44,9 @@ export async function ensureDevOrganization(token, options = {}) {
       if (accounts.filter((account) => account.account === name).length !== 1) throw new Error(`缺少或重复种子账号 ${name}`);
     }
   }
-  const leader = accounts.find((row) => row.account === FOUNDATION.sales_leader_account);
-  if (!leader.role_ids.includes(FOUNDATION.sales_leader_role_id)) throw new Error("销售领导未绑定销售领导角色");
   const root = await unit(FOUNDATION.root_department, null);
-  let salesDepartment;
   for (const spec of DEV_DEPARTMENTS) {
     const department = await unit(spec.name, root.id);
-    if (spec.name === FOUNDATION.sales_department) salesDepartment = department;
     for (const name of spec.accounts) {
       const account = accounts.find((row) => row.account === name);
       const memberships = state.memberships.filter((row) => row.user_id === account.id && active(row));
@@ -59,12 +55,5 @@ export async function ensureDevOrganization(token, options = {}) {
       await change({ operation: "transfer_member", user_id: account.id, org_unit_id: department.id });
     }
   }
-  const grants = state.management.filter((row) => row.user_id === leader.id && row.role_id === FOUNDATION.sales_leader_role_id && active(row));
-  const exact = grants.filter((row) => row.org_unit_id === salesDepartment.id && row.include_descendants && row.valid_to == null);
-  for (const grant of grants) {
-    if (grant === exact[0]) continue;
-    await change({ operation: "revoke_management", assignment_id: grant.id });
-  }
-  if (!exact.length) await change({ operation: "grant_management", user_id: leader.id, role_id: FOUNDATION.sales_leader_role_id, org_unit_id: salesDepartment.id, include_descendants: true, valid_to: null });
   return state;
 }

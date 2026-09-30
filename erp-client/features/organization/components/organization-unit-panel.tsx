@@ -8,8 +8,6 @@ import {
     FolderInputIcon,
     PencilIcon,
     PlusIcon,
-    ShieldCheckIcon,
-    ShieldMinusIcon,
     UserMinusIcon,
     UserPlusIcon,
     UsersIcon,
@@ -18,11 +16,7 @@ import {
 import { BusinessStatusBadge } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { KIND_LABEL } from "@/features/organization/lib/labels"
-import {
-    isRelationActive,
-    personLabel,
-    roleLabel,
-} from "@/features/organization/lib/tree"
+import { isRelationActive, personLabel } from "@/features/organization/lib/tree"
 import type { OrgTreeNode } from "@/features/organization/lib/tree"
 import type { OrganizationStateView } from "@/features/organization/types"
 import { formatDateTime } from "@/lib/datetime"
@@ -84,16 +78,11 @@ export function OrganizationUnitPanel({
                         <span className="num text-foreground">
                             {node.members.length}
                         </span>{" "}
-                        人<span className="mx-1.5 text-border">/</span>
-                        管理此部门的人员{" "}
-                        <span className="num text-foreground">
-                            {node.management.length}
-                        </span>{" "}
-                        项
+                        人
                     </p>
                     {!unit.enabled ? (
                         <p className="mt-1 text-xs text-muted-foreground">
-                            该组织已停用，不能新增下级、调入成员或设置管理部门。
+                            该组织已停用，不能新增下级或调入成员。
                         </p>
                     ) : null}
                 </div>
@@ -284,97 +273,6 @@ export function OrganizationUnitPanel({
                                                 移出部门
                                             </Button>
                                         </div>
-                                    ) : null}
-                                </li>
-                            ))}
-                        </ul>
-                    )}
-                </div>
-
-                <div className="min-w-0 space-y-4 border-t border-border pt-6">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                        <h3 className="flex items-center gap-2 text-sm font-medium">
-                            <ShieldCheckIcon
-                                className="size-4 text-muted-foreground"
-                                aria-hidden="true"
-                            />
-                            管理此部门的人员{" "}
-                            <span className="num text-xs text-muted-foreground">
-                                {node.management.length}
-                            </span>
-                        </h3>
-                        {canManage ? (
-                            <Button
-                                id={`organization-unit-${segment}-grant`}
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                disabled={!unit.enabled}
-                                onClick={() =>
-                                    onChange("grant_management", {
-                                        orgUnitId: unit.id,
-                                    })
-                                }
-                            >
-                                <ShieldCheckIcon
-                                    data-icon="inline-start"
-                                    aria-hidden="true"
-                                />
-                                添加管理此部门的人员
-                            </Button>
-                        ) : null}
-                    </div>
-                    {node.management.length === 0 ? (
-                        <p className="rounded-lg bg-muted/30 px-4 py-8 text-center text-sm leading-6 text-muted-foreground">
-                            当前没有显式管理此部门的人员。部门负责人身份不会自动获得组织配置权。
-                        </p>
-                    ) : (
-                        <ul className="min-w-0 divide-y divide-border">
-                            {node.management.map((grant) => (
-                                <li
-                                    key={grant.id}
-                                    className="flex min-w-0 flex-wrap items-center justify-between gap-3 px-1 py-4 text-sm"
-                                >
-                                    <span className="min-w-0 wrap-anywhere">
-                                        {personLabel(
-                                            view.people,
-                                            grant.user_id,
-                                        )}{" "}
-                                        · {roleLabel(view.roles, grant.role_id)}
-                                        <span className="mt-1 block text-xs text-muted-foreground">
-                                            {grant.include_descendants
-                                                ? "含下级"
-                                                : "仅本级"}{" "}
-                                            ·{" "}
-                                            {relationPeriod(
-                                                grant.valid_from,
-                                                grant.valid_to,
-                                            )}
-                                        </span>
-                                    </span>
-                                    {canManage &&
-                                    isRelationActive(
-                                        grant.valid_from,
-                                        grant.valid_to,
-                                        view.asOf,
-                                    ) ? (
-                                        <Button
-                                            id={`organization-grant-${toAutomationIdSegment(grant.id)}-revoke`}
-                                            type="button"
-                                            size="sm"
-                                            variant="ghost"
-                                            onClick={() =>
-                                                onChange("revoke_management", {
-                                                    assignmentId: grant.id,
-                                                })
-                                            }
-                                        >
-                                            <ShieldMinusIcon
-                                                data-icon="inline-start"
-                                                aria-hidden="true"
-                                            />
-                                            撤销
-                                        </Button>
                                     ) : null}
                                 </li>
                             ))}

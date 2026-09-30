@@ -1,11 +1,11 @@
-//! 把演示岗位放进部门，并让销售领导管理销售部。已符合的关系不重复写入。
+//! 把演示岗位放进部门；业务数据范围由人员配置维护。已符合的关系不重复写入。
 
 use std::collections::HashMap;
 use std::future::Future;
 
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
-use erp_identity::entity::organization::{OrgManagementAssignment, OrgMembership, OrgUnit, OrgUnitKind};
+use erp_identity::entity::organization::{OrgMembership, OrgUnit, OrgUnitKind};
 use erp_identity::entity::organization_change::{OrganizationChangeRequest, OrganizationOperation};
 use erp_identity::{AccessControlExt, AccountCoreRepositoryExt};
 
@@ -18,7 +18,6 @@ struct OrgSnap {
     version: u64,
     units: Vec<OrgUnit>,
     memberships: Vec<OrgMembership>,
-    management: Vec<OrgManagementAssignment>,
 }
 
 impl DemoMasterDataService {
@@ -30,7 +29,7 @@ impl DemoMasterDataService {
     /// * `notices` - 本次组织调整的提示记录
     ///
     /// # 返回
-    /// 返回经编译器验证为 `Send` 的 future，完成后部门、成员与管理关系符合规格。
+    /// 返回经编译器验证为 `Send` 的 future，完成后部门与成员符合规格。
     ///
     /// # 错误
     /// 组织查询、调整或规格关系校验失败时返回错误。
@@ -54,8 +53,6 @@ impl DemoMasterDataService {
                 changed |=
                     self.seat_members(actor, &mut snap, &unit_id, department, user_ids, notices).await?;
             }
-            let sales_id = unit_id(&snap, &spec.sales_department, Some(&root_id))?;
-            changed |= self.ensure_sales_management(actor, &mut snap, &sales_id, user_ids).await?;
             if changed {
                 notices.push("已按演示部门放置岗位账号".to_string());
             }
@@ -65,12 +62,7 @@ impl DemoMasterDataService {
 
     async fn org_snapshot(&self, actor: &AuditActor) -> Result<OrgSnap> {
         let view = organization_service(self.db.clone(), self.rbac.clone()).state(actor).await?;
-        Ok(OrgSnap {
-            version: view.version,
-            units: view.units,
-            memberships: view.memberships,
-            management: view.management,
-        })
+        Ok(OrgSnap { version: view.version, units: view.units, memberships: view.memberships })
     }
 
     async fn ensure_root(&self, actor: &AuditActor, snap: &mut OrgSnap) -> Result<String> {
@@ -146,63 +138,6 @@ impl DemoMasterDataService {
         Ok(changed)
     }
 
-    async fn ensure_sales_management(
-        &self,
-        actor: &AuditActor,
-        snap: &mut OrgSnap,
-        sales_id: &str,
-        user_ids: &HashMap<String, String>,
-    ) -> Result<bool> {
-        let spec = spec::foundation_spec();
-        let Some(leader_id) = self.login_id(&spec.sales_leader_account, user_ids).await? else {
-            return Ok(false);
-        };
-        let mut changed = false;
-        let grants = snap
-            .management
-            .iter()
-            .filter(|row| {
-                row.user_id == leader_id
-                    && row.role_id == spec.sales_leader_role_id
-                    && row.validity.contains(Instant::now())
-            })
-            .cloned()
-            .collect::<Vec<_>>();
-        let exact = grants.iter().find(|row| {
-            row.org_unit_id == sales_id && row.include_descendants && row.validity.valid_to.is_none()
-        });
-        for grant in &grants {
-            if exact.is_some_and(|row| row.base.id == grant.base.id) {
-                continue;
-            }
-            self.apply_org(
-                actor,
-                snap,
-                &format!("demo-org-revoke-{}", grant.base.id),
-                OrganizationOperation::RevokeManagement { assignment_id: grant.base.id.clone() },
-            )
-            .await?;
-            changed = true;
-        }
-        if exact.is_none() {
-            self.apply_org(
-                actor,
-                snap,
-                "demo-org-grant-sales-leader",
-                OrganizationOperation::GrantManagement {
-                    user_id: leader_id,
-                    role_id: spec.sales_leader_role_id.clone(),
-                    org_unit_id: sales_id.to_string(),
-                    include_descendants: true,
-                    valid_to: None,
-                },
-            )
-            .await?;
-            changed = true;
-        }
-        Ok(changed)
-    }
-
     async fn apply_org(
         &self,
         actor: &AuditActor,
@@ -249,12 +184,6 @@ fn live_unit(unit: &OrgUnit) -> Result<String> {
     } else {
         Err(Error::ValidationError(format!("部门 {} 已停用或类型不匹配", unit.name)))
     }
-}
-
-fn unit_id(snap: &OrgSnap, name: &str, parent_id: Option<&str>) -> Result<String> {
-    find_unit(&snap.units, name, parent_id)?
-        .ok_or_else(|| Error::Internal(format!("部门 {name} 不存在")))
-        .map(|unit| unit.base.id.clone())
 }
 
 fn active_membership<'a>(snap: &'a OrgSnap, user_id: &str) -> Result<Option<&'a OrgMembership>> {

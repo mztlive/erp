@@ -4,19 +4,20 @@ use std::collections::BTreeSet;
 use erp_core::common::time::Instant;
 use serde::{Deserialize, Serialize};
 
-use super::organization_change::{OrganizationOperation, OrganizationState};
+use super::organization_change::OrganizationOperation;
 use crate::{Error, Result, RoleIdSet};
 
-/// 单人的新增部门管理关系。
+/// 仅供旧审计载荷反序列化的部门管理关系。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
-pub struct PersonManagementChange {
+pub(crate) struct PersonManagementChange {
     pub role_id: String,
     pub org_unit_id: String,
     pub include_descendants: bool,
     pub valid_to: Option<Instant>,
 }
 
+/// 姓名、完整角色集合与所属部门的一次原子修改。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct PersonProfileChange {
@@ -26,24 +27,26 @@ pub struct PersonProfileChange {
     pub expected_role_ids: Option<Vec<String>>,
     pub role_ids: Option<Vec<String>>,
     pub org_unit_id: Option<String>,
-    pub remove_management_ids: Vec<String>,
-    pub add_management: Vec<PersonManagementChange>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) remove_management_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) add_management: Vec<PersonManagementChange>,
 }
 
 impl PersonProfileChange {
-    /// 校验完整角色集的期望值以及保留、新增管理关系的角色依赖。
+    /// 校验完整角色集的期望值；旧管理关系不约束角色修改。
     ///
     /// # 参数
     /// * `current` - 当前授权快照的人员角色。
-    /// * `state` - 同一快照的组织关系。
-    /// * `at` - 校验时点。
+    /// # 返回
+    /// 角色集合与期望版本校验成功。
     /// # 错误
-    /// 空角色集、角色版本冲突、未移除的管理关系依赖被撤销角色时拒绝。
-    pub fn validate_roles(&self, current: &[String], state: &OrganizationState, at: Instant) -> Result<()> {
+    /// 空角色集、缺失期望值或角色版本冲突时拒绝。
+    pub fn validate_roles(&self, current: &[String]) -> Result<()> {
         let Some(roles) = &self.role_ids else {
             return Ok(());
         };
-        let roles = RoleIdSet::parse_non_empty(roles.clone())?.to_strings();
+        RoleIdSet::parse_non_empty(roles.clone())?;
         let expected = self
             .expected_role_ids
             .as_ref()
@@ -53,57 +56,31 @@ impl PersonProfileChange {
         {
             return Err(Error::ConflictError("人员角色已变化，请刷新后重新编辑".into()));
         }
-        let retained_dependency = state.management.iter().any(|grant| {
-            grant.user_id == self.user_id
-                && grant.validity.contains(at)
-                && !self.remove_management_ids.contains(&grant.base.id)
-                && !roles.contains(&grant.role_id)
-        });
-        if retained_dependency || self.add_management.iter().any(|grant| !roles.contains(&grant.role_id)) {
-            return Err(Error::ValidationError(
-                "部门管理关系使用了未选择的角色，请同时移除该关系或保留角色".into(),
-            ));
-        }
         Ok(())
     }
 
-    /// 展开固定人员的关系差异；不允许删除其他人员关系。
+    /// 展开单人的所属部门变更，旧管理字段只允许存在于历史审计。
     ///
     /// # 参数
-    /// * `state` - 同一快照的完整组织事实。
+    /// 无。
     /// # 返回
-    /// 先撤销、再调岗、再新增的组织命令。
+    /// 零个或一个调岗命令。
     /// # 错误
-    /// 空修改、重复删除、超量操作及越人删除均拒绝。
-    pub fn operations(&self, state: &OrganizationState) -> Result<Vec<OrganizationOperation>> {
-        if self.user_id.trim().is_empty()
-            || self.remove_management_ids.len() + self.add_management.len() > 100
-        {
-            return Err(Error::ValidationError("人员不能为空且单次最多修改100条管理关系".into()));
+    /// 空人员、空修改及停用的管理关系修改均拒绝。
+    pub fn operations(&self) -> Result<Vec<OrganizationOperation>> {
+        if self.user_id.trim().is_empty() {
+            return Err(Error::ValidationError("人员不能为空".into()));
+        }
+        if !self.remove_management_ids.is_empty() || !self.add_management.is_empty() {
+            return Err(Error::ValidationError("部门管理关系已停用，请在人员数据范围中设置授权".into()));
         }
         let mut operations = Vec::new();
-        let mut seen = BTreeSet::new();
-        for id in &self.remove_management_ids {
-            if !seen.insert(id)
-                || !state.management.iter().any(|g| g.base.id == *id && g.user_id == self.user_id)
-            {
-                return Err(Error::ValidationError("撤销关系必须属于当前人员且不能重复".into()));
-            }
-            operations.push(OrganizationOperation::RevokeManagement { assignment_id: id.clone() });
-        }
         if let Some(org_unit_id) = &self.org_unit_id {
             operations.push(OrganizationOperation::TransferMember {
                 user_id: self.user_id.clone(),
                 org_unit_id: org_unit_id.clone(),
             });
         }
-        operations.extend(self.add_management.iter().map(|g| OrganizationOperation::GrantManagement {
-            user_id: self.user_id.clone(),
-            role_id: g.role_id.clone(),
-            org_unit_id: g.org_unit_id.clone(),
-            include_descendants: g.include_descendants,
-            valid_to: g.valid_to,
-        }));
         if operations.is_empty() && self.name.is_none() && self.role_ids.is_none() {
             return Err(Error::ValidationError("没有需要保存的修改".into()));
         }
@@ -132,80 +109,62 @@ mod tests {
         let mut value = change();
         value.role_ids = Some(vec!["new".into()]);
         let current = vec!["old".into()];
-        let state = OrganizationState::default();
-        let at = Instant::from_unix_secs(10);
-        assert!(value.validate_roles(&current, &state, at).is_err());
+        assert!(value.validate_roles(&current).is_err());
         value.expected_role_ids = Some(vec!["other".into()]);
-        assert!(matches!(value.validate_roles(&current, &state, at), Err(Error::ConflictError(_))));
+        assert!(matches!(value.validate_roles(&current), Err(Error::ConflictError(_))));
         value.expected_role_ids = Some(current.clone());
-        assert!(value.validate_roles(&current, &state, at).is_ok());
-        assert!(value.operations(&state).unwrap().is_empty());
+        assert!(value.validate_roles(&current).is_ok());
+        assert!(value.operations().unwrap().is_empty());
         value.expected_role_ids = Some(vec!["second".into(), "old".into()]);
-        assert!(value.validate_roles(&["old".into(), "second".into()], &state, at).is_ok());
+        assert!(value.validate_roles(&["old".into(), "second".into()]).is_ok());
         value.expected_role_ids = Some(current.clone());
         value.role_ids = Some(vec![]);
-        assert!(value.validate_roles(&current, &state, at).is_err());
-    }
-
-    /// 新角色可供同次新增关系使用；移除旧角色必须同步移除其现行管理关系。
-    #[test]
-    fn management_uses_resulting_roles_and_requires_explicit_removal() {
-        use entity_core::BaseModel;
-
-        use crate::entity::organization::{OrgManagementAssignment, OrgValidity};
-        let mut value = change();
-        let current = vec!["old".into()];
-        value.expected_role_ids = Some(current.clone());
-        value.role_ids = Some(vec!["new".into()]);
-        value.add_management.push(PersonManagementChange {
-            role_id: "new".into(),
-            org_unit_id: "dept".into(),
-            include_descendants: false,
-            valid_to: None,
-        });
-        let at = Instant::from_unix_secs(10);
-        let mut state = OrganizationState::default();
-        assert!(value.validate_roles(&current, &state, at).is_ok());
-        state.management.push(OrgManagementAssignment {
-            base: BaseModel::new("grant".into()),
-            user_id: "one".into(),
-            role_id: "old".into(),
-            org_unit_id: "dept".into(),
-            include_descendants: false,
-            validity: OrgValidity { valid_from: Instant::from_unix_secs(1), valid_to: None },
-            granted_by: "admin".into(),
-            reason: "初始化".into(),
-        });
-        assert!(value.validate_roles(&current, &state, at).is_err());
-        value.remove_management_ids.push("grant".into());
-        assert!(value.validate_roles(&current, &state, at).is_ok());
-        value.add_management[0].role_id = "not-selected".into();
-        assert!(value.validate_roles(&current, &state, at).is_err());
+        assert!(value.validate_roles(&current).is_err());
     }
 
     #[test]
     fn profile_expands_only_target_person() {
         let mut value = change();
         value.org_unit_id = Some("sales".into());
+        let ops = value.operations().unwrap();
+        assert_eq!(ops.len(), 1);
+        assert!(matches!(&ops[0], OrganizationOperation::TransferMember { user_id, .. } if user_id == "one"));
+    }
+
+    #[test]
+    fn current_profile_payload_omits_retired_fields() {
+        let value = serde_json::from_str::<PersonProfileChange>(
+            r#"{
+            "user_id":"one", "expected_name":"旧姓名", "name":"新姓名", "org_unit_id":null,
+            "expected_role_ids":null, "role_ids":null
+        }"#,
+        )
+        .unwrap();
+        assert!(value.operations().unwrap().is_empty());
+        let encoded = serde_json::to_value(&value).unwrap();
+        assert!(encoded.get("remove_management_ids").is_none());
+        assert!(encoded.get("add_management").is_none());
+    }
+
+    #[test]
+    fn empty_and_legacy_management_writes_fail_but_history_roundtrips() {
+        let mut value = change();
+        assert!(value.operations().is_err());
+        value.name = Some("新姓名".into());
+        assert!(value.operations().unwrap().is_empty());
+        value.remove_management_ids.push("legacy".into());
+        assert!(value.operations().is_err());
+        let encoded = serde_json::to_string(&value).unwrap();
+        assert_eq!(serde_json::from_str::<PersonProfileChange>(&encoded).unwrap(), value);
+        value.remove_management_ids.clear();
         value.add_management.push(PersonManagementChange {
-            role_id: "role".into(),
-            org_unit_id: "sales".into(),
-            include_descendants: true,
+            role_id: "old".into(),
+            org_unit_id: "dept".into(),
+            include_descendants: false,
             valid_to: None,
         });
-        let ops = value.operations(&OrganizationState::default()).unwrap();
-        assert!(matches!(&ops[0], OrganizationOperation::TransferMember { user_id, .. } if user_id == "one"));
-        assert!(
-            matches!(&ops[1], OrganizationOperation::GrantManagement { user_id, include_descendants: true, .. } if user_id == "one")
-        );
-    }
-    #[test]
-    fn empty_and_foreign_removal_fail() {
-        let mut value = change();
-        assert!(value.operations(&OrganizationState::default()).is_err());
-        value.name = Some("新姓名".into());
-        assert!(value.operations(&OrganizationState::default()).unwrap().is_empty());
-        value.remove_management_ids.push("foreign".into());
-        assert!(value.operations(&OrganizationState::default()).is_err());
+        assert!(value.operations().is_err());
+        let encoded = serde_json::to_string(&value).unwrap();
+        assert_eq!(serde_json::from_str::<PersonProfileChange>(&encoded).unwrap(), value);
     }
 }

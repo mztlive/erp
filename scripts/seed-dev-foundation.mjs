@@ -424,7 +424,7 @@ async function main() {
   const seeded = await ensureDevAccounts(adminToken);
   await ensureDevOrganization(adminToken);
   await seedPersonDataScopes(adminToken, seeded);
-  console.log("岗位部门、人员归属与销售领导管理部门已补齐");
+  console.log("岗位部门与人员归属已补齐");
 
   const salesToken = await login(ACCOUNTS.sales.account, ACCOUNTS.sales.password);
   const salesUserId = seeded.sales.id;

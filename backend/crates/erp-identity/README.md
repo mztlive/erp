@@ -16,7 +16,7 @@
 ## 负责的数据与能力
 
 - 账号、角色、权限、用户角色绑定和数据范围规则。
-- 内部组织节点、成员及管理关系，组织变更预览与执行。
+- 内部组织节点与成员关系，组织变更预览与执行；旧部门管理关系仅保留历史记录。
 - 后台认证、IAM 管理、RBAC 服务与 MongoDB Casbin 适配。
 
 ## 依赖与协作边界
@@ -35,7 +35,7 @@
 | [src/service/iam/mod.rs](src/service/iam/mod.rs) | 账号、角色与 RBAC 服务入口 |
 | [src/service/auth/mod.rs](src/service/auth/mod.rs) | 后台认证入口 |
 | [src/service/organization.rs](src/service/organization.rs) | 组织状态、变更预览与执行 |
-| [src/entity/organization.rs](src/entity/organization.rs) | 部门、团队、成员与管理关系 |
+| [src/entity/organization.rs](src/entity/organization.rs) | 部门、团队、成员及旧管理关系存储类型 |
 | [src/ports/mod.rs](src/ports/mod.rs) | 审计及授权合同 |
 | [src/entity/mod.rs](src/entity/mod.rs) | 本域实体、值对象和确定性规则 |
 | [src/repository/mod.rs](src/repository/mod.rs) | 本域 MongoDB 仓储与集合访问器 |

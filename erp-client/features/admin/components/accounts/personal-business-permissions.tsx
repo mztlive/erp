@@ -1,5 +1,6 @@
 "use client"
 import * as React from "react"
+import { SlidersHorizontalIcon } from "lucide-react"
 import { BusinessFailureState } from "@/components/business"
 import { Input } from "@/components/ui/input"
 import {
@@ -79,8 +80,8 @@ export function PersonalBusinessPermissions({
                         )}
                     </h2>
                     <p className="text-xs text-muted-foreground">
-                        未设置的操作暂不能访问数据。点击业务行右侧按钮，为{name}
-                        设置范围。
+                        仅列出{name}
+                        通过有效角色获得的业务操作。未设置范围的操作暂不能访问数据。
                     </p>
                 </div>
                 <Input
@@ -165,7 +166,7 @@ export function PersonalBusinessPermissions({
                                     已有操作权限
                                 </TableHead>
                                 <TableHead>当前数据范围</TableHead>
-                                <TableHead className="w-28 text-right">
+                                <TableHead className="w-32 text-right">
                                     设置
                                 </TableHead>
                             </TableRow>
@@ -279,6 +280,7 @@ export function PersonalBusinessPermissions({
                                                             )
                                                         }}
                                                     >
+                                                        <SlidersHorizontalIcon data-icon="inline-start" />
                                                         {saved
                                                             ? "修改范围"
                                                             : "设置范围"}
@@ -286,52 +288,33 @@ export function PersonalBusinessPermissions({
                                                 )}
                                             </TableCell>
                                         </TableRow>
-                                        {editing === business.resource &&
-                                            ready &&
-                                            canCreate && (
-                                                <TableRow className="hover:bg-transparent">
-                                                    <TableCell
-                                                        colSpan={4}
-                                                        className="whitespace-normal p-3"
-                                                    >
-                                                        <PersonalGrantForm
-                                                            key={
-                                                                business.resource
-                                                            }
-                                                            userId={userId}
-                                                            resource={
-                                                                business.resource
-                                                            }
-                                                            name={name}
-                                                            data={data}
-                                                            units={units}
-                                                            draft={draft}
-                                                            onDraftChange={
-                                                                onDraftChange
-                                                            }
-                                                            onDone={() => {
-                                                                onDraftChange(
-                                                                    null,
-                                                                )
-                                                                setEditing(null)
-                                                            }}
-                                                            onSaved={() =>
-                                                                setNotice(
-                                                                    `${name}的${resourceLabel(business.resource)}数据范围已保存。`,
-                                                                )
-                                                            }
-                                                            onReload={() =>
-                                                                void query.refetch()
-                                                            }
-                                                        />
-                                                    </TableCell>
-                                                </TableRow>
-                                            )}
                                     </React.Fragment>
                                 )
                             })}
                         </TableBody>
                     </Table>
+                    {editing && ready && canCreate && !unavailableDraft && (
+                        <PersonalGrantForm
+                            key={editing}
+                            userId={userId}
+                            resource={editing}
+                            name={name}
+                            data={query.data}
+                            units={units}
+                            draft={draft}
+                            onDraftChange={onDraftChange}
+                            onDone={() => {
+                                onDraftChange(null)
+                                setEditing(null)
+                            }}
+                            onSaved={() =>
+                                setNotice(
+                                    `${name}的${resourceLabel(editing)}数据范围已保存。`,
+                                )
+                            }
+                            onReload={() => void query.refetch()}
+                        />
+                    )}
                 </>
             )}
         </section>

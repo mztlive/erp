@@ -8,8 +8,8 @@ use mongodb::options::FindOptions;
 use persistence_core::{Executor, mongo_ops};
 use serde::de::DeserializeOwned;
 
-use super::{ORG_MANAGEMENT, ORG_MEMBERSHIPS, ORG_UNITS, OrganizationRepository};
-use crate::entity::organization::{OrgManagementAssignment, OrgMembership, OrgUnit};
+use super::{ORG_MEMBERSHIPS, ORG_UNITS, OrganizationRepository};
+use crate::entity::organization::{OrgMembership, OrgUnit};
 use crate::entity::organization_change::OrganizationState;
 use crate::repository::person_directory_query::DIRECTORY_LIMIT;
 use crate::{Error, Result};
@@ -28,19 +28,11 @@ impl OrganizationRepository<'_> {
         at: Instant,
         executor: &mut dyn Executor,
     ) -> Result<OrganizationState> {
-        let mut management_filter = current_filter(at);
-        management_filter.insert("user_id", actor_id);
         Ok(OrganizationState {
             version: self.revision(executor).await?.map_or(0, |row| row.revision),
             units: bounded::<OrgUnit>(self.db, ORG_UNITS, doc! {}, executor).await?,
             memberships: self.directory_memberships(Some(&[actor_id.to_owned()]), None, at, executor).await?,
-            management: bounded::<OrgManagementAssignment>(
-                self.db,
-                ORG_MANAGEMENT,
-                management_filter,
-                executor,
-            )
-            .await?,
+            management: Vec::new(),
         })
     }
 
