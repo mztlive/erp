@@ -2,10 +2,12 @@
 //!
 //! 规格必须放在 crate 内。web-api 镜像只复制 `backend/`，编译时读不到仓库根的 `scripts/`。
 
+use std::collections::HashMap;
 use std::sync::OnceLock;
 
 use erp_identity::access_control::{DataScopeType, ScopeDimension, ScopeTargetMode};
-use erp_identity::entity::access_control::person_scope::PersonScopeTerm;
+use erp_identity::dto::person_scope::{PersonBusinessOption, PersonScopeGrant, SavePersonScopeRequest};
+use erp_identity::entity::access_control::person_scope::{PersonDataScope, PersonScopeTerm};
 use erp_party::dto::company::SaveCompanyRequest;
 use erp_workflow::{DocumentType, FinanceResponsibilityOperation};
 use serde::Deserialize;
@@ -33,6 +35,15 @@ pub(super) struct FoundationFile {
     pub accounts: Vec<AccountSpec>,
     pub departments: Vec<DepartmentSpec>,
     pub approvals: Vec<ApprovalSpec>,
+    pub required_permissions: HashMap<String, Vec<String>>,
+    pub person_scope_defaults: PersonScopeDefaults,
+}
+
+#[derive(Deserialize)]
+pub(super) struct PersonScopeDefaults {
+    pub self_accounts: Vec<String>,
+    pub department_accounts: Vec<String>,
+    pub company_resources: HashMap<String, Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -101,12 +112,73 @@ pub(super) fn document_type(code: &str) -> Result<DocumentType> {
 /// 演示范围配置的固定输入选择。
 pub(super) struct DemoPersonScope;
 impl DemoPersonScope {
+    /// 只为未配置的准入动作生成追加范围，保留撤权和旧表达式。
+    /// # 参数
+    /// 账号、服务端业务准入、已有记录与本次策略版本。
+    /// # 返回
+    /// 需要写入的正式规范化请求；本人基础或已有配置返回 None。
+    /// # 错误
+    /// 维度、动作或范围违反当前合同则失败。
+    pub(super) fn request(
+        login: &str,
+        business: &PersonBusinessOption,
+        items: &[PersonDataScope],
+        policy_version: u64,
+    ) -> Result<Option<SavePersonScopeRequest>> {
+        let actions = business
+            .configurable_actions
+            .iter()
+            .filter(|action| {
+                !items.iter().any(|row| row.resource == business.resource && row.action == **action)
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        if actions.is_empty() {
+            return Ok(None);
+        }
+        let term = Self::term(login, &business.resource, business.default_self, &business.dimensions)?;
+        if business.default_self && term.scope_type == DataScopeType::SelfOwned {
+            return Ok(None);
+        }
+        let request = SavePersonScopeRequest {
+            resource: business.resource.clone(),
+            actions: actions.clone(),
+            grants: vec![PersonScopeGrant { actions, terms: vec![term] }],
+            replace_legacy: false,
+            expected_policy_version: policy_version,
+        }
+        .normalized(&business.dimensions)?;
+        Ok(Some(request))
+    }
+
     /// 演示岗位初始选择；跨维度业务明确使用公司范围。
-    pub(super) fn term(login: &str, dimensions: &[ScopeDimension]) -> PersonScopeTerm {
+    /// # 参数
+    /// 登录名、资源、本人基础标记及登记维度。
+    /// # 返回
+    /// 声明的本人、部门或公司范围条件。
+    /// # 错误
+    /// 未登记维度时返回错误。
+    pub(super) fn term(
+        login: &str,
+        resource: &str,
+        default_self: bool,
+        dimensions: &[ScopeDimension],
+    ) -> Result<PersonScopeTerm> {
+        let defaults = &foundation_spec().person_scope_defaults;
+        let dimension = dimensions
+            .first()
+            .copied()
+            .ok_or_else(|| Error::ValidationError(format!("演示范围 {resource} 缺少维度")))?;
         let internal = dimensions == [ScopeDimension::InternalOrg];
-        let own = internal && matches!(login, "xiaoshou" | "caigou" | "yunying");
-        let department = internal && login == "lisiyong";
-        PersonScopeTerm {
+        let company = defaults
+            .company_resources
+            .get(login)
+            .is_some_and(|resources| resources.iter().any(|value| value == resource));
+        let own =
+            !company && internal && default_self && defaults.self_accounts.iter().any(|value| value == login);
+        let department =
+            !company && internal && defaults.department_accounts.iter().any(|value| value == login);
+        Ok(PersonScopeTerm {
             scope_type: if own {
                 DataScopeType::SelfOwned
             } else if department {
@@ -114,11 +186,11 @@ impl DemoPersonScope {
             } else {
                 DataScopeType::Company
             },
-            target_dimension: dimensions[0],
+            target_dimension: dimension,
             target_mode: department.then_some(ScopeTargetMode::OwnOrg),
             include_descendants: department.then_some(true),
             scope_targets: vec![],
-        }
+        })
     }
 }
 

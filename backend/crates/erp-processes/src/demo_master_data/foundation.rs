@@ -2,8 +2,8 @@
 
 use application_core::AuditActor;
 
-use super::DemoMasterDataService;
-use crate::Result;
+use super::{DemoMasterDataService, spec};
+use crate::{Error, Result};
 
 /// 岗位账号、部门与审批流程的准备结果。
 #[derive(Debug, serde::Serialize)]
@@ -33,13 +33,14 @@ impl DemoMasterDataService {
     /// * `actor` - 当前操作人，须能创建账号、调整组织、发布审批流程和维护责任规则
     ///
     /// # 返回
-    /// 返回新建和已存在的数量。已有账号不改密码，但姓名会同步为演示人名。已发布但审批人不同的流程只在说明里标出。
+    /// 返回新建和已存在的数量。已有账号不改密码，但姓名会同步为演示人名。已发布审批链不一致时保留原定义并返回阻断错误。
     /// 已启用的默认采购调度人或财务责任规则保留现有负责人。
     ///
     /// # 错误
-    /// 环境未开放，或账号、部门、审批流程、责任规则写入失败时返回错误。
+    /// 环境未开放、必要权限缺失、已发布审批链不一致，或基础写入失败时返回错误。
     pub async fn ensure_foundation(&self, actor: &AuditActor) -> Result<DemoFoundationReport> {
         self.ensure_enabled()?;
+        spec::foundation_spec().validate()?;
         let mut report = DemoFoundationReport {
             accounts_created: 0,
             accounts_existing: 0,
@@ -51,9 +52,13 @@ impl DemoMasterDataService {
             notices: Vec::new(),
         };
         let accounts = self.ensure_accounts(actor, &mut report).await?;
+        self.validate_demo_permissions(&accounts).await?;
         self.ensure_departments(actor, &accounts.by_login, &mut report.notices).await?;
         self.ensure_person_scopes(actor, &accounts.by_login).await?;
         self.ensure_approvals(actor, &accounts, &mut report).await?;
+        if report.approvals_mismatched > 0 {
+            return Err(Error::ValidationError(report.notices.join("；")));
+        }
         self.ensure_responsibilities(actor, &accounts, &mut report).await?;
         Ok(report)
     }

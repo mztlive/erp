@@ -1,0 +1,596 @@
+[
+  {
+    "sku_id": "DEMO-MD-SKU-01",
+    "supplier_id": "demo-master-supplier-01",
+    "supplier_product_code": "DEMO-MD-P-01",
+    "supplier_sku_code": "DEMO-MD-SKU-01",
+    "source_type": "MANUAL",
+    "terms": {
+      "dropship_supply_price_gross": "60.00",
+      "bulk_supply_price_gross": "50.00",
+      "input_tax_rate": "0.13",
+      "bulk_minimum_order_quantity": "1",
+      "supply_region": [
+        "全国"
+      ],
+      "product_capabilities": [],
+      "valid_from": "2026-01-01"
+    },
+    "availability_status": "AVAILABLE",
+    "available_quantity": "10000",
+    "change_reason": "演示商品可售供给",
+    "idempotency_key": "demo-offering-01"
+  },
+  {
+    "sku_id": "DEMO-MD-SKU-02",
+    "supplier_id": "demo-master-supplier-02",
+    "supplier_product_code": "DEMO-MD-P-02",
+    "supplier_sku_code": "DEMO-MD-SKU-02",
+    "source_type": "MANUAL",
+    "terms": {
+      "dropship_supply_price_gross": "60.00",
+      "bulk_supply_price_gross": "50.00",
+      "input_tax_rate": "0.13",
+      "bulk_minimum_order_quantity": "1",
+      "supply_region": [
+        "全国"
+      ],
+      "product_capabilities": [],
+      "valid_from": "2026-01-01"
+    },
+    "availability_status": "AVAILABLE",
+    "available_quantity": "10000",
+    "change_reason": "演示商品可售供给",
+    "idempotency_key": "demo-offering-02"
+  },
+  {
+    "sku_id": "DEMO-MD-SKU-03",
+    "supplier_id": "demo-master-supplier-03",
+    "supplier_product_code": "DEMO-MD-P-03",
+    "supplier_sku_code": "DEMO-MD-SKU-03",
+    "source_type": "MANUAL",
+    "terms": {
+      "dropship_supply_price_gross": "60.00",
+      "bulk_supply_price_gross": "50.00",
+      "input_tax_rate": "0.13",
+      "bulk_minimum_order_quantity": "1",
+      "supply_region": [
+        "全国"
+      ],
+      "product_capabilities": [],
+      "valid_from": "2026-01-01"
+    },
+    "availability_status": "AVAILABLE",
+    "available_quantity": "10000",
+    "change_reason": "演示商品可售供给",
+    "idempotency_key": "demo-offering-03"
+  },
+  {
+    "sku_id": "DEMO-MD-SKU-04",
+    "supplier_id": "demo-master-supplier-04",
+    "supplier_product_code": "DEMO-MD-P-04",
+    "supplier_sku_code": "DEMO-MD-SKU-04",
+    "source_type": "MANUAL",
+    "terms": {
+      "dropship_supply_price_gross": "60.00",
+      "bulk_supply_price_gross": "50.00",
+      "input_tax_rate": "0.13",
+      "bulk_minimum_order_quantity": "1",
+      "supply_region": [
+        "全国"
+      ],
+      "product_capabilities": [],
+      "valid_from": "2026-01-01"
+    },
+    "availability_status": "AVAILABLE",
+    "available_quantity": "10000",
+    "change_reason": "演示商品可售供给",
+    "idempotency_key": "demo-offering-04"
+  },
+  {
+    "sku_id": "DEMO-MD-SKU-05",
+    "supplier_id": "demo-master-supplier-05",
+    "supplier_product_code": "DEMO-MD-P-05",
+    "supplier_sku_code": "DEMO-MD-SKU-05",
+    "source_type": "MANUAL",
+    "terms": {
+      "dropship_supply_price_gross": "60.00",
+      "bulk_supply_price_gross": "50.00",
+      "input_tax_rate": "0.13",
+      "bulk_minimum_order_quantity": "1",
+      "supply_region": [
+        "全国"
+      ],
+      "product_capabilities": [],
+      "valid_from": "2026-01-01"
+    },
+    "availability_status": "AVAILABLE",
+    "available_quantity": "10000",
+    "change_reason": "演示商品可售供给",
+    "idempotency_key": "demo-offering-05"
+  },
+  {
+    "sku_id": "DEMO-MD-SKU-06",
+    "supplier_id": "demo-master-supplier-06",
+    "supplier_product_code": "DEMO-MD-P-06",
+    "supplier_sku_code": "DEMO-MD-SKU-06",
+    "source_type": "MANUAL",
+    "terms": {
+      "dropship_supply_price_gross": "60.00",
+      "bulk_supply_price_gross": "50.00",
+      "input_tax_rate": "0.13",
+      "bulk_minimum_order_quantity": "1",
+      "supply_region": [
+        "全国"
+      ],
+      "product_capabilities": [],
+      "valid_from": "2026-01-01"
+    },
+    "availability_status": "AVAILABLE",
+    "available_quantity": "10000",
+    "change_reason": "演示商品可售供给",
+    "idempotency_key": "demo-offering-06"
+  },
+  {
+    "sku_id": "DEMO-MD-SKU-07",
+    "supplier_id": "demo-master-supplier-07",
+    "supplier_product_code": "DEMO-MD-P-07",
+    "supplier_sku_code": "DEMO-MD-SKU-07",
+    "source_type": "MANUAL",
+    "terms": {
+      "dropship_supply_price_gross": "60.00",
+      "bulk_supply_price_gross": "50.00",
+      "input_tax_rate": "0.13",
+      "bulk_minimum_order_quantity": "1",
+      "supply_region": [
+        "全国"
+      ],
+      "product_capabilities": [],
+      "valid_from": "2026-01-01"
+    },
+    "availability_status": "AVAILABLE",
+    "available_quantity": "10000",
+    "change_reason": "演示商品可售供给",
+    "idempotency_key": "demo-offering-07"
+  },
+  {
+    "sku_id": "DEMO-MD-SKU-08",
+    "supplier_id": "demo-master-supplier-08",
+    "supplier_product_code": "DEMO-MD-P-08",
+    "supplier_sku_code": "DEMO-MD-SKU-08",
+    "source_type": "MANUAL",
+    "terms": {
+      "dropship_supply_price_gross": "60.00",
+      "bulk_supply_price_gross": "50.00",
+      "input_tax_rate": "0.13",
+      "bulk_minimum_order_quantity": "1",
+      "supply_region": [
+        "全国"
+      ],
+      "product_capabilities": [],
+      "valid_from": "2026-01-01"
+    },
+    "availability_status": "AVAILABLE",
+    "available_quantity": "10000",
+    "change_reason": "演示商品可售供给",
+    "idempotency_key": "demo-offering-08"
+  },
+  {
+    "sku_id": "DEMO-MD-SKU-09",
+    "supplier_id": "demo-master-supplier-09",
+    "supplier_product_code": "DEMO-MD-P-09",
+    "supplier_sku_code": "DEMO-MD-SKU-09",
+    "source_type": "MANUAL",
+    "terms": {
+      "dropship_supply_price_gross": "60.00",
+      "bulk_supply_price_gross": "50.00",
+      "input_tax_rate": "0.13",
+      "bulk_minimum_order_quantity": "1",
+      "supply_region": [
+        "全国"
+      ],
+      "product_capabilities": [],
+      "valid_from": "2026-01-01"
+    },
+    "availability_status": "AVAILABLE",
+    "available_quantity": "10000",
+    "change_reason": "演示商品可售供给",
+    "idempotency_key": "demo-offering-09"
+  },
+  {
+    "sku_id": "DEMO-MD-SKU-10",
+    "supplier_id": "demo-master-supplier-10",
+    "supplier_product_code": "DEMO-MD-P-10",
+    "supplier_sku_code": "DEMO-MD-SKU-10",
+    "source_type": "MANUAL",
+    "terms": {
+      "dropship_supply_price_gross": "60.00",
+      "bulk_supply_price_gross": "50.00",
+      "input_tax_rate": "0.13",
+      "bulk_minimum_order_quantity": "1",
+      "supply_region": [
+        "全国"
+      ],
+      "product_capabilities": [],
+      "valid_from": "2026-01-01"
+    },
+    "availability_status": "AVAILABLE",
+    "available_quantity": "10000",
+    "change_reason": "演示商品可售供给",
+    "idempotency_key": "demo-offering-10"
+  },
+  {
+    "sku_id": "DEMO-MD-SKU-11",
+    "supplier_id": "demo-master-supplier-11",
+    "supplier_product_code": "DEMO-MD-P-11",
+    "supplier_sku_code": "DEMO-MD-SKU-11",
+    "source_type": "MANUAL",
+    "terms": {
+      "dropship_supply_price_gross": "60.00",
+      "bulk_supply_price_gross": "50.00",
+      "input_tax_rate": "0.13",
+      "bulk_minimum_order_quantity": "1",
+      "supply_region": [
+        "全国"
+      ],
+      "product_capabilities": [],
+      "valid_from": "2026-01-01"
+    },
+    "availability_status": "AVAILABLE",
+    "available_quantity": "10000",
+    "change_reason": "演示商品可售供给",
+    "idempotency_key": "demo-offering-11"
+  },
+  {
+    "sku_id": "DEMO-MD-SKU-12",
+    "supplier_id": "demo-master-supplier-12",
+    "supplier_product_code": "DEMO-MD-P-12",
+    "supplier_sku_code": "DEMO-MD-SKU-12",
+    "source_type": "MANUAL",
+    "terms": {
+      "dropship_supply_price_gross": "60.00",
+      "bulk_supply_price_gross": "50.00",
+      "input_tax_rate": "0.13",
+      "bulk_minimum_order_quantity": "1",
+      "supply_region": [
+        "全国"
+      ],
+      "product_capabilities": [],
+      "valid_from": "2026-01-01"
+    },
+    "availability_status": "AVAILABLE",
+    "available_quantity": "10000",
+    "change_reason": "演示商品可售供给",
+    "idempotency_key": "demo-offering-12"
+  },
+  {
+    "sku_id": "DEMO-MD-SKU-13",
+    "supplier_id": "demo-master-supplier-13",
+    "supplier_product_code": "DEMO-MD-P-13",
+    "supplier_sku_code": "DEMO-MD-SKU-13",
+    "source_type": "MANUAL",
+    "terms": {
+      "dropship_supply_price_gross": "60.00",
+      "bulk_supply_price_gross": "50.00",
+      "input_tax_rate": "0.13",
+      "bulk_minimum_order_quantity": "1",
+      "supply_region": [
+        "全国"
+      ],
+      "product_capabilities": [],
+      "valid_from": "2026-01-01"
+    },
+    "availability_status": "AVAILABLE",
+    "available_quantity": "10000",
+    "change_reason": "演示商品可售供给",
+    "idempotency_key": "demo-offering-13"
+  },
+  {
+    "sku_id": "DEMO-MD-SKU-14",
+    "supplier_id": "demo-master-supplier-14",
+    "supplier_product_code": "DEMO-MD-P-14",
+    "supplier_sku_code": "DEMO-MD-SKU-14",
+    "source_type": "MANUAL",
+    "terms": {
+      "dropship_supply_price_gross": "60.00",
+      "bulk_supply_price_gross": "50.00",
+      "input_tax_rate": "0.13",
+      "bulk_minimum_order_quantity": "1",
+      "supply_region": [
+        "全国"
+      ],
+      "product_capabilities": [],
+      "valid_from": "2026-01-01"
+    },
+    "availability_status": "AVAILABLE",
+    "available_quantity": "10000",
+    "change_reason": "演示商品可售供给",
+    "idempotency_key": "demo-offering-14"
+  },
+  {
+    "sku_id": "DEMO-MD-SKU-15",
+    "supplier_id": "demo-master-supplier-15",
+    "supplier_product_code": "DEMO-MD-P-15",
+    "supplier_sku_code": "DEMO-MD-SKU-15",
+    "source_type": "MANUAL",
+    "terms": {
+      "dropship_supply_price_gross": "60.00",
+      "bulk_supply_price_gross": "50.00",
+      "input_tax_rate": "0.13",
+      "bulk_minimum_order_quantity": "1",
+      "supply_region": [
+        "全国"
+      ],
+      "product_capabilities": [],
+      "valid_from": "2026-01-01"
+    },
+    "availability_status": "AVAILABLE",
+    "available_quantity": "10000",
+    "change_reason": "演示商品可售供给",
+    "idempotency_key": "demo-offering-15"
+  },
+  {
+    "sku_id": "DEMO-MD-SKU-16",
+    "supplier_id": "demo-master-supplier-16",
+    "supplier_product_code": "DEMO-MD-P-16",
+    "supplier_sku_code": "DEMO-MD-SKU-16",
+    "source_type": "MANUAL",
+    "terms": {
+      "dropship_supply_price_gross": "60.00",
+      "bulk_supply_price_gross": "50.00",
+      "input_tax_rate": "0.13",
+      "bulk_minimum_order_quantity": "1",
+      "supply_region": [
+        "全国"
+      ],
+      "product_capabilities": [],
+      "valid_from": "2026-01-01"
+    },
+    "availability_status": "AVAILABLE",
+    "available_quantity": "10000",
+    "change_reason": "演示商品可售供给",
+    "idempotency_key": "demo-offering-16"
+  },
+  {
+    "sku_id": "DEMO-MD-SKU-17",
+    "supplier_id": "demo-master-supplier-01",
+    "supplier_product_code": "DEMO-MD-P-17",
+    "supplier_sku_code": "DEMO-MD-SKU-17",
+    "source_type": "MANUAL",
+    "terms": {
+      "dropship_supply_price_gross": "60.00",
+      "bulk_supply_price_gross": "50.00",
+      "input_tax_rate": "0.13",
+      "bulk_minimum_order_quantity": "1",
+      "supply_region": [
+        "全国"
+      ],
+      "product_capabilities": [],
+      "valid_from": "2026-01-01"
+    },
+    "availability_status": "AVAILABLE",
+    "available_quantity": "10000",
+    "change_reason": "演示商品可售供给",
+    "idempotency_key": "demo-offering-17"
+  },
+  {
+    "sku_id": "DEMO-MD-SKU-18",
+    "supplier_id": "demo-master-supplier-02",
+    "supplier_product_code": "DEMO-MD-P-18",
+    "supplier_sku_code": "DEMO-MD-SKU-18",
+    "source_type": "MANUAL",
+    "terms": {
+      "dropship_supply_price_gross": "60.00",
+      "bulk_supply_price_gross": "50.00",
+      "input_tax_rate": "0.13",
+      "bulk_minimum_order_quantity": "1",
+      "supply_region": [
+        "全国"
+      ],
+      "product_capabilities": [],
+      "valid_from": "2026-01-01"
+    },
+    "availability_status": "AVAILABLE",
+    "available_quantity": "10000",
+    "change_reason": "演示商品可售供给",
+    "idempotency_key": "demo-offering-18"
+  },
+  {
+    "sku_id": "DEMO-MD-SKU-19",
+    "supplier_id": "demo-master-supplier-03",
+    "supplier_product_code": "DEMO-MD-P-19",
+    "supplier_sku_code": "DEMO-MD-SKU-19",
+    "source_type": "MANUAL",
+    "terms": {
+      "dropship_supply_price_gross": "60.00",
+      "bulk_supply_price_gross": "50.00",
+      "input_tax_rate": "0.13",
+      "bulk_minimum_order_quantity": "1",
+      "supply_region": [
+        "全国"
+      ],
+      "product_capabilities": [],
+      "valid_from": "2026-01-01"
+    },
+    "availability_status": "AVAILABLE",
+    "available_quantity": "10000",
+    "change_reason": "演示商品可售供给",
+    "idempotency_key": "demo-offering-19"
+  },
+  {
+    "sku_id": "DEMO-MD-SKU-20",
+    "supplier_id": "demo-master-supplier-04",
+    "supplier_product_code": "DEMO-MD-P-20",
+    "supplier_sku_code": "DEMO-MD-SKU-20",
+    "source_type": "MANUAL",
+    "terms": {
+      "dropship_supply_price_gross": "60.00",
+      "bulk_supply_price_gross": "50.00",
+      "input_tax_rate": "0.13",
+      "bulk_minimum_order_quantity": "1",
+      "supply_region": [
+        "全国"
+      ],
+      "product_capabilities": [],
+      "valid_from": "2026-01-01"
+    },
+    "availability_status": "AVAILABLE",
+    "available_quantity": "10000",
+    "change_reason": "演示商品可售供给",
+    "idempotency_key": "demo-offering-20"
+  },
+  {
+    "sku_id": "DEMO-MD-SKU-21",
+    "supplier_id": "demo-master-supplier-05",
+    "supplier_product_code": "DEMO-MD-P-21",
+    "supplier_sku_code": "DEMO-MD-SKU-21",
+    "source_type": "MANUAL",
+    "terms": {
+      "dropship_supply_price_gross": "60.00",
+      "bulk_supply_price_gross": "50.00",
+      "input_tax_rate": "0.13",
+      "bulk_minimum_order_quantity": "1",
+      "supply_region": [
+        "全国"
+      ],
+      "product_capabilities": [],
+      "valid_from": "2026-01-01"
+    },
+    "availability_status": "AVAILABLE",
+    "available_quantity": "10000",
+    "change_reason": "演示商品可售供给",
+    "idempotency_key": "demo-offering-21"
+  },
+  {
+    "sku_id": "DEMO-MD-SKU-22",
+    "supplier_id": "demo-master-supplier-06",
+    "supplier_product_code": "DEMO-MD-P-22",
+    "supplier_sku_code": "DEMO-MD-SKU-22",
+    "source_type": "MANUAL",
+    "terms": {
+      "dropship_supply_price_gross": "60.00",
+      "bulk_supply_price_gross": "50.00",
+      "input_tax_rate": "0.13",
+      "bulk_minimum_order_quantity": "1",
+      "supply_region": [
+        "全国"
+      ],
+      "product_capabilities": [],
+      "valid_from": "2026-01-01"
+    },
+    "availability_status": "AVAILABLE",
+    "available_quantity": "10000",
+    "change_reason": "演示商品可售供给",
+    "idempotency_key": "demo-offering-22"
+  },
+  {
+    "sku_id": "DEMO-MD-SKU-23",
+    "supplier_id": "demo-master-supplier-07",
+    "supplier_product_code": "DEMO-MD-P-23",
+    "supplier_sku_code": "DEMO-MD-SKU-23",
+    "source_type": "MANUAL",
+    "terms": {
+      "dropship_supply_price_gross": "60.00",
+      "bulk_supply_price_gross": "50.00",
+      "input_tax_rate": "0.13",
+      "bulk_minimum_order_quantity": "1",
+      "supply_region": [
+        "全国"
+      ],
+      "product_capabilities": [],
+      "valid_from": "2026-01-01"
+    },
+    "availability_status": "AVAILABLE",
+    "available_quantity": "10000",
+    "change_reason": "演示商品可售供给",
+    "idempotency_key": "demo-offering-23"
+  },
+  {
+    "sku_id": "DEMO-MD-SKU-24",
+    "supplier_id": "demo-master-supplier-08",
+    "supplier_product_code": "DEMO-MD-P-24",
+    "supplier_sku_code": "DEMO-MD-SKU-24",
+    "source_type": "MANUAL",
+    "terms": {
+      "dropship_supply_price_gross": "60.00",
+      "bulk_supply_price_gross": "50.00",
+      "input_tax_rate": "0.13",
+      "bulk_minimum_order_quantity": "1",
+      "supply_region": [
+        "全国"
+      ],
+      "product_capabilities": [],
+      "valid_from": "2026-01-01"
+    },
+    "availability_status": "AVAILABLE",
+    "available_quantity": "10000",
+    "change_reason": "演示商品可售供给",
+    "idempotency_key": "demo-offering-24"
+  },
+  {
+    "sku_id": "DEMO-MD-SKU-25",
+    "supplier_id": "demo-master-supplier-17",
+    "supplier_product_code": "DEMO-MD-P-25",
+    "supplier_sku_code": "DEMO-MD-SKU-25",
+    "source_type": "MANUAL",
+    "terms": {
+      "dropship_supply_price_gross": "60.00",
+      "bulk_supply_price_gross": "50.00",
+      "input_tax_rate": "0.06",
+      "bulk_minimum_order_quantity": "1",
+      "supply_region": [
+        "全国"
+      ],
+      "product_capabilities": [],
+      "valid_from": "2026-01-01"
+    },
+    "availability_status": "AVAILABLE",
+    "available_quantity": "10000",
+    "change_reason": "演示商品可售供给",
+    "idempotency_key": "demo-offering-25"
+  },
+  {
+    "sku_id": "DEMO-MD-SKU-26",
+    "supplier_id": "demo-master-supplier-18",
+    "supplier_product_code": "DEMO-MD-P-26",
+    "supplier_sku_code": "DEMO-MD-SKU-26",
+    "source_type": "MANUAL",
+    "terms": {
+      "dropship_supply_price_gross": "60.00",
+      "bulk_supply_price_gross": "50.00",
+      "input_tax_rate": "0.06",
+      "bulk_minimum_order_quantity": "1",
+      "supply_region": [
+        "全国"
+      ],
+      "product_capabilities": [],
+      "valid_from": "2026-01-01"
+    },
+    "availability_status": "AVAILABLE",
+    "available_quantity": "10000",
+    "change_reason": "演示商品可售供给",
+    "idempotency_key": "demo-offering-26"
+  },
+  {
+    "sku_id": "DEMO-MD-P-27",
+    "supplier_id": "demo-master-supplier-17",
+    "supplier_product_code": "DEMO-MD-P-27",
+    "supplier_sku_code": "DEMO-MD-P-27",
+    "source_type": "MANUAL",
+    "terms": {
+      "dropship_supply_price_gross": "60.00",
+      "bulk_supply_price_gross": "50.00",
+      "input_tax_rate": "0.06",
+      "bulk_minimum_order_quantity": "1",
+      "supply_region": [
+        "全国"
+      ],
+      "product_capabilities": [],
+      "valid_from": "2026-01-01"
+    },
+    "availability_status": "AVAILABLE",
+    "available_quantity": "10000",
+    "change_reason": "演示商品可售供给",
+    "idempotency_key": "demo-offering-27"
+  }
+]

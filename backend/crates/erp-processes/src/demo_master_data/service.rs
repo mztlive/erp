@@ -14,7 +14,7 @@ use super::ensure_dictionary::EnsureOutcome;
 use super::plan::{self, DemoCounts, DemoStep};
 use super::record::{self, DemoMasterRecord};
 use super::seed::SeedRequest;
-use super::{DemoMasterDataService, removal};
+use super::{DemoMasterDataService, offerings, removal};
 use crate::adapters::{party_service, scoped_catalog_service, warehouse_service};
 use crate::{CustomerProfileService, Error, Result, SupplierProfileService};
 
@@ -118,6 +118,7 @@ impl DemoMasterDataService {
     pub async fn apply_chunk(&self, actor: &AuditActor, cursor: u32) -> Result<DemoChunkReport> {
         self.ensure_enabled()?;
         let steps = plan::demo_steps()?;
+        let offerings = offerings::load(&steps)?;
         let range = plan::apply_window(cursor as usize, steps.len());
         let mut report = empty_report(range.end, steps.len());
         let company_party_id = self.company_party_id(actor, &mut report.notices).await?;
@@ -134,7 +135,10 @@ impl DemoMasterDataService {
                     &mut report.notices,
                 )
                 .await?;
-            tally(&mut report, outcome);
+            if step.kind == plan::DemoKind::Product {
+                self.ensure_sellable(step, &offerings, &self.record_map().await?).await?;
+            }
+            tally(&mut report, outcome)?;
         }
         Ok(report)
     }
@@ -309,13 +313,17 @@ impl DemoMasterDataService {
 }
 
 /// 累计本批主数据创建或恢复结果。
-fn tally(report: &mut DemoChunkReport, outcome: EnsureOutcome) {
+fn tally(report: &mut DemoChunkReport, outcome: EnsureOutcome) -> Result<()> {
     match outcome {
         EnsureOutcome::Created => report.created += 1,
         EnsureOutcome::Restored => report.restored += 1,
         EnsureOutcome::Skipped => report.skipped += 1,
-        EnsureOutcome::Notice(text) => push_notice(&mut report.notices, text),
+        EnsureOutcome::Notice(text) => return Err(Error::ValidationError(text)),
     }
+    if !report.notices.is_empty() {
+        return Err(Error::ValidationError(report.notices.join("；")));
+    }
+    Ok(())
 }
 
 /// 去重合并生成提示。
@@ -337,5 +345,21 @@ fn empty_report(next_cursor: usize, total: usize) -> DemoChunkReport {
         removed: 0,
         derived_removed: 0,
         notices: Vec::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn prerequisites_and_owner_handover_failures_cannot_report_completion() {
+        let mut report = empty_report(8, 8);
+        assert!(tally(&mut report, EnsureOutcome::Notice("供应商无创建权限".into())).is_err());
+        report.notices.push("客户负责人移交失败".into());
+        assert!(tally(&mut report, EnsureOutcome::Skipped).is_err());
+        report.notices.clear();
+        tally(&mut report, EnsureOutcome::Created).unwrap();
+        assert_eq!(report.created, 1);
     }
 }

@@ -13,8 +13,10 @@ mod ensure_product;
 mod ensure_supplier;
 mod ensure_warehouse;
 mod foundation;
+mod foundation_validation;
 mod lifecycle;
 mod master_graph;
+mod offerings;
 mod organization;
 mod person_scopes;
 mod plan;
@@ -25,6 +27,7 @@ use repository::record;
 mod seed;
 mod service;
 mod spec;
+mod voucher;
 
 use std::sync::Arc;
 

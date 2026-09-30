@@ -14,6 +14,23 @@
     {"operation": "SUPPLIER_PAYMENT", "owner": "payment"},
     {"operation": "SALES_INVOICE", "owner": "invoice"}
   ],
+  "required_permissions": {
+    "sales": ["customer:create", "sales_order:create", "sales_order:submit", "sales_change_order:create", "sales_invoice_request:submit", "sales_person:list", "business_person:list", "warehouse:list"],
+    "salesLeader": ["approval_instance:read", "approval_instance:decide", "sales_order:detail"],
+    "procurement": ["product:create", "product:update", "supplier:create", "supplier_offering:create", "purchase_order:create", "purchase_order:submit", "electronic_delivery:create", "service_fulfillment:create", "sales_order:detail", "procurement_person:list", "warehouse:list"],
+    "operations": ["approval_instance:read", "approval_instance:decide", "product:detail", "voucher_category_profile:update"],
+    "warehouse": ["purchase_receipt:create", "delivery:create", "stock_adjustment:create", "stock_adjustment:submit", "stock_balance:list", "warehouse:list"],
+    "finance": ["approval_instance:read", "approval_instance:decide", "finance_ledger:read", "sales_order:detail", "purchase_order:detail"],
+    "payment": ["customer_receipt:create", "customer_receipt:submit", "supplier_payment:create", "customer_refund:submit", "supplier_refund:submit", "receipt_reversal:submit", "payment_reversal:submit", "finance_ledger:read", "settlement_party:list"],
+    "invoice": ["invoice:create", "invoice:list", "finance_ledger:read", "settlement_party:list"],
+    "management": ["sales_order:detail", "purchase_order:detail"],
+    "sysadmin": ["integration_error_task:list", "reconciliation_difference:list"]
+  },
+  "person_scope_defaults": {
+    "self_accounts": ["xiaoshou", "caigou", "yunying"],
+    "department_accounts": ["lisiyong"],
+    "company_resources": {"caigou": ["sales_order"], "yunying": ["product"]}
+  },
   "accounts": [
     {"key": "sales", "account": "xiaoshou", "name": "周晓彤", "role_id": "role-sales", "label": "周晓彤"},
     {"key": "salesLeader", "account": "lisiyong", "name": "李思勇", "role_id": "role-sales-leader", "label": "李思勇"},

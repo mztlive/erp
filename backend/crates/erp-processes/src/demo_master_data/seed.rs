@@ -3,7 +3,8 @@
 use std::collections::HashMap;
 
 use erp_catalog::{
-    CreateProductBrandRequest, CreateProductCategoryRequest, CreateProductRequest, CreateUnitOfMeasureRequest,
+    CreateProductBrandRequest, CreateProductCategoryRequest, CreateProductRequest,
+    CreateUnitOfMeasureRequest, ProductKind,
 };
 use erp_customer::SaveCustomerProfileRequest;
 use erp_supplier::SaveSupplierProfileRequest;
@@ -129,6 +130,9 @@ pub(super) fn load(json: &str) -> Result<Vec<DemoStep>> {
 
 /// 商品只允许引用前面已声明的字典种子。
 fn validate_product(row: &CreateProductRequest, previous: &HashMap<String, DemoKind>) -> Result<()> {
+    if row.product_kind == ProductKind::Voucher {
+        super::voucher::voucher_request(row)?;
+    }
     reference(previous, row.brand_id.as_ref(), DemoKind::Brand)?;
     reference(previous, row.category_id.as_ref(), DemoKind::Category)?;
     for sku in &row.skus {
@@ -179,13 +183,13 @@ mod tests {
     fn embedded_seed_preserves_catalog_and_business_values() {
         let steps = load(include_str!("master-data.json")).unwrap();
         let counts = planned_counts(&steps);
-        assert_eq!((counts.unit, counts.brand, counts.category, counts.warehouse), (6, 8, 10, 6));
-        assert_eq!((counts.customer, counts.supplier, counts.product), (24, 16, 24));
+        assert_eq!((counts.unit, counts.brand, counts.category, counts.warehouse), (6, 8, 13, 6));
+        assert_eq!((counts.customer, counts.supplier, counts.product), (24, 18, 27));
         let SeedRequest::Product(product) = &steps.last().unwrap().request else {
             panic!("商品必须最后生成")
         };
-        assert_eq!(product.skus[0].sales_visible_price_gross.unwrap().to_string(), "104.00");
-        assert_eq!(product.skus[0].sku_no, "DEMO-MD-SKU-24");
+        assert_eq!(product.skus[0].sales_visible_price_gross.unwrap().to_string(), "100.00");
+        assert_eq!(product.skus[0].sku_no, "DEMO-MD-P-27");
         assert!(steps.iter().all(|step| !step.request.label().is_empty()));
     }
 

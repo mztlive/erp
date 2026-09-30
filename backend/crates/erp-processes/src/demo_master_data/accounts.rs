@@ -115,17 +115,34 @@ impl DemoMasterDataService {
         Ok(true)
     }
 
+    /// 仅把可登录的后台账号解析为演示岗位身份。
+    /// # 参数
+    /// `login` 为固定演示登录名。
+    /// # 返回
+    /// 有效后台身份；不存在或停用时为 None。
+    /// # 错误
+    /// 账号查询失败时返回错误。
     pub(super) async fn role_actor(&self, login: &str) -> Result<Option<AuditActor>> {
         let found = self.db.accounts().find_by_account(login, &mut NoTransaction).await?;
-        Ok(found.map(|account| AuditActor::new(account.base.id, login.to_string(), AccountKind::Admin)))
+        Ok(found
+            .filter(|account| account.is_active_backoffice())
+            .map(|account| AuditActor::new(account.base.id, login.to_string(), AccountKind::Admin)))
     }
 
+    /// 返回有效后台账号 ID，停用账号不得进入审批和默认责任规则。
+    /// # 参数
+    /// `account` 为固定演示登录名。
+    /// # 返回
+    /// 当前可用后台账号的真实 ID。
+    /// # 错误
+    /// 账号不可用或查询失败时返回错误。
     pub(super) async fn account_id(&self, account: &str) -> Result<String> {
         self.db
             .accounts()
             .find_by_account(account, &mut NoTransaction)
             .await?
+            .filter(|found| found.is_active_backoffice())
             .map(|found| found.base.id)
-            .ok_or_else(|| Error::NotFound(format!("岗位账号 {account} 不存在")))
+            .ok_or_else(|| Error::NotFound(format!("岗位账号 {account} 不存在、已停用或不是后台账号")))
     }
 }

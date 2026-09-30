@@ -42,9 +42,9 @@ impl DemoMasterDataService {
             return self.adopt_product(actor, step, &existing, &maintainer_id).await;
         }
         let request = product_request(template, records, &maintainer_id)?;
-        let view = self.catalog().product_create(request, actor).await?;
-        let sku_ids = self.sku_ids(&view.id).await?;
-        self.remember_product(step, view.id, sku_ids).await?;
+        let id = self.create_demo_product(request, actor).await?;
+        let sku_ids = self.sku_ids(&id).await?;
+        self.remember_product(step, id, sku_ids).await?;
         Ok(EnsureOutcome::Created)
     }
 

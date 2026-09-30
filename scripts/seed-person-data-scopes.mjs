@@ -1,5 +1,5 @@
 /** 显式演示追加范围；本人基础无需写入，只补从未配置的业务动作。 */
-import { call } from "./dev-seed-lib.mjs";
+import { call, FOUNDATION } from "./dev-seed-lib.mjs";
 
 export async function seedPersonDataScopes(token, accounts) {
   for (const [key, person] of Object.entries(accounts)) {
@@ -12,8 +12,12 @@ export async function seedPersonDataScopes(token, accounts) {
       const actions = business.configurable_actions.filter(action => !view.items.some(scope => scope.resource === business.resource && scope.action === action));
       if (!actions.length) continue;
       const internal = business.dimensions.length === 1 && business.dimensions[0] === "internal_org";
-      const self = internal && ["sales", "procurement", "operations"].includes(key);
-      const ownOrg = internal && key === "salesLeader";
+      const defaults = FOUNDATION.person_scope_defaults;
+      const login = FOUNDATION.accounts.find(account => account.key === key)?.account;
+      if (!login) throw new Error(`未声明的演示岗位 ${key}`);
+      const company = defaults.company_resources[login]?.includes(business.resource) ?? false;
+      const self = !company && internal && business.default_self && defaults.self_accounts.includes(login);
+      const ownOrg = !company && internal && defaults.department_accounts.includes(login);
       if (self && business.default_self) continue;
       const term = {
         scope_type: self ? "self_owned" : ownOrg ? "organization" : "company",
