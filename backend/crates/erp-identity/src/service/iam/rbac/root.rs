@@ -20,7 +20,7 @@ use crate::error::{Error, Result};
 ///
 /// # 业务约束
 /// 角色元数据与 `*:*` policy 按固定 root ID 修复；不写入或恢复业务数据范围。
-/// 内建超级管理员的组织配置权由治理规则提供，不依赖业务人员范围初始化。
+/// 内建超级管理员的全公司数据范围由公共解析器提供，不依赖人员范围初始化或旧记录。
 pub async fn ensure_root_role(rbac: &SharedRbacService) -> Result<Role> {
     let root_permission = Permission::parse("*:*")?;
     let mut attempts = 0;

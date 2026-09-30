@@ -4,7 +4,7 @@ use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
-use crate::entity::rbac::RoleId;
+use crate::entity::rbac::{PermissionSet, RoleId};
 
 const NAME_MAX_LEN: usize = 32;
 const DESCRIPTION_MAX_LEN: usize = 256;
@@ -155,6 +155,26 @@ impl Role {
             return Err(Error::from("已停用角色不能分配"));
         }
         Ok(())
+    }
+
+    /// 为显式种子命令合并缺失权限，拒绝认领失效、系统或同 ID 异名角色。
+    /// # 参数
+    /// `name` 为种子身份名称；`current` 为当前直接权限；`desired` 为声明权限。
+    /// # 返回
+    /// 需要补齐时返回保留现有权限的并集，否则返回 None。
+    /// # 错误
+    /// 身份不符、角色被删除或不能分配时拒绝。
+    pub fn seeded_permissions(
+        &self,
+        name: &str,
+        current: &PermissionSet,
+        desired: &PermissionSet,
+    ) -> Result<Option<PermissionSet>> {
+        if self.base.id == ROOT_ROLE_ID || self.base.is_deleted() || self.name != name {
+            return Err(Error::from("种子角色身份不符或已删除，不能自动修改"));
+        }
+        self.ensure_assignable()?;
+        Ok(current.with_missing(desired))
     }
 }
 

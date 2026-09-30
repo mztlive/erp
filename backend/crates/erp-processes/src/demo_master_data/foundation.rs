@@ -52,6 +52,7 @@ impl DemoMasterDataService {
             notices: Vec::new(),
         };
         let accounts = self.ensure_accounts(actor, &mut report).await?;
+        self.ensure_demo_roles(actor, &accounts, &mut report).await?;
         self.validate_demo_permissions(&accounts).await?;
         self.ensure_departments(actor, &accounts.by_login, &mut report.notices).await?;
         self.ensure_person_scopes(actor, &accounts.by_login).await?;

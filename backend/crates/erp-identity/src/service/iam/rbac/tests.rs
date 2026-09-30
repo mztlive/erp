@@ -243,8 +243,18 @@ async fn casbin_model_should_enforce_role_permissions_and_wildcards() {
         .await
         .unwrap();
 
-    let permission = Permission::parse("role:delete").unwrap();
-    assert!(enforcer.enforce(("user:admin:1", permission.resource(), permission.action(),)).unwrap());
+    for code in [
+        "role:delete",
+        "product:create",
+        "supplier:update",
+        "sales_order:submit",
+        "stock_adjustment:create",
+        "finance_ledger:read",
+        "approval_instance:decide",
+    ] {
+        let permission = Permission::parse(code).unwrap();
+        assert!(enforcer.enforce(("user:admin:1", permission.resource(), permission.action())).unwrap());
+    }
     assert!(!enforcer.enforce(("user:admin:2", "role", "delete")).unwrap());
 }
 

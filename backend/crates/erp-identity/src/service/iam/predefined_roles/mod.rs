@@ -35,7 +35,22 @@ pub(crate) use upgrades::{
 
 use crate::entity::policy_permission::FINANCE_LEDGER_READ;
 use crate::entity::{Permission, RoleData};
-use crate::error::Result;
+use crate::error::{Error, Result};
+
+/// 读取岗位当前推荐权限，供显式初始化命令构造独立角色。
+/// # 参数
+/// `role_id` 为内建业务岗位键，不接受超级管理员角色。
+/// # 返回
+/// 已解析的推荐权限；不读取或改写数据库角色。
+/// # 错误
+/// 岗位未登记或静态权限无效时拒绝。
+pub fn predefined_role_permissions(role_id: &str) -> Result<Vec<Permission>> {
+    let role = PREDEFINED_ROLES
+        .iter()
+        .find(|role| role.id == role_id)
+        .ok_or_else(|| Error::ValidationError(format!("未登记的业务岗位角色：{role_id}")))?;
+    parse_permissions(role.permissions)
+}
 
 /// 单条预定义角色的静态定义。
 #[derive(Debug, Clone, Copy)]

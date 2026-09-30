@@ -1,6 +1,7 @@
 //! Casbin RBAC 服务。
 
 mod seed;
+mod seed_command;
 
 mod authorize;
 mod command;

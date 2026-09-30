@@ -23,6 +23,7 @@ mod plan;
 mod removal;
 mod repository;
 mod responsibility;
+mod roles;
 use repository::record;
 mod seed;
 mod service;

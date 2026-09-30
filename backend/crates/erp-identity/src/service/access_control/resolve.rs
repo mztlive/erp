@@ -1,6 +1,7 @@
 //! DataScope v2 唯一应用解析入口，复用现有 RBAC 版本和同角色权限证明。
 
 use std::collections::BTreeMap;
+use std::future::Future;
 
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
@@ -10,7 +11,7 @@ use persistence_core::Executor;
 use super::consumers::configurable_registration;
 use crate::access_control::{ResolvedScope, ScopeClause};
 use crate::entity::access_control::authorization_policy::AuthorizationPolicy;
-use crate::entity::access_control::governance::root_organization_scope;
+use crate::entity::access_control::governance::root_scope;
 use crate::entity::access_control::person_scope::PersonDataScope;
 use crate::entity::organization_change::OrganizationState;
 use crate::entity::role::Role;
@@ -239,22 +240,33 @@ impl DataScopeService {
         let registration = super::consumers::registration(resource, action)?;
         let qualifications =
             roles.iter().map(|role| (role.base.id.clone(), ScopeClause::default())).collect();
-        if let Some(scope) = root_organization_scope(roles, resource, action) {
-            return Ok((scope, qualifications));
-        }
-        state.own_org(user, at)?;
-        let configs =
-            self.db.person_data_scopes().for_person(user, Some(resource), Some(action), executor).await?;
-        let scope = match configs.first() {
-            Some(config) => {
-                config.resolve(state, registration.required_dimensions, registration.allows_history, at)?
-            },
-            None if registration.default_self => PersonDataScope::default_for(user, resource, action)
-                .resolve(state, registration.required_dimensions, registration.allows_history, at)?,
-            None => PersonDataScope::denied(),
-        };
-        // 此映射只证明同角色完整动作资格；业务范围完全取自人员配置。
+        let scope = resolve_scope(roles, async {
+            state.own_org(user, at)?;
+            let configs =
+                self.db.person_data_scopes().for_person(user, Some(resource), Some(action), executor).await?;
+            match configs.first() {
+                Some(config) => {
+                    config.resolve(state, registration.required_dimensions, registration.allows_history, at)
+                },
+                None if registration.default_self => PersonDataScope::default_for(user, resource, action)
+                    .resolve(state, registration.required_dimensions, registration.allows_history, at),
+                None => Ok(PersonDataScope::denied()),
+            }
+        })
+        .await?;
+        // 此映射只证明同角色完整动作资格，不以全公司范围替代审批角色或节点责任。
         Ok((scope, qualifications))
+    }
+}
+
+/// 超管范围直接生效；其他角色才执行人员范围读取，读取失败不得退化为公司范围。
+async fn resolve_scope(
+    roles: &[Role],
+    person_scope: impl Future<Output = Result<ResolvedScope>>,
+) -> Result<ResolvedScope> {
+    match root_scope(roles) {
+        Some(scope) => Ok(scope),
+        None => person_scope.await,
     }
 }
 
@@ -295,6 +307,56 @@ mod tests {
 
     use super::*;
     use crate::entity::organization::{OrgManagementAssignment, OrgMembership, OrgValidity};
+    use crate::entity::role::{ROOT_ROLE_ID, RoleData};
+    use crate::service::access_control::consumers::registration;
+
+    /// 已有超管不读人员配置；缺配置、旧撤权或读取错误均不改变固定范围。
+    #[tokio::test]
+    async fn root_scope_does_not_poll_person_configuration() {
+        let root = Role::new(ROOT_ROLE_ID.into(), RoleData::new("超级管理员").with_system(true)).unwrap();
+        let scope = resolve_scope(&[root], async {
+            panic!("超级管理员不应读取人员范围配置");
+        })
+        .await
+        .unwrap();
+        assert_eq!(scope.role_clauses, vec![ScopeClause { company: true, ..Default::default() }]);
+        assert!(scope.user_limit.is_none());
+    }
+
+    /// 普通账号即使名为 admin 也保留本人范围、撤权结果和读取错误。
+    #[tokio::test]
+    async fn ordinary_role_keeps_person_scope_and_errors() {
+        let roles = [Role::new("role-custom".into(), RoleData::new("超级管理员")).unwrap()];
+        let state = OrganizationState::default();
+        let at = Instant::from_unix_secs(0);
+        let registration = registration("product", "create").unwrap();
+        let config = PersonDataScope::default_for("admin", "product", "create");
+        let expected = config
+            .resolve(&state, registration.required_dimensions, registration.allows_history, at)
+            .unwrap();
+        let scope = resolve_scope(&roles, async { Ok(expected.clone()) }).await.unwrap();
+        assert_eq!(scope, expected);
+        assert!(!scope.role_clauses.iter().any(|clause| clause.company));
+        let denied = resolve_scope(&roles, async { Ok(PersonDataScope::denied()) }).await.unwrap();
+        assert_eq!(denied, PersonDataScope::denied());
+        let failed = resolve_scope(&roles, async { Err(Error::Forbidden("范围读取失败".into())) }).await;
+        assert!(matches!(failed, Err(Error::Forbidden(message)) if message == "范围读取失败"));
+    }
+
+    /// 内建角色失效后立即回到人员范围，不保留超管公司授权。
+    #[tokio::test]
+    async fn disabled_or_deleted_root_does_not_override_person_scope() {
+        let mut root = Role::new(ROOT_ROLE_ID.into(), RoleData::new("超级管理员").with_system(true)).unwrap();
+        root.disabled = true;
+        let scope = resolve_scope(std::slice::from_ref(&root), async { Ok(PersonDataScope::denied()) })
+            .await
+            .unwrap();
+        assert_eq!(scope, PersonDataScope::denied());
+        root.disabled = false;
+        root.base.deleted_at = 1;
+        let scope = resolve_scope(&[root], async { Ok(PersonDataScope::denied()) }).await.unwrap();
+        assert_eq!(scope, PersonDataScope::denied());
+    }
 
     /// 只有主属关系的生效边界影响范围版本，旧管理关系不再激活授权。
     #[test]

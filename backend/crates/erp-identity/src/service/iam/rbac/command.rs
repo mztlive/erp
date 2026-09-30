@@ -167,7 +167,7 @@ impl RbacService {
 
     /// 使用指定 ID 在同一事务中创建角色实体并写入完整权限规则。
     ///
-    /// 仅内建角色初始化可以指定固定 ID；普通角色始终由 [`Self::create_role`] 生成 ID。
+    /// 仅内建角色初始化或经授权的显式种子命令可以指定固定 ID；普通管理入口由 [`Self::create_role`] 生成 ID。
     pub(super) async fn create_role_with_id(
         self: &Arc<Self>,
         id: String,
