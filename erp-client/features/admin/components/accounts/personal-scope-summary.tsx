@@ -2,6 +2,7 @@ import { actionLabel } from "@/lib/permission-catalog"
 import type { OrgUnit, ScopeDimension } from "@/features/organization/types"
 import {
     personEffectiveDescription,
+    personGrantKey,
     type PersonScopeBusiness,
     type PersonScopeInput,
 } from "../../api/person-data-scopes"
@@ -13,58 +14,87 @@ export const scopeDimensionLabel = (dimension: ScopeDimension) =>
           ? "仓库"
           : "结算主体"
 
-/** 按操作重算并集，移除一条授权后仍显示其他条目覆盖的范围。 */
+/** 仅合并规范条件完全相同的操作，不能按可能重名的目标文案归组。 */
 export function ProposedScopeSummary({
-    name,
     value,
     business,
     units,
+    incompleteKeys,
 }: {
-    name: string
     value: PersonScopeInput
     business: PersonScopeBusiness
     units: OrgUnit[]
+    incompleteKeys: Set<string>
 }) {
     const labels = new Map(units.map((unit) => [unit.id, unit.name]))
+    const groups = new Map<string, { actions: string[]; description: string }>()
+    for (const action of value.actions) {
+        const alternatives = value.grants
+            .filter(
+                (grant) =>
+                    !incompleteKeys.has(grant.key) &&
+                    grant.actions.includes(action),
+            )
+            .map((grant) => grant.terms)
+        const company = alternatives.some((terms) =>
+            terms.some((term) => term.scope_type === "company"),
+        )
+        const key = company
+            ? "company"
+            : JSON.stringify(
+                  [...new Set(alternatives.map(personGrantKey))].sort(),
+              )
+        const group = groups.get(key) ?? {
+            actions: [],
+            description: personEffectiveDescription(
+                {
+                    id: "preview",
+                    user_id: "",
+                    version: 0,
+                    created_at: 0,
+                    resource: value.resource,
+                    action,
+                    expression: {
+                        additive: true,
+                        history_read: false,
+                        condition: null,
+                        alternatives: [
+                            ...new Map(
+                                alternatives.map((terms) => [
+                                    personGrantKey(terms),
+                                    terms,
+                                ]),
+                            ).values(),
+                        ],
+                    },
+                },
+                business,
+                labels,
+            ),
+        }
+        group.actions.push(action)
+        groups.set(key, group)
+    }
     return (
-        <section
-            className="space-y-2 rounded-md bg-muted/40 p-3"
-            aria-live="polite"
-        >
-            <h3 className="font-medium">保存后的最终范围</h3>
-            <p className="text-xs text-muted-foreground">
-                {name}的各项操作分别合并基础范围与适用的追加授权。
-            </p>
-            {value.actions.map((action) => (
-                <p key={action} className="text-xs leading-6">
-                    <span className="font-medium">{actionLabel(action)}：</span>
-                    {personEffectiveDescription(
-                        {
-                            id: "preview",
-                            user_id: "",
-                            version: 0,
-                            created_at: 0,
-                            resource: value.resource,
-                            action,
-                            expression: {
-                                additive: true,
-                                history_read: false,
-                                condition: null,
-                                alternatives: value.grants
-                                    .filter((grant) =>
-                                        grant.actions.includes(action),
-                                    )
-                                    .map((grant) => grant.terms),
-                            },
-                        },
-                        business,
-                        labels,
-                    )}
+        <section className="space-y-2 border-t pt-4" aria-live="polite">
+            <h3 className="text-xs font-medium text-muted-foreground">
+                {incompleteKeys.size ? "已完善范围的预览" : "保存后可访问"}
+            </h3>
+            {[...groups.entries()].map(([key, group]) => (
+                <p key={key} className="text-xs leading-6">
+                    <span className="font-medium">
+                        {group.actions.length === value.actions.length
+                            ? "所有已有操作"
+                            : group.actions.map(actionLabel).join("、")}
+                        ：
+                    </span>
+                    {group.description}
                 </p>
             ))}
-            {value.editor && (
+            {incompleteKeys.size > 0 && (
                 <p className="text-xs text-amber-700">
-                    正在编辑的授权还未加入列表，不计入以上范围。
+                    还有 {incompleteKeys.size}{" "}
+                    条范围未完善，暂不计入预览，填写完整后才能保存。
                 </p>
             )}
             {value.resource === "approval_instance" && (

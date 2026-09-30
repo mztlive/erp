@@ -3,6 +3,8 @@ import * as React from "react"
 import type { PersonScopeInput } from "../api/person-data-scopes"
 
 export type PersonalGrantDraft = {
+    /** 未改变授权字段时仍保留展开状态，但不拦截离开。 */
+    dirty?: boolean
     values: PersonScopeInput
     policyVersion: number
 }
@@ -23,7 +25,7 @@ export function usePersonalGrantDraft(accountId: string) {
         [accountId],
     )
     React.useEffect(() => {
-        if (!draft) return
+        if (!draft || draft.dirty === false) return
         const confirmLeave = () => {
             if (!window.confirm("人员数据范围尚未保存，确定放弃选择并离开？"))
                 return false

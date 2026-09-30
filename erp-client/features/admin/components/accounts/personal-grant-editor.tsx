@@ -3,15 +3,11 @@ import * as React from "react"
 import { useStore } from "@tanstack/react-form"
 import { z } from "zod"
 import { useAppForm } from "@/components/form"
-import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { OptionCombobox } from "@/components/business/option-combobox"
 import { ScopeTargetPicker } from "@/features/organization/components/scope-target-picker"
 import type { OrgUnit } from "@/features/organization/types"
-import { actionLabel } from "@/lib/permission-catalog"
-import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
-    personGrantKey,
     type PersonGrantEditorInput,
     type PersonScopeBusiness,
     type PersonScopeGrant,
@@ -77,7 +73,7 @@ export function canEditGrant(
 }
 
 /** 每条授权内部保持交集；不同授权在保存和摘要中合并为并集。 */
-function editorTerms(
+export function editorTerms(
     value: PersonGrantEditorInput,
     business: PersonScopeBusiness,
 ): PersonScopeTerm[] {
@@ -122,27 +118,11 @@ function editorTerms(
     }))
 }
 
-export function PersonalGrantEditor({
-    initial,
-    business,
-    units,
-    name,
-    onChange,
-    onApply,
-    onCancel,
-}: {
-    initial: PersonGrantEditorInput
-    business: PersonScopeBusiness
-    units: OrgUnit[]
-    name: string
-    onChange: (value: PersonGrantEditorInput) => void
-    onApply: (grant: PersonScopeGrant) => void
-    onCancel: () => void
-}) {
-    const schema = z
+export function grantEditorSchema(business: PersonScopeBusiness) {
+    return z
         .object({
             key: z.string().nullable(),
-            actions: z.array(z.string()).min(1, "请选择此授权适用的操作"),
+            actions: z.array(z.string()),
             dimension: z.enum([
                 "internal_org",
                 "warehouse",
@@ -204,20 +184,34 @@ export function PersonalGrantEditor({
                     })
             }
         })
+}
+
+export function PersonalGrantEditor({
+    initial,
+    business,
+    units,
+    name,
+    idPrefix,
+    onChange,
+}: {
+    initial: PersonGrantEditorInput
+    business: PersonScopeBusiness
+    units: OrgUnit[]
+    name: string
+    idPrefix: string
+    onChange: (value: PersonGrantEditorInput) => void
+}) {
+    const schema = grantEditorSchema(business)
     const form = useAppForm({
         defaultValues: initial,
-        validators: { onSubmit: schema },
-        onSubmit: ({ value }) => {
-            const terms = editorTerms(value, business)
-            onApply({
-                key: personGrantKey(terms),
-                terms,
-                actions: value.actions,
-            })
-        },
+        validators: { onChange: schema },
     })
     const value = useStore(form.store, (state) => state.values)
+    const lastReported = React.useRef(initial)
     React.useEffect(() => {
+        if (JSON.stringify(lastReported.current) === JSON.stringify(value))
+            return
+        lastReported.current = value
         onChange(value)
     }, [value, onChange])
     const dimensions =
@@ -227,21 +221,19 @@ export function PersonalGrantEditor({
     const validation = schema.safeParse(value)
     return (
         <section
-            className="space-y-4 rounded-lg border border-primary/30 bg-muted/20 p-4"
+            id={`${idPrefix}-fields`}
+            className="grid gap-4 bg-muted/35 p-4 sm:grid-cols-2"
             aria-label="编辑追加授权"
         >
-            <h4 className="font-medium">
-                {initial.key ? "修改追加授权" : "添加授权范围"}
-            </h4>
             {business.resource === "approval_instance" && (
                 <form.Field name="dimension">
                     {(field) => (
                         <div className="space-y-2">
-                            <label htmlFor="person-scope-dimension">
+                            <label htmlFor={`${idPrefix}-dimension`}>
                                 按什么限定审批数据？
                             </label>
                             <OptionCombobox
-                                id="person-scope-dimension"
+                                id={`${idPrefix}-dimension`}
                                 aria-label="按什么限定审批数据？"
                                 value={field.state.value}
                                 allowClear={false}
@@ -296,12 +288,12 @@ export function PersonalGrantEditor({
                         ).map(([mode, label]) => (
                             <label
                                 key={mode}
-                                htmlFor={`person-scope-mode-${mode}`}
+                                htmlFor={`${idPrefix}-mode-${mode}`}
                                 className="flex items-center gap-2"
                             >
                                 <input
-                                    id={`person-scope-mode-${mode}`}
-                                    name="person-scope-mode"
+                                    id={`${idPrefix}-mode-${mode}`}
+                                    name={`${idPrefix}-mode`}
                                     type="radio"
                                     checked={field.state.value === mode}
                                     onChange={() => field.handleChange(mode)}
@@ -331,7 +323,7 @@ export function PersonalGrantEditor({
                                 <div className="space-y-2">
                                     <p>{scopeDimensionLabel(dimension)}</p>
                                     <ScopeTargetPicker
-                                        id={`person-scope-target-${dimension}`}
+                                        id={`${idPrefix}-target-${dimension}`}
                                         dimension={dimension}
                                         value={field.state.value}
                                         onChange={field.handleChange}
@@ -348,11 +340,11 @@ export function PersonalGrantEditor({
                     <form.Field name="include_descendants">
                         {(field) => (
                             <label
-                                htmlFor="person-scope-descendants"
+                                htmlFor={`${idPrefix}-descendants`}
                                 className="flex items-center gap-2"
                             >
                                 <Checkbox
-                                    id="person-scope-descendants"
+                                    id={`${idPrefix}-descendants`}
                                     checked={field.state.value}
                                     onCheckedChange={(checked) =>
                                         field.handleChange(checked === true)
@@ -368,68 +360,14 @@ export function PersonalGrantEditor({
                     此条授权要求数据同时符合以上条件；其他组合请另加一条授权。
                 </p>
             )}
-            <form.Field name="actions">
-                {(field) => (
-                    <fieldset className="space-y-2">
-                        <legend className="mb-2 font-medium">适用操作</legend>
-                        <div className="flex flex-wrap gap-4">
-                            {business.actions.map((action) => (
-                                <label
-                                    key={action}
-                                    htmlFor={`person-scope-action-${toAutomationIdSegment(action)}`}
-                                    className="flex items-center gap-2"
-                                >
-                                    <Checkbox
-                                        id={`person-scope-action-${toAutomationIdSegment(action)}`}
-                                        checked={field.state.value.includes(
-                                            action,
-                                        )}
-                                        onCheckedChange={(checked) =>
-                                            field.handleChange(
-                                                checked
-                                                    ? [
-                                                          ...field.state.value,
-                                                          action,
-                                                      ]
-                                                    : field.state.value.filter(
-                                                          (item) =>
-                                                              item !== action,
-                                                      ),
-                                            )
-                                        }
-                                    />
-                                    {actionLabel(action)}
-                                </label>
-                            ))}
-                        </div>
-                    </fieldset>
-                )}
-            </form.Field>
             {!validation.success && (
-                <p role="status" className="text-xs text-muted-foreground">
+                <p
+                    role="status"
+                    className="text-xs text-muted-foreground sm:col-span-2"
+                >
                     {validation.error.issues[0]?.message}
                 </p>
             )}
-            <div className="flex justify-end gap-2">
-                <Button
-                    id="person-scope-entry-cancel"
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={onCancel}
-                >
-                    取消此条编辑
-                </Button>
-                <Button
-                    id="person-scope-entry-apply"
-                    type="button"
-                    size="sm"
-                    disabled={!validation.success}
-                    onClick={() => void form.handleSubmit()}
-                >
-                    加入待保存列表
-                </Button>
-            </div>
         </section>
     )
 }

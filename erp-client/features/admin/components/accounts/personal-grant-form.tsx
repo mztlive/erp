@@ -1,5 +1,6 @@
 "use client"
 import * as React from "react"
+import { LockKeyholeIcon } from "lucide-react"
 import { useStore } from "@tanstack/react-form"
 import { z } from "zod"
 import { useAppForm } from "@/components/form"
@@ -31,7 +32,7 @@ import { useSavePersonScope } from "../../hooks/use-person-data-scopes"
 import {
     personScopeDefaults,
     personScopeDescription,
-    personTermsDescription,
+    personGrantKey,
     type PersonGrantEditorInput,
     type PersonScopeInput,
     type PersonScopeList,
@@ -39,18 +40,27 @@ import {
 } from "../../api/person-data-scopes"
 import { ProposedScopeSummary } from "./personal-scope-summary"
 import {
-    PersonalGrantEditor,
     grantEditorDefaults,
-    canEditGrant,
+    grantEditorSchema,
+    editorTerms,
 } from "./personal-grant-editor"
+import { PersonalGrantList } from "./personal-grant-list"
 
-/** 授权规范条件构成稳定身份，编码完整键避免重复行或目标名导致 DOM ID 冲突。 */
-function grantAutomationKey(key: string) {
-    return toAutomationIdSegment(
-        Array.from(key, (character) =>
-            character.codePointAt(0)!.toString(16),
-        ).join("-"),
-    )
+/** 保存时规范化条件并合并重复范围，各条草稿编辑期间保留自己的身份。 */
+function mergedGrants(grants: PersonScopeGrant[]): PersonScopeGrant[] {
+    const result = new Map<string, PersonScopeGrant>()
+    for (const grant of grants) {
+        const key = personGrantKey(grant.terms)
+        const existing = result.get(key)
+        result.set(key, {
+            key,
+            terms: grant.terms,
+            actions: [
+                ...new Set([...(existing?.actions ?? []), ...grant.actions]),
+            ],
+        })
+    }
+    return [...result.values()]
 }
 
 export function PersonalGrantForm({
@@ -126,10 +136,20 @@ export function PersonalGrantForm({
                     code: "custom",
                     message: "操作权限已变化，请刷新后核对",
                 })
-            if (value.editor)
+            if (
+                business &&
+                value.grants.some(
+                    (grant) =>
+                        grant.editor &&
+                        !grantEditorSchema(business).safeParse({
+                            ...grant.editor,
+                            actions: grant.actions,
+                        }).success,
+                )
+            )
                 context.addIssue({
                     code: "custom",
-                    message: "请先将当前授权加入列表，或取消此条编辑",
+                    message: "请完善所有追加范围后保存，或移除不需要的条目",
                 })
             if (legacy.length && !value.replace_legacy)
                 context.addIssue({
@@ -147,7 +167,7 @@ export function PersonalGrantForm({
             )
                 context.addIssue({
                     code: "custom",
-                    message: "追加授权包含已失效的操作，请刷新后核对",
+                    message: "请为每条追加范围选择至少一项有效操作",
                 })
         })
     const form = useAppForm({
@@ -160,7 +180,14 @@ export function PersonalGrantForm({
             }
             setError(null)
             try {
-                await save.mutateAsync({ value, version })
+                await save.mutateAsync({
+                    value: {
+                        ...value,
+                        grants: mergedGrants(value.grants),
+                        editor: null,
+                    },
+                    version,
+                })
                 onSaved()
                 onDone()
             } catch (cause) {
@@ -169,47 +196,127 @@ export function PersonalGrantForm({
         },
     })
     const value = useStore(form.store, (state) => state.values)
+    const dirtySnapshot = (input: PersonScopeInput) =>
+        JSON.stringify({
+            resource: input.resource,
+            actions: [...input.actions].sort(),
+            replace_legacy: input.replace_legacy,
+            grants: input.grants
+                .map(({ actions, terms }) =>
+                    JSON.stringify({
+                        actions: [...actions].sort(),
+                        terms: personGrantKey(terms),
+                    }),
+                )
+                .sort(),
+        })
+    const dirty = dirtySnapshot(value) !== dirtySnapshot(defaults)
     React.useEffect(() => {
-        onDraftChange({ values: value, policyVersion: version })
-    }, [value, version, onDraftChange])
+        onDraftChange({ values: value, policyVersion: version, dirty })
+    }, [value, version, dirty, onDraftChange])
     const updateEditor = React.useCallback(
         (editor: PersonGrantEditorInput) => {
-            form.setFieldValue("editor", editor)
+            if (!business) return
+            // 适用操作由行内复选框管理，不让编辑器旧快照覆盖当前操作。
+            const grant = form
+                .getFieldValue("grants")
+                .find((entry) => entry.key === editor.key)
+            if (!grant) return
+            const current = { ...editor, actions: grant.actions }
+            form.setFieldValue(
+                "grants",
+                form.getFieldValue("grants").map((entry) =>
+                    entry.key === editor.key
+                        ? {
+                              ...entry,
+                              terms: editorTerms(current, business),
+                              editor: current,
+                          }
+                        : entry,
+                ),
+            )
+            form.setFieldValue("editor", current)
         },
-        [form],
+        [form, business],
     )
     const labels = new Map(units.map((unit) => [unit.id, unit.name]))
     const validation = schema.safeParse(value)
-    const applyGrant = (grant: PersonScopeGrant) => {
-        const previousKey = value.editor?.key
-        const remaining = value.grants.filter(
-            (entry) => entry.key !== previousKey,
+    const incompleteKeys = new Set(
+        value.grants
+            .filter(
+                (grant) =>
+                    !grant.actions.length ||
+                    grant.actions.some(
+                        (action) => !business?.actions.includes(action),
+                    ) ||
+                    (business &&
+                        grant.editor &&
+                        !grantEditorSchema(business).safeParse({
+                            ...grant.editor,
+                            actions: grant.actions,
+                        }).success),
+            )
+            .map((grant) => grant.key),
+    )
+    // 编号在创建时分配并写入草稿，不依赖当前数组位置；删除、重排均不改变既有身份。
+    const nextDraftNumber = React.useRef(1)
+    const addGrant = () => {
+        if (!business || value.grants.length >= 32) return
+        let key: string
+        do {
+            key = `draft-${resource}-${nextDraftNumber.current++}`
+        } while (value.grants.some((grant) => grant.key === key))
+        const editor = { ...grantEditorDefaults(business), key }
+        form.setFieldValue("grants", [
+            ...value.grants,
+            {
+                key,
+                actions: editor.actions,
+                terms: editorTerms(editor, business),
+                editor,
+            },
+        ])
+        form.setFieldValue("editor", editor)
+    }
+    const editGrant = (grant: PersonScopeGrant) => {
+        if (!business) return
+        form.setFieldValue(
+            "editor",
+            value.editor?.key === grant.key
+                ? null
+                : {
+                      ...(grant.editor ?? grantEditorDefaults(business, grant)),
+                      actions: grant.actions,
+                  },
         )
-        const duplicate = remaining.find((entry) => entry.key === grant.key)
+    }
+    const removeGrant = (key: string) => {
+        const remaining = value.grants.filter((grant) => grant.key !== key)
+        form.setFieldValue("grants", remaining)
+        if (value.editor?.key === key) {
+            const next = remaining.find((grant) => grant.editor)
+            form.setFieldValue("editor", next?.editor ?? null)
+        }
+    }
+    const changeActions = (key: string, actions: string[]) => {
         form.setFieldValue(
             "grants",
-            duplicate
-                ? remaining.map((entry) =>
-                      entry.key === grant.key
-                          ? {
-                                ...entry,
-                                actions: [
-                                    ...new Set([
-                                        ...entry.actions,
-                                        ...grant.actions,
-                                    ]),
-                                ],
-                            }
-                          : entry,
-                  )
-                : [...remaining, grant],
+            value.grants.map((grant) =>
+                grant.key === key
+                    ? {
+                          ...grant,
+                          actions,
+                          ...(grant.editor
+                              ? { editor: { ...grant.editor, actions } }
+                              : {}),
+                      }
+                    : grant,
+            ),
         )
-        form.setFieldValue("editor", null)
     }
     const leave = () => {
         if (save.isPending) return
-        if (initialDraft || JSON.stringify(value) !== JSON.stringify(defaults))
-            setDiscarding(true)
+        if (dirty) setDiscarding(true)
         else onDone()
     }
     return (
@@ -223,30 +330,31 @@ export function PersonalGrantForm({
                 id="person-scope-dialog"
                 closeButtonId="person-scope-dialog-close"
                 showCloseButton={!save.isPending}
-                className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl"
+                className="flex max-h-[85dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl"
                 finalFocus={() =>
                     document.getElementById(
                         `person-scope-${toAutomationIdSegment(resource)}-edit`,
                     )
                 }
             >
-                <DialogHeader>
-                    <DialogTitle>
-                        {name}的{resourceLabel(resource)}数据范围
-                    </DialogTitle>
+                <DialogHeader className="shrink-0 px-6 pt-6 pb-5">
+                    <DialogTitle>管理数据范围</DialogTitle>
                     <DialogDescription>
-                        按操作合并基础范围和追加授权。修改与移除将在保存后一起生效。
+                        {name} · {resourceLabel(resource)}
                     </DialogDescription>
                 </DialogHeader>
                 <form
-                    className="space-y-4 text-sm"
+                    className="flex min-h-0 flex-col text-sm"
                     onSubmit={(event) => {
                         event.preventDefault()
                         event.stopPropagation()
                         void form.handleSubmit()
                     }}
                 >
-                    <fieldset disabled={save.isPending} className="space-y-4">
+                    <fieldset
+                        disabled={save.isPending}
+                        className="min-h-0 space-y-5 overflow-y-auto px-6 pb-5"
+                    >
                         {stale && (
                             <div
                                 role="status"
@@ -274,26 +382,28 @@ export function PersonalGrantForm({
                         )}
                         {business && (
                             <>
-                                <section className="space-y-2 rounded-md border p-3">
-                                    <h3 className="font-medium">
-                                        基础范围
-                                        {legacy.length ? "（转换后生效）" : ""}
-                                    </h3>
+                                <div className="flex items-start gap-2 border-b pb-4 text-xs leading-5 text-muted-foreground">
+                                    <LockKeyholeIcon
+                                        className="mt-0.5 size-4 shrink-0"
+                                        aria-hidden
+                                    />
                                     <p>
-                                        {business.default_self
-                                            ? `${name}负责的数据`
-                                            : "此业务没有默认本人范围，请按实际职责添加授权。"}
+                                        {business.default_self ? (
+                                            <>
+                                                <span className="font-medium text-foreground">
+                                                    默认包含{name}负责的数据
+                                                </span>{" "}
+                                                ·
+                                                按当前负责人判断，适用于已有操作
+                                                {legacy.length
+                                                    ? "（转换后生效）"
+                                                    : ""}
+                                            </>
+                                        ) : (
+                                            "此业务没有默认本人范围，请添加授权。"
+                                        )}
                                     </p>
-                                    {business.default_self && (
-                                        <p className="text-xs text-muted-foreground">
-                                            自动适用于已有的
-                                            {business.actions
-                                                .map(actionLabel)
-                                                .join("、")}
-                                            操作。按当前负责人判断，不按创建人判断。
-                                        </p>
-                                    )}
-                                </section>
+                                </div>
                                 {legacy.length > 0 && (
                                     <section className="space-y-3 rounded-md border border-amber-400/50 bg-amber-50/30 p-3">
                                         <h3 className="font-medium">
@@ -355,175 +465,21 @@ export function PersonalGrantForm({
                                         </form.Field>
                                     </section>
                                 )}
-                                <section className="space-y-3">
-                                    <div className="flex items-center justify-between">
-                                        <h3 className="font-medium">
-                                            追加授权{" "}
-                                            <span className="text-muted-foreground">
-                                                {value.grants.length} 条
-                                            </span>
-                                        </h3>
-                                        <Button
-                                            id="person-scope-add"
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            disabled={
-                                                Boolean(value.editor) ||
-                                                value.grants.length >= 32
-                                            }
-                                            aria-describedby={
-                                                value.grants.length >= 32
-                                                    ? "person-scope-grant-limit"
-                                                    : undefined
-                                            }
-                                            onClick={() =>
-                                                form.setFieldValue(
-                                                    "editor",
-                                                    grantEditorDefaults(
-                                                        business,
-                                                    ),
-                                                )
-                                            }
-                                        >
-                                            添加授权范围
-                                        </Button>
-                                    </div>
-                                    {value.grants.length >= 32 && (
-                                        <p
-                                            id="person-scope-grant-limit"
-                                            role="status"
-                                            className="text-xs text-muted-foreground"
-                                        >
-                                            每项业务最多保留 32
-                                            条追加授权。可以修改已有授权，或移除部分授权后再添加。
-                                        </p>
-                                    )}
-                                    {!value.grants.length && (
-                                        <p className="text-xs text-muted-foreground">
-                                            暂无追加授权。
-                                            {business.default_self
-                                                ? "当前只保留基础范围。"
-                                                : "请添加此人可处理的数据范围。"}
-                                        </p>
-                                    )}
-                                    <form.Field name="grants">
-                                        {(field) => (
-                                            <div className="space-y-2">
-                                                {field.state.value.map(
-                                                    (grant) => {
-                                                        const id = `person-scope-grant-${grantAutomationKey(grant.key)}`
-                                                        return (
-                                                            <div
-                                                                key={grant.key}
-                                                                className="space-y-2 rounded-md border p-3"
-                                                            >
-                                                                <p className="leading-6">
-                                                                    {personTermsDescription(
-                                                                        grant.terms,
-                                                                        labels,
-                                                                    )}
-                                                                </p>
-                                                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                                                    <p className="text-xs text-muted-foreground">
-                                                                        适用：
-                                                                        {grant.actions
-                                                                            .map(
-                                                                                actionLabel,
-                                                                            )
-                                                                            .join(
-                                                                                "、",
-                                                                            )}
-                                                                    </p>
-                                                                    <div className="flex gap-1">
-                                                                        {canEditGrant(
-                                                                            grant,
-                                                                            business,
-                                                                        ) && (
-                                                                            <Button
-                                                                                id={`${id}-edit`}
-                                                                                type="button"
-                                                                                variant="ghost"
-                                                                                size="sm"
-                                                                                disabled={Boolean(
-                                                                                    value.editor,
-                                                                                )}
-                                                                                onClick={() =>
-                                                                                    form.setFieldValue(
-                                                                                        "editor",
-                                                                                        grantEditorDefaults(
-                                                                                            business,
-                                                                                            grant,
-                                                                                        ),
-                                                                                    )
-                                                                                }
-                                                                            >
-                                                                                修改
-                                                                            </Button>
-                                                                        )}
-                                                                        <Button
-                                                                            id={`${id}-remove`}
-                                                                            type="button"
-                                                                            variant="ghost"
-                                                                            size="sm"
-                                                                            disabled={Boolean(
-                                                                                value.editor,
-                                                                            )}
-                                                                            onClick={() =>
-                                                                                field.handleChange(
-                                                                                    field.state.value.filter(
-                                                                                        (
-                                                                                            entry,
-                                                                                        ) =>
-                                                                                            entry.key !==
-                                                                                            grant.key,
-                                                                                    ),
-                                                                                )
-                                                                            }
-                                                                        >
-                                                                            移除
-                                                                        </Button>
-                                                                    </div>
-                                                                </div>
-                                                                {!canEditGrant(
-                                                                    grant,
-                                                                    business,
-                                                                ) && (
-                                                                    <p className="text-xs text-muted-foreground">
-                                                                        保留的原授权条件。如需调整，请移除此条并添加新范围。
-                                                                    </p>
-                                                                )}
-                                                            </div>
-                                                        )
-                                                    },
-                                                )}
-                                            </div>
-                                        )}
-                                    </form.Field>
-                                    {value.editor && (
-                                        <PersonalGrantEditor
-                                            key={value.editor.key ?? "new"}
-                                            initial={value.editor}
-                                            business={business}
-                                            units={units}
-                                            name={name}
-                                            onChange={updateEditor}
-                                            onApply={applyGrant}
-                                            onCancel={() =>
-                                                form.setFieldValue(
-                                                    "editor",
-                                                    null,
-                                                )
-                                            }
-                                        />
-                                    )}
-                                    <p className="text-xs text-muted-foreground">
-                                        相同范围会合并适用操作。移除一条授权后，其他授权覆盖的数据仍然可用。
-                                    </p>
-                                </section>
-                                <ProposedScopeSummary
-                                    name={name}
+                                <PersonalGrantList
                                     value={value}
+                                    business={business}
+                                    units={units}
+                                    name={name}
+                                    incompleteKeys={incompleteKeys}
+                                    onAdd={addGrant}
+                                    onEdit={editGrant}
+                                    onRemove={removeGrant}
+                                    onActionsChange={changeActions}
+                                    onEditorChange={updateEditor}
+                                />
+                                <ProposedScopeSummary
+                                    value={value}
+                                    incompleteKeys={incompleteKeys}
                                     business={business}
                                     units={units}
                                 />
@@ -546,7 +502,10 @@ export function PersonalGrantForm({
                             </p>
                         )}
                     </fieldset>
-                    <div className="sticky bottom-0 flex justify-end gap-2 border-t bg-popover pt-4">
+                    <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t bg-popover px-6 py-4">
+                        <p className="mr-auto text-xs text-muted-foreground">
+                            所有修改将在保存后生效
+                        </p>
                         <Button
                             id="person-scope-cancel"
                             size="sm"
@@ -565,7 +524,7 @@ export function PersonalGrantForm({
                                 save.isPending || stale || !validation.success
                             }
                         >
-                            {save.isPending ? "保存中…" : "保存数据范围"}
+                            {save.isPending ? "保存中…" : "保存"}
                         </Button>
                     </div>
                 </form>

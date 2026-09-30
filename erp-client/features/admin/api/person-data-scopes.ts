@@ -40,6 +40,8 @@ export type PersonScopeList = {
     policy_version: number
 }
 export type PersonScopeGrant = {
+    /** 未完成的行内字段随草稿保留，提交时不发送。 */
+    editor?: PersonGrantEditorInput
     key: string
     actions: string[]
     terms: PersonScopeTerm[]
