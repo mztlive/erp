@@ -22,6 +22,17 @@ use crate::core::middleware::with_permission;
 /// 返回挂载了权限校验层的路由集合。
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
+        .merge(organization_routes(rbac))
+        .merge(permission_routes(rbac))
+        .merge(scope_routes(rbac))
+        .merge(binding_routes(rbac))
+        .merge(inspection_routes(rbac))
+        .merge(people_routes(rbac))
+}
+
+/// 组织结构及人员查询资格路由。
+fn organization_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
         .route(
             "/person-query-qualifications/{category}/{account_id}",
             with_permission(
@@ -50,6 +61,11 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             "/org-units/change",
             with_permission(post(organization::change), rbac, organization::change_permission_key()),
         )
+}
+
+/// 权限目录管理路由。
+fn permission_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
         .route(
             "/permissions",
             with_permission(
@@ -82,6 +98,11 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 access_control::permission_delete_permission_key(),
             ),
         )
+}
+
+/// 范围查询、创建、替换与移除路由。
+fn scope_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
         .route(
             "/data-scopes",
             with_permission(
@@ -99,6 +120,14 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/data-scopes/replace",
+            with_permission(
+                post(access_control::scope_replacement::replace),
+                rbac,
+                access_control::scope_replacement::replace_permission_key(),
+            ),
+        )
+        .route(
             "/data-scopes/{id}",
             with_permission(
                 delete(access_control::data_scope_delete),
@@ -106,6 +135,11 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 access_control::data_scope_delete_permission_key(),
             ),
         )
+}
+
+/// 用户角色绑定及撤销路由。
+fn binding_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
         .route(
             "/user-roles",
             with_permission(
@@ -130,6 +164,11 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 access_control::user_role_revoke_permission_key(),
             ),
         )
+}
+
+/// 访问检查与审计查询路由。
+fn inspection_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
         .route(
             "/access-check",
             with_permission(
@@ -146,6 +185,11 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 access_control::audit_event_list_permission_key(),
             ),
         )
+}
+
+/// 按类别读取业务人员的目录路由。
+fn people_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
         .route(
             "/salespeople",
             with_permission(

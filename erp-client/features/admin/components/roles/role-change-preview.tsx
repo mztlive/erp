@@ -34,18 +34,15 @@ export function RoleChangePreview({
     )
     return (
         <aside
-            className="h-full min-w-0 space-y-7 border-t py-6 xl:border-l xl:border-t-0 xl:px-6"
+            className="h-full min-w-0 space-y-5 border-t py-4 xl:border-l xl:border-t-0 xl:px-5"
             aria-label="本次调整预览"
         >
             <section>
-                <h2 className="text-base font-semibold">本次调整</h2>
+                <h2 className="text-sm font-semibold">本次调整</h2>
                 {changes.length ? (
-                    <ul className="mt-5 max-h-64 space-y-5 overflow-y-auto">
+                    <ul className="mt-3 max-h-64 space-y-4 overflow-y-auto">
                         {changes.map((change) => (
-                            <li
-                                key={change.code}
-                                className="space-y-1.5 text-base"
-                            >
+                            <li key={change.code} className="space-y-1 text-sm">
                                 <p className="font-medium">{change.label}</p>
                                 <p className="text-muted-foreground">
                                     原来：{change.allowed ? "不允许" : "允许"}
@@ -62,31 +59,31 @@ export function RoleChangePreview({
                         ))}
                     </ul>
                 ) : (
-                    <p className="mt-4 text-base text-muted-foreground">
+                    <p className="mt-3 text-sm text-muted-foreground">
                         {converted.length || broadened
                             ? "操作范围保持不变，授权方式已调整"
                             : "尚未调整操作权限"}
                     </p>
                 )}
                 {broadened && (
-                    <p className="mt-4 text-sm leading-5 text-amber-700">
+                    <p className="mt-3 text-xs leading-5 text-amber-700">
                         已选择全部操作，该业务今后新增的操作也会自动授予。
                     </p>
                 )}
                 {converted.length > 0 && (
-                    <p className="mt-4 text-sm leading-5 text-muted-foreground">
+                    <p className="mt-3 text-xs leading-5 text-muted-foreground">
                         已切换为逐项授权，今后新增操作需另行勾选。
                     </p>
                 )}
             </section>
-            <section className="border-t pt-6">
-                <h2 className="text-base font-semibold">影响人员</h2>
+            <section className="border-t pt-4">
+                <h2 className="text-sm font-semibold">影响人员</h2>
                 {accounts.isPending ? (
-                    <p className="mt-4 text-base text-muted-foreground">
+                    <p className="mt-3 text-sm text-muted-foreground">
                         正在读取人员…
                     </p>
                 ) : accounts.isError ? (
-                    <div className="mt-4 text-base">
+                    <div className="mt-3 text-sm">
                         <p>人员读取失败，暂不能确认影响人数。</p>
                         <Button
                             id="role-impact-retry"
@@ -99,7 +96,7 @@ export function RoleChangePreview({
                     </div>
                 ) : (
                     <>
-                        <ul className="mt-4 max-h-52 space-y-4 overflow-y-auto">
+                        <ul className="mt-3 max-h-52 space-y-4 overflow-y-auto">
                             {bound.map((person) => {
                                 const unitId = org?.people.find(
                                     (item) => item.id === person.id,
@@ -112,15 +109,15 @@ export function RoleChangePreview({
                                         key={person.id}
                                         className="flex items-center gap-3"
                                     >
-                                        <UserRoundIcon className="size-9 shrink-0 rounded-full bg-muted p-2 text-muted-foreground" />
+                                        <UserRoundIcon className="size-8 shrink-0 rounded-full bg-muted p-2 text-muted-foreground" />
                                         <div className="min-w-0">
                                             <p
                                                 id={`role-impact-${toAutomationIdSegment(person.id)}`}
-                                                className="break-words text-base font-medium"
+                                                className="break-words text-sm font-medium"
                                             >
                                                 {person.name}
                                             </p>
-                                            <p className="text-sm text-muted-foreground">
+                                            <p className="text-xs text-muted-foreground">
                                                 {department ?? "部门待确认"}
                                             </p>
                                         </div>
@@ -128,21 +125,21 @@ export function RoleChangePreview({
                                 )
                             })}
                         </ul>
-                        <p className="mt-4 text-base text-muted-foreground">
+                        <p className="mt-3 text-sm text-muted-foreground">
                             {roleId
                                 ? `当前可见人员中，共 ${bound.length} 人使用此岗位`
                                 : "创建岗位后可分配给人员"}
                         </p>
                     </>
                 )}
-                <p className="mt-5 text-sm leading-6 text-muted-foreground">
+                <p className="mt-3 text-xs leading-5 text-muted-foreground">
                     保存后，使用此岗位的人员同步生效。其他岗位授予的权限仍会保留。
                 </p>
             </section>
-            <section className="border-t pt-6">
-                <h2 className="text-base font-semibold">当前业务的数据范围</h2>
-                <p className="mt-4 text-base leading-6">{scopeSummary}</p>
-                <p className="mt-3 text-sm leading-5 text-muted-foreground">
+            <section className="border-t pt-4">
+                <h2 className="text-sm font-semibold">当前业务的数据范围</h2>
+                <p className="mt-3 text-sm leading-5">{scopeSummary}</p>
+                <p className="mt-3 text-xs leading-5 text-muted-foreground">
                     调整操作权限不会自动修改已保存的范围。个人限制与业务状态仍须满足。
                 </p>
             </section>

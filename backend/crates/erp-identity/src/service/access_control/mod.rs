@@ -36,6 +36,7 @@ use crate::ports::ScopeTargetPort;
 use crate::repository::prelude::*;
 pub mod consumers;
 mod query;
+mod replacement;
 pub mod resolve;
 
 use application_core::AuditActor;
@@ -624,10 +625,13 @@ async fn ensure_scope_configuration(
     action: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let permissions = [
-        crate::Permission::parse("org_unit:manage")?,
-        crate::Permission::parse(format!("data_scope:{action}"))?,
-    ];
+    let mut permissions = vec![crate::Permission::parse("org_unit:manage")?];
+    if action == "replace" {
+        permissions.push(crate::Permission::parse("data_scope:create")?);
+        permissions.push(crate::Permission::parse("data_scope:delete")?);
+    } else {
+        permissions.push(crate::Permission::parse(format!("data_scope:{action}"))?);
+    }
     let access = resolve::DataScopeService::new(db.clone(), rbac.clone())
         .resolve_permissions(actor, "org_unit", "manage", &permissions, executor)
         .await?;

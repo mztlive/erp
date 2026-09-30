@@ -6,6 +6,7 @@ pub const AUDIT_ACTIONS: &[(&str, &str)] = &[
     ("permission.update", "权限定义 · 修改"),
     ("permission.delete", "权限定义 · 删除"),
     ("data_scope.create", "数据范围 · 新建"),
+    ("data_scope.replace", "数据范围 · 替换"),
     ("data_scope.delete", "数据范围 · 删除"),
     ("user_role.assign", "用户角色 · 授权"),
     ("user_role.revoke", "用户角色 · 撤权"),

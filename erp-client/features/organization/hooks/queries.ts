@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import {
     createDataScope,
+    replaceDataScope,
     deleteDataScope,
     fetchDataScopes,
 } from "@/features/organization/api/data-scopes"
@@ -83,6 +84,23 @@ export function useDeleteDataScopeMutation() {
     return useMutation({
         meta: { affectsDataScope: true },
         mutationFn: (id: string) => deleteDataScope(id),
+        onSuccess: async () => {
+            await queryClient.invalidateQueries({ queryKey: dataScopeKeys.all })
+        },
+    })
+}
+
+export function useReplaceDataScopeMutation() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        meta: { affectsDataScope: true },
+        mutationFn: ({
+            input,
+            policyVersion,
+        }: {
+            input: CreateDataScopeInput
+            policyVersion: number
+        }) => replaceDataScope(input, policyVersion),
         onSuccess: async () => {
             await queryClient.invalidateQueries({ queryKey: dataScopeKeys.all })
         },

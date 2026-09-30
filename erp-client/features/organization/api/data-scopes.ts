@@ -89,8 +89,8 @@ export async function fetchDataScopes(
     }
 }
 
-export async function createDataScope(input: CreateDataScopeInput) {
-    return apiPost<BackendDataScope>("/admin/data-scopes", {
+function scopePayload(input: CreateDataScopeInput) {
+    return {
         schema_version: 2,
         resource: input.resource,
         actions: input.actions,
@@ -102,9 +102,23 @@ export async function createDataScope(input: CreateDataScopeInput) {
         subject_id: input.subjectId,
         scope_type: input.scopeType,
         scope_targets: input.scopeTargets,
-    })
+    }
 }
 
 export async function deleteDataScope(id: string) {
     await apiDelete<void>(`/admin/data-scopes/${id}`)
+}
+
+export async function createDataScope(input: CreateDataScopeInput) {
+    return apiPost<BackendDataScope>("/admin/data-scopes", scopePayload(input))
+}
+
+export async function replaceDataScope(
+    input: CreateDataScopeInput,
+    policyVersion: number,
+) {
+    return apiPost<BackendDataScope>("/admin/data-scopes/replace", {
+        scope: scopePayload(input),
+        expected_policy_version: policyVersion,
+    })
 }

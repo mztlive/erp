@@ -256,12 +256,14 @@ function RoleForm({
             }
         },
     })
+    const [scopeDirty, setScopeDirty] = React.useState(false)
     const leave = () => {
         const { added, removed } = diffPermissions(
             form.state.values.permissions,
             role?.permissions ?? [],
         )
         if (
+            scopeDirty ||
             form.state.values.name.trim() !== (role?.name ?? "") ||
             added.length > 0 ||
             removed.length > 0
@@ -279,6 +281,7 @@ function RoleForm({
                 className="flex min-h-0 flex-1 flex-col"
                 onSubmit={(event) => {
                     event.preventDefault()
+                    if (scopeDirty) return
                     void form.handleSubmit()
                 }}
             >
@@ -304,7 +307,7 @@ function RoleForm({
                         </Button>
                         <form.Subscribe selector={(state) => state.values.name}>
                             {(name) => (
-                                <h1 className="text-3xl font-semibold tracking-tight">
+                                <h1 className="text-xl font-semibold tracking-tight">
                                     {role ? name || "未命名角色" : "新建角色"}
                                 </h1>
                             )}
@@ -472,6 +475,7 @@ function RoleForm({
                             {editor === "guided" ? (
                                 <RoleAccessMatrix
                                     role={role}
+                                    onScopeDirtyChange={setScopeDirty}
                                     permissions={field.state.value}
                                     savedPermissions={role?.permissions ?? []}
                                     disabled={pending || hasWildcard}
@@ -560,7 +564,7 @@ function RoleForm({
                         return (
                             <>
                                 <UnsavedRefreshGuard
-                                    dirty={dirty && !pending}
+                                    dirty={(dirty || scopeDirty) && !pending}
                                 />
                                 <footer className="sticky bottom-0 z-10 flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-border bg-card py-3">
                                     <div className="flex min-w-0 flex-wrap items-center gap-x-1 gap-y-1 text-xs text-muted-foreground [&_button]:px-1.5 [&_button]:text-xs">
@@ -586,9 +590,11 @@ function RoleForm({
                                             size="sm"
                                             onClick={() => setReview("changes")}
                                         >
-                                            {dirty
-                                                ? `有 ${effectiveChanges.length || 1} 项未保存调整`
-                                                : "暂无变更"}
+                                            {scopeDirty
+                                                ? "有未保存的数据范围选择"
+                                                : dirty
+                                                  ? `有 ${effectiveChanges.length || 1} 项未保存调整`
+                                                  : "暂无变更"}
                                         </Button>
                                         {editor === "advanced" &&
                                             dangerous > 0 && (
@@ -646,6 +652,7 @@ function RoleForm({
                                                 }
                                                 disabled={
                                                     pending ||
+                                                    scopeDirty ||
                                                     (role !== null && !dirty)
                                                 }
                                             />

@@ -80,6 +80,7 @@ pub mod user_role;
 pub use audit_event::{AuditEventListParams, AuditEventView};
 pub use data_scope::{
     CreateDataScopeRequest, DataScopeListMeta, DataScopeListParams, DataScopeListView, DataScopeView,
+    ReplaceDataScopeRequest,
 };
 pub use permission::{
     CreatePermissionRequest, PermissionListParams, PermissionView, UpdatePermissionRequest,

@@ -17,6 +17,10 @@ export const AUDIT_ACTION_OPTIONS = [
         label: "数据范围 · 新建",
     },
     {
+        value: "data_scope.replace",
+        label: "数据范围 · 替换",
+    },
+    {
         value: "data_scope.delete",
         label: "数据范围 · 删除",
     },

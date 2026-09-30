@@ -1047,6 +1047,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "POST",
+                path: "/admin/data-scopes/replace",
+                description: "创建数据范围",
+                permission: {
+                    resource: "data_scope",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
                 method: "DELETE",
                 path: "/admin/data-scopes/{id}",
                 description: "删除数据范围",

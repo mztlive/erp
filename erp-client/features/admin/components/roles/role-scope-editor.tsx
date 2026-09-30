@@ -3,21 +3,20 @@
 import * as React from "react"
 import { ChevronDownIcon, ChevronRightIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { actionLabel } from "@/lib/permission-catalog"
+import { actionLabel, resourceLabel } from "@/lib/permission-catalog"
 import { hasPermission } from "@/lib/permissions"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import {
-    useCreateDataScopeMutation,
-    useDeleteDataScopeMutation,
-} from "@/features/organization/hooks/queries"
-import {
     asScopeRule,
     scopeDescription,
 } from "@/features/organization/lib/scope-description"
-import { DataScopeFormDialog } from "@/features/organization/components/data-scope-form-dialog"
-import type { DataScopeRecord, OrgUnit } from "@/features/organization/types"
-import { getErrorMessage } from "@/lib/api/errors"
+import type {
+    DataScopeRecord,
+    OrgUnit,
+    ScopeDimension,
+} from "@/features/organization/types"
+import { RoleScopeChoiceForm } from "./role-scope-choice-form"
 
 export function RoleScopeEditor({
     role,
@@ -30,6 +29,10 @@ export function RoleScopeEditor({
     disabled,
     summary,
     ready,
+    dimensions,
+    policyVersion,
+    onDirtyChange,
+    onReload,
 }: {
     role: { id: string; name: string } | null
     resource: string
@@ -41,258 +44,217 @@ export function RoleScopeEditor({
     disabled: boolean
     summary: string
     ready: boolean
+    dimensions: readonly ScopeDimension[]
+    policyVersion?: number
+    onDirtyChange: (dirty: boolean) => void
+    onReload: () => Promise<void>
 }) {
-    const [expanded, setExpanded] = React.useState(false)
-    const [adding, setAdding] = React.useState<string[] | null>(null)
-    const [exceptions, setExceptions] = React.useState(false)
-    const [removing, setRemoving] = React.useState<string | null>(null)
-    const [error, setError] = React.useState<string | null>(null)
     const profile = useAccountProfileQuery()
-    const create = useCreateDataScopeMutation()
-    const remove = useDeleteDataScopeMutation()
-    const selected = actions.filter((action) =>
-        hasPermission(permissions, `${resource}:${action}`),
+    const [exceptions, setExceptions] = React.useState(false)
+    const [advanced, setAdvanced] = React.useState(false)
+    const [action, setAction] = React.useState<string | null>(null)
+    const [saved, setSaved] = React.useState(false)
+    const [dirty, setDirty] = React.useState(false)
+    const [snapshot, setSnapshot] = React.useState({ rows, policyVersion })
+    const setScopeDirty = React.useCallback(
+        (value: boolean) => {
+            setDirty(value)
+            if (value) setSaved(false)
+            onDirtyChange(value)
+        },
+        [onDirtyChange],
     )
-    const pendingActions = selected.some(
-        (action) => !hasPermission(savedPermissions, `${resource}:${action}`),
+    React.useEffect(() => {
+        if (!dirty && snapshot.policyVersion !== policyVersion)
+            setSnapshot({ rows, policyVersion })
+    }, [dirty, policyVersion, rows, snapshot.policyVersion])
+    const selected = actions.filter((item) =>
+        hasPermission(permissions, `${resource}:${item}`),
     )
-    const busy = disabled || create.isPending || remove.isPending
-    const canCreate = hasPermission(
-        profile.data?.permissions,
-        "data_scope:create",
+    const chosen = action && selected.includes(action) ? [action] : selected
+    const pendingActions = chosen.some(
+        (item) => !hasPermission(savedPermissions, `${resource}:${item}`),
     )
-    const canDelete = hasPermission(
-        profile.data?.permissions,
-        "data_scope:delete",
-    )
+    const canSave =
+        hasPermission(profile.data?.permissions, "data_scope:create") &&
+        hasPermission(profile.data?.permissions, "data_scope:delete")
     return (
-        <section className="border-t pt-6">
-            <h3 className="text-base font-semibold">
-                这些操作可以处理谁的数据？
-            </h3>
-            <Button
-                id="role-access-scope-adjust"
-                type="button"
-                variant="outline"
-                className="mt-4 h-auto min-h-11 w-full justify-between whitespace-normal text-left font-normal"
-                onClick={() => setExpanded(!expanded)}
-                aria-expanded={expanded}
-                disabled={!ready || !role}
-            >
-                {summary}
-                <ChevronDownIcon className="ml-2 size-4 shrink-0" />
-            </Button>
-            <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                {summary === "本人负责"
-                    ? "每位人员只能处理分配给自己的业务数据。"
-                    : "点击查看或调整适用范围；多条规则叠加生效。"}
-            </p>
-            {expanded && (
-                <div className="mt-4 space-y-4 rounded-md border bg-muted/10 p-4">
-                    <p className="text-xs leading-5 text-muted-foreground">
-                        范围在此处独立保存，成功后立即生效。底部按钮只保存岗位名称与操作权限。
-                    </p>
+        <section className="space-y-4 border-t pt-4">
+            <div className="space-y-2">
+                <h3 className="text-sm font-semibold">
+                    可以操作哪些{resourceLabel(resource)}？
+                </h3>
+                <p className="text-xs leading-5 text-muted-foreground">
+                    已保存范围：{summary}
+                </p>
+            </div>
+            {ready &&
+            role &&
+            snapshot.policyVersion !== undefined &&
+            chosen.length ? (
+                <>
+                    {action && (
+                        <div className="flex items-center justify-between gap-2 text-sm">
+                            <span>单独设置：{actionLabel(action)}</span>
+                            <Button
+                                id="role-scope-common"
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                disabled={dirty}
+                                onClick={() => setAction(null)}
+                            >
+                                返回统一设置
+                            </Button>
+                        </div>
+                    )}
                     {pendingActions && (
-                        <p className="text-sm text-amber-700">
-                            新增操作尚未保存，请先保存本次调整，再配置新增操作的范围。
+                        <p className="text-xs leading-5 text-amber-700">
+                            请先在底部保存新勾选的操作权限，再设置这些操作的数据范围。
                         </p>
                     )}
-                    {rows.length === 0 && (
-                        <p className="text-sm">
-                            尚未配置范围。需要范围授权的操作不会获得业务数据。
+                    {!canSave && (
+                        <p className="text-xs text-muted-foreground">
+                            当前账号没有完整的范围修改权限。
                         </p>
                     )}
-                    <ul className="divide-y">
+                    <RoleScopeChoiceForm
+                        key={`${snapshot.policyVersion}-${chosen.join("-")}`}
+                        roleId={role.id}
+                        resource={resource}
+                        actions={chosen}
+                        rows={snapshot.rows}
+                        units={units}
+                        dimensions={dimensions}
+                        policyVersion={snapshot.policyVersion}
+                        disabled={disabled || pendingActions || !canSave}
+                        onDirtyChange={setScopeDirty}
+                        onSaved={() => setSaved(true)}
+                        onReload={onReload}
+                    />
+                </>
+            ) : (
+                <p className="text-xs leading-5 text-muted-foreground">
+                    {!role
+                        ? "先创建岗位，再设置数据范围。"
+                        : !selected.length
+                          ? "先在上方选择允许的操作。"
+                          : !ready
+                            ? "范围尚未读取成功，请先确认查看权限或重试。"
+                            : "范围版本缺失，请刷新后重试。"}
+                </p>
+            )}
+            {saved && !dirty && (
+                <p role="status" className="text-xs text-muted-foreground">
+                    数据范围已保存并生效
+                </p>
+            )}
+            <div className="border-t pt-3">
+                <Button
+                    id="role-access-scope-exceptions"
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="px-0 font-normal"
+                    disabled={!ready || dirty}
+                    aria-expanded={exceptions}
+                    onClick={() => setExceptions(!exceptions)}
+                >
+                    {exceptions ? <ChevronDownIcon /> : <ChevronRightIcon />}
+                    个别操作需要不同范围？
+                </Button>
+                {exceptions && (
+                    <div className="mt-2 divide-y">
+                        {selected.map((item) => (
+                            <div
+                                key={item}
+                                className="flex items-center justify-between gap-3 py-2 text-sm"
+                            >
+                                <div className="min-w-0">
+                                    <p>{actionLabel(item)}</p>
+                                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                                        {rows
+                                            .filter(
+                                                (row) =>
+                                                    row.enabled &&
+                                                    row.actions.includes(
+                                                        item,
+                                                    ) &&
+                                                    !(
+                                                        row.scopeType ===
+                                                            "collaborative" &&
+                                                        [
+                                                            "customer",
+                                                            "contract",
+                                                            "sales_order",
+                                                        ].includes(resource)
+                                                    ),
+                                            )
+                                            .map((row) =>
+                                                scopeDescription(
+                                                    asScopeRule(row),
+                                                    units,
+                                                ),
+                                            )
+                                            .join("；") || "尚未配置"}
+                                    </p>
+                                </div>
+                                <Button
+                                    id={`role-access-action-scope-${toAutomationIdSegment(item)}`}
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={dirty || disabled}
+                                    onClick={() => setAction(item)}
+                                >
+                                    单独设置
+                                </Button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+            <div>
+                <Button
+                    id="role-access-scope-adjust"
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="px-0 text-muted-foreground"
+                    aria-expanded={advanced}
+                    onClick={() => setAdvanced(!advanced)}
+                >
+                    {advanced ? <ChevronDownIcon /> : <ChevronRightIcon />}
+                    查看原始规则
+                </Button>
+                {advanced && (
+                    <ul className="mt-2 divide-y rounded-md border px-3">
                         {rows.map((row) => (
-                            <li key={row.id} className="space-y-2 py-3 text-sm">
-                                <p className="font-medium">
+                            <li
+                                key={row.id}
+                                className="space-y-1 py-3 text-xs leading-5 text-muted-foreground"
+                            >
+                                <p>
                                     {scopeDescription(asScopeRule(row), units)}
                                 </p>
-                                <p className="text-xs leading-5 text-muted-foreground">
+                                <p>
                                     适用操作：
                                     {row.actions.map(actionLabel).join("、")}
-                                    <br />
-                                    限制维度：
-                                    {row.targetDimension === "internal_org"
-                                        ? "负责人及部门"
-                                        : row.targetDimension === "warehouse"
-                                          ? "仓库"
-                                          : "结算主体"}
                                 </p>
-                                {canDelete && (
-                                    <Button
-                                        id={`role-access-remove-${toAutomationIdSegment(row.id)}`}
-                                        type="button"
-                                        variant="ghost"
-                                        size="sm"
-                                        disabled={busy}
-                                        onClick={() => setRemoving(row.id)}
-                                    >
-                                        移除此范围
-                                    </Button>
-                                )}
-                                {removing === row.id && (
-                                    <div className="space-y-2 rounded-md bg-muted p-3">
-                                        <p>
-                                            确认移除以上全部操作的这条范围？其他范围仍会保留。
-                                        </p>
-                                        <div className="flex gap-2">
-                                            <Button
-                                                id={`role-access-confirm-${toAutomationIdSegment(row.id)}`}
-                                                type="button"
-                                                size="sm"
-                                                disabled={busy}
-                                                onClick={async () => {
-                                                    try {
-                                                        setError(null)
-                                                        await remove.mutateAsync(
-                                                            row.id,
-                                                        )
-                                                        setRemoving(null)
-                                                    } catch (failure) {
-                                                        setError(
-                                                            getErrorMessage(
-                                                                failure,
-                                                                "移除失败，请重试",
-                                                            ),
-                                                        )
-                                                    }
-                                                }}
-                                            >
-                                                确认移除
-                                            </Button>
-                                            <Button
-                                                id={`role-access-cancel-${toAutomationIdSegment(row.id)}`}
-                                                type="button"
-                                                variant="outline"
-                                                size="sm"
-                                                disabled={busy}
-                                                onClick={() =>
-                                                    setRemoving(null)
-                                                }
-                                            >
-                                                保留
-                                            </Button>
-                                        </div>
-                                    </div>
-                                )}
                             </li>
                         ))}
+                        {!rows.length && (
+                            <li className="py-3 text-xs text-muted-foreground">
+                                暂无规则
+                            </li>
+                        )}
                     </ul>
-                    {canCreate && (
-                        <Button
-                            id="role-access-add-scope"
-                            type="button"
-                            variant="outline"
-                            disabled={
-                                busy ||
-                                pendingActions ||
-                                !selected.length ||
-                                !role
-                            }
-                            onClick={() => setAdding(selected)}
-                        >
-                            配置操作范围
-                        </Button>
-                    )}
-                    <p className="text-xs leading-5 text-muted-foreground">
-                        收窄范围时须移除原有宽范围；新增窄范围不会覆盖已有授权。
-                    </p>
-                    {error && (
-                        <p role="alert" className="text-sm text-destructive">
-                            {error}
-                        </p>
-                    )}
-                </div>
-            )}
-            <Button
-                id="role-access-scope-exceptions"
-                type="button"
-                variant="outline"
-                className="mt-5 h-auto min-h-12 w-full justify-start whitespace-normal font-normal"
-                disabled={!ready || !role}
-                onClick={() => setExceptions(!exceptions)}
-                aria-expanded={exceptions}
-            >
-                <ChevronRightIcon className="mr-2 size-4" />
-                为个别操作设置不同范围
-                <span className="ml-auto text-xs text-muted-foreground">
-                    展开规则
-                </span>
-            </Button>
-            {exceptions && (
-                <div className="mt-3 divide-y rounded-md border px-4">
-                    <p className="py-3 text-xs leading-5 text-muted-foreground">
-                        逐项核对适用范围。新增规则会叠加；收窄须在上方移除原有宽范围。
-                    </p>
-                    {selected.length === 0 && (
-                        <p className="py-3 text-sm">先选择需要配置的操作。</p>
-                    )}
-                    {selected.map((action) => (
-                        <div
-                            key={action}
-                            className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"
-                        >
-                            <div className="min-w-0 flex-1">
-                                <p className="font-medium">
-                                    {actionLabel(action)}
-                                </p>
-                                <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                                    {rows
-                                        .filter(
-                                            (row) =>
-                                                row.enabled &&
-                                                row.actions.includes(action),
-                                        )
-                                        .map((row) =>
-                                            scopeDescription(
-                                                asScopeRule(row),
-                                                units,
-                                            ),
-                                        )
-                                        .join("；") || "尚未配置范围"}
-                                </p>
-                            </div>
-                            {canCreate && (
-                                <Button
-                                    id={`role-access-action-scope-${toAutomationIdSegment(action)}`}
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    disabled={
-                                        busy ||
-                                        !hasPermission(
-                                            savedPermissions,
-                                            `${resource}:${action}`,
-                                        )
-                                    }
-                                    onClick={() => setAdding([action])}
-                                >
-                                    配置范围
-                                </Button>
-                            )}
-                        </div>
-                    ))}
-                </div>
-            )}
-            {adding && role && (
-                <DataScopeFormDialog
-                    open
-                    onOpenChange={(open) => {
-                        if (!open) setAdding(null)
-                    }}
-                    subject={{ type: "role", id: role.id, label: role.name }}
-                    roles={[]}
-                    people={[]}
-                    units={[...units]}
-                    submitting={create.isPending}
-                    onSubmit={async (input) => {
-                        await create.mutateAsync(input)
-                    }}
-                    initialResource={resource}
-                    initialActions={adding}
-                    permissions={savedPermissions}
-                />
+                )}
+            </div>
+            {dirty && (
+                <p role="status" className="text-xs text-amber-700">
+                    范围选择尚未保存。请保存数据范围或撤销选择，再切换业务或操作。
+                </p>
             )}
         </section>
     )

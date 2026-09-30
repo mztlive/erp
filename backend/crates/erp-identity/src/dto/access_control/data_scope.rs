@@ -328,3 +328,13 @@ fn registered_identifier(value: Option<&str>, field: &str) -> Result<Option<Stri
     }
     Ok(Some(text))
 }
+
+/// 岗位范围替换请求；只替换新范围中列出的动作，不影响其他动作。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReplaceDataScopeRequest {
+    /// 新范围，必须为启用的岗位规则。
+    pub scope: CreateDataScopeRequest,
+    /// 打开配置时的策略版本；过期请求返回冲突。
+    pub expected_policy_version: u64,
+}

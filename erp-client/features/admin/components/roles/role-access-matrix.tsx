@@ -40,14 +40,24 @@ export function RoleAccessMatrix({
     onChange,
     disabled,
     onOpenAdvanced,
+    onScopeDirtyChange,
 }: {
     role: { id: string; name: string } | null
     permissions: readonly string[]
     savedPermissions: readonly string[]
     onChange: (permissions: string[]) => void
     disabled: boolean
+    onScopeDirtyChange: (dirty: boolean) => void
     onOpenAdvanced: () => void
 }) {
+    const [scopeDirty, setScopeDirty] = React.useState(false)
+    const scopeDirtyChanged = React.useCallback(
+        (dirty: boolean) => {
+            setScopeDirty(dirty)
+            onScopeDirtyChange(dirty)
+        },
+        [onScopeDirtyChange],
+    )
     const [resource, setResource] = React.useState("sales_order")
     const [keyword, setKeyword] = React.useState("")
     const [allBusinesses, setAllBusinesses] = React.useState(false)
@@ -125,10 +135,10 @@ export function RoleAccessMatrix({
             aria-label="岗位权限工作台"
         >
             <nav
-                className="min-w-0 border-b py-5 md:border-b-0 md:border-r md:pr-4"
+                className="min-w-0 border-b py-4 md:border-b-0 md:border-r md:pr-4"
                 aria-label="选择业务"
             >
-                <h2 className="mb-4 text-base font-semibold">选择业务</h2>
+                <h2 className="mb-3 text-sm font-semibold">选择业务</h2>
                 <div className="relative mb-4">
                     <SearchIcon className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
                     <Input
@@ -149,9 +159,10 @@ export function RoleAccessMatrix({
                             aria-current={
                                 resource === item.resource ? "true" : undefined
                             }
+                            disabled={scopeDirty}
                             onClick={() => setResource(item.resource)}
                             className={cn(
-                                "flex min-h-11 items-center gap-2 rounded-md px-3 py-2 text-left text-base hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-ring",
+                                "flex min-h-control items-center gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-ring",
                                 resource === item.resource &&
                                     "bg-muted font-medium",
                             )}
@@ -180,21 +191,21 @@ export function RoleAccessMatrix({
                     </Button>
                 )}
             </nav>
-            <div className="min-w-0 space-y-6 py-6 md:px-6 xl:px-7">
-                <h2 className="text-xl font-semibold">
+            <div className="min-w-0 space-y-5 py-4 md:px-5">
+                <h2 className="text-base font-semibold">
                     {resourceLabel(resource)}
                 </h2>
                 <section>
-                    <h3 className="text-base font-semibold">允许哪些操作？</h3>
+                    <h3 className="text-sm font-semibold">允许哪些操作？</h3>
                     <div
-                        className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-3"
+                        className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2"
                         role="radiogroup"
                         aria-label="操作授权方式"
                     >
                         {([true, false] as const).map((mode) => (
                             <label
                                 key={String(mode)}
-                                className="flex items-center gap-2 text-base"
+                                className="flex items-center gap-2 text-sm"
                             >
                                 <input
                                     id={`role-access-mode-${mode ? "all" : "custom"}`}
@@ -202,7 +213,9 @@ export function RoleAccessMatrix({
                                     name="role-access-mode"
                                     className="size-4 accent-primary"
                                     checked={all === mode}
-                                    disabled={disabled || inherited}
+                                    disabled={
+                                        disabled || inherited || scopeDirty
+                                    }
                                     onChange={() =>
                                         onChange(
                                             mode
@@ -233,7 +246,7 @@ export function RoleAccessMatrix({
                         ))}
                     </div>
                     {all && (
-                        <p className="mt-3 text-sm leading-5 text-muted-foreground">
+                        <p className="mt-2 text-xs leading-5 text-muted-foreground">
                             包含该业务当前及今后新增的操作。取消某项时会切换为逐项授权。
                         </p>
                     )}
@@ -242,7 +255,7 @@ export function RoleAccessMatrix({
                             此业务由跨业务授权覆盖，需在高级授权中核对。
                         </p>
                     )}
-                    <div className="mt-6 grid grid-cols-1 gap-x-5 gap-y-6 sm:grid-cols-2">
+                    <div className="mt-4 grid grid-cols-1 gap-x-5 gap-y-4 sm:grid-cols-2">
                         {entry.codes.map((code) => {
                             const action = code.split(":")[1]!
                             const checked = hasPermission(permissions, code)
@@ -251,13 +264,15 @@ export function RoleAccessMatrix({
                                 <label
                                     key={code}
                                     htmlFor={id}
-                                    className="flex cursor-pointer items-start gap-3 text-base"
+                                    className="flex cursor-pointer items-start gap-2 text-sm"
                                 >
                                     <Checkbox
                                         id={id}
-                                        className="mt-0.5 size-5 rounded-sm border-input bg-background"
+                                        className="mt-0.5 rounded-sm border-input bg-background"
                                         checked={checked}
-                                        disabled={disabled || inherited}
+                                        disabled={
+                                            disabled || inherited || scopeDirty
+                                        }
                                         onCheckedChange={(value) => {
                                             const custom =
                                                 selectResourceActions(
@@ -290,7 +305,7 @@ export function RoleAccessMatrix({
                                                 谨慎授权
                                             </span>
                                         )}
-                                        <span className="mt-1 block text-sm leading-5 text-muted-foreground">
+                                        <span className="mt-1 block text-xs leading-5 text-muted-foreground">
                                             {
                                                 PERMISSION_BY_CODE.get(code)
                                                     ?.description
@@ -312,6 +327,12 @@ export function RoleAccessMatrix({
                 <RoleScopeEditor
                     key={resource}
                     role={role}
+                    dimensions={entry.dimensions}
+                    policyVersion={scopes.data?.policyVersion}
+                    onDirtyChange={scopeDirtyChanged}
+                    onReload={async () => {
+                        await scopes.refetch()
+                    }}
                     resource={resource}
                     actions={entry.actions}
                     rows={rows}
@@ -324,9 +345,10 @@ export function RoleAccessMatrix({
                 />
                 <Button
                     id="role-editor-advanced"
+                    disabled={scopeDirty}
                     type="button"
                     variant="outline"
-                    className="h-12 w-full justify-start font-normal"
+                    className="w-full justify-start font-normal"
                     onClick={onOpenAdvanced}
                 >
                     <ChevronRightIcon className="mr-2 size-4" />
