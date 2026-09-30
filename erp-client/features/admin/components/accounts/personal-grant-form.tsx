@@ -23,6 +23,7 @@ import {
     AlertDialogAction,
 } from "@/components/ui/alert-dialog"
 import { Checkbox } from "@/components/ui/checkbox"
+import { OptionCombobox } from "@/components/business/option-combobox"
 import { ScopeTargetPicker } from "@/features/organization/components/scope-target-picker"
 import type { OrgUnit } from "@/features/organization/types"
 import { actionLabel, resourceLabel } from "@/lib/permission-catalog"
@@ -307,13 +308,34 @@ export function PersonalGrantForm({
                                                 <label htmlFor="person-scope-dimension">
                                                     审批范围维度
                                                 </label>
-                                                <select
+                                                <OptionCombobox
                                                     id="person-scope-dimension"
-                                                    className="ml-3 rounded border p-2 text-sm"
+                                                    aria-label="审批范围维度"
+                                                    className="mt-2"
                                                     value={field.state.value}
-                                                    onChange={(e) => {
-                                                        const d = e.target
-                                                            .value as PersonScopeInput["dimension"]
+                                                    allowClear={false}
+                                                    disabled={save.isPending}
+                                                    options={[
+                                                        {
+                                                            value: "internal_org",
+                                                            label: "业务部门/负责人",
+                                                        },
+                                                        {
+                                                            value: "warehouse",
+                                                            label: "仓库",
+                                                        },
+                                                        {
+                                                            value: "settlement_party",
+                                                            label: "结算主体",
+                                                        },
+                                                    ]}
+                                                    onBlur={field.handleBlur}
+                                                    onValueChange={(
+                                                        dimension,
+                                                    ) => {
+                                                        if (!dimension) return
+                                                        const d =
+                                                            dimension as PersonScopeInput["dimension"]
                                                         field.handleChange(d)
                                                         form.setFieldValue(
                                                             "mode",
@@ -322,17 +344,7 @@ export function PersonalGrantForm({
                                                                 : "explicit",
                                                         )
                                                     }}
-                                                >
-                                                    <option value="internal_org">
-                                                        业务部门/负责人
-                                                    </option>
-                                                    <option value="warehouse">
-                                                        仓库
-                                                    </option>
-                                                    <option value="settlement_party">
-                                                        结算主体
-                                                    </option>
-                                                </select>
+                                                />
                                             </div>
                                         )}
                                     </form.Field>

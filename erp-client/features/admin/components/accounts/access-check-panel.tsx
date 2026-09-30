@@ -2,6 +2,7 @@
 import * as React from "react"
 import { z } from "zod"
 import { useAppForm } from "@/components/form"
+import { OptionCombobox } from "@/components/business/option-combobox"
 import { BusinessFailureState } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { actionLabel, resourceLabel } from "@/lib/permission-catalog"
@@ -68,33 +69,30 @@ export function AccessCheckPanel({ accountId }: { accountId: string }) {
                             <FieldLabel htmlFor="account-check-resource">
                                 业务
                             </FieldLabel>
-                            <select
+                            <OptionCombobox
                                 id="account-check-resource"
-                                className="h-10 rounded-md border bg-background px-3"
+                                aria-label="业务"
                                 value={field.state.value}
-                                onChange={(event) => {
-                                    field.handleChange(event.target.value)
+                                allowClear={false}
+                                options={resources.map((row) => ({
+                                    value: row.resource,
+                                    label: resourceLabel(row.resource),
+                                }))}
+                                placeholder="选择业务"
+                                onBlur={field.handleBlur}
+                                onValueChange={(resource) => {
+                                    if (!resource) return
+                                    field.handleChange(resource)
                                     form.setFieldValue(
                                         "action",
                                         resources.find(
-                                            (row) =>
-                                                row.resource ===
-                                                event.target.value,
+                                            (row) => row.resource === resource,
                                         )?.actions[0] ?? "",
                                     )
                                     form.setFieldValue("objectId", "")
                                     setInput(null)
                                 }}
-                            >
-                                {resources.map((row) => (
-                                    <option
-                                        key={row.resource}
-                                        value={row.resource}
-                                    >
-                                        {resourceLabel(row.resource)}
-                                    </option>
-                                ))}
-                            </select>
+                            />
                         </Field>
                     )}
                 </form.AppField>
@@ -106,32 +104,32 @@ export function AccessCheckPanel({ accountId }: { accountId: string }) {
                                     <FieldLabel htmlFor="account-check-action">
                                         操作
                                     </FieldLabel>
-                                    <select
+                                    <OptionCombobox
                                         id="account-check-action"
-                                        className="h-10 rounded-md border bg-background px-3"
+                                        aria-label="操作"
                                         value={field.state.value}
-                                        onChange={(event) => {
-                                            field.handleChange(
-                                                event.target.value,
-                                            )
+                                        allowClear={false}
+                                        options={
+                                            resources
+                                                .find(
+                                                    (row) =>
+                                                        row.resource ===
+                                                        resource,
+                                                )
+                                                ?.actions.map((action) => ({
+                                                    value: action,
+                                                    label: actionLabel(action),
+                                                })) ?? []
+                                        }
+                                        placeholder="选择操作"
+                                        onBlur={field.handleBlur}
+                                        onValueChange={(action) => {
+                                            if (!action) return
+                                            field.handleChange(action)
                                             form.setFieldValue("objectId", "")
                                             setInput(null)
                                         }}
-                                    >
-                                        {resources
-                                            .find(
-                                                (row) =>
-                                                    row.resource === resource,
-                                            )
-                                            ?.actions.map((action) => (
-                                                <option
-                                                    key={action}
-                                                    value={action}
-                                                >
-                                                    {actionLabel(action)}
-                                                </option>
-                                            ))}
-                                    </select>
+                                    />
                                 </Field>
                             )}
                         </form.AppField>

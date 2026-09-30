@@ -182,7 +182,7 @@ export function OptionCombobox({
                         {loading ? "正在加载…" : emptyLabel}
                     </ComboboxEmpty>
                     <ComboboxList>
-                        {items.map((item) => (
+                        {(item: InternalOption) => (
                             <ComboboxItem
                                 key={item.value}
                                 id={
@@ -198,7 +198,7 @@ export function OptionCombobox({
                                     {item.label}
                                 </span>
                             </ComboboxItem>
-                        ))}
+                        )}
                     </ComboboxList>
                 </ComboboxContent>
             </div>
