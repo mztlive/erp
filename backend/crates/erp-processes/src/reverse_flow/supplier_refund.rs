@@ -1,5 +1,6 @@
+mod commit_source;
 use application_core::{AuditActor, CommandReceipt};
-use erp_audit::{AuditActorLogs, AuditExt, CommandReceiptServiceExt as _};
+use erp_audit::{AuditActorLogs, AuditExt, CommandReceiptServiceExt};
 use erp_core::common::time::Instant;
 use erp_core::ids::{SupplierAccountId, SupplierPaymentId};
 use erp_finance::entity::payable::SupplierPaymentStatus;
@@ -34,7 +35,7 @@ use super::ReturnsProcess;
 use super::adapter::{
     build_supplier_refund_snapshot, execute_supplier_refund_domain_action, require_supplier_refund_binding,
     supplier_refund_adapter, supplier_refund_object_readable, supplier_refund_responsible_org_id,
-    supplier_refund_start_command, supplier_refund_start_command_kind, supplier_refund_subject_ref,
+    supplier_refund_subject_ref,
 };
 use super::cancel_approval::{
     SupplierRefundCancelPersistInput, build_supplier_refund_cancel_input, load_cancel_runtime,
@@ -105,26 +106,11 @@ impl ReturnsProcess {
             &req.idempotency_key,
             &req,
         )?;
-        if let Some(refund_id) = command_receipt.committed_resource_id(&self.db).await? {
+        if let Some(refund_id) = self.supplier_refund_commit_replay(&command_receipt, actor).await? {
             return self.reads().supplier_refund_detail(&refund_id).await.map_err(crate::Error::from);
         }
-        let payment = self
-            .db
-            .supplier_payments()
-            .find_by_id(&req.source_fact_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("原供应商付款不存在".to_string()))?;
-        let source_fact_id = SupplierPaymentId::new(payment.base.id.clone());
-        let source_version = payment.base.version;
-        let mut refund = new_supplier_refund_commit(
-            &req,
-            SupplierRefundSourceFact {
-                payment_id: source_fact_id.clone(),
-                supplier_id: payment.supplier_id.clone(),
-                amount: payment.amount,
-            },
-            actor.id(),
-        )?;
+        let (source_fact_id, source_version, mut refund) =
+            self.supplier_refund_commit_source(&req, actor).await?;
         let adapter = supplier_refund_adapter()?;
         start_supplier_refund_approval(&mut refund)?;
         let id = refund.base.id.clone();
@@ -155,6 +141,17 @@ impl ReturnsProcess {
         let transaction_result = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    refund.ensure_submitter(actor_owned.id())?;
+                    ensure_return_start_replay_authorized(
+                        &db,
+                        &rbac,
+                        &actor_owned,
+                        DocumentType::SupplierPayment,
+                        "supplier_refund:submit",
+                        source_fact_id.as_ref(),
+                        executor,
+                    )
+                    .await?;
                     validate_supplier_refund_source(&db, &source_fact_id, source_version, executor).await?;
                     let binding = persist_bound_supplier_refund_document(
                         &db,
@@ -203,7 +200,7 @@ impl ReturnsProcess {
             .await;
         let detail_id = match transaction_result {
             Ok(()) => id,
-            Err(error) => match command_receipt.committed_resource_id(&self.db).await? {
+            Err(error) => match self.supplier_refund_commit_replay(&command_receipt, actor).await? {
                 Some(refund_id) => refund_id,
                 None => return Err(error),
             },
@@ -292,9 +289,6 @@ impl ReturnsProcess {
         let now = Instant::now();
         let organization_id = self.supplier_refund_responsible_org(&refund.supplier_id).await?;
         let snapshot = build_supplier_refund_snapshot(&refund, &organization_id, actor.id(), now)?;
-        let start =
-            supplier_refund_start_command(id, refund.approval_subject_version, actor.id(), &idempotency_key);
-        let _ = supplier_refund_start_command_kind(&start);
         let _ = supplier_refund_object_readable(&organization_id, actor.id())?;
         let graph = load_bound_definition_graph(&self.db, &binding).await?;
         let existing_receipt = load_supplier_refund_start_receipt(
@@ -319,6 +313,7 @@ impl ReturnsProcess {
         let recovery_subject_version = refund.approval_subject_version;
         let persisted = persist_supplier_refund_start(
             &self.db,
+            &self.rbac,
             SupplierRefundStartPersistInput {
                 refund,
                 actor: actor.clone(),
@@ -392,14 +387,14 @@ impl ReturnsProcess {
                         .find_by_id(&refund.supplier_id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
-                    let organization_id = supplier_refund_responsible_org_id(supplier.party_id.as_ref())?;
+                    let _organization_id = supplier_refund_responsible_org_id(supplier.party_id.as_ref())?;
                     ensure_return_start_replay_authorized(
                         &db,
                         &rbac,
                         &actor,
                         DocumentType::SupplierRefund,
                         "supplier_refund:submit",
-                        &organization_id,
+                        &refund_id,
                         executor,
                     )
                     .await?;
@@ -456,14 +451,14 @@ impl ReturnsProcess {
                         .find_by_id(&refund.supplier_id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
-                    let organization_id = supplier_refund_responsible_org_id(supplier.party_id.as_ref())?;
+                    let _organization_id = supplier_refund_responsible_org_id(supplier.party_id.as_ref())?;
                     ensure_return_start_replay_authorized(
                         &db,
                         &rbac,
                         &actor,
                         DocumentType::SupplierRefund,
                         "supplier_refund:submit",
-                        &organization_id,
+                        &refund_id,
                         executor,
                     )
                     .await?;

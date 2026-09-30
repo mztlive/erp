@@ -15,6 +15,7 @@ use erp_inventory::{
 use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshot;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::ports::WorkflowAuthorizationPort;
 use erp_workflow::repository::prelude::*;
 use erp_workflow::service::approval::business_adapter::ensure_separation_of_duties;
 use erp_workflow::service::approval::execution::authorization::converge_eligibility;
@@ -27,8 +28,8 @@ use erp_workflow::service::approval::execution::{
 use erp_workflow::service::approval::policy::require_process_required;
 use erp_workflow::service::approval::process_kind::process_kind_of;
 use erp_workflow::service::approval::{
-    approval_actor_is_active_with_executor, approval_decide_scope_with_executor,
-    approval_document_action_scope_with_executor, approval_document_read_scope_with_executor,
+    approval_action_roles_with_executor, approval_actor_is_active_with_executor,
+    approval_participant_permissions_with_executor,
 };
 use erp_workflow::{ApprovalIntegrationExt, BpmExt};
 use id_generator::next_id;
@@ -410,27 +411,15 @@ pub async fn ensure_stock_adjustment_submit_authorized_with_executor(
     {
         return Err(Error::Forbidden(STOCK_ADJUSTMENT_SUBMIT_FORBIDDEN.to_string()));
     }
-    let object = erp_workflow::ports::WorkflowScopeObject {
-        owner_user_id: adjustment.created_by.clone(),
-        warehouse_id: Some(adjustment.warehouse_id.to_string()),
-        ..Default::default()
-    };
-    let action_scope = approval_document_action_scope_with_executor(
-        &crate::adapters::workflow::workflow_auth(db.clone(), rbac.clone()),
-        actor,
-        "stock_adjustment:submit",
-        executor,
-    )
-    .await?;
-    let read_scope = approval_document_read_scope_with_executor(
-        &crate::adapters::workflow::workflow_auth(db.clone(), rbac.clone()),
-        actor,
-        DocumentType::StockAdjustment,
-        executor,
-    )
-    .await?;
-    if !action_scope.covers_object(&object) || !read_scope.covers_object(&object) {
-        return Err(Error::Forbidden("无权提交该责任组织的库存调整单".to_string()));
+    let auth = crate::adapters::workflow::workflow_auth(db.clone(), rbac.clone());
+    let roles =
+        approval_action_roles_with_executor(&auth, actor, "stock_adjustment:submit", executor).await?;
+    if roles.is_empty()
+        || !auth
+            .approval_source_readable(actor, DocumentType::StockAdjustment, &adjustment.base.id, executor)
+            .await?
+    {
+        return Err(Error::Forbidden("无权提交该仓库的库存调整单".to_string()));
     }
     Ok(())
 }
@@ -625,31 +614,9 @@ pub(super) async fn revalidate_stock_adjustment_start_candidates(
             .filter(|account| account.is_active_backoffice())
             .ok_or_else(|| Error::ValidationError("指定审批人账号不存在、已停用或任职失效".to_string()))?;
         let assignee_actor = AuditActor::new(account.base.id.clone(), account.base.id.clone(), account.kind);
-        let decide_scope = approval_decide_scope_with_executor(
-            &crate::adapters::workflow::workflow_auth(db.clone(), rbac.clone()),
-            &assignee_actor,
-            executor,
-        )
-        .await?;
-        let read_scope = approval_document_read_scope_with_executor(
-            &crate::adapters::workflow::workflow_auth(db.clone(), rbac.clone()),
-            &assignee_actor,
-            DocumentType::StockAdjustment,
-            executor,
-        )
-        .await?;
-        let object = erp_workflow::ports::WorkflowScopeObject {
-            owner_user_id: initiator_id.to_string(),
-            warehouse_id: Some(organization_id.to_string()),
-            ..Default::default()
-        };
-        if !decide_scope.covers_object(&object) {
-            return Err(Error::ValidationError(
-                "指定审批人缺少审批权限或数据范围不覆盖当前单据组织".to_string(),
-            ));
-        }
-        if !read_scope.covers_object(&object) {
-            return Err(Error::ValidationError("指定审批人不能读取当前库存调整单".to_string()));
+        let auth = crate::adapters::workflow::workflow_auth(db.clone(), rbac.clone());
+        if !approval_participant_permissions_with_executor(&auth, &assignee_actor, executor).await? {
+            return Err(Error::ValidationError("指定审批人缺少审批读取和决定权限".to_string()));
         }
     }
     if graph.nodes.is_empty() {

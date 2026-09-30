@@ -7,7 +7,9 @@ use erp_core::common::time::Instant;
 use mongodb::Database;
 use persistence_core::Executor;
 
+use super::consumers::configurable_registration;
 use crate::access_control::{ResolvedScope, ScopeClause};
+use crate::entity::access_control::authorization_policy::AuthorizationPolicy;
 use crate::entity::access_control::governance::root_organization_scope;
 use crate::entity::access_control::person_scope::PersonDataScope;
 use crate::entity::organization_change::OrganizationState;
@@ -114,7 +116,49 @@ impl DataScopeService {
         permissions: &[Permission],
         executor: &mut dyn Executor,
     ) -> Result<AuthorizedDataScope> {
+        let source = AuthorizationPolicy::scope_source(resource, action);
+        self.resolve_boundary(actor, (resource, action), source, permissions, executor).await
+    }
+
+    /// 证明目标动作权限后读取真实来源范围，不要求来源动作权限。
+    /// # 参数
+    /// `actor` 为当前账号；目标和来源分别明确资源、动作；`executor` 为调用事务。
+    /// # 返回
+    /// 保留目标动作身份、采用来源人员范围的授权上下文。
+    /// # 错误
+    /// 任一资源未接线、账号或目标权限失效、版本变化时拒绝。
+    pub async fn resolve_source_scope(
+        &self,
+        actor: &AuditActor,
+        resource: &str,
+        action: &str,
+        source_resource: &str,
+        source_action: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<AuthorizedDataScope> {
+        let permission = Permission::parse(format!("{resource}:{action}"))?;
+        self.resolve_boundary(
+            actor,
+            (resource, action),
+            (source_resource, source_action),
+            &[permission],
+            executor,
+        )
+        .await
+    }
+
+    /// 动作资格与数据边界在同一策略快照中独立取证。
+    async fn resolve_boundary(
+        &self,
+        actor: &AuditActor,
+        target: (&str, &str),
+        source: (&str, &str),
+        permissions: &[Permission],
+        executor: &mut dyn Executor,
+    ) -> Result<AuthorizedDataScope> {
+        let (resource, action) = target;
         ensure_resource(resource, action)?;
+        configurable_registration(source.0, source.1)?;
         let mut required = permissions.to_vec();
         required.push(Permission::parse(format!("{resource}:{action}"))?);
         let account = self
@@ -132,11 +176,10 @@ impl DataScopeService {
             return Err(Error::Forbidden("没有该资源动作权限".into()));
         }
         let as_of = Instant::now();
-        let state = self.scope_organizations(actor.id(), resource, as_of, executor).await?;
-        let (scope, role_scopes) =
-            self.resolved(actor.id(), &roles, (resource, action), &state, as_of, executor).await?;
+        let state = self.scope_organizations(actor.id(), source.0, as_of, executor).await?;
+        let (scope, role_scopes) = self.resolved(actor.id(), &roles, source, &state, as_of, executor).await?;
         let fingerprint = format!(
-            "{}:{}:{}:{}:{}:{:?}:{:?}",
+            "{}:{}:{}:{}:{}:{source:?}:{:?}:{:?}",
             account.base.version,
             snapshot.policy_revision(),
             state.version,

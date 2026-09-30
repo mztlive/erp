@@ -136,7 +136,8 @@ pub async fn authorize_inventory(
     .with_list_meta(balance_meta, movement_meta, adjustment_meta))
 }
 
-/// 每个库存资源动作独立解析；创建、更新及列表沿用同角色完整详情权限要求。
+/// 库存查询共用仓库政策，保留各资源动作的授权槽，避免合并存量范围扩大权限。
+/// 库存调整创建、更新及列表沿用同角色完整详情权限要求；仓库目录范围不参与。
 async fn inventory_scope(
     service: &DataScopeService,
     actor: &AuditActor,

@@ -236,7 +236,7 @@ impl FundsAccess {
         let page_size = query.page_size.unwrap_or(20).clamp(1, 100);
         let start = ((page - 1) as usize).saturating_mul(page_size as usize);
         let end = start.saturating_add(page_size as usize).min(decided.len());
-        let whole = authorization.whole();
+        let whole = true;
         let mut items = Vec::new();
         if start < decided.len() {
             for (row, handler) in decided[start..end].iter() {
@@ -330,7 +330,7 @@ impl FundsAccess {
             return Err(Error::NotFound("开票申请不存在".into()));
         }
         let order_nos = self.sales_order_nos(&order_ids, executor).await?;
-        let whole = authorization.whole();
+        let whole = true;
         let data = ScopedInvoiceRequestRow {
             id: row.base.id.clone(),
             request_no: row.request_no.clone(),

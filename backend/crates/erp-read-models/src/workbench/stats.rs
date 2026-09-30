@@ -6,7 +6,7 @@ use erp_workflow::entity::work_item::{WorkItemStatus, WorkItemType};
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
-use super::access::{ActorAccess, ViewAccess, authorized_fields};
+use super::access::{ActorAccess, ViewAccess};
 use super::query::{AUTHORIZED_SCAN_BATCH_SIZE, next_candidate_offset};
 use super::{
     ProcessingState, WorkItemAllowedAction, WorkItemDueFilter, WorkItemFamily, WorkItemFamilyCountsView,
@@ -174,14 +174,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
                 break;
             }
             let mut facts = self.object_facts_for_rows(&rows, executor).await?;
-            self.filter_order_access_keeping_owned_fulfillment(
-                &access.actor_id,
-                rows.iter().map(super::query::owned_fulfillment_task),
-                &mut facts,
-                executor,
-            )
-            .await?;
-            let authorized = authorized_fields(rows, access, &facts);
+            let authorized = self.authorize_queue_rows(rows, access, &mut facts, executor).await?;
             fields.extend(authorized.into_iter().filter(|item| {
                 super::query::matches_keyword(item, filter.query.as_deref())
                     && super::query::matches_handler(item, &query.handler_user_ids)

@@ -76,6 +76,26 @@ pub struct ContractFilter {
     pub sort_ascending: bool,
 }
 
+impl ContractFilter {
+    /// 将已授权候选客户与仍存在的来源客户求交，历史参与不得扩张来源边界。
+    ///
+    /// # 参数
+    /// * `existing` - 同一执行器按候选合同引用 ID 查询的未删除客户
+    /// # 返回
+    /// 原地收窄客户条件；空集合保持空结果。
+    /// # 错误
+    /// 无。
+    pub fn require_existing_customers(&mut self, existing: Vec<String>) {
+        self.customer_ids = Some(
+            existing
+                .into_iter()
+                .filter(|id| self.customer_ids.as_ref().is_none_or(|allowed| allowed.contains(id)))
+                .collect(),
+        );
+        self.historical_contract_ids.clear();
+    }
+}
+
 impl Default for ContractFilter {
     /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
     ///
@@ -680,5 +700,21 @@ mod tests {
         let revision_roundtrip: ContractRevision =
             mongodb::bson::deserialize_from_document(revision_doc).unwrap();
         assert_eq!(revision_roundtrip, revision);
+    }
+
+    #[test]
+    fn source_existence_limits_company_without_requiring_an_owner() {
+        let mut company =
+            ContractFilter { historical_contract_ids: vec!["orphan-contract".into()], ..Default::default() };
+        company.require_existing_customers(vec!["existing-unassigned-customer".into()]);
+        assert_eq!(company.customer_ids, Some(vec!["existing-unassigned-customer".into()]));
+        assert!(company.historical_contract_ids.is_empty());
+        let mut restricted =
+            ContractFilter { customer_ids: Some(vec!["allowed".into()]), ..Default::default() };
+        restricted.require_existing_customers(vec!["outside".into()]);
+        assert_eq!(restricted.customer_ids, Some(Vec::new()));
+        let mut missing = ContractFilter::default();
+        missing.require_existing_customers(Vec::new());
+        assert_eq!(missing.customer_ids, Some(Vec::new()));
     }
 }

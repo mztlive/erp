@@ -101,12 +101,13 @@ pub(super) async fn list_customer_facts_with(
     executor: &mut dyn Executor,
 ) -> Result<Vec<ContractCustomer>> {
     let customer_ids = ids.iter().cloned().map(CustomerAccountId::new).collect::<Vec<_>>();
-    let facts = customers.find_by_ids(&customer_ids).await?;
+    let facts = customers.find_by_ids(&customer_ids, executor).await?;
     let owners = assignments.owner_user_ids_by_customer(ids, as_of, executor).await?;
     let names = accounts.names_by_ids(&owners.values().cloned().collect::<Vec<_>>()).await?;
     let numbers = facts.into_iter().map(|c| (c.id, c.customer_no)).collect::<HashMap<_, _>>();
     Ok(ids
         .iter()
+        .filter(|id| numbers.contains_key(*id))
         .map(|id| ContractCustomer {
             id: id.clone(),
             number: numbers.get(id).cloned().unwrap_or_default(),

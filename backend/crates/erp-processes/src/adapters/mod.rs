@@ -1,6 +1,8 @@
 //! Composition adapters that bind consumer ports to providing domains.
 
+mod approval_materials;
 mod catalog;
+pub(crate) use approval_materials::freeze_approval_materials;
 mod catalog_data_scope;
 mod contract;
 mod contract_data_scope;

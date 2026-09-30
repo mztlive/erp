@@ -323,6 +323,10 @@ function WorkspaceDocumentTaskDetail({
         item.approvalNodeExecutionId,
     )
     const trackingTask = item.workItemType === "APPROVAL_INSTANCE"
+    const approvalDocument =
+        approvalTask ||
+        trackingTask ||
+        item.workItemType === "DOCUMENT_APPROVAL"
     const instanceId =
         item.approvalProcessInstanceId ?? item.approval?.instanceId
     const recoveryQuery = useRecoveryOptionsQuery(
@@ -332,12 +336,15 @@ function WorkspaceDocumentTaskDetail({
     const documentHref = buildDocumentHref(item)
     const currentPaperKind = workspacePaperKind(item.businessObjectType)
     const canReadPaper = Boolean(
-        currentPaperKind && item.businessObjectId.trim(),
+        approvalDocument
+            ? instanceId
+            : currentPaperKind && item.businessObjectId.trim(),
     )
-    const readActionLabel =
-        item.workItemType === "FULFILLMENT_OPERATION"
-            ? `查看来源${item.businessObjectType === "delivery" ? "销售" : "采购"}单`
-            : workspaceReadActionLabel(item.businessObjectType)
+    const readActionLabel = approvalDocument
+        ? "查看提交资料"
+        : item.workItemType === "FULFILLMENT_OPERATION"
+          ? `查看来源${item.businessObjectType === "delivery" ? "销售" : "采购"}单`
+          : workspaceReadActionLabel(item.businessObjectType)
     const openActionLabel = workspaceOpenActionLabel(
         item.workItemType,
         item.businessObjectType,
@@ -352,10 +359,15 @@ function WorkspaceDocumentTaskDetail({
     const documentFacts = useWorkspaceDocumentFacts(item)
     const sourceSales = useWorkspaceSourceSalesOrder(item)
     const facts = documentFacts.facts
-    const summarySections = withSourceSalesOrder(
-        facts?.sections ?? item.summarySections ?? [],
-        sourceSales.source,
-    )
+    const summarySections = approvalDocument
+        ? (facts?.sections ?? item.summarySections ?? []).map((section) => ({
+              ...section,
+              objectId: undefined,
+          }))
+        : withSourceSalesOrder(
+              facts?.sections ?? item.summarySections ?? [],
+              sourceSales.source,
+          )
     const briefLines = facts?.lines ?? item.briefLines
     const briefMoreCount = facts?.moreCount ?? item.briefMoreCount
     const counterpartyName = facts?.counterparty ?? item.counterpartyName
@@ -418,6 +430,7 @@ function WorkspaceDocumentTaskDetail({
             />
         ) : null
     const canOpenDocument = Boolean(
+        !approvalDocument &&
         documentHref &&
         (approvalTask ||
             trackingTask ||
@@ -443,17 +456,29 @@ function WorkspaceDocumentTaskDetail({
                                 }
                             />
                         ) : null}
-                        {canReadPaper && currentPaperKind ? (
+                        {canReadPaper &&
+                        (approvalDocument || currentPaperKind) ? (
                             <IconActionButton
                                 id={`workspace-task-detail-read-${toAutomationIdSegment(item.workItemId)}`}
                                 label={readActionLabel}
                                 testId={`work-item-read-document-${item.workItemId}`}
                                 onClick={() =>
-                                    setPaper({
-                                        kind: currentPaperKind,
-                                        objectId: item.businessObjectId,
-                                        title: item.stableNumber,
-                                    })
+                                    setPaper(
+                                        approvalDocument && instanceId
+                                            ? {
+                                                  kind: "approval_snapshot",
+                                                  objectId: instanceId,
+                                                  title: item.stableNumber,
+                                              }
+                                            : currentPaperKind
+                                              ? {
+                                                    kind: currentPaperKind,
+                                                    objectId:
+                                                        item.businessObjectId,
+                                                    title: item.stableNumber,
+                                                }
+                                              : null,
+                                    )
                                 }
                             >
                                 <FileTextIcon aria-hidden="true" />
@@ -616,7 +641,10 @@ function WorkspaceDocumentTaskDetail({
                 ) : null}
 
                 {briefLines && briefLines.length > 0 ? (
-                    <DetailBlock title="明细" description={`${lineCount} 行`}>
+                    <DetailBlock
+                        title={approvalDocument ? "提交资料摘要" : "明细"}
+                        description={`${lineCount} 行`}
+                    >
                         <ul className="flex flex-col text-sm">
                             {briefLines.map((line, lineIndex) => (
                                 <li
@@ -645,9 +673,11 @@ function WorkspaceDocumentTaskDetail({
                         </ul>
                         {briefMoreCount ? (
                             <p className="text-xs text-muted-foreground">
-                                {canReadPaper
-                                    ? `另有 ${briefMoreCount} 行，${readActionLabel}可看全部明细`
-                                    : `另有 ${briefMoreCount} 行，${openActionLabel}查看`}
+                                {approvalDocument
+                                    ? `本摘要未包含另外 ${briefMoreCount} 行。请核对提交资料中的附件；资料不足时请发起人补充后重新提交。`
+                                    : canReadPaper
+                                      ? `另有 ${briefMoreCount} 行，${readActionLabel}可看全部明细`
+                                      : `另有 ${briefMoreCount} 行，${openActionLabel}查看`}
                             </p>
                         ) : null}
                     </DetailBlock>

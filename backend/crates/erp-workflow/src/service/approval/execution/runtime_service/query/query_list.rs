@@ -1,8 +1,5 @@
 //! 运行实例 Mine / Started / Managed 列表查询。
 
-use std::collections::hash_map::Entry;
-use std::collections::{HashMap, HashSet};
-
 use application_core::AuditActor;
 use persistence_core::{Executor, NoTransaction, Transactional};
 
@@ -25,11 +22,10 @@ use crate::repository::approval_integration::{
 use crate::repository::bpm::{ApprovalInstanceListCursor, ApprovalInstanceListFilter};
 use crate::repository::prelude::*;
 use crate::repository::{ApprovalIntegrationExt, BpmExt, WorkItemExt};
-use crate::service::approval::approval_document_read_scope_with_executor;
+use crate::service::approval::approval_participant_permissions_with_executor;
 use crate::service::approval::business_adapter::adapter_spec_of;
 use crate::service::approval::policy::{ALL_DOCUMENT_TYPES, DocumentApprovalPolicy, policy_of};
 use crate::service::approval::process_kind::process_kind_of;
-use crate::service::approval::scope::ApprovalManagementScope;
 
 impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     /// 返回由开放审批任务映射的运行实例列表页。
@@ -51,6 +47,9 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         actor: &AuditActor,
         query: &RuntimeInstanceListQuery,
     ) -> Result<RuntimeInstanceListPage> {
+        if !approval_participant_permissions_with_executor(&self.auth, actor, &mut NoTransaction).await? {
+            return Ok(RuntimeInstanceListPage { items: Vec::new(), total: 0, next_cursor: None });
+        }
         let document_type = query.document_type.as_deref().map(parse_document_type).transpose()?;
         let cursor = query
             .cursor
@@ -204,14 +203,12 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         scan.cursor = None;
         scan.limit = 100;
         let mut allowed = Vec::new();
-        let mut read_scopes = HashMap::new();
         loop {
             let page = ApprovalRuntimeReadRepository::new(&self.db).search(&scan, scope, executor).await?;
             if page.items.is_empty() {
                 break;
             }
-            self.append_authorized_batch(actor, query, &page.items, &mut allowed, &mut read_scopes, executor)
-                .await?;
+            self.append_authorized_batch(actor, query, &page.items, &mut allowed, executor).await?;
             let last = page.items.last().expect("nonempty batch");
             let cursor = cursor_from_summary(scan.view, &last.instance);
             scan.cursor = Some(ApprovalInstanceListCursor { sort_time: cursor.sort_time, id: cursor.id });
@@ -225,42 +222,24 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         query: &RuntimeInstanceListQuery,
         items: &[ApprovalRuntimeReadRow],
         allowed: &mut Vec<String>,
-        read_scopes: &mut HashMap<DocumentType, ApprovalManagementScope>,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let keys = items
-            .iter()
-            .filter_map(|row| row.snapshot.as_ref())
-            .map(|snapshot| (snapshot.document_type, snapshot.business_object_id.clone()))
-            .collect::<HashSet<_>>();
-        let objects = self.auth.approval_scope_objects(&keys, executor).await?;
-        let sources = objects.values().filter_map(|object| object.order_source.clone()).collect();
-        let readable = self.auth.readable_order_sources(actor, &sources, executor).await?;
         for row in items {
             let Some(snapshot) = &row.snapshot else {
                 continue;
             };
-            let Some(object) = objects.get(&(snapshot.document_type, snapshot.business_object_id.clone()))
-            else {
-                continue;
-            };
-            if object.order_source.as_ref().is_some_and(|source| !readable.contains(source)) {
-                continue;
-            }
-            if query.view != RuntimeInstanceListView::Started {
-                if let Entry::Vacant(entry) = read_scopes.entry(snapshot.document_type) {
-                    let access = approval_document_read_scope_with_executor(
-                        &self.auth,
+            if query.view != RuntimeInstanceListView::Started
+                && !self
+                    .auth
+                    .approval_source_readable(
                         actor,
                         snapshot.document_type,
+                        &snapshot.business_object_id,
                         executor,
                     )
-                    .await?;
-                    entry.insert(access);
-                }
-                if !read_scopes[&snapshot.document_type].covers_object(object) {
-                    continue;
-                }
+                    .await?
+            {
+                continue;
             }
             if allowed.len() >= 20_000 {
                 return Err(Error::ValidationError(
@@ -310,17 +289,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         let mut scopes = Vec::new();
         for document_type in allowed {
             adapter_spec_of(document_type)?;
-            let organization_ids = if query.view == RuntimeInstanceListView::Started {
-                None
-            } else {
-                let scope =
-                    approval_document_read_scope_with_executor(&self.auth, actor, document_type, executor)
-                        .await?;
-                if scope.is_empty() {
-                    continue;
-                }
-                None
-            };
+            let organization_ids = None;
             scopes.push(ApprovalRuntimeReadTypeScope {
                 process_kind: process_kind_of(document_type),
                 organization_ids,

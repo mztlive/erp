@@ -6,6 +6,7 @@ pub mod auth;
 pub mod organization;
 pub mod organization_change;
 pub mod person_directory;
+pub mod policy_permission;
 pub mod rbac;
 pub mod role;
 

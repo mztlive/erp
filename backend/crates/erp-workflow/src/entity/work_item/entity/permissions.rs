@@ -268,6 +268,7 @@ impl WorkItemType {
                 | Self::CustomerAcceptanceRegistration
                 | Self::SupplierPaymentExecution
                 | Self::SalesInvoiceExecution
+                | Self::SupplierSettlementReview
         )
     }
 }
@@ -353,5 +354,16 @@ mod tests {
                 .customer_acceptance_execution_permissions("unknown")
                 .is_none()
         );
+    }
+}
+
+#[cfg(test)]
+mod settlement_owner_tests {
+    use super::WorkItemType;
+
+    #[test]
+    fn settlement_review_requires_explicit_owner_participation() {
+        assert!(WorkItemType::SupplierSettlementReview.uses_explicit_owner_authorization());
+        assert!(!WorkItemType::BusinessException.uses_explicit_owner_authorization());
     }
 }

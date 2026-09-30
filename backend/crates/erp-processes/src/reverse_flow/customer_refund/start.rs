@@ -42,6 +42,7 @@ impl ReturnsProcess {
         let recovery_subject_version = refund.approval_subject_version;
         let persisted = persist_customer_refund_start(
             &self.db,
+            &self.rbac,
             CustomerRefundStartPersistInput {
                 refund,
                 actor: actor.clone(),
@@ -93,14 +94,14 @@ impl ReturnsProcess {
                             .find_by_id(&refund.customer_id, executor)
                             .await?
                             .ok_or_else(|| Error::NotFound("客户不存在".to_string()))?;
-                        let organization_id = customer_refund_responsible_org_id(customer.party_id.as_ref())?;
+                        customer_refund_responsible_org_id(customer.party_id.as_ref())?;
                         ensure_return_start_replay_authorized(
                             &db,
                             &rbac,
                             &actor,
                             DocumentType::CustomerRefund,
                             "customer_refund:submit",
-                            &organization_id,
+                            &refund_id,
                             executor,
                         )
                         .await?;
@@ -162,14 +163,14 @@ impl ReturnsProcess {
                         .find_by_id(&refund.customer_id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("客户不存在".to_string()))?;
-                    let organization_id = customer_refund_responsible_org_id(customer.party_id.as_ref())?;
+                    customer_refund_responsible_org_id(customer.party_id.as_ref())?;
                     ensure_return_start_replay_authorized(
                         &db,
                         &rbac,
                         &actor,
                         DocumentType::CustomerRefund,
                         "customer_refund:submit",
-                        &organization_id,
+                        &refund_id,
                         executor,
                     )
                     .await?;

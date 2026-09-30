@@ -1,6 +1,7 @@
 //! 已接线 DataScope v2 消费者登记；不得用初始化清单代替准入。
 
 use crate::access_control::{DataScopeType, ScopeBinding, ScopeDimension};
+use crate::entity::access_control::authorization_policy::AuthorizationPolicy;
 use crate::entity::access_control::person_scope::PersonScopeExpression;
 use crate::error::{Error, Result};
 
@@ -120,7 +121,8 @@ pub fn registration(resource: &str, action: &str) -> Result<ConsumerRegistration
         return Err(Error::ValidationError(format!("{resource}:{action} 尚未接入 DataScope v2")));
     }
     Ok(ConsumerRegistration {
-        default_self: PersonScopeExpression::default_self(resource),
+        default_self: AuthorizationPolicy::for_action(resource, action)?.configurable()
+            && PersonScopeExpression::default_self(resource),
         supported_dimensions: entry.2,
         required_dimensions: if resource == "approval_instance" { &[] } else { entry.2 },
         allows_history: matches!(resource, "customer" | "contract" | "sales_order" | "purchase_order")
@@ -176,6 +178,19 @@ pub fn validate_binding(binding: &ScopeBinding) -> Result<()> {
     Ok(())
 }
 
+/// 校验独立范围配置准入；运行消费者登记不等于可编辑配置。
+/// # 参数
+/// `resource` 与 `action` 为待写入的资源动作。
+/// # 返回
+/// 可配置动作的消费者登记。
+/// # 错误
+/// 未接线或采用来源、任务、角色授权的动作拒绝。
+pub fn configurable_registration(resource: &str, action: &str) -> Result<ConsumerRegistration> {
+    let consumer = registration(resource, action)?;
+    AuthorizationPolicy::for_action(resource, action)?.ensure_configurable()?;
+    Ok(consumer)
+}
+
 /// 返回支持本人默认与部门扩展的已接线业务及动作。
 /// # 参数
 /// 无。
@@ -196,6 +211,25 @@ pub fn department_resources() -> impl Iterator<Item = (&'static str, &'static [&
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wired_runtime_catalog_does_not_admit_retired_scope_configuration() {
+        for (resource, actions, _) in WIRED_CONSUMERS {
+            for action in *actions {
+                let policy = AuthorizationPolicy::for_action(resource, action).unwrap();
+                let runtime = registration(resource, action).unwrap();
+                assert_eq!(configurable_registration(resource, action).is_ok(), policy.configurable());
+                if !policy.configurable() {
+                    assert!(!runtime.default_self);
+                }
+            }
+        }
+        for (resource, action) in [("contract", "update"), ("sales_selection_proposal", "get")] {
+            assert!(configurable_registration(resource, action).is_err());
+            let source = AuthorizationPolicy::scope_source(resource, action);
+            assert!(configurable_registration(source.0, source.1).is_ok());
+        }
+    }
 
     #[test]
     fn binding_checks_every_action_and_dimension_even_when_disabled() {
@@ -361,7 +395,7 @@ mod tests {
             assert!(!registration(resource, action).unwrap().default_self);
         }
         assert!(registration("product", "list").unwrap().default_self);
-        assert!(registration("supplier_payment", "detail").unwrap().default_self);
+        assert!(!registration("supplier_payment", "detail").unwrap().default_self);
         assert!(registration("integration_error_task", "list").unwrap().default_self);
     }
 }

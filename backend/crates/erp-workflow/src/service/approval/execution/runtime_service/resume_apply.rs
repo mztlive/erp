@@ -12,7 +12,6 @@ use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::super::apply_plan::PlannedWrites;
-use super::super::authorization::{AuthorizationFailure, converge_eligibility};
 use super::super::idempotency::{
     PreparedCommandIdentity, ReceiptBranch, map_receipt_first_write_error, normalize_idempotency_key,
     payload_conflict_error, resume_identity,
@@ -33,18 +32,14 @@ use super::{
     persisted_command_view_with_executor, recover_by_replay, require_cas_applied,
 };
 use crate::entity::approval_integration::ApprovalSubjectSnapshot;
-use crate::entity::document_registry::DocumentType;
 use crate::entity::work_item::WorkItemStatus;
 use crate::error::{Error, ErrorCode, Result};
 use crate::ports::PreparedWorkflowAudit;
 use crate::repository::bpm::ApprovalInstanceListProjection;
 use crate::repository::prelude::*;
 use crate::repository::{ApprovalIntegrationExt, BpmExt, WorkItemExt};
-use crate::service::approval::business_adapter::{
-    BindingRevalidationContext, adapter_object_read_decision_with, adapter_spec_of,
-};
-use crate::service::approval::policy::STATIC_APPROVE_PERMISSION;
-use crate::service::approval::{ApprovalResumeCommand, approval_recovery_scope};
+use crate::service::approval::business_adapter::adapter_spec_of;
+use crate::service::approval::{ApprovalResumeCommand, require_approval_management_with_executor};
 
 /// 人员恢复时对旧关闭任务执行的只读并发守卫。
 struct ClosedTaskGuard {
@@ -101,53 +96,21 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         spec: &crate::service::approval::business_adapter::ApprovalAdapterSpec,
         executor: &mut dyn Executor,
     ) -> Result<Eligibility> {
-        if spec.document_type == DocumentType::StockAdjustment {
-            return revalidate_decision_approver(
-                &self.db,
-                &self.auth,
-                self.object_read.as_ref(),
-                RevalidateDecisionApproverInput {
-                    assignee_id,
-                    assignee_name,
-                    authenticated_actor: None,
-                    snapshot,
-                    spec,
-                    separation_policy: process_required_separation_policy(snapshot.document_type)?,
-                },
-                executor,
-            )
-            .await;
-        }
-        let failure = match self.auth.load_account(assignee_id, executor).await? {
-            Some(account) if account.is_active_backoffice() => {
-                if self
-                    .auth
-                    .enforce(
-                        &crate::entity::work_item::casbin_subject(account.kind, &account.id),
-                        STATIC_APPROVE_PERMISSION,
-                    )
-                    .await?
-                {
-                    let context = BindingRevalidationContext::new(
-                        snapshot.payload.responsible_org_id.clone(),
-                        String::new(),
-                    );
-                    match adapter_object_read_decision_with(
-                        spec,
-                        &context,
-                        assignee_id,
-                        self.object_read.as_ref(),
-                    )? {
-                        Some(true) => None,
-                        _ => Some(AuthorizationFailure::CannotReadSubject),
-                    }
-                } else {
-                    Some(AuthorizationFailure::NotEligible)
-                }
+        revalidate_decision_approver(
+            &self.db,
+            &self.auth,
+            self.object_read.as_ref(),
+            RevalidateDecisionApproverInput {
+                assignee_id,
+                assignee_name,
+                authenticated_actor: None,
+                snapshot,
+                spec,
+                separation_policy: process_required_separation_policy(snapshot.document_type)?,
             },
-            _ => Some(AuthorizationFailure::AccountInactive),
-        };
-        converge_eligibility(assignee_id, assignee_name, failure)
+            executor,
+        )
+        .await
     }
 
     /// 在原审批人重新合格后恢复当前受阻执行。
@@ -234,19 +197,15 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                 instance.subject_version,
             )
             .map_err(|_| Error::ConflictError("审批实例与冻结业务快照不一致".to_string()))?;
-        let recovery_scope = approval_recovery_scope(&self.auth, actor).await?;
-        if !recovery_scope.covers_object(
-            &self
-                .auth
-                .approval_scope_object(
-                    snapshot.document_type,
-                    &snapshot.business_object_id,
-                    &mut NoTransaction,
-                )
-                .await?,
-        ) {
-            return Err(Error::Forbidden("无权恢复该责任组织的审批实例".to_string()));
-        }
+        require_approval_management_with_executor(
+            &self.auth,
+            actor,
+            "approval_instance:resume",
+            document_type,
+            &snapshot.business_object_id,
+            &mut NoTransaction,
+        )
+        .await?;
         let spec = adapter_spec_of(document_type)?;
         let eligibility = self
             .revalidate_approver(
@@ -312,41 +271,37 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         let rbac = self.auth.clone();
         let object_read = Arc::clone(&self.object_read);
         let audit_port = Arc::clone(&self.audit);
-        let stock_resume_revalidation = (document_type == DocumentType::StockAdjustment).then(|| {
+        let resume_revalidation = {
             (
                 assignee.current_assignee_participant_id.as_str().to_string(),
                 current.assignee_name_snapshot.clone(),
                 snapshot.clone(),
                 spec.clone(),
             )
-        });
+        };
+        let recovery_actor = actor.clone();
         let recovery_identity = identity.clone();
         let recovery_instance_id = instance_id.clone();
         let view = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    if let Some((assignee_id, assignee_name, snapshot, spec)) =
-                        stock_resume_revalidation.as_ref()
-                    {
-                        let eligibility = revalidate_decision_approver(
-                            &db,
-                            &rbac,
-                            object_read.as_ref(),
-                            RevalidateDecisionApproverInput {
-                                assignee_id,
-                                assignee_name,
-                                authenticated_actor: None,
-                                snapshot,
-                                spec,
-                                separation_policy: process_required_separation_policy(
-                                    snapshot.document_type,
-                                )?,
-                            },
-                            executor,
-                        )
-                        .await?;
-                        ensure_resume_approver_recovered(&eligibility)?;
-                    }
+                    let (assignee_id, assignee_name, snapshot, spec) = &resume_revalidation;
+                    revalidate_resume_with_executor(
+                        &db,
+                        &rbac,
+                        object_read.as_ref(),
+                        &recovery_actor,
+                        RevalidateDecisionApproverInput {
+                            assignee_id,
+                            assignee_name,
+                            authenticated_actor: None,
+                            snapshot,
+                            spec,
+                            separation_policy: process_required_separation_policy(snapshot.document_type)?,
+                        },
+                        executor,
+                    )
+                    .await?;
                     persist_resume_writes(
                         &db,
                         ResumePersistInput {
@@ -483,6 +438,28 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     }
 }
 
+/// 在恢复写入的同一事务中重验管理者及原审批人，所有单据类型一致执行。
+async fn revalidate_resume_with_executor(
+    db: &Database,
+    rbac: &impl crate::ports::WorkflowAuthorizationPort,
+    object_read: &dyn crate::ports::ApprovalObjectReadPort,
+    actor: &AuditActor,
+    input: RevalidateDecisionApproverInput<'_>,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    require_approval_management_with_executor(
+        rbac,
+        actor,
+        "approval_instance:resume",
+        input.snapshot.document_type,
+        &input.snapshot.business_object_id,
+        executor,
+    )
+    .await?;
+    let eligibility = revalidate_decision_approver(db, rbac, object_read, input, executor).await?;
+    ensure_resume_approver_recovered(&eligibility)
+}
+
 /// 原审批人恢复回放先按当前账号与责任组织授权，再允许读取和比较收据。
 async fn replay_resume_apply(
     db: &Database,
@@ -498,18 +475,15 @@ async fn replay_resume_apply(
         .await?
         .ok_or_else(hidden_not_found)?;
     let (_, snapshot) = load_exact_runtime_snapshot(db, &instance, executor, true).await?;
-    let (recovery_scope, _) = crate::service::approval::scope::permission_scope_and_roles_with_executor(
+    require_approval_management_with_executor(
         rbac,
         actor,
         "approval_instance:resume",
+        snapshot.document_type,
+        &snapshot.business_object_id,
         executor,
     )
     .await?;
-    if !recovery_scope.covers_object(
-        &rbac.approval_scope_object(snapshot.document_type, &snapshot.business_object_id, executor).await?,
-    ) {
-        return Err(Error::Forbidden("无权恢复该责任组织的审批实例".to_string()));
-    }
     let Some(receipt) = find_receipt_for_identity(db, identity, executor).await? else {
         return Ok(None);
     };

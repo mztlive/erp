@@ -338,6 +338,14 @@ fn apply_subject_display(
     fact: &WorkbenchObjectFact,
     subject: Option<&WorkbenchSubjectDisplay>,
 ) {
+    if fields.work_item_type == WorkItemType::DocumentApproval {
+        fields.counterparty_label = subject.and_then(|item| item.counterparty_label.clone());
+        fields.brief_source = subject.and_then(|item| item.brief_source.clone());
+        if let Some(impact) = subject.and_then(|item| item.impact_summary.clone()) {
+            fields.impact_summary = Some(impact);
+        }
+        return;
+    }
     fields.counterparty_label = subject
         .filter(|item| item.brief_source.is_some())
         .map(|item| item.counterparty_label.clone())
@@ -756,6 +764,22 @@ mod authority_display_tests {
         )
         .unwrap()
         .into()
+    }
+
+    #[test]
+    fn approval_missing_submission_never_inherits_current_impact() {
+        let mut fact = WorkbenchObjectFact::from_authority(ObjectFact::new("root", "title", "creator"));
+        fact.display.impact_summary = Some("current confidential amount".into());
+        fact.display.counterparty_label = Some("current customer".into());
+        let mut fields = fields();
+        fields.work_item_type = WorkItemType::DocumentApproval;
+        apply_object_display(&mut fields, &fact);
+        assert_eq!(fields.impact_summary, None);
+        assert_eq!(fields.counterparty_label, None);
+        assert!(fields.brief_source.is_none());
+        fields.impact_summary = Some("frozen task impact".into());
+        apply_object_display(&mut fields, &fact);
+        assert_eq!(fields.impact_summary.as_deref(), Some("frozen task impact"));
     }
 
     #[test]

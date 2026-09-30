@@ -1,23 +1,13 @@
 "use client"
 import * as React from "react"
-import { SlidersHorizontalIcon } from "lucide-react"
 import { BusinessFailureState } from "@/components/business"
 import { Input } from "@/components/ui/input"
-import {
-    Table,
-    TableHeader,
-    TableBody,
-    TableHead,
-    TableRow,
-    TableCell,
-} from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { actionLabel, resourceLabel } from "@/lib/permission-catalog"
-import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { OrgUnit } from "@/features/organization/types"
 import { usePersonScopes } from "../../hooks/use-person-data-scopes"
 import type { PersonalGrantDraft } from "../../hooks/use-personal-grant-draft"
-import { personEffectiveDescription } from "../../api/person-data-scopes"
+import { PersonalPolicyTable } from "./personal-policy-table"
 import { PersonalGrantForm } from "./personal-grant-form"
 
 export function PersonalBusinessPermissions({
@@ -58,7 +48,9 @@ export function PersonalBusinessPermissions({
             !ready ||
             (query.isSuccess &&
                 !query.data.businesses.some(
-                    (business) => business.resource === editing,
+                    (business) =>
+                        business.resource === editing &&
+                        business.configurable_actions.length > 0,
                 )))
 
     const businesses =
@@ -72,7 +64,7 @@ export function PersonalBusinessPermissions({
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="space-y-1">
                     <h2 className="font-semibold">
-                        业务数据范围
+                        数据访问与授权
                         {query.isSuccess && (
                             <span className="ml-2 text-xs font-normal text-muted-foreground">
                                 {query.data.businesses.length} 项业务
@@ -81,7 +73,7 @@ export function PersonalBusinessPermissions({
                     </h2>
                     <p className="text-xs text-muted-foreground">
                         仅列出{name}
-                        通过有效角色获得的业务操作。适用业务默认包含本人负责的数据，追加授权按操作合并。
+                        通过有效角色获得的操作。业务范围、治理委派和目录可见分别配置；来源继承及流程指派由对应业务规则决定。
                     </p>
                 </div>
                 <Input
@@ -135,7 +127,7 @@ export function PersonalBusinessPermissions({
                 <p role="status">正在读取数据范围…</p>
             ) : !query.data.businesses.length ? (
                 <p className="text-muted-foreground">
-                    尚无可配置的业务操作，请先为此人分配有效角色。
+                    尚无需要说明的数据访问政策，请先核对有效角色。
                 </p>
             ) : (
                 <>
@@ -158,143 +150,37 @@ export function PersonalBusinessPermissions({
                             ，请先保存或取消，再调整其他业务。
                         </p>
                     )}
-                    <Table className="min-w-[640px] table-fixed">
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead className="w-[16%]">业务</TableHead>
-                                <TableHead className="w-[36%]">
-                                    已有操作权限
-                                </TableHead>
-                                <TableHead>当前数据范围</TableHead>
-                                <TableHead className="w-32 text-right">
-                                    设置
-                                </TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {!businesses.length && (
-                                <TableRow>
-                                    <TableCell
-                                        colSpan={4}
-                                        className="py-8 text-center text-muted-foreground"
-                                    >
-                                        没有匹配的业务，请修改搜索内容。
-                                    </TableCell>
-                                </TableRow>
-                            )}
-                            {businesses.map((business) => {
-                                const data = query.data!
-                                const scopes = business.actions.map((action) =>
-                                    data.items.find(
-                                        (item) =>
-                                            item.resource ===
-                                                business.resource &&
-                                            item.action === action,
-                                    ),
-                                )
-                                const mixed =
-                                    new Set(
-                                        scopes.map((scope) =>
-                                            JSON.stringify(scope?.expression),
-                                        ),
-                                    ).size > 1
-                                const saved =
-                                    business.default_self ||
-                                    scopes.some(Boolean)
-                                const segment = toAutomationIdSegment(
-                                    business.resource,
-                                )
-                                return (
-                                    <React.Fragment key={business.resource}>
-                                        <TableRow>
-                                            <TableCell className="whitespace-normal font-medium">
-                                                {resourceLabel(
-                                                    business.resource,
-                                                )}
-                                            </TableCell>
-                                            <TableCell className="whitespace-normal text-xs leading-5 text-muted-foreground">
-                                                {business.actions
-                                                    .map(actionLabel)
-                                                    .join("、")}
-                                            </TableCell>
-                                            <TableCell className="whitespace-normal">
-                                                {mixed ? (
-                                                    <details className="text-xs leading-6">
-                                                        <summary
-                                                            id={`person-scope-${segment}-details`}
-                                                            className="cursor-pointer font-medium"
-                                                        >
-                                                            按操作合并范围 ·
-                                                            展开查看
-                                                        </summary>
-                                                        <ul className="mt-2 space-y-1 text-muted-foreground">
-                                                            {business.actions.map(
-                                                                (
-                                                                    action,
-                                                                    index,
-                                                                ) => (
-                                                                    <li
-                                                                        key={
-                                                                            action
-                                                                        }
-                                                                    >
-                                                                        {actionLabel(
-                                                                            action,
-                                                                        )}
-                                                                        ：
-                                                                        {personEffectiveDescription(
-                                                                            scopes[
-                                                                                index
-                                                                            ],
-                                                                            business,
-                                                                            labels,
-                                                                        )}
-                                                                    </li>
-                                                                ),
-                                                            )}
-                                                        </ul>
-                                                    </details>
-                                                ) : (
-                                                    <p
-                                                        className={`text-xs leading-6 ${saved ? "" : "text-amber-700"}`}
-                                                    >
-                                                        {personEffectiveDescription(
-                                                            scopes[0],
-                                                            business,
-                                                            labels,
-                                                        )}
-                                                    </p>
-                                                )}
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                {canCreate && (
-                                                    <Button
-                                                        id={`person-scope-${segment}-edit`}
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className="h-7"
-                                                        disabled={
-                                                            Boolean(editing) ||
-                                                            !ready
-                                                        }
-                                                        onClick={() => {
-                                                            setNotice(null)
-                                                            setEditing(
-                                                                business.resource,
-                                                            )
-                                                        }}
-                                                    >
-                                                        <SlidersHorizontalIcon data-icon="inline-start" />
-                                                        管理范围
-                                                    </Button>
-                                                )}
-                                            </TableCell>
-                                        </TableRow>
-                                    </React.Fragment>
-                                )
-                            })}
-                        </TableBody>
-                    </Table>
+                    <PersonalPolicyTable
+                        businesses={businesses}
+                        data={query.data}
+                        labels={labels}
+                        canEdit={canCreate && ready}
+                        editing={editing}
+                        onEdit={(resource) => {
+                            setNotice(null)
+                            setEditing(resource)
+                        }}
+                    />
+                    {query.data.retired_items.length > 0 && (
+                        <details className="border-t pt-3 text-xs text-muted-foreground">
+                            <summary
+                                id="person-scope-retired-details"
+                                className="cursor-pointer leading-6"
+                            >
+                                {query.data.retired_items.length}{" "}
+                                项旧范围已停用，仅保留审计记录
+                            </summary>
+                            <ul className="mt-2 space-y-2">
+                                {query.data.retired_items.map((item) => (
+                                    <li key={`${item.resource}:${item.action}`}>
+                                        {resourceLabel(item.resource)} ·{" "}
+                                        {actionLabel(item.action)}：
+                                        {item.reason}
+                                    </li>
+                                ))}
+                            </ul>
+                        </details>
+                    )}
                     {editing && ready && canCreate && !unavailableDraft && (
                         <PersonalGrantForm
                             key={editing}

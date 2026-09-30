@@ -4,9 +4,9 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use application_core::AuditActor;
 use erp_workflow::WorkflowAuthorizationPort;
-use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::work_item::WorkItemStatus;
 use erp_workflow::ports::{ObjectFactMap, OrderTaskSource, RolePermissionSnapshotFact, WorkflowAccountFact};
+use erp_workflow::service::approval::approval_participant_permissions_with_executor;
 use erp_workflow::service::work_item::access::required_execution_permissions;
 use persistence_core::Executor;
 
@@ -25,7 +25,7 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
         self.qualify_approvals(items, executor).await?;
         let keys = items
             .iter()
-            .filter(|item| item.status == WorkItemStatus::Open)
+            .filter(|item| item.status == WorkItemStatus::Open && !item.work_item_type.is_document_approval())
             .filter_map(|item| {
                 item.work_item_type
                     .brief_relation(&item.business_object_type)
@@ -41,73 +41,37 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
         self.qualify_owner_groups(items, groups, executor).await
     }
 
-    /// 当前审批动作范围失效时保留原负责人并移除决定动作。
+    /// 任务链已由工作流服务校验；投影仅复核当前审批人账号和静态资格。
     async fn qualify_approvals(&self, items: &mut [WorkItemView], executor: &mut dyn Executor) -> Result<()> {
-        let mut keys = HashSet::new();
-        let mut owners = BTreeSet::new();
-        for item in items
+        let owners = items
             .iter()
-            .filter(|i| i.status == WorkItemStatus::Open && i.work_item_type.is_document_approval())
-        {
-            let kind = DocumentType::try_from_code(&item.business_object_type)
-                .map_err(|_| Error::Internal("审批任务类型未登记".into()))?;
-            keys.insert((kind, item.business_object_id.clone()));
-            if let Some(id) = &item.owner_user_id {
-                owners.insert(id.clone());
-            }
-        }
-        if keys.is_empty() {
+            .filter(|item| item.status == WorkItemStatus::Open && item.work_item_type.is_document_approval())
+            .filter_map(|item| item.owner_user_id.clone())
+            .collect::<BTreeSet<_>>();
+        if owners.is_empty() {
             return Ok(());
         }
-        let objects = self.auth.approval_scope_objects(&keys, executor).await?;
         let accounts = self
             .auth
             .load_accounts(&owners.into_iter().collect::<Vec<_>>(), executor)
             .await?
             .into_iter()
-            .map(|a| (a.id.clone(), a))
+            .map(|account| (account.id.clone(), account))
             .collect::<HashMap<_, _>>();
-        let mut decisions = HashMap::new();
-        let mut reads = HashMap::new();
+        let mut eligible = HashMap::new();
+        for account in accounts.values() {
+            let actor = AuditActor::new(account.id.clone(), account.login_account.clone(), account.kind);
+            eligible.insert(
+                account.id.clone(),
+                account.is_active_backoffice()
+                    && approval_participant_permissions_with_executor(&self.auth, &actor, executor).await?,
+            );
+        }
         for item in items
             .iter_mut()
-            .filter(|i| i.status == WorkItemStatus::Open && i.work_item_type.is_document_approval())
+            .filter(|item| item.status == WorkItemStatus::Open && item.work_item_type.is_document_approval())
         {
-            let account = item
-                .owner_user_id
-                .as_ref()
-                .and_then(|id| accounts.get(id))
-                .filter(|a| a.is_active_backoffice());
-            let Some(account) = account else {
-                block_owner(item);
-                continue;
-            };
-            let kind = DocumentType::try_from_code(&item.business_object_type)
-                .map_err(|_| Error::Internal("审批任务类型未登记".into()))?;
-            let Some(object) = objects.get(&(kind, item.business_object_id.clone())) else {
-                block_owner(item);
-                continue;
-            };
-            let actor = AuditActor::new(account.id.clone(), account.login_account.clone(), account.kind);
-            if !decisions.contains_key(&account.id) {
-                decisions.insert(
-                    account.id.clone(),
-                    self.auth.resolve_workflow_scope(&actor, "approval_instance:decide", executor).await?,
-                );
-            }
-            let read_key = (account.id.clone(), kind);
-            if !reads.contains_key(&read_key) {
-                reads.insert(
-                    read_key.clone(),
-                    erp_workflow::service::approval::approval_document_read_scope_with_executor(
-                        &self.auth, &actor, kind, executor,
-                    )
-                    .await?,
-                );
-            }
-            if !decisions[&account.id].as_ref().is_some_and(|s| s.allows(object))
-                || !reads[&read_key].covers_object(object)
-            {
+            if !item.owner_user_id.as_ref().is_some_and(|owner| eligible.get(owner) == Some(&true)) {
                 block_owner(item);
             }
         }
@@ -180,7 +144,7 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
 /// 本人履约任务在仍有执行权时，不因缺少销售单详情而失效。
 ///
 /// 仓发的订单来源是销售单。仓储经办人没有销售单详情权限，任务却派给本人。
-/// 审批和非履约任务仍必须能读来源订单。
+/// 非审批、非履约任务仍必须能读来源订单；审批另走精确任务授权。
 fn order_source_allows_execution(readable: bool, executable: bool, fulfillment: bool) -> bool {
     readable || (fulfillment && executable)
 }
@@ -214,7 +178,10 @@ fn owner_groups(items: &[WorkItemView], facts: &ObjectFactMap) -> Result<OwnerGr
         let Some(relation) = item.work_item_type.brief_relation(&item.business_object_type) else {
             continue;
         };
-        if item.status != WorkItemStatus::Open || !OrderTaskSource::required_for(relation.object_kind) {
+        if item.status != WorkItemStatus::Open
+            || item.work_item_type.is_document_approval()
+            || !OrderTaskSource::required_for(relation.object_kind)
+        {
             continue;
         }
         let source = facts

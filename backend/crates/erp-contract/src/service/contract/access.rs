@@ -5,13 +5,14 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_core::common::time::{BusinessDate, Instant};
+use erp_core::ids::CustomerAccountId;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
 use crate::error::{Error, Result};
 use crate::ports::{
     ContractDataScopePort, ContractParticipantPort, ContractResolvedClause, ContractResolvedScope,
-    ContractScopeObject, CustomerAssignmentFactsPort,
+    ContractScopeObject, CustomerAssignmentFactsPort, CustomerFactsPort,
 };
 use crate::repository::ContractExt;
 use crate::repository::prelude::*;
@@ -24,6 +25,7 @@ pub struct ContractAccess {
     scope: Arc<dyn ContractDataScopePort>,
     assignments: Arc<dyn CustomerAssignmentFactsPort>,
     participants: Arc<dyn ContractParticipantPort>,
+    customers: Arc<dyn CustomerFactsPort>,
 }
 
 impl ContractAccess {
@@ -34,6 +36,7 @@ impl ContractAccess {
     /// * `scope` - 组合层注入的合同范围 Port
     /// * `assignments` - 当前客户主责与协作事实
     /// * `participants` - 合法单据参与事实
+    /// * `customers` - 在相同执行器中重验客户来源存在性
     ///
     /// # 返回
     /// 返回无授权缓存的访问服务，构造不执行 I/O。
@@ -48,8 +51,9 @@ impl ContractAccess {
         scope: Arc<dyn ContractDataScopePort>,
         assignments: Arc<dyn CustomerAssignmentFactsPort>,
         participants: Arc<dyn ContractParticipantPort>,
+        customers: Arc<dyn CustomerFactsPort>,
     ) -> Self {
-        Self { db, scope, assignments, participants }
+        Self { db, scope, assignments, participants, customers }
     }
 
     /// 在调用方事务内证明资源动作并映射合同责任条件。
@@ -90,9 +94,8 @@ impl ContractAccess {
         ensure_limit(owned.len(), "主责范围超过查询上限")?;
         ensure_limit(collaborating.len(), "协作范围超过查询上限")?;
         let org_owned = self.org_owned_customers(&access, as_of, executor).await?;
-        let limit_customers = access.user_limit.as_ref().and_then(|clause| {
-            clause_ids(&map_clause(clause, actor.id(), &collaborating), &owned, &org_owned)
-        });
+        let current = contract_scope(&access, actor.id(), &owned, &collaborating, Vec::new(), &org_owned);
+        let limit_customers = current.authorized_customer_ids;
         let history = if allows_history(action) {
             self.historical_contracts(actor.id(), limit_customers.as_deref(), executor).await?
         } else {
@@ -209,6 +212,9 @@ impl ContractAccess {
         scope: &ContractReadScope,
         executor: &mut dyn Executor,
     ) -> Result<ContractScopeObject> {
+        if self.customers.find_by_ids(&[CustomerAccountId::new(id)], executor).await?.is_empty() {
+            return Err(deny_object(&access.action));
+        }
         let owners = self
             .assignments
             .owner_user_ids_by_customer(&[id.to_string()], business_date(access.as_of)?, executor)
@@ -229,7 +235,7 @@ impl ContractAccess {
     ///
     /// # 参数
     /// * `user` - 当前账号
-    /// * `limit_customers` - 个人上限客户集合；`None` 表示不附加个人限制
+    /// * `limit_customers` - 当前客户来源范围；`None` 表示来源已授权公司范围
     /// * `executor` - 调用方执行器
     ///
     /// # 返回
@@ -239,7 +245,7 @@ impl ContractAccess {
     /// 超限或数据库读取失败时拒绝。
     ///
     /// # 关键业务约束
-    /// 不得由创建人、签约日期或业绩快照推导参与资格；结果仍受个人上限限制。
+    /// 不得由创建人、签约日期或业绩快照推导参与资格；结果不得突破当前客户来源范围。
     async fn historical_contracts(
         &self,
         user: &str,

@@ -65,7 +65,7 @@ impl FulfillmentOrderAccess {
     /// * `actor` - 已认证操作人
     /// * `action` - 已注册动作
     /// * `id` - 订单主键
-    /// * `handler_user_id` - 当前开放 W26 处理人；无任务时为空
+    /// * `handler_user_id` - 调用方携带的任务处理人；普通对象访问不以此授予权限
     /// * `executor` - 调用方执行器
     ///
     /// # 返回
@@ -82,10 +82,12 @@ impl FulfillmentOrderAccess {
         executor: &mut dyn Executor,
     ) -> Result<SupplierFulfillmentOrder> {
         let (access, scope) = self.resolve(actor, action, executor).await?;
-        let found = self.db.supplier_fulfillment_orders().find_by_id(id, executor).await?.filter(|item| {
-            in_scope(&scope, &item.follow_up_user_id, &item.business_org_unit_id)
-                || handler_user_id == Some(access.user_id.as_str())
-        });
+        let found = self
+            .db
+            .supplier_fulfillment_orders()
+            .find_by_id(id, executor)
+            .await?
+            .filter(|item| in_scope(&scope, &item.follow_up_user_id, &item.business_org_unit_id));
         let Some(order) = found else {
             return Err(Error::NotFound("供应商履约订单不存在或无权查看".into()));
         };
@@ -100,7 +102,7 @@ impl FulfillmentOrderAccess {
     /// # 参数
     /// * `access` - 当前动作已解析事实
     /// * `order` - 已加载订单
-    /// * `handler_user_id` - 当前开放 W26 处理人
+    /// * `handler_user_id` - 任务处理人；仅任务专用入口验证任务，不扩张普通范围
     ///
     /// # 返回
     /// 范围允许时为 true。
@@ -111,13 +113,12 @@ impl FulfillmentOrderAccess {
         &self,
         access: &FulfillmentOrderResolvedScope,
         order: &SupplierFulfillmentOrder,
-        handler_user_id: Option<&str>,
+        _handler_user_id: Option<&str>,
     ) -> Result<bool> {
         self.scope.allows(
             access,
             &FulfillmentOrderScopeObject {
-                owned: order.follow_up_user_id == access.user_id
-                    || handler_user_id == Some(access.user_id.as_str()),
+                owned: order.follow_up_user_id == access.user_id,
                 org_unit_id: Some(order.business_org_unit_id.clone()).filter(|id| !id.is_empty()),
             },
         )

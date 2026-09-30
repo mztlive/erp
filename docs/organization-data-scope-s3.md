@@ -83,13 +83,13 @@
 | 销售列表和候选 | `sales_center/order/{query,scope}.rs`、`erp-sales/src/repository/sales_order/{order,scope}.rs` | 列表、总数、候选及业务身份版本同事务读取；完整可见范围内形成负责人候选；返回前新事务复核 |
 | 销售详情 | `sales_center/order/query.rs` | HTTP 读取必须提供认证操作人；读取前和返回前各自检查当前详情动作、对象范围与单据版本；内部写命令回读不替代命令自己的授权 |
 | 销售主单命令 | `erp-processes/src/order_to_cash/{authorization,command/*,draft_working_copy,start_approval,cancel_approval}.rs` | 创建、保存、提交、撤回、作废按各自动作解析范围；原写入事务重验当前责任及版本；创建并提交分别检查两个动作范围且要求同一角色提供完整权限；幂等重放重验当前操作资格 |
-| 成本及分配 | `erp-read-models/src/finance/cost{.rs,/snapshot.rs}`、`erp-finance/src/dto/cost_scope.rs` | 目标成本动作和销售读取动作由同一合格角色提供；成本资源范围与销售对象范围交集；全量裁剪后计算总数、排序和分页 |
-| 盈亏收入与成本 | `finance/actual_profit_loss/access.rs` | 销售与成本查询的数据范围独立解析后求交；成本个人上限不得被销售 Company 范围绕过 |
-| 初始化 | `erp-identity/src/service/iam/predefined_data_scopes.rs` | 增加 `cost_entry:list/detail` 与 `cost_allocation:list` 显式资源清单；沿用原岗位规则及撤销留痕，不恢复管理员已撤销的范围 |
+| 成本及分配 | `erp-read-models/src/finance/cost{.rs,/snapshot.rs}`、`erp-finance/src/dto/cost_scope.rs` | 目标成本动作单独校验；分配继承销售来源边界，不再叠加成本镜像范围；全量裁剪后计算总数、排序和分页 |
+| 盈亏收入与成本 | `finance/actual_profit_loss/access.rs` | 销售与成本查询采用真实来源授权；完整成本及未分配成本另验 finance_ledger:read，不以销售 Company 单独授予整账资格 |
+| 初始化 | `erp-identity/src/service/iam/predefined_data_scopes.rs` | 只初始化可配置动作；成本派生记录不再生成独立范围，不恢复已撤销权限 |
 
 1. 销售列表、成本列表和成本分配列表第二页起必须携带 `scope_version`；缺失或变化返回 `DATA_SCOPE_CHANGED` 冲突。版本包含资源授权、组织及当前查询业务版本；不返回内部授权集合。
 2. 销售查询最多 10000 张匹配订单，成本读取最多 10000 笔候选成本、100000 条分配；超限必须整体拒绝并收窄条件，不得截断统计或导出。当前成本列表使用有界候选装载；大数据量查询计划仍须上线前验收。
-3. 整笔成本读取要求成本资源和关联销售资源均具有未被个人上限收窄的 Company 范围。其他范围只提供获授权分配；整笔含税、不含税、税额及完整来源引用返回 `null`，不得使用零值或差额替代。
+3. 整笔成本读取要求目标读取动作、明确的 `finance_ledger:read` 资格及来源范围完整覆盖。其他范围只提供获授权分配；整笔含税、不含税、税额及完整来源引用返回 `null`，不得使用零值或差额替代。
 4. `scope_gross_amount`、`scope_net_amount` 只合计当前返回的分配事实；预计、确认、实际和冲减阶段保持原事实方向，不因授权裁剪改变金额。未分配部分不得由可见分配推导获得。
 5. 部分成本读取不接受以完整来源字段探测隐藏单据；带来源单据条件时必须返回校验错误，不以空列表掩盖不适用组合。成本列表金额排序使用授权分配合计，不按隐藏整笔金额排序。
 6. 销售主单的历史参与仅用于 `list/detail`，不得用于任何写动作。客户独立接口的功能接入不得作为销售建单所选客户／合同依赖已经完整接入的证明；必须单独核对跨域调用链、对象范围和原事务重验。S2-12 已按 S2 核销；责任交接已按 S3-07 核销本地检查。
@@ -122,9 +122,11 @@
 | --- | --- | --- |
 | 销售列表／详情及主单命令 | `erp-read-models/src/sales_center/access.rs`；`erp-processes/src/order_to_cash/authorization.rs` | 命名组合用例可调用身份域公共解析；销售对象事实与条件映射必须唯一复用；按每个入口动作传递权限、执行器和版本；不得让销售域依赖组合层 |
 | 销售数据库条件与创建判定 | `erp-sales/src/repository/sales_order/scope.rs` | 数据库条件编译可保留在 Repository；生产单对象判定已复用公共入口（`SalesAccess::allows` → `ResolvedScope::allows`，`erp-read-models/src/sales_center/access.rs`），`allows_creation` 仅为 `#[cfg(test)]`，不进入生产授权；四类资源 A34／A36 及 S2 业务验收已按 S2 §6.6—§6.15、§8.3 核销；S3 销售内存等价见 `scope_equivalence.rs`，新增入口按 §6.2 核销本地检查 |
-| 成本分配与实际盈亏 | `erp-read-models/src/finance/cost/snapshot.rs`、`finance/actual_profit_loss/access.rs` | 分别解析销售与成本资源动作后求交，保留同角色完整权限及个人上限；金额裁剪继续由业务规则处理，不放入身份模型；不得复制 SalesAccess 或形成另一套授权默认值 |
+| 成本分配与实际盈亏 | `erp-read-models/src/finance/cost/snapshot.rs`、`finance/actual_profit_loss/access.rs` | 分别证明目标读取动作和真实来源边界；成本独立范围退出，完整读取另验整账资格；金额裁剪继续由业务规则处理，不放入身份模型；不得复制 SalesAccess 或形成另一套授权默认值 |
 | 客户／合同／采购依赖 | 客户、合同、采购均已建立本域 Port 并由 `erp-processes` 生产 adapter 调用 `DataScopeService`（S2 §4.1、§4.3）；A34 真实库等价已按 S2 §6.6 执行（客户 492、合同 486、采购 486 组），A36 解析层已按 S2 §6.7 执行，S2 业务验收已按 §6.14／§6.15、§8.3 核销 | 客户整改以 S2 登记为准；后续业务 Service 通过本域 Port，生产 adapter 在 erp-processes；S3 关联读取与命令已按各功能组核销本地检查，不以独立接口接入替代真实验收 |
 | 选品册、票款、履约、工作台、客户经营质量等剩余链路 | S3-08 已按主合同第 9.5 节补九列登记（见下表）；旧读取器残留已收敛：工作台详情／审批跟踪展示读取沿用调用方同一执行器（`query.rs detail_page`、`access.rs` 删除 `NoTransaction` 快照入口、`party_names.rs` 删除展示层独立执行器、`approval_list.rs` 复用调用方执行器），未发现 `scope_type/scope_targets` 再解析或 Company 回退 | 先登记事实来源、资源动作及必需维度，再接入公共解析；工作流 Port 已按 S2 §8.1 返回已解析事实，生产消费者不得读取原始范围（静态零阻断，S2 §6.10）；当前责任与历史归属各守其口径 |
+
+现行授权分类按[授权边界合同](authorization-boundary-contract.md)执行：合同继承客户，方案继承当前册；票款、成本按真实来源和获授权份额读取，结算应付必须使用结算来源。下表为原 S3 接入登记，仅保留历史证据，资金资源独立范围、同义交集及审批范围不得继续作为运行规范。
 
 #### S3-08 新增消费方登记（主合同 §9.5 第 1 条九列；基线 `730a847c`，登记稿自 `c842b4e8`）
 

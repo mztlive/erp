@@ -2,6 +2,8 @@
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
+pub use super::material_file::ApprovalMaterialFile;
+
 /// 同一审批版本的公共展示；身份只用于关联与导航，不授予阅读权限。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ApprovalDisplaySnapshot {

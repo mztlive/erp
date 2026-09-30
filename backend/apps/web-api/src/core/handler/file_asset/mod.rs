@@ -264,6 +264,13 @@ pub async fn document_attachment_create(
     erp_read_models::sales_center::access::SalesAccess::new(state.db(), state.rbac())
         .require_attachment(&actor, "update", req.document_id.as_ref())
         .await?;
+    erp_processes::approval_materials::authorize_attachment(
+        &state.db(),
+        &state.rbac(),
+        &actor,
+        req.file_asset_id.as_ref(),
+    )
+    .await?;
     let view = state.file_asset_service().attach_to_document(req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))

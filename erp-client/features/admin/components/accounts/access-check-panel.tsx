@@ -54,7 +54,7 @@ export function AccessCheckPanel({ accountId }: { accountId: string }) {
                 检查访问权限
             </h2>
             <p className="text-sm text-muted-foreground">
-                由服务端检查当前账号、角色与数据范围。销售单查看和修改可选择具体单据；结果不代替业务执行时校验。检查他人权限需要公司范围的组织读取及账号、角色、数据范围读取权限。
+                由服务端检查当前账号、角色与实际访问政策。销售单查看和修改可选择具体单据；来源继承与任务指派需要对应业务上下文，未核对具体对象时不会判定可处理。结果不代替业务执行时校验。检查他人权限需要公司范围的组织读取及账号、角色、数据范围读取权限。
             </p>
             <form
                 className="space-y-3"

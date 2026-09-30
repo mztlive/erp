@@ -5,6 +5,7 @@ use std::hash::{Hash, Hasher};
 
 use application_core::AuditActor;
 use erp_core::money::Amount;
+use erp_finance::entity::read_coverage::whole_document_readable;
 use erp_finance::ports::funds_scope::FundsResolvedScope;
 use erp_finance::repository::ReceivableExt;
 use erp_finance::repository::prelude::*;
@@ -312,7 +313,7 @@ impl FundsAccess {
         &self,
         query: &erp_finance::dto::receivable::CustomerReceiptListQuery,
         rows: Vec<CustomerReceiptRow>,
-        access: FundsResolvedScope,
+        _access: FundsResolvedScope,
         authorization: &FundsAuthorization,
         executor: &mut dyn Executor,
     ) -> Result<Vec<(CustomerReceiptRow, Vec<String>)>> {
@@ -326,11 +327,12 @@ impl FundsAccess {
             .receipt_operators(&ids, query.operator_kind, query.operator_user_ids.is_some(), executor)
             .await?;
         let condition = self.receipt_condition(query, executor).await?;
-        let whole = authorization.whole();
         let mut decided = Vec::new();
         for row in rows {
-            let empty_links: Vec<ReceiptLink> = Vec::new();
-            let row_links = links.get(&row.id).unwrap_or(&empty_links);
+            let row_links = links.get(&row.id).map(Vec::as_slice).unwrap_or_default();
+            if !linked_sources_exist(row_links.iter().map(|link| link.order.as_deref()), &facts) {
+                continue;
+            }
             let tuples = receipt_tuples(&row, row_links, &facts);
             let matched = matched_orders(&tuples, &allowed);
             let matched = filter_matched_orders(
@@ -343,9 +345,12 @@ impl FundsAccess {
             {
                 continue;
             }
-            let visible = row_visible(&access, &tuples, &[], &[])?;
-            let unlinked = row_links.iter().all(|link| link.order.is_none());
-            if !keep_row(visible, whole, !matched.is_empty(), row_links.is_empty() || unlinked) {
+            let whole = whole_document_readable(
+                authorization.ledger_read,
+                row_links.iter().map(|link| link.order.as_deref()),
+                &matched,
+            );
+            if !whole && matched.is_empty() {
                 continue;
             }
             let doc_operators = operators.get(&row.id).cloned().unwrap_or_default();
@@ -378,20 +383,22 @@ impl FundsAccess {
         let page_size = query.paging.page_size.max(1);
         let start = ((page - 1) as usize).saturating_mul(page_size as usize);
         let end = start.saturating_add(page_size as usize).min(decided.len());
-        let whole = authorization.whole();
-        let empty_links: Vec<ReceiptLink> = Vec::new();
-        let mut items = Vec::new();
-        if start < decided.len() {
-            for (row, matched) in decided[start..end].iter() {
-                let row_links = links.get(&row.id).unwrap_or(&empty_links);
-                items.push(self.cut_receipt_row(row, row_links, matched, whole));
-            }
-        }
+        let items = self.receipt_page_items(
+            decided.get(start..end).unwrap_or_default(),
+            &links,
+            authorization.ledger_read,
+        );
         let mut triples = Vec::new();
+        let mut whole = true;
         let mut whole_sum = zero_amount();
         for (row, matched) in decided.iter() {
-            let row_links = links.get(&row.id).unwrap_or(&empty_links);
+            let row_links = links.get(&row.id).map(Vec::as_slice).unwrap_or_default();
             triples.extend(summary_inputs(row_links, matched));
+            whole &= whole_document_readable(
+                authorization.ledger_read,
+                row_links.iter().map(|link| link.order.as_deref()),
+                matched,
+            );
             whole_sum = whole_sum.checked_add(row.amount);
         }
         let owner_of = facts
@@ -412,7 +419,7 @@ impl FundsAccess {
             organization_version: authorization.context.organizations.version,
             as_of: authorization.context.as_of.as_utc().to_rfc3339(),
             empty_reason: None,
-            scope_summary: "回款按核销关联销售当前负责人与登记/核销经办人授权；部分授权仅返获授权份额",
+            scope_summary: "回款继承销售核销来源范围；整单另需财务整账职责及全部来源可见",
             ownership_basis: "linked_sales_owner_and_receipt_operator",
         })
     }
@@ -459,7 +466,7 @@ impl FundsAccess {
         executor: &mut dyn Executor,
     ) -> Result<FundsScopedResult<ScopedCustomerReceiptRow>> {
         use erp_finance::repository::CustomerReceiptFilter;
-        let (access, authorization) = self.resolve(actor, "customer_receipt", "detail", executor).await?;
+        let (_access, authorization) = self.resolve(actor, "customer_receipt", "detail", executor).await?;
         let filter = CustomerReceiptFilter {
             keyword_ids: None,
             receipt_ids: Some(vec![id.to_string()]),
@@ -479,14 +486,18 @@ impl FundsAccess {
         let facts = self.sales_fact_map(&order_ids, executor).await?;
         let authorized = self.authorized_sales_ids(&authorization, executor).await?;
         let allowed = authorized.map(|list| list.into_iter().collect::<BTreeSet<_>>());
-        let empty_links: Vec<ReceiptLink> = Vec::new();
-        let row_links = links.get(&row.id).unwrap_or(&empty_links);
+        let row_links = links.get(&row.id).map(Vec::as_slice).unwrap_or_default();
+        if !linked_sources_exist(row_links.iter().map(|link| link.order.as_deref()), &facts) {
+            return Err(Error::NotFound("客户回款单不存在".into()));
+        }
         let tuples = receipt_tuples(&row, row_links, &facts);
         let matched = matched_orders(&tuples, &allowed);
-        let whole = authorization.whole();
-        let visible = row_visible(&access, &tuples, &[], &[])?;
-        let unlinked = row_links.iter().all(|link| link.order.is_none());
-        if !keep_row(visible, whole, !matched.is_empty(), row_links.is_empty() || unlinked) {
+        let whole = whole_document_readable(
+            authorization.ledger_read,
+            row_links.iter().map(|link| link.order.as_deref()),
+            &matched,
+        );
+        if !whole && matched.is_empty() {
             return Err(Error::NotFound("客户回款单不存在".into()));
         }
         let data = self.cut_receipt_row(&row, row_links, &matched, whole);
@@ -501,9 +512,31 @@ impl FundsAccess {
             organization_version: authorization.context.organizations.version,
             as_of: authorization.context.as_of.as_utc().to_rfc3339(),
             empty_reason: None,
-            scope_summary: "回款按核销关联销售当前负责人与登记/核销经办人授权；部分授权仅返获授权份额",
+            scope_summary: "回款继承销售核销来源范围；整单另需财务整账职责及全部来源可见",
             ownership_basis: "linked_sales_owner_and_receipt_operator",
         })
+    }
+}
+
+impl FundsAccess {
+    /// 只对当前分页已授权行投影金额，沿用逐单据整账覆盖判定。
+    fn receipt_page_items(
+        &self,
+        rows: &[(CustomerReceiptRow, Vec<String>)],
+        links: &HashMap<String, Vec<ReceiptLink>>,
+        ledger_read: bool,
+    ) -> Vec<ScopedCustomerReceiptRow> {
+        rows.iter()
+            .map(|(row, matched)| {
+                let row_links = links.get(&row.id).map(Vec::as_slice).unwrap_or_default();
+                let whole = whole_document_readable(
+                    ledger_read,
+                    row_links.iter().map(|link| link.order.as_deref()),
+                    matched,
+                );
+                self.cut_receipt_row(row, row_links, matched, whole)
+            })
+            .collect()
     }
 }
 

@@ -35,8 +35,8 @@ use erp_workflow::service::approval::execution::{
 };
 use erp_workflow::service::approval::process_kind::process_kind_of;
 use erp_workflow::service::approval::{
-    approval_actor_is_active_with_executor, approval_cancel_scope_with_executor,
-    approval_document_read_scope_with_executor, definition_management_visibility_with_executor,
+    approval_action_roles_with_executor, approval_actor_is_active_with_executor,
+    definition_management_visibility_with_executor,
 };
 use erp_workflow::{ApprovalIntegrationExt, BpmExt, WorkItemExt};
 use id_generator::next_id;
@@ -554,24 +554,13 @@ pub(crate) async fn ensure_cancel_authorized_with_executor(
             instance.subject_version,
         )
         .map_err(|_| Error::ConflictError("审批实例与冻结业务快照不一致".to_string()))?;
-    let cancel_scope = approval_cancel_scope_with_executor(
-        &crate::adapters::workflow::workflow_auth(db.clone(), rbac.clone()),
-        actor,
-        executor,
-    )
-    .await?;
-    let read_scope = approval_document_read_scope_with_executor(
-        &crate::adapters::workflow::workflow_auth(db.clone(), rbac.clone()),
-        actor,
-        DocumentType::StockAdjustment,
-        executor,
-    )
-    .await?;
-    let object = crate::adapters::workflow::workflow_auth(db.clone(), rbac.clone())
-        .approval_scope_object(DocumentType::StockAdjustment, &snapshot.business_object_id, executor)
-        .await?;
-    if !cancel_scope.covers_object(&object) || !read_scope.covers_object(&object) {
-        return Err(Error::Forbidden("无权撤回该责任组织的库存调整审批".to_string()));
+    let auth = crate::adapters::workflow::workflow_auth(db.clone(), rbac.clone());
+    let roles =
+        approval_action_roles_with_executor(&auth, actor, "approval_instance:cancel", executor).await?;
+    let read_roles =
+        approval_action_roles_with_executor(&auth, actor, "approval_instance:read", executor).await?;
+    if roles.is_empty() || read_roles.is_empty() {
+        return Err(Error::Forbidden("当前账号缺少撤回审批或读取权限".to_string()));
     }
     if snapshot.payload.submitted_by == actor.id() {
         return Ok(CancelAuthorization {
@@ -586,7 +575,16 @@ pub(crate) async fn ensure_cancel_authorized_with_executor(
         executor,
     )
     .await?;
-    if !visibility.runtime_admin_types().contains(&DocumentType::StockAdjustment) {
+    if !visibility.runtime_admin_types().contains(&DocumentType::StockAdjustment)
+        || !auth
+            .approval_source_readable(
+                actor,
+                DocumentType::StockAdjustment,
+                &snapshot.business_object_id,
+                executor,
+            )
+            .await?
+    {
         return Err(Error::Forbidden("只有原提交人或库存调整审批运行管理员可以撤回".to_string()));
     }
     Ok(CancelAuthorization {

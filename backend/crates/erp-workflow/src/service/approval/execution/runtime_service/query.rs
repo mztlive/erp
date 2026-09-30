@@ -26,7 +26,6 @@ use super::read_auth::{
 use super::{ApprovalRuntimeService, hidden_not_found};
 use crate::entity::approval_integration::ApprovalSubjectSnapshot;
 use crate::error::Result;
-use crate::ports::OrderTaskSource;
 use crate::repository::approval_integration::{ApprovalRuntimeReadRow, ApprovalRuntimeReadTypeScope};
 use crate::repository::bpm::{
     ApprovalInstanceListCursor, ApprovalInstanceListFilter, ApprovalInstanceListProjection,
@@ -36,8 +35,10 @@ use crate::repository::prelude::*;
 use crate::repository::{ApprovalIntegrationExt, BpmExt, WorkItemExt};
 use crate::service::approval::business_adapter::adapter_spec_of;
 use crate::service::approval::process_kind::process_kind_of;
-use crate::service::approval::scope::definition_management_visibility;
-use crate::service::approval::{approval_actor_is_active, approval_document_read_scope};
+use crate::service::approval::{
+    approval_action_roles_with_executor, approval_actor_is_active,
+    approval_participant_permissions_with_executor, require_approval_management_with_executor,
+};
 
 /// 实例列表行。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -235,7 +236,19 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         let subject = self.load_runtime_read_subject(instance_id).await?;
         self.ensure_management_runtime_read(actor, &subject).await?;
         let blocked = subject.instance.status == ApprovalProcessInstanceStatus::Blocked;
-        let actions = recovery_options_for(blocked, subject.instance.blocker_code);
+        let mut actions = Vec::new();
+        for action in recovery_options_for(blocked, subject.instance.blocker_code) {
+            let permission = match action {
+                RuntimeRecoveryAction::ResumeCurrentApprover => "approval_instance:resume",
+                RuntimeRecoveryAction::CancelBlocked => "approval_instance:cancel_blocked",
+            };
+            if !approval_action_roles_with_executor(&self.auth, actor, permission, &mut NoTransaction)
+                .await?
+                .is_empty()
+            {
+                actions.push(action);
+            }
+        }
         let hints = self.resume_version_hints(&subject).await?;
         Ok(RuntimeRecoveryOptionsView {
             instance_id: instance_id.to_string(),
@@ -320,15 +333,24 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     ///
     /// # 错误
     /// 账号失效时返回隐藏存在性的 NotFound；仓储失败时传播基础设施错误。
-    async fn ensure_active_instance_reader(&self, actor: &AuditActor) -> Result<()> {
-        if approval_actor_is_active(&self.auth, actor).await? {
+    pub(super) async fn ensure_active_instance_reader(&self, actor: &AuditActor) -> Result<()> {
+        if approval_actor_is_active(&self.auth, actor).await?
+            && !approval_action_roles_with_executor(
+                &self.auth,
+                actor,
+                "approval_instance:read",
+                &mut NoTransaction,
+            )
+            .await?
+            .is_empty()
+        {
             return Ok(());
         }
         Err(hidden_not_found())
     }
 
     /// 加载实例、当前执行与唯一冻结快照，并校验运行主体三元组。
-    async fn load_runtime_read_subject(&self, instance_id: &str) -> Result<RuntimeReadSubject> {
+    pub(super) async fn load_runtime_read_subject(&self, instance_id: &str) -> Result<RuntimeReadSubject> {
         let instance_id = ApprovalProcessInstanceId::new(instance_id);
         let instance = self
             .db
@@ -366,107 +388,80 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         Ok(RuntimeReadSubject { instance, current_execution, snapshot, document_type })
     }
 
-    /// 订单审批详情不能由启动人或历史责任绕过当前订单详情范围。
-    async fn ensure_order_approval_read(
+    /// 发起人和精确当前责任人读取冻结审批资料；其他人必须具备类型管理及来源读权。
+    pub(super) async fn ensure_ordinary_runtime_read(
         &self,
         actor: &AuditActor,
         subject: &RuntimeReadSubject,
     ) -> Result<()> {
-        if OrderTaskSource::approval_kind(subject.document_type).is_some()
-            && !self
-                .auth
-                .order_approval_readable(
-                    actor,
-                    subject.document_type,
-                    &subject.snapshot.business_object_id,
-                    &mut NoTransaction,
-                )
-                .await?
-        {
-            return Err(hidden_not_found());
-        }
-        Ok(())
-    }
-
-    /// 校验普通详情/历史读取的三条互斥授权来源。
-    async fn ensure_ordinary_runtime_read(
-        &self,
-        actor: &AuditActor,
-        subject: &RuntimeReadSubject,
-    ) -> Result<()> {
-        self.ensure_order_approval_read(actor, subject).await?;
-        let initiator = subject.instance.started_by.as_str() == actor.id();
-        if (RuntimeReadAuthorizationFacts {
-            actor_active: true,
-            initiator,
-            current_responsibility: false,
-            object_readable: false,
-            scope_covers: false,
-            runtime_admin: false,
-        })
-        .ordinary_allowed()
-        {
-            return Ok(());
-        }
-        if self.current_runtime_responsibility(actor, subject).await? {
-            return Ok(());
-        }
-        adapter_spec_of(subject.document_type)?;
-        let scope = approval_document_read_scope(&self.auth, actor, subject.document_type).await?;
         let facts = RuntimeReadAuthorizationFacts {
             actor_active: true,
-            initiator: false,
-            current_responsibility: false,
-            object_readable: !scope.is_empty(),
-            scope_covers: scope.covers_object(
-                &self
-                    .auth
-                    .approval_scope_object(
-                        subject.document_type,
-                        &subject.snapshot.business_object_id,
-                        &mut NoTransaction,
-                    )
-                    .await?,
-            ),
-            runtime_admin: false,
+            initiator: subject.instance.started_by.as_str() == actor.id(),
+            current_responsibility: self.current_runtime_responsibility(actor, subject).await?
+                || self.historical_runtime_participant(actor, subject).await?,
+            ..Default::default()
         };
         if facts.ordinary_allowed() {
             return Ok(());
         }
-        Err(hidden_not_found())
+        self.ensure_management_runtime_read(actor, subject).await
     }
 
-    /// 校验恢复选项等管理读取的类型、对象与组织三门。
+    /// 只承认已执行决定的历史审批人，不把未来节点配置当作参与事实。
+    async fn historical_runtime_participant(
+        &self,
+        actor: &AuditActor,
+        subject: &RuntimeReadSubject,
+    ) -> Result<bool> {
+        let instance_id = ApprovalProcessInstanceId::new(subject.instance.base.id.clone());
+        let mut after = None;
+        loop {
+            let executions = self
+                .db
+                .bpm_workflow()
+                .list_execution_history(&instance_id, after, 100, &mut NoTransaction)
+                .await?;
+            if executions.is_empty() {
+                return Ok(false);
+            }
+            if executions.iter().any(|execution| {
+                execution.process_instance_id == instance_id
+                    && execution.assignee_participant_id.as_str() == actor.id()
+                    && execution
+                        .decided_by
+                        .as_ref()
+                        .is_some_and(|participant| participant.as_str() == actor.id())
+                    && execution.decided_at.is_some()
+                    && matches!(
+                        execution.status,
+                        ApprovalNodeExecutionStatus::Approved | ApprovalNodeExecutionStatus::Rejected
+                    )
+            }) {
+                return Ok(true);
+            }
+            after = executions.last().map(|execution| execution.execution_no);
+        }
+    }
+
+    /// 管理读取必须具有静态 read、类型管理和真实业务来源读取资格。
     async fn ensure_management_runtime_read(
         &self,
         actor: &AuditActor,
         subject: &RuntimeReadSubject,
     ) -> Result<()> {
-        self.ensure_order_approval_read(actor, subject).await?;
-        let visibility = definition_management_visibility(&self.auth, actor).await?;
-        adapter_spec_of(subject.document_type)?;
-        let scope = approval_document_read_scope(&self.auth, actor, subject.document_type).await?;
-        let facts = RuntimeReadAuthorizationFacts {
-            actor_active: true,
-            initiator: subject.instance.started_by.as_str() == actor.id(),
-            current_responsibility: false,
-            object_readable: !scope.is_empty(),
-            scope_covers: scope.covers_object(
-                &self
-                    .auth
-                    .approval_scope_object(
-                        subject.document_type,
-                        &subject.snapshot.business_object_id,
-                        &mut NoTransaction,
-                    )
-                    .await?,
-            ),
-            runtime_admin: visibility.runtime_admin_types().contains(&subject.document_type),
-        };
-        if facts.management_allowed() {
-            return Ok(());
-        }
-        Err(hidden_not_found())
+        require_approval_management_with_executor(
+            &self.auth,
+            actor,
+            "approval_instance:read",
+            subject.document_type,
+            &subject.snapshot.business_object_id,
+            &mut NoTransaction,
+        )
+        .await
+        .map_err(|error| match error {
+            crate::error::Error::Forbidden(_) => hidden_not_found(),
+            other => other,
+        })
     }
 
     /// 判断当前执行是否仍有由本人承担的开放审批任务。
@@ -475,7 +470,9 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         actor: &AuditActor,
         subject: &RuntimeReadSubject,
     ) -> Result<bool> {
-        if subject.instance.status != ApprovalProcessInstanceStatus::Running {
+        if subject.instance.status != ApprovalProcessInstanceStatus::Running
+            || !approval_participant_permissions_with_executor(&self.auth, actor, &mut NoTransaction).await?
+        {
             return Ok(false);
         }
         let Some(execution) = &subject.current_execution else {

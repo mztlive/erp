@@ -240,7 +240,16 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
 pub(super) fn object_access_shapes(access: &ActorAccess) -> Vec<(WorkItemType, String)> {
     WorkItemType::registered_brief_relations()
         .iter()
-        .filter(|policy| has_permission(access, policy.read_permission))
+        .filter(|policy| {
+            has_permission(
+                access,
+                if policy.work_item_type.is_document_approval() {
+                    "approval_instance:read"
+                } else {
+                    policy.read_permission
+                },
+            )
+        })
         .map(|policy| (policy.work_item_type, policy.business_object_type.to_string()))
         .collect()
 }
@@ -463,7 +472,7 @@ pub(super) fn allowed_actions(
     // 开放的单据审批任务由审批运行时直接指派给责任人（owner_user_id = 指派
     // 人，owner_role 为语义标签而非角色 ID，无法用责任范围校验）；最终授权由
     // /admin/approval-decisions 写时重验（账号启用 + approval_instance:decide +
-    // 单据读权）。
+    // 精确任务责任链）。
     if item.work_item_type.is_document_approval()
         && item.status == WorkItemStatus::Open
         && item.approval_node_execution_id.is_some()
@@ -541,4 +550,23 @@ pub(super) fn covers_owner(access: &ActorAccess, owner: Option<&str>) -> bool {
 /// 无。
 fn is_w29_fields_closable(item: &dto::WorkItemFields) -> bool {
     item.work_item_type.is_w29_closable(&item.business_object_type, item.approval_node_execution_id.is_some())
+}
+
+#[cfg(test)]
+mod approval_admission_tests {
+    use super::*;
+
+    /// 仅有审批读取资格即可进入精确任务授权候选，不附带销售或采购权限。
+    #[test]
+    fn approval_candidates_use_approval_permission_without_granting_business_shapes() {
+        let access = ActorAccess::new("approver".into())
+            .with_permissions(vec![Permission::parse("approval_instance:read").unwrap()]);
+        let shapes = object_access_shapes(&access);
+        assert!(!shapes.is_empty());
+        assert!(shapes.iter().all(|(kind, _)| kind.is_document_approval()));
+        let ordinary = ActorAccess::new("sales".into())
+            .with_permissions(vec![Permission::parse("sales_order:detail").unwrap()]);
+        assert!(object_access_shapes(&ordinary).iter().all(|(kind, _)| !kind.is_document_approval()));
+        assert!(object_access_shapes(&ActorAccess::new("none".into())).is_empty());
+    }
 }

@@ -7,6 +7,7 @@
 pub mod approval_process;
 pub mod error;
 pub mod http;
+pub mod materials;
 
 use application_core::AuditActor;
 use axum::extract::{Path, Query, State};

@@ -10,12 +10,14 @@ use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
+use super::ApprovalMaterialFile;
 use crate::entity::document_registry::DocumentType;
 
 const DOCUMENT_NO_MAX_LEN: usize = 128;
 const ORG_ID_MAX_LEN: usize = 128;
 const ACTOR_ID_MAX_LEN: usize = 128;
 const OBJECT_ID_MAX_LEN: usize = 128;
+const MATERIAL_FILE_LIMIT: usize = 100;
 
 /// 对手方引用。按类型穷尽枚举，可为空。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -77,6 +79,9 @@ pub struct ApprovalSubjectSnapshot {
     /// 旧快照没有该字段；缺失时不得从当前草稿补成历史内容。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub display: Option<super::display_snapshot::ApprovalDisplaySnapshot>,
+    /// 提交时从当前业务对象证明并冻结的材料引用；历史缺失保持空，不回填当前附件。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub material_files: Vec<ApprovalMaterialFile>,
 }
 
 impl ApprovalSubjectSnapshot {
@@ -116,7 +121,58 @@ impl ApprovalSubjectSnapshot {
             subject_version,
             payload,
             display: None,
+            material_files: Vec::new(),
         })
+    }
+
+    /// 为新提交快照冻结已由业务领域证明的材料文件引用。
+    ///
+    /// # 参数
+    /// * `ids` - 当前业务版本实际关联的文件资产 ID，最多 100 个。
+    /// # 返回
+    /// 返回去重并稳定排序的快照；本方法不生成文件读取授权。
+    /// # 错误
+    /// 超量、空白或非法长度 ID 时拒绝整个快照。
+    pub fn with_material_files(mut self, mut files: Vec<ApprovalMaterialFile>) -> Result<Self> {
+        if files.len() > MATERIAL_FILE_LIMIT {
+            return Err(Error::from("审批材料超过100个"));
+        }
+        for file in &files {
+            file.validate()?;
+        }
+        files.sort_by(|left, right| left.file_asset_id.as_ref().cmp(right.file_asset_id.as_ref()));
+        if files.windows(2).any(|pair| pair[0].file_asset_id == pair[1].file_asset_id && pair[0] != pair[1]) {
+            return Err(Error::from("同一审批材料存在不同文件版本"));
+        }
+        files.dedup();
+        self.material_files = files;
+        Ok(self)
+    }
+
+    /// 证明材料属于精确运行实例及其冻结提交版本。
+    ///
+    /// # 参数
+    /// * `instance_id` / `document_type` / `document_id` / `version` - 已授权运行主体。
+    /// * `file_id` - 本次请求的文件资产 ID。
+    /// # 返回
+    /// 所有主体引用和冻结允许清单同时匹配时返回 true；调用方仍须证明参与或管理资格。
+    /// # 错误
+    /// 无；旧快照、缺失引用、串实例或串版本均返回 false。
+    pub fn allows_runtime_material(
+        &self,
+        instance_id: &str,
+        document_type: DocumentType,
+        document_id: &str,
+        version: u32,
+        file_id: &str,
+    ) -> bool {
+        self.approval_process_instance_id.as_ref() == instance_id
+            && self.ensure_matches_runtime_subject(document_type, document_id, version).is_ok()
+            && self.material_files.len() <= MATERIAL_FILE_LIMIT
+            && self
+                .material_files
+                .iter()
+                .any(|file| file.file_asset_id.as_ref() == file_id && file.validate().is_ok())
     }
 
     /// 校验冻结快照与运行时主体的三项不可变引用完全一致。
@@ -388,6 +444,67 @@ mod tests {
                 .unwrap_err()
                 .to_string(),
             "冻结快照提交版本不匹配"
+        );
+    }
+
+    fn material(id: &str) -> super::ApprovalMaterialFile {
+        super::ApprovalMaterialFile {
+            file_asset_id: erp_core::ids::FileAssetId::new(id),
+            file_name: "proof.pdf".into(),
+            content_type: "application/pdf".into(),
+            byte_size: 12,
+            asset_version: 1,
+            content_hmac: "a".repeat(64),
+        }
+    }
+
+    #[test]
+    fn materials_are_limited_to_the_exact_frozen_instance_subject_and_version() {
+        let snapshot = ApprovalSubjectSnapshot::new(
+            ApprovalSubjectSnapshotId::new("snap-1"),
+            ApprovalProcessInstanceId::new("inst-1"),
+            DocumentType::StockAdjustment,
+            "adj-1",
+            1,
+            stock_payload(),
+        )
+        .unwrap()
+        .with_material_files(vec![material("proof-2"), material("proof-1"), material("proof-1")])
+        .unwrap();
+        assert_eq!(snapshot.material_files.len(), 2);
+        assert!(snapshot.allows_runtime_material(
+            "inst-1",
+            DocumentType::StockAdjustment,
+            "adj-1",
+            1,
+            "proof-1"
+        ));
+        for (instance, kind, document, version, file) in [
+            ("inst-other", DocumentType::StockAdjustment, "adj-1", 1, "proof-1"),
+            ("inst-1", DocumentType::SalesOrder, "adj-1", 1, "proof-1"),
+            ("inst-1", DocumentType::StockAdjustment, "adj-other", 1, "proof-1"),
+            ("inst-1", DocumentType::StockAdjustment, "adj-1", 2, "proof-1"),
+            ("inst-1", DocumentType::StockAdjustment, "adj-1", 1, "new-current-attachment"),
+        ] {
+            assert!(!snapshot.allows_runtime_material(instance, kind, document, version, file));
+        }
+        let mut legacy = serde_json::to_value(&snapshot).unwrap();
+        legacy.as_object_mut().unwrap().remove("material_files");
+        let legacy: ApprovalSubjectSnapshot = serde_json::from_value(legacy).unwrap();
+        assert!(!legacy.allows_runtime_material(
+            "inst-1",
+            DocumentType::StockAdjustment,
+            "adj-1",
+            1,
+            "proof-1"
+        ));
+        assert!(snapshot.clone().with_material_files(vec![material(" ")]).is_err());
+        let mut changed = material("proof-1");
+        changed.content_hmac = "b".repeat(64);
+        assert!(!material("proof-1").matches_current(&changed));
+        assert!(snapshot.clone().with_material_files(vec![material("proof-1"), changed]).is_err());
+        assert!(
+            snapshot.with_material_files((0..101).map(|i| material(&format!("f-{i}"))).collect()).is_err()
         );
     }
 

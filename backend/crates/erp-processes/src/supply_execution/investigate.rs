@@ -101,8 +101,7 @@ impl SupplierFulfillmentProcess {
         actor: &AuditActor,
     ) -> Result<SupplierOrderInvestigationResultView> {
         command.validate()?;
-        self.require_scoped_order(command.action.order_id.as_ref(), actor, "investigate", &mut NoTransaction)
-            .await?;
+        self.require_task_permissions(actor, &mut NoTransaction).await?;
         let expected_task_version = parse_positive_version(&command.expected_task_version, "任务版本")?;
         let fingerprint = serialized_fingerprint(&command)?;
         let audit_id = investigation_audit_id(

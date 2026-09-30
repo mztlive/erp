@@ -8,6 +8,7 @@ use application_core::AuditActor;
 use erp_core::money::Amount;
 use erp_finance::ports::funds_scope::{FundsDataScopePort, FundsResolvedClause, FundsResolvedScope};
 use erp_identity::access_control::{ResolvedScope, ScopeClause, ScopedObject};
+#[cfg(test)]
 use erp_identity::entity::organization_change::OrganizationState;
 use erp_identity::service::access_control::consumers::registration;
 use erp_identity::service::access_control::resolve::AuthorizedDataScope;
@@ -21,52 +22,30 @@ use persistence_core::Executor;
 use serde::Serialize;
 
 use super::rows::*;
-use crate::sales_center::access::{SalesAccess, sales_scope};
 use crate::{Error, Result};
 
-/// 资金读取动作共用的已解析授权：关联销售范围与资金资源范围求交。
+/// 资金自身动作资格与真实来源边界；整账职责不替代任何来源判定。
 pub struct FundsAuthorization {
     /// 关联销售单的已解析范围。
     pub sales: SalesReadScope,
-    /// 资金资源的已解析范围。
-    pub funds: SalesReadScope,
+    /// 明确的财务整账读取职责，不授予来源业务动作。
+    pub ledger_read: bool,
+    /// 结算来源范围，必须按实际来源类型选择。
+    pub settlement: Option<AuthorizedDataScope>,
     /// 采购关联资源的已解析采购范围；销售关联查询为 `None`。
     pub purchase_scope: Option<PurchaseReadScope>,
     /// 资金资源动作的解析上下文。
     pub context: AuthorizedDataScope,
-    pub(super) fingerprint: std::collections::hash_map::DefaultHasher,
     pub(super) no_scope: bool,
 }
 
 impl FundsAuthorization {
-    /// 关联单据与资金动作分别授权，份额、候选及命令必须同时满足两者。
-    pub(super) fn restrict_links(&mut self) {
-        self.sales.required_scopes.push(self.funds.clone());
-        if let Some(purchase) = &mut self.purchase_scope {
-            let clause = |scope: &erp_sales::repository::sales_order::scope::SalesScopeClause| {
-                erp_procurement::repository::purchase_order::scope::PurchaseScopeClause {
-                    company: scope.company,
-                    owner_user_id: scope.owner_user_id.clone(),
-                    business_org_unit_ids: scope.business_org_unit_ids.clone(),
-                }
-            };
-            purchase.required_scopes.push(PurchaseReadScope {
-                required_scopes: Vec::new(),
-                roles: self.funds.roles.iter().map(clause).collect(),
-                user_limit: self.funds.user_limit.as_ref().map(clause),
-                historical_order_ids: Vec::new(),
-            });
-        }
-    }
-
-    /// 两组独立范围同时为公司范围时才有整单读取资格。
-    pub fn whole(&self) -> bool {
-        self.sales.is_company() && self.funds.is_company()
-    }
-
-    /// 任一组范围为空即无可见对象。
+    /// 所有实际来源均无可见规则时返回空集。
     pub fn empty(&self) -> bool {
-        self.sales.is_empty() || self.funds.is_empty()
+        !self.ledger_read
+            && self.sales.is_empty()
+            && self.purchase_scope.as_ref().is_none_or(PurchaseReadScope::is_empty)
+            && self.settlement.as_ref().is_none_or(|scope| scope.scope.role_clauses.is_empty())
     }
 }
 
@@ -163,7 +142,7 @@ impl FundsAccess {
     /// * `executor` - 调用方执行器
     ///
     /// # 返回
-    /// 返回已解析的资金授权；关联销售读取动作同时由同角色证明。
+    /// 返回目标资金动作及来源销售范围；不要求额外销售操作权限。
     ///
     /// # 错误
     /// 无动作权限返回 Forbidden；未装配或未注册时拒绝。
@@ -177,82 +156,26 @@ impl FundsAccess {
         action: &str,
         executor: &mut dyn Executor,
     ) -> Result<(FundsResolvedScope, FundsAuthorization)> {
-        let access = self.scope.resolve(actor, resource, action, executor).await.map_err(Error::from)?;
-        let (sales_access, sales) = self.linked_sales_scope(actor, &access, executor).await?;
-        let mut authorization = FundsAuthorization {
-            sales,
-            funds: sales_scope(&access_output(&access)?, actor.id(), &[], Vec::new()),
-            purchase_scope: None,
-            context: access_output(&access)?,
-            fingerprint: Default::default(),
-            no_scope: false,
-        };
-        sales_access.scope_version.hash(&mut authorization.fingerprint);
-        authorization.context.scope_version.hash(&mut authorization.fingerprint);
-        authorization.restrict_links();
-        authorization.no_scope = authorization.empty();
-        Ok((access, authorization))
+        self.resolve_sources(actor, resource, action, false, false, executor).await
     }
 
-    /// 在调用方事务内证明采购关联资金资源的动作。
+    /// 证明资金自身动作后，按采购及结算的实际来源边界解析。
     ///
     /// # 参数
-    /// * `actor` - 已认证操作人
-    /// * `resource` - 本次解析的资金资源
-    /// * `action` - 该资源已注册动作
-    /// * `purchase_access` - 组合层注入的采购访问器
-    /// * `executor` - 调用方执行器
-    ///
+    /// 参数为调用人、目标资金动作、采购访问器及同一事务。
     /// # 返回
-    /// 返回已解析的资金授权；关联采购读取动作同时由同角色证明。
-    ///
+    /// 返回与实际来源绑定的授权，不读取镜像资金范围。
     /// # 错误
-    /// 无动作权限返回 Forbidden；未装配或未注册时拒绝。
+    /// 账号、目标动作或来源配置失效时拒绝。
     pub async fn resolve_with_purchase(
         &self,
         actor: &AuditActor,
         resource: &str,
         action: &str,
-        purchase_access: &PurchaseAccess,
+        _purchase_access: &PurchaseAccess,
         executor: &mut dyn Executor,
     ) -> Result<(FundsResolvedScope, FundsAuthorization)> {
-        let access = self.scope.resolve(actor, resource, action, executor).await.map_err(Error::from)?;
-        let (purchase_resolved, purchase_scope) =
-            self.linked_purchase_scope(actor, purchase_access, executor).await?;
-        let mut authorization = FundsAuthorization {
-            sales: SalesReadScope {
-                required_scopes: vec![],
-                roles: purchase_scope
-                    .roles
-                    .iter()
-                    .map(|clause| erp_sales::repository::sales_order::scope::SalesScopeClause {
-                        company: clause.company,
-                        owner_user_id: clause.owner_user_id.clone(),
-                        business_org_unit_ids: clause.business_org_unit_ids.clone(),
-                        collaborative_customer_ids: Vec::new(),
-                    })
-                    .collect(),
-                user_limit: purchase_scope.user_limit.as_ref().map(|clause| {
-                    erp_sales::repository::sales_order::scope::SalesScopeClause {
-                        company: clause.company,
-                        owner_user_id: clause.owner_user_id.clone(),
-                        business_org_unit_ids: clause.business_org_unit_ids.clone(),
-                        collaborative_customer_ids: Vec::new(),
-                    }
-                }),
-                historical_order_ids: purchase_scope.historical_order_ids.clone(),
-            },
-            funds: sales_scope(&access_output(&access)?, actor.id(), &[], Vec::new()),
-            purchase_scope: Some(purchase_scope),
-            context: access_output(&access)?,
-            fingerprint: Default::default(),
-            no_scope: false,
-        };
-        purchase_resolved.scope_version.hash(&mut authorization.fingerprint);
-        authorization.context.scope_version.hash(&mut authorization.fingerprint);
-        authorization.restrict_links();
-        authorization.no_scope = authorization.empty();
-        Ok((access, authorization))
+        self.resolve_sources(actor, resource, action, true, false, executor).await
     }
 
     /// 以关联销售责任事实复用公共单对象判定。
@@ -337,7 +260,7 @@ impl FundsAccess {
         if authorization.empty() {
             return Ok(Some(Vec::new()));
         }
-        if authorization.whole() {
+        if authorization.sales.is_company() {
             return Ok(None);
         }
         let ids = self.db.sales_orders().list_authorized_ids(&authorization.sales, executor).await?;
@@ -391,30 +314,6 @@ impl FundsAccess {
     ) -> Result<BTreeSet<String>> {
         self.scope.expand_org_units(org_unit_ids, include_descendants, executor).await.map_err(Error::from)
     }
-
-    /// 在调用方事务内证明关联销售读取动作，由同角色同时持有资金动作。
-    pub(super) async fn linked_sales_scope(
-        &self,
-        actor: &AuditActor,
-        access: &FundsResolvedScope,
-        executor: &mut dyn Executor,
-    ) -> Result<(AuthorizedDataScope, SalesReadScope)> {
-        let _ = access;
-        let resolver = SalesAccess::new(self.db.clone(), self.rbac.clone());
-        let permission = erp_identity::Permission::parse("sales_order:list")?;
-        resolver.resolve(actor, "list", &[permission], executor).await
-    }
-
-    /// 在调用方事务内证明关联采购读取动作。
-    pub(super) async fn linked_purchase_scope(
-        &self,
-        actor: &AuditActor,
-        purchase_access: &PurchaseAccess,
-        executor: &mut dyn Executor,
-    ) -> Result<(PurchaseResolvedScope, erp_procurement::repository::purchase_order::scope::PurchaseReadScope)>
-    {
-        purchase_access.resolve(actor, "list", executor).await.map_err(Error::from)
-    }
 }
 
 /// 把资金 Port 事实无损转回公共判定输入，不读取或重解释原始规则。
@@ -439,27 +338,8 @@ pub(super) fn purchase_clause(clause: &erp_procurement::ports::PurchaseResolvedC
     }
 }
 
-/// 把资金 Port 事实转为销售条件编译可用的已解析上下文。
-pub(super) fn access_output(access: &FundsResolvedScope) -> Result<AuthorizedDataScope> {
-    let consumer = registration(&access.resource, &access.action)?;
-    let _ = consumer;
-    Ok(AuthorizedDataScope {
-        user_id: access.user_id.clone(),
-        resource: access.resource.clone(),
-        action: access.action.clone(),
-        scope: ResolvedScope {
-            role_clauses: access.role_clauses.iter().map(public_clause).collect(),
-            user_limit: access.user_limit.as_ref().map(public_clause),
-        },
-        role_scopes: Default::default(),
-        organizations: organization_version(access.organization_version),
-        policy_version: access.policy_version,
-        scope_version: access.scope_version.clone(),
-        as_of: access.as_of,
-    })
-}
-
 /// 由版本号构造组织版本快照；不读取组织集合。
+#[cfg(test)]
 pub(super) fn organization_version(version: u64) -> OrganizationState {
     OrganizationState { version, ..Default::default() }
 }
@@ -782,101 +662,5 @@ mod tests {
         let first = scope_version(&context, &["so-1:3".to_string()]);
         let second = scope_version(&context, &["so-1:4".to_string()]);
         assert_ne!(first, second);
-    }
-
-    #[test]
-    pub(super) fn whole_document_rules_require_both_funds_and_linked_company() {
-        let authorization = FundsAuthorization {
-            sales: erp_sales::repository::sales_order::scope::SalesReadScope {
-                roles: vec![erp_sales::repository::sales_order::scope::SalesScopeClause {
-                    company: true,
-                    ..Default::default()
-                }],
-                ..Default::default()
-            },
-            funds: erp_sales::repository::sales_order::scope::SalesReadScope {
-                roles: vec![erp_sales::repository::sales_order::scope::SalesScopeClause {
-                    company: true,
-                    ..Default::default()
-                }],
-                ..Default::default()
-            },
-            purchase_scope: None,
-            context: AuthorizedDataScope {
-                user_id: "u1".into(),
-                resource: "customer_receipt".into(),
-                action: "list".into(),
-                scope: ResolvedScope { role_clauses: vec![], user_limit: None },
-                role_scopes: Default::default(),
-                organizations: organization_version(1),
-                policy_version: 1,
-                scope_version: "v".into(),
-                as_of: erp_core::common::time::Instant::from_unix_secs(0),
-            },
-            fingerprint: Default::default(),
-            no_scope: false,
-        };
-        assert!(authorization.whole());
-        assert!(!authorization.empty());
-    }
-    #[test]
-    fn funds_scope_intersects_each_sales_and_purchase_share_including_history() {
-        use erp_procurement::repository::purchase_order::scope::PurchaseScopeClause;
-        use erp_sales::repository::sales_order::scope::SalesScopeClause;
-        use serde_json::json;
-        use test_support::matches_filter;
-        let company = SalesScopeClause { company: true, ..Default::default() };
-        let mut auth = FundsAuthorization {
-            sales: SalesReadScope {
-                historical_order_ids: vec!["so-b".into()],
-                roles: vec![company.clone()],
-                ..Default::default()
-            },
-            funds: SalesReadScope {
-                roles: vec![company],
-                user_limit: Some(SalesScopeClause { owner_user_id: Some("a".into()), ..Default::default() }),
-                ..Default::default()
-            },
-            purchase_scope: Some(PurchaseReadScope {
-                roles: vec![PurchaseScopeClause { company: true, ..Default::default() }],
-                historical_order_ids: vec!["po-b".into()],
-                ..Default::default()
-            }),
-            context: AuthorizedDataScope {
-                user_id: "a".into(),
-                resource: "invoice".into(),
-                action: "list".into(),
-                scope: ResolvedScope { role_clauses: vec![], user_limit: None },
-                role_scopes: Default::default(),
-                organizations: Default::default(),
-                policy_version: 1,
-                scope_version: "v1".into(),
-                as_of: erp_core::common::time::Instant::from_unix_secs(1),
-            },
-            fingerprint: Default::default(),
-            no_scope: false,
-        };
-        auth.restrict_links();
-        for (owner, expected) in [("a", true), ("b", false)] {
-            assert_eq!(
-                matches_filter(
-                    &auth.sales.document(),
-                    &json!({"id":"so-b", "sales_owner_user_id":owner,"business_org_unit_id":"org"})
-                ),
-                expected
-            );
-            assert_eq!(
-                matches_filter(
-                    &auth.purchase_scope.as_ref().unwrap().document(),
-                    &json!({"id":"po-b", "owner_user_id":owner,"business_org_unit_id":"org"})
-                ),
-                expected
-            );
-        }
-        assert!(!auth.whole());
-        auth.funds = SalesReadScope::default();
-        auth.restrict_links();
-        assert!(auth.empty());
-        assert!(!matches_filter(&auth.sales.document(), &json!({"id":"so-b", "sales_owner_user_id":"a"})));
     }
 }

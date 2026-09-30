@@ -1,4 +1,4 @@
-//! 资金往来范围授权 adapter：调用身份域公共解析器，转换成资金 Port 事实。
+//! 资金授权辅助 adapter：展开目录条件；资金读取必须经真实来源授权入口。
 
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -11,12 +11,11 @@ use erp_finance::ports::funds_scope::{
 };
 use erp_identity::SharedRbacService;
 use erp_identity::access_control::{ScopeClause, ScopedObject};
-use erp_identity::service::access_control::resolve::DataScopeService;
 use mongodb::Database;
 use persistence_core::Executor;
 
 use super::identity_error::map_identity_error;
-use super::scope_support::{self, evaluate_registered, reject_unsupported_dimensions, scope_clause};
+use super::scope_support::{self, evaluate_registered, scope_clause};
 
 map_identity_error!(erp_finance);
 
@@ -24,13 +23,12 @@ map_identity_error!(erp_finance);
 #[derive(Clone)]
 pub struct MongoFundsDataScope {
     db: Database,
-    rbac: SharedRbacService,
 }
 
 impl MongoFundsDataScope {
     /// 绑定身份数据库及现有 RBAC 实例。
-    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
-        Self { db, rbac }
+    pub fn new(db: Database, _rbac: SharedRbacService) -> Self {
+        Self { db }
     }
 
     /// 包装为资金域可注入的共享 Port。
@@ -52,21 +50,8 @@ impl FundsDataScopePort for MongoFundsDataScope {
         action: &str,
         executor: &mut dyn Executor,
     ) -> erp_finance::Result<FundsResolvedScope> {
-        let access = DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .resolve(actor, resource, action, executor)
-            .await
-            .map_err(map_identity_error)?;
-        Ok(FundsResolvedScope {
-            user_id: access.user_id,
-            resource: access.resource,
-            action: access.action,
-            role_clauses: map_clauses(&access.scope.role_clauses)?,
-            user_limit: access.scope.user_limit.as_ref().map(map_clause).transpose()?,
-            policy_version: access.policy_version,
-            organization_version: access.organizations.version,
-            scope_version: access.scope_version,
-            as_of: access.as_of,
-        })
+        let _ = (actor, resource, action, executor);
+        Err(erp_finance::Error::Forbidden("资金读取必须按实际业务来源解析授权".into()))
     }
 
     async fn expand_org_units(
@@ -101,23 +86,6 @@ impl FundsDataScopePort for MongoFundsDataScope {
         )
         .await
     }
-}
-
-/// 转换全部角色条款；任一不支持维度即失败。
-fn map_clauses(clauses: &[ScopeClause]) -> erp_finance::Result<Vec<FundsResolvedClause>> {
-    clauses.iter().map(map_clause).collect()
-}
-
-/// 将身份域条款转为资金已解析条款。
-fn map_clause(clause: &ScopeClause) -> erp_finance::Result<FundsResolvedClause> {
-    reject_unsupported_dimensions(clause, "资金范围不支持结算主体或仓库维度")
-        .map_err(erp_finance::Error::ValidationError)?;
-    Ok(FundsResolvedClause {
-        company: clause.company,
-        self_owned: clause.self_owned,
-        collaborative: clause.collaborative,
-        org_unit_ids: clause.org_unit_ids.iter().cloned().collect(),
-    })
 }
 
 /// 将本域已解析事实无损转回公共判定输入，不读取或重解释原始规则。
@@ -330,41 +298,7 @@ mod equivalence_tests {
 
 #[cfg(test)]
 mod adapter_tests {
-    use std::collections::BTreeSet;
-
     use super::*;
-
-    #[test]
-    fn funds_adapter_rejects_unsupported_scope_dimensions() {
-        let warehouse =
-            ScopeClause { warehouse_ids: BTreeSet::from(["wh-1".into()]), ..ScopeClause::default() };
-        match map_clause(&warehouse) {
-            Err(erp_finance::Error::ValidationError(message)) => {
-                assert!(message.contains("仓库"));
-            },
-            other => panic!("expected validation error, got {other:?}"),
-        }
-        let settlement = ScopeClause {
-            settlement_party_ids: BTreeSet::from(["party-1".into()]),
-            ..ScopeClause::default()
-        };
-        assert!(matches!(map_clause(&settlement), Err(erp_finance::Error::ValidationError(_))));
-    }
-
-    #[test]
-    fn funds_adapter_keeps_owner_collab_and_org_dimensions() {
-        let clause = ScopeClause {
-            company: false,
-            self_owned: true,
-            collaborative: true,
-            org_unit_ids: BTreeSet::from(["org-b".into(), "org-a".into()]),
-            ..ScopeClause::default()
-        };
-        let mapped = map_clause(&clause).unwrap();
-        assert!(mapped.self_owned);
-        assert!(mapped.collaborative);
-        assert_eq!(mapped.org_unit_ids, vec!["org-a".to_string(), "org-b".to_string()]);
-    }
 
     #[test]
     fn mismatched_resource_fails_closed() {

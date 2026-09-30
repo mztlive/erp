@@ -5,7 +5,6 @@ use std::collections::HashMap;
 use erp_audit::AuditExt;
 use erp_audit::repository::prelude::*;
 use erp_core::money::Amount;
-use erp_finance::ports::funds_scope::FundsResolvedScope;
 use erp_finance::repository::prelude::*;
 use erp_finance::repository::{PayableExt, ReceivableExt};
 use erp_procurement::repository::PurchaseOrderExt;
@@ -19,6 +18,7 @@ use serde::Serialize;
 
 use super::authorization::*;
 use super::invoice::sales_invoice_allocation_view;
+use super::payable_source::source_key;
 use super::receipt::receipt_allocation_view;
 use crate::Result;
 
@@ -347,7 +347,7 @@ pub(super) struct LinkedSalesFact {
 /// 关联采购单的当前责任事实；老单缺责任人时负责人为空。
 #[derive(Debug, Clone)]
 pub(super) struct LinkedPurchaseFact {
-    /// 当前采购负责人；缺失时仅公司范围可见。
+    /// 来源当前负责人；采购与结算分别解释。
     pub(super) owner_user_id: Option<String>,
     /// 当前业务组织。
     pub(super) business_org_unit_id: String,
@@ -390,7 +390,7 @@ pub(super) struct PaymentLink {
     pub(super) id: String,
     /// 正反动作后的记账方向金额。
     pub(super) signed: Amount,
-    /// 归属采购单；结算单来源与缺失时计入未分配。
+    /// 归属采购单；结算来源使用带类型关联键；缺失来源拒绝。
     pub(super) order: LinkedOrderId,
     /// 响应视图（来源单号不回填，不得当单号展示）。
     pub(super) view: erp_finance::dto::payable::PaymentAllocationView,
@@ -429,7 +429,7 @@ impl FundsAccess {
         executor: &mut dyn Executor,
     ) -> Result<HashMap<String, LinkedPurchaseFact>> {
         let mut map = HashMap::new();
-        let unique = crate::support::dedup_sorted(ids.iter().cloned());
+        let unique = crate::support::dedup_sorted(ids.iter().filter(|id| !id.contains(':')).cloned());
         for chunk in unique.chunks(500) {
             let keys = chunk.to_vec();
             for order in self.db.purchase_order().find_orders_by_ids(&keys, executor).await? {
@@ -444,44 +444,9 @@ impl FundsAccess {
                 );
             }
         }
+        map.extend(self.settlement_fact_map(ids, executor).await?);
         Ok(map)
     }
-}
-
-/// 单据行关联的多个责任事实中任一通过公共判定即该行可见。
-pub(super) fn row_visible(
-    access: &FundsResolvedScope,
-    orders: &[LinkedOrderRow],
-    operators: &[String],
-    secondary: &[String],
-) -> Result<bool> {
-    if orders.is_empty() {
-        return FundsAccess::allows(
-            access,
-            &FundsLinkedFacts {
-                owner_user_id: None,
-                business_org_unit_id: None,
-                operator_user_ids: operators.to_vec(),
-                secondary_operator_user_ids: secondary.to_vec(),
-                linked_document_id: String::new(),
-                linked_document_version: 0,
-            },
-        );
-    }
-    for (_, owner, org, id, version) in orders {
-        let facts = FundsLinkedFacts {
-            owner_user_id: owner.clone(),
-            business_org_unit_id: org.clone(),
-            operator_user_ids: operators.to_vec(),
-            secondary_operator_user_ids: secondary.to_vec(),
-            linked_document_id: id.clone(),
-            linked_document_version: *version,
-        };
-        if FundsAccess::allows(access, &facts)? {
-            return Ok(true);
-        }
-    }
-    Ok(false)
 }
 
 /// 多关联单据行的条件匹配：负责人与组织任一关联命中，操作人按单据事实判定。
@@ -594,14 +559,13 @@ impl FundsAccess {
         Ok(links)
     }
 
-    /// 付款核销按应付分录反查子账与采购单；结算单来源份额无采购归属。
+    /// 付款核销按应付分录反查子账与采购单；结算来源保留自身责任边界。
     pub(super) async fn payment_matched_links(
         &self,
         payment_ids: &[String],
         executor: &mut dyn Executor,
     ) -> Result<HashMap<String, Vec<PaymentLink>>> {
         use erp_core::ids::{PayableAccountId, PayableEntryId, SupplierPaymentId};
-        use erp_finance::entity::payable::PayableSourceType;
         let keys = payment_ids.iter().map(|id| SupplierPaymentId::new(id.clone())).collect::<Vec<_>>();
         let allocations = self.db.payment_allocations().find_allocations_by_payments(&keys, executor).await?;
         let entry_keys = allocations
@@ -619,8 +583,7 @@ impl FundsAccess {
         let account_order = accounts
             .into_iter()
             .map(|account| {
-                let order = (account.source_type == PayableSourceType::PurchaseOrder)
-                    .then(|| account.source_document_id.clone());
+                let order = Some(source_key(account.source_type, &account.source_document_id));
                 (account.base.id.clone(), order)
             })
             .collect::<HashMap<_, _>>();
@@ -940,5 +903,27 @@ mod tests {
             assert!(invoice_json["items"][0].get("sales_owner_user_id").is_none());
             assert!(invoice_json["items"][0].get("procurement_owner_user_id").is_none());
         }
+    }
+}
+
+/// 已存在的分配必须指向存在的来源；真正零分配单据单独由整账职责授权。
+pub(super) fn linked_sources_exist<'a, T>(
+    mut sources: impl Iterator<Item = Option<&'a str>>,
+    facts: &HashMap<String, T>,
+) -> bool {
+    sources.all(|source| source.is_some_and(|id| facts.contains_key(id)))
+}
+
+#[cfg(test)]
+mod source_integrity_tests {
+    use super::*;
+
+    #[test]
+    fn unallocated_is_distinct_from_dangling_allocation() {
+        let facts = [("known".into(), ())].into();
+        assert!(linked_sources_exist(std::iter::empty(), &facts));
+        assert!(linked_sources_exist([Some("known")].into_iter(), &facts));
+        assert!(!linked_sources_exist([Some("missing")].into_iter(), &facts));
+        assert!(!linked_sources_exist([Some("known"), None].into_iter(), &facts));
     }
 }

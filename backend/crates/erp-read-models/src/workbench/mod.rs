@@ -1,6 +1,9 @@
 //! Workbench read model: authorized work-item list, detail, stats and briefs.
 
 mod access;
+mod approval_access;
+mod material_transfer;
+pub use material_transfer::authorize_material_transfer;
 mod approval_list;
 pub use approval_list::{ApprovalDocumentSummary, ApprovalListItem, ApprovalListPage};
 pub mod authority;
@@ -44,5 +47,7 @@ pub(crate) type WorkItemFilter = <mongodb::Database as WorkItemExt>::WorkItemFil
 
 mod approval_snapshot;
 pub use approval_snapshot::capture_approval_display;
+mod approval_materials;
+pub use approval_materials::freeze_approval_materials;
 
 mod fulfillment_details;

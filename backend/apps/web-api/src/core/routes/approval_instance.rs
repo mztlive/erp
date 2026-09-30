@@ -25,14 +25,43 @@ mod approval_process;
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .merge(approval_process::routes(rbac))
+        .merge(material_routes(rbac))
+        .merge(query_routes(rbac))
+        .merge(command_routes(rbac))
+}
+
+/// 提交资料和冻结附件读取路由。
+fn material_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
         .route(
-            "/approval-decisions",
+            "/approval-instances/{id}/materials",
             with_permission(
-                post(approval_instance::submit_decision),
+                get(approval_instance::materials::list),
                 rbac,
-                approval_instance::submit_decision_permission_key(),
+                approval_instance::materials::list_permission_key(),
             ),
         )
+        .route(
+            "/approval-instances/{id}/materials/{file_asset_id}/preview",
+            with_permission(
+                get(approval_instance::materials::preview),
+                rbac,
+                approval_instance::materials::preview_permission_key(),
+            ),
+        )
+        .route(
+            "/approval-instances/{id}/materials/{file_asset_id}/download",
+            with_permission(
+                get(approval_instance::materials::download),
+                rbac,
+                approval_instance::materials::download_permission_key(),
+            ),
+        )
+}
+
+/// 审批实例列表、详情、历史与恢复选项。
+fn query_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
         .route(
             "/approval-instances",
             with_permission(
@@ -63,6 +92,19 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 get(approval_instance::recovery_options),
                 rbac,
                 approval_instance::recovery_options_permission_key(),
+            ),
+        )
+}
+
+/// 审批决定及管理写命令。
+fn command_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
+        .route(
+            "/approval-decisions",
+            with_permission(
+                post(approval_instance::submit_decision),
+                rbac,
+                approval_instance::submit_decision_permission_key(),
             ),
         )
         .route(

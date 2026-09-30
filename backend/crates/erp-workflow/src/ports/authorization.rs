@@ -119,6 +119,26 @@ pub trait WorkflowAuthorizationPort: Clone + Send + Sync + 'static {
         async { Err(Error::Internal("工作流范围解析未装配".into())) }
     }
 
+    /// 按真实来源领域证明管理者可读取整个审批主体。
+    ///
+    /// # 参数
+    /// * `actor` - 当前管理者。
+    /// * `document_type` / `document_id` - 精确业务主体。
+    /// * `executor` - 当前事务执行器。
+    /// # 返回
+    /// 真实来源全部可读时返回 true；部分财务分摊不等于整单可读。
+    /// # 错误
+    /// 未装配、来源缺失或授权基础设施失败时拒绝。
+    fn approval_source_readable(
+        &self,
+        _actor: &AuditActor,
+        _document_type: DocumentType,
+        _document_id: &str,
+        _executor: &mut dyn Executor,
+    ) -> impl Future<Output = Result<bool>> + Send {
+        async { Err(Error::Internal("审批来源读取授权未装配".into())) }
+    }
+
     /// 绑定前按当前或拟创建订单事实独立核对详情范围；未装配时失败关闭。
     fn binding_order_readable(
         &self,
@@ -498,5 +518,32 @@ impl WorkflowAuthorizationPort for FailClosedWorkflowAuthorizationPort {
             + 'static,
     {
         async move { Err(E::from(Error::Internal("授权端口未接线".to_string()))) }
+    }
+}
+
+#[cfg(test)]
+mod permission_tests {
+    use super::*;
+
+    #[test]
+    fn approval_read_and_decide_must_be_granted_by_one_role() {
+        let required = ["approval_instance:read", "approval_instance:decide"];
+        let split = RolePermissionSnapshotFact::new(
+            vec!["reader".into(), "decider".into()],
+            HashMap::from([
+                ("reader".into(), vec![required[0].into()]),
+                ("decider".into(), vec![required[1].into()]),
+            ]),
+            1,
+        );
+        assert!(split.granting_role_ids_for_all(&required).is_empty());
+        let combined = RolePermissionSnapshotFact::new(
+            vec!["approver".into()],
+            HashMap::from([("approver".into(), required.map(str::to_owned).to_vec())]),
+            1,
+        );
+        assert_eq!(combined.granting_role_ids_for_all(&required), vec!["approver"]);
+        assert!(combined.granting_role_ids("sales_order:detail").is_empty());
+        assert!(combined.granting_role_ids("approval_instance:resume").is_empty());
     }
 }

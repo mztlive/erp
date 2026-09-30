@@ -5,6 +5,7 @@ use std::hash::{Hash, Hasher};
 
 use application_core::AuditActor;
 use erp_core::money::Amount;
+use erp_finance::entity::read_coverage::whole_document_readable;
 use erp_finance::ports::funds_scope::FundsResolvedScope;
 use erp_finance::repository::ReceivableExt;
 use erp_finance::repository::prelude::*;
@@ -209,12 +210,11 @@ impl FundsAccess {
         &self,
         query: &erp_finance::dto::receivable::InvoiceListQuery,
         rows: Vec<InvoiceRow>,
-        access: &FundsResolvedScope,
+        _access: &FundsResolvedScope,
         authorization: &FundsAuthorization,
-        purchase_access: &PurchaseAccess,
+        _purchase_access: &PurchaseAccess,
         executor: &mut dyn Executor,
     ) -> Result<Vec<(InvoiceRow, Vec<String>, Vec<String>)>> {
-        use erp_finance::entity::receivable::InvoiceDirection;
         let ids = rows.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
         let sales_links = self.sales_invoice_matched_links(&ids, executor).await?;
         let purchase_links = self.purchase_invoice_matched_links(&ids, executor).await?;
@@ -224,18 +224,17 @@ impl FundsAccess {
             .authorized_sales_ids(authorization, executor)
             .await?
             .map(|list| list.into_iter().collect::<BTreeSet<_>>());
-        let purchase_scope = authorization.purchase_scope.clone().unwrap_or_default();
-        let purchase_allowed = self
-            .authorized_purchase_ids(purchase_access, &purchase_scope, executor)
-            .await?
-            .map(|list| list.into_iter().collect::<BTreeSet<_>>());
+        let purchase_allowed = authorization.payable_ids(&purchase_facts);
         let condition = self.invoice_condition(query, executor).await?;
-        let empty_sales: Vec<SalesInvoiceLink> = Vec::new();
-        let empty_purchase: Vec<PurchaseInvoiceLink> = Vec::new();
         let mut decided = Vec::new();
         for row in rows {
-            let sales = sales_links.get(&row.id).unwrap_or(&empty_sales);
-            let purchase = purchase_links.get(&row.id).unwrap_or(&empty_purchase);
+            let sales = sales_links.get(&row.id).map(Vec::as_slice).unwrap_or_default();
+            let purchase = purchase_links.get(&row.id).map(Vec::as_slice).unwrap_or_default();
+            if !linked_sources_exist(sales.iter().map(|link| link.order.as_deref()), &sales_facts)
+                || !linked_sources_exist(purchase.iter().map(|link| link.order.as_deref()), &purchase_facts)
+            {
+                continue;
+            }
             let sales_tuples = invoice_sales_tuples(&row, sales, &sales_facts);
             let purchase_tuples = invoice_purchase_tuples(&row, purchase, &purchase_facts);
             let sales_matched = matched_orders(&sales_tuples, &sales_allowed);
@@ -260,17 +259,15 @@ impl FundsAccess {
             {
                 continue;
             }
-            let whole = match row.invoice_direction {
-                InvoiceDirection::Sales => authorization.whole(),
-                InvoiceDirection::Purchase => purchase_whole(authorization),
-            };
-            let mut combined = sales_tuples.clone();
-            combined.extend(purchase_tuples.clone());
+            let whole = whole_invoice_readable(
+                authorization.ledger_read,
+                sales,
+                purchase,
+                &sales_matched,
+                &purchase_matched,
+            );
             let operators = vec![row.stable.created_by.clone()];
-            let visible = row_visible(access, &combined, &operators, &[])?;
-            let unlinked = combined.iter().all(|(order, _, _, _, _)| order.is_none());
-            let matched_any = !sales_matched.is_empty() || !purchase_matched.is_empty();
-            if !keep_row(visible, whole, matched_any, sales.is_empty() && purchase.is_empty() || unlinked) {
+            if !whole && sales_matched.is_empty() && purchase_matched.is_empty() {
                 continue;
             }
             if !matches_invoice_condition(&sales_tuples, &purchase_tuples, &operators, &condition) {
@@ -326,23 +323,23 @@ impl FundsAccess {
         fingerprint: std::collections::hash_map::DefaultHasher,
         _executor: &mut dyn Executor,
     ) -> Result<FundsScopedPage<ScopedInvoiceRow>> {
-        use erp_finance::entity::receivable::InvoiceDirection;
         let total = decided.len() as u64;
         let page = query.paging.page.max(1);
         let page_size = query.paging.page_size.max(1);
         let start = ((page - 1) as usize).saturating_mul(page_size as usize);
         let end = start.saturating_add(page_size as usize).min(decided.len());
-        let empty_sales: Vec<SalesInvoiceLink> = Vec::new();
-        let empty_purchase: Vec<PurchaseInvoiceLink> = Vec::new();
         let mut items = Vec::new();
         if start < decided.len() {
             for (row, sales_matched, purchase_matched) in decided[start..end].iter() {
-                let sales = sales_links.get(&row.id).unwrap_or(&empty_sales);
-                let purchase = purchase_links.get(&row.id).unwrap_or(&empty_purchase);
-                let whole = match row.invoice_direction {
-                    InvoiceDirection::Sales => authorization.whole(),
-                    InvoiceDirection::Purchase => purchase_whole(&authorization),
-                };
+                let sales = sales_links.get(&row.id).map(Vec::as_slice).unwrap_or_default();
+                let purchase = purchase_links.get(&row.id).map(Vec::as_slice).unwrap_or_default();
+                let whole = whole_invoice_readable(
+                    authorization.ledger_read,
+                    sales,
+                    purchase,
+                    sales_matched,
+                    purchase_matched,
+                );
                 items.push(self.cut_invoice_row(
                     row,
                     sales,
@@ -357,27 +354,27 @@ impl FundsAccess {
         let mut whole_sum = zero_amount();
         let mut all_whole = true;
         for (row, sales_matched, purchase_matched) in decided.iter() {
-            let sales = sales_links.get(&row.id).unwrap_or(&empty_sales);
-            let purchase = purchase_links.get(&row.id).unwrap_or(&empty_purchase);
-            let whole = match row.invoice_direction {
-                InvoiceDirection::Sales => authorization.whole(),
-                InvoiceDirection::Purchase => purchase_whole(&authorization),
-            };
+            let sales = sales_links.get(&row.id).map(Vec::as_slice).unwrap_or_default();
+            let purchase = purchase_links.get(&row.id).map(Vec::as_slice).unwrap_or_default();
+            if !linked_sources_exist(sales.iter().map(|link| link.order.as_deref()), &sales_facts)
+                || !linked_sources_exist(purchase.iter().map(|link| link.order.as_deref()), &purchase_facts)
+            {
+                continue;
+            }
+            let whole = whole_invoice_readable(
+                authorization.ledger_read,
+                sales,
+                purchase,
+                sales_matched,
+                purchase_matched,
+            );
             all_whole &= whole;
             triples.extend(invoice_summary_inputs(sales, purchase, sales_matched, purchase_matched));
             if whole {
                 whole_sum = whole_sum.checked_add(row.gross_amount);
             }
         }
-        let mut owner_of = HashMap::new();
-        for (id, fact) in sales_facts.iter() {
-            owner_of.insert(id.clone(), fact.owner_user_id.clone());
-        }
-        for (id, fact) in purchase_facts.iter() {
-            if let Some(owner) = fact.owner_user_id.clone() {
-                owner_of.insert(id.clone(), owner);
-            }
-        }
+        let owner_of = invoice_source_owners(&sales_facts, &purchase_facts);
         let version = format!("{:x}", fingerprint.finish());
         ensure_version(params.scope_version.as_deref(), &version).map_err(|_| changed())?;
         let summary =
@@ -393,7 +390,7 @@ impl FundsAccess {
             organization_version: authorization.context.organizations.version,
             as_of: authorization.context.as_of.as_utc().to_rfc3339(),
             empty_reason: None,
-            scope_summary: "发票按分配关联销售/采购当前负责人与登记经办人授权；部分授权仅返获授权份额",
+            scope_summary: "发票按销售、采购或结算来源分配授权；完整票面另需财务整账职责及全部来源可见",
             ownership_basis: "linked_sales_and_purchase_owner_and_register_operator",
         })
     }
@@ -459,9 +456,8 @@ impl FundsAccess {
         purchase_access: &PurchaseAccess,
         executor: &mut dyn Executor,
     ) -> Result<FundsScopedResult<ScopedInvoiceRow>> {
-        use erp_finance::entity::receivable::InvoiceDirection;
         use erp_finance::repository::InvoiceFilter;
-        let (access, authorization) =
+        let (_access, authorization) =
             self.resolve_dual(actor, "invoice", "detail", purchase_access, executor).await?;
         let filter = InvoiceFilter {
             keyword_ids: None,
@@ -483,34 +479,30 @@ impl FundsAccess {
             self.purchase_invoice_matched_links(std::slice::from_ref(&row.id), executor).await?;
         let (sales_facts, purchase_facts) =
             self.invoice_fact_maps(&sales_links, &purchase_links, executor).await?;
-        let empty_sales: Vec<SalesInvoiceLink> = Vec::new();
-        let empty_purchase: Vec<PurchaseInvoiceLink> = Vec::new();
-        let sales = sales_links.get(&row.id).unwrap_or(&empty_sales);
-        let purchase = purchase_links.get(&row.id).unwrap_or(&empty_purchase);
+        let sales = sales_links.get(&row.id).map(Vec::as_slice).unwrap_or_default();
+        let purchase = purchase_links.get(&row.id).map(Vec::as_slice).unwrap_or_default();
+        if !linked_sources_exist(sales.iter().map(|link| link.order.as_deref()), &sales_facts)
+            || !linked_sources_exist(purchase.iter().map(|link| link.order.as_deref()), &purchase_facts)
+        {
+            return Err(Error::NotFound("发票不存在".into()));
+        }
         let sales_tuples = invoice_sales_tuples(&row, sales, &sales_facts);
         let purchase_tuples = invoice_purchase_tuples(&row, purchase, &purchase_facts);
         let sales_allowed = self
             .authorized_sales_ids(&authorization, executor)
             .await?
             .map(|list| list.into_iter().collect::<BTreeSet<_>>());
-        let purchase_scope = authorization.purchase_scope.clone().unwrap_or_default();
-        let purchase_allowed = self
-            .authorized_purchase_ids(purchase_access, &purchase_scope, executor)
-            .await?
-            .map(|list| list.into_iter().collect::<BTreeSet<_>>());
+        let purchase_allowed = authorization.payable_ids(&purchase_facts);
         let sales_matched = matched_orders(&sales_tuples, &sales_allowed);
         let purchase_matched = matched_orders(&purchase_tuples, &purchase_allowed);
-        let whole = match row.invoice_direction {
-            InvoiceDirection::Sales => authorization.whole(),
-            InvoiceDirection::Purchase => purchase_whole(&authorization),
-        };
-        let mut combined = sales_tuples;
-        combined.extend(purchase_tuples);
-        let operators = vec![row.stable.created_by.clone()];
-        let visible = row_visible(&access, &combined, &operators, &[])?;
-        let unlinked = combined.iter().all(|(order, _, _, _, _)| order.is_none());
-        let matched_any = !sales_matched.is_empty() || !purchase_matched.is_empty();
-        if !keep_row(visible, whole, matched_any, sales.is_empty() && purchase.is_empty() || unlinked) {
+        let whole = whole_invoice_readable(
+            authorization.ledger_read,
+            sales,
+            purchase,
+            &sales_matched,
+            &purchase_matched,
+        );
+        if !whole && sales_matched.is_empty() && purchase_matched.is_empty() {
             return Err(Error::NotFound("发票不存在".into()));
         }
         let data = self.cut_invoice_row(&row, sales, purchase, &sales_matched, &purchase_matched, whole);
@@ -528,7 +520,7 @@ impl FundsAccess {
             organization_version: authorization.context.organizations.version,
             as_of: authorization.context.as_of.as_utc().to_rfc3339(),
             empty_reason: None,
-            scope_summary: "发票按分配关联销售/采购当前负责人与登记经办人授权；部分授权仅返获授权份额",
+            scope_summary: "发票按销售、采购或结算来源分配授权；完整票面另需财务整账职责及全部来源可见",
             ownership_basis: "linked_sales_and_purchase_owner_and_register_operator",
         })
     }
@@ -716,6 +708,39 @@ pub(super) fn invoice_unallocated(row: &InvoiceRow, allocated: Amount) -> Amount
         InvoiceKind::Blue => row.gross_amount.checked_sub(allocated),
         InvoiceKind::Red => row.gross_amount.checked_add(allocated),
     }
+}
+
+/// 整张发票必须覆盖销项与进项实际分配，部分来源不授予完整票面。
+pub(super) fn whole_invoice_readable(
+    ledger_read: bool,
+    sales: &[SalesInvoiceLink],
+    purchase: &[PurchaseInvoiceLink],
+    sales_matched: &[String],
+    purchase_matched: &[String],
+) -> bool {
+    whole_document_readable(ledger_read, sales.iter().map(|link| link.order.as_deref()), sales_matched)
+        && whole_document_readable(
+            ledger_read,
+            purchase.iter().map(|link| link.order.as_deref()),
+            purchase_matched,
+        )
+}
+
+/// 汇总沿用已授权分配的真实来源负责人，不从登记经办人推导归属。
+fn invoice_source_owners(
+    sales_facts: &HashMap<String, LinkedSalesFact>,
+    purchase_facts: &HashMap<String, LinkedPurchaseFact>,
+) -> HashMap<String, String> {
+    let mut owner_of = HashMap::new();
+    for (id, fact) in sales_facts.iter() {
+        owner_of.insert(id.clone(), fact.owner_user_id.clone());
+    }
+    for (id, fact) in purchase_facts.iter() {
+        if let Some(owner) = fact.owner_user_id.clone() {
+            owner_of.insert(id.clone(), owner);
+        }
+    }
+    owner_of
 }
 
 #[cfg(test)]

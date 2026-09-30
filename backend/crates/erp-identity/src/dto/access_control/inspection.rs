@@ -2,6 +2,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::access_control::{DataScope, ScopeTargetMode};
+use crate::entity::access_control::authorization_policy::AuthorizationPolicy;
 use crate::service::access_control::consumers::registration;
 use crate::service::access_control::resolve::AuthorizedDataScope;
 use crate::{Error, Result};
@@ -60,6 +61,25 @@ pub struct AccessInspectionView {
 }
 
 impl AccessInspectionView {
+    /// 仅有动作资格时报告仍需具体对象，不给出范围允许结论。
+    /// # 参数
+    /// `policy` 为资源动作的真实授权策略。
+    /// # 返回
+    /// 动作通过、业务授权待检查的只读结果。
+    /// # 错误
+    /// 无；调用方必须先验证当前有效动作权限。
+    pub fn contextual(policy: AuthorizationPolicy) -> Self {
+        let mut view = Self::default();
+        view.push("操作权限", "passed", "账号有效，启用角色提供了本操作权限。");
+        view.push("业务授权", "review", policy.description());
+        view.push(
+            "对象上下文",
+            "review",
+            "需在实际业务中核验来源单据、任务归属、版本和管理资格；此检查不代表可以访问或处理具体对象。",
+        );
+        view
+    }
+
     /// 追加明确的检查层结果。
     /// # 参数
     /// * `layer` - 检查层。
@@ -159,6 +179,18 @@ impl AccessInspectionView {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn contextual_policies_never_report_object_access_as_passed_or_blocked() {
+        for policy in
+            [AuthorizationPolicy::Task, AuthorizationPolicy::SourceInherited, AuthorizationPolicy::Role]
+        {
+            let view = AccessInspectionView::contextual(policy);
+            assert_eq!(view.steps[0].status, "passed");
+            assert!(view.steps[1..].iter().all(|step| step.status == "review"));
+            assert!(view.scope_version.is_none());
+        }
+    }
 
     #[test]
     fn validates_registered_actions_and_object_checks() {

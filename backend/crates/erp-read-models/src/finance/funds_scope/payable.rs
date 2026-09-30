@@ -1,6 +1,6 @@
 //! 应付子账范围查询。
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 
 use application_core::AuditActor;
@@ -10,8 +10,8 @@ use erp_procurement::PurchaseAccess;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
-use super::allocation::purchase_whole;
 use super::authorization::*;
+use super::payable_source::source_key;
 use super::rows::*;
 use crate::{Error, Result};
 
@@ -91,7 +91,7 @@ impl FundsAccess {
             .await
     }
 
-    /// 分页查询应付子账范围行：采购来源按当前采购负责人，非采购来源按空事实。
+    /// 分页查询应付子账范围行：采购来源按当前采购负责人，结算来源按当前对账负责人。
     pub(super) async fn load_payable_accounts(
         &self,
         params: &erp_finance::dto::payable::PayableAccountListParams,
@@ -100,8 +100,7 @@ impl FundsAccess {
         purchase_access: &PurchaseAccess,
         executor: &mut dyn Executor,
     ) -> Result<FundsScopedPage<ScopedPayableAccountRow>> {
-        use erp_finance::entity::payable::PayableSourceType;
-        let (access, authorization) =
+        let (_access, authorization) =
             self.resolve_with_purchase(actor, "payable_account", "list", purchase_access, executor).await?;
         if authorization.empty() {
             return Ok(empty_page(&authorization, "no_scope", "应付子账无可见范围"));
@@ -130,29 +129,21 @@ impl FundsAccess {
         let po_ids = candidates
             .items
             .iter()
-            .filter(|row| row.source_type == PayableSourceType::PurchaseOrder)
-            .map(|row| row.source_document_id.clone())
+            .map(|row| source_key(row.source_type, &row.source_document_id))
             .collect::<Vec<_>>();
         let purchase_facts = self.purchase_fact_map(&po_ids, executor).await?;
-        let purchase_scope = authorization.purchase_scope.clone().unwrap_or_default();
-        let allowed = self
-            .authorized_purchase_ids(purchase_access, &purchase_scope, executor)
-            .await?
-            .map(|list| list.into_iter().collect::<BTreeSet<_>>());
         let condition = self.payable_account_condition(query, executor).await?;
         let mut decided = Vec::new();
         let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
         authorization.context.scope_version.hash(&mut fingerprint);
         for row in candidates.items {
-            let fact = (row.source_type == PayableSourceType::PurchaseOrder)
-                .then(|| purchase_facts.get(&row.source_document_id))
-                .flatten();
-            if fact.is_some()
-                && let Some(allowed) = &allowed
-                && !allowed.contains(&row.source_document_id)
-            {
+            let key = source_key(row.source_type, &row.source_document_id);
+            let Some(fact) =
+                purchase_facts.get(&key).filter(|fact| authorization.payable_fact_allowed(&key, fact))
+            else {
                 continue;
-            }
+            };
+            let fact = Some(fact);
             let row_facts = FundsLinkedFacts {
                 owner_user_id: fact.and_then(|order| order.owner_user_id.clone()),
                 business_org_unit_id: fact.map(|order| order.business_org_unit_id.clone()),
@@ -161,16 +152,10 @@ impl FundsAccess {
                 linked_document_id: row.source_document_id.clone(),
                 linked_document_version: fact.map(|order| order.version).unwrap_or(0),
             };
-            if !Self::allows(&access, &row_facts)? {
-                continue;
-            }
             if !matches_linked_condition(&row_facts, &condition) {
                 continue;
             }
-            let whole = match fact {
-                Some(_) => purchase_whole(&authorization),
-                None => authorization.funds.is_company(),
-            };
+            let whole = true;
             row.id.hash(&mut fingerprint);
             row.version.hash(&mut fingerprint);
             row.source_document_id.hash(&mut fingerprint);
@@ -254,7 +239,7 @@ impl FundsAccess {
             organization_version: authorization.context.organizations.version,
             as_of: authorization.context.as_of.as_utc().to_rfc3339(),
             empty_reason: None,
-            scope_summary: "应付子账按来源采购单当前采购负责人授权；部分授权仅返获授权份额",
+            scope_summary: "应付子账继承采购或供应商结算的真实来源边界",
             ownership_basis: "linked_purchase_owner",
         })
     }
@@ -303,8 +288,7 @@ impl FundsAccess {
         executor: &mut dyn Executor,
     ) -> Result<FundsScopedResult<ScopedPayableAccountRow>> {
         use erp_core::ids::PayableAccountId;
-        use erp_finance::entity::payable::PayableSourceType;
-        let (access, authorization) =
+        let (_access, authorization) =
             self.resolve_with_purchase(actor, "payable_account", "detail", purchase_access, executor).await?;
         let accounts = self
             .db
@@ -313,21 +297,14 @@ impl FundsAccess {
             .await?;
         let account =
             accounts.into_iter().next().ok_or_else(|| Error::NotFound("应付往来子账不存在".into()))?;
-        let fact = if account.source_type == PayableSourceType::PurchaseOrder {
-            self.purchase_fact_map(std::slice::from_ref(&account.source_document_id), executor)
-                .await?
-                .remove(&account.source_document_id)
-        } else {
-            None
-        };
-        if fact.is_some()
-            && let Some(scope) = authorization.purchase_scope.as_ref()
-        {
-            let allowed = self.authorized_purchase_ids(purchase_access, scope, executor).await?;
-            if allowed.is_some_and(|list| !list.contains(&account.source_document_id)) {
-                return Err(Error::NotFound("应付往来子账不存在".into()));
-            }
-        }
+        let key = source_key(account.source_type, &account.source_document_id);
+        let fact = self
+            .purchase_fact_map(std::slice::from_ref(&key), executor)
+            .await?
+            .remove(&key)
+            .filter(|fact| authorization.payable_fact_allowed(&key, fact))
+            .ok_or_else(|| Error::NotFound("应付往来子账不存在".into()))?;
+        let fact = Some(fact);
         let row_facts = FundsLinkedFacts {
             owner_user_id: fact.as_ref().and_then(|order| order.owner_user_id.clone()),
             business_org_unit_id: fact.as_ref().map(|order| order.business_org_unit_id.clone()),
@@ -336,13 +313,7 @@ impl FundsAccess {
             linked_document_id: account.source_document_id.clone(),
             linked_document_version: fact.as_ref().map(|order| order.version).unwrap_or(0),
         };
-        if !Self::allows(&access, &row_facts)? {
-            return Err(Error::NotFound("应付往来子账不存在".into()));
-        }
-        let whole = match fact.as_ref() {
-            Some(_) => purchase_whole(&authorization),
-            None => authorization.funds.is_company(),
-        };
+        let whole = true;
         let mut data = cut_payable_account_row(
             &PayableAccountRow {
                 id: account.base.id.clone(),
@@ -401,7 +372,7 @@ impl FundsAccess {
             organization_version: authorization.context.organizations.version,
             as_of: authorization.context.as_of.as_utc().to_rfc3339(),
             empty_reason: None,
-            scope_summary: "应付子账按来源采购单当前采购负责人授权；部分授权仅返获授权份额",
+            scope_summary: "应付子账继承采购或供应商结算的真实来源边界",
             ownership_basis: "linked_purchase_owner",
         })
     }

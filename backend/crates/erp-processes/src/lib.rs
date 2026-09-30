@@ -6,6 +6,7 @@ pub use errors::{Error, Result};
 
 pub mod adapters;
 pub mod approval_dispatch;
+pub mod approval_materials;
 pub mod attachments;
 pub mod audit;
 pub mod background;

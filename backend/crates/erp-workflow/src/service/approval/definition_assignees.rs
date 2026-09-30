@@ -4,6 +4,7 @@ use application_core::AuditActor;
 use persistence_core::NoTransaction;
 use serde::{Deserialize, Serialize};
 
+use super::approval_participant_permissions_with_executor;
 use super::definition::ApprovalDefinitionService;
 use super::execution::runtime_service::RuntimeAssigneeCandidate;
 use super::policy::require_process_required;
@@ -53,10 +54,15 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
             .auth
             .list_active_approval_candidates(query.search.as_deref(), query.limit, &mut NoTransaction)
             .await?;
-        let items = accounts
-            .into_iter()
-            .map(|account| RuntimeAssigneeCandidate { user_id: account.id, name: account.display_name })
-            .collect();
+        let mut items = Vec::new();
+        for account in accounts {
+            let candidate = AuditActor::new(account.id.clone(), account.login_account.clone(), account.kind);
+            if approval_participant_permissions_with_executor(&self.auth, &candidate, &mut NoTransaction)
+                .await?
+            {
+                items.push(RuntimeAssigneeCandidate { user_id: account.id, name: account.display_name });
+            }
+        }
         Ok(DefinitionAssigneePage { items })
     }
 }

@@ -8,7 +8,9 @@ use persistence_core::{Executor, Transactional};
 use serde::Serialize;
 
 use super::AccessControlService;
-use super::consumers::{WIRED_CONSUMERS, registration, validate_binding, validate_scope_type};
+use super::consumers::{
+    WIRED_CONSUMERS, configurable_registration, registration, validate_binding, validate_scope_type,
+};
 use crate::access_control::{
     AuditEvent, AuditEventData, AuditEventId, AuditEventResult, DataScope, DataScopeSubjectType,
 };
@@ -103,6 +105,9 @@ async fn migrate(
 pub(crate) async fn seed_company(db: &Database, user: &str, executor: &mut dyn Executor) -> Result<()> {
     for (resource, actions, dimensions) in WIRED_CONSUMERS {
         for action in *actions {
+            if configurable_registration(resource, action).is_err() {
+                continue;
+            }
             let scope = PersonDataScope {
                 base: BaseModel::new(id_generator::next_id()),
                 user_id: user.into(),
@@ -154,6 +159,9 @@ async fn plan(
     state.own_org(user, Instant::now())?;
     for (resource, actions, _) in WIRED_CONSUMERS {
         for action in *actions {
+            if configurable_registration(resource, action).is_err() {
+                continue;
+            }
             if existing.iter().any(|s| s.resource == *resource && s.action == *action) {
                 continue;
             }

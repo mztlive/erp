@@ -3,6 +3,7 @@
 use std::collections::BTreeSet;
 
 use application_core::AuditActor;
+use erp_finance::entity::read_coverage::whole_document_readable;
 use erp_finance::repository::prelude::*;
 use erp_finance::repository::{PayableExt, ReceivableExt, SupplierPaymentFilter};
 use erp_procurement::PurchaseAccess;
@@ -153,7 +154,7 @@ impl FundsAccess {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         use erp_finance::repository::CustomerReceiptFilter;
-        let (access, authorization) = self.resolve(actor, "customer_receipt", "detail", executor).await?;
+        let (_access, authorization) = self.resolve(actor, "customer_receipt", "detail", executor).await?;
         let filter = CustomerReceiptFilter {
             keyword_ids: None,
             receipt_ids: Some(vec![id.to_string()]),
@@ -179,8 +180,12 @@ impl FundsAccess {
         let row_links = links.get(&row.id).unwrap_or(&empty_links);
         let tuples = receipt_tuples(&row, row_links, &facts);
         let matched = matched_orders(&tuples, &allowed);
-        let whole = authorization.whole();
-        let visible = row_visible(&access, &tuples, &[], &[])?;
+        let whole = whole_document_readable(
+            authorization.ledger_read,
+            row_links.iter().map(|link| link.order.as_deref()),
+            &matched,
+        );
+        let visible = whole || !matched.is_empty();
         let unlinked = row_links.iter().all(|link| link.order.is_none());
         if !keep_row(visible, whole, !matched.is_empty(), row_links.is_empty() || unlinked) {
             return Err(Error::NotFound("客户回款单不存在".into()));
@@ -196,9 +201,8 @@ impl FundsAccess {
         purchase_access: &PurchaseAccess,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        use erp_finance::entity::receivable::InvoiceDirection;
         use erp_finance::repository::InvoiceFilter;
-        let (access, authorization) =
+        let (_access, authorization) =
             self.resolve_dual(actor, "invoice", "detail", purchase_access, executor).await?;
         let filter = InvoiceFilter {
             keyword_ids: None,
@@ -230,21 +234,21 @@ impl FundsAccess {
             .authorized_sales_ids(&authorization, executor)
             .await?
             .map(|list| list.into_iter().collect::<BTreeSet<_>>());
-        let purchase_scope = authorization.purchase_scope.clone().unwrap_or_default();
-        let purchase_allowed = self
-            .authorized_purchase_ids(purchase_access, &purchase_scope, executor)
-            .await?
-            .map(|list| list.into_iter().collect::<BTreeSet<_>>());
+        let purchase_allowed = authorization.payable_ids(&purchase_facts);
         let sales_part: Vec<OrderTuple> = invoice_sales_tuples(&row, sales, &sales_facts);
         let purchase_part: Vec<OrderTuple> = invoice_purchase_tuples(&row, purchase, &purchase_facts);
         let matched_any = !matched_orders(&sales_part, &sales_allowed).is_empty()
             || !matched_orders(&purchase_part, &purchase_allowed).is_empty();
-        let whole = match row.invoice_direction {
-            InvoiceDirection::Sales => authorization.whole(),
-            InvoiceDirection::Purchase => purchase_whole(&authorization),
-        };
-        let operators = vec![row.stable.created_by.clone()];
-        let visible = row_visible(&access, &combined, &operators, &[])?;
+        let sales_matched = matched_orders(&sales_part, &sales_allowed);
+        let purchase_matched = matched_orders(&purchase_part, &purchase_allowed);
+        let whole = whole_invoice_readable(
+            authorization.ledger_read,
+            sales,
+            purchase,
+            &sales_matched,
+            &purchase_matched,
+        );
+        let visible = whole || matched_any;
         let unlinked = combined.iter().all(|(order, _, _, _, _)| order.is_none());
         let empty = sales.is_empty() && purchase.is_empty();
         if !keep_row(visible, whole, matched_any, empty || unlinked) {
@@ -307,43 +311,7 @@ impl FundsAccess {
         purchase_access: &PurchaseAccess,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        use erp_core::ids::PayableAccountId;
-        use erp_finance::entity::payable::PayableSourceType;
-        let (access, authorization) =
-            self.resolve_with_purchase(actor, "payable_account", "detail", purchase_access, executor).await?;
-        let accounts = self
-            .db
-            .payable_accounts()
-            .find_accounts_by_ids(&[PayableAccountId::new(id.to_string())], executor)
-            .await?;
-        let account =
-            accounts.into_iter().next().ok_or_else(|| Error::NotFound("应付往来子账不存在".into()))?;
-        let fact = if account.source_type == PayableSourceType::PurchaseOrder {
-            self.purchase_fact_map(std::slice::from_ref(&account.source_document_id), executor)
-                .await?
-                .remove(&account.source_document_id)
-        } else {
-            None
-        };
-        if fact.is_some()
-            && let Some(scope) = authorization.purchase_scope.as_ref()
-        {
-            let allowed = self.authorized_purchase_ids(purchase_access, scope, executor).await?;
-            if allowed.is_some_and(|list| !list.contains(&account.source_document_id)) {
-                return Err(Error::NotFound("应付往来子账不存在".into()));
-            }
-        }
-        let row_facts = FundsLinkedFacts {
-            owner_user_id: fact.as_ref().and_then(|order| order.owner_user_id.clone()),
-            business_org_unit_id: fact.as_ref().map(|order| order.business_org_unit_id.clone()),
-            operator_user_ids: Vec::new(),
-            secondary_operator_user_ids: Vec::new(),
-            linked_document_id: account.source_document_id.clone(),
-            linked_document_version: fact.as_ref().map(|order| order.version).unwrap_or(0),
-        };
-        if !Self::allows(&access, &row_facts)? {
-            return Err(Error::NotFound("应付往来子账不存在".into()));
-        }
+        self.load_payable_account_detail(id, actor, purchase_access, executor).await?;
         Ok(())
     }
 
@@ -355,7 +323,7 @@ impl FundsAccess {
         purchase_access: &PurchaseAccess,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let (access, authorization) = self
+        let (_access, authorization) = self
             .resolve_with_purchase(actor, "supplier_payment", "detail", purchase_access, executor)
             .await?;
         let filter = SupplierPaymentFilter {
@@ -376,19 +344,17 @@ impl FundsAccess {
         let links = self.payment_matched_links(std::slice::from_ref(&row.id), executor).await?;
         let order_ids = links.values().flatten().filter_map(|link| link.order.clone()).collect::<Vec<_>>();
         let facts = self.purchase_fact_map(&order_ids, executor).await?;
-        let purchase_scope = authorization.purchase_scope.clone().unwrap_or_default();
-        let allowed = self
-            .authorized_purchase_ids(purchase_access, &purchase_scope, executor)
-            .await?
-            .map(|list| list.into_iter().collect::<BTreeSet<_>>());
+        let allowed = authorization.payable_ids(&facts);
         let empty_links: Vec<PaymentLink> = Vec::new();
         let row_links = links.get(&row.id).unwrap_or(&empty_links);
         let tuples = payment_tuples(&row, row_links, &facts);
         let matched = matched_orders(&tuples, &allowed);
-        let whole = purchase_whole(&authorization);
-        let operators = self.payment_operators(std::slice::from_ref(&row.id), true, executor).await?;
-        let doc_operators = operators.get(&row.id).cloned().unwrap_or_default();
-        let visible = row_visible(&access, &tuples, &doc_operators, &[])?;
+        let whole = whole_document_readable(
+            authorization.ledger_read,
+            row_links.iter().map(|link| link.order.as_deref()),
+            &matched,
+        );
+        let visible = whole || !matched.is_empty();
         let unlinked = row_links.iter().all(|link| link.order.is_none());
         if !keep_row(visible, whole, !matched.is_empty(), row_links.is_empty() || unlinked) {
             return Err(Error::NotFound("供应商付款单不存在".into()));

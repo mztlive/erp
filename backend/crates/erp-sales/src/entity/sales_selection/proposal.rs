@@ -75,9 +75,9 @@ pub struct SalesSelectionProposalData {
     pub customer_name: String,
     /// 选品册。
     pub booklet_id: SalesSelectionBookletId,
-    /// 继承所属册的显式销售负责人；客户提交人不成为负责人。
+    /// 提交时所属册的销售负责人快照；当前授权须读取所属册当前责任。
     pub sales_owner_user_id: String,
-    /// 继承所属册的业务组织。
+    /// 提交时所属册的业务组织快照；不作为当前授权依据。
     pub business_org_unit_id: String,
     /// 准备批次。
     pub batch_id: String,
@@ -106,9 +106,9 @@ pub struct SalesSelectionProposal {
     pub customer_name: String,
     /// 选品册。
     pub booklet_id: SalesSelectionBookletId,
-    /// 继承所属册的显式销售负责人；客户提交人不成为负责人。
+    /// 提交时所属册的销售负责人快照；当前授权须读取所属册当前责任。
     pub sales_owner_user_id: String,
-    /// 继承所属册的业务组织。
+    /// 提交时所属册的业务组织快照；不作为当前授权依据。
     pub business_org_unit_id: String,
     /// 准备批次。
     pub batch_id: String,

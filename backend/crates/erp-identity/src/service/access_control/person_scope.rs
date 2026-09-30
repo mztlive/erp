@@ -27,7 +27,7 @@ impl AccessControlService {
         actor: &AuditActor,
     ) -> Result<()> {
         let action = req.actions.first().ok_or_else(|| Error::ValidationError("请选择操作".into()))?;
-        let dimensions = consumers::registration(&req.resource, action)?.required_dimensions;
+        let dimensions = consumers::configurable_registration(&req.resource, action)?.required_dimensions;
         let req = req.normalized(dimensions)?;
         let event = self
             .build_audit_event(
@@ -65,11 +65,11 @@ impl AccessControlService {
             .iter()
             .find(|o| o.resource == req.resource)
             .ok_or_else(|| Error::ValidationError("此人没有该业务操作权限".into()))?;
-        if req.actions.is_empty() || req.actions.iter().any(|a| !option.actions.contains(a)) {
+        if req.actions.is_empty() || req.actions.iter().any(|a| !option.configurable_actions.contains(a)) {
             return Err(Error::ValidationError("请选择此人当前具备的操作".into()));
         }
         for action in &req.actions {
-            consumers::registration(&req.resource, action)?;
+            consumers::configurable_registration(&req.resource, action)?;
         }
         for grant in &req.grants {
             for term in &grant.terms {

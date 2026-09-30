@@ -5,18 +5,14 @@ use bpm::model::types::ModelError;
 use mongodb::Database;
 use persistence_core::Executor;
 
-use super::super::business_adapter::{
-    BindingRevalidationContext, adapter_object_read_decision_with, adapter_spec_of,
-    ensure_separation_of_duties,
-};
+use super::super::business_adapter::{BindingRevalidationContext, ensure_separation_of_duties};
 use super::super::policy::{ApproverEligibilityPolicy, ProcessRequiredApprovalPolicy};
-use super::super::scope::approval_document_read_scope_with_executor;
+use super::super::scope::approval_participant_permissions_with_executor;
 use super::process_not_configured;
 use super::upgrade::map_model_error;
 use crate::error::{Error, Result};
 use crate::ports::{ApprovalObjectReadPort, OrderTaskSource, WorkflowAccountFact, WorkflowAuthorizationPort};
 use crate::repository::bpm::DefinitionGraph;
-use crate::service::approval::approval_decide_scope_with_executor;
 
 /// 复用 BPM 图原语重验发布结构；不得把 Executor 传入 BPM。
 ///
@@ -59,13 +55,12 @@ pub(super) fn revalidate_published_graph(graph: &DefinitionGraph) -> Result<()> 
 pub(super) async fn revalidate_binding_graph(
     _db: &Database,
     rbac: &impl WorkflowAuthorizationPort,
-    object_read: &dyn ApprovalObjectReadPort,
+    _object_read: &dyn ApprovalObjectReadPort,
     policy: &ProcessRequiredApprovalPolicy,
     context: &BindingRevalidationContext,
     graph: &DefinitionGraph,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let spec = adapter_spec_of(policy.document_type)?;
     let assignee_ids = graph.assignee_ids();
     ensure_separation_of_duties(policy.separation_of_duties_policy, &context.creator_id, &assignee_ids)?;
     let accounts = load_assignee_accounts(rbac, &assignee_ids, executor).await?;
@@ -80,19 +75,8 @@ pub(super) async fn revalidate_binding_graph(
         {
             return Err(Error::ValidationError("订单审批绑定缺少内部业务部门".into()));
         }
-        let decide = approval_decide_scope_with_executor(rbac, &assignee, executor).await?;
-        let read =
-            approval_document_read_scope_with_executor(rbac, &assignee, policy.document_type, executor)
-                .await?;
-        if !decide.covers_object(&object) || !read.covers_object(&object) {
-            return Err(Error::ValidationError("指定审批人缺少动作权限或当前对象范围".into()));
-        }
-        if object.order_source.is_some() && !rbac.binding_order_readable(&assignee, &object, executor).await?
-        {
-            return Err(Error::ValidationError("指定审批人不能读取当前原订单".into()));
-        }
-        if adapter_object_read_decision_with(&spec, context, user_id, object_read)? != Some(true) {
-            return Err(Error::ValidationError("指定审批人不能读取当前业务对象".into()));
+        if !approval_participant_permissions_with_executor(rbac, &assignee, executor).await? {
+            return Err(Error::ValidationError("指定审批人缺少审批读取或决定权限".into()));
         }
     }
     Ok(())

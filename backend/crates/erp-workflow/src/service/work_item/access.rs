@@ -14,6 +14,7 @@ use crate::error::{Error, ErrorCode, Result};
 use crate::ports::{ObjectFact, ObjectFactMap, permission_covers};
 use crate::repository::DocumentRegistryExt;
 use crate::repository::prelude::*;
+use crate::service::approval::execution::runtime_service::approval_task_readable_with_executor;
 
 pub fn object_policy(
     work_item_type: WorkItemType,
@@ -253,6 +254,21 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         access: &ActorAccess,
         executor: &mut dyn Executor,
     ) -> Result<()> {
+        if item.work_item_type.is_document_approval() {
+            let account = self
+                .auth
+                .load_account(&access.actor_id, executor)
+                .await?
+                .ok_or_else(|| Error::Forbidden("审批任务账号不存在".into()))?;
+            let actor = AuditActor::new(account.id, account.login_account, account.kind);
+            return if approval_task_readable_with_executor(&self.db, &self.auth, &actor, item, executor)
+                .await?
+            {
+                Ok(())
+            } else {
+                Err(Error::Forbidden("审批任务责任链不匹配".into()))
+            };
+        }
         let policy = object_policy(item.work_item_type, &item.business_object_type)
             .ok_or_else(|| Error::Forbidden("任务类型未注册责任策略".to_string()))?;
         let keys = HashSet::from([(policy.object_kind, item.business_object_id.clone())]);
@@ -400,14 +416,19 @@ pub fn authorized_fields(
             let policy = object_policy(row.work_item_type, &row.business_object_type)?;
             let fact = facts.get(&(policy.object_kind, row.business_object_id.clone()))?;
             if !has_permission(access, policy.read_permission)
-                || !has_item_participation(
+                || !(supplier_fulfillment_owner(
+                    row.work_item_type,
+                    &row.business_object_type,
+                    row.owner_user_id.as_deref(),
+                    access,
+                ) || has_item_participation(
                     row.work_item_type,
                     row.owner_user_id.as_deref(),
                     &row.owner_role,
                     &row.owner_organization_id,
                     access,
                     fact,
-                )
+                ))
                 || !fact.subject_versions.accepts(&row.subject_version)
             {
                 return None;
@@ -439,14 +460,19 @@ pub fn authorized_item_fields(
     let policy = object_policy(item.work_item_type, &item.business_object_type)?;
     let fact = facts.get(&(policy.object_kind, item.business_object_id.clone()))?;
     if !has_permission(access, policy.read_permission)
-        || !has_item_participation(
+        || !(supplier_fulfillment_owner(
+            item.work_item_type,
+            &item.business_object_type,
+            item.owner_user_id.as_deref(),
+            access,
+        ) || has_item_participation(
             item.work_item_type,
             item.owner_user_id.as_deref(),
             &item.owner_role,
             &item.owner_organization_id,
             access,
             fact,
-        )
+        ))
         || !fact.subject_versions.accepts(&item.subject_version)
     {
         return None;
@@ -482,11 +508,34 @@ pub fn has_assignment_candidate_access(item: &WorkItem, access: &ActorAccess, fa
         && fact.subject_versions.accepts(&item.subject_version)
 }
 
+/// W26 只有供应商履约对象的两个正式异常任务使用具体责任人授权。
+fn is_supplier_fulfillment_task(kind: WorkItemType, object_type: &str) -> bool {
+    object_type == "SUPPLIER_FULFILLMENT_ORDER"
+        && matches!(kind, WorkItemType::IntegrationResultUnknown | WorkItemType::BusinessException)
+}
+
+/// 具体任务责任只补充该对象的任务读取，普通单据访问另行校验。
+fn supplier_fulfillment_owner(
+    kind: WorkItemType,
+    object_type: &str,
+    owner: Option<&str>,
+    access: &ActorAccess,
+) -> bool {
+    is_supplier_fulfillment_task(kind, object_type) && owner == Some(access.actor_id.as_str())
+}
+
 /// 返回执行任务的完整权限；普通任务返回空集，未注册执行对象失败关闭。
 pub fn required_execution_permissions(
     work_item_type: WorkItemType,
     business_object_type: &str,
 ) -> Option<Vec<&'static str>> {
+    if is_supplier_fulfillment_task(work_item_type, business_object_type) {
+        return Some(vec![
+            "supplier_fulfillment_order:detail",
+            "supplier_fulfillment_order:investigate",
+            "supplier_fulfillment_order:complete",
+        ]);
+    }
     if work_item_type == WorkItemType::BusinessException && business_object_type == "SUPPLIER_OFFERING" {
         return Some(vec!["supplier_offering:resolve_supply_exception"]);
     }
@@ -688,5 +737,52 @@ fn apply_object_display(fields: &mut dto::WorkItemFields, fact: &ObjectFact) {
     if !preserve_task_impact {
         fields.impact_summary =
             subject.and_then(|item| item.impact_summary.clone()).or_else(|| fact.impact_summary.clone());
+    }
+}
+
+#[cfg(test)]
+mod task_policy_tests {
+    use super::*;
+
+    #[test]
+    fn fulfillment_exception_owner_is_limited_to_exact_task_type_and_object() {
+        let owner = ActorAccess::new("handler".into());
+        assert!(supplier_fulfillment_owner(
+            WorkItemType::BusinessException,
+            "SUPPLIER_FULFILLMENT_ORDER",
+            Some("handler"),
+            &owner
+        ));
+        assert!(!supplier_fulfillment_owner(
+            WorkItemType::BusinessException,
+            "SUPPLIER_FULFILLMENT_ORDER",
+            Some("someone-else"),
+            &owner
+        ));
+        assert!(!supplier_fulfillment_owner(
+            WorkItemType::BusinessException,
+            "SUPPLIER_OFFERING",
+            Some("handler"),
+            &owner
+        ));
+        assert!(!supplier_fulfillment_owner(
+            WorkItemType::DocumentApproval,
+            "SUPPLIER_FULFILLMENT_ORDER",
+            Some("handler"),
+            &owner
+        ));
+        let permissions = required_execution_permissions(
+            WorkItemType::IntegrationResultUnknown,
+            "SUPPLIER_FULFILLMENT_ORDER",
+        )
+        .unwrap();
+        assert_eq!(
+            permissions,
+            vec![
+                "supplier_fulfillment_order:detail",
+                "supplier_fulfillment_order:investigate",
+                "supplier_fulfillment_order:complete"
+            ]
+        );
     }
 }

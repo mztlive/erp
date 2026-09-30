@@ -39,6 +39,7 @@ mod refund;
 mod refund_result;
 mod refund_writes;
 mod reject;
+mod task_authorization;
 mod work_item;
 
 use std::sync::Arc;
@@ -88,7 +89,7 @@ impl SupplierFulfillmentProcess {
         Ok(self.domain().load_order(id).await?)
     }
 
-    /// 按动作重验订单范围；当前开放 W26 处理人可处理非跟进人任务。
+    /// 按动作重验普通订单范围；任务专用入口单独证明任务、责任与版本。
     pub async fn require_scoped_order(
         &self,
         id: &str,

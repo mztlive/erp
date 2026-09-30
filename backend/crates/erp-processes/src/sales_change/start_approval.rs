@@ -30,6 +30,7 @@ use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::adapter::sales_change_order_object_readable;
+use crate::adapters::freeze_approval_materials;
 use crate::{Error, Result};
 
 /// 加载绑定定义图。缺失时失败关闭，不得用空图启动。
@@ -473,6 +474,7 @@ async fn persist_runtime_writes(
         snapshot_payload.clone(),
     )
     .map_err(|error| Error::ValidationError(error.to_string()))?;
+    let snapshot = freeze_approval_materials(db, snapshot, executor).await?;
     db.approval_subject_snapshots().create_immutable_snapshot(&snapshot, executor).await?;
     persist_open_tasks(db, writes, owner_role, organization_id, now, executor).await
 }

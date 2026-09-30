@@ -9,15 +9,13 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use super::super::apply_plan::PlannedWrites;
-use super::read_auth::runtime_object_readable;
 use crate::entity::approval_integration::ApprovalSubjectSnapshot;
 use crate::entity::document_registry::DocumentType;
 use crate::error::{Error, Result};
 use crate::ports::ApprovalObjectReadPort;
 use crate::repository::ApprovalIntegrationExt;
-use crate::service::approval::business_adapter::{BindingRevalidationContext, adapter_spec_of};
 use crate::service::approval::{
-    approval_document_read_scope_with_executor, definition_management_visibility_with_executor,
+    approval_action_roles_with_executor, definition_management_visibility_with_executor,
 };
 
 /// 决定通知只消费冻结快照、实际执行与当前权限事实。
@@ -125,12 +123,11 @@ pub(super) fn blocked_cancel_notification_recipients(submitted_by: &str, actor_i
 pub(super) async fn runtime_admin_notification_recipients(
     _db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
-    object_read: &dyn ApprovalObjectReadPort,
+    _object_read: &dyn ApprovalObjectReadPort,
     document_type: DocumentType,
     snapshot: &ApprovalSubjectSnapshot,
     executor: &mut dyn Executor,
 ) -> Result<Vec<String>> {
-    let spec = adapter_spec_of(document_type)?;
     let accounts = rbac.list_accounts_by_kind(erp_core::AccountKind::Admin, executor).await?;
     let mut recipients = Vec::new();
     for account in accounts {
@@ -139,21 +136,15 @@ pub(super) async fn runtime_admin_notification_recipients(
         }
         let actor = AuditActor::new(account.id.clone(), account.id.clone(), account.kind);
         let visibility = definition_management_visibility_with_executor(rbac, &actor, executor).await?;
-        let read_scope =
-            approval_document_read_scope_with_executor(rbac, &actor, document_type, executor).await?;
-        let context = BindingRevalidationContext::new(
-            snapshot.payload.responsible_org_id.clone(),
-            snapshot.payload.submitted_by.clone(),
-        );
-        let read_scope_covers = !read_scope.is_empty()
-            && read_scope.covers_object(
-                &rbac
-                    .approval_scope_object(snapshot.document_type, &snapshot.business_object_id, executor)
-                    .await?,
-            );
-        let object_readable =
-            runtime_object_readable(&spec, &context, &account.id, read_scope_covers, object_read)?;
-        if visibility.runtime_admin_types().contains(&document_type) && read_scope_covers && object_readable {
+        let can_read = !approval_action_roles_with_executor(rbac, &actor, "approval_instance:read", executor)
+            .await?
+            .is_empty();
+        if visibility.runtime_admin_types().contains(&document_type)
+            && can_read
+            && rbac
+                .approval_source_readable(&actor, document_type, &snapshot.business_object_id, executor)
+                .await?
+        {
             recipients.push(account.id);
         }
     }

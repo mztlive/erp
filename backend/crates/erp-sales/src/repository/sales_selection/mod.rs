@@ -3,6 +3,7 @@
 //! 单集合 CRUD 直接复用 `owned` 仓储；本模块只承载跨集合多步骤写入入口与
 //! 列表投影查询。集合名统一取 `SalesSelectionExt` 关联常量。
 
+mod proposal_scope;
 mod queries;
 mod rate;
 pub mod scope;
@@ -177,15 +178,8 @@ impl QueryFilter for SelectionProposalFilter {
     fn to_doc(&self) -> Document {
         let mut and: Vec<Document> = Vec::new();
         push_undeleted(&mut and);
-        and.push(self.authorized_scope.document());
         if let Some(ids) = &self.authorized_customer_ids {
             and.push(doc! { "customer_id": { "$in": ids } });
-        }
-        if let Some(owners) = &self.owner_user_ids {
-            and.push(doc! { "sales_owner_user_id": { "$in": owners } });
-        }
-        if let Some(orgs) = &self.org_unit_ids {
-            and.push(doc! { "business_org_unit_id": { "$in": orgs } });
         }
         let mut filter = doc! { "$and": and };
         if let Some(customer_id) = &self.customer_id {
@@ -322,26 +316,7 @@ impl<'a> SalesSelectionDomainRepository<'a> {
         filter: &SelectionProposalFilter,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<SalesSelectionProposal>> {
-        let options = FindOptions::builder()
-            .sort(doc! { "submitted_at": -1, "id": -1 })
-            .skip(filter.skip())
-            .limit(filter.limit())
-            .build();
-        let condition = filter.to_doc();
-        let items = mongo_ops::find_many(
-            &self.db.collection::<SalesSelectionProposal>(PROPOSALS),
-            condition.clone(),
-            options,
-            executor,
-        )
-        .await?;
-        let total = mongo_ops::count_documents(
-            &self.db.collection::<SalesSelectionProposal>(PROPOSALS),
-            condition,
-            executor,
-        )
-        .await?;
-        Ok(PageResult { items, total: total as i64 })
+        proposal_scope::search(self.db, filter, executor).await
     }
 
     /// 列出某批次当前有效陈列。

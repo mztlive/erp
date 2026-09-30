@@ -1,4 +1,4 @@
-//! 审批动作采用内部业务组织、仓库或结算主体的独立身份维度。
+//! 工作流管理读取复用业务来源范围；该适配器不授予审批任务访问权。
 
 use std::slice;
 use std::sync::Arc;
@@ -91,11 +91,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn approval_identity_dimensions_and_user_cap_do_not_cross_grant() {
+    fn source_identity_dimensions_and_user_cap_do_not_cross_grant() {
         let mut predicate = Predicate(AuthorizedDataScope {
             user_id: "approver".into(),
-            resource: "approval_instance".into(),
-            action: "decide".into(),
+            resource: "supplier_settlement_statement".into(),
+            action: "detail".into(),
             role_scopes: Default::default(),
             scope: ResolvedScope {
                 role_clauses: vec![ScopeClause {
@@ -143,7 +143,7 @@ mod tests {
         let mut predicate = Predicate(AuthorizedDataScope {
             user_id: "reviewer".into(),
             resource: "supplier_settlement_statement".into(),
-            action: "confirm".into(),
+            action: "detail".into(),
             role_scopes: [("finance".into(), clause.clone())].into(),
             scope: ResolvedScope { role_clauses: vec![clause], user_limit: None },
             organizations: Default::default(),

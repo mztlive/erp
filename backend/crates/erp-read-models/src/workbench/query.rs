@@ -11,7 +11,7 @@ use erp_workflow::{BpmExt, WorkItemExt};
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
-use super::access::{ActorAccess, authorized_fields, authorized_item_fields, detail_scope};
+use super::access::{ActorAccess, authorized_item_fields, detail_scope};
 use super::facts::{OwnedFulfillmentTask, object_policy};
 use super::stats::apply_due_filter;
 use super::{
@@ -211,14 +211,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
                 break;
             }
             let mut facts = self.object_facts_for_rows(&rows, executor).await?;
-            self.filter_order_access_keeping_owned_fulfillment(
-                &access.actor_id,
-                rows.iter().map(owned_fulfillment_task),
-                &mut facts,
-                executor,
-            )
-            .await?;
-            let fields = authorized_fields(rows, access, &facts);
+            let fields = self.authorize_queue_rows(rows, access, &mut facts, executor).await?;
             for fields in fields.into_iter().filter(|fields| {
                 matches_keyword(fields, filter.query.as_deref())
                     && matches_handler(fields, &query.handler_user_ids)
@@ -280,6 +273,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             })
             .collect::<HashSet<_>>();
         let mut facts = self.load_object_facts(&keys, executor).await?;
+        let original = facts.clone();
         self.filter_order_access_keeping_owned_fulfillment(
             &access.actor_id,
             items.iter().map(owned_fulfillment_task_item),
@@ -287,7 +281,19 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             executor,
         )
         .await?;
-        Ok(items.into_iter().filter_map(|item| authorized_item_fields(item, access, &facts)).collect())
+        let mut fields = Vec::new();
+        for item in items {
+            if item.work_item_type.is_document_approval() {
+                if let Some(authorized) =
+                    self.authorize_approval_item(&item, access, &original, executor).await?
+                {
+                    fields.push(authorized);
+                }
+            } else if let Some(authorized) = authorized_item_fields(item, access, &facts) {
+                fields.push(authorized);
+            }
+        }
+        Ok(fields)
     }
 
     /// 为已授权任务逐条计算审批阻断与允许动作。

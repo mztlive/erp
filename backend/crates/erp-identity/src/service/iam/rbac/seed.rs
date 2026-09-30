@@ -9,7 +9,9 @@ use crate::entity::access_control::{DataScope, DataScopeData, DataScopeId, DataS
 use crate::entity::{Permission, PermissionSet, RoleData};
 use crate::error::{Error, Result};
 use crate::repository::prelude::*;
-use crate::service::access_control::consumers::{validate_binding, validate_scope_type};
+use crate::service::access_control::consumers::{
+    configurable_registration, validate_binding, validate_scope_type,
+};
 use crate::{AccessControlExt, MongoCasbinAdapter};
 
 impl RbacService {
@@ -237,6 +239,9 @@ fn validate_scope_manifest(role: &str, resource: &str, definitions: &[DataScopeD
         }
         data.binding.validate(data.scope_type, &data.scope_targets)?;
         validate_binding(&data.binding)?;
+        for action in &data.binding.actions {
+            configurable_registration(&data.binding.resource, action)?;
+        }
         validate_scope_type(&data.binding.resource, data.scope_type)?;
     }
     Ok(())
@@ -262,6 +267,21 @@ mod scope_manifest_tests {
                 include_descendants: None,
                 enabled: true,
             },
+        }
+    }
+
+    #[test]
+    fn scope_seed_rejects_retired_authorization_policies() {
+        for (resource, action) in [
+            ("approval_instance", "read"),
+            ("contract", "list"),
+            ("supplier_settlement_statement", "confirm"),
+            ("integration_error_task", "create"),
+        ] {
+            let mut retired = data();
+            retired.binding.resource = resource.into();
+            retired.binding.actions = vec![action.into()];
+            assert!(validate_scope_manifest("role-sales", resource, &[retired]).is_err());
         }
     }
 

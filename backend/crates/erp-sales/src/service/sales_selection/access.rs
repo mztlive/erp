@@ -136,21 +136,19 @@ impl SelectionAccess {
         executor: &mut dyn Executor,
     ) -> Result<SalesSelectionProposal> {
         let (access, scope) = self.resolve(actor, "sales_selection_proposal", action, executor).await?;
-        let found = self
+        let proposal = self
             .db
             .sales_selection_proposals()
             .find_by_id(id, executor)
             .await?
-            .filter(|item| in_scope(&scope, &item.sales_owner_user_id, &item.business_org_unit_id));
-        let Some(proposal) = found else {
-            return Err(Error::NotFound("销售方案不存在或无权查看".into()));
-        };
-        let object = SelectionScopeObject {
-            owned: proposal.sales_owner_user_id == access.user_id,
-            historical_read_participant: false,
-            org_unit_id: Some(proposal.business_org_unit_id.clone()),
-        };
-        if !self.scope.allows(&access, &object)? {
+            .ok_or_else(|| Error::NotFound("销售方案不存在或无权查看".into()))?;
+        let booklet = self
+            .db
+            .sales_selection_booklets()
+            .find_by_id(proposal.booklet_id.as_ref(), executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("销售方案不存在或无权查看".into()))?;
+        if !self.allows_booklet(&access, &scope, &booklet)? {
             return Err(Error::NotFound("销售方案不存在或无权查看".into()));
         }
         Ok(proposal)

@@ -6,7 +6,10 @@ export async function seedPersonDataScopes(token, accounts) {
     const path = `/admin/person-data-scopes/${encodeURIComponent(person.id)}`;
     let view = await call("GET", path, { token });
     for (const business of view.businesses) {
-      const actions = business.actions.filter(action => !view.items.some(scope => scope.resource === business.resource && scope.action === action));
+      if (!Array.isArray(business.configurable_actions)) {
+        throw new Error("人员范围接口缺少授权策略准入信息，请先更新后端");
+      }
+      const actions = business.configurable_actions.filter(action => !view.items.some(scope => scope.resource === business.resource && scope.action === action));
       if (!actions.length) continue;
       const internal = business.dimensions.length === 1 && business.dimensions[0] === "internal_org";
       const self = internal && ["sales", "procurement", "operations"].includes(key);

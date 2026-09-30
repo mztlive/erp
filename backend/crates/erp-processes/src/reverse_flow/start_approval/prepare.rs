@@ -26,14 +26,14 @@ pub async fn ensure_return_start_actor_active(
     super::authorization::ensure_actor_active(db, rbac, actor, executor).await
 }
 
-/// 重放前在同一 fresh session 内重验账号、提交动作和对象读取 DataScope。
+/// 重放前在同一事务内重验账号、提交动作和精确资金来源。
 pub async fn ensure_return_start_replay_authorized(
     db: &Database,
     rbac: &SharedRbacService,
     actor: &AuditActor,
     document_type: DocumentType,
     submit_permission: &str,
-    organization_id: &str,
+    document_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
     super::authorization::ensure_replay_authorized(
@@ -42,7 +42,7 @@ pub async fn ensure_return_start_replay_authorized(
         actor,
         document_type,
         submit_permission,
-        organization_id,
+        document_id,
         executor,
     )
     .await

@@ -33,7 +33,10 @@ use super::{
     ApprovalRuntimeService, commit_or_recover, find_receipt_for_identity, hidden_not_found,
     persisted_command_view_with_executor, recover_by_replay,
 };
-use crate::entity::work_item::{ApprovalDecisionTaskError, WorkItem, WorkItemStatus};
+use crate::entity::approval_integration::ApprovalSubjectSnapshot;
+use crate::entity::work_item::{
+    ApprovalDecisionTaskError, AssignmentSource, WorkItem, WorkItemStatus, WorkItemType,
+};
 use crate::error::{Error, ErrorCode, Result};
 use crate::repository::prelude::*;
 use crate::repository::{ApprovalIntegrationExt, BpmExt, WorkItemExt};
@@ -229,7 +232,8 @@ async fn replay_decision(
     if original_actor_id != actor.id() {
         return Err(decision_terminal_fresh_error());
     }
-    match authorize_decision_terminal_replay(db, rbac, object_read, actor, &execution, executor).await {
+    match authorize_decision_terminal_replay(db, rbac, object_read, actor, &item, &execution, executor).await
+    {
         Ok(()) => {},
         Err(Error::Forbidden(_)) => {
             return Err(decision_terminal_fresh_error());
@@ -470,18 +474,38 @@ pub(super) fn legacy_decision_terminal_facts_match(
         && execution.ended_at.is_some()
 }
 
+/// 终态回放绑定原始任务与冻结主体，不要求该执行仍为实例当前节点。
+pub(super) fn terminal_task_subject_matches(
+    item: &WorkItem,
+    execution: &ApprovalNodeExecution,
+    snapshot: &ApprovalSubjectSnapshot,
+) -> bool {
+    item.work_item_type == WorkItemType::DocumentApproval
+        && item.assignment_source == AssignmentSource::ApprovalRuntime
+        && item.approval_node_execution_id.as_ref().is_some_and(|id| id.as_ref() == execution.base.id)
+        && snapshot.approval_process_instance_id == execution.process_instance_id
+        && item.business_object_type == snapshot.document_type.as_str()
+        && item.business_object_id == snapshot.business_object_id
+        && item.subject_version == snapshot.subject_version.to_string()
+        && item.owner_organization_id == snapshot.payload.responsible_org_id
+        && item.owner_user_id.as_deref() == Some(execution.assignee_participant_id.as_str())
+}
+
 /// 回放只使用冻结运行事实证明原决定人当前仍具备动作权限，不信任收据或 WorkItem owner 投影。
 async fn authorize_decision_terminal_replay(
     db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
     object_read: &dyn crate::ports::ApprovalObjectReadPort,
     actor: &AuditActor,
+    item: &WorkItem,
     execution: &ApprovalNodeExecution,
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let (snapshot, spec, assignee, document_type) =
         load_decision_terminal_replay_facts(db, execution, executor).await?;
-    if execution.assignee_participant_id.as_str() != actor.id()
+    if !terminal_task_subject_matches(item, execution, &snapshot)
+        || item.owner_role != spec.owner_role.as_str()
+        || execution.assignee_participant_id.as_str() != actor.id()
         || assignee.current_assignee_participant_id.as_str() != actor.id()
     {
         return Err(hidden_forbidden());

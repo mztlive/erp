@@ -57,6 +57,18 @@ impl WorkflowAuth {
 }
 
 impl WorkflowAuthorizationPort for WorkflowAuth {
+    async fn approval_source_readable(
+        &self,
+        actor: &AuditActor,
+        document_type: DocumentType,
+        document_id: &str,
+        executor: &mut dyn Executor,
+    ) -> WorkflowResult<bool> {
+        super::approval_source::readable(&self.db, &self.rbac, actor, document_type, document_id, executor)
+            .await
+            .map_err(map_service)
+    }
+
     async fn resolve_workflow_scope(
         &self,
         actor: &AuditActor,

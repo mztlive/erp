@@ -11,6 +11,7 @@ use crate::errors::{Error, Result};
 
 mod approval_objects;
 mod approval_scope;
+mod approval_source;
 mod audit;
 mod authorization;
 mod object_facts;

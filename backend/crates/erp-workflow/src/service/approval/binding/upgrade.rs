@@ -165,13 +165,12 @@ async fn load_authorized_upgrade_context(
             .await?;
     ensure_active_upgrade_actor(rbac, actor, executor).await?;
     let policy = require_process_required(facts.document_type)?;
-    let scope_object = rbac.approval_scope_object(facts.document_type, &facts.document_id, executor).await?;
     let authorization = approval_binding_upgrade_authorization_with_executor(
         rbac,
         actor,
         facts.document_type,
         &policy.definition_admin_permission,
-        &scope_object,
+        &facts.document_id,
         executor,
     )
     .await?;

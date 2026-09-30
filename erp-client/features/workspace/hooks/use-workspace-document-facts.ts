@@ -18,10 +18,15 @@ export function useWorkspaceDocumentFacts(item: WorkspaceWorkItem) {
         (item.summarySections && item.summarySections.length > 0) ||
         (item.briefLines && item.briefLines.length > 0),
     )
-    const enabled = shouldLoadDocumentFacts({
-        businessObjectType: item.businessObjectType,
-        hasSummary,
-    })
+    const approval =
+        item.workItemType === "DOCUMENT_APPROVAL" ||
+        item.workItemType === "APPROVAL_INSTANCE"
+    const enabled =
+        !approval &&
+        shouldLoadDocumentFacts({
+            businessObjectType: item.businessObjectType,
+            hasSummary,
+        })
     const query = useQuery({
         queryKey: [
             "workspace-document-facts",
@@ -46,7 +51,9 @@ export function useWorkspaceDocumentFacts(item: WorkspaceWorkItem) {
               lines: item.briefLines ?? [],
               moreCount: item.briefMoreCount ?? 0,
           }
-        : (query.data ?? null)
+        : approval
+          ? null
+          : (query.data ?? null)
     return {
         facts,
         isPending: enabled && query.isPending,

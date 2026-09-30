@@ -137,7 +137,7 @@ async fn load_list_filter_and_search(
 ) -> Result<(ContractFilter, ContractSearch, Vec<ContractVersion>)> {
     let (customer_ids, historical_contract_ids) =
         apply_list_filters(db, data_scope, assignments, context, scope, query, executor).await?;
-    let filter = list_filter(query, customer_ids, historical_contract_ids);
+    let mut filter = list_filter(query, customer_ids, historical_contract_ids);
     let versions = db.contract().query_versions(&filter, executor).await?;
     if versions.len() > 10_000 {
         return Err(Error::ValidationError(
@@ -148,6 +148,7 @@ async fn load_list_filter_and_search(
     let customer_facts =
         super::query::list_customer_facts_with(customers, assignments, accounts, &ids, as_of, executor)
             .await?;
+    filter.require_existing_customers(customer_facts.iter().map(|fact| fact.id.clone()).collect());
     let search = ContractSearch {
         q: query.q.clone(),
         metric: query.metric,

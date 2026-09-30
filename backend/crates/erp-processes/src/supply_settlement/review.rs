@@ -158,8 +158,6 @@ impl SupplierSettlementProcess {
     ) -> Result<SettlementReviewDecisionResult> {
         req.validate()?;
         ensure_same_id(id, &req.decision.statement_id, "结算单")?;
-        self.domain().access().require_statement(actor, "detail", id, &mut NoTransaction).await?;
-        self.domain().access().require_statement(actor, "confirm", id, &mut NoTransaction).await?;
         let reject_reason = req.decision.parsed_reject_reason()?;
         let expected_task_version = parse_expected_version(&req.expected_task_version, "待办版本")?;
         let action = match req.decision.action {
@@ -169,7 +167,7 @@ impl SupplierSettlementProcess {
         let fingerprint = review_decision_fingerprint(&req);
         let audit_id = command_audit_id(actor.id(), action, id, &req.idempotency_key);
         if let Some(result) =
-            self.replay_review_decision(&audit_id, &fingerprint, id, &req.work_item_id).await?
+            self.replay_review_decision(&audit_id, &fingerprint, id, &req.work_item_id, actor).await?
         {
             return Ok(result);
         }
@@ -258,7 +256,7 @@ impl SupplierSettlementProcess {
             Ok(result) => result,
             Err(error) => {
                 if let Some(result) =
-                    self.replay_review_decision(&audit_id, &fingerprint, id, &req.work_item_id).await?
+                    self.replay_review_decision(&audit_id, &fingerprint, id, &req.work_item_id, actor).await?
                 {
                     return Ok(result);
                 }
@@ -308,6 +306,7 @@ impl SupplierSettlementProcess {
         expected_fingerprint: &str,
         statement_id: &str,
         work_item_id: &str,
+        actor: &AuditActor,
     ) -> Result<Option<SettlementReviewDecisionResult>> {
         let Some(audit) = self.db.audit_logs().find_by_id(audit_id, &mut NoTransaction).await? else {
             return Ok(None);
@@ -324,6 +323,21 @@ impl SupplierSettlementProcess {
             .find_by_id(work_item_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::Internal("复核决定收据引用的任务不存在".to_string()))?;
+        if work_item.owner_user_id.as_deref() != Some(actor.id()) {
+            return Err(Error::Forbidden("仅原复核人可重放决定".into()));
+        }
+        let auth = crate::adapters::workflow::workflow_auth(
+            self.db.clone(),
+            crate::adapters::identity::shared_rbac_service(self.db.clone()),
+        );
+        super::reviewers::ensure_reviewer(
+            &auth,
+            actor.id(),
+            &statement.prepared_by,
+            &statement.business_org_unit_id,
+            &mut NoTransaction,
+        )
+        .await?;
         ensure_decision_replay(&statement, &work_item, &receipt)?;
         Ok(Some(review_decision_result(statement, work_item, receipt.operation_id.clone(), receipt)))
     }

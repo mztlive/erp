@@ -73,10 +73,12 @@ pub async fn supplier_fulfillment_order_detail(
     Path(id): Path<String>,
     Query(params): Query<SupplierFulfillmentOrderDetailParams>,
 ) -> Result<SupplierFulfillmentOrderDetailView> {
-    state
-        .supplier_fulfillment_process()
-        .require_scoped_order(&id, &actor, "detail", &mut NoTransaction)
-        .await?;
+    if params.work_item_id.as_deref().is_none_or(|id| id.trim().is_empty()) {
+        state
+            .supplier_fulfillment_process()
+            .require_scoped_order(&id, &actor, "detail", &mut NoTransaction)
+            .await?;
+    }
     let view = erp_read_models::supplier_center::SupplierFulfillmentDetailReadService::new(
         state.db(),
         state.supplier_fulfillment_service(),

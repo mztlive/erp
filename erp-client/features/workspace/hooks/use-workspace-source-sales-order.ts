@@ -19,13 +19,15 @@ export function useWorkspaceSourceSalesOrder(item: WorkspaceWorkItem): {
     const isPurchase =
         normalizeObjectType(item.businessObjectType) === "purchase_order"
     const needsCenter =
+        item.workItemType !== "DOCUMENT_APPROVAL" &&
+        item.workItemType !== "APPROVAL_INSTANCE" &&
         isPurchase &&
         !fromBrief?.objectId &&
         Boolean(item.businessObjectId.trim())
     const query = usePurchaseOrderCenterQuery(
         needsCenter ? item.businessObjectId : "",
     )
-    const header = query.data?.header
+    const header = needsCenter ? query.data?.header : undefined
     const orderNo = header?.salesOrderNo?.trim() || fromBrief?.orderNo
     const objectId = header?.salesOrderId?.trim() || fromBrief?.objectId
     if (!orderNo) {

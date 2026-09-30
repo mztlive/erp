@@ -471,12 +471,32 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         permissions: [
             {
                 module: "admin",
-                method: "POST",
-                path: "/admin/approval-decisions",
-                description: "提交当前开放审批任务的通过或驳回",
+                method: "GET",
+                path: "/admin/approval-instances/{id}/materials",
+                description: "读取本次提交的审批资料",
                 permission: {
                     resource: "approval_instance",
-                    action: "decide",
+                    action: "read",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/approval-instances/{id}/materials/{file_asset_id}/preview",
+                description: "预览本次提交的审批附件",
+                permission: {
+                    resource: "approval_instance",
+                    action: "read",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/approval-instances/{id}/materials/{file_asset_id}/download",
+                description: "下载本次提交的审批附件",
+                permission: {
+                    resource: "approval_instance",
+                    action: "read",
                 },
             },
             {
@@ -517,6 +537,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 permission: {
                     resource: "approval_instance",
                     action: "read",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/approval-decisions",
+                description: "提交当前开放审批任务的通过或驳回",
+                permission: {
+                    resource: "approval_instance",
+                    action: "decide",
                 },
             },
             {
@@ -5015,6 +5045,22 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 permission: {
                     resource: "demo_master_data",
                     action: "remove",
+                },
+            },
+        ],
+    },
+    {
+        name: "财务整账",
+        description: "完整财务台账及无来源记录的读取资格；仍检查业务读取动作和来源边界",
+        permissions: [
+            {
+                module: "admin",
+                method: "POLICY",
+                path: "",
+                description: "读取完整及未分配财务台账",
+                permission: {
+                    resource: "finance_ledger",
+                    action: "read",
                 },
             },
         ],

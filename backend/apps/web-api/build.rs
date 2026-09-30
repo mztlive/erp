@@ -1,83 +1,17 @@
 #[path = "../../crates/erp-identity/src/entity/access_control/audit_actions.rs"]
 mod audit_actions;
 
+mod build_permissions;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::{env, fs, io};
 
+use build_permissions::{
+    DOMAIN_MODULES, PermissionGroup, PermissionItem, PermissionMeta, RouteHandler, append_policy_permissions,
+};
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::{Attribute, Expr, File, Item, ItemFn, Lit, MetaNameValue, Token};
-
-#[derive(Debug, Clone)]
-struct PermissionMeta {
-    group: String,
-    group_desc: String,
-    desc: String,
-    resource: Option<String>,
-    action: Option<String>,
-}
-
-/// 权限扫描覆盖的业务域模块：既有业务域、审批定义管理，以及演示主数据。
-const DOMAIN_MODULES: &[&str] = &[
-    "organization",
-    "source_registry",
-    "document_registry",
-    "work_item",
-    "approval_instance",
-    "approval_process",
-    "bulk_job",
-    "file_asset",
-    "access_control",
-    "party",
-    "customer",
-    "customer_quality",
-    "supplier",
-    "catalog",
-    "warehouse",
-    "contract",
-    "sales_order",
-    "sales_review",
-    "sales_selection",
-    "purchase_order",
-    "fulfillment",
-    "inventory",
-    "receivable",
-    "payable",
-    "cost",
-    "returns",
-    "legacy_import",
-    "supplier_offering",
-    "supplier_api",
-    "supplier_fulfillment",
-    "supplier_settlement",
-    "integration_ops",
-    // 单文件不够，扫描 `handler/demo_master_data/mod.rs`。
-    "demo_master_data",
-];
-
-#[derive(Debug, Clone)]
-struct RouteHandler {
-    method: String,
-    path: String,
-    handler: String,
-}
-
-#[derive(Debug, Default)]
-struct PermissionGroup {
-    desc: String,
-    permissions: Vec<PermissionItem>,
-}
-
-#[derive(Debug, Clone)]
-struct PermissionItem {
-    module: String,
-    method: String,
-    path: String,
-    description: String,
-    resource: String,
-    action: String,
-}
 
 /// 构建脚本入口。
 ///
@@ -108,11 +42,13 @@ fn main() {
     };
 
     generate_audit_actions(&backend_root, &repo_root).expect("generate audit action catalog");
+    rerun_if_changed(&backend_root.join("crates/erp-identity/src/entity/policy_permission.rs"));
 
     let routes_mod_path = manifest_dir.join("src/core/routes/mod.rs");
     let routes_admin_path = manifest_dir.join("src/core/routes/admin.rs");
     let handlers_root = manifest_dir.join("src/core/handler");
 
+    rerun_if_changed(&manifest_dir.join("build_permissions.rs"));
     rerun_if_changed(&routes_mod_path);
     rerun_if_changed(&routes_admin_path);
 
@@ -723,6 +659,7 @@ fn build_permission_groups(
         });
     }
 
+    append_policy_permissions(&mut groups, &mut order);
     let ordered =
         order.into_iter().filter_map(|name| groups.remove(&name).map(|group| (name, group))).collect();
 

@@ -1,14 +1,16 @@
 //! 只读身份检查；先证明检查人的公司配置读取边界，再解析目标账号。
 use std::result::Result as StdResult;
+use std::slice;
 
 use application_core::AuditActor;
 use mongodb::Database;
 use persistence_core::Executor;
 
 use crate::dto::inspection::{AccessInspectionRequest, AccessInspectionView};
+use crate::entity::access_control::authorization_policy::AuthorizationPolicy;
 use crate::repository::access_control::person_scope::PersonDataScopeRepositoryExt;
 use crate::service::access_control::resolve::{AuthorizedDataScope, DataScopeService};
-use crate::{AccessControlExt, Error, Permission, Result, SharedRbacService};
+use crate::{AccessControlExt, Error, Permission, Result, RoleRepositoryExt, SharedRbacService};
 
 /// 为跨域单据检查提供经授权的目标身份；不能作为登录或操作令牌。
 pub struct InspectedAccess {
@@ -63,6 +65,10 @@ impl AccessInspectionService {
             return Ok(denied("账号", "账号不存在或未启用，请核对人员账号状态。"));
         };
         let actor = AuditActor::new(account.base.id.clone(), account.secret.account().into(), account.kind);
+        let policy = AuthorizationPolicy::for_action(&request.resource, &request.action)?;
+        if !policy.configurable() {
+            return self.inspect_contextual(actor, request, policy, executor).await;
+        }
         let result = DataScopeService::new(self.db.clone(), self.rbac.clone())
             .resolve(&actor, &request.resource, &request.action, executor)
             .await;
@@ -77,6 +83,27 @@ impl AccessInspectionService {
             },
             Err(error) => Err(error),
         }
+    }
+
+    /// 来源与任务授权只验证动作资格；缺少对象上下文时不解析旧范围冒充结论。
+    async fn inspect_contextual(
+        &self,
+        actor: AuditActor,
+        request: &AccessInspectionRequest,
+        policy: AuthorizationPolicy,
+        executor: &mut dyn Executor,
+    ) -> Result<InspectedAccess> {
+        let permission = Permission::parse(format!("{}:{}", request.resource, request.action))?;
+        let snapshot = self
+            .rbac
+            .role_permission_snapshot(actor.kind(), actor.id(), slice::from_ref(&permission))
+            .await?;
+        self.rbac.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
+        let ids = snapshot.granting_role_ids(&permission);
+        if self.db.roles().enabled_roles(&ids, executor).await?.is_empty() {
+            return Ok(denied("操作权限", "没有启用角色提供本操作权限，请检查人员角色及操作权限。"));
+        }
+        Ok(InspectedAccess { actor: None, view: AccessInspectionView::contextual(policy) })
     }
 
     /// 读取本操作的合格角色规则，为缺失部门关系提供可操作原因。

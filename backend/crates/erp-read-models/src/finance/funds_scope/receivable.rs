@@ -73,7 +73,7 @@ impl FundsAccess {
                     if !Self::allows(&access, &facts)? {
                         return Err(Error::NotFound("应收往来子账不存在".into()));
                     }
-                    let whole = authorization.whole();
+                    let whole = true;
                     let visible = this.receivable_visible_share(&account.base.id, executor).await?;
                     let mut row = ScopedReceivableAccountRow {
                         id: account.base.id.clone(),
@@ -107,7 +107,7 @@ impl FundsAccess {
                         organization_version: authorization.context.organizations.version,
                         as_of: authorization.context.as_of.as_utc().to_rfc3339(),
                         empty_reason: None,
-                        scope_summary: "应收子账按关联销售当前负责人与登记经办人授权；部分授权仅返获授权份额",
+                        scope_summary: "应收子账继承所属销售来源边界",
                         ownership_basis: "current_sales_owner_and_register_operator",
                     })
                 })
@@ -261,7 +261,7 @@ impl FundsAccess {
         let page_size = query.paging.page_size.max(1);
         let start = ((page - 1) as usize).saturating_mul(page_size as usize);
         let end = start.saturating_add(page_size as usize).min(filtered.len());
-        let whole = authorization.whole();
+        let whole = true;
         let mut items = Vec::new();
         if start < filtered.len() {
             for (row, _, _) in filtered[start..end].iter() {
@@ -317,7 +317,7 @@ impl FundsAccess {
             organization_version: authorization.context.organizations.version,
             as_of: authorization.context.as_of.as_utc().to_rfc3339(),
             empty_reason: None,
-            scope_summary: "应收子账按关联销售当前负责人与登记经办人授权；部分授权仅返获授权份额",
+            scope_summary: "应收子账继承所属销售来源边界",
             ownership_basis: "current_sales_owner_and_register_operator",
         })
     }

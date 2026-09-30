@@ -5,12 +5,14 @@ use bpm::model::SubjectRef;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
 use erp_core::ids::{ApprovalSubjectSnapshotId, WorkItemId};
+use erp_identity::SharedRbacService;
 use erp_returns::entity::returns::SupplierRefund;
 use erp_workflow::entity::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::work_item::{DocumentApprovalWorkItemData, WorkItem, WorkItemPriority};
 use erp_workflow::repository::prelude::*;
+use erp_workflow::service::approval::execution::apply_plan::PlannedWrites;
 use erp_workflow::service::approval::execution::{
     PreparedExecution, StartExecutionInput, map_receipt_first_write_error,
 };
@@ -23,6 +25,7 @@ use super::super::adapter::supplier_refund_object_readable;
 use super::common::{ReverseStartContracts, ReverseStartInput, build_reverse_start_input};
 use super::mapping::list_projection_from_execution;
 use super::prepare::load_start_receipt_for_document_type;
+use crate::adapters::freeze_approval_materials;
 use crate::{Error, Result};
 
 /// 读取供应商退款同载荷启动收据；不存在时返回 `None`。
@@ -196,7 +199,25 @@ pub struct SupplierRefundStartPersistInput {
 /// Replay 不得重复写运行事实；Apply 必须写入快照与入口任务。
 pub async fn persist_supplier_refund_start(
     db: &Database,
+    rbac: &SharedRbacService,
     input: SupplierRefundStartPersistInput,
+) -> Result<SupplierRefund> {
+    let db = db.clone();
+    let rbac = rbac.clone();
+    db.client()
+        .clone()
+        .with_transaction(move |executor| {
+            Box::pin(async move { persist_start(db, rbac, input, executor).await })
+        })
+        .await
+}
+
+/// 启动写入在同一事务中重新授权，回放不产生额外写入。
+async fn persist_start(
+    db: Database,
+    rbac: SharedRbacService,
+    input: SupplierRefundStartPersistInput,
+    executor: &mut dyn Executor,
 ) -> Result<SupplierRefund> {
     let SupplierRefundStartPersistInput {
         refund,
@@ -208,53 +229,63 @@ pub async fn persist_supplier_refund_start(
         organization_id,
         now,
     } = input;
+    super::authorization::ensure_replay_authorized(
+        &db,
+        &rbac,
+        &actor,
+        DocumentType::SupplierRefund,
+        "supplier_refund:submit",
+        &refund.base.id,
+        executor,
+    )
+    .await?;
     let PreparedExecution::Apply(writes) = prepared else {
         return Ok(refund);
     };
     let audit = actor.resource_log("supplier_refund.submit", "supplier_refund", id)?;
-    let db = db.clone();
-    let client = db.client().clone();
-    client
-        .with_transaction(move |executor| {
-            Box::pin(async move {
-                db.bpm_workflow()
-                    .insert_command_receipt(&writes.receipt, executor)
-                    .await
-                    .map_err(map_receipt_first_write_error)?;
-                let guarded = db
-                    .business_documents()
-                    .mark_approval_started(
-                        writes.instance.subject.subject_id(),
-                        DocumentType::SupplierRefund,
-                        &writes.instance.process_definition_id,
-                        writes.instance.definition_version,
-                        now,
-                        executor,
-                    )
-                    .await?;
-                if guarded.is_none() {
-                    return Err(Error::ConflictError(
-                        "供应商退款单审批启动守卫冲突，请刷新后重试".to_string(),
-                    ));
-                }
-                let mut refund = refund;
-                erp_returns::service::ReturnsService::persist_supplier_refund(&db, &mut refund, executor)
-                    .await?;
-                persist_supplier_refund_runtime(
-                    &db,
-                    &writes,
-                    &snapshot_payload,
-                    owner_role,
-                    &organization_id,
-                    now,
-                    executor,
-                )
-                .await?;
-                db.audit_logs().create(&audit, executor).await?;
-                Ok::<SupplierRefund, crate::Error>(refund)
-            })
-        })
+    persist_start_guard(&db, &writes, now, executor).await?;
+    let mut refund = refund;
+    erp_returns::service::ReturnsService::persist_supplier_refund(&db, &mut refund, executor).await?;
+    persist_supplier_refund_runtime(
+        &db,
+        &writes,
+        &snapshot_payload,
+        owner_role,
+        &organization_id,
+        now,
+        executor,
+    )
+    .await?;
+    db.audit_logs().create(&audit, executor).await?;
+    Ok::<SupplierRefund, crate::Error>(refund)
+}
+
+/// 回执和注册单据守卫先写入，后续失败由外层事务整体回滚。
+async fn persist_start_guard(
+    db: &Database,
+    writes: &PlannedWrites,
+    now: Instant,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    db.bpm_workflow()
+        .insert_command_receipt(&writes.receipt, executor)
         .await
+        .map_err(map_receipt_first_write_error)?;
+    let guarded = db
+        .business_documents()
+        .mark_approval_started(
+            writes.instance.subject.subject_id(),
+            DocumentType::SupplierRefund,
+            &writes.instance.process_definition_id,
+            writes.instance.definition_version,
+            now,
+            executor,
+        )
+        .await?;
+    if guarded.is_none() {
+        return Err(Error::ConflictError("供应商退款单审批启动守卫冲突，请刷新后重试".to_string()));
+    }
+    Ok(())
 }
 
 /// 将供应商退款启动计划写入 BPM 集合、不可变快照和入口 WorkItem。
@@ -263,7 +294,7 @@ pub async fn persist_supplier_refund_start(
 /// 计划缺少入口执行或写入失败时返回错误。
 pub async fn persist_supplier_refund_runtime(
     db: &Database,
-    writes: &erp_workflow::service::approval::execution::apply_plan::PlannedWrites,
+    writes: &PlannedWrites,
     snapshot_payload: &ApprovalSubjectSnapshotPayload,
     owner_role: &str,
     organization_id: &str,
@@ -301,6 +332,7 @@ pub async fn persist_supplier_refund_runtime(
         )
         .await?,
     );
+    let snapshot = freeze_approval_materials(db, snapshot, executor).await?;
     db.approval_subject_snapshots().create_immutable_snapshot(&snapshot, executor).await?;
     persist_supplier_refund_open_tasks(db, writes, owner_role, organization_id, now, executor).await
 }
@@ -311,7 +343,7 @@ pub async fn persist_supplier_refund_runtime(
 /// 责任人为空或仓储失败时返回错误。
 async fn persist_supplier_refund_open_tasks(
     db: &Database,
-    writes: &erp_workflow::service::approval::execution::apply_plan::PlannedWrites,
+    writes: &PlannedWrites,
     owner_role: &str,
     organization_id: &str,
     now: Instant,

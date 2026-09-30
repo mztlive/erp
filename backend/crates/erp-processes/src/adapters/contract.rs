@@ -105,11 +105,12 @@ impl CustomerFactsPort for MongoContractCustomers {
     async fn find_by_ids(
         &self,
         customer_ids: &[CustomerAccountId],
+        executor: &mut dyn Executor,
     ) -> erp_contract::Result<Vec<CustomerAccountFact>> {
         Ok(self
             .db
             .customer_accounts()
-            .find_accounts_by_ids(customer_ids, &mut NoTransaction)
+            .find_accounts_by_ids(customer_ids, executor)
             .await
             .map_err(map_customer_to_contract)?
             .into_iter()
@@ -398,7 +399,8 @@ pub fn contract_access(db: Database, rbac: SharedRbacService) -> erp_contract::C
         db.clone(),
         MongoContractDataScope::shared(db.clone(), rbac),
         MongoContractAssignments::shared(db.clone()),
-        MongoContractParticipants::shared(db),
+        MongoContractParticipants::shared(db.clone()),
+        MongoContractCustomers::shared(db),
     )
 }
 

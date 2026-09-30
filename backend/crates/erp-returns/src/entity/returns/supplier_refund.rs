@@ -164,6 +164,21 @@ pub struct SupplierRefund {
 }
 
 impl SupplierRefund {
+    /// 退款发起职责属于登记的经办人，复核人不得代为提交。
+    ///
+    /// # 参数
+    /// * `actor_id` - 当前提交人的账号。
+    /// # 返回
+    /// 经办人与复核岗位分离且本人发起时返回成功。
+    /// # 错误
+    /// 非经办人或岗位未分离时返回业务规则错误。
+    pub fn ensure_submitter(&self, actor_id: &str) -> Result<()> {
+        if self.handled_by == actor_id && self.reviewed_by != actor_id {
+            return Ok(());
+        }
+        Err(Error::from("仅退款经办人可以发起退款，且不得兼任复核人"))
+    }
+
     /// 创建供应商退款（初始状态为草稿）。
     ///
     /// 完成编号/原因/经办复核人的 trim/非空/长度校验、金额正数校验、经办人
@@ -382,6 +397,17 @@ pub(crate) mod tests {
             occurred_at: Instant::from_unix_secs(1_700_000_000),
             evidence_attachment_id: None,
         }
+    }
+
+    #[test]
+    fn submitter_must_be_handler_and_separated_from_reviewer() {
+        let mut refund =
+            SupplierRefund::new(SupplierRefundId::new("refund-test"), data(), "creator").unwrap();
+        assert!(refund.ensure_submitter("handler-1").is_ok());
+        assert!(refund.ensure_submitter("other").is_err());
+        assert!(refund.ensure_submitter("reviewer-1").is_err());
+        refund.reviewed_by = refund.handled_by.clone();
+        assert!(refund.ensure_submitter("handler-1").is_err());
     }
 
     #[test]

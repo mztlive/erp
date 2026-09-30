@@ -122,6 +122,7 @@ impl ContractService {
             Arc::clone(&self.data_scope),
             Arc::clone(&self.assignments),
             Arc::clone(&self.participants),
+            Arc::clone(&self.customers),
         )
     }
 

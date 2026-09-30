@@ -217,4 +217,17 @@ mod tests {
         assert!(clause.allows("sales-a", "org-a"));
         assert!(!clause.allows("submitter", "org-a"));
     }
+
+    #[test]
+    fn current_booklet_transfer_removes_old_owner_and_grants_new_owner() {
+        let for_owner = |owner: &str| SelectionReadScope {
+            roles: vec![SelectionScopeClause { owner_user_id: Some(owner.into()), ..Default::default() }],
+            ..Default::default()
+        };
+        let previous_owner = for_owner("old-owner");
+        let new_owner = for_owner("current-owner");
+        assert!(!previous_owner.allows_object("current-owner", "current-org"));
+        assert!(new_owner.allows_object("current-owner", "current-org"));
+        assert!(!SelectionReadScope::default().allows_object("current-owner", "current-org"));
+    }
 }

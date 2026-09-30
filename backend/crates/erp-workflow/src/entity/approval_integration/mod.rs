@@ -4,6 +4,8 @@
 
 mod action_policy;
 mod identity;
+mod material_file;
+pub use material_file::ApprovalMaterialFile;
 pub mod notification_outbox;
 pub mod subject_snapshot;
 

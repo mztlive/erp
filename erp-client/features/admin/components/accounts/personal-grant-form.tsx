@@ -94,7 +94,14 @@ export function PersonalGrantForm({
     )
     const [error, setError] = React.useState<string | null>(null)
     const [defaults] = React.useState(() => personScopeDefaults(data, resource))
-    const business = data.businesses.find((item) => item.resource === resource)
+    const option = data.businesses.find((item) => item.resource === resource)
+    const business = React.useMemo(
+        () =>
+            option?.configurable_actions.length
+                ? { ...option, actions: option.configurable_actions }
+                : undefined,
+        [option],
+    )
     const legacy = data.items.filter(
         (item) =>
             item.resource === resource &&
@@ -128,6 +135,7 @@ export function PersonalGrantForm({
                 })
             if (
                 !business ||
+                !value.actions.length ||
                 value.actions.some(
                     (action) => !business.actions.includes(action),
                 )
@@ -394,7 +402,7 @@ export function PersonalGrantForm({
                                                     默认包含{name}负责的数据
                                                 </span>{" "}
                                                 ·
-                                                按当前负责人判断，适用于已有操作
+                                                按当前负责人判断，适用于下列可配置操作
                                                 {legacy.length
                                                     ? "（转换后生效）"
                                                     : ""}

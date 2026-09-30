@@ -7,7 +7,7 @@ import { hasPermission } from "@/lib/permissions"
 import { actionLabel, resourceLabel } from "@/lib/permission-catalog"
 import { useRolesQuery } from "../../hooks/queries"
 import { usePersonScopes } from "../../hooks/use-person-data-scopes"
-import { personScopeDescription } from "../../api/person-data-scopes"
+import { personEffectiveDescription } from "../../api/person-data-scopes"
 import { permissionLabel } from "../../lib/permission-catalog"
 import type { AdminAccount } from "../../types"
 export function AccountPermissionsSheet({
@@ -39,7 +39,7 @@ export function AccountPermissionsSheet({
             }}
             size="preview"
             title={`${account?.name ?? "人员"}的权限`}
-            description="角色提供操作权限，数据范围由基础范围与人员追加授权合并。"
+            description="角色提供操作权限，数据访问按业务范围、来源关系或任务指派确定。"
             footer={
                 <>
                     <Button
@@ -83,7 +83,7 @@ export function AccountPermissionsSheet({
                     )}
                 </section>
                 <section className="space-y-3">
-                    <h3 className="font-semibold">此人的数据范围</h3>
+                    <h3 className="font-semibold">此人的数据访问依据</h3>
                     {scopes.isError ? (
                         <BusinessFailureState
                             error={scopes.error}
@@ -99,15 +99,17 @@ export function AccountPermissionsSheet({
                                         key={a}
                                     >
                                         {actionLabel(a)}：
-                                        {personScopeDescription(
-                                            scopes.data.items.find(
-                                                (s) =>
-                                                    s.resource === b.resource &&
-                                                    s.action === a,
-                                            ),
-                                            undefined,
-                                            b.default_self,
-                                        )}
+                                        {b.configurable_actions.includes(a)
+                                            ? personEffectiveDescription(
+                                                  scopes.data.items.find(
+                                                      (s) =>
+                                                          s.resource ===
+                                                              b.resource &&
+                                                          s.action === a,
+                                                  ),
+                                                  b,
+                                              )
+                                            : b.policy_description}
                                     </p>
                                 ))}
                             </div>

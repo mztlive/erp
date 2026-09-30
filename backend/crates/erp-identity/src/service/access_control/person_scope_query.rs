@@ -3,9 +3,9 @@ use application_core::AuditActor;
 use persistence_core::{Executor, Transactional};
 
 use super::AccessControlService;
-use super::consumers::{WIRED_CONSUMERS, registration};
+use super::consumers::WIRED_CONSUMERS;
 use super::resolve::DataScopeService;
-use crate::dto::person_scope::{PersonBusinessOption, PersonScopeView};
+use crate::dto::person_scope::{PersonBusinessOption, PersonScopeView, RetiredPersonScope};
 use crate::repository::access_control::person_scope::PersonDataScopeRepositoryExt;
 use crate::{AccessControlExt, Error, Permission, Result, RoleRepositoryExt, SharedRbacService};
 
@@ -29,7 +29,8 @@ impl AccessControlService {
                     let businesses = service.person_business_options(&user, executor).await?;
                     let items =
                         service.db.person_data_scopes().for_person(&user, None, None, executor).await?;
-                    Ok(PersonScopeView { items, businesses, policy_version })
+                    let retired_items = items.iter().filter_map(RetiredPersonScope::from_scope).collect();
+                    Ok(PersonScopeView { items, businesses, policy_version, retired_items })
                 })
             })
             .await
@@ -111,12 +112,7 @@ impl AccessControlService {
                 }
             }
             if !granted.is_empty() {
-                options.push(PersonBusinessOption {
-                    resource: (*resource).into(),
-                    default_self: registration(resource, &granted[0])?.default_self,
-                    actions: granted,
-                    dimensions: dimensions.to_vec(),
-                });
+                options.push(PersonBusinessOption::from_granted(resource, granted, dimensions)?);
             }
         }
         Ok(options)

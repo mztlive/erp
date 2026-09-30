@@ -52,10 +52,15 @@ pub trait CustomerFactsPort: Send + Sync {
     ///
     /// # Parameters
     /// * `customer_ids` - customer role ids
+    /// * `executor` - caller executor used to validate source existence
     ///
     /// # Errors
     /// Adapter query failures.
-    async fn find_by_ids(&self, customer_ids: &[CustomerAccountId]) -> Result<Vec<CustomerAccountFact>>;
+    async fn find_by_ids(
+        &self,
+        customer_ids: &[CustomerAccountId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<CustomerAccountFact>>;
 }
 
 /// Port contract uses to resolve current customer ownership without depending on `erp-customer`.
@@ -140,7 +145,11 @@ impl CustomerFactsPort for EmptyCustomers {
         Ok(None)
     }
 
-    async fn find_by_ids(&self, _customer_ids: &[CustomerAccountId]) -> Result<Vec<CustomerAccountFact>> {
+    async fn find_by_ids(
+        &self,
+        _customer_ids: &[CustomerAccountId],
+        _executor: &mut dyn Executor,
+    ) -> Result<Vec<CustomerAccountFact>> {
         Ok(Vec::new())
     }
 }
@@ -190,7 +199,11 @@ impl CustomerFactsPort for FailClosedCustomerFactsPort {
         Err(Error::Internal("客户端口未接线".to_string()))
     }
 
-    async fn find_by_ids(&self, _customer_ids: &[CustomerAccountId]) -> Result<Vec<CustomerAccountFact>> {
+    async fn find_by_ids(
+        &self,
+        _customer_ids: &[CustomerAccountId],
+        _executor: &mut dyn Executor,
+    ) -> Result<Vec<CustomerAccountFact>> {
         Err(Error::Internal("客户端口未接线".to_string()))
     }
 }

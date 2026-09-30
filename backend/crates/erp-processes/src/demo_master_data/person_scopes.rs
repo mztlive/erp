@@ -30,7 +30,7 @@ impl DemoMasterDataService {
             let mut view = service.person_scopes(user, actor).await?;
             for business in std::mem::take(&mut view.businesses) {
                 let actions = business
-                    .actions
+                    .configurable_actions
                     .iter()
                     .filter(|action| {
                         !view

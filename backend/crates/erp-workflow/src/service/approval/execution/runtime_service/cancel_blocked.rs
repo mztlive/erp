@@ -21,7 +21,6 @@ use super::super::runtime_query::{RuntimeRecoveryAction, recovery_options_for};
 use super::super::view::{ApprovalCommandView, map_command_view};
 use super::super::{CancelExecutionInput, ExecutionCommandInput, PreparedExecution, prepare_cancel};
 use super::notifications::{CancelNotificationFacts, persist_cancel_notifications};
-use super::read_auth::runtime_object_readable;
 use super::{
     ApprovalRuntimeService, commit_or_recover, ensure_command_actor, ensure_expected_version,
     find_receipt_for_identity, hidden_not_found, load_exact_runtime_snapshot,
@@ -33,11 +32,10 @@ use crate::error::{Error, Result};
 use crate::ports::{ApprovalObjectReadPort, PreparedWorkflowAudit};
 use crate::repository::prelude::*;
 use crate::repository::{BpmExt, WorkItemExt};
-use crate::service::approval::business_adapter::{BindingRevalidationContext, adapter_spec_of};
+use crate::service::approval::business_adapter::adapter_spec_of;
 use crate::service::approval::{
     ApprovalActionContext, ApprovalCancelBlockedCommand, ApprovalDomainActionPort, BlockedCancelActionParams,
-    approval_actor_is_active_with_executor, approval_cancel_blocked_scope_with_executor,
-    approval_document_read_scope_with_executor, definition_management_visibility_with_executor,
+    require_approval_management_with_executor,
 };
 
 /// 已提交受阻取消的不可变终态事实；先证明原操作人，再允许比较请求摘要。
@@ -480,44 +478,21 @@ async fn cancel_blocked_apply(
 async fn ensure_cancel_blocked_authorized(
     _db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
-    object_read: &dyn ApprovalObjectReadPort,
+    _object_read: &dyn ApprovalObjectReadPort,
     actor: &AuditActor,
     document_type: DocumentType,
     snapshot: &ApprovalSubjectSnapshot,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    if !approval_actor_is_active_with_executor(rbac, actor, executor).await? {
-        return Err(hidden_forbidden());
-    }
-    let action_scope = approval_cancel_blocked_scope_with_executor(rbac, actor, executor).await?;
-    let read_scope = approval_document_read_scope_with_executor(rbac, actor, document_type, executor).await?;
-    let visibility = definition_management_visibility_with_executor(rbac, actor, executor).await?;
-    let spec = adapter_spec_of(document_type)?;
-    let context = BindingRevalidationContext::new(
-        snapshot.payload.responsible_org_id.clone(),
-        snapshot.payload.submitted_by.clone(),
-    );
-    let read_scope_covers = !read_scope.is_empty()
-        && read_scope.covers_object(
-            &rbac
-                .approval_scope_object(snapshot.document_type, &snapshot.business_object_id, executor)
-                .await?,
-        );
-    let object_readable =
-        runtime_object_readable(&spec, &context, actor.id(), read_scope_covers, object_read)?;
-    if action_scope.is_empty()
-        || !action_scope.covers_object(
-            &rbac
-                .approval_scope_object(snapshot.document_type, &snapshot.business_object_id, executor)
-                .await?,
-        )
-        || !read_scope_covers
-        || !visibility.runtime_admin_types().contains(&document_type)
-        || !object_readable
-    {
-        return Err(hidden_forbidden());
-    }
-    Ok(())
+    require_approval_management_with_executor(
+        rbac,
+        actor,
+        "approval_instance:cancel_blocked",
+        document_type,
+        &snapshot.business_object_id,
+        executor,
+    )
+    .await
 }
 
 /// 在调用方事务内校验受阻取消携带的可空历史任务版本。

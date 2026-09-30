@@ -16,17 +16,12 @@ use crate::entity::approval_integration::ApprovalSubjectSnapshot;
 use crate::entity::document_registry::DocumentType;
 use crate::entity::work_item::{AssignmentSource, WorkItem, WorkItemStatus, WorkItemType};
 use crate::error::{Error, ErrorCode, Result};
-use crate::ports::{ApprovalObjectReadPort, OrderTaskSource};
+use crate::ports::ApprovalObjectReadPort;
 use crate::repository::bpm::ApprovalInstanceSummary;
-use crate::service::approval::business_adapter::{
-    BindingRevalidationContext, adapter_object_read_decision_with, adapter_spec_of,
-    ensure_separation_of_duties,
-};
+use crate::service::approval::approval_participant_permissions_with_executor;
+use crate::service::approval::business_adapter::{adapter_spec_of, ensure_separation_of_duties};
 use crate::service::approval::policy::{DocumentApprovalPolicy, SeparationOfDutiesPolicy, policy_of};
 use crate::service::approval::process_kind::process_kind_of;
-use crate::service::approval::{
-    approval_decide_scope_with_executor, approval_document_read_scope_with_executor,
-};
 
 /// 单实例读取授权所需的持久化事实。
 pub(super) struct RuntimeReadSubject {
@@ -72,7 +67,7 @@ pub(super) struct RevalidateDecisionApproverInput<'a> {
     pub(super) separation_policy: SeparationOfDutiesPolicy,
 }
 
-/// 按冻结快照重验审批人账号、动作权限、对象读取、DataScopeFact 与岗位分离。
+/// 按冻结快照重验审批人账号、同角色静态读写权限与岗位分离。
 ///
 /// # 用途
 /// 将审批人资格收敛为 BPM 可消费的 Eligible/Blocked。
@@ -95,7 +90,7 @@ pub(super) struct RevalidateDecisionApproverInput<'a> {
 pub(super) async fn revalidate_decision_approver(
     _db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
-    object_read: &dyn ApprovalObjectReadPort,
+    _object_read: &dyn ApprovalObjectReadPort,
     input: RevalidateDecisionApproverInput<'_>,
     executor: &mut dyn Executor,
 ) -> Result<Eligibility> {
@@ -107,6 +102,9 @@ pub(super) async fn revalidate_decision_approver(
         spec,
         separation_policy,
     } = input;
+    if spec.document_type != snapshot.document_type {
+        return Err(hidden_not_found());
+    }
     let account = rbac.load_account(assignee_id, executor).await?;
     let failure = match account {
         None => Some(AuthorizationFailure::AccountInactive),
@@ -121,91 +119,22 @@ pub(super) async fn revalidate_decision_approver(
             let scope_actor = authenticated_actor
                 .cloned()
                 .unwrap_or_else(|| AuditActor::new(account.id.clone(), account.id.clone(), account.kind));
-            if OrderTaskSource::approval_kind(snapshot.document_type).is_some()
-                && !rbac
-                    .order_approval_readable(
-                        &scope_actor,
-                        snapshot.document_type,
-                        &snapshot.business_object_id,
-                        executor,
-                    )
-                    .await?
-            {
-                return converge_eligibility(
-                    assignee_id,
-                    assignee_name,
-                    Some(AuthorizationFailure::CannotReadSubject),
-                );
-            }
-            let decide_scope = approval_decide_scope_with_executor(rbac, &scope_actor, executor).await?;
-            if decide_scope.is_empty() {
+            if !approval_participant_permissions_with_executor(rbac, &scope_actor, executor).await? {
                 Some(AuthorizationFailure::NotEligible)
-            } else if !decide_scope.covers_object(
-                &rbac
-                    .approval_scope_object(snapshot.document_type, &snapshot.business_object_id, executor)
-                    .await?,
-            ) {
-                Some(AuthorizationFailure::OutOfDataScope)
+            } else if ensure_separation_of_duties(
+                separation_policy,
+                &snapshot.payload.submitted_by,
+                &[assignee_id.to_string()],
+            )
+            .is_err()
+            {
+                Some(AuthorizationFailure::SeparationOfDuties)
             } else {
-                let read_scope = approval_document_read_scope_with_executor(
-                    rbac,
-                    &scope_actor,
-                    snapshot.document_type,
-                    executor,
-                )
-                .await?;
-                if read_scope.is_empty() {
-                    Some(AuthorizationFailure::CannotReadSubject)
-                } else if !read_scope.covers_object(
-                    &rbac
-                        .approval_scope_object(snapshot.document_type, &snapshot.business_object_id, executor)
-                        .await?,
-                ) {
-                    Some(AuthorizationFailure::OutOfDataScope)
-                } else {
-                    let context = BindingRevalidationContext::new(
-                        snapshot.payload.responsible_org_id.clone(),
-                        snapshot.payload.submitted_by.clone(),
-                    );
-                    match runtime_object_readable(spec, &context, assignee_id, true, object_read)? {
-                        true => {
-                            if ensure_separation_of_duties(
-                                separation_policy,
-                                &snapshot.payload.submitted_by,
-                                &[assignee_id.to_string()],
-                            )
-                            .is_err()
-                            {
-                                Some(AuthorizationFailure::SeparationOfDuties)
-                            } else {
-                                None
-                            }
-                        },
-                        false => Some(AuthorizationFailure::CannotReadSubject),
-                    }
-                }
+                None
             }
         },
     };
     converge_eligibility(assignee_id, assignee_name, failure)
-}
-
-/// 按当前已签署对象读取端口判定审批运行可读性。
-///
-/// `StockAdjustment` 的真实读取端口是 Entity 登记的
-/// `stock_adjustment:detail` 与当前组织 DataScopeFact 交集；不得回退到已删除的
-/// 常量 helper。其它类型仍要求业务 Adapter 显式接线。
-pub(super) fn runtime_object_readable(
-    spec: &crate::service::approval::business_adapter::ApprovalAdapterSpec,
-    context: &BindingRevalidationContext,
-    actor_id: &str,
-    read_scope_covers: bool,
-    object_read: &dyn ApprovalObjectReadPort,
-) -> Result<bool> {
-    if spec.document_type == DocumentType::StockAdjustment {
-        return Ok(read_scope_covers);
-    }
-    Ok(adapter_object_read_decision_with(spec, context, actor_id, object_read)?.unwrap_or(false))
 }
 
 /// 读取必须审批政策唯一签署的岗位分离规则。
@@ -244,7 +173,9 @@ impl RuntimeReadAuthorizationFacts {
     /// 允许读取时返回 `true`。
     pub(super) fn ordinary_allowed(self) -> bool {
         self.actor_active
-            && (self.initiator || self.current_responsibility || (self.object_readable && self.scope_covers))
+            && (self.initiator
+                || self.current_responsibility
+                || (self.runtime_admin && self.object_readable && self.scope_covers))
     }
 
     /// 管理读取：同时具备类型级运行管理、对象读取与 DataScopeFact。
@@ -276,7 +207,17 @@ pub(super) fn task_proves_current_responsibility(
     actor_id: &str,
     expected_owner_role: &str,
 ) -> bool {
-    subject.instance.status == ApprovalProcessInstanceStatus::Running
+    subject.snapshot.approval_process_instance_id.as_ref() == subject.instance.base.id
+        && subject
+            .snapshot
+            .ensure_matches_runtime_subject(
+                subject.document_type,
+                subject.instance.subject.subject_id(),
+                subject.instance.subject_version,
+            )
+            .is_ok()
+        && subject.instance.process_kind == process_kind_of(subject.document_type)
+        && subject.instance.status == ApprovalProcessInstanceStatus::Running
         && execution.status == ApprovalNodeExecutionStatus::Active
         && execution.round_no == subject.instance.current_round_no
         && execution.assignee_participant_id.as_str() == actor_id
@@ -347,7 +288,7 @@ pub(super) fn mine_runtime_chain_matches(
                 )
                 .is_ok()
         })
-        .is_none_or(|snapshot| snapshot.payload.responsible_org_id == task.owner_organization_id);
+        .is_some_and(|snapshot| snapshot.payload.responsible_org_id == task.owner_organization_id);
     Ok(snapshot_owner_matches)
 }
 

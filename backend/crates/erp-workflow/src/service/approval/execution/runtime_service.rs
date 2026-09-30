@@ -4,12 +4,16 @@
 
 mod cancel_blocked;
 mod decision_apply;
+mod materials;
 mod notifications;
+pub use materials::{ApprovalMaterialView, ApprovalMaterialsView};
 mod query;
 mod query_contract;
 mod read_auth;
 mod resume_apply;
+mod task_read;
 mod tasks;
+pub use task_read::approval_task_readable_with_executor;
 mod upgrade;
 
 use std::future::Future;
@@ -342,13 +346,13 @@ mod tests {
     use super::decision_apply::{
         DecisionReceiptLookup, RuntimeDecisionCommand, decision_receipt_lookup_gate, decision_terminal_actor,
         decision_terminal_fresh_error, legacy_decision_terminal_facts_match, map_approval_task_error,
+        terminal_task_subject_matches,
     };
     use super::notifications::{blocked_cancel_notification_recipients, notification_recipients};
     use super::query::{cursor_from_summary, item_from_runtime_read_row, item_from_summary};
     use super::read_auth::{
         RuntimeReadAuthorizationFacts, RuntimeReadSubject, ensure_mine_page_integrity, mine_execution_ids,
-        mine_instance_ids, mine_runtime_chain_matches, runtime_object_readable,
-        task_proves_current_responsibility, unique_by_id,
+        mine_instance_ids, mine_runtime_chain_matches, task_proves_current_responsibility, unique_by_id,
     };
     use super::tasks::{CompleteOrCloseTasksInput, approval_task_ending};
     use crate::entity::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
@@ -363,7 +367,6 @@ mod tests {
         APPROVAL_COMMAND_RECEIPT_IDEMPOTENCY_INDEX, ApprovalInstanceListView, ApprovalInstanceSummary,
     };
     use crate::service::approval::ApprovalCancelBlockedCommand;
-    use crate::service::approval::business_adapter::{BindingRevalidationContext, adapter_spec_of};
     use crate::service::approval::execution::idempotency::{
         command_may_have_committed, command_recovery_delay, map_receipt_first_write_error,
     };
@@ -548,7 +551,7 @@ mod tests {
         assert!(RuntimeReadAuthorizationFacts { initiator: true, ..denied }.ordinary_allowed());
         assert!(RuntimeReadAuthorizationFacts { current_responsibility: true, ..denied }.ordinary_allowed());
         assert!(
-            RuntimeReadAuthorizationFacts { object_readable: true, scope_covers: true, ..denied }
+            !RuntimeReadAuthorizationFacts { object_readable: true, scope_covers: true, ..denied }
                 .ordinary_allowed()
         );
         assert!(
@@ -608,7 +611,23 @@ mod tests {
     }
 
     #[test]
-    fn mine_chain_uses_runtime_identity_and_treats_snapshot_as_optional_label() {
+    fn terminal_replay_keeps_original_task_subject_without_current_node_requirement() {
+        let (subject, task) = runtime_responsibility_fixture();
+        let execution = subject.current_execution.as_ref().unwrap();
+        assert!(terminal_task_subject_matches(&task, execution, &subject.snapshot));
+        let mut wrong = task.clone();
+        wrong.subject_version = "2".into();
+        assert!(!terminal_task_subject_matches(&wrong, execution, &subject.snapshot));
+        let mut wrong = task.clone();
+        wrong.business_object_id = "another-document".into();
+        assert!(!terminal_task_subject_matches(&wrong, execution, &subject.snapshot));
+        let mut wrong = task.clone();
+        wrong.assignment_source = AssignmentSource::SystemRule;
+        assert!(!terminal_task_subject_matches(&wrong, execution, &subject.snapshot));
+    }
+
+    #[test]
+    fn mine_chain_requires_runtime_identity_and_exact_snapshot() {
         let (subject, task) = runtime_responsibility_fixture();
         let execution = subject.current_execution.as_ref().expect("当前执行");
         let row = summary();
@@ -620,10 +639,21 @@ mod tests {
         let mut drifted = subject.snapshot.clone();
         drifted.subject_version = 2;
         assert!(
-            mine_runtime_chain_matches(&task, execution, &row, Some(&drifted), "warehouse-1",)
-                .expect("漂移快照不撤销 WorkItem 责任")
+            !mine_runtime_chain_matches(&task, execution, &row, Some(&drifted), "warehouse-1",)
+                .expect("漂移快照不能证明当前任务读取")
         );
 
+        assert!(!mine_runtime_chain_matches(&task, execution, &row, None, "warehouse-1").unwrap());
+        assert!(
+            !mine_runtime_chain_matches(&task, execution, &row, Some(&subject.snapshot), "other-user")
+                .unwrap()
+        );
+        let mut wrong_round = execution.clone();
+        wrong_round.round_no += 1;
+        assert!(
+            !mine_runtime_chain_matches(&task, &wrong_round, &row, Some(&subject.snapshot), "warehouse-1")
+                .unwrap()
+        );
         let mut wrong_projection = row;
         wrong_projection.current_node_name = Some("错误节点".to_string());
         assert!(
@@ -1022,18 +1052,5 @@ mod tests {
             &separator_relocated,
             "4\u{1f}warehouse-1"
         ));
-    }
-
-    #[test]
-    fn stock_adjustment_runtime_object_read_uses_registered_permission_scope() {
-        let spec = adapter_spec_of(DocumentType::StockAdjustment).expect("库存调整适配器");
-        let context = BindingRevalidationContext::new("org-1".to_string(), "submitter".to_string());
-        let port = crate::ports::FailClosedObjectReadPort;
-        assert!(
-            runtime_object_readable(&spec, &context, "approver", true, &port).expect("已登记读权且范围覆盖")
-        );
-        assert!(
-            !runtime_object_readable(&spec, &context, "approver", false, &port).expect("范围不覆盖必须拒绝")
-        );
     }
 }

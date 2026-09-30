@@ -1,6 +1,6 @@
 //! 进项发票分配与采购关联范围查询。
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 
 use application_core::AuditActor;
@@ -14,8 +14,8 @@ use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::authorization::*;
+use super::payable_source::source_key;
 use super::rows::*;
-use crate::sales_center::access::sales_scope;
 use crate::{Error, Result};
 
 /// 进项发票分配的授权裁剪单元。
@@ -24,16 +24,10 @@ pub(super) struct PurchaseInvoiceLink {
     pub(super) id: String,
     /// 正反动作后的含税方向金额。
     pub(super) signed: Amount,
-    /// 归属采购单；结算单来源与缺失时计入未分配。
+    /// 归属采购单；结算来源使用带类型关联键；缺失来源拒绝。
     pub(super) order: LinkedOrderId,
     /// 响应视图。
     pub(super) view: erp_finance::dto::payable::PurchaseInvoiceAllocationView,
-}
-
-/// 采购关联整单读取资格：资金与关联采购均具未被个人上限收窄的公司范围。
-pub(super) fn purchase_whole(authorization: &FundsAuthorization) -> bool {
-    authorization.purchase_scope.as_ref().is_some_and(|scope| scope.is_company())
-        && authorization.funds.is_company()
 }
 
 impl FundsAccess {
@@ -46,34 +40,17 @@ impl FundsAccess {
         purchase_access: &PurchaseAccess,
         executor: &mut dyn Executor,
     ) -> Result<(FundsResolvedScope, FundsAuthorization)> {
-        let access = self.scope.resolve(actor, resource, action, executor).await.map_err(Error::from)?;
-        let (sales_access, sales) = self.linked_sales_scope(actor, &access, executor).await?;
-        let (purchase_resolved, purchase_scope) =
-            self.linked_purchase_scope(actor, purchase_access, executor).await?;
-        let mut authorization = FundsAuthorization {
-            sales,
-            funds: sales_scope(&access_output(&access)?, actor.id(), &[], Vec::new()),
-            purchase_scope: Some(purchase_scope),
-            context: access_output(&access)?,
-            fingerprint: Default::default(),
-            no_scope: false,
-        };
-        sales_access.scope_version.hash(&mut authorization.fingerprint);
-        purchase_resolved.scope_version.hash(&mut authorization.fingerprint);
-        authorization.context.scope_version.hash(&mut authorization.fingerprint);
-        authorization.restrict_links();
-        authorization.no_scope = authorization.empty();
-        Ok((access, authorization))
+        let _ = purchase_access;
+        self.resolve_sources(actor, resource, action, true, true, executor).await
     }
 
-    /// 进项发票分配按应付子账反查采购单；结算单来源份额无采购归属。
+    /// 进项发票分配按应付子账反查采购单；结算来源保留自身责任边界。
     pub(super) async fn purchase_invoice_matched_links(
         &self,
         invoice_ids: &[String],
         executor: &mut dyn Executor,
     ) -> Result<HashMap<String, Vec<PurchaseInvoiceLink>>> {
         use erp_core::ids::{InvoiceId, PayableAccountId};
-        use erp_finance::entity::payable::PayableSourceType;
         let keys = invoice_ids.iter().map(|id| InvoiceId::new(id.clone())).collect::<Vec<_>>();
         let allocations =
             self.db.purchase_invoice_allocations().find_allocations_by_invoices(&keys, executor).await?;
@@ -85,8 +62,7 @@ impl FundsAccess {
         let account_order = accounts
             .into_iter()
             .map(|account| {
-                let order = (account.source_type == PayableSourceType::PurchaseOrder)
-                    .then(|| account.source_document_id.clone());
+                let order = Some(source_key(account.source_type, &account.source_document_id));
                 (account.base.id.clone(), order)
             })
             .collect::<HashMap<_, _>>();
@@ -122,7 +98,7 @@ use erp_finance::repository::PurchaseInvoiceAllocationFilter;
 pub(super) struct ScopedPurchaseAllocation {
     /// 分配实体。
     pub(super) item: PurchaseInvoiceAllocation,
-    /// 归属采购单；结算单来源与缺失时计入未分配。
+    /// 归属采购单；结算来源使用带类型关联键；缺失来源拒绝。
     pub(super) order: LinkedOrderId,
     /// 方向金额（正反动作已记符号）。
     pub(super) signed: Amount,
@@ -132,6 +108,8 @@ pub(super) struct ScopedPurchaseAllocation {
     pub(super) whole_flag: bool,
     /// 归属采购单当前负责人；无归属时为空，份额计入未分配。
     pub(super) owner_name: Option<String>,
+    /// 当前真实来源版本，责任交接须使分页凭据失效。
+    pub(super) source_version: u64,
 }
 
 impl FundsAccess {
@@ -250,8 +228,7 @@ impl FundsAccess {
         let mut all_whole = true;
         let mut owner_of = HashMap::new();
         for scoped in assembled.iter() {
-            scoped.item.base.id.hash(&mut fingerprint);
-            scoped.item.base.version.hash(&mut fingerprint);
+            scoped.hash_source(&mut fingerprint);
             triples.push((scoped.item.base.id.clone(), scoped.signed, scoped.order.clone()));
             if scoped.whole() {
                 whole_sum = whole_sum.checked_add(scoped.signed);
@@ -302,7 +279,7 @@ impl FundsAccess {
             organization_version: authorization.context.organizations.version,
             as_of: authorization.context.as_of.as_utc().to_rfc3339(),
             empty_reason: None,
-            scope_summary: "收票分配按应付子账来源采购当前负责人与收票经办人授权；部分授权仅返获授权份额",
+            scope_summary: "收票分配继承应付子账的采购或结算来源边界，仅返回获授权分配",
             ownership_basis: "linked_purchase_owner_and_invoice_operator",
         })
     }
@@ -312,13 +289,12 @@ impl FundsAccess {
         &self,
         query: &erp_finance::dto::payable::PurchaseInvoiceAllocationListQuery,
         rows: Vec<PurchaseInvoiceAllocation>,
-        access: &FundsResolvedScope,
+        _access: &FundsResolvedScope,
         authorization: &FundsAuthorization,
-        purchase_access: &PurchaseAccess,
+        _purchase_access: &PurchaseAccess,
         executor: &mut dyn Executor,
     ) -> Result<Vec<ScopedPurchaseAllocation>> {
         use erp_core::ids::{InvoiceId, PayableAccountId};
-        use erp_finance::entity::payable::PayableSourceType;
         let account_keys = rows
             .iter()
             .map(|item| PayableAccountId::new(item.payable_account_id.to_string()))
@@ -327,8 +303,7 @@ impl FundsAccess {
         let account_order = accounts
             .into_iter()
             .map(|account| {
-                let order = (account.source_type == PayableSourceType::PurchaseOrder)
-                    .then(|| account.source_document_id.clone());
+                let order = Some(source_key(account.source_type, &account.source_document_id));
                 (account.base.id.clone(), order)
             })
             .collect::<HashMap<_, _>>();
@@ -344,11 +319,7 @@ impl FundsAccess {
             .collect::<HashMap<_, _>>();
         let po_ids = account_order.values().filter_map(|order| order.clone()).collect::<Vec<_>>();
         let purchase_facts = self.purchase_fact_map(&po_ids, executor).await?;
-        let purchase_scope = authorization.purchase_scope.clone().unwrap_or_default();
-        let allowed = self
-            .authorized_purchase_ids(purchase_access, &purchase_scope, executor)
-            .await?
-            .map(|list| list.into_iter().collect::<BTreeSet<_>>());
+        let allowed = authorization.payable_ids(&purchase_facts);
         let condition = self.purchase_invoice_condition(query, executor).await?;
         let mut decided = Vec::new();
         for item in rows {
@@ -372,7 +343,7 @@ impl FundsAccess {
                 linked_document_id: item.payable_account_id.to_string(),
                 linked_document_version: item.base.version,
             };
-            if !Self::allows(access, &row_facts)? {
+            if fact.is_none() {
                 continue;
             }
             if !matches_linked_condition(&row_facts, &condition) {
@@ -382,7 +353,7 @@ impl FundsAccess {
                 PayableAllocationAction::Apply => item.allocated_gross_amount,
                 PayableAllocationAction::Reverse => zero_amount().checked_sub(item.allocated_gross_amount),
             };
-            let whole = purchase_whole(authorization);
+            let whole = true;
             decided.push(ScopedPurchaseAllocation {
                 item,
                 order,
@@ -390,6 +361,7 @@ impl FundsAccess {
                 invoice_no,
                 whole_flag: whole,
                 owner_name: fact.and_then(|order| order.owner_user_id.clone()),
+                source_version: fact.map(|source| source.version).unwrap_or(0),
             });
         }
         Ok(decided)
@@ -421,6 +393,14 @@ impl FundsAccess {
 }
 
 impl ScopedPurchaseAllocation {
+    /// 分配和来源版本共同绑定分页凭据，责任交接会使旧快照失效。
+    fn hash_source(&self, fingerprint: &mut impl Hasher) {
+        self.item.base.id.hash(fingerprint);
+        self.item.base.version.hash(fingerprint);
+        self.order.hash(fingerprint);
+        self.source_version.hash(fingerprint);
+    }
+
     /// 本行整单读取资格由调用时授权快照决定，装载后不再重算。
     pub(super) fn whole(&self) -> bool {
         self.whole_flag

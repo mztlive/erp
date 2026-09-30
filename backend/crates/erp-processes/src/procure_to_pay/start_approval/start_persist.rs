@@ -26,6 +26,7 @@ use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Executor;
 
+use crate::adapters::freeze_approval_materials;
 use crate::{Error, Result};
 
 /// 采购单提交事务内需要一并写入的冻结提交。
@@ -306,6 +307,7 @@ async fn persist_runtime_writes(
         snapshot_payload.clone(),
     )
     .map_err(|error| Error::ValidationError(error.to_string()))?;
+    let snapshot = freeze_approval_materials(db, snapshot, executor).await?;
     db.approval_subject_snapshots().create_immutable_snapshot(&snapshot, executor).await?;
     persist_open_tasks(db, writes, owner_role, organization_id, now, executor).await
 }

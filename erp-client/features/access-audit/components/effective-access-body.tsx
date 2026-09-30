@@ -83,7 +83,7 @@ function PermissionLead({
             </p>
             <p className="mt-2 text-xs leading-5 text-muted-foreground">
                 {preview.allPermissions
-                    ? "可进入全部模块。实际能看哪些单据仍受数据范围限制。"
+                    ? "可进入全部模块。具体数据访问仍须符合业务范围、来源关系或任务指派规则。"
                     : preview.groups.length > 0
                       ? `覆盖 ${preview.groups
                             .slice(0, 3)
@@ -107,7 +107,7 @@ function DataScopeSection({
     if (query.isPending) {
         return (
             <section className="space-y-3">
-                <h3 className="font-medium">数据范围</h3>
+                <h3 className="font-medium">数据访问依据</h3>
                 <p role="status" className="text-xs text-muted-foreground">
                     正在读取数据范围…
                 </p>
@@ -117,7 +117,7 @@ function DataScopeSection({
     if (query.isError) {
         return (
             <section className="space-y-3">
-                <h3 className="font-medium">数据范围</h3>
+                <h3 className="font-medium">数据访问依据</h3>
                 <BusinessFailureState
                     error={query.error}
                     action={
@@ -138,13 +138,13 @@ function DataScopeSection({
     const groups = query.data?.dataScopes ?? []
     return (
         <section className="space-y-3">
-            <h3 className="font-medium">数据范围</h3>
+            <h3 className="font-medium">数据访问依据</h3>
             <p className="text-xs leading-5 text-muted-foreground">
-                在已有操作权限的前提下，决定可以处理哪些数据。
+                在已有操作权限的前提下，分别按业务范围、来源关系、任务指派、治理委派或目录资格判断。
             </p>
             {groups.length === 0 ? (
                 <p className="text-xs leading-5 text-muted-foreground">
-                    尚未配置数据范围，不代表可访问全部数据。
+                    暂无可展示的访问依据，具体业务须在访问时校验。
                 </p>
             ) : (
                 <div className="space-y-3 text-xs">
@@ -253,7 +253,7 @@ function EffectiveAccessBody({ query, previewRole }: EffectiveAccessBodyProps) {
                         查询范围
                     </h3>
                     <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                        以上为当前人员的操作权限与数据范围配置。具体业务操作是否允许，以执行时的权限校验为准。
+                        以上为当前人员的操作权限与数据访问政策。具体业务操作是否允许，以执行时的权限校验为准。
                     </p>
                 </section>
             ) : null}

@@ -1,4 +1,4 @@
-//! 阻塞审批管理接口的数据范围解析，以及定义管理的类型级可见范围。
+//! 审批静态资格、类型管理权限与真实业务来源授权。
 
 use application_core::AuditActor;
 use persistence_core::{Executor, NoTransaction};
@@ -6,20 +6,10 @@ use persistence_core::{Executor, NoTransaction};
 use super::dto::ApprovalRecoveryAuthorization;
 use super::policy::{ALL_DOCUMENT_TYPES, DocumentApprovalPolicy, policy_of};
 use crate::entity::document_registry::DocumentType;
-use crate::entity::work_item::WorkItemType;
 use crate::error::{Error, Result};
-use crate::ports::{WorkflowAuthorizationPort, WorkflowDataScope, WorkflowScopeObject};
+use crate::ports::WorkflowAuthorizationPort;
 
 const AUTHORIZATION_SNAPSHOT_ATTEMPTS: usize = 3;
-
-/// 服务端计算的组织级诊断范围。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ApprovalManagementScope {
-    /// 公共解析器返回的当前对象范围。
-    Resolved(WorkflowDataScope),
-    /// 没有完整动作权限或正向范围。
-    Empty,
-}
 
 /// 定义管理的类型级可见范围。不是具体单据 对象范围。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -98,24 +88,6 @@ impl DefinitionManagementVisibility {
                 .filter(|item| other.runtime_admin_types.contains(item))
                 .collect(),
         )
-    }
-}
-
-impl ApprovalManagementScope {
-    /// 对当前强业务对象执行公共范围判定；旧组织集合不得判定新对象。
-    pub fn covers_object(&self, object: &WorkflowScopeObject) -> bool {
-        match self {
-            Self::Resolved(scope) => scope.allows(object),
-            _ => false,
-        }
-    }
-
-    /// 判断当前权限是否没有任何可证明的数据范围。
-    pub fn is_empty(&self) -> bool {
-        match self {
-            Self::Resolved(scope) => !scope.has_role_scope,
-            Self::Empty => true,
-        }
     }
 }
 
@@ -271,148 +243,90 @@ fn visibility_from_enforced_permissions(
     DefinitionManagementVisibility::from_type_permissions(definition_admin_types, runtime_admin_types)
 }
 
-/// 计算指定审批单据类型的对象读取 对象范围。
+/// 在当前执行器中证明静态动作由仍启用的角色授予。
 ///
 /// # 参数
-/// * `db` - 当前 MongoDB 数据库
-/// * `rbac` - 当前 RBAC 服务
-/// * `actor` - 已认证且已重验的操作人
-/// * `document_type` - 审批运行时固定单据类型
-///
+/// * `rbac` - 权限事实端口。
+/// * `actor` - 已认证主体。
+/// * `permission` - 静态动作权限。
+/// * `executor` - 当前事务执行器。
 /// # 返回
-/// 返回由真正授予该业务对象读取权限的角色与用户范围形成的组织范围；未获得
-/// 权限或没有可证明范围时返回空组织集合。
-///
+/// 返回有效授权角色；空集表示无动作权限，不产生对象访问权。
 /// # 错误
-/// 单据类型未登记 DocumentApproval 简报关系、权限格式非法或事实读取失败时
-/// 返回服务错误。
-///
-/// # 关键业务约束
-/// 读取权限必须来自 Entity-owned `WorkItemBriefRelation`，不得在审批 Service
-/// 维护第二份 DocumentType 权限表；不同单据类型的范围必须分别计算，禁止先
-/// 合并组织再交给 Repository。
-pub async fn approval_document_read_scope(
-    rbac: &impl WorkflowAuthorizationPort,
-    actor: &AuditActor,
-    document_type: DocumentType,
-) -> Result<ApprovalManagementScope> {
-    approval_document_read_scope_with_executor(rbac, actor, document_type, &mut NoTransaction).await
-}
-
-/// 在调用方执行器的同一数据库快照内计算对象读取 对象范围。
-///
-/// # 错误
-/// 单据类型未登记、权限格式非法或授权事实读取失败时返回服务错误。
-pub async fn approval_document_read_scope_with_executor(
-    rbac: &impl WorkflowAuthorizationPort,
-    actor: &AuditActor,
-    document_type: DocumentType,
-    executor: &mut dyn Executor,
-) -> Result<ApprovalManagementScope> {
-    let relation = WorkItemType::DocumentApproval
-        .brief_relation(document_type.as_str())
-        .ok_or_else(|| Error::from_approval_code(crate::error::ErrorCode::ApprovalPolicyNotRegistered))?;
-    let snapshot =
-        rbac.role_permission_snapshot(actor.kind(), actor.id(), &[relation.read_permission]).await?;
-    let roles =
-        rbac.enabled_role_ids(&snapshot.granting_role_ids(relation.read_permission), executor).await?;
-    rbac.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
-    if roles.is_empty() {
-        return Ok(ApprovalManagementScope::Empty);
-    }
-    permission_scope_with_executor(rbac, actor, "approval_instance:read", executor).await
-}
-
-/// 在调用方执行器的同一数据库快照内计算普通取消动作 对象范围。
-///
-/// # 错误
-/// 账号角色、RBAC policy、权限代码或 对象范围 事实读取失败时返回服务错误。
-#[allow(dead_code)]
-pub async fn approval_cancel_scope_with_executor(
-    rbac: &impl WorkflowAuthorizationPort,
-    actor: &AuditActor,
-    executor: &mut dyn Executor,
-) -> Result<ApprovalManagementScope> {
-    permission_scope_with_executor(rbac, actor, "approval_instance:cancel", executor).await
-}
-
-/// 在调用方执行器的同一数据库快照内计算受阻取消动作 对象范围。
-///
-/// # 错误
-/// 账号角色、RBAC policy、权限代码或 对象范围 事实读取失败时返回服务错误。
-///
-/// # 关键业务约束
-/// `cancel_blocked` 与普通 `cancel` 是两个独立动作权限，禁止以恢复或普通取消
-/// 权限替代；只有真正授予本动作的启用角色范围才能参与实例组织授权。
-pub async fn approval_cancel_blocked_scope_with_executor(
-    rbac: &impl WorkflowAuthorizationPort,
-    actor: &AuditActor,
-    executor: &mut dyn Executor,
-) -> Result<ApprovalManagementScope> {
-    permission_scope_with_executor(rbac, actor, "approval_instance:cancel_blocked", executor).await
-}
-
-/// 在调用方执行器的同一数据库快照内计算审批决定动作 对象范围。
-///
-/// # 错误
-/// 账号角色、RBAC policy、权限代码或 对象范围 事实读取失败时返回服务错误。
-///
-/// # 关键业务约束
-/// 决定权限必须由同一个仍启用的角色授予，并与该角色及用户的组织范围求交；
-/// 禁止把停用角色残留策略或不同角色的权限与范围拼接成有效授权。
-pub async fn approval_decide_scope_with_executor(
-    rbac: &impl WorkflowAuthorizationPort,
-    actor: &AuditActor,
-    executor: &mut dyn Executor,
-) -> Result<ApprovalManagementScope> {
-    permission_scope_with_executor(rbac, actor, "approval_instance:decide", executor).await
-}
-
-/// 在调用方执行器的同一数据库快照内计算指定单据动作的 对象范围。
-///
-/// # 参数
-/// * `db` - 当前 MongoDB 数据库
-/// * `rbac` - 当前 RBAC 服务
-/// * `actor` - 已认证且已重验的操作人
-/// * `permission` - 业务单据已登记的稳定动作权限代码
-/// * `executor` - 调用方持有的事务或非事务执行器
-///
-/// # 返回
-/// 返回公共解析器证明的资源动作对象范围；没有有效
-/// 授权或范围时返回空组织集合。
-///
-/// # 错误
-/// 账号角色、RBAC policy、权限代码或 对象范围 事实读取失败时返回服务错误。
-///
-/// # 关键业务约束
-/// 本方法仅供 Service 在具体单据事务内重验 actor-specific 动作权限。调用方仍
-/// 必须把返回范围与当前业务对象的身份维度精确比对；不得把权限字符串或授权判断下沉到
-/// Repository、Entity 或 BPM。
-#[allow(dead_code)]
-pub async fn approval_document_action_scope_with_executor(
+/// 账号失效或策略版本变化时失败关闭。
+pub async fn approval_action_roles_with_executor(
     rbac: &impl WorkflowAuthorizationPort,
     actor: &AuditActor,
     permission: &str,
     executor: &mut dyn Executor,
-) -> Result<ApprovalManagementScope> {
-    permission_scope_with_executor(rbac, actor, permission, executor).await
+) -> Result<Vec<String>> {
+    if !approval_actor_is_active_with_executor(rbac, actor, executor).await? {
+        return Ok(Vec::new());
+    }
+    let snapshot = rbac.role_permission_snapshot(actor.kind(), actor.id(), &[permission]).await?;
+    let roles = rbac.enabled_role_ids(&snapshot.granting_role_ids(permission), executor).await?;
+    rbac.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
+    Ok(roles)
 }
 
-/// 从实际授予恢复权限的角色与用户范围形成恢复授权边界。
+/// 校验候选审批人同一启用角色同时授予审批读取与决定能力。
 ///
+/// # 参数
+/// * `rbac` / `actor` / `executor` - 当前授权事实及事务快照。
+/// # 返回
+/// 资格成立时返回 true；该结果不授予任何具体单据读取权。
 /// # 错误
-/// 当前 RBAC policy 或数据范围仓储读取失败时返回服务错误。
-pub async fn approval_recovery_scope(
+/// 账号或策略读取失败时拒绝。
+pub async fn approval_participant_permissions_with_executor(
     rbac: &impl WorkflowAuthorizationPort,
     actor: &AuditActor,
-) -> Result<ApprovalManagementScope> {
-    permission_scope_with_executor(rbac, actor, "approval_instance:resume", &mut NoTransaction).await
+    executor: &mut dyn Executor,
+) -> Result<bool> {
+    if !approval_actor_is_active_with_executor(rbac, actor, executor).await? {
+        return Ok(false);
+    }
+    let required = ["approval_instance:read", "approval_instance:decide"];
+    let snapshot = rbac.role_permission_snapshot(actor.kind(), actor.id(), &required).await?;
+    let roles = rbac.enabled_role_ids(&snapshot.granting_role_ids_for_all(&required), executor).await?;
+    rbac.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
+    Ok(!roles.is_empty())
+}
+
+/// 证明运行管理动作、类型管理资格和真实业务来源同时成立。
+///
+/// # 参数
+/// * `rbac` / `actor` / `executor` - 当前身份和授权事务。
+/// * `permission` - 当前管理动作。
+/// * `document_type` / `document_id` - 精确主体。
+/// # 返回
+/// 所有边界同时成立时成功。
+/// # 错误
+/// 任何动作、类型或来源权限不足时拒绝。
+pub async fn require_approval_management_with_executor(
+    rbac: &impl WorkflowAuthorizationPort,
+    actor: &AuditActor,
+    permission: &str,
+    document_type: DocumentType,
+    document_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let roles = approval_action_roles_with_executor(rbac, actor, permission, executor).await?;
+    let read = approval_action_roles_with_executor(rbac, actor, "approval_instance:read", executor).await?;
+    let visibility = definition_management_visibility_with_executor(rbac, actor, executor).await?;
+    if roles.is_empty()
+        || read.is_empty()
+        || !visibility.runtime_admin_types().contains(&document_type)
+        || !rbac.approval_source_readable(actor, document_type, document_id, executor).await?
+    {
+        return Err(Error::Forbidden("缺少审批动作、类型管理资格或业务来源访问权".into()));
+    }
+    Ok(())
 }
 
 /// 在稳定 Casbin policy 版本下形成恢复授权锚点。
 ///
 /// Handler 必须把返回值原样注入恢复命令；运行时在同一恢复事务内重新读取账号、
-/// 角色绑定、启用角色、数据范围和 policy 版本，禁止只信任事务外范围判断。
+/// 角色绑定、启用角色和 policy 版本；具体恢复命令另验类型管理与真实业务来源。
 pub async fn approval_recovery_authorization(
     rbac: &impl WorkflowAuthorizationPort,
     actor: &AuditActor,
@@ -423,8 +337,12 @@ pub async fn approval_recovery_authorization(
             .await?
             .filter(|account| account.kind == actor.kind() && account.can_login)
             .ok_or_else(|| Error::Forbidden("恢复账号不存在、已停用或身份已变化".to_string()))?;
-        let (_scope, granting_role_ids) =
-            permission_scope_and_roles(rbac, actor, "approval_instance:resume").await?;
+        let granting_role_ids =
+            approval_action_roles_with_executor(rbac, actor, "approval_instance:resume", &mut NoTransaction)
+                .await?;
+        if granting_role_ids.is_empty() {
+            return Err(Error::Forbidden("缺少审批恢复权限".into()));
+        }
         let after = rbac.current_policy_revision().await?;
         if before == after {
             return Ok(ApprovalRecoveryAuthorization {
@@ -435,56 +353,6 @@ pub async fn approval_recovery_authorization(
         }
     }
     Err(Error::Rbac("审批恢复授权策略持续变化，无法形成稳定快照".to_string()))
-}
-
-/// 使用调用方执行器计算权限与组织范围交集。
-async fn permission_scope_with_executor(
-    rbac: &impl WorkflowAuthorizationPort,
-    actor: &AuditActor,
-    permission: &str,
-    executor: &mut dyn Executor,
-) -> Result<ApprovalManagementScope> {
-    permission_scope_and_roles_with_executor(rbac, actor, permission, executor).await.map(|(scope, _)| scope)
-}
-
-/// 在当前 RBAC 与 对象范围 事实上计算权限的组织范围与授权角色。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `rbac` - 共享 RBAC 服务
-/// * `actor` - 已认证操作人
-/// * `permission` - 需要判定的稳定权限代码
-///
-/// # 返回
-/// 返回不扩大用户/角色交集的组织范围与实际生效角色 ID。
-///
-/// # 错误
-/// 角色、RBAC、权限解析或 对象范围 事实读取失败时返回错误。
-///
-/// # 关键业务约束
-/// Repository 批量返回事实；Service 必须逐角色完成权限与范围交集。
-async fn permission_scope_and_roles(
-    rbac: &impl WorkflowAuthorizationPort,
-    actor: &AuditActor,
-    permission: &str,
-) -> Result<(ApprovalManagementScope, Vec<String>)> {
-    permission_scope_and_roles_with_executor(rbac, actor, permission, &mut NoTransaction).await
-}
-
-/// 在调用方执行器内计算权限范围与实际授权角色。
-pub(crate) async fn permission_scope_and_roles_with_executor(
-    rbac: &impl WorkflowAuthorizationPort,
-    actor: &AuditActor,
-    permission: &str,
-    executor: &mut dyn Executor,
-) -> Result<(ApprovalManagementScope, Vec<String>)> {
-    match rbac.resolve_workflow_scope(actor, permission, executor).await? {
-        Some(scope) => {
-            let roles = scope.granting_role_ids.clone();
-            Ok((ApprovalManagementScope::Resolved(scope), roles))
-        },
-        None => Ok((ApprovalManagementScope::Empty, Vec::new())),
-    }
 }
 
 /// 绑定升级在同一授权快照中得到的服务端身份。
@@ -502,12 +370,12 @@ pub(crate) struct ApprovalBindingUpgradeAuthorization {
 /// * `actor` - 已在同一事务中重验为有效的操作人
 /// * `document_type` - 强业务对象证明的精确单据类型
 /// * `definition_admin_permission` - 该类型政策注册的定义管理权限
-/// * `responsible_org_id` - 强业务对象或其固定责任链给出的组织
+/// * `document_id` - 已加载强事实证明的精确业务主体
 /// * `executor` - 调用方持有的事务执行器
 ///
 /// # 返回
-/// 动作权限、定义管理权限和对象读权范围分别覆盖责任组织时，
-/// 返回真正覆盖该组织的定义管理授权角色中确定性的 `actor_role`。
+/// 动作权限、定义管理权限和真实来源读权同时成立时，
+/// 返回定义管理授权角色中确定性的 `actor_role`。
 ///
 /// # 错误
 /// 权限、角色、对象范围、对象读取关系或 policy revision 任一无法证明时
@@ -522,7 +390,7 @@ pub(crate) async fn approval_binding_upgrade_authorization_with_executor(
     actor: &AuditActor,
     document_type: DocumentType,
     definition_admin_permission: &str,
-    object: &WorkflowScopeObject,
+    document_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<ApprovalBindingUpgradeAuthorization> {
     let snapshot =
@@ -533,10 +401,14 @@ pub(crate) async fn approval_binding_upgrade_authorization_with_executor(
     let actor_role =
         roles.into_iter().next().ok_or_else(|| Error::Forbidden("没有该类型定义管理权".into()))?;
     let upgrade =
-        permission_scope_with_executor(rbac, actor, "approval_instance:upgrade_binding", executor).await?;
-    let read = approval_document_read_scope_with_executor(rbac, actor, document_type, executor).await?;
-    if !upgrade.covers_object(object) || !read.covers_object(object) {
-        return Err(Error::Forbidden("审批绑定升级动作或读取范围不覆盖当前业务对象".into()));
+        approval_action_roles_with_executor(rbac, actor, "approval_instance:upgrade_binding", executor)
+            .await?;
+    let read = approval_action_roles_with_executor(rbac, actor, "approval_instance:read", executor).await?;
+    if upgrade.is_empty()
+        || read.is_empty()
+        || !rbac.approval_source_readable(actor, document_type, document_id, executor).await?
+    {
+        return Err(Error::Forbidden("审批绑定升级动作或业务来源读取权限不足".into()));
     }
     rbac.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
     Ok(ApprovalBindingUpgradeAuthorization { actor_role })

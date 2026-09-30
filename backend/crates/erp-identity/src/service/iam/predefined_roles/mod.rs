@@ -33,6 +33,7 @@ pub(crate) use upgrades::{
     upgrade_sales_role_permissions, upgrade_sellable_sku_reader_permissions, upgrade_workflow_permissions,
 };
 
+use crate::entity::policy_permission::FINANCE_LEDGER_READ;
 use crate::entity::{Permission, RoleData};
 use crate::error::Result;
 
@@ -215,9 +216,9 @@ async fn upgrade_supplier_connection_governance_permissions(rbac: &SharedRbacSer
     upgrade_exact(rbac, "role-sysadmin", sysadmin_previous, sysadmin_desired).await
 }
 
-/// 从目标权限还原低毛利确认上线前的销售领导精确快照。
+/// 仅在首次创建财务角色时授予整账资格，既有角色不得由启动补权。
 async fn seed_one(rbac: &SharedRbacService, role: &PredefinedRoleDef) -> Result<()> {
-    let permissions = parse_permissions(role.permissions)?;
+    let permissions = initial_permissions(role)?;
     // 可分配、可后续由管理员调整；仅 `role-root` 使用 system=true 的强保护边界。
     let data = RoleData::new(role.name.to_string()).with_description(role.description.to_string());
     let created = rbac.seed_role_if_absent(role.id, data, permissions).await?;
@@ -225,6 +226,15 @@ async fn seed_one(rbac: &SharedRbacService, role: &PredefinedRoleDef) -> Result<
         tracing::info!(role_id = role.id, role_name = role.name, "predefined role seeded");
     }
     Ok(())
+}
+
+/// 构建首次创建权限；整账资格不进入既有角色的自动升级快照。
+fn initial_permissions(role: &PredefinedRoleDef) -> Result<Vec<Permission>> {
+    let mut permissions = parse_permissions(role.permissions)?;
+    if role.id == "role-finance" {
+        permissions.push(Permission::parse(FINANCE_LEDGER_READ)?);
+    }
+    Ok(permissions)
 }
 
 /// 将静态权限字符串解析为领域权限集合。
@@ -252,6 +262,17 @@ pub(super) fn predefined_role_ids() -> Vec<&'static str> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn ledger_read_is_only_seeded_for_a_new_finance_role() {
+        for role in super::PREDEFINED_ROLES {
+            let initial = super::initial_permissions(role).unwrap();
+            let has_ledger =
+                initial.iter().any(|permission| permission.to_string() == super::FINANCE_LEDGER_READ);
+            assert_eq!(has_ledger, role.id == "role-finance");
+            assert!(!role.permissions.contains(&super::FINANCE_LEDGER_READ));
+        }
+    }
+
     use super::{
         APPROVAL_HTTP_ACTION_PERMISSIONS, FINANCE_PERMISSIONS, PREDEFINED_ROLES, PROCUREMENT_PERMISSIONS,
         SALES_LEADER_PERMISSIONS, SALES_PERMISSIONS, approval_http_legacy_snapshot,

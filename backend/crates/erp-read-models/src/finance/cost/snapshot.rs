@@ -4,20 +4,21 @@ use std::collections::{BTreeSet, HashMap};
 use std::hash::{Hash, Hasher};
 
 use erp_finance::entity::cost::CostAllocation;
+use erp_finance::entity::read_coverage::whole_document_readable;
 use erp_finance::repository::CostExt;
 use erp_finance::repository::cost::read_scope::{ALLOCATION_LIMIT, ENTRY_LIMIT};
 use erp_finance::repository::cost::{CostEntryFilter, CostEntryRow};
 use erp_finance::repository::prelude::*;
 use erp_finance::service::cost::{cost_entry_filter, cost_entry_row_view};
-use erp_identity::Permission;
-use erp_identity::service::access_control::resolve::AuthorizedDataScope;
+use erp_identity::service::access_control::resolve::{AuthorizedDataScope, DataScopeService};
 use erp_sales::repository::SalesOrderExt;
 use erp_sales::repository::prelude::*;
 use erp_sales::repository::sales_order::scope::SalesReadScope;
 use persistence_core::{Executor, Transactional};
 
 use super::*;
-use crate::sales_center::access::SalesAccess;
+use crate::finance::funds_scope::ledger_readable;
+use crate::sales_center::access::sales_scope;
 
 pub(super) struct Snapshot {
     pub rows: Vec<ScopedCostEntryView>,
@@ -31,16 +32,13 @@ pub(super) struct Snapshot {
 
 struct CostAuthorization {
     sales: SalesReadScope,
-    cost: SalesReadScope,
+    ledger_read: bool,
     context: AuthorizedDataScope,
     fingerprint: DefaultHasher,
 }
 impl CostAuthorization {
-    fn whole(&self) -> bool {
-        self.sales.is_company() && self.cost.is_company()
-    }
     fn empty(&self) -> bool {
-        self.sales.is_empty() || self.cost.is_empty()
+        !self.ledger_read && self.sales.is_empty()
     }
 }
 impl Snapshot {
@@ -63,7 +61,7 @@ impl Snapshot {
             organization_version: self.organization,
             as_of: self.as_of,
             empty_reason: self.no_scope.then_some("no_scope"),
-            scope_summary: "当前成本权限与关联销售权限交集；受限整笔金额不返回",
+            scope_summary: "按关联销售范围读取成本份额；整笔及未分配成本另需财务整账读取资格",
             ownership_basis: "current_sales_allocation",
         }
     }
@@ -82,11 +80,20 @@ impl Snapshot {
             line.base.version.hash(&mut access.fingerprint);
             grouped.entry(line.cost_entry_id.to_string()).or_default().push(line);
         }
+        let visible_sources = orders.iter().cloned().collect::<Vec<_>>();
         for row in candidates {
             row.id.hash(&mut access.fingerprint);
             row.version.hash(&mut access.fingerprint);
             let allocations = grouped.remove(&row.id).unwrap_or_default();
-            if let Some(view) = cost_entry_row_view(row, allocations).restrict(access.whole(), orders)? {
+            let whole = whole_document_readable(
+                access.ledger_read,
+                allocations
+                    .iter()
+                    .filter_map(|line| line.sales_order_id.as_ref())
+                    .map(|id| Some(id.as_ref())),
+                &visible_sources,
+            );
+            if let Some(view) = cost_entry_row_view(row, allocations).restrict(whole, orders)? {
                 self.rows.push(view);
             }
         }
@@ -140,7 +147,7 @@ impl CostReadModel {
             })
             .await
     }
-    /// 收入和目标成本动作必须由同一合格角色集合证明，两个资源范围仍分别解析。
+    /// 证明目标成本动作并继承销售来源边界；整账职责独立重验。
     async fn authorize(
         &self,
         actor: &AuditActor,
@@ -148,17 +155,15 @@ impl CostReadModel {
         action: &str,
         executor: &mut dyn Executor,
     ) -> Result<CostAuthorization> {
-        let resolver = SalesAccess::new(self.db.clone(), self.rbac.clone());
-        let (sales_context, sales) = resolver
-            .resolve(actor, "list", &[Permission::parse(format!("{resource}:{action}"))?], executor)
-            .await?;
-        let (context, cost) = resolver
-            .resolve_resource(actor, resource, action, &[Permission::parse("sales_order:list")?], executor)
-            .await?;
+        let resolver = DataScopeService::new(self.db.clone(), self.rbac.clone());
+        let context =
+            resolver.resolve_source_scope(actor, resource, action, "sales_order", "list", executor).await?;
+        let sales = sales_scope(&context, actor.id(), &[], Vec::new());
+        let ledger_read = ledger_readable(&self.db, &self.rbac, actor, executor).await?;
         let mut fingerprint = DefaultHasher::new();
-        sales_context.scope_version.hash(&mut fingerprint);
         context.scope_version.hash(&mut fingerprint);
-        Ok(CostAuthorization { sales, cost, context, fingerprint })
+        ledger_read.hash(&mut fingerprint);
+        Ok(CostAuthorization { sales, ledger_read, context, fingerprint })
     }
     /// 隐藏来源条件拒绝，空范围保持空集；完整装载并裁剪后才允许分页。
     async fn load_snapshot(
@@ -170,7 +175,7 @@ impl CostReadModel {
     ) -> Result<Snapshot> {
         let mut snapshot = Snapshot::new(&access);
         if !access.empty() {
-            if !access.whole() && filter.source_document_id.is_some() {
+            if !access.ledger_read && filter.source_document_id.is_some() {
                 return Err(Error::ValidationError("当前只能读取成本分配，不能按整笔来源单据筛选".into()));
             }
             let candidates = self.cost_candidates(filter, id, executor).await?;
@@ -210,7 +215,7 @@ impl CostReadModel {
         }
         Ok(allocations)
     }
-    /// 在销售与成本范围交集中装载当前销售责任，业务版本加入跨页凭据。
+    /// 按销售来源范围装载当前责任，业务版本加入跨页凭据。
     async fn authorized_orders(
         &self,
         allocations: &[CostAllocation],
@@ -226,7 +231,7 @@ impl CostReadModel {
         let mut orders = BTreeSet::new();
         for chunk in ids.chunks(500) {
             let mut current =
-                self.db.sales_orders().scope_orders(chunk, &access.sales, &access.cost, executor).await?;
+                self.db.sales_orders().scope_orders(chunk, &access.sales, &access.sales, executor).await?;
             current.sort_by(|a, b| a.base.id.cmp(&b.base.id));
             for order in current {
                 order.base.id.hash(&mut access.fingerprint);

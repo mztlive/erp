@@ -37,6 +37,7 @@ use super::approval_prepare::{
 };
 use super::approval_query::load_approval_binding;
 use super::mapping::{list_projection_from_execution, stock_adjustment_start_scopes};
+use crate::adapters::freeze_approval_materials;
 use crate::{Error, Result};
 
 /// 库存调整启动事务写入集合。
@@ -468,6 +469,7 @@ async fn persist_runtime_writes(
         )
         .await?,
     );
+    let snapshot = freeze_approval_materials(db, snapshot, executor).await?;
     db.approval_subject_snapshots().create_immutable_snapshot(&snapshot, executor).await?;
     persist_open_tasks(db, writes, context.owner_role, context.organization_id, context.now, executor)
         .await?;

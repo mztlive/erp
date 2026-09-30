@@ -1,4 +1,4 @@
-//! 结算复核人的可用账号、执行权限和财务责任范围校验。
+//! 指定结算复核人的启用账号、完整财务角色资格及岗位分离。
 use application_core::AuditActor;
 use erp_core::AccountKind;
 use erp_workflow::entity::work_item::AvailableWorkItemAccount;
@@ -39,7 +39,7 @@ fn eligible(
         && scopes.iter().any(|(role, _)| role == SETTLEMENT_REVIEW_OWNER_ROLE)
 }
 
-/// 岗位资格保留原财务角色；范围由 confirm 动作及结算单业务组织独立证明。
+/// 候选资格由同一启用财务角色提供完整动作；对象访问由指定复核任务证明。
 async fn reviewer_scopes(
     auth: &impl WorkflowAuthorizationPort,
     account: &WorkflowAccountFact,
@@ -47,26 +47,13 @@ async fn reviewer_scopes(
     org: &str,
     executor: &mut dyn Executor,
 ) -> Result<Vec<(String, Option<String>)>> {
-    let actor = AuditActor::new(account.id.clone(), account.login_account.clone(), account.kind);
-    let Some(scope) =
-        auth.resolve_workflow_scope(&actor, "supplier_settlement_statement:confirm", executor).await?
-    else {
-        return Ok(Vec::new());
-    };
-    let object = erp_workflow::ports::WorkflowScopeObject {
-        owner_user_id: preparer.into(),
-        business_org_unit_id: Some(org.into()),
-        ..Default::default()
-    };
-    let Some(detail) =
-        auth.resolve_workflow_scope(&actor, "supplier_settlement_statement:detail", executor).await?
-    else {
-        return Ok(Vec::new());
-    };
-    if !detail.allows(&object) || !scope.allows_role(SETTLEMENT_REVIEW_OWNER_ROLE, &object) {
-        return Ok(Vec::new());
-    }
-    Ok(scope.granting_role_ids.into_iter().map(|role| (role, None)).collect())
+    let _ = (preparer, org);
+    let required =
+        ["supplier_settlement_statement:detail", "supplier_settlement_statement:confirm", "work_item:detail"];
+    let snapshot = auth.role_permission_snapshot(account.kind, &account.id, &required).await?;
+    auth.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
+    let roles = auth.enabled_role_ids(&snapshot.granting_role_ids_for_all(&required), executor).await?;
+    Ok(roles.into_iter().map(|role| (role, None)).collect())
 }
 
 impl SupplierSettlementProcess {
@@ -133,7 +120,7 @@ impl SupplierSettlementProcess {
     }
 }
 
-/// 在调用方事务内重验岗位分离、账号、动作权限和单据读取/复核范围。
+/// 在调用方事务内重验岗位分离、账号及同一启用财务角色的完整动作。
 pub(super) async fn ensure_reviewer(
     auth: &impl WorkflowAuthorizationPort,
     reviewer_id: &str,

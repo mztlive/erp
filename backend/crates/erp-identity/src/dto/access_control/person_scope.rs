@@ -2,7 +2,9 @@
 use serde::{Deserialize, Serialize};
 
 use crate::access_control::{DataScopeType, ScopeBinding, ScopeDimension};
+use crate::entity::access_control::authorization_policy::AuthorizationPolicy;
 use crate::entity::access_control::person_scope::{PersonDataScope, PersonScopeExpression, PersonScopeTerm};
+use crate::service::access_control::consumers::{configurable_registration, registration};
 use crate::{Error, Result};
 
 #[derive(Debug, Deserialize)]
@@ -26,6 +28,9 @@ pub struct PersonScopeGrant {
 
 #[derive(Serialize)]
 pub struct PersonBusinessOption {
+    pub authorization_policy: AuthorizationPolicy,
+    pub configurable_actions: Vec<String>,
+    pub policy_description: String,
     pub resource: String,
     pub actions: Vec<String>,
     pub dimensions: Vec<ScopeDimension>,
@@ -33,9 +38,69 @@ pub struct PersonBusinessOption {
 }
 #[derive(Serialize)]
 pub struct PersonScopeView {
+    pub retired_items: Vec<RetiredPersonScope>,
     pub items: Vec<PersonDataScope>,
     pub businesses: Vec<PersonBusinessOption>,
     pub policy_version: u64,
+}
+
+impl PersonBusinessOption {
+    /// 将已证明的角色动作映射为配置候选，保留不可配置动作的真实授权说明。
+    /// # 参数
+    /// `resource`、`actions` 为有效动作，`dimensions` 为登记维度。
+    /// # 返回
+    /// 可编辑动作子集与完整角色动作。
+    /// # 错误
+    /// 空动作或未登记策略返回校验错误。
+    pub fn from_granted(resource: &str, actions: Vec<String>, dimensions: &[ScopeDimension]) -> Result<Self> {
+        let first = actions.first().ok_or_else(|| Error::ValidationError("缺少操作权限".into()))?;
+        let authorization_policy = AuthorizationPolicy::for_action(resource, first)?;
+        let configurable_actions = actions
+            .iter()
+            .filter(|action| configurable_registration(resource, action).is_ok())
+            .cloned()
+            .collect();
+        let default_self = authorization_policy.configurable() && registration(resource, first)?.default_self;
+        Ok(Self {
+            resource: resource.into(),
+            authorization_policy,
+            configurable_actions,
+            policy_description: authorization_policy.description_for(resource).into(),
+            default_self,
+            actions,
+            dimensions: dimensions.to_vec(),
+        })
+    }
+}
+
+/// 保留原记录用于审计，但不能再次编辑已退役策略。
+#[derive(Serialize)]
+pub struct RetiredPersonScope {
+    pub resource: String,
+    pub action: String,
+    pub reason: String,
+}
+
+impl RetiredPersonScope {
+    /// 从历史记录取得当前配置政策退役说明。
+    /// # 参数
+    /// `scope` 为已存储的原始范围记录。
+    /// # 返回
+    /// 不支持独立配置时返回说明；有效配置返回 None。
+    /// # 错误
+    /// 无；未知资源同样标记不可配置。
+    pub fn from_scope(scope: &PersonDataScope) -> Option<Self> {
+        let policy = AuthorizationPolicy::for_action(&scope.resource, &scope.action);
+        if configurable_registration(&scope.resource, &scope.action).is_ok() {
+            return None;
+        }
+        Some(Self {
+            resource: scope.resource.clone(),
+            action: scope.action.clone(),
+            reason: policy
+                .map_or("当前资源未登记独立范围策略。".into(), |p| p.description().into()),
+        })
+    }
 }
 
 impl SavePersonScopeRequest {
@@ -51,6 +116,9 @@ impl SavePersonScopeRequest {
         self.actions.dedup();
         if self.actions.is_empty() || self.actions.len() > 32 || self.grants.len() > 32 {
             return Err(Error::ValidationError("请选择操作，附加授权最多32项".into()));
+        }
+        for action in &self.actions {
+            configurable_registration(&self.resource, action)?;
         }
         ScopeBinding {
             schema_version: 2,
@@ -177,6 +245,51 @@ mod tests {
             replace_legacy: false,
             expected_policy_version: 1,
         }
+    }
+
+    #[test]
+    fn options_keep_role_actions_but_only_expose_configurable_subset() {
+        let option = PersonBusinessOption::from_granted(
+            "supplier_settlement_statement",
+            vec!["list".into(), "confirm".into()],
+            &[ScopeDimension::InternalOrg],
+        )
+        .unwrap();
+        assert_eq!(option.actions, vec!["list", "confirm"]);
+        assert_eq!(option.configurable_actions, vec!["list"]);
+        assert!(option.default_self);
+        let task = PersonBusinessOption::from_granted(
+            "approval_instance",
+            vec!["read".into(), "decide".into()],
+            &[],
+        )
+        .unwrap();
+        assert!(task.configurable_actions.is_empty());
+        assert!(!task.default_self);
+        assert_eq!(task.authorization_policy, AuthorizationPolicy::Task);
+        assert!(PersonBusinessOption::from_granted("customer", vec![], &[]).is_err());
+    }
+
+    #[test]
+    fn retired_resource_or_mixed_retired_action_cannot_be_saved() {
+        for (resource, actions) in [
+            ("approval_instance", vec!["decide"]),
+            ("contract", vec!["list"]),
+            ("supplier_settlement_statement", vec!["submit", "confirm"]),
+            ("integration_error_task", vec!["list", "create"]),
+        ] {
+            let mut input = request();
+            input.resource = resource.into();
+            input.actions = actions.into_iter().map(String::from).collect();
+            input.grants.clear();
+            assert!(input.normalized(&[]).is_err());
+        }
+        let retired = PersonDataScope::default_for("alice", "approval_instance", "read");
+        let retired = RetiredPersonScope::from_scope(&retired).unwrap();
+        assert_eq!(retired.resource, "approval_instance");
+        assert!(!retired.reason.is_empty());
+        let active = PersonDataScope::default_for("alice", "customer", "list");
+        assert!(RetiredPersonScope::from_scope(&active).is_none());
     }
 
     #[test]

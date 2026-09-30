@@ -13,9 +13,9 @@ use super::super::definition_dto::{
     DefinitionDetailView, DefinitionNodeRequest, ReplaceDefinitionNodesRequest,
 };
 use super::super::policy::{
-    ApproverEligibilityPolicy, ProcessRequiredApprovalPolicy, STATIC_APPROVE_PERMISSION,
-    SeparationOfDutiesPolicy,
+    ApproverEligibilityPolicy, ProcessRequiredApprovalPolicy, SeparationOfDutiesPolicy,
 };
+use super::super::scope::approval_participant_permissions_with_executor;
 use super::ApprovalDefinitionService;
 use super::command::{
     DefinitionCommandResultRef, DefinitionResultExpectation, PreparedDefinitionIdentity, applied_definition,
@@ -359,7 +359,7 @@ pub(super) async fn validate_assignees(
     let accounts = load_assignee_snapshots(rbac, user_ids, session).await?;
     for user_id in user_ids {
         let account = require_active_backoffice_assignee(accounts.get(user_id))?;
-        ensure_static_eligibility(rbac, policy, account).await?;
+        ensure_static_eligibility(rbac, policy, account, session).await?;
     }
     validate_static_separation(policy.separation_of_duties_policy, user_ids)
 }
@@ -410,17 +410,14 @@ async fn ensure_static_eligibility(
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
     policy: &ProcessRequiredApprovalPolicy,
     account: &crate::entity::work_item::WorkflowAccountFact,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     match policy.approver_eligibility_policy {
         ApproverEligibilityPolicy::ActiveBackofficeWithDecidePermission => {},
     }
     require_active_backoffice_assignee(Some(account))?;
-    let allowed = rbac
-        .enforce(
-            &crate::entity::work_item::casbin_subject(account.kind, &account.id),
-            STATIC_APPROVE_PERMISSION,
-        )
-        .await?;
+    let actor = AuditActor::new(account.id.clone(), account.login_account.clone(), account.kind);
+    let allowed = approval_participant_permissions_with_executor(rbac, &actor, executor).await?;
     ensure_static_decide_permission(allowed)
 }
 

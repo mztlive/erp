@@ -34,19 +34,28 @@ export function scopeViewRows(
         const business = view.businesses.find(
             (item) => item.resource === scope.resource,
         )
-        const active = business?.actions.includes(scope.action) ?? false
+        const retired = view.retired_items.find(
+            (item) =>
+                item.resource === scope.resource &&
+                item.action === scope.action,
+        )
+        const active =
+            !retired &&
+            (business?.configurable_actions.includes(scope.action) ?? false)
         const row = scopeRow(scope, business?.default_self ?? false)
         return {
             ...row,
             enabled: active,
-            summary: active
-                ? row.summary
-                : `当前无操作权限；已存范围：${row.summary}`,
+            summary: retired
+                ? `旧范围已停用：${retired.reason}；保留记录：${row.summary}`
+                : active
+                  ? row.summary
+                  : `当前无操作权限；已存范围：${row.summary}`,
         }
     })
     for (const business of view.businesses) {
         if (!business.default_self) continue
-        for (const action of business.actions) {
+        for (const action of business.configurable_actions) {
             if (
                 view.items.some(
                     (scope) =>

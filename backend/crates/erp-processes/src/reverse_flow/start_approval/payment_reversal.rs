@@ -23,6 +23,7 @@ use super::super::adapter::payment_reversal_object_readable;
 use super::common::{ReverseStartContracts, ReverseStartInput, build_reverse_start_input};
 use super::mapping::list_projection_from_execution;
 use super::prepare::load_start_receipt_for_document_type;
+use crate::adapters::freeze_approval_materials;
 use crate::{Error, Result};
 
 ///
@@ -300,6 +301,7 @@ pub async fn persist_payment_reversal_runtime(
         )
         .await?,
     );
+    let snapshot = freeze_approval_materials(db, snapshot, executor).await?;
     db.approval_subject_snapshots().create_immutable_snapshot(&snapshot, executor).await?;
     persist_payment_reversal_open_tasks(db, writes, owner_role, organization_id, now, executor).await
 }

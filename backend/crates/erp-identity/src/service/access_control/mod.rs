@@ -648,6 +648,9 @@ async fn ensure_scope_configuration(
     if action == "delete" {
         return Ok(());
     }
+    for scope_action in &scope.binding.actions {
+        consumers::configurable_registration(&scope.binding.resource, scope_action)?;
+    }
     ensure_scope_subject(db, &rbac, scope, executor).await?;
     if scope.binding.target_mode == Some(ScopeTargetMode::Explicit)
         && scope.binding.target_dimension == ScopeDimension::InternalOrg

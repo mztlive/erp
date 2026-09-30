@@ -14,6 +14,7 @@
 
 pub mod audit_actions;
 pub mod audit_event;
+pub mod authorization_policy;
 pub mod data_scope;
 pub(crate) mod governance;
 pub mod permission;

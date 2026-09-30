@@ -16,10 +16,11 @@ import { usePurchaseOrderCenterQuery } from "@/features/purchase-orders/hooks/qu
 import { SalesOrderPaperDocument } from "@/features/sales-orders/components/sales-order-paper-dialog"
 import { useSalesOrderDetailQuery } from "@/features/sales-orders/hooks/queries"
 import { type WorkspacePaperKind } from "@/features/workspace/lib/paper-kind"
+import { ApprovalSubmittedMaterials } from "@/features/approval-workflow/components/approval-submitted-materials"
 import { XIcon } from "lucide-react"
 
 export type WorkspacePaperTarget = Readonly<{
-    kind: WorkspacePaperKind
+    kind: WorkspacePaperKind | "approval_snapshot"
     objectId: string
     title?: string
 }>
@@ -47,12 +48,14 @@ export function WorkspaceDocumentPaperDialog({
             >
                 <DialogTitle className="sr-only">
                     {target?.title
-                        ? `${target.title} 纸质预览`
+                        ? `${target.title} ${target.kind === "approval_snapshot" ? "提交资料" : "纸质预览"}`
                         : "单据纸质预览"}
                 </DialogTitle>
                 <DialogDescription className="sr-only">
-                    系统业务数据的打印件；金额与状态以系统记录为准。按 Esc
-                    或点击遮罩关闭。版本、附件和关联单据仍在对应工作面查看。
+                    {target?.kind === "approval_snapshot"
+                        ? "此次审批提交时保留的资料摘要与附件，按当前审批访问资格读取。"
+                        : "系统业务数据的打印件；金额与状态以系统记录为准。版本、附件和关联单据仍在对应工作面查看。"}
+                    按 Esc 或点击遮罩关闭。
                 </DialogDescription>
 
                 <div className="relative min-h-0 flex-1">
@@ -73,7 +76,12 @@ export function WorkspaceDocumentPaperDialog({
                     </DialogClose>
 
                     <div className="max-h-[min(96vh,56rem)] overflow-y-auto overscroll-contain">
-                        {target ? (
+                        {target?.kind === "approval_snapshot" ? (
+                            <ApprovalSubmittedMaterials
+                                instanceId={target.objectId}
+                                enabled={open}
+                            />
+                        ) : target ? (
                             <WorkspacePaperBody
                                 kind={target.kind}
                                 objectId={target.objectId}

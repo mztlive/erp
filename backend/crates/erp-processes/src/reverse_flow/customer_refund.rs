@@ -1,6 +1,7 @@
+mod commit_source;
 mod start;
 use application_core::{AuditActor, CommandReceipt};
-use erp_audit::{AuditActorLogs, AuditExt, CommandReceiptServiceExt as _};
+use erp_audit::{AuditActorLogs, AuditExt, CommandReceiptServiceExt};
 use erp_core::common::time::Instant;
 use erp_core::ids::{CustomerAccountId, CustomerReceiptId};
 use erp_customer::CustomerExt;
@@ -98,28 +99,16 @@ impl ReturnsProcess {
             &req.idempotency_key,
             &req,
         )?;
-        if let Some(refund_id) = command_receipt.committed_resource_id(&self.db).await? {
+        if let Some(refund_id) = self.customer_refund_commit_replay(&command_receipt, actor).await? {
             return self.reads().customer_refund_detail(&refund_id).await.map_err(crate::Error::from);
         }
-        let receipt = erp_finance::service::receivable::customer_refund::load_customer_refund_source(
-            &self.db,
-            &req.source_fact_id,
-            &mut NoTransaction,
-        )
-        .await?;
-        let source_fact_id = CustomerReceiptId::new(receipt.base.id.clone());
-        let source_version = receipt.base.version;
-        let mut refund = erp_returns::service::ReturnsService::prepare_committed_customer_refund(
-            &req,
-            &customer_refund_source_fact(&receipt),
-            actor.id(),
-        )?;
-        let customer_id = refund.customer_id.clone();
+        let (source_fact_id, source_version, mut refund) =
+            self.customer_refund_commit_source(&req, actor).await?;
         let adapter = customer_refund_adapter()?;
         start_customer_refund_approval(&mut refund)?;
         let id = refund.base.id.clone();
         let subject = customer_refund_subject_ref(&id)?;
-        let organization_id = load_customer_responsible_org_id(&self.db, &customer_id).await?;
+        let organization_id = load_customer_responsible_org_id(&self.db, &refund.customer_id).await?;
         let _ = customer_refund_object_readable(&organization_id, actor.id())?;
         let now = Instant::now();
         let snapshot = build_customer_refund_snapshot(&refund, &organization_id, actor.id(), now)?;
@@ -145,6 +134,17 @@ impl ReturnsProcess {
         let transaction_result = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    refund.ensure_submitter(actor_owned.id())?;
+                    ensure_return_start_replay_authorized(
+                        &db,
+                        &rbac,
+                        &actor_owned,
+                        DocumentType::CustomerReceipt,
+                        "customer_refund:submit",
+                        source_fact_id.as_ref(),
+                        executor,
+                    )
+                    .await?;
                     validate_customer_refund_source(&db, &source_fact_id, source_version, executor).await?;
                     let binding = persist_bound_customer_refund_document(
                         &db,
@@ -195,7 +195,7 @@ impl ReturnsProcess {
             .await;
         let detail_id = match transaction_result {
             Ok(()) => id,
-            Err(error) => match command_receipt.committed_resource_id(&self.db).await? {
+            Err(error) => match self.customer_refund_commit_replay(&command_receipt, actor).await? {
                 Some(refund_id) => refund_id,
                 None => return Err(error),
             },

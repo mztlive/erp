@@ -252,6 +252,25 @@ impl fmt::Debug for FileAsset {
 }
 
 impl FileAsset {
+    /// 文件关联或审批材料转授须由有效上传者或有通用预览资格者发起。
+    ///
+    /// # 参数
+    /// * `actor_id` - 当前发起账号。
+    /// * `actor_active` - 当前账号是否有效。
+    /// * `preview_granted` - 当前启用角色是否授予通用文件预览权限。
+    /// # 返回
+    /// 当前人可以把此资产作为业务材料交给后续参与者时返回 true。
+    /// # 错误
+    /// 无；既有附件关联、单据所有权和资产 ID 均不单独授予转授资格。
+    pub fn can_transfer_to_document(
+        &self,
+        actor_id: &str,
+        actor_active: bool,
+        preview_granted: bool,
+    ) -> bool {
+        actor_active && !actor_id.is_empty() && (self.created_by == actor_id || preview_granted)
+    }
+
     /// 创建文件资产。
     ///
     /// 完成对象键/文件名/内容类型的校验与规范化（trim、非空、长度上限），
@@ -386,6 +405,18 @@ mod tests {
             expires_at: Some(Instant::from_unix_secs(1_703_260_800)),
             created_by: " admin-1 ".to_string(),
         }
+    }
+
+    /// 文件转授不接受停用身份、未知资产所有权或仅知道文件 ID。
+    #[test]
+    fn transfer_requires_active_uploader_or_current_preview_permission() {
+        let asset = FileAsset::new(FileAssetId::new("foreign-asset"), data()).unwrap();
+        assert!(asset.can_transfer_to_document("admin-1", true, false));
+        assert!(asset.can_transfer_to_document("other", true, true));
+        assert!(!asset.can_transfer_to_document("other", true, false));
+        assert!(!asset.can_transfer_to_document("admin-1", false, false));
+        assert!(!asset.can_transfer_to_document("other", false, true));
+        assert!(!asset.can_transfer_to_document("", true, true));
     }
 
     /// happy path：字段 trim、初始待扫描、指纹稳定且带密钥。
