@@ -4,21 +4,13 @@ import * as React from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import type { ColumnDef } from "@tanstack/react-table"
-import {
-    ArrowRightLeftIcon,
-    NetworkIcon,
-    PencilIcon,
-    PlusIcon,
-    ShieldCheckIcon,
-    Trash2Icon,
-} from "lucide-react"
+import { PlusIcon, ShieldCheckIcon } from "lucide-react"
 
 import {
     BusinessEmptyState,
     BusinessFailureState,
     DataTable,
     PageScaffold,
-    TableRowActions,
 } from "@/components/business"
 import {
     ListSearchField,
@@ -30,10 +22,7 @@ import {
     listWorkspaceStyles as styles,
 } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
-import { AccountPermissionsSheet } from "@/features/admin/components/accounts/account-permissions-sheet"
 import { AccountFormDialog } from "@/features/admin/components/accounts/account-form-dialog"
-import type { AccountDraft } from "@/features/admin/components/accounts/account-form-dialog"
-import { DeleteAdminDialog } from "@/features/admin/components/accounts/delete-admin-dialog"
 import {
     useAdminsQuery,
     useAssignableRolesQuery,
@@ -44,30 +33,11 @@ import { toAutomationIdSegment } from "@/lib/automation-id"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
 import { PeopleNavigation } from "@/features/organization/components/people-navigation"
-import { OrganizationChangeDialog } from "@/features/organization/components/organization-change-dialog"
-import {
-    useOrganizationStateQuery,
-    usePreviewOrganizationChangeMutation,
-    useSubmitOrganizationChangeMutation,
-} from "@/features/organization/hooks/queries"
-import {
-    EMPTY_CHANGE_DRAFT,
-    type OrganizationChangeDraft,
-} from "@/features/organization/lib/change-payload"
+import { useOrganizationStateQuery } from "@/features/organization/hooks/queries"
 import { unitLabel } from "@/features/organization/lib/tree"
 import { formatDateTime } from "@/lib/datetime"
 
-type AccountFormState = {
-    mode: "create" | "edit"
-    account: AccountDraft | null
-}
-
-/**
- * 账号管理：登录账号的新建、改资料与删除。
- *
- * 与「权限配置」分工：这里管账号本身（账号、姓名、密码），
- * 角色只做初始绑定；授权口径与有效权限解释在权限配置页。
- */
+/** 人员列表只负责查找与创建，所有人员设置统一进入人员资料。 */
 export function AccountsPage() {
     const router = useRouter()
     const searchParams = useSearchParams()
@@ -76,14 +46,7 @@ export function AccountsPage() {
         profileQuery.data?.permissions,
         "org_unit:list",
     )
-    const canManageOrganization =
-        canReadOrganization &&
-        hasPermission(profileQuery.data?.permissions, "org_unit:manage")
     const organizationQuery = useOrganizationStateQuery(canReadOrganization)
-    const previewChange = usePreviewOrganizationChangeMutation()
-    const submitChange = useSubmitOrganizationChangeMutation()
-    const [departmentDraft, setDepartmentDraft] =
-        React.useState<OrganizationChangeDraft | null>(null)
     const adminsQuery = useAdminsQuery()
     const rolesQuery = useRolesQuery()
     const assignableRolesQuery = useAssignableRolesQuery()
@@ -98,19 +61,8 @@ export function AccountsPage() {
         setKeyword(next)
         setSearchDraft(next)
     }, [searchParams])
-    const [accountForm, setAccountForm] =
-        React.useState<AccountFormState | null>(null)
-    const [permissionAccount, setPermissionAccount] =
-        React.useState<AdminAccount | null>(null)
-    const [permissionsOpen, setPermissionsOpen] = React.useState(false)
-    const permissionReturnId = React.useRef<string | null>(null)
-    const editAfterPermissionsClose = React.useRef(false)
-
+    const [creating, setCreating] = React.useState(false)
     const [setupMessage, setSetupMessage] = React.useState<string | null>(null)
-    const [deletingAccount, setDeletingAccount] = React.useState<{
-        id: string
-        account: string
-    } | null>(null)
 
     const roleNameById = React.useMemo(
         () =>
@@ -140,13 +92,14 @@ export function AccountsPage() {
         () => [
             {
                 id: "identity",
+                enableHiding: false,
                 size: 240,
-                header: "账号",
+                header: "人员 / 登录账号",
                 cell: ({ row }) => (
                     <div className="min-w-[9rem]">
                         <Link
                             id={`account-open-${toAutomationIdSegment(row.original.id)}`}
-                            className="font-medium hover:text-primary"
+                            className="font-medium text-primary hover:underline"
                             href={`/system/accounts/${encodeURIComponent(row.original.id)}`}
                         >
                             {row.original.name || row.original.account}
@@ -203,118 +156,10 @@ export function AccountsPage() {
                     </span>
                 ),
             },
-            {
-                id: "actions",
-                meta: { align: "end" },
-                size: 264,
-                minSize: 264,
-                header: () => <span className="block text-right">操作</span>,
-                cell: ({ row }) => {
-                    const account = row.original
-                    const protectedAccount = account.role_ids.some((id) =>
-                        rolesQuery.data?.some(
-                            (role) => role.id === id && role.system,
-                        ),
-                    )
-                    const segment = toAutomationIdSegment(account.id)
-                    const member = organizationQuery.data?.people.find(
-                        (person) => person.id === account.id,
-                    )
-                    return (
-                        <TableRowActions
-                            moreId={`governance-admin-accounts-row-${segment}-more`}
-                            moreLabel={`${account.name} 更多操作`}
-                            actions={[
-                                {
-                                    id: `governance-admin-accounts-row-${segment}-edit`,
-                                    label: "编辑",
-                                    icon: PencilIcon,
-                                    onClick: () =>
-                                        setAccountForm({
-                                            mode: "edit",
-                                            account: {
-                                                id: account.id,
-                                                account: account.account,
-                                                name: account.name,
-                                                role_ids: [...account.role_ids],
-                                            },
-                                        }),
-                                },
-                                {
-                                    id: `governance-admin-accounts-row-${segment}-permissions`,
-                                    label: "查看权限",
-                                    icon: ShieldCheckIcon,
-                                    onClick: () => {
-                                        permissionReturnId.current = `governance-admin-accounts-row-${segment}-permissions`
-                                        setPermissionAccount(account)
-                                        setPermissionsOpen(true)
-                                    },
-                                },
-                                ...(canManageOrganization && member
-                                    ? [
-                                          {
-                                              id: `governance-admin-accounts-row-${segment}-department`,
-                                              label: "调整部门",
-                                              icon: ArrowRightLeftIcon,
-                                              placement: "menu" as const,
-                                              onClick: () =>
-                                                  setDepartmentDraft({
-                                                      ...EMPTY_CHANGE_DRAFT,
-                                                      operation:
-                                                          "transfer_member",
-                                                      userId: account.id,
-                                                      orgUnitId:
-                                                          member.own_org_unit_id ??
-                                                          "",
-                                                  }),
-                                          },
-                                          {
-                                              id: `governance-admin-accounts-row-${segment}-management`,
-                                              label: "设置管理部门",
-                                              icon: NetworkIcon,
-                                              placement: "menu" as const,
-                                              onClick: () =>
-                                                  setDepartmentDraft({
-                                                      ...EMPTY_CHANGE_DRAFT,
-                                                      operation:
-                                                          "grant_management",
-                                                      userId: account.id,
-                                                      roleId:
-                                                          account.role_ids
-                                                              .length === 1
-                                                              ? account
-                                                                    .role_ids[0]!
-                                                              : "",
-                                                  }),
-                                          },
-                                      ]
-                                    : []),
-                                {
-                                    id: `governance-admin-accounts-row-${segment}-delete`,
-                                    label: "删除",
-                                    icon: Trash2Icon,
-                                    destructive: true,
-                                    disabled: protectedAccount,
-                                    disabledReason: protectedAccount
-                                        ? "绑定系统角色的账号不可删除"
-                                        : undefined,
-                                    onClick: () =>
-                                        setDeletingAccount({
-                                            id: account.id,
-                                            account: account.account,
-                                        }),
-                                },
-                            ]}
-                        />
-                    )
-                },
-            },
         ],
         [
             roleNameById,
-            rolesQuery.data,
             canReadOrganization,
-            canManageOrganization,
             organizationQuery.data,
             organizationQuery.isError,
         ],
@@ -347,7 +192,7 @@ export function AccountsPage() {
             <ListWorkspaceHeader
                 eyebrow="系统"
                 title="组织与人员"
-                description="创建人员账号，分配所属部门与角色，并查看权限配置。"
+                description="点击人员姓名，统一管理资料、角色与数据范围。"
             >
                 <div className="flex flex-wrap items-center gap-2">
                     <Button
@@ -367,12 +212,13 @@ export function AccountsPage() {
                         id="governance-admin-accounts-create"
                         type="button"
                         size="sm"
-                        onClick={() =>
-                            setAccountForm({
-                                mode: "create",
-                                account: null,
-                            })
+                        disabled={
+                            !hasPermission(
+                                profileQuery.data?.permissions,
+                                "admin:create",
+                            ) || !assignableRolesQuery.isSuccess
                         }
+                        onClick={() => setCreating(true)}
                     >
                         <PlusIcon className="size-3.5" aria-hidden="true" />
                         新建账号
@@ -396,6 +242,18 @@ export function AccountsPage() {
                     }}
                 />
             ) : null}
+            {assignableRolesQuery.isError &&
+                hasPermission(
+                    profileQuery.data?.permissions,
+                    "admin:create",
+                ) && (
+                    <BusinessFailureState
+                        id="accounts-role-options-retry"
+                        title="新建账号所需角色加载失败"
+                        error={assignableRolesQuery.error}
+                        onRetry={() => void assignableRolesQuery.refetch()}
+                    />
+                )}
             <ListWorkSurface
                 ariaLabel="账号列表"
                 toolbar={
@@ -439,7 +297,6 @@ export function AccountsPage() {
                         loading={adminsQuery.isPending}
                         defaultColumnPinning={{
                             left: ["identity"],
-                            right: ["actions"],
                         }}
                         errorState={
                             adminsQuery.isError ? (
@@ -484,64 +341,8 @@ export function AccountsPage() {
                 }
             />
 
-            {departmentDraft &&
-            organizationQuery.data &&
-            canManageOrganization ? (
-                <OrganizationChangeDialog
-                    open
-                    onOpenChange={(open) => {
-                        if (!open) setDepartmentDraft(null)
-                    }}
-                    view={organizationQuery.data}
-                    draft={departmentDraft}
-                    expectedVersion={organizationQuery.data.organizationVersion}
-                    previewing={previewChange.isPending}
-                    submitting={submitChange.isPending}
-                    onPreview={(request) => previewChange.mutateAsync(request)}
-                    onSubmit={async (request) => {
-                        await submitChange.mutateAsync(request)
-                    }}
-                />
-            ) : null}
-            <AccountPermissionsSheet
-                account={permissionAccount}
-                open={permissionsOpen}
-                onOpenChange={setPermissionsOpen}
-                onAdjustRoles={() => {
-                    setPermissionsOpen(false)
-                    if (permissionAccount)
-                        router.push(
-                            `/system/accounts/${encodeURIComponent(permissionAccount.id)}`,
-                        )
-                }}
-                onClosed={() => {
-                    if (
-                        editAfterPermissionsClose.current &&
-                        permissionAccount
-                    ) {
-                        editAfterPermissionsClose.current = false
-                        setAccountForm({
-                            mode: "edit",
-                            account: {
-                                ...permissionAccount,
-                                role_ids: [...permissionAccount.role_ids],
-                            },
-                        })
-                    } else if (permissionReturnId.current) {
-                        document
-                            .getElementById(permissionReturnId.current)
-                            ?.focus({ preventScroll: true })
-                    }
-                }}
-            />
-
-            {accountForm ? (
+            {creating ? (
                 <AccountFormDialog
-                    key={
-                        accountForm.mode === "edit"
-                            ? (accountForm.account?.id ?? "edit")
-                            : "create"
-                    }
                     onCreated={(accountName) => {
                         setSetupMessage(
                             "账号已创建，正在打开人员资料继续配置。",
@@ -567,63 +368,11 @@ export function AccountsPage() {
                                 ),
                             )
                     }}
-                    departmentLabel={
-                        accountForm.account && organizationQuery.data
-                            ? (() => {
-                                  const person =
-                                      organizationQuery.data.people.find(
-                                          (item) =>
-                                              item.id ===
-                                              accountForm.account?.id,
-                                      )
-                                  return !person
-                                      ? "不在可查看范围"
-                                      : person.own_org_unit_id
-                                        ? unitLabel(
-                                              organizationQuery.data.units,
-                                              person.own_org_unit_id,
-                                          )
-                                        : "未分配部门"
-                              })()
-                            : undefined
-                    }
-                    onAdjustDepartment={
-                        canManageOrganization &&
-                        accountForm.account &&
-                        organizationQuery.data?.people.some(
-                            (person) => person.id === accountForm.account?.id,
-                        )
-                            ? () => {
-                                  const account = accountForm.account!
-                                  setAccountForm(null)
-                                  setDepartmentDraft({
-                                      ...EMPTY_CHANGE_DRAFT,
-                                      operation: "transfer_member",
-                                      userId: account.id,
-                                      orgUnitId:
-                                          organizationQuery.data?.people.find(
-                                              (person) =>
-                                                  person.id === account.id,
-                                          )?.own_org_unit_id ?? "",
-                                  })
-                              }
-                            : undefined
-                    }
-                    mode={accountForm.mode}
-                    account={accountForm.account}
+                    mode="create"
+                    account={null}
                     roleOptions={assignableRolesQuery.data ?? []}
                     onOpenChange={(open) => {
-                        if (!open) setAccountForm(null)
-                    }}
-                />
-            ) : null}
-
-            {deletingAccount ? (
-                <DeleteAdminDialog
-                    key={deletingAccount.id}
-                    account={deletingAccount}
-                    onOpenChange={(open) => {
-                        if (!open) setDeletingAccount(null)
+                        if (!open) setCreating(false)
                     }}
                 />
             ) : null}

@@ -20,10 +20,12 @@ import { useAdminMutations } from "@/features/admin/hooks/queries"
 export function DeleteAdminDialog({
     account,
     onOpenChange,
+    onDeleted,
     id = "governance-admin-delete-account-dialog",
 }: {
     account: { id: string; account: string }
     onOpenChange: (open: boolean) => void
+    onDeleted?: () => void
     id?: string
 }) {
     const { deleteAdmin, isDeleting } = useAdminMutations()
@@ -62,6 +64,7 @@ export function DeleteAdminDialog({
                             try {
                                 await deleteAdmin(account.id)
                                 onOpenChange(false)
+                                onDeleted?.()
                             } catch (e) {
                                 setError(
                                     getErrorMessage(e, "删除失败，请重试。"),

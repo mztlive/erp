@@ -23,6 +23,8 @@ import {
 
 export function PersonalGrantForm({
     userId,
+    resource,
+    onSaved,
     name,
     data,
     units,
@@ -32,6 +34,8 @@ export function PersonalGrantForm({
     onReload,
 }: {
     userId: string
+    resource: string
+    onSaved: () => void
     name: string
     data: PersonScopeList
     units: OrgUnit[]
@@ -46,17 +50,7 @@ export function PersonalGrantForm({
         draft?.policyVersion ?? data.policy_version,
     )
     const [error, setError] = React.useState<string | null>(null)
-    const [defaults] = React.useState<PersonScopeInput>({
-        confirmed: true,
-        resource: "",
-        dimension: "internal_org",
-        actions: [],
-        mode: "self",
-        org_ids: [],
-        warehouse_ids: [],
-        settlement_ids: [],
-        include_descendants: false,
-    })
+    const [defaults] = React.useState(() => personScopeDefaults(data, resource))
     const stale = version !== data.policy_version
     const schema = z
         .object({
@@ -179,6 +173,7 @@ export function PersonalGrantForm({
                     terms,
                     version,
                 })
+                onSaved()
                 onDone()
             } catch (e) {
                 setError(getErrorMessage(e, "保存失败，请刷新后重试"))
@@ -211,7 +206,9 @@ export function PersonalGrantForm({
                 void form.handleSubmit()
             }}
         >
-            <h3 className="font-semibold">设置{name}的数据范围</h3>
+            <h3 className="font-semibold">
+                {resourceLabel(resource)} · 设置{name}的数据范围
+            </h3>
             {stale && (
                 <div role="status" className="text-xs text-amber-700">
                     配置已变化，当前草稿不能直接保存。
@@ -230,40 +227,6 @@ export function PersonalGrantForm({
                     </Button>
                 </div>
             )}
-            <form.Field name="resource">
-                {(field) => (
-                    <div className="space-y-2">
-                        <label htmlFor="person-scope-business">业务</label>
-                        <select
-                            id="person-scope-business"
-                            className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-                            value={field.state.value}
-                            onChange={(e) => {
-                                field.handleChange(e.target.value)
-                                const next = personScopeDefaults(
-                                    data,
-                                    e.target.value,
-                                )
-                                for (const key of Object.keys(
-                                    next,
-                                ) as (keyof PersonScopeInput)[]) {
-                                    form.setFieldValue(key, next[key])
-                                }
-                            }}
-                        >
-                            <option value="">请选择业务</option>
-                            {data.businesses.map((b) => (
-                                <option key={b.resource} value={b.resource}>
-                                    {resourceLabel(b.resource)}
-                                </option>
-                            ))}
-                        </select>
-                        <FieldError
-                            errors={toFieldErrors(field.state.meta.errors)}
-                        />
-                    </div>
-                )}
-            </form.Field>
             {business && (
                 <>
                     {!value.confirmed && (

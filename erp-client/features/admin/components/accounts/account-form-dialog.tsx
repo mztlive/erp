@@ -81,9 +81,13 @@ export function AccountFormDialog({
     onOpenChange,
     id = "governance-admin-account-dialog",
     onCreated,
+    section,
+    onSaved,
     departmentLabel,
     onAdjustDepartment,
 }: {
+    section?: "name" | "roles" | "password"
+    onSaved?: () => void
     onCreated?: (account: string) => void
     departmentLabel?: string
     onAdjustDepartment?: () => void
@@ -102,6 +106,31 @@ export function AccountFormDialog({
     const [submitError, setSubmitError] = React.useState<string | null>(null)
     const isEdit = mode === "edit"
     const pending = isCreating || isUpdating
+    const title =
+        section === "name"
+            ? "修改姓名"
+            : section === "roles"
+              ? "调整角色"
+              : section === "password"
+                ? "修改密码"
+                : isEdit
+                  ? "编辑账号"
+                  : "新建账号"
+    const schema = !isEdit
+        ? createSchema
+        : section
+          ? editSchema.extend({
+                name: section === "name" ? editSchema.shape.name : z.string(),
+                role_ids:
+                    section === "roles"
+                        ? editSchema.shape.role_ids
+                        : z.array(z.string()),
+                password:
+                    section === "password"
+                        ? createSchema.shape.password
+                        : editSchema.shape.password,
+            })
+          : editSchema
 
     const form = useAppForm({
         defaultValues: {
@@ -111,7 +140,7 @@ export function AccountFormDialog({
             role_ids: account?.role_ids ?? [],
         } satisfies AccountFormValues,
         validators: {
-            onChange: isEdit ? editSchema : createSchema,
+            onChange: schema,
         },
         onSubmit: async ({ value }) => {
             setSubmitError(null)
@@ -120,9 +149,15 @@ export function AccountFormDialog({
                     await updateAdmin({
                         id: account.id,
                         payload: {
-                            name: value.name.trim(),
-                            role_ids: value.role_ids,
-                            password: value.password || undefined,
+                            ...(!section || section === "name"
+                                ? { name: value.name.trim() }
+                                : {}),
+                            ...(!section || section === "roles"
+                                ? { role_ids: value.role_ids }
+                                : {}),
+                            ...(!section || section === "password"
+                                ? { password: value.password || undefined }
+                                : {}),
                         },
                     })
                 } else {
@@ -135,26 +170,43 @@ export function AccountFormDialog({
                 }
                 onOpenChange(false)
                 if (!isEdit) onCreated?.(value.account.trim())
+                else onSaved?.()
             } catch (error) {
                 setSubmitError(getErrorMessage(error, "操作失败，请重试。"))
             }
         },
     })
 
+    const close = () => {
+        if (pending) return
+        if (!form.state.isDirty || window.confirm("修改尚未保存，确定放弃？"))
+            onOpenChange(false)
+    }
+    React.useEffect(() => {
+        const guard = (event: BeforeUnloadEvent) => {
+            if (!form.state.isDirty) return
+            event.preventDefault()
+            event.returnValue = ""
+        }
+        window.addEventListener("beforeunload", guard)
+        return () => window.removeEventListener("beforeunload", guard)
+    }, [form])
     return (
-        <Dialog open onOpenChange={(open) => !open && onOpenChange(false)}>
+        <Dialog open onOpenChange={(open) => !open && close()}>
             <DialogContent
                 closeButtonId={`${id}-close`}
                 className="max-h-[88vh] overflow-y-auto sm:max-w-lg"
             >
                 <DialogHeader>
-                    <DialogTitle>
-                        {isEdit ? "编辑账号" : "新建账号"}
-                    </DialogTitle>
+                    <DialogTitle>{title}</DialogTitle>
                     <DialogDescription>
-                        {isEdit
-                            ? "修改账号资料与角色权限。"
-                            : "登录账号创建后不可修改。"}
+                        {section === "roles"
+                            ? `为${account?.name}分配角色；每个业务的数据范围在人员页单独设置。`
+                            : section
+                              ? `正在${title}：${account?.name}（${account?.account}）`
+                              : isEdit
+                                ? "修改账号资料与角色权限。"
+                                : "登录账号创建后不可修改。"}
                     </DialogDescription>
                 </DialogHeader>
                 <form
@@ -197,113 +249,127 @@ export function AccountFormDialog({
                     {!isEdit && onCreated ? (
                         <p className="text-sm text-muted-foreground">
                             第 1
-                            步：创建账号并选择角色。创建后进入人员资料，继续设置部门、管理范围并核对权限。
+                            步：创建账号并选择角色。创建后进入人员资料，设置所属部门与业务数据范围。
                         </p>
                     ) : null}
                     <FieldGroup className="gap-4">
-                        {isEdit ? (
-                            <Field data-disabled>
-                                <FieldLabel>账号</FieldLabel>
-                                <Input
-                                    id={`${id}-account-readonly`}
-                                    value={account?.account ?? ""}
-                                    disabled
-                                    readOnly
+                        {!section &&
+                            (isEdit ? (
+                                <Field data-disabled>
+                                    <FieldLabel>账号</FieldLabel>
+                                    <Input
+                                        id={`${id}-account-readonly`}
+                                        value={account?.account ?? ""}
+                                        disabled
+                                        readOnly
+                                    />
+                                </Field>
+                            ) : (
+                                <form.AppField
+                                    name="account"
+                                    children={(field) => (
+                                        <field.TextField
+                                            id={`${id}-account`}
+                                            label="账号"
+                                            required
+                                            placeholder="登录账号，3-32 个字符"
+                                            autoComplete="off"
+                                        />
+                                    )}
                                 />
-                            </Field>
-                        ) : (
+                            ))}
+                        {(!section || section === "name") && (
                             <form.AppField
-                                name="account"
+                                name="name"
                                 children={(field) => (
                                     <field.TextField
-                                        id={`${id}-account`}
-                                        label="账号"
+                                        id={`${id}-name`}
+                                        label="姓名"
                                         required
-                                        placeholder="登录账号，3-32 个字符"
-                                        autoComplete="off"
+                                        placeholder="人员姓名"
                                     />
                                 )}
                             />
                         )}
-                        <form.AppField
-                            name="name"
-                            children={(field) => (
-                                <field.TextField
-                                    id={`${id}-name`}
-                                    label="姓名"
-                                    required
-                                    placeholder="人员姓名"
-                                />
-                            )}
-                        />
-                        <form.AppField
-                            name="password"
-                            children={(field) => (
-                                <field.TextField
-                                    id={`${id}-password`}
-                                    label={isEdit ? "新密码" : "密码"}
-                                    required={!isEdit}
-                                    type="password"
-                                    placeholder={
-                                        isEdit ? "留空则不修改" : "6-32 个字符"
-                                    }
-                                    autoComplete="new-password"
-                                />
-                            )}
-                        />
-                        <form.AppField
-                            name="role_ids"
-                            mode="array"
-                            children={(field) => {
-                                const selected = field.state.value ?? []
-                                const isInvalid =
-                                    field.state.meta.isTouched &&
-                                    !field.state.meta.isValid
-                                const errors = toFieldErrors(
-                                    field.state.meta.errors,
-                                )
-                                return (
-                                    <Field
-                                        className="border-t border-border pt-4"
-                                        data-invalid={isInvalid || undefined}
-                                    >
-                                        <FieldLabel>
-                                            角色分配
-                                            <span className="text-destructive">
-                                                *
-                                            </span>
-                                        </FieldLabel>
-                                        <p className="text-xs leading-5 text-muted-foreground">
-                                            {selected.length
-                                                ? `已选择：${selected.map((roleId) => roleOptions.find((role) => role.id === roleId)?.name ?? "角色信息待确认").join("、")}`
-                                                : "选择该账号需要使用的角色。"}
-                                        </p>
-                                        <RoleOptionsPanel
-                                            id={`${id}-roles`}
-                                            options={roleOptions}
-                                            selected={selected}
-                                            invalid={isInvalid}
-                                            onToggle={(roleId, checked) => {
-                                                const next = checked
-                                                    ? [...selected, roleId]
-                                                    : selected.filter(
-                                                          (value) =>
-                                                              value !== roleId,
-                                                      )
-                                                field.handleChange(next)
-                                                form.validateField(
-                                                    "role_ids",
-                                                    "change",
-                                                )
-                                            }}
-                                        />
-                                        {isInvalid ? (
-                                            <FieldError errors={errors} />
-                                        ) : null}
-                                    </Field>
-                                )
-                            }}
-                        />
+                        {(!section || section === "password") && (
+                            <form.AppField
+                                name="password"
+                                children={(field) => (
+                                    <field.TextField
+                                        id={`${id}-password`}
+                                        label={isEdit ? "新密码" : "密码"}
+                                        required={
+                                            !isEdit || section === "password"
+                                        }
+                                        type="password"
+                                        placeholder={
+                                            isEdit && !section
+                                                ? "留空则不修改"
+                                                : "6-32 个字符"
+                                        }
+                                        autoComplete="new-password"
+                                    />
+                                )}
+                            />
+                        )}
+                        {(!section || section === "roles") && (
+                            <form.AppField
+                                name="role_ids"
+                                mode="array"
+                                children={(field) => {
+                                    const selected = field.state.value ?? []
+                                    const isInvalid =
+                                        field.state.meta.isTouched &&
+                                        !field.state.meta.isValid
+                                    const errors = toFieldErrors(
+                                        field.state.meta.errors,
+                                    )
+                                    return (
+                                        <Field
+                                            className="border-t border-border pt-4"
+                                            data-invalid={
+                                                isInvalid || undefined
+                                            }
+                                        >
+                                            <FieldLabel>
+                                                角色分配
+                                                <span className="text-destructive">
+                                                    *
+                                                </span>
+                                            </FieldLabel>
+                                            <p className="text-xs leading-5 text-muted-foreground">
+                                                {selected.length
+                                                    ? `已选择：${selected.map((roleId) => roleOptions.find((role) => role.id === roleId)?.name ?? "角色信息待确认").join("、")}`
+                                                    : "选择该账号需要使用的角色。"}
+                                            </p>
+                                            <RoleOptionsPanel
+                                                id={`${id}-roles`}
+                                                options={roleOptions}
+                                                selected={selected}
+                                                invalid={isInvalid}
+                                                onToggle={(roleId, checked) => {
+                                                    const next = checked
+                                                        ? [...selected, roleId]
+                                                        : selected.filter(
+                                                              (value) =>
+                                                                  value !==
+                                                                  roleId,
+                                                          )
+                                                    field.handleChange(next)
+                                                    form.validateField(
+                                                        "role_ids",
+                                                        "change",
+                                                    )
+                                                }}
+                                            />
+                                            {isInvalid ? (
+                                                <FieldError errors={errors} />
+                                            ) : null}
+                                        </Field>
+                                    )
+                                }}
+                            />
+                        )}
                     </FieldGroup>
                     {submitError ? (
                         <Alert variant="destructive" role="alert">
@@ -317,7 +383,7 @@ export function AccountFormDialog({
                             type="button"
                             variant="outline"
                             disabled={pending}
-                            onClick={() => onOpenChange(false)}
+                            onClick={close}
                         >
                             取消
                         </Button>
