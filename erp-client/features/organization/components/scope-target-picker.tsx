@@ -18,7 +18,9 @@ export function ScopeTargetPicker({
     value,
     onChange,
     units,
+    noScopeLabel,
 }: {
+    noScopeLabel?: string
     id?: string
     disabled?: boolean
     dimension: ScopeDimension
@@ -53,6 +55,7 @@ export function ScopeTargetPicker({
                 <div className="flex gap-2" key={targetId || "add"}>
                     <Picker
                         purpose="filter"
+                        noScopeLabel={noScopeLabel}
                         id={
                             targetId
                                 ? `${id}-${toAutomationIdSegment(targetId)}`

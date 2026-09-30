@@ -32,12 +32,17 @@ import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { PersonalGrantDraft } from "../../hooks/use-personal-grant-draft"
 import { useSavePersonScope } from "../../hooks/use-person-data-scopes"
 import {
-    personScopeDescription,
     personScopeDefaults,
     type PersonScopeInput,
     type PersonScopeList,
     type PersonScopeTerm,
 } from "../../api/person-data-scopes"
+
+import {
+    SavedScopeSummary,
+    ProposedScopeSummary,
+    scopeDimensionLabel,
+} from "./personal-scope-summary"
 
 export function PersonalGrantForm({
     userId,
@@ -100,7 +105,35 @@ export function PersonalGrantForm({
                               : chosen.dimensions,
                   }
                 : undefined
-            if (!business) return
+            if (!business) {
+                ctx.addIssue({
+                    code: "custom",
+                    path: ["resource"],
+                    message: "当前业务已无可配置操作，请刷新后核对",
+                })
+                return
+            }
+            if (
+                value.actions.some(
+                    (action) => !business.actions.includes(action),
+                )
+            ) {
+                ctx.addIssue({
+                    code: "custom",
+                    path: ["actions"],
+                    message: "操作权限已变化，请刷新后核对",
+                })
+            }
+            if (
+                !business.dimensions.includes("internal_org") &&
+                ["self", "own_org"].includes(value.mode)
+            ) {
+                ctx.addIssue({
+                    code: "custom",
+                    path: ["mode"],
+                    message: "请选择适用于当前业务的范围",
+                })
+            }
             if (value.mode === "company") return
             for (const dimension of business.resource === "approval_instance"
                 ? [value.dimension]
@@ -119,7 +152,7 @@ export function PersonalGrantForm({
                     ctx.addIssue({
                         code: "custom",
                         path: [field],
-                        message: "请选择范围目标",
+                        message: `请先选择${scopeDimensionLabel(dimension)}`,
                     })
             }
         })
@@ -213,6 +246,10 @@ export function PersonalGrantForm({
     React.useEffect(() => {
         onDraftChange({ values: value, policyVersion: version })
     }, [value, version, onDraftChange])
+    const validation = schema.safeParse(value)
+    const incomplete = validation.success
+        ? undefined
+        : validation.error.issues[0]?.message
     const leave = () => {
         if (save.isPending) return
         if (
@@ -242,10 +279,14 @@ export function PersonalGrantForm({
             >
                 <DialogHeader>
                     <DialogTitle>
-                        {resourceLabel(resource)} · 数据范围
+                        设置{name}的
+                        {resource === "approval_instance"
+                            ? "审批"
+                            : resourceLabel(resource)}
+                        数据范围
                     </DialogTitle>
                     <DialogDescription>
-                        为{name}设置已有操作可处理的数据。
+                        选择{name}可以处理哪些数据，再勾选使用此范围的已有操作。
                     </DialogDescription>
                 </DialogHeader>
                 <form
@@ -306,11 +347,11 @@ export function PersonalGrantForm({
                                         {(field) => (
                                             <div>
                                                 <label htmlFor="person-scope-dimension">
-                                                    审批范围维度
+                                                    按什么限定审批数据？
                                                 </label>
                                                 <OptionCombobox
                                                     id="person-scope-dimension"
-                                                    aria-label="审批范围维度"
+                                                    aria-label="按什么限定审批数据？"
                                                     className="mt-2"
                                                     value={field.state.value}
                                                     allowClear={false}
@@ -318,7 +359,7 @@ export function PersonalGrantForm({
                                                     options={[
                                                         {
                                                             value: "internal_org",
-                                                            label: "业务部门/负责人",
+                                                            label: "业务部门",
                                                         },
                                                         {
                                                             value: "warehouse",
@@ -336,7 +377,16 @@ export function PersonalGrantForm({
                                                         if (!dimension) return
                                                         const d =
                                                             dimension as PersonScopeInput["dimension"]
+                                                        if (
+                                                            d ===
+                                                            field.state.value
+                                                        )
+                                                            return
                                                         field.handleChange(d)
+                                                        form.setFieldValue(
+                                                            "confirmed",
+                                                            true,
+                                                        )
                                                         form.setFieldValue(
                                                             "mode",
                                                             d === "internal_org"
@@ -345,95 +395,17 @@ export function PersonalGrantForm({
                                                         )
                                                     }}
                                                 />
+                                                <p className="mt-2 text-xs text-muted-foreground">
+                                                    {value.dimension ===
+                                                    "internal_org"
+                                                        ? "按被审批业务的负责人或所属部门限定。"
+                                                        : `按被审批业务关联的${scopeDimensionLabel(value.dimension)}限定。`}
+                                                </p>
                                             </div>
                                         )}
                                     </form.Field>
                                 )}
-                                <details className="space-y-3">
-                                    <summary
-                                        id="person-scope-actions-expand"
-                                        className="cursor-pointer"
-                                    >
-                                        适用操作：
-                                        {value.actions.length ===
-                                        business.actions.length
-                                            ? "此业务全部已有操作"
-                                            : value.actions
-                                                  .map(actionLabel)
-                                                  .join("、") || "未选择"}{" "}
-                                        · 按操作区分
-                                    </summary>
-                                    <form.Field name="actions">
-                                        {(field) => (
-                                            <div className="flex flex-wrap gap-4">
-                                                {business.actions.map(
-                                                    (action) => (
-                                                        <label
-                                                            key={action}
-                                                            className="flex items-center gap-2"
-                                                        >
-                                                            <Checkbox
-                                                                id={`person-scope-action-${toAutomationIdSegment(action)}`}
-                                                                checked={field.state.value.includes(
-                                                                    action,
-                                                                )}
-                                                                onCheckedChange={(
-                                                                    checked,
-                                                                ) =>
-                                                                    field.handleChange(
-                                                                        checked
-                                                                            ? [
-                                                                                  ...field
-                                                                                      .state
-                                                                                      .value,
-                                                                                  action,
-                                                                              ]
-                                                                            : field.state.value.filter(
-                                                                                  (
-                                                                                      a,
-                                                                                  ) =>
-                                                                                      a !==
-                                                                                      action,
-                                                                              ),
-                                                                    )
-                                                                }
-                                                            />
-                                                            {actionLabel(
-                                                                action,
-                                                            )}
-                                                        </label>
-                                                    ),
-                                                )}
-                                                <FieldError
-                                                    errors={toFieldErrors(
-                                                        field.state.meta.errors,
-                                                    )}
-                                                />
-                                            </div>
-                                        )}
-                                    </form.Field>
-                                </details>
-                                <div className="space-y-1 text-xs text-muted-foreground">
-                                    {value.actions.map((action) => (
-                                        <p key={action}>
-                                            当前{actionLabel(action)}：
-                                            {personScopeDescription(
-                                                data.items.find(
-                                                    (s) =>
-                                                        s.resource ===
-                                                            value.resource &&
-                                                        s.action === action,
-                                                ),
-                                                new Map(
-                                                    units.map((u) => [
-                                                        u.id,
-                                                        u.name,
-                                                    ]),
-                                                ),
-                                            )}
-                                        </p>
-                                    ))}
-                                </div>
+
                                 <form.Field name="mode">
                                     {(field) => (
                                         <fieldset className="space-y-2">
@@ -442,15 +414,21 @@ export function PersonalGrantForm({
                                             </legend>
                                             {(
                                                 [
-                                                    ["self", "本人负责"],
-                                                    ["own_org", "自己所属部门"],
+                                                    [
+                                                        "self",
+                                                        `${name}负责的数据`,
+                                                    ],
+                                                    [
+                                                        "own_org",
+                                                        `${name}所属部门的数据`,
+                                                    ],
                                                     [
                                                         "explicit",
                                                         business.dimensions.includes(
                                                             "internal_org",
                                                         )
                                                             ? "指定部门"
-                                                            : "指定对象",
+                                                            : `指定${business.dimensions.map(scopeDimensionLabel).join("及")}`,
                                                     ],
                                                     ["company", "公司范围"],
                                                 ] as const
@@ -527,6 +505,10 @@ export function PersonalGrantForm({
                                                                   : "结算主体"}
                                                         </p>
                                                         <ScopeTargetPicker
+                                                            disabled={
+                                                                save.isPending
+                                                            }
+                                                            noScopeLabel={`你当前登录的账号没有${scopeDimensionLabel(dimension)}目录的查看范围，暂时无法选择。请联系有权限的管理员完成配置；这不是${name}的权限提示。`}
                                                             id={`person-scope-target-${dimension}`}
                                                             dimension={
                                                                 dimension
@@ -577,9 +559,72 @@ export function PersonalGrantForm({
                                             )}
                                         </form.Field>
                                     )}
-                                <p className="text-xs text-muted-foreground">
-                                    保存后替换此人所选操作的范围。其他操作、其他人员保持原配置；业务状态及审批资格仍需满足。
-                                </p>
+                                <section className="space-y-3 border-t pt-3">
+                                    <h3 className="font-medium">
+                                        哪些操作使用这个范围？
+                                    </h3>
+                                    <form.Field name="actions">
+                                        {(field) => (
+                                            <div className="flex flex-wrap gap-4">
+                                                {business.actions.map(
+                                                    (action) => (
+                                                        <label
+                                                            key={action}
+                                                            className="flex items-center gap-2"
+                                                        >
+                                                            <Checkbox
+                                                                id={`person-scope-action-${toAutomationIdSegment(action)}`}
+                                                                checked={field.state.value.includes(
+                                                                    action,
+                                                                )}
+                                                                onCheckedChange={(
+                                                                    checked,
+                                                                ) =>
+                                                                    field.handleChange(
+                                                                        checked
+                                                                            ? [
+                                                                                  ...field
+                                                                                      .state
+                                                                                      .value,
+                                                                                  action,
+                                                                              ]
+                                                                            : field.state.value.filter(
+                                                                                  (
+                                                                                      a,
+                                                                                  ) =>
+                                                                                      a !==
+                                                                                      action,
+                                                                              ),
+                                                                    )
+                                                                }
+                                                            />
+                                                            {actionLabel(
+                                                                action,
+                                                            )}
+                                                        </label>
+                                                    ),
+                                                )}
+                                                <FieldError
+                                                    errors={toFieldErrors(
+                                                        field.state.meta.errors,
+                                                    )}
+                                                />
+                                            </div>
+                                        )}
+                                    </form.Field>
+                                    <SavedScopeSummary
+                                        data={data}
+                                        value={value}
+                                        units={units}
+                                    />
+                                </section>
+                                <ProposedScopeSummary
+                                    name={name}
+                                    value={value}
+                                    dimensions={business.dimensions}
+                                    units={units}
+                                    incomplete={incomplete}
+                                />
                             </>
                         )}
                         {error && (
@@ -606,7 +651,9 @@ export function PersonalGrantForm({
                             id="person-scope-save"
                             size="sm"
                             type="submit"
-                            disabled={save.isPending || stale}
+                            disabled={
+                                save.isPending || stale || !validation.success
+                            }
                         >
                             {save.isPending ? "保存中…" : "保存数据范围"}
                         </Button>

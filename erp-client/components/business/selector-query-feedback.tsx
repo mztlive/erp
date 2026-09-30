@@ -9,23 +9,34 @@ export function SelectorQueryFeedback({
     failed,
     error,
     noScope,
+    noScopeLabel = "当前角色无此目录的数据范围，请申请权限",
     onRetry,
 }: {
     id?: string
     failed: boolean
     error?: unknown
     noScope?: boolean
+    noScopeLabel?: string
     onRetry: () => void
 }) {
     if (!failed && !noScope) return null
     return (
-        <div role={failed ? "alert" : "status"} className="text-sm text-muted-foreground">
+        <div
+            role={failed ? "alert" : "status"}
+            className="text-sm text-muted-foreground"
+        >
             <span>
                 {failed
                     ? getErrorMessage(error, "候选加载失败，请重试")
-                    : "当前角色无此目录的数据范围，请申请权限"}
+                    : noScopeLabel}
             </span>
-            <Button id={id ? `${id}-retry` : undefined} type="button" size="sm" variant="ghost" onClick={onRetry}>
+            <Button
+                id={id ? `${id}-retry` : undefined}
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={onRetry}
+            >
                 重试
             </Button>
         </div>

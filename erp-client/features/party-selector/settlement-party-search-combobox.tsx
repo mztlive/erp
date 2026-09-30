@@ -24,6 +24,7 @@ export type SettlementPartySearchComboboxProps = Omit<
     "loading" | "filterMode" | "onSearchChange" | "parties"
 > & {
     purpose?: PartySelectorPurpose
+    noScopeLabel?: string
     selectedItem?: SettlementPartyComboboxItem
     onItemChange?: (item?: SettlementPartyComboboxItem) => void
     /** 已选客户对应主体；空搜索时只列出该主体，输入关键词后仍可搜全部。 */
@@ -36,6 +37,7 @@ export function SettlementPartySearchCombobox({
     selectedItem: _selectedItem,
     onItemChange,
     emptyLabel,
+    noScopeLabel,
     value,
     onValueChange,
     restrictToPartyId,
@@ -63,7 +65,12 @@ export function SettlementPartySearchCombobox({
         selected.isError || selected.isFetching
             ? undefined
             : (selected.data ?? undefined)
-    const rows = [...(list.isError || list.isFetching ? [] : (list.data?.items.filter((item) => item.partyId !== value) ?? []))]
+    const rows = [
+        ...(list.isError || list.isFetching
+            ? []
+            : (list.data?.items.filter((item) => item.partyId !== value) ??
+              [])),
+    ]
     if (
         selectedRow &&
         !rows.some((item) => item.partyId === selectedRow.partyId)
@@ -87,7 +94,9 @@ export function SettlementPartySearchCombobox({
                 }}
                 onSearchChange={setInput}
                 filterMode="remote"
-                loading={list.isFetching || (selected.isFetching && !selectedRow)}
+                loading={
+                    list.isFetching || (selected.isFetching && !selectedRow)
+                }
                 emptyLabel={
                     list.isError || selected.isError
                         ? getErrorMessage(
@@ -95,17 +104,23 @@ export function SettlementPartySearchCombobox({
                               "结算主体加载失败，请重试",
                           )
                         : list.data?.empty_reason === "no_scope"
-                          ? "当前角色无此目录的数据范围，请申请权限"
+                          ? (noScopeLabel ??
+                            "当前角色无此目录的数据范围，请申请权限")
                           : restrictToPartyId && !query && parties.length === 0
-                          ? "请先选择客户"
-                          : emptyLabel
+                            ? "请先选择客户"
+                            : emptyLabel
                 }
             />
             <SelectorQueryFeedback
+                noScopeLabel={noScopeLabel}
                 id={props.id}
                 failed={list.isError || selected.isError}
                 error={list.error ?? selected.error}
-                noScope={!list.isFetching && !list.isError && list.data?.empty_reason === "no_scope"}
+                noScope={
+                    !list.isFetching &&
+                    !list.isError &&
+                    list.data?.empty_reason === "no_scope"
+                }
                 onRetry={() => {
                     void list.refetch()
                     if (value) void selected.refetch()

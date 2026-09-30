@@ -15,13 +15,14 @@ import { useSearchInput } from "@/features/entity-selectors/hooks/use-search-inp
 export type WarehouseSearchComboboxProps = SmartProps<
     WarehouseComboboxProps,
     WarehouseComboboxItem
->
+> & { noScopeLabel?: string }
 
 export function WarehouseSearchCombobox({
     purpose = "filter",
     selectedItem,
     onItemChange,
     emptyLabel,
+    noScopeLabel,
     value,
     onValueChange,
     ...props
@@ -42,6 +43,7 @@ export function WarehouseSearchCombobox({
         selectedItem,
         idOf: (item) => item.warehouseId,
         emptyLabel,
+        noScopeLabel,
         fallbackError: "仓库加载失败，请重试",
     })
     return (
@@ -60,10 +62,15 @@ export function WarehouseSearchCombobox({
                 emptyLabel={resolvedEmptyLabel}
             />
             <SelectorQueryFeedback
+                noScopeLabel={noScopeLabel}
                 id={props.id}
                 failed={query.list.isError || query.selected.isError}
                 error={query.list.error ?? query.selected.error}
-                noScope={!query.list.isFetching && !query.list.isError && query.list.emptyReason === "no_scope"}
+                noScope={
+                    !query.list.isFetching &&
+                    !query.list.isError &&
+                    query.list.emptyReason === "no_scope"
+                }
                 onRetry={() => {
                     void query.list.refetch()
                     if (value) void query.selected.refetch()
