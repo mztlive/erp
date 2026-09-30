@@ -15,7 +15,7 @@ use crate::{Error, Result};
 id_type!(PersonDataScopeId);
 
 /// 无角色引用的动态范围项；同组内同维度求并，不同维度求交。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PersonScopeTerm {
     pub scope_type: DataScopeType,
@@ -29,12 +29,15 @@ pub struct PersonScopeTerm {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct PersonScopeExpression {
+    /// 新配置仅保存附加项；旧配置缺少此字段时保持原表达式。
+    #[serde(default)]
+    pub additive: bool,
     pub history_read: bool,
     pub alternatives: Vec<Vec<PersonScopeTerm>>,
     pub condition: Option<Vec<PersonScopeTerm>>,
 }
 
-/// 唯一人员、业务、动作配置；缺失配置必须失败关闭。
+/// 唯一人员、业务、动作配置；基础范围由明确的业务负责人政策提供。
 #[derive(Debug, Clone, Serialize, Deserialize, Entity)]
 pub struct PersonDataScope {
     #[serde(flatten)]
@@ -92,6 +95,89 @@ impl PersonScopeTerm {
     }
 }
 
+impl PersonScopeExpression {
+    /// 明确允许使用当前业务负责人作为基础范围的业务。
+    /// # 参数
+    /// * `resource` - 已注册业务标识。
+    /// # 返回
+    /// 仅负责人语义明确且不要求其他身份维度的业务返回真。
+    /// # 错误
+    /// 无；未知业务不提供基础范围。
+    pub fn default_self(resource: &str) -> bool {
+        matches!(
+            resource,
+            "customer"
+                | "contract"
+                | "sales_order"
+                | "purchase_order"
+                | "cost_entry"
+                | "cost_allocation"
+                | "sales_selection_booklet"
+                | "sales_selection_proposal"
+                | "receivable_account"
+                | "customer_receipt"
+                | "invoice"
+                | "sales_invoice_request"
+                | "payable_account"
+                | "supplier_payment"
+                | "purchase_invoice_allocation"
+                | "supplier_settlement_statement"
+                | "supplier"
+                | "product"
+                | "supplier_offering"
+                | "supplier_fulfillment_order"
+                | "integration_error_task"
+                | "reconciliation_difference"
+        )
+    }
+
+    /// 基础本人只加入新模型；旧配置原样保留，不因发布自动扩权。
+    fn branches(&self, resource: &str) -> Vec<Vec<PersonScopeTerm>> {
+        let mut branches = self.alternatives.clone();
+        if self.additive && Self::default_self(resource) {
+            branches.push(vec![PersonScopeTerm {
+                scope_type: DataScopeType::SelfOwned,
+                target_dimension: ScopeDimension::InternalOrg,
+                target_mode: None,
+                include_descendants: None,
+                scope_targets: vec![],
+            }]);
+        }
+        branches
+    }
+
+    /// 读取的上限精确匹配授权并集，防止历史参与在范围外补权。
+    fn read_limit(
+        &self,
+        branches: &[Vec<PersonScopeTerm>],
+        dimensions: &[ScopeDimension],
+        allows_history: bool,
+    ) -> Result<Option<Vec<PersonScopeTerm>>> {
+        if !self.additive {
+            if allows_history && !self.history_read && (branches.len() != 1 || self.condition.is_some()) {
+                return Err(Error::ValidationError("普通人员范围必须包含一组完整条件".into()));
+            }
+            return Ok(if self.history_read || !allows_history {
+                self.condition.clone()
+            } else {
+                branches.first().cloned()
+            });
+        }
+        if self.history_read || self.condition.is_some() {
+            return Err(Error::ValidationError("附加授权不能携带历史读取或旧交集条件".into()));
+        }
+        if !allows_history {
+            return Ok(None);
+        }
+        if dimensions != [ScopeDimension::InternalOrg]
+            || branches.iter().flatten().any(|term| term.target_dimension != ScopeDimension::InternalOrg)
+        {
+            return Err(Error::ValidationError("历史读取消费者不支持跨维度附加授权".into()));
+        }
+        Ok(Some(branches.iter().flatten().cloned().collect()))
+    }
+}
+
 impl PersonDataScope {
     /// 将单份表达式编译为所有业务查询与对象检查共用的范围中间态。
     /// # 参数
@@ -109,26 +195,16 @@ impl PersonDataScope {
         allows_history: bool,
         at: Instant,
     ) -> Result<ResolvedScope> {
-        if allows_history
-            && !self.expression.history_read
-            && (self.expression.alternatives.len() != 1 || self.expression.condition.is_some())
-        {
-            return Err(Error::ValidationError("普通人员范围必须包含一组完整条件".into()));
-        }
+        let branches = self.expression.branches(&self.resource);
+        let condition = self.expression.read_limit(&branches, dimensions, allows_history)?;
         let mut rules = Vec::new();
-        let roles =
-            (0..self.expression.alternatives.len()).map(|n| format!("branch-{n}")).collect::<Vec<_>>();
-        for (branch, id) in self.expression.alternatives.iter().zip(&roles) {
+        let roles = (0..branches.len()).map(|n| format!("branch-{n}")).collect::<Vec<_>>();
+        for (branch, id) in branches.iter().zip(&roles) {
             for term in branch {
                 rules.push(term.rule(&self.resource, &self.action, id, false)?);
             }
         }
-        let condition = if self.expression.history_read || !allows_history {
-            self.expression.condition.as_ref()
-        } else {
-            self.expression.alternatives.first()
-        };
-        if let Some(condition) = condition {
+        if let Some(condition) = &condition {
             for term in condition {
                 rules.push(term.rule(&self.resource, &self.action, &self.user_id, true)?);
             }
@@ -148,10 +224,27 @@ impl PersonDataScope {
             as_of: at,
         }
         .resolve()?;
-        if condition.is_some_and(Vec::is_empty) {
+        if condition.as_ref().is_some_and(Vec::is_empty) {
             result.user_limit = Some(ScopeClause::default());
         }
         Ok(result)
+    }
+
+    /// 构造尚未持久化的基础范围；必须先完成账号与动作资格检查。
+    /// # 参数
+    /// 人员、已注册业务及操作。
+    /// # 返回
+    /// 仅含默认政策、没有附加授权的临时配置。
+    /// # 错误
+    /// 无；无基础政策的业务解析为空范围。
+    pub fn default_for(user: &str, resource: &str, action: &str) -> Self {
+        Self {
+            base: BaseModel::new("default-person-scope".into()),
+            user_id: user.into(),
+            resource: resource.into(),
+            action: action.into(),
+            expression: PersonScopeExpression { additive: true, ..Default::default() },
+        }
     }
 
     /// 缺配置时同时拒绝普通与历史路径。
@@ -188,6 +281,7 @@ mod tests {
             resource: "sales_order".into(),
             action: "detail".into(),
             expression: PersonScopeExpression {
+                additive: false,
                 history_read: false,
                 alternatives: vec![terms],
                 condition: None,
@@ -314,5 +408,142 @@ mod tests {
         assert!(scope.allows(&target, false));
         target.settlement_party_id = Some("y");
         assert!(!scope.allows(&target, false));
+    }
+    /// 建立两个有效部门用于验证实际组织范围解析。
+    fn departments() -> OrganizationState {
+        OrganizationState {
+            units: ["one", "two"]
+                .into_iter()
+                .map(|id| {
+                    OrgUnit::new(
+                        id.into(),
+                        id.into(),
+                        None,
+                        OrgUnitKind::Department,
+                        "system".into(),
+                        "test".into(),
+                    )
+                    .unwrap()
+                })
+                .collect(),
+            ..Default::default()
+        }
+    }
+
+    /// 生成明确部门范围，包含下级的选择不能省略。
+    fn department(id: &str) -> PersonScopeTerm {
+        PersonScopeTerm {
+            target_mode: Some(ScopeTargetMode::Explicit),
+            include_descendants: Some(false),
+            scope_targets: vec![id.into()],
+            ..term(DataScopeType::Organization)
+        }
+    }
+
+    #[test]
+    fn additive_reads_union_self_and_departments_without_history_leak() {
+        let mut policy = PersonDataScope::default_for("alice", "sales_order", "detail");
+        policy.expression.alternatives = vec![vec![department("one")], vec![department("two")]];
+        let scope =
+            policy.resolve(&departments(), &[ScopeDimension::InternalOrg], true, Instant::now()).unwrap();
+        let mut target = object(false, true);
+        assert!(scope.allows(&target, true));
+        target.org_unit_id = Some("two");
+        assert!(scope.allows(&target, true));
+        target.org_unit_id = Some("outside");
+        assert!(!scope.allows(&target, true));
+        target.owned = true;
+        assert!(scope.allows(&target, true));
+        policy.expression.alternatives.clear();
+        let scope =
+            policy.resolve(&departments(), &[ScopeDimension::InternalOrg], true, Instant::now()).unwrap();
+        assert!(scope.allows(&target, true));
+        target.owned = false;
+        target.org_unit_id = Some("one");
+        assert!(!scope.allows(&target, true));
+    }
+
+    #[test]
+    fn removing_company_and_other_grants_restores_remaining_scope() {
+        let mut policy = PersonDataScope::default_for("alice", "sales_order", "detail");
+        policy.expression.alternatives = vec![vec![department("one")], vec![term(DataScopeType::Company)]];
+        let mut target = object(false, false);
+        target.org_unit_id = Some("outside");
+        assert!(
+            policy
+                .resolve(&departments(), &[ScopeDimension::InternalOrg], true, Instant::now())
+                .unwrap()
+                .allows(&target, true)
+        );
+        policy.expression.alternatives.pop();
+        let scope =
+            policy.resolve(&departments(), &[ScopeDimension::InternalOrg], true, Instant::now()).unwrap();
+        assert!(!scope.allows(&target, true));
+        target.org_unit_id = Some("one");
+        assert!(scope.allows(&target, true));
+        policy.expression.alternatives.clear();
+        let scope =
+            policy.resolve(&departments(), &[ScopeDimension::InternalOrg], true, Instant::now()).unwrap();
+        assert!(!scope.allows(&target, true));
+        target.owned = true;
+        assert!(scope.allows(&target, true));
+    }
+
+    #[test]
+    fn legacy_records_do_not_gain_self_and_additive_rejects_legacy_conditions() {
+        let mut policy = config(vec![department("one")]);
+        let mut serialized = serde_json::to_value(&policy).unwrap();
+        serialized["expression"].as_object_mut().unwrap().remove("additive");
+        policy = serde_json::from_value(serialized).unwrap();
+        assert!(!policy.expression.additive);
+        let mut target = object(true, false);
+        target.org_unit_id = Some("outside");
+        assert!(
+            !policy
+                .resolve(&departments(), &[ScopeDimension::InternalOrg], true, Instant::now())
+                .unwrap()
+                .allows(&target, true)
+        );
+        policy.expression.additive = true;
+        policy.expression.history_read = true;
+        assert!(
+            policy.resolve(&departments(), &[ScopeDimension::InternalOrg], true, Instant::now()).is_err()
+        );
+        policy.expression.history_read = false;
+        policy.expression.condition = Some(vec![]);
+        assert!(
+            policy.resolve(&departments(), &[ScopeDimension::InternalOrg], false, Instant::now()).is_err()
+        );
+    }
+
+    #[test]
+    fn multiple_dimension_grants_remain_separate_and_have_no_default_self() {
+        let mut policy = PersonDataScope::default_for("alice", "approval_instance", "read");
+        let warehouse = |id: &str| PersonScopeTerm {
+            scope_type: DataScopeType::Organization,
+            target_dimension: ScopeDimension::Warehouse,
+            target_mode: Some(ScopeTargetMode::Explicit),
+            include_descendants: None,
+            scope_targets: vec![id.into()],
+        };
+        let party =
+            |id: &str| PersonScopeTerm { target_dimension: ScopeDimension::SettlementParty, ..warehouse(id) };
+        let dimensions = [ScopeDimension::Warehouse, ScopeDimension::SettlementParty];
+        let mut target = object(true, false);
+        assert!(
+            !policy
+                .resolve(&departments(), &dimensions, false, Instant::now())
+                .unwrap()
+                .allows(&target, false)
+        );
+        policy.expression.alternatives =
+            vec![vec![warehouse("a"), party("x")], vec![warehouse("b"), party("y")]];
+        let scope = policy.resolve(&departments(), &dimensions, false, Instant::now()).unwrap();
+        target.warehouse_id = Some("a");
+        target.settlement_party_id = Some("x");
+        assert!(scope.allows(&target, false));
+        target.settlement_party_id = Some("y");
+        assert!(!scope.allows(&target, false));
+        assert!(policy.resolve(&departments(), &dimensions, true, Instant::now()).is_err());
     }
 }

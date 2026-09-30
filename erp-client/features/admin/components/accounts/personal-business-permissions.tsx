@@ -17,7 +17,7 @@ import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { OrgUnit } from "@/features/organization/types"
 import { usePersonScopes } from "../../hooks/use-person-data-scopes"
 import type { PersonalGrantDraft } from "../../hooks/use-personal-grant-draft"
-import { personScopeDescription } from "../../api/person-data-scopes"
+import { personEffectiveDescription } from "../../api/person-data-scopes"
 import { PersonalGrantForm } from "./personal-grant-form"
 
 export function PersonalBusinessPermissions({
@@ -81,7 +81,7 @@ export function PersonalBusinessPermissions({
                     </h2>
                     <p className="text-xs text-muted-foreground">
                         仅列出{name}
-                        通过有效角色获得的业务操作。未设置范围的操作暂不能访问数据。
+                        通过有效角色获得的业务操作。适用业务默认包含本人负责的数据，追加授权按操作合并。
                     </p>
                 </div>
                 <Input
@@ -198,7 +198,9 @@ export function PersonalBusinessPermissions({
                                             JSON.stringify(scope?.expression),
                                         ),
                                     ).size > 1
-                                const saved = scopes.some(Boolean)
+                                const saved =
+                                    business.default_self ||
+                                    scopes.some(Boolean)
                                 const segment = toAutomationIdSegment(
                                     business.resource,
                                 )
@@ -222,7 +224,7 @@ export function PersonalBusinessPermissions({
                                                             id={`person-scope-${segment}-details`}
                                                             className="cursor-pointer font-medium"
                                                         >
-                                                            按操作分别设置 ·
+                                                            按操作合并范围 ·
                                                             展开查看
                                                         </summary>
                                                         <ul className="mt-2 space-y-1 text-muted-foreground">
@@ -240,10 +242,11 @@ export function PersonalBusinessPermissions({
                                                                             action,
                                                                         )}
                                                                         ：
-                                                                        {personScopeDescription(
+                                                                        {personEffectiveDescription(
                                                                             scopes[
                                                                                 index
                                                                             ],
+                                                                            business,
                                                                             labels,
                                                                         )}
                                                                     </li>
@@ -255,8 +258,9 @@ export function PersonalBusinessPermissions({
                                                     <p
                                                         className={`text-xs leading-6 ${saved ? "" : "text-amber-700"}`}
                                                     >
-                                                        {personScopeDescription(
+                                                        {personEffectiveDescription(
                                                             scopes[0],
+                                                            business,
                                                             labels,
                                                         )}
                                                     </p>
@@ -281,9 +285,7 @@ export function PersonalBusinessPermissions({
                                                         }}
                                                     >
                                                         <SlidersHorizontalIcon data-icon="inline-start" />
-                                                        {saved
-                                                            ? "修改范围"
-                                                            : "设置范围"}
+                                                        管理范围
                                                     </Button>
                                                 )}
                                             </TableCell>

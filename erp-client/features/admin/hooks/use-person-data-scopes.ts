@@ -3,8 +3,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
     fetchPersonScopes,
     savePersonScope,
-    type PersonScopeTerm,
+    type PersonScopeInput,
 } from "../api/person-data-scopes"
+
 export function usePersonScopes(userId: string, enabled = true) {
     return useQuery({
         queryKey: ["admin", "person-data-scopes", userId],
@@ -19,16 +20,12 @@ export function useSavePersonScope(userId: string) {
     return useMutation({
         meta: { affectsDataScope: true },
         mutationFn: ({
-            resource,
-            actions,
-            terms,
+            value,
             version,
         }: {
-            resource: string
-            actions: string[]
-            terms: PersonScopeTerm[]
+            value: PersonScopeInput
             version: number
-        }) => savePersonScope(userId, resource, actions, terms, version),
+        }) => savePersonScope(userId, value, version),
         onSuccess: async () => {
             await Promise.all([
                 client.invalidateQueries({ queryKey: ["admin"] }),

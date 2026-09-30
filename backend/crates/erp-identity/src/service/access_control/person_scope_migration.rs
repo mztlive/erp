@@ -109,6 +109,7 @@ pub(crate) async fn seed_company(db: &Database, user: &str, executor: &mut dyn E
                 resource: (*resource).into(),
                 action: (*action).into(),
                 expression: PersonScopeExpression {
+                    additive: false,
                     history_read: false,
                     alternatives: vec![vec![PersonScopeTerm {
                         scope_type: crate::access_control::DataScopeType::Company,

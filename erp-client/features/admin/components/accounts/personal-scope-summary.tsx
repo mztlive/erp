@@ -1,9 +1,9 @@
 import { actionLabel } from "@/lib/permission-catalog"
 import type { OrgUnit, ScopeDimension } from "@/features/organization/types"
 import {
-    personScopeDescription,
+    personEffectiveDescription,
+    type PersonScopeBusiness,
     type PersonScopeInput,
-    type PersonScopeList,
 } from "../../api/person-data-scopes"
 
 export const scopeDimensionLabel = (dimension: ScopeDimension) =>
@@ -13,110 +13,65 @@ export const scopeDimensionLabel = (dimension: ScopeDimension) =>
           ? "仓库"
           : "结算主体"
 
-/** 已有操作范围相同时合并，范围不同时保留逐操作说明。 */
-export function SavedScopeSummary({
-    data,
-    value,
-    units,
-}: {
-    data: PersonScopeList
-    value: PersonScopeInput
-    units: OrgUnit[]
-}) {
-    const labels = new Map(units.map((unit) => [unit.id, unit.name]))
-    const scopes = value.actions.map((action) =>
-        data.items.find(
-            (item) =>
-                item.resource === value.resource && item.action === action,
-        ),
-    )
-    if (!scopes.length) return null
-    const same =
-        new Set(scopes.map((scope) => JSON.stringify(scope?.expression)))
-            .size === 1
-    return (
-        <div className="space-y-1 text-xs text-muted-foreground">
-            {same ? (
-                <p>
-                    {scopes[0]
-                        ? `这些操作当前使用：${personScopeDescription(scopes[0], labels)}`
-                        : "这些操作尚未设置数据范围。"}
-                </p>
-            ) : (
-                <>
-                    <p>这些操作当前范围不同：</p>
-                    {value.actions.map((action, index) => (
-                        <p key={action}>
-                            {actionLabel(action)}：
-                            {personScopeDescription(scopes[index], labels)}
-                        </p>
-                    ))}
-                </>
-            )}
-        </div>
-    )
-}
-
-/** 仅描述待保存的配置，不代替实际操作资格或流程节点判断。 */
+/** 按操作重算并集，移除一条授权后仍显示其他条目覆盖的范围。 */
 export function ProposedScopeSummary({
     name,
     value,
-    dimensions,
+    business,
     units,
-    incomplete,
 }: {
     name: string
     value: PersonScopeInput
-    dimensions: ScopeDimension[]
+    business: PersonScopeBusiness
     units: OrgUnit[]
-    incomplete?: string
 }) {
-    const departmentNames = value.org_ids
-        .map(
-            (id) =>
-                units.find((unit) => unit.id === id)?.name ??
-                "名称待确认的部门",
-        )
-        .join("、")
-    const descriptions =
-        value.mode === "company"
-            ? ["公司范围"]
-            : dimensions.map((dimension) => {
-                  if (dimension === "warehouse")
-                      return `所选 ${value.warehouse_ids.length} 个仓库关联的数据`
-                  if (dimension === "settlement_party")
-                      return `所选 ${value.settlement_ids.length} 个结算主体关联的数据`
-                  if (value.mode === "self") return `${name}负责的数据`
-                  const departments =
-                      value.mode === "own_org"
-                          ? `${name}所属部门`
-                          : departmentNames
-                  return `${departments}${value.include_descendants ? "及下级部门" : ""}的数据`
-              })
+    const labels = new Map(units.map((unit) => [unit.id, unit.name]))
     return (
-        <div
+        <section
             className="space-y-2 rounded-md bg-muted/40 p-3"
             aria-live="polite"
         >
-            <p className="font-medium">保存后的范围</p>
-            {incomplete ? (
-                <p className="text-muted-foreground">{incomplete}</p>
-            ) : (
-                <>
-                    <p>
-                        {name}的{value.actions.map(actionLabel).join("、")}
-                        操作将使用：{descriptions.join("，并且同时属于")}。
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                        仅替换以上操作的范围，未勾选操作保持原配置。
-                    </p>
-                </>
+            <h3 className="font-medium">保存后的最终范围</h3>
+            <p className="text-xs text-muted-foreground">
+                {name}的各项操作分别合并基础范围与适用的追加授权。
+            </p>
+            {value.actions.map((action) => (
+                <p key={action} className="text-xs leading-6">
+                    <span className="font-medium">{actionLabel(action)}：</span>
+                    {personEffectiveDescription(
+                        {
+                            id: "preview",
+                            user_id: "",
+                            version: 0,
+                            created_at: 0,
+                            resource: value.resource,
+                            action,
+                            expression: {
+                                additive: true,
+                                history_read: false,
+                                condition: null,
+                                alternatives: value.grants
+                                    .filter((grant) =>
+                                        grant.actions.includes(action),
+                                    )
+                                    .map((grant) => grant.terms),
+                            },
+                        },
+                        business,
+                        labels,
+                    )}
+                </p>
+            ))}
+            {value.editor && (
+                <p className="text-xs text-amber-700">
+                    正在编辑的授权还未加入列表，不计入以上范围。
+                </p>
             )}
             {value.resource === "approval_instance" && (
                 <p className="text-xs text-muted-foreground">
-                    实际审批仍须符合流程节点要求；设置范围不会把此人安排为审批人。
+                    实际审批仍须符合流程节点要求；添加范围不会把此人安排为审批人。
                 </p>
             )}
-        </div>
+        </section>
     )
 }

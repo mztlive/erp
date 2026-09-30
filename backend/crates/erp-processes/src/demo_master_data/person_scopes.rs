@@ -2,9 +2,10 @@
 use std::collections::HashMap;
 
 use application_core::AuditActor;
+use erp_identity::access_control::DataScopeType;
 #[cfg(test)]
-use erp_identity::access_control::{DataScopeType, ScopeDimension, ScopeTargetMode};
-use erp_identity::dto::person_scope::SavePersonScopeRequest;
+use erp_identity::access_control::{ScopeDimension, ScopeTargetMode};
+use erp_identity::dto::person_scope::{PersonScopeGrant, SavePersonScopeRequest};
 
 use super::DemoMasterDataService;
 use super::spec::DemoPersonScope;
@@ -42,13 +43,18 @@ impl DemoMasterDataService {
                 if actions.is_empty() {
                     continue;
                 }
+                let term = DemoPersonScope::term(login, &business.dimensions);
+                if business.default_self && term.scope_type == DataScopeType::SelfOwned {
+                    continue;
+                }
                 service
                     .save_person_scope(
                         user,
                         SavePersonScopeRequest {
                             resource: business.resource,
-                            actions,
-                            terms: vec![DemoPersonScope::term(login, &business.dimensions)],
+                            actions: actions.clone(),
+                            grants: vec![PersonScopeGrant { actions, terms: vec![term] }],
+                            replace_legacy: false,
                             expected_policy_version: view.policy_version,
                         },
                         actor,

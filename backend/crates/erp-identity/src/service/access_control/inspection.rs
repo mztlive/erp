@@ -92,17 +92,23 @@ impl AccessInspectionService {
             .person_data_scopes()
             .for_person(actor.id(), Some(&access.resource), Some(&access.action), executor)
             .await?;
-        if configs.is_empty() {
+        if configs.is_empty() && access.scope.has_role_scope() {
+            view.push(
+                "人员数据范围",
+                "passed",
+                "本操作已按服务端基础范围生效；新增其他范围需在人员资料中添加授权。",
+            );
+        } else if configs.is_empty() {
             view.push(
                 "人员数据范围",
                 "blocked",
-                "本操作尚未配置数据范围，请进入人员资料设置；角色仅提供操作权限。",
+                "本操作没有本人基础范围，且尚未添加授权范围；请进入人员资料设置。",
             );
         } else {
             view.push(
                 "人员数据范围",
                 "passed",
-                "已按此人、本业务、本操作的唯一范围配置检查；部门关系不授予操作权限。",
+                "已按此人、本业务、本操作的基础政策及已保存范围检查；部门关系不授予操作权限。",
             );
         }
         Ok(())

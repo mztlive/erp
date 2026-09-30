@@ -368,6 +368,7 @@ mod equivalence_tests {
                 resource: "purchase_order".into(),
                 action: "detail".into(),
                 expression: PersonScopeExpression {
+                    additive: false,
                     history_read: false,
                     condition: None,
                     alternatives: vec![vec![PersonScopeTerm {

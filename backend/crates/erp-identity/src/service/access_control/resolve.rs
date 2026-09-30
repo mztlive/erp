@@ -206,6 +206,8 @@ impl DataScopeService {
             Some(config) => {
                 config.resolve(state, registration.required_dimensions, registration.allows_history, at)?
             },
+            None if registration.default_self => PersonDataScope::default_for(user, resource, action)
+                .resolve(state, registration.required_dimensions, registration.allows_history, at)?,
             None => PersonDataScope::denied(),
         };
         // 此映射只证明同角色完整动作资格；业务范围完全取自人员配置。

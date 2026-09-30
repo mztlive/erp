@@ -1,6 +1,7 @@
 //! 已接线 DataScope v2 消费者登记；不得用初始化清单代替准入。
 
 use crate::access_control::{DataScopeType, ScopeBinding, ScopeDimension};
+use crate::entity::access_control::person_scope::PersonScopeExpression;
 use crate::error::{Error, Result};
 
 /// 已由真实消费者接入公共解析的资源动作及必需维度。
@@ -86,6 +87,8 @@ pub(crate) const WIRED_CONSUMERS: &[(&str, &[&str], &[ScopeDimension])] = &[
 
 /// 已接线消费者的资源动作登记。
 pub struct ConsumerRegistration {
+    /// 已证明动作权限后是否提供本人负责的基础范围。
+    pub default_self: bool,
     /// 本资源动作接受的身份维度；未列出的维度必须拒绝。
     pub supported_dimensions: &'static [ScopeDimension],
     /// 该资源动作解析所需维度。
@@ -117,6 +120,7 @@ pub fn registration(resource: &str, action: &str) -> Result<ConsumerRegistration
         return Err(Error::ValidationError(format!("{resource}:{action} 尚未接入 DataScope v2")));
     }
     Ok(ConsumerRegistration {
+        default_self: PersonScopeExpression::default_self(resource),
         supported_dimensions: entry.2,
         required_dimensions: if resource == "approval_instance" { &[] } else { entry.2 },
         allows_history: matches!(resource, "customer" | "contract" | "sales_order" | "purchase_order")
@@ -332,5 +336,32 @@ mod tests {
         }
         assert!(registration("supplier_offering", "detail").is_err());
         assert!(registration("supplier_offering", "delete").is_err());
+    }
+    #[test]
+    fn defaults_only_apply_to_registered_business_ownership_dimensions() {
+        for (resource, actions, _) in WIRED_CONSUMERS {
+            for action in *actions {
+                let consumer = registration(resource, action).unwrap();
+                if consumer.default_self {
+                    assert_eq!(consumer.required_dimensions, &[ScopeDimension::InternalOrg]);
+                }
+            }
+        }
+        for (resource, action) in [
+            ("approval_instance", "decide"),
+            ("work_item", "manage"),
+            ("org_unit", "list"),
+            ("person_query_qualification", "manage"),
+            ("warehouse", "list"),
+            ("settlement_party", "list"),
+            ("sales_person", "list"),
+            ("procurement_person", "list"),
+            ("business_person", "list"),
+        ] {
+            assert!(!registration(resource, action).unwrap().default_self);
+        }
+        assert!(registration("product", "list").unwrap().default_self);
+        assert!(registration("supplier_payment", "detail").unwrap().default_self);
+        assert!(registration("integration_error_task", "list").unwrap().default_self);
     }
 }

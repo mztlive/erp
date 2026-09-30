@@ -3,7 +3,7 @@ use application_core::AuditActor;
 use persistence_core::{Executor, Transactional};
 
 use super::AccessControlService;
-use super::consumers::WIRED_CONSUMERS;
+use super::consumers::{WIRED_CONSUMERS, registration};
 use super::resolve::DataScopeService;
 use crate::dto::person_scope::{PersonBusinessOption, PersonScopeView};
 use crate::repository::access_control::person_scope::PersonDataScopeRepositoryExt;
@@ -103,7 +103,7 @@ impl AccessControlService {
         let roles = self.db.roles().enabled_roles(snapshot.role_ids(), executor).await?;
         let mut options = Vec::new();
         for (resource, actions, dimensions) in WIRED_CONSUMERS {
-            let mut granted = Vec::new();
+            let mut granted: Vec<String> = Vec::new();
             for action in *actions {
                 let ids = snapshot.granting_role_ids(&Permission::parse(format!("{resource}:{action}"))?);
                 if roles.iter().any(|r| ids.contains(&r.base.id)) {
@@ -113,6 +113,7 @@ impl AccessControlService {
             if !granted.is_empty() {
                 options.push(PersonBusinessOption {
                     resource: (*resource).into(),
+                    default_self: registration(resource, &granted[0])?.default_self,
                     actions: granted,
                     dimensions: dimensions.to_vec(),
                 });

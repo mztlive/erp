@@ -1,4 +1,4 @@
-/** 显式演示人员配置；只补从未配置的业务动作，不改既有范围。 */
+/** 显式演示追加范围；本人基础无需写入，只补从未配置的业务动作。 */
 import { call } from "./dev-seed-lib.mjs";
 
 export async function seedPersonDataScopes(token, accounts) {
@@ -11,6 +11,7 @@ export async function seedPersonDataScopes(token, accounts) {
       const internal = business.dimensions.length === 1 && business.dimensions[0] === "internal_org";
       const self = internal && ["sales", "procurement", "operations"].includes(key);
       const ownOrg = internal && key === "salesLeader";
+      if (self && business.default_self) continue;
       const term = {
         scope_type: self ? "self_owned" : ownOrg ? "organization" : "company",
         target_dimension: business.dimensions[0],
@@ -18,7 +19,13 @@ export async function seedPersonDataScopes(token, accounts) {
         include_descendants: ownOrg ? true : null,
         scope_targets: [],
       };
-      await call("PUT", path, { token, body: { resource: business.resource, actions, terms: [term], expected_policy_version: view.policy_version } });
+      await call("PUT", path, { token, body: {
+        resource: business.resource,
+        actions,
+        grants: [{ actions, terms: [term] }],
+        replace_legacy: false,
+        expected_policy_version: view.policy_version,
+      } });
       view = await call("GET", path, { token });
     }
   }

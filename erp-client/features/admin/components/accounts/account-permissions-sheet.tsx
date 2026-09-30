@@ -39,7 +39,7 @@ export function AccountPermissionsSheet({
             }}
             size="preview"
             title={`${account?.name ?? "人员"}的权限`}
-            description="角色提供操作权限，数据范围由人员独立配置。"
+            description="角色提供操作权限，数据范围由基础范围与人员追加授权合并。"
             footer={
                 <>
                     <Button
@@ -105,6 +105,8 @@ export function AccountPermissionsSheet({
                                                     s.resource === b.resource &&
                                                     s.action === a,
                                             ),
+                                            undefined,
+                                            b.default_self,
                                         )}
                                     </p>
                                 ))}

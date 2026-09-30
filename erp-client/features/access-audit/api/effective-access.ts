@@ -1,10 +1,8 @@
 // 有效权限解释读路径：按 ROLE / USER 主体组装来源视图，不合并前端数据。
 
 import { apiGet } from "@/lib/api"
-import {
-    fetchPersonScopes,
-    personScopeDescription,
-} from "@/features/admin/api/person-data-scopes"
+import { fetchPersonScopes } from "@/features/admin/api/person-data-scopes"
+import { scopeViewRows } from "./person-scopes"
 import type { EffectiveAccessView } from "@/features/access-audit/types"
 import type {
     BackendAdmin,
@@ -110,16 +108,17 @@ export async function fetchEffectiveAccess(
             sourceType: "USER_ROLE",
             sourceLabel: roleNameById.get(roleId) ?? roleId,
         })),
-        dataScopes: scopes.items.map((scope) => ({
+        dataScopes: scopeViewRows(subjectId, scopes).map((scope) => ({
             id: scope.id,
             layer: "DATA_SCOPE" as const,
             layerLabel: "人员数据范围",
-            targetLabel: personScopeDescription(scope),
-            capability: scope.resource,
+            targetLabel: scope.summary ?? "无数据访问范围",
+            capability: scope.resource ?? "",
             sourceType: "USER",
             sourceLabel,
             resource: scope.resource,
-            actions: [scope.action],
+            actions: scope.actions,
+            enabled: scope.enabled,
         })),
         fieldPolicies: [],
         historicalParticipantRules: [],

@@ -51,6 +51,7 @@ pub fn expression(
             .filter(|r| r.subject_type == DataScopeSubjectType::User && r.subject_id == user),
     )?;
     Ok(PersonScopeExpression {
+        additive: false,
         history_read: allows_history,
         alternatives,
         condition: (!condition.is_empty()).then_some(condition),

@@ -1,4 +1,4 @@
-//! 原子替换所选操作的唯一人员范围，审计与策略版本同事务提交。
+//! 原子保存所选操作的附加授权，审计与策略版本同事务提交。
 use application_core::AuditActor;
 use entity_core::BaseModel;
 use persistence_core::Executor;
@@ -6,14 +6,14 @@ use persistence_core::Executor;
 use super::{AccessControlService, consumers};
 use crate::access_control::{DataScope, ScopeDimension, ScopeTargetMode};
 use crate::dto::person_scope::SavePersonScopeRequest;
-use crate::entity::access_control::person_scope::{PersonDataScope, PersonScopeExpression};
+use crate::entity::access_control::person_scope::PersonDataScope;
 use crate::entity::organization::OrgTree;
 use crate::repository::OrganizationRepository;
 use crate::repository::access_control::person_scope::PersonDataScopeRepositoryExt;
 use crate::{AccessControlExt, Error, Result};
 
 impl AccessControlService {
-    /// 保存替换人员指定业务操作范围，不改变角色操作权限。
+    /// 保存人员指定业务操作的完整附加授权列表，不改变角色操作权限。
     /// # 参数
     /// 固定人员、业务操作及完整范围、管理员。
     /// # 返回
@@ -69,8 +69,11 @@ impl AccessControlService {
             return Err(Error::ValidationError("请选择此人当前具备的操作".into()));
         }
         for action in &req.actions {
-            for term in &req.terms {
-                let rule = term.rule(&req.resource, action, user, true)?;
+            consumers::registration(&req.resource, action)?;
+        }
+        for grant in &req.grants {
+            for term in &grant.terms {
+                let rule = term.rule(&req.resource, &grant.actions[0], user, true)?;
                 consumers::validate_binding(&rule.binding)?;
                 consumers::validate_scope_type(&req.resource, rule.scope_type)?;
                 self.validate_scope_targets(&rule, executor).await?;
@@ -111,12 +114,9 @@ impl AccessControlService {
     ) -> Result<()> {
         let existing =
             self.db.person_data_scopes().for_person(user, Some(&req.resource), None, executor).await?;
+        req.ensure_legacy_conversion(&existing)?;
         for action in &req.actions {
-            let expression = PersonScopeExpression {
-                history_read: false,
-                alternatives: vec![req.terms.clone()],
-                condition: None,
-            };
+            let expression = req.expression(action);
             if let Some(old) = existing.iter().find(|s| s.action == *action) {
                 let mut scope = old.clone();
                 scope.expression = expression;
