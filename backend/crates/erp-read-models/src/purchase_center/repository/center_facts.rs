@@ -7,7 +7,10 @@
 //! 审批 Repository 提供，本模块不读取审批定义、实例与历史，不做任何审批
 //! 政策判断。
 
-use erp_core::ids::{PurchaseOrderRevisionLineId, PurchaseOrderSubmissionId};
+use erp_core::ids::{
+    PurchaseOrderRevisionId, PurchaseOrderRevisionLineId, PurchaseOrderSubmissionId, SalesOrderId,
+    SupplierAccountId,
+};
 use erp_core::money::Amount;
 use erp_finance::repository::PayableExt;
 use erp_finance::repository::prelude::*;
@@ -22,7 +25,7 @@ use erp_procurement::repository::prelude::*;
 use erp_sales::repository::SalesOrderExt;
 use erp_sales::repository::prelude::*;
 use mongodb::Database;
-use persistence_core::{Executor, Result};
+use persistence_core::{Executor, NoTransaction, Result};
 
 /// 采购单对象中心事实 Bundle。
 ///
@@ -84,48 +87,81 @@ pub async fn load_purchase_order_center_facts(
     let Some(order) = db.purchase_orders().find_by_id(order_id, executor).await? else {
         return Ok(PurchaseOrderCenterFacts::default());
     };
-    let supplier_names = super::supplier_names::current_legal_names_by_account_ids(
-        db,
-        std::slice::from_ref(&order.supplier_id),
-        executor,
-    )
-    .await?;
-    let supplier_name = supplier_names.get(&order.supplier_id.to_string()).cloned();
+    if executor.session().is_none() {
+        return load_parallel_facts(db, order).await;
+    }
+    load_serial_facts(db, order, executor).await
+}
+
+/// 非事务展示查询并行装配，各分支使用独立执行器.
+///
+/// # 参数
+/// * `db` - MongoDB 数据库句柄
+/// * `order` - 已加载的采购单主表
+///
+/// # 返回
+/// 返回全部当前指针事实；语义与串行路径一致.
+///
+/// # 错误
+/// MongoDB 查询或反序列化失败时返回错误.
+///
+/// # 约束
+/// 独立事实并行 join，两条链内串行、链间并行；不读取审批运行时.
+async fn load_parallel_facts(db: &Database, order: PurchaseOrder) -> Result<PurchaseOrderCenterFacts> {
+    let supplier_id = order.supplier_id.clone();
     let sales_id = order.sales_order_id.clone();
-    let sales_orders =
-        db.sales_orders().find_orders_by_ids(std::slice::from_ref(&sales_id), executor).await?;
-    let sales_order_no = sales_orders.into_iter().find_map(|item| {
-        if item.base.id == sales_id.to_string() { Some(item.order_no.clone()) } else { None }
-    });
+    let owner = order.owner_user_id.clone();
+    let order_id = erp_core::ids::PurchaseOrderId::new(order.base.id.clone());
+    let revision_id = order.stable.current_revision_id.clone();
+    let submission_id = order.current_submission_id.clone();
+    let (supplier_name, sales_order_no, owner_name, changes, payable, revision_bundle, submission_bundle) = tokio::try_join!(
+        load_supplier_name_nt(db, supplier_id),
+        load_sales_no_nt(db, sales_id),
+        load_owner_name_nt(db, owner),
+        load_changes_nt(db, order_id.clone()),
+        load_payable_nt(db, order_id),
+        load_revision_chain_nt(db, revision_id),
+        load_submission_chain_nt(db, submission_id),
+    )?;
+    Ok(PurchaseOrderCenterFacts {
+        order: Some(order),
+        supplier_name,
+        sales_order_no,
+        owner_name,
+        current_revision: revision_bundle.0,
+        revision_lines: revision_bundle.1,
+        current_submission: submission_bundle.0,
+        submission_lines: submission_bundle.1,
+        allocations: revision_bundle.2,
+        changes,
+        payable,
+    })
+}
+
+/// 事务内串行装配，复用调用方执行器保证读己写.
+///
+/// # 参数
+/// * `db` - MongoDB 数据库句柄
+/// * `order` - 已加载的采购单主表
+/// * `executor` - 调用方事务执行器
+///
+/// # 返回
+/// 返回全部当前指针事实；缺失以空值表达.
+///
+/// # 错误
+/// MongoDB 查询或反序列化失败时返回错误.
+async fn load_serial_facts(
+    db: &Database,
+    order: PurchaseOrder,
+    executor: &mut dyn Executor,
+) -> Result<PurchaseOrderCenterFacts> {
+    let supplier_name = load_supplier_name_with(db, &order.supplier_id, executor).await?;
+    let sales_order_no = load_sales_no_with(db, &order.sales_order_id, executor).await?;
     let owner_name = load_owner_name(db, &order, executor).await?;
-    let current_revision = match &order.stable.current_revision_id {
-        Some(revision_id) => db.purchase_order_revisions().find_by_id(revision_id, executor).await?,
-        None => None,
-    };
-    let revision_lines = match &current_revision {
-        Some(revision) => {
-            db.purchase_order()
-                .list_revision_lines(
-                    &erp_core::ids::PurchaseOrderRevisionId::new(revision.base.id.clone()),
-                    executor,
-                )
-                .await?
-        },
-        None => Vec::new(),
-    };
-    let current_submission = match &order.current_submission_id {
-        Some(submission_id) => db.purchase_order_submissions().find_by_id(submission_id, executor).await?,
-        None => None,
-    };
-    let submission_lines = match &current_submission {
-        Some(submission) => {
-            db.purchase_order()
-                .list_submission_lines(&PurchaseOrderSubmissionId::new(submission.base.id.clone()), executor)
-                .await?
-        },
-        None => Vec::new(),
-    };
-    let allocations = load_allocations(db, &revision_lines, executor).await?;
+    let (current_revision, revision_lines, allocations) =
+        load_revision_chain_with(db, order.stable.current_revision_id.clone(), executor).await?;
+    let (current_submission, submission_lines) =
+        load_submission_chain_with(db, order.current_submission_id.clone(), executor).await?;
     let changes = db.purchase_order().list_changes_by_order(&order.base.id.clone().into(), executor).await?;
     let payable =
         db.payable_accounts().find_by_purchase_order(&order.base.id.clone().into(), executor).await?;
@@ -146,6 +182,304 @@ pub async fn load_purchase_order_center_facts(
             invoiced_total: account.invoiced_total,
         }),
     })
+}
+
+/// 非事务加载供应商法定名称，独立分支可并行.
+///
+/// # 参数
+/// * `db` - MongoDB 数据库句柄
+/// * `supplier_id` - 供应商账号主键
+///
+/// # 返回
+/// 返回当前法定名称；缺失时返回 `None`.
+///
+/// # 错误
+/// MongoDB 查询或反序列化失败时返回错误.
+async fn load_supplier_name_nt(db: &Database, supplier_id: SupplierAccountId) -> Result<Option<String>> {
+    load_supplier_name_with(db, &supplier_id, &mut NoTransaction).await
+}
+
+/// 非事务加载来源销售单号，独立分支可并行.
+///
+/// # 参数
+/// * `db` - MongoDB 数据库句柄
+/// * `sales_id` - 来源销售单主键
+///
+/// # 返回
+/// 返回业务单号；缺失时返回 `None`，由 Service 报完整性错误.
+///
+/// # 错误
+/// MongoDB 查询或反序列化失败时返回错误.
+async fn load_sales_no_nt(db: &Database, sales_id: SalesOrderId) -> Result<Option<String>> {
+    load_sales_no_with(db, &sales_id, &mut NoTransaction).await
+}
+
+/// 非事务加载负责人展示名，独立分支可并行.
+///
+/// # 参数
+/// * `db` - MongoDB 数据库句柄
+/// * `owner` - 负责人账号，未指定或空白时直接返回空
+///
+/// # 返回
+/// 返回展示名；缺失时返回 `None`.
+///
+/// # 错误
+/// MongoDB 查询或反序列化失败时返回错误.
+async fn load_owner_name_nt(db: &Database, owner: Option<String>) -> Result<Option<String>> {
+    let Some(owner) = owner.as_deref().map(str::trim).filter(|id| !id.is_empty()) else {
+        return Ok(None);
+    };
+    let names =
+        db.accounts().names_by_ids(std::slice::from_ref(&owner.to_string()), &mut NoTransaction).await?;
+    Ok(names.get(owner).cloned())
+}
+
+/// 非事务加载变更历史，独立分支可并行.
+///
+/// # 参数
+/// * `db` - MongoDB 数据库句柄
+/// * `order_id` - 采购单主键
+///
+/// # 返回
+/// 返回本采购单的全部变更单.
+///
+/// # 错误
+/// MongoDB 查询或反序列化失败时返回错误.
+async fn load_changes_nt(
+    db: &Database,
+    order_id: erp_core::ids::PurchaseOrderId,
+) -> Result<Vec<PurchaseChangeOrder>> {
+    db.purchase_order().list_changes_by_order(&order_id, &mut NoTransaction).await
+}
+
+/// 非事务加载应付汇总，独立分支可并行.
+///
+/// # 参数
+/// * `db` - MongoDB 数据库句柄
+/// * `order_id` - 采购单主键
+///
+/// # 返回
+/// 返回应付余额；账户不存在时返回 `None`.
+///
+/// # 错误
+/// MongoDB 查询或反序列化失败时返回错误.
+async fn load_payable_nt(
+    db: &Database,
+    order_id: erp_core::ids::PurchaseOrderId,
+) -> Result<Option<PurchasePayableFact>> {
+    let payable = db.payable_accounts().find_by_purchase_order(&order_id, &mut NoTransaction).await?;
+    Ok(payable.map(|account| PurchasePayableFact {
+        open_total: account.open_total,
+        settled_total: account.settled_total,
+        invoiced_total: account.invoiced_total,
+    }))
+}
+
+/// 非事务加载版本链，链内串行、链间并行.
+///
+/// # 参数
+/// * `db` - MongoDB 数据库句柄
+/// * `revision_id` - 当前生效版本指针；为空时返回空链
+///
+/// # 返回
+/// 返回版本头、版本行与销售分配.
+///
+/// # 错误
+/// MongoDB 查询或反序列化失败时返回错误.
+async fn load_revision_chain_nt(
+    db: &Database,
+    revision_id: Option<String>,
+) -> Result<(Option<PurchaseOrderRevision>, Vec<PurchaseOrderRevisionLine>, Vec<PurchaseLineSalesAllocation>)>
+{
+    let Some(revision_id) = revision_id else {
+        return Ok((None, Vec::new(), Vec::new()));
+    };
+    let current_revision = db.purchase_order_revisions().find_by_id(&revision_id, &mut NoTransaction).await?;
+    let Some(revision) = current_revision else {
+        return Ok((None, Vec::new(), Vec::new()));
+    };
+    let lines = db
+        .purchase_order()
+        .list_revision_lines(&PurchaseOrderRevisionId::new(revision.base.id.clone()), &mut NoTransaction)
+        .await?;
+    let allocations = load_allocations_nt(db, &lines).await?;
+    Ok((Some(revision), lines, allocations))
+}
+
+/// 非事务加载提交链，链内串行、链间并行.
+///
+/// # 参数
+/// * `db` - MongoDB 数据库句柄
+/// * `submission_id` - 当前提交指针；为空时返回空链
+///
+/// # 返回
+/// 返回提交头与提交行.
+///
+/// # 错误
+/// MongoDB 查询或反序列化失败时返回错误.
+async fn load_submission_chain_nt(
+    db: &Database,
+    submission_id: Option<String>,
+) -> Result<(Option<PurchaseOrderSubmission>, Vec<PurchaseOrderSubmissionLine>)> {
+    let Some(submission_id) = submission_id else {
+        return Ok((None, Vec::new()));
+    };
+    let current_submission =
+        db.purchase_order_submissions().find_by_id(&submission_id, &mut NoTransaction).await?;
+    let Some(submission) = current_submission else {
+        return Ok((None, Vec::new()));
+    };
+    let lines = db
+        .purchase_order()
+        .list_submission_lines(
+            &PurchaseOrderSubmissionId::new(submission.base.id.clone()),
+            &mut NoTransaction,
+        )
+        .await?;
+    Ok((Some(submission), lines))
+}
+
+/// 事务内加载供应商法定名称.
+///
+/// # 参数
+/// * `db` - MongoDB 数据库句柄
+/// * `supplier_id` - 供应商账号主键
+/// * `executor` - 调用方事务执行器
+///
+/// # 返回
+/// 返回当前法定名称；缺失时返回 `None`.
+///
+/// # 错误
+/// MongoDB 查询或反序列化失败时返回错误.
+async fn load_supplier_name_with(
+    db: &Database,
+    supplier_id: &SupplierAccountId,
+    executor: &mut dyn Executor,
+) -> Result<Option<String>> {
+    let names = super::supplier_names::current_legal_names_by_account_ids(
+        db,
+        std::slice::from_ref(supplier_id),
+        executor,
+    )
+    .await?;
+    Ok(names.get(&supplier_id.to_string()).cloned())
+}
+
+/// 事务内加载来源销售单号.
+///
+/// # 参数
+/// * `db` - MongoDB 数据库句柄
+/// * `sales_id` - 来源销售单主键
+/// * `executor` - 调用方事务执行器
+///
+/// # 返回
+/// 返回业务单号；缺失时返回 `None`，由 Service 报完整性错误.
+///
+/// # 错误
+/// MongoDB 查询或反序列化失败时返回错误.
+async fn load_sales_no_with(
+    db: &Database,
+    sales_id: &SalesOrderId,
+    executor: &mut dyn Executor,
+) -> Result<Option<String>> {
+    let text = sales_id.to_string();
+    let orders = db.sales_orders().find_orders_by_ids(std::slice::from_ref(sales_id), executor).await?;
+    Ok(orders.into_iter().find_map(
+        |item| {
+            if item.base.id == text { Some(item.order_no.clone()) } else { None }
+        },
+    ))
+}
+
+/// 事务内加载版本链，链内串行.
+///
+/// # 参数
+/// * `db` - MongoDB 数据库句柄
+/// * `revision_id` - 当前生效版本指针；为空时返回空链
+/// * `executor` - 调用方事务执行器
+///
+/// # 返回
+/// 返回版本头、版本行与销售分配.
+///
+/// # 错误
+/// MongoDB 查询或反序列化失败时返回错误.
+async fn load_revision_chain_with(
+    db: &Database,
+    revision_id: Option<String>,
+    executor: &mut dyn Executor,
+) -> Result<(Option<PurchaseOrderRevision>, Vec<PurchaseOrderRevisionLine>, Vec<PurchaseLineSalesAllocation>)>
+{
+    let Some(revision_id) = revision_id else {
+        return Ok((None, Vec::new(), Vec::new()));
+    };
+    let current_revision = db.purchase_order_revisions().find_by_id(&revision_id, executor).await?;
+    let Some(revision) = current_revision else {
+        return Ok((None, Vec::new(), Vec::new()));
+    };
+    let lines = db
+        .purchase_order()
+        .list_revision_lines(&PurchaseOrderRevisionId::new(revision.base.id.clone()), executor)
+        .await?;
+    let allocations = load_allocations(db, &lines, executor).await?;
+    Ok((Some(revision), lines, allocations))
+}
+
+/// 事务内加载提交链，链内串行.
+///
+/// # 参数
+/// * `db` - MongoDB 数据库句柄
+/// * `submission_id` - 当前提交指针；为空时返回空链
+/// * `executor` - 调用方事务执行器
+///
+/// # 返回
+/// 返回提交头与提交行.
+///
+/// # 错误
+/// MongoDB 查询或反序列化失败时返回错误.
+async fn load_submission_chain_with(
+    db: &Database,
+    submission_id: Option<String>,
+    executor: &mut dyn Executor,
+) -> Result<(Option<PurchaseOrderSubmission>, Vec<PurchaseOrderSubmissionLine>)> {
+    let Some(submission_id) = submission_id else {
+        return Ok((None, Vec::new()));
+    };
+    let current_submission = db.purchase_order_submissions().find_by_id(&submission_id, executor).await?;
+    let Some(submission) = current_submission else {
+        return Ok((None, Vec::new()));
+    };
+    let lines = db
+        .purchase_order()
+        .list_submission_lines(&PurchaseOrderSubmissionId::new(submission.base.id.clone()), executor)
+        .await?;
+    Ok((Some(submission), lines))
+}
+
+/// 非事务批量加载生效版本销售分配.
+///
+/// # 参数
+/// * `db` - MongoDB 数据库句柄
+/// * `revision_lines` - 当前生效版本行
+///
+/// # 返回
+/// 返回当前版本行关联的全部销售分配；无版本行时返回空集合.
+///
+/// # 错误
+/// MongoDB 查询或反序列化失败时返回错误.
+async fn load_allocations_nt(
+    db: &Database,
+    revision_lines: &[PurchaseOrderRevisionLine],
+) -> Result<Vec<PurchaseLineSalesAllocation>> {
+    let line_ids = revision_lines
+        .iter()
+        .map(|line| erp_core::ids::PurchaseOrderRevisionLineId::new(line.base.id.clone()))
+        .collect::<Vec<_>>();
+    if line_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    db.purchase_line_sales_allocations()
+        .find_by_purchase_revision_line_ids(&line_ids, &mut NoTransaction)
+        .await
 }
 
 /// 批量加载负责人展示名。

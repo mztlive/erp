@@ -8,6 +8,7 @@ mod balance;
 mod movement;
 mod people_read;
 mod reservation;
+mod reservation_write;
 mod search;
 pub use people_read::AdjustmentSnapshotReadFilter;
 pub use search::InventorySearch;

@@ -1,5 +1,7 @@
 //! 销售单跨域查询：组合销售历史快照、采购覆盖、财务与审批投影。
 
+mod detail;
+
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
@@ -7,30 +9,24 @@ use application_core::AuditActor;
 use erp_contract::repository::prelude::*;
 use erp_core::ids::{SalesOrderId, SalesOrderRevisionId, SalesOrderSubmissionId};
 use erp_customer::repository::prelude::*;
-use erp_finance::repository::ReceivableExt;
-use erp_finance::repository::prelude::*;
 use erp_identity::repository::prelude::*;
 use erp_identity::{AccessControlExt, Permission, subject};
-use erp_procurement::repository::PurchaseOrderExt;
-use erp_procurement::repository::prelude::*;
-use erp_sales::dto::sales_order::{PageView, SalesOrderLineView, SubmissionView};
-use erp_sales::entity::sales_order::{BusinessType, ReviewStatus, SalesOrderSubmissionLine, WorkingPurpose};
-use erp_sales::repository::prelude::*;
-use erp_sales::repository::{SalesOrderExt, SalesReviewExt};
-use erp_sales::service::sales_order::mapper::submission_view;
+use erp_sales::dto::sales_order::{PageView, SubmissionView};
+use erp_sales::entity::sales_order::{BusinessType, ReviewStatus};
+use erp_sales::repository::sales_order::SalesOrderRow;
 use erp_workflow::WorkItemExt;
 use erp_workflow::repository::prelude::*;
-use erp_workflow::service::document_registry::find_approval_binding;
 use persistence_core::NoTransaction;
 
-use super::approval_query::load_document_approval;
 use super::dto::{
-    ActiveCardSalesApprovalView, PurchaseCreationAccessView, SalesOrderDetailView, SalesOrderView,
-    SalesProcurementCoverageView,
+    ActiveCardSalesApprovalView, PurchaseCreationAccessView, SalesOrderView, SalesProcurementCoverageView,
 };
-use super::status::{close_eligibility_view, compute_can_start_sales_change, stage_code_label_tone};
+use super::status::stage_code_label_tone;
 use super::{SalesOrderReadService, dto};
 use crate::{Error, Result};
+
+/// 销售单阶段责任快照：`(责任角色, 责任人账号, 责任人姓名, 时限)`。
+type StageOwnerSnapshot = HashMap<String, (Option<String>, Option<String>, Option<String>, Option<u64>)>;
 
 /// 构造尚无当前销售版本时的零采购覆盖视图。
 ///
@@ -110,56 +106,10 @@ impl SalesOrderReadService {
             )
             .await?;
 
-        let items = page
-            .items
-            .into_iter()
-            .map(|row| {
-                let (code, label, tone) = stage_code_label_tone(
-                    row.commercial_status,
-                    row.review_status,
-                    row.close_status,
-                    row.fulfillment_progress,
-                );
-                let (owner_role, stage_owner_user_id, stage_owner_user_name, due_at) =
-                    owners.get(&row.id).cloned().unwrap_or_default();
-                let owner_user_id = row.sales_owner_user_id.clone();
-                let owner_user_name = owner_names.get(&owner_user_id).cloned();
-                SalesOrderView {
-                    id: row.id,
-                    order_no: row.order_no,
-                    business_type: row.business_type,
-                    origin_system: row.origin_system,
-                    customer_id: row.customer_id,
-                    contract_id: row.contract_id,
-                    commercial_status: row.commercial_status,
-                    review_status: row.review_status,
-                    fulfillment_progress: row.fulfillment_progress,
-                    collection_progress: row.collection_progress,
-                    invoice_progress: row.invoice_progress,
-                    close_status: row.close_status,
-                    effective_at: row.effective_at,
-                    closed_at: row.closed_at,
-                    version: row.version,
-                    created_at: row.created_at,
-                    updated_at: row.updated_at,
-                    owner_user_id,
-                    owner_user_name,
-                    stage: dto::SalesOrderStageSummary {
-                        code,
-                        label,
-                        tone,
-                        owner_role,
-                        owner_user_id: stage_owner_user_id,
-                        owner_user_name: stage_owner_user_name,
-                        due_at,
-                    },
-                }
-            })
-            .collect();
+        let items = page.items.into_iter().map(|row| map_sales_row(row, &owners, &owner_names)).collect();
 
-        let current =
-            self.list_snapshot(params, self.keyword_search(params.q.as_deref()).await?, actor).await?;
-        if current.context.scope_version != context.scope_version {
+        let current_version = self.scope_fingerprint(params, search, actor).await?;
+        if current_version != context.scope_version {
             return Err(crate::support::data_scope_changed("数据范围或业务单据已变化，请刷新"));
         }
         Ok(super::SalesListView {
@@ -174,235 +124,6 @@ impl SalesOrderReadService {
         })
     }
 
-    /// 查询销售单详情（订单 + 稳定明细 + 草稿 + 提交历史 + 版本历史）。
-    ///
-    /// # 参数
-    /// * `id` - 销售单 ID
-    ///
-    /// # 返回
-    /// 返回详情视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 销售单不存在
-    #[tracing::instrument(
-        name = "sales_order.detail",
-        skip_all,
-        fields(layer = "service", domain = "sales_order", operation = "detail")
-    )]
-    pub async fn sales_order_detail(
-        &self,
-        id: &str,
-        actor: Option<&AuditActor>,
-    ) -> Result<SalesOrderDetailView> {
-        let mut access_version = None;
-        let order = if let Some(actor) = actor {
-            let (order, version) =
-                crate::sales_center::access::SalesAccess::new(self.db.clone(), self.require_rbac()?.clone())
-                    .detail(actor, id)
-                    .await?;
-            access_version = Some(version);
-            order
-        } else {
-            self.db
-                .sales_orders()
-                .find_by_id(id, &mut NoTransaction)
-                .await?
-                .ok_or_else(|| Error::NotFound("销售单不存在".into()))?
-        };
-
-        let order_id = SalesOrderId::new(order.base.id.clone());
-
-        let stable_lines =
-            self.db.sales_order_lines().list_lines_by_order(&order_id, &mut NoTransaction).await?;
-
-        let working_copy = self
-            .db
-            .sales_order_working_copies()
-            .find_active_by_order_and_purpose(&order_id, WorkingPurpose::FirstSubmission, &mut NoTransaction)
-            .await?;
-
-        let working_copy_view = match working_copy {
-            Some(copy) => Some(self.sales().working_copy_view(&copy).await?),
-            None => None,
-        };
-
-        let submissions = self
-            .db
-            .sales_order_submissions()
-            .list_by_order_newest_first(&order_id, &mut NoTransaction)
-            .await?;
-        let submission_ids =
-            submissions.iter().map(|s| SalesOrderSubmissionId::new(s.base.id.clone())).collect::<Vec<_>>();
-
-        let submission_lines = self
-            .db
-            .sales_order_submission_lines()
-            .list_lines_by_submissions(&submission_ids, &mut NoTransaction)
-            .await?;
-
-        let mut lines_by_submission: HashMap<String, Vec<SalesOrderSubmissionLine>> = HashMap::new();
-
-        for line in submission_lines {
-            lines_by_submission.entry(line.submission_id.to_string()).or_default().push(line);
-        }
-
-        let submission_views: Vec<SubmissionView> = submissions
-            .into_iter()
-            .map(|submission| {
-                let mut lines = lines_by_submission.remove(&submission.base.id).unwrap_or_default();
-                lines.sort_by_key(|line| line.line_no);
-                submission_view(submission, lines)
-            })
-            .collect();
-
-        let revisions = self.sales().load_revision_views(&order_id).await?;
-
-        let owner_user_id = order.sales_owner_user_id.clone();
-
-        let owner_user_name = self.account_name(&owner_user_id).await?;
-        let purchase_order_count =
-            self.db.purchase_orders().count_active_by_sales_order(&order_id, &mut NoTransaction).await?;
-        let purchase_coverage = self.sales_procurement_coverage(&order).await?;
-        let purchase_creation_access =
-            self.purchase_creation_access(&order, &purchase_coverage, actor).await?;
-
-        let active_card_sales_approval = match (actor, submission_ids.first()) {
-            (Some(actor), Some(submission_id)) => {
-                self.resolve_active_card_sales_approval(
-                    &order,
-                    submission_id,
-                    submission_views.first(),
-                    actor,
-                )
-                .await?
-            },
-            _ => None,
-        };
-
-        let (stage_owner_role, stage_owner_user_id, stage_due_at) = self
-            .resolve_stage_owner(
-                &SalesOrderId::new(order.base.id.clone()),
-                order.business_type,
-                order.review_status,
-            )
-            .await?;
-        let stage_owner_user_name = match stage_owner_user_id.as_deref() {
-            Some(user_id) => self.account_name(user_id).await?,
-            None => None,
-        };
-        let (stage_code, stage_label, stage_tone) = stage_code_label_tone(
-            order.commercial_status,
-            order.review_status,
-            order.close_status,
-            order.fulfillment_progress,
-        );
-
-        let receivable_summary =
-            self.db.receivable_accounts().sales_order_amount_summary(&order_id, &mut NoTransaction).await?;
-        let settled_total = receivable_summary.settled_total;
-        let invoiced_total = receivable_summary.invoiced_total;
-        let close_eligibility = close_eligibility_view(order.closure_facts().assess(
-            receivable_summary.has_accounts(),
-            receivable_summary.settled_total,
-            receivable_summary.gross_total,
-        ));
-
-        let has_active_change_order = match order.current_revision_id() {
-            Some(revision_id) => {
-                self.db
-                    .sales_change_orders()
-                    .has_in_progress_by_order_and_base(
-                        &order_id,
-                        &SalesOrderRevisionId::new(revision_id),
-                        &mut NoTransaction,
-                    )
-                    .await?
-            },
-            None => false,
-        };
-        let (can_start_sales_change_order, change_order_blocker) = compute_can_start_sales_change(
-            order.origin_system,
-            stage_code,
-            stage_label,
-            has_active_change_order,
-        );
-
-        let binding = find_approval_binding(&self.db, id, &mut NoTransaction).await.ok().flatten();
-        let approval = Some(
-            load_document_approval(
-                &self.db,
-                order.business_type,
-                id,
-                binding.as_ref(),
-                order.commercial_status,
-                order.review_status,
-            )
-            .await?,
-        );
-
-        if let (Some(actor), Some(expected)) = (actor, access_version) {
-            let (_, current) =
-                crate::sales_center::access::SalesAccess::new(self.db.clone(), self.require_rbac()?.clone())
-                    .detail(actor, id)
-                    .await?;
-            if current != expected {
-                return Err(crate::support::data_scope_changed("数据范围或销售单已变化，请刷新"));
-            }
-        }
-
-        Ok(SalesOrderDetailView {
-            id: order.base.id.clone(),
-            order_no: order.order_no.clone(),
-            business_type: order.business_type,
-            origin_system: order.origin_system,
-            customer_id: order.customer_id.to_string(),
-            contract_id: order.contract_id.as_ref().map(ToString::to_string),
-            settlement_party_id: order.settlement_party_id.to_string(),
-            commercial_status: order.commercial_status,
-            review_status: order.review_status,
-            fulfillment_progress: order.fulfillment_progress,
-            collection_progress: order.collection_progress,
-            invoice_progress: order.invoice_progress,
-            close_status: order.close_status,
-            current_revision_id: order.stable.current_revision_id,
-            effective_at: order.effective_at.map(|instant| instant.unix_secs() as u64),
-            version: order.base.version,
-            created_at: order.base.created_at,
-            owner_user_id,
-            owner_user_name,
-            purchase_order_count,
-            purchase_coverage,
-            purchase_creation_access,
-            settled_total,
-            invoiced_total,
-            lines: stable_lines
-                .into_iter()
-                .map(|line| SalesOrderLineView {
-                    id: line.base.id,
-                    line_no: line.line_no,
-                    line_status: line.line_status,
-                })
-                .collect(),
-            working_copy: working_copy_view,
-            submissions: submission_views,
-            revisions,
-            stage: dto::SalesOrderStageSummary {
-                code: stage_code,
-                label: stage_label,
-                tone: stage_tone,
-                owner_role: stage_owner_role,
-                owner_user_id: stage_owner_user_id,
-                owner_user_name: stage_owner_user_name,
-                due_at: stage_due_at,
-            },
-            close_eligibility,
-            can_start_sales_change_order,
-            change_order_blocker,
-            active_card_sales_approval,
-            approval,
-        })
-    }
-
     /// 计算当前账号从销售单继续执行供给分配的访问投影。
     ///
     /// # 参数
@@ -411,10 +132,10 @@ impl SalesOrderReadService {
     /// * `actor` - 当前已认证账号；内部无账号上下文时为空
     ///
     /// # 返回
-    /// 返回账号状态、静态供给分配权限与开放责任任务共同决定的访问投影。
+    /// 返回账号状态、静态供给分配权限与开放责任任务共同决定的访问投影.
     ///
     /// # 错误
-    /// 账号、任务或 RBAC 查询失败，以及权限值对象不合法时返回错误。
+    /// 任务查询失败，以及权限值对象不合法时返回错误。
     ///
     /// # 关键业务约束
     /// `allowed` 只在账号仍可登录、身份未变化、拥有 `purchase_order:create`
@@ -528,33 +249,6 @@ impl SalesOrderReadService {
         })
     }
 
-    /// 构建当前操作人可安全执行的卡券审批工作面投影。
-    async fn resolve_active_card_sales_approval(
-        &self,
-        _order: &erp_sales::entity::sales_order::SalesOrder,
-        _submission_id: &SalesOrderSubmissionId,
-        _submission: Option<&SubmissionView>,
-        _actor: &AuditActor,
-    ) -> Result<Option<ActiveCardSalesApprovalView>> {
-        Ok(None)
-    }
-
-    /// 按账号 ID 查询展示姓名。
-    ///
-    /// 用于销售单负责人、阶段责任人和采购驳回处理人，避免把账号 ID 下发给页面。
-    ///
-    /// # 参数
-    /// * `user_id` - 账号 ID
-    ///
-    /// # 返回
-    /// 返回账号姓名；账号已不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// 数据库查询失败时返回仓储错误。
-    async fn account_name(&self, user_id: &str) -> Result<Option<String>> {
-        Ok(self.db.accounts().find_by_id(user_id, &mut NoTransaction).await?.map(|account| account.name))
-    }
-
     /// 解析当前审核轨阶段的责任角色、责任人和时限（详情页专用）。
     ///
     /// # 参数
@@ -588,6 +282,17 @@ impl SalesOrderReadService {
         Ok((Some(task.owner_role), task.owner_user_id, task.due_at.map(|due_at| due_at.unix_secs() as u64)))
     }
 
+    /// 构建当前操作人可安全执行的卡券审批工作面投影。
+    async fn resolve_active_card_sales_approval(
+        &self,
+        _order: &erp_sales::entity::sales_order::SalesOrder,
+        _submission_id: &SalesOrderSubmissionId,
+        _submission: Option<&SubmissionView>,
+        _actor: &AuditActor,
+    ) -> Result<Option<ActiveCardSalesApprovalView>> {
+        Ok(None)
+    }
+
     /// 批量解析本页销售单的当前阶段责任人和时限。
     ///
     /// # 参数
@@ -602,7 +307,7 @@ impl SalesOrderReadService {
     async fn resolve_stage_owners_batch(
         &self,
         rows: &[(String, BusinessType, ReviewStatus)],
-    ) -> Result<HashMap<String, (Option<String>, Option<String>, Option<String>, Option<u64>)>> {
+    ) -> Result<StageOwnerSnapshot> {
         let business_objects = rows
             .iter()
             .filter(|(_, _, review_status)| review_status.has_active_review_task())
@@ -652,6 +357,54 @@ impl SalesOrderReadService {
         let unique_ids = account_ids.iter().cloned().collect::<HashSet<_>>().into_iter().collect::<Vec<_>>();
         let accounts = self.db.accounts().list_by_ids(&unique_ids, &mut NoTransaction).await?;
         Ok(accounts.into_iter().map(|account| (account.base.id, account.name)).collect())
+    }
+}
+
+/// 映射销售列表行与阶段责任快照，纯内存组装不触库.
+fn map_sales_row(
+    row: SalesOrderRow,
+    owners: &StageOwnerSnapshot,
+    owner_names: &HashMap<String, String>,
+) -> SalesOrderView {
+    let (code, label, tone) = stage_code_label_tone(
+        row.commercial_status,
+        row.review_status,
+        row.close_status,
+        row.fulfillment_progress,
+    );
+    let (owner_role, stage_owner_user_id, stage_owner_user_name, due_at) =
+        owners.get(&row.id).cloned().unwrap_or_default();
+    let owner_user_id = row.sales_owner_user_id.clone();
+    let owner_user_name = owner_names.get(&owner_user_id).cloned();
+    SalesOrderView {
+        id: row.id,
+        order_no: row.order_no,
+        business_type: row.business_type,
+        origin_system: row.origin_system,
+        customer_id: row.customer_id,
+        contract_id: row.contract_id,
+        commercial_status: row.commercial_status,
+        review_status: row.review_status,
+        fulfillment_progress: row.fulfillment_progress,
+        collection_progress: row.collection_progress,
+        invoice_progress: row.invoice_progress,
+        close_status: row.close_status,
+        effective_at: row.effective_at,
+        closed_at: row.closed_at,
+        version: row.version,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        owner_user_id,
+        owner_user_name,
+        stage: dto::SalesOrderStageSummary {
+            code,
+            label,
+            tone,
+            owner_role,
+            owner_user_id: stage_owner_user_id,
+            owner_user_name: stage_owner_user_name,
+            due_at,
+        },
     }
 }
 

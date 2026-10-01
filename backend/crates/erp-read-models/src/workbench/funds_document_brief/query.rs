@@ -4,12 +4,15 @@ use std::collections::{HashMap, HashSet};
 
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{PartyId, PayableAccountId, ReceivableAccountId, SalesOrderRevisionLineId};
-use erp_finance::entity::payable::{PayableAccount, SupplierPayment};
+use erp_finance::entity::payable::{PayableAccount, PaymentAllocation, SupplierPayment};
 use erp_finance::entity::receivable::{CustomerReceipt, ReceivableAccount};
 use erp_finance::repository::prelude::*;
 use erp_finance::repository::{PayableExt, ReceivableExt};
 use erp_party::PartyExt;
 use erp_party::repository::prelude::*;
+use erp_sales::entity::sales_order::{
+    SalesOrderRevision, SalesOrderRevisionLine, SalesOrderVoucherLineRevision,
+};
 use erp_sales::repository::SalesOrderExt;
 use erp_sales::repository::prelude::*;
 use persistence_core::Executor;
@@ -196,6 +199,30 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             .await?;
         let revision_line_by_id =
             revision_lines.iter().map(|line| (line.base.id.clone(), line)).collect::<HashMap<_, _>>();
+        let (command_ids, invoice_requirements, vouchers) =
+            Self::assemble_revision_briefs(&revisions, voucher_lines, &revision_line_by_id);
+        Ok(ReceivableRevisionBriefs {
+            command_voucher_revision_ids: command_ids,
+            invoice_requirements,
+            vouchers,
+        })
+    }
+
+    /// 纯内存组装开票要求与卡券简报，不触库.
+    ///
+    /// # 参数
+    /// * `revisions` - 已批量加载的销售版本
+    /// * `voucher_lines` - 已按版本行批量加载的卡券行
+    /// * `revision_line_by_id` - 版本行 ID 到版本行的映射
+    ///
+    /// # 返回
+    /// 返回卡券版本 ID、开票要求与卡券简报；组装前后总数口径一致。
+    fn assemble_revision_briefs(
+        revisions: &[SalesOrderRevision],
+        voucher_lines: Vec<SalesOrderVoucherLineRevision>,
+        revision_line_by_id: &HashMap<String, &SalesOrderRevisionLine>,
+    ) -> (HashSet<String>, HashMap<String, InvoiceRequirementBrief>, HashMap<String, VoucherAccountBrief>)
+    {
         let invoice_requirements = revisions
             .iter()
             .map(|revision| {
@@ -208,10 +235,10 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
                 )
             })
             .collect::<HashMap<_, _>>();
-        let command_voucher_revision_ids = voucher_revision_ids(&revisions);
+        let command_ids = voucher_revision_ids(revisions);
         let mut briefs = revisions
             .iter()
-            .filter(|revision| command_voucher_revision_ids.contains(&revision.base.id))
+            .filter(|revision| command_ids.contains(&revision.base.id))
             .map(|revision| {
                 (
                     revision.base.id.clone(),
@@ -222,6 +249,21 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
                 )
             })
             .collect::<HashMap<_, _>>();
+        Self::accumulate_voucher_lines(voucher_lines, revision_line_by_id, &mut briefs);
+        (command_ids, invoice_requirements, briefs)
+    }
+
+    /// 归集卡券行并定稿简报行与面值汇总，纯内存操作.
+    ///
+    /// # 参数
+    /// * `voucher_lines` - 已按版本行批量加载的卡券行
+    /// * `revision_line_by_id` - 版本行 ID 到版本行的映射
+    /// * `briefs` - 待定稿的卡券简报，按版本归集行与面值
+    fn accumulate_voucher_lines(
+        voucher_lines: Vec<SalesOrderVoucherLineRevision>,
+        revision_line_by_id: &HashMap<String, &SalesOrderRevisionLine>,
+        briefs: &mut HashMap<String, VoucherAccountBrief>,
+    ) {
         let mut raw_lines: HashMap<String, Vec<(u32, BriefLine)>> = HashMap::new();
         let mut face_values: HashMap<String, HashSet<String>> = HashMap::new();
         for voucher in voucher_lines {
@@ -237,7 +279,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
                 .or_default()
                 .push((revision_line.line_no, voucher_account_line(revision_line, &voucher)));
         }
-        for (revision_id, brief) in &mut briefs {
+        for (revision_id, brief) in briefs {
             let mut lines = raw_lines.remove(revision_id).unwrap_or_default();
             lines.sort_by_key(|(line_no, _)| *line_no);
             brief.more_count = lines.len().saturating_sub(BRIEF_LINE_LIMIT) as u32;
@@ -248,7 +290,6 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
                 brief.face_summary = Some(values.join(" / "));
             }
         }
-        Ok(ReceivableRevisionBriefs { command_voucher_revision_ids, invoice_requirements, vouchers: briefs })
     }
 
     /// 批量读取主体在当前业务日生效的默认优先税号。
@@ -513,19 +554,40 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             accounts.into_iter().map(|account| (account.base.id.clone(), account)).collect::<HashMap<_, _>>();
         let entry_by_id =
             entries.into_iter().map(|entry| (entry.base.id.clone(), entry)).collect::<HashMap<_, _>>();
+        let by_payment = group_allocations_by_payment(allocations);
         Ok(payments
             .iter()
             .map(|payment| {
-                let payment_allocations = allocations
-                    .iter()
-                    .filter(|allocation| allocation.supplier_payment_id.as_ref() == payment.base.id)
-                    .cloned()
-                    .collect::<Vec<_>>();
+                let empty = Vec::new();
+                let payment_allocations = by_payment.get(&payment.base.id).unwrap_or(&empty);
                 (
                     payment.base.id.clone(),
-                    payment_brief_lines(&payment_allocations, &entry_by_id, &account_by_id, &purchase_nos),
+                    payment_brief_lines(payment_allocations, &entry_by_id, &account_by_id, &purchase_nos),
                 )
             })
             .collect())
     }
+}
+
+/// 按付款单分组核销事实，建表一次装配查表，复杂度由 O(P*A) 降为 O(P+A)。
+///
+/// # 参数
+/// * `allocations` - 同批付款单的全部核销事实
+///
+/// # 返回
+/// 返回付款单 ID 到核销事实的映射；同单内保持仓储返回顺序，缺失键由调用方按空行解释。
+///
+/// # 错误
+/// 无。
+fn group_allocations_by_payment(
+    allocations: Vec<PaymentAllocation>,
+) -> HashMap<String, Vec<PaymentAllocation>> {
+    let mut by_payment = HashMap::new();
+    for allocation in allocations {
+        by_payment
+            .entry(allocation.supplier_payment_id.to_string())
+            .or_insert_with(Vec::new)
+            .push(allocation);
+    }
+    by_payment
 }
