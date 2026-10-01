@@ -120,7 +120,7 @@ export function useSupplierOrdersListColumns({
                 meta: { label: "跟进人", width: "default" },
                 enableSorting: false,
                 cell: ({ row }) => (
-                    <span className="truncate text-[13px]">
+                    <span className="truncate text-body-compact">
                         {row.original.followUpUserName || "—"}
                     </span>
                 ),
@@ -131,7 +131,7 @@ export function useSupplierOrdersListColumns({
                 meta: { label: "异常处理人", width: "default" },
                 enableSorting: false,
                 cell: ({ row }) => (
-                    <span className="truncate text-[13px]">
+                    <span className="truncate text-body-compact">
                         {row.original.handlerUserName || "—"}
                     </span>
                 ),
@@ -143,7 +143,7 @@ export function useSupplierOrdersListColumns({
                 meta: { label: "供应商外部单号", width: "reference" },
                 cell: ({ row }) =>
                     row.original.externalOrderNo ? (
-                        <span className="num text-[13px]">
+                        <span className="num text-body-compact">
                             {row.original.externalOrderNo}
                         </span>
                     ) : (
@@ -158,7 +158,7 @@ export function useSupplierOrdersListColumns({
                 header: "更新时间",
                 meta: { label: "更新时间", width: "default" },
                 cell: ({ row }) => (
-                    <span className="num text-[13px] text-muted-foreground">
+                    <span className="num text-body-compact text-muted-foreground">
                         {formatDateTime(
                             row.original.lastBusinessAt,
                             "monthDayIntl",
@@ -178,7 +178,7 @@ export function useSupplierOrdersListColumns({
                     numeric: true,
                 },
                 cell: ({ row }) => (
-                    <span className="num text-[13px]">
+                    <span className="num text-body-compact">
                         {row.original.itemCount}
                     </span>
                 ),

@@ -94,7 +94,7 @@ export function BackgroundJobItemResults({
                                     {item.object_id}
                                 </p>
                             )}
-                            <p className="mt-1 text-[13px]">
+                            <p className="mt-1 text-body-compact">
                                 {item.result_summary || "排队执行中"}
                             </p>
                         </li>

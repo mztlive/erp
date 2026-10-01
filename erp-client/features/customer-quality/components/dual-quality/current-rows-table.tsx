@@ -2,6 +2,14 @@
 
 import { MoneyValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { CurrentQualityRow } from "../../dual-types"
 import type { PatchDual } from "../../lib/dual-filter-state"
@@ -17,37 +25,25 @@ export function CurrentRowsTable({
 }) {
     const grouped = dimension !== "customer"
     return (
-        <div className="min-w-0 overflow-x-auto rounded-xl border border-border">
-            <table className="w-full min-w-[560px] border-collapse text-sm">
-                <thead>
-                    <tr className="border-b border-border text-left text-xs text-muted-foreground">
-                        <th className="px-3 py-2 font-medium">
-                            {grouped ? "分组" : "客户"}
-                        </th>
-                        <th className="px-3 py-2 font-medium">现任负责人</th>
-                        <th className="px-3 py-2 font-medium">现任组织</th>
+        <div className="min-w-0">
+            <Table data-density="comfortable" className="min-w-[560px]">
+                <TableHeader>
+                    <TableRow>
+                        <TableHead>{grouped ? "分组" : "客户"}</TableHead>
+                        <TableHead>现任负责人</TableHead>
+                        <TableHead>现任组织</TableHead>
                         {grouped ? (
-                            <th className="px-3 py-2 text-right font-medium">
-                                客户数
-                            </th>
+                            <TableHead data-align="end">客户数</TableHead>
                         ) : null}
-                        <th className="px-3 py-2 text-right font-medium">
-                            订单数
-                        </th>
-                        <th className="px-3 py-2 text-right font-medium">
-                            含税总额
-                        </th>
-                        <th className="px-3 py-2 text-right font-medium">
-                            缺版本
-                        </th>
+                        <TableHead data-align="end">订单数</TableHead>
+                        <TableHead data-align="end">含税总额</TableHead>
+                        <TableHead data-align="end">缺版本</TableHead>
                         {grouped ? (
-                            <th className="px-3 py-2 text-right font-medium">
-                                下钻
-                            </th>
+                            <TableHead data-align="end">下钻</TableHead>
                         ) : null}
-                    </tr>
-                </thead>
-                <tbody>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
                     {items.map((row) => {
                         const drill =
                             dimension === "owner_user" && row.groupId != null
@@ -57,11 +53,8 @@ export function CurrentRowsTable({
                                   ? `org:${row.groupId}`
                                   : null
                         return (
-                            <tr
-                                key={row.rowId}
-                                className="border-b border-border last:border-0"
-                            >
-                                <td className="max-w-48 px-3 py-2">
+                            <TableRow key={row.rowId}>
+                                <TableCell className="max-w-48">
                                     <div className="truncate font-medium">
                                         {grouped
                                             ? (row.label ?? row.rowId)
@@ -72,36 +65,36 @@ export function CurrentRowsTable({
                                             {row.customerNo}
                                         </div>
                                     ) : null}
-                                </td>
-                                <td className="max-w-40 truncate px-3 py-2 text-[13px]">
+                                </TableCell>
+                                <TableCell className="max-w-40 truncate">
                                     {row.ownerUserName ??
                                         row.ownerUserId ??
                                         "—"}
-                                </td>
-                                <td className="max-w-40 truncate px-3 py-2 text-[13px]">
+                                </TableCell>
+                                <TableCell className="max-w-40 truncate">
                                     {row.ownerOrgUnitName ??
                                         row.ownerOrgUnitId ??
                                         "—"}
-                                </td>
+                                </TableCell>
                                 {grouped ? (
-                                    <td className="num px-3 py-2 text-right">
+                                    <TableCell className="num" data-align="end">
                                         {row.customerCount ?? "—"}
-                                    </td>
+                                    </TableCell>
                                 ) : null}
-                                <td className="num px-3 py-2 text-right">
+                                <TableCell className="num" data-align="end">
                                     {row.orderCount}
-                                </td>
-                                <td className="px-3 py-2 text-right">
+                                </TableCell>
+                                <TableCell data-align="end">
                                     <MoneyValue
                                         value={row.grossTotal}
                                         taxBasis="gross"
                                     />
-                                </td>
-                                <td className="num px-3 py-2 text-right">
+                                </TableCell>
+                                <TableCell className="num" data-align="end">
                                     {row.unpricedCount}
-                                </td>
+                                </TableCell>
                                 {grouped ? (
-                                    <td className="px-3 py-2 text-right">
+                                    <TableCell data-align="end">
                                         {drill ? (
                                             <Button
                                                 id={`customers-quality-dual-drill-${toAutomationIdSegment(row.rowId)}`}
@@ -121,13 +114,13 @@ export function CurrentRowsTable({
                                         ) : (
                                             "—"
                                         )}
-                                    </td>
+                                    </TableCell>
                                 ) : null}
-                            </tr>
+                            </TableRow>
                         )
                     })}
-                </tbody>
-            </table>
+                </TableBody>
+            </Table>
         </div>
     )
 }

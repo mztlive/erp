@@ -70,7 +70,7 @@ export function DataTableHeader<TData>({
                                     meta?.align === "end" ? "end" : undefined
                                 }
                                 className={cn(
-                                    "sticky top-0 z-20 h-11 py-2 text-[13px]",
+                                    "sticky top-0 z-20",
                                     alignmentClass(meta?.align),
                                     columnWidthClass(meta?.width, meta?.role),
                                     pinningClass(
@@ -108,7 +108,7 @@ export function DataTableHeader<TData>({
                                         variant="ghost"
                                         size="xs"
                                         className={cn(
-                                            "w-full px-0 text-[13px] font-medium text-muted-foreground hover:text-foreground",
+                                            "w-full px-0 text-body-compact font-medium text-muted-foreground hover:text-foreground",
                                             sortableHeaderClass(meta?.align),
                                         )}
                                         onClick={header.column.getToggleSortingHandler()}

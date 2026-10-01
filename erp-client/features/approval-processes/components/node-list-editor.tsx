@@ -227,7 +227,7 @@ export function NodeListEditor({
                             type="button"
                             variant="secondary"
                             disabled={readOnly}
-                            className="h-9 flex-1 rounded-lg border border-dashed border-border bg-transparent shadow-none hover:border-primary/40 hover:bg-accent/50"
+                            className="h-control flex-1 rounded-lg border border-dashed border-border bg-transparent shadow-none hover:border-primary/40 hover:bg-accent/50"
                             onClick={() =>
                                 onChange([...nodes, emptyEditorNode()])
                             }

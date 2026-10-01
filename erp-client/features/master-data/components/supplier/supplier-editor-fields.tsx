@@ -204,16 +204,7 @@ export function FieldShell({
     className?: string
     children: React.ReactNode
 }) {
-    return (
-        <div
-            className={cn(
-                "space-y-2 [&_[data-slot=label]]:text-[13px] [&_[data-slot=label]]:font-medium [&_[data-slot=label]]:text-foreground/80",
-                className,
-            )}
-        >
-            {children}
-        </div>
-    )
+    return <div className={cn("space-y-2", className)}>{children}</div>
 }
 
 export function SectionPanel({

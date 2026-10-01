@@ -36,7 +36,7 @@ export function MasterDataPreviewPanel({
     )
 
     return (
-        <div className="min-h-0 space-y-6 overflow-y-auto px-7 py-6 text-sm [&_dd]:min-w-0 [&_dd]:break-words [&_dd]:text-right [&_dd]:text-[13px] [&_dt]:text-xs [&_h3]:text-sm [&_h3]:font-medium [&_h3]:text-foreground">
+        <div className="space-y-6 text-sm [&_dd]:min-w-0 [&_dd]:break-words [&_dd]:text-right [&_dd]:text-body-compact [&_dt]:text-xs [&_h3]:text-sm [&_h3]:font-medium [&_h3]:text-foreground">
             <section className="space-y-2">
                 <h3 className="text-xs font-medium text-muted-foreground">
                     {masterDataCopy.previewIdentity}

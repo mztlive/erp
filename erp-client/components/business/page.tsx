@@ -342,9 +342,8 @@ function PageScaffold({
             data-density={density}
             className={cn(
                 "mx-auto flex w-full max-w-none flex-1 flex-col bg-card",
-                density === "compact"
-                    ? "gap-4 p-5 md:px-8 md:py-6"
-                    : "gap-6 p-5 md:px-8 md:py-6",
+                "px-page-inline py-page-block md:px-page-inline-lg md:py-page-block-lg",
+                density === "compact" ? "gap-4" : "gap-6",
                 "[&>[data-slot=page-header]]:pb-2",
                 "[&:has(>[data-slot=document-header])>[data-slot=page-header]_h1]:text-sm",
                 "[&:has(>[data-slot=document-header])>[data-slot=page-header]_h1]:font-normal",

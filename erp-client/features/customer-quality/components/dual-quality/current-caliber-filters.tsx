@@ -1,6 +1,8 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { OptionCombobox } from "@/components/business/option-combobox"
 import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
 import { OrganizationUnitFilter } from "@/features/organization/components/organization-unit-filter"
 import type { useCurrentQualityFilters } from "../../hooks/use-current-quality-filters"
@@ -48,7 +50,7 @@ export function CurrentCaliberFilters({
                     >
                         搜索客户或单号
                     </label>
-                    <input
+                    <Input
                         id="customers-quality-dual-search"
                         type="search"
                         value={qDraft}
@@ -60,7 +62,7 @@ export function CurrentCaliberFilters({
                             }
                         }}
                         placeholder="客户编号 / 名称 / 单号"
-                        className="h-9 min-w-0 flex-1 rounded-lg border border-border bg-background px-3 text-sm"
+                        className="min-w-0 flex-1"
                     />
                     <Button
                         id="customers-quality-dual-apply"
@@ -92,60 +94,57 @@ export function CurrentCaliberFilters({
                 onDescendantsChange={applyDescendants}
             />
 
-            <div className="flex min-w-0 flex-wrap items-center gap-2 text-[13px]">
+            <div className="flex min-w-0 flex-wrap items-center gap-2 text-body-compact">
                 <label
                     htmlFor="customers-quality-dual-dimension"
                     className="text-muted-foreground"
                 >
                     分组
                 </label>
-                <select
+                <OptionCombobox
                     id="customers-quality-dual-dimension"
                     value={dimension}
-                    onChange={(e) =>
+                    aria-label="分组"
+                    allowClear={false}
+                    onValueChange={(value) => {
+                        if (value === null) return
                         patchDual({
-                            dualDimension:
-                                e.target.value === "customer"
-                                    ? null
-                                    : e.target.value,
+                            dualDimension: value === "customer" ? null : value,
                             ownerGroup: null,
                             scopeVersion: null,
                             dualPage: null,
                         })
-                    }
-                    className="h-9 min-w-0 rounded-lg border border-border bg-background px-2"
-                >
-                    <option value="customer">按客户</option>
-                    <option value="owner_user">按现任负责人</option>
-                    <option value="owner_org">按现任组织</option>
-                </select>
+                    }}
+                    options={[
+                        { value: "customer", label: "按客户" },
+                        { value: "owner_user", label: "按现任负责人" },
+                        { value: "owner_org", label: "按现任组织" },
+                    ]}
+                    className="w-auto min-w-40"
+                />
                 <label
                     htmlFor="customers-quality-dual-sort"
                     className="text-muted-foreground"
                 >
                     排序
                 </label>
-                <select
+                <OptionCombobox
                     id="customers-quality-dual-sort"
                     value={sort}
-                    onChange={(e) =>
+                    aria-label="排序"
+                    allowClear={false}
+                    onValueChange={(value) => {
+                        if (value === null) return
                         patchDual({
                             dualSort:
-                                e.target.value === "orderCount:desc"
-                                    ? null
-                                    : e.target.value,
+                                value === "orderCount:desc" ? null : value,
                             scopeVersion: null,
                             dualPage: null,
                         })
-                    }
-                    className="h-9 min-w-0 rounded-lg border border-border bg-background px-2"
-                >
-                    {CURRENT_SORT_OPTIONS.map((o) => (
-                        <option key={o.value} value={o.value}>
-                            {o.label}
-                        </option>
-                    ))}
-                </select>
+                    }}
+                    options={CURRENT_SORT_OPTIONS}
+                    className="w-auto min-w-40"
+                />
                 {hasFilters ? (
                     <Button
                         id="customers-quality-dual-clear"
@@ -171,7 +170,7 @@ export function CurrentCaliberFilters({
             </div>
 
             {ownerGroup ? (
-                <div className="flex min-w-0 flex-wrap items-center gap-2 rounded-xl border border-border p-2 text-[13px]">
+                <div className="flex min-w-0 flex-wrap items-center gap-2 rounded-xl border border-border p-2 text-body-compact">
                     <span className="min-w-0 truncate">
                         现任分组下钻：{ownerGroup}
                     </span>

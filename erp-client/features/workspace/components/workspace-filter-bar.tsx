@@ -7,6 +7,7 @@ import { toAutomationIdSegment } from "@/lib/automation-id"
 
 import { listWorkspaceFilterStatusText } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
+import { NativeCheckbox } from "@/components/ui/checkbox"
 import {
     InputGroup,
     InputGroupAddon,
@@ -244,12 +245,10 @@ export function WorkspaceQueueStatusNav({
                             className="flex cursor-pointer items-center gap-2 whitespace-nowrap text-sm"
                             htmlFor={"workspace-queue-scope-" + metric.key}
                         >
-                            <input
-                                type="checkbox"
-                                className="size-4 cursor-pointer accent-foreground"
+                            <NativeCheckbox
                                 id={"workspace-queue-scope-" + metric.key}
                                 checked={activeMetric === metric.key}
-                                onChange={() =>
+                                onCheckedChange={() =>
                                     onMetricClick(
                                         activeMetric === metric.key
                                             ? "inbox"

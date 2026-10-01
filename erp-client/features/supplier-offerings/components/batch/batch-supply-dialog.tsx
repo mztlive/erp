@@ -3,6 +3,7 @@ import * as React from "react"
 import { DiscardConfirmDialog } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
     Dialog,
     DialogContent,
@@ -138,13 +139,15 @@ function BatchSupplyEditor({
                                             </p>
                                         )}
                                         {unknown.length > 0 && (
-                                            <div
+                                            <Alert
+                                                variant="warning"
                                                 role="alert"
-                                                className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"
                                             >
-                                                有 {unknown.length}{" "}
-                                                行结果待确认，内容已锁定。关闭后可在当前浏览器标签页重新打开此操作恢复；不要清除浏览器会话数据。
-                                            </div>
+                                                <AlertDescription>
+                                                    有 {unknown.length}{" "}
+                                                    行结果待确认，内容已锁定。关闭后可在当前浏览器标签页重新打开此操作恢复；不要清除浏览器会话数据。
+                                                </AlertDescription>
+                                            </Alert>
                                         )}
                                         <fieldset
                                             disabled={editor.busy}

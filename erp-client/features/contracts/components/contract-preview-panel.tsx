@@ -316,7 +316,7 @@ function Fact({
             <dd
                 className={cn(
                     numeric && "num",
-                    "min-w-0 break-words text-right text-[13px]",
+                    "min-w-0 break-words text-right text-body-compact",
                 )}
             >
                 {value}

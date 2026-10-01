@@ -31,7 +31,7 @@ function SupplyRegions({ regions }: { regions: readonly string[] }) {
     const rest = regions.length - 2
     return (
         <div
-            className="flex min-w-0 flex-wrap gap-x-2 gap-y-1 text-[13px] text-muted-foreground"
+            className="flex min-w-0 flex-wrap gap-x-2 gap-y-1 text-body-compact text-muted-foreground"
             title={regions.join("、")}
         >
             {shown.map((region) => (
@@ -169,8 +169,8 @@ export function useSellableListColumns() {
                         <span
                             className={
                                 atRisk
-                                    ? "inline-flex items-center gap-1.5 text-[13px] text-warning-soft-foreground"
-                                    : "inline-flex items-center gap-1.5 text-[13px] text-muted-foreground"
+                                    ? "inline-flex items-center gap-1.5 text-body-compact text-warning-soft-foreground"
+                                    : "inline-flex items-center gap-1.5 text-body-compact text-muted-foreground"
                             }
                         >
                             {atRisk ? (

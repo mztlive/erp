@@ -23,7 +23,7 @@ export function SellableGallerySelectionBar({
 }) {
     return (
         <div
-            className="flex flex-wrap items-center gap-x-3 gap-y-2 text-[13px]"
+            className="flex flex-wrap items-center gap-x-3 gap-y-2 text-body-compact"
             data-slot="sellable-gallery-selection-bar"
         >
             <label

@@ -2,10 +2,20 @@
 import * as React from "react"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { OptionCombobox } from "@/components/business/option-combobox"
 import type { BatchEditor } from "../../hooks/use-batch-supply-editor"
 import { AVAILABILITY_STATUS_LABELS } from "../../types"
 import type { TextFieldKey } from "../../lib/batch-supply"
+
+const availabilityOptions = [
+    { value: "keep", label: "保持每行状态" },
+    ...Object.entries(AVAILABILITY_STATUS_LABELS).map(([value, label]) => ({
+        value,
+        label,
+    })),
+]
 
 export function BatchCommonSettings({ editor }: { editor: BatchEditor }) {
     const [confirmOverwrite, setConfirmOverwrite] = React.useState(false)
@@ -74,36 +84,31 @@ export function BatchCommonSettings({ editor }: { editor: BatchEditor }) {
                                     htmlFor="batch-supply-common-status"
                                 >
                                     可供状态
-                                    <select
+                                    <OptionCombobox
                                         id="batch-supply-common-status"
-                                        className="h-9 w-full rounded-md border bg-background px-2"
+                                        aria-label="公共可供状态"
+                                        options={availabilityOptions}
+                                        allowClear={false}
+                                        disabled={editor.busy}
                                         value={
                                             editor.form.state.values
                                                 .applyAvailabilityStatus
                                                 ? field.state.value
-                                                : ""
+                                                : "keep"
                                         }
-                                        onChange={(event) => {
+                                        onValueChange={(value) => {
+                                            const availabilityStatus =
+                                                value === "keep" ? null : value
                                             editor.form.setFieldValue(
                                                 "applyAvailabilityStatus",
-                                                Boolean(event.target.value),
+                                                Boolean(availabilityStatus),
                                             )
-                                            if (event.target.value)
+                                            if (availabilityStatus)
                                                 field.handleChange(
-                                                    event.target
-                                                        .value as typeof field.state.value,
+                                                    availabilityStatus as typeof field.state.value,
                                                 )
                                         }}
-                                    >
-                                        <option value="">保持每行状态</option>
-                                        {Object.entries(
-                                            AVAILABILITY_STATUS_LABELS,
-                                        ).map(([key, label]) => (
-                                            <option key={key} value={key}>
-                                                {label}
-                                            </option>
-                                        ))}
-                                    </select>
+                                    />
                                 </label>
                             )}
                         </editor.form.AppField>
@@ -113,27 +118,34 @@ export function BatchCommonSettings({ editor }: { editor: BatchEditor }) {
                                     className="flex items-center gap-2 text-sm"
                                     htmlFor="batch-supply-common-unknown"
                                 >
-                                    <Input
+                                    <Checkbox
                                         id="batch-supply-common-unknown"
-                                        type="checkbox"
-                                        className="size-4"
+                                        aria-label="数量未提供（覆盖时清空数量）"
+                                        nativeButton
+                                        render={
+                                            <button
+                                                type="button"
+                                                aria-label="数量未提供（覆盖时清空数量）"
+                                            />
+                                        }
+                                        disabled={editor.busy}
                                         checked={
                                             editor.form.state.values
                                                 .applyQuantity &&
                                             field.state.value === "unknown"
                                         }
-                                        onChange={(event) => {
+                                        onCheckedChange={(checked) => {
                                             editor.form.setFieldValue(
                                                 "applyQuantity",
-                                                event.target.checked,
+                                                checked,
                                             )
-                                            if (event.target.checked)
+                                            if (checked)
                                                 editor.form.setFieldValue(
                                                     "common.availableQuantity",
                                                     "",
                                                 )
                                             field.handleChange(
-                                                event.target.checked
+                                                checked
                                                     ? "unknown"
                                                     : "provided",
                                             )
@@ -181,38 +193,37 @@ export function BatchCommonSettings({ editor }: { editor: BatchEditor }) {
                 )}
             </div>
             {confirmOverwrite && (
-                <div
-                    className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"
-                    role="alert"
-                >
-                    <span>
+                <Alert variant="warning" role="alert">
+                    <AlertDescription>
                         将用已填写的公共设置替换勾选行现有值
                         {editor.mode === "availability"
                             ? "，包括状态和数量"
                             : ""}
                         。确认后请重新校验。
-                    </span>
-                    <Button
-                        id="batch-supply-overwrite-confirm"
-                        type="button"
-                        size="sm"
-                        onClick={() => {
-                            editor.applyCommon(true)
-                            setConfirmOverwrite(false)
-                        }}
-                    >
-                        确认覆盖
-                    </Button>
-                    <Button
-                        id="batch-supply-overwrite-cancel"
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setConfirmOverwrite(false)}
-                    >
-                        取消
-                    </Button>
-                </div>
+                    </AlertDescription>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                        <Button
+                            id="batch-supply-overwrite-confirm"
+                            type="button"
+                            size="sm"
+                            onClick={() => {
+                                editor.applyCommon(true)
+                                setConfirmOverwrite(false)
+                            }}
+                        >
+                            确认覆盖
+                        </Button>
+                        <Button
+                            id="batch-supply-overwrite-cancel"
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setConfirmOverwrite(false)}
+                        >
+                            取消
+                        </Button>
+                    </div>
+                </Alert>
             )}
         </section>
     )

@@ -81,10 +81,10 @@ const PreviewCard = ({
                     <CardHeader className="gap-1.5 p-3 pb-0">
                         <div className="flex items-baseline gap-1.5">
                             <MoneyValue
-                                className="font-bold text-foreground [&>span:first-child]:text-base"
+                                className="text-base font-bold text-foreground"
                                 value={item.price_gross || item.price}
                             />
-                            <span className="text-3xs text-muted-foreground">
+                            <span className="text-2xs text-muted-foreground">
                                 含税
                             </span>
                         </div>
@@ -117,7 +117,7 @@ const PreviewCard = ({
                                     </li>
                                 ))}
                                 {extraMembers > 0 ? (
-                                    <li className="num pt-0.5 text-3xs font-medium text-muted-foreground">
+                                    <li className="num pt-0.5 text-2xs font-medium text-muted-foreground">
                                         另有 {extraMembers} 件商品
                                     </li>
                                 ) : null}
@@ -135,7 +135,7 @@ const PreviewCard = ({
                             type="button"
                             variant="ghost"
                             size="xs"
-                            className="h-7 w-full justify-center text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            className="w-full justify-center text-destructive hover:bg-destructive/10 hover:text-destructive"
                             disabled={pending}
                             loading={deleting}
                             onClick={() => onDelete(item.item_id)}

@@ -76,7 +76,7 @@ export function useCustomerQualityColumns({
                                         {r.customerName}
                                     </span>
                                 )}
-                                <span className="num text-[13px] text-muted-foreground">
+                                <span className="num text-body-compact text-muted-foreground">
                                     {r.customerNo}
                                 </span>
                             </div>
@@ -378,7 +378,7 @@ export function useCustomerQualityColumns({
                 header: "最近业务",
                 meta: { label: "最近业务" },
                 cell: ({ row }) => (
-                    <span className="num text-[13px] text-muted-foreground">
+                    <span className="num text-body-compact text-muted-foreground">
                         {row.original.latestBusinessAt
                             ? formatDateTime(
                                   row.original.latestBusinessAt,

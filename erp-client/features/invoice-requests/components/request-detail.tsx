@@ -5,7 +5,7 @@ import { z } from "zod"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
-import { MoneyValue } from "@/components/business"
+import { MetricItem, MetricStrip, MoneyValue } from "@/components/business"
 import { ApprovalReadonly } from "@/features/approval-workflow/components/approval-readonly"
 import {
     mapDocumentApprovalViewDto,
@@ -133,20 +133,19 @@ export function InvoiceRequestDetail({
                     返回申请列表
                 </Button>
             </div>
-            <div className="grid gap-4 rounded-lg bg-muted p-4 sm:grid-cols-3">
+            <MetricStrip columns={3} aria-label="开票申请详情金额摘要">
                 {[
                     ["申请金额", facts.amount],
                     ["已开票", facts.invoiced],
                     ["本次尚未开票", facts.remaining],
                 ].map(([label, amount]) => (
-                    <div key={label}>
-                        <p className="text-sm text-muted-foreground">{label}</p>
-                        <div className="mt-1 text-xl font-semibold">
-                            <MoneyValue value={amount!} />
-                        </div>
-                    </div>
+                    <MetricItem
+                        key={label}
+                        label={label}
+                        value={<MoneyValue value={amount!} />}
+                    />
                 ))}
-            </div>
+            </MetricStrip>
             <dl className="grid gap-4 text-sm sm:grid-cols-2">
                 {[
                     ["开票抬头", facts.title],

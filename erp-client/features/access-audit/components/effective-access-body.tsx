@@ -69,7 +69,7 @@ function PermissionLead({
             <h3 className="text-xs font-medium text-muted-foreground">
                 操作权限
             </h3>
-            <p className="mt-2 text-[32px] font-semibold leading-10 tracking-tight">
+            <p className="mt-2 text-value-summary font-semibold leading-10 tracking-tight">
                 {preview.allPermissions ? (
                     "全部操作权限"
                 ) : (

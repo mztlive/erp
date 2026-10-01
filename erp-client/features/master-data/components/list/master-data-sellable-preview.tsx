@@ -19,14 +19,15 @@ export function SellableItemPreviewPanel({ row }: { row: MasterDataListItem }) {
                 </div>
                 <MoneyValue
                     value={item.salesVisiblePriceGross}
-                    className="mt-2 [&>span:first-child]:text-[32px] [&>span:first-child]:font-semibold [&>span:first-child]:tracking-tight"
+                    size="summary"
+                    className="mt-2"
                 />
                 {item.marketPrice ? (
                     <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
                         <span>市场参考价</span>
                         <MoneyValue
                             value={item.marketPrice}
-                            className="[&>span:first-child]:text-xs [&>span:first-child]:text-muted-foreground"
+                            className="text-xs text-muted-foreground"
                         />
                     </div>
                 ) : null}
@@ -82,7 +83,7 @@ export function SellableItemPreviewPanel({ row }: { row: MasterDataListItem }) {
                                 {label}
                             </dt>
                             <dd
-                                className="num min-w-0 break-all text-right text-[13px]"
+                                className="num min-w-0 break-all text-right text-body-compact"
                                 title={value}
                             >
                                 {value}

@@ -50,7 +50,8 @@ export function OfferingTerms({
                                     ? terms.dropship_supply_price_gross
                                     : null
                             }
-                            className="mt-2 [&>span:first-child]:text-2xl [&>span:first-child]:font-semibold"
+                            size="section"
+                            className="mt-2"
                         />
                     </div>
                     <div>
@@ -63,7 +64,8 @@ export function OfferingTerms({
                                     ? terms.bulk_supply_price_gross
                                     : null
                             }
-                            className="mt-2 [&>span:first-child]:text-2xl [&>span:first-child]:font-semibold"
+                            size="section"
+                            className="mt-2"
                         />
                     </div>
                 </div>

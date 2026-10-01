@@ -9,7 +9,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import { MoneyValue } from "@/components/business"
+import { MetricItem, MetricStrip, MoneyValue } from "@/components/business"
 import { getErrorMessage } from "@/lib/api/errors"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
@@ -143,7 +143,7 @@ export function InvoiceRequestPanel({
                 ) : null}
             </div>
             {amounts.data ? (
-                <div className="grid gap-3 rounded-lg bg-muted p-4 sm:grid-cols-3">
+                <MetricStrip columns={3} aria-label="开票申请金额摘要">
                     {[
                         ["可申请金额", amounts.data.available_amount],
                         ["审批中金额", amounts.data.pending_amount],
@@ -152,16 +152,13 @@ export function InvoiceRequestPanel({
                             amounts.data.approved_remaining_amount,
                         ],
                     ].map(([label, amount]) => (
-                        <div key={label}>
-                            <div className="text-xs text-muted-foreground">
-                                {label}
-                            </div>
-                            <div className="mt-1 text-lg font-semibold">
-                                <MoneyValue value={amount!} />
-                            </div>
-                        </div>
+                        <MetricItem
+                            key={label}
+                            label={label}
+                            value={<MoneyValue value={amount!} />}
+                        />
                     ))}
-                </div>
+                </MetricStrip>
             ) : null}
             {list.isPending ? (
                 <p>正在读取申请记录…</p>

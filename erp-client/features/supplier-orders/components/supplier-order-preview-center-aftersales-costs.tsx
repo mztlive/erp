@@ -57,10 +57,8 @@ export function AftersalesSection({
                             )}
                         >
                             <CardHeader className="rounded-t-lg border-b border-grid pb-2">
-                                <CardTitle className="text-sm">
-                                    {as.requestNo}
-                                </CardTitle>
-                                <CardDescription className="text-xs">
+                                <CardTitle>{as.requestNo}</CardTitle>
+                                <CardDescription>
                                     {as.scope} · 申请于{" "}
                                     {formatDateTime(
                                         as.requestedAt,

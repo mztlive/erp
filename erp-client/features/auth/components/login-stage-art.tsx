@@ -404,8 +404,7 @@ export function LoginStageArt({ className }: LoginStageArtProps) {
                     y="398"
                     fill="currentColor"
                     opacity="0.45"
-                    fontSize="11"
-                    fontFamily="ui-sans-serif, system-ui, sans-serif"
+                    className="font-sans text-tiny"
                 >
                     销售
                 </text>
@@ -463,8 +462,7 @@ export function LoginStageArt({ className }: LoginStageArtProps) {
                     y="398"
                     fill="currentColor"
                     opacity="0.45"
-                    fontSize="11"
-                    fontFamily="ui-sans-serif, system-ui, sans-serif"
+                    className="font-sans text-tiny"
                 >
                     采购
                 </text>
@@ -514,8 +512,7 @@ export function LoginStageArt({ className }: LoginStageArtProps) {
                     y="776"
                     fill="currentColor"
                     opacity="0.45"
-                    fontSize="11"
-                    fontFamily="ui-sans-serif, system-ui, sans-serif"
+                    className="font-sans text-tiny"
                 >
                     库存
                 </text>
@@ -565,8 +562,7 @@ export function LoginStageArt({ className }: LoginStageArtProps) {
                     y="776"
                     fill="currentColor"
                     opacity="0.45"
-                    fontSize="11"
-                    fontFamily="ui-sans-serif, system-ui, sans-serif"
+                    className="font-sans text-tiny"
                 >
                     结算
                 </text>

@@ -55,7 +55,8 @@ export function SalesOrderDetailSidebar({
                 </p>
                 <MoneyValue
                     value={order.amountGross}
-                    className="mt-1 block wrap-anywhere text-[44px] leading-tight font-semibold tracking-tight"
+                    size="hero"
+                    className="mt-1 block wrap-anywhere"
                 />
                 {!hideFinanceSummary ? (
                     <>

@@ -7,11 +7,10 @@
 /* ==========================================================================
    ERP 商务主题 — shadcn Neutral 表面 + 语义状态色
    --------------------------------------------------------------------------
-   布局：深色侧栏 + 浅灰画布 + 白卡片/白页头浮起。
-   侧栏用近黑（对齐登录页品牌舞台 bg-foreground），让工作台与登录页同一套语气；
-   内容侧对齐 shadcn/ui Neutral：
+   布局：侧栏消费 sidebar 系列令牌；浅色模式用近白侧栏、浅灰画布和白卡片/页头。
+   内容侧对齐 shadcn/ui Neutral，深色模式由对应主题令牌切换：
      background 浅灰画布 · card / 页头 纯白 · primary 近黑 · accent 浅灰
-   侧栏选中：深灰底 + 近白字 + 左侧近白竖标；悬停比选中更淡一档。
+   侧栏选中与悬停统一消费 sidebar-accent / sidebar-accent-foreground。
    单据状态色仍用独立色相（成功绿 / 警告金 / 信息蓝 / 危险红），不灰度化。
 
    内容区层级靠发丝 border / grid、画布与卡片的明度差和字重，不靠大块灰底。
@@ -50,6 +49,9 @@
     --color-input: var(--input);
     --color-border: var(--border);
     --color-overlay: var(--overlay);
+    --color-overlay-sheet: var(--overlay-sheet);
+    --color-highlight: var(--highlight);
+    --color-highlight-foreground: var(--highlight-foreground);
     --color-destructive: var(--destructive);
     --color-destructive-foreground: var(--destructive-foreground);
     --color-accent-foreground: var(--accent-foreground);
@@ -134,13 +136,22 @@
     --spacing-page-inline-lg: 2rem; /* 32px 桌面内容区内边距 */
     --spacing-page-block: 1.25rem; /* 20px 内容区纵向边距 */
     --spacing-page-block-lg: 1.5rem; /* 24px 桌面内容区纵向边距 */
+    --spacing-workspace-inline: 1rem; /* 列表工作面窄窗口边距 */
+    --spacing-workspace-block-start-lg: 1.75rem; /* 列表工作面页头上边距 */
+    --spacing-workspace-header-block-end: 1.875rem;
+    --spacing-workspace-toolbar-block: 1.125rem;
+    --spacing-workspace-view: 2.875rem;
+    --spacing-workspace-view-gap: 1.625rem;
     --spacing-toolbar-inset: 0.75rem; /* 12px 筛选条内边距 */
     --spacing-search-min: 16rem; /* 搜索框在工具栏中的最小宽度 */
     --spacing-row: 2.25rem; /* 标准列表行高 36px */
-    --spacing-row-comfortable: 3.5rem; /* 舒适密度 / 双行单元格 56px */
+    --spacing-row-comfortable: 4rem; /* 舒适密度 / 双行单元格 64px */
+    --spacing-table-header: 2.75rem; /* 列表表头 44px */
+    --spacing-table-header-block: 0.5rem; /* 表头纵向留白 8px */
+    --spacing-object-tab: 2.75rem; /* 对象中心分区导航 44px */
     --spacing-table-cell-inline: 1rem; /* 表格单元格横向留白 */
     --spacing-table-cell-block: 0.25rem; /* 高密度单元格纵向留白 */
-    --spacing-table-cell-block-comfortable: 0.75rem; /* 多行单元格纵向留白 */
+    --spacing-table-cell-block-comfortable: 0.625rem; /* 多行单元格纵向留白 10px */
     --spacing-table-frame-inset: 1.25rem; /* 内嵌表格与业务卡片边缘距离 */
     --spacing-table-resize-target: 0.75rem; /* 列宽拖拽命中区 */
     --spacing-table-column-default: 10rem;
@@ -166,9 +177,19 @@
     --spacing-detail: 48rem; /* 右侧半屏详情抽屉 768px；读完主事实 */
     --spacing-shell: 90rem; /* 基准工作宽度 1440px */
 
-    /* 辅助标注字号 */
+    /* 页面角色字号；业务组件只消费这些角色或 Tailwind 标准字号。 */
     --text-2xs: 0.625rem; /* 10px */
     --text-tiny: 0.6875rem; /* 11px */
+    --text-body-compact: 0.8125rem; /* 13px */
+    --text-body-compact--line-height: 1.375rem; /* 22px */
+    --text-page-title: 1.625rem; /* 26px */
+    --text-page-title--line-height: 2.25rem; /* 36px */
+    --text-value-summary: 2rem; /* 32px */
+    --text-value-summary--line-height: 2.5rem;
+    --text-value-hero: 2.75rem; /* 44px */
+    --text-value-hero--line-height: 3rem;
+    --text-login-title: 1.75rem; /* 28px */
+    --text-login-title--line-height: 2.25rem;
 
     /* 比例协调的圆角阶梯体系 */
     --radius-xs: 0.125rem; /* 2px */
@@ -191,6 +212,7 @@
         0 10px 15px -3px rgb(0 0 0 / 0.07), 0 4px 6px -4px rgb(0 0 0 / 0.04);
     --shadow-xl:
         0 20px 25px -5px rgb(0 0 0 / 0.08), 0 8px 10px -6px rgb(0 0 0 / 0.04);
+    --shadow-footer: 0 -6px 24px -18px rgb(0 0 0 / 0.15);
 }
 
 /* --------------------------------------------------------------------------
@@ -217,6 +239,9 @@
 
     --accent: oklch(0.955 0.003 260);
     --accent-foreground: oklch(0.14 0.005 260);
+
+    --highlight: oklch(0.95 0.09 95);
+    --highlight-foreground: oklch(0.32 0.06 75);
 
     /* 语义状态色 —— Notion 极简低饱和度典雅配色（告别刺眼荧光与俗气大红大绿） */
     --destructive: oklch(0.55 0.18 25);
@@ -275,6 +300,7 @@
     /* 极细微高精边框与发丝线（单像素微发丝质感） */
     --border: oklch(0.915 0.003 260); /* #e4e4e7 精密浅灰细线 */
     --overlay: oklch(0.12 0.005 260 / 30%);
+    --overlay-sheet: oklch(0 0 0 / 20%);
     --input: oklch(0.895 0.004 260); /* #d4d4d8 控件微边框 */
     --ring: oklch(0.14 0.005 260 / 15%); /* 黑灰极细微环 */
 
@@ -323,6 +349,9 @@
 
     --accent: oklch(0.22 0.005 260);
     --accent-foreground: oklch(0.98 0 0);
+
+    --highlight: oklch(0.34 0.065 95);
+    --highlight-foreground: oklch(0.9 0.08 95);
 
     --destructive: oklch(0.6 0.18 25);
     --destructive-foreground: oklch(1 0 0);
@@ -376,6 +405,7 @@
 
     --border: oklch(1 0 0 / 10%);
     --overlay: oklch(0 0 0 / 70%);
+    --overlay-sheet: oklch(0 0 0 / 30%);
     --input: oklch(1 0 0 / 15%);
     --ring: oklch(1 0 0 / 15%);
 

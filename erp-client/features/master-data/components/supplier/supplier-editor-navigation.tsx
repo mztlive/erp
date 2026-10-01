@@ -64,7 +64,7 @@ export function SupplierSectionTabs({
                         key={section.id}
                         id={`master-data-supplier-editor-tab-${toAutomationIdSegment(section.id)}`}
                         value={section.id}
-                        className="h-11 flex-none rounded-none px-0 text-sm after:inset-x-0 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary data-active:font-semibold"
+                        className="h-object-tab flex-none"
                     >
                         {section.label}
                     </TabsTrigger>

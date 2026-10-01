@@ -37,7 +37,6 @@ export function SellablePreviewSheet({
                 }
             }}
             size="preview"
-            contentClassName="data-[side=right]:sm:w-[460px] data-[side=right]:sm:max-w-[460px]"
             title={previewRow?.name ?? "商品预览"}
             description={
                 previewRow?.sellableItem?.specificationLabel !== "无规格"

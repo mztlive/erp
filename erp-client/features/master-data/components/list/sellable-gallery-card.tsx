@@ -100,7 +100,7 @@ export function SellableGalleryCard({
                     >
                         <div className="flex items-baseline gap-1.5">
                             <MoneyValue
-                                className="font-semibold [&>span:first-child]:text-lg"
+                                className="text-lg font-semibold"
                                 value={item?.salesVisiblePriceGross}
                             />
                             <span className="text-xs text-muted-foreground">
@@ -111,7 +111,7 @@ export function SellableGalleryCard({
                             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                                 <span>市场参考价</span>
                                 <MoneyValue
-                                    className="[&>span:first-child]:text-xs [&>span:first-child]:font-normal [&>span:first-child]:text-muted-foreground"
+                                    className="text-xs font-normal text-muted-foreground"
                                     value={item.marketPrice}
                                 />
                             </div>

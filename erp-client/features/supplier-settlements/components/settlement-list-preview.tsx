@@ -97,7 +97,7 @@ export function SettlementListPreviewSheet({
                             </h3>
                             <MoneyValue
                                 value={row.erpAmountGross}
-                                className="[&>span:first-child]:text-[32px] [&>span:first-child]:font-semibold [&>span:first-child]:tracking-tight"
+                                size="summary"
                             />
                             <dl className="space-y-3 pt-3">
                                 <div className="flex items-baseline justify-between gap-5">
@@ -144,7 +144,7 @@ export function SettlementListPreviewSheet({
                                     <dt className="text-xs text-muted-foreground">
                                         经办
                                     </dt>
-                                    <dd className="min-w-0 break-words text-right text-[13px]">
+                                    <dd className="min-w-0 break-words text-right text-body-compact">
                                         {row.preparedByLabel || "—"}
                                     </dd>
                                 </div>
@@ -152,7 +152,7 @@ export function SettlementListPreviewSheet({
                                     <dt className="text-xs text-muted-foreground">
                                         复核
                                     </dt>
-                                    <dd className="min-w-0 break-words text-right text-[13px]">
+                                    <dd className="min-w-0 break-words text-right text-body-compact">
                                         {row.reviewedByLabel || "—"}
                                     </dd>
                                 </div>

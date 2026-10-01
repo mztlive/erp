@@ -51,7 +51,7 @@ export function useSettlementListColumns(
                         <span className="block">
                             {row.original.periodStart}
                         </span>
-                        <span className="block text-[13px] text-muted-foreground">
+                        <span className="block text-body-compact text-muted-foreground">
                             至 {row.original.periodEnd}
                         </span>
                     </span>

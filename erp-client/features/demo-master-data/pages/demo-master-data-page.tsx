@@ -127,7 +127,7 @@ export function DemoMasterDataPage() {
                     {COUNT_ROWS.map(([key, label]) => (
                         <div
                             key={key}
-                            className="flex items-center justify-between gap-4 px-4 py-3 text-[13px]"
+                            className="flex items-center justify-between gap-4 px-4 py-3 text-body-compact"
                         >
                             <dt>{label}</dt>
                             <dd className="text-muted-foreground">

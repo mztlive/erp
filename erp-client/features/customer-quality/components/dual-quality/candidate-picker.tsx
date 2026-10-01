@@ -1,5 +1,6 @@
 "use client"
 
+import { NativeCheckbox } from "@/components/ui/checkbox"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { QualityFilterOption } from "../../dual-types"
 
@@ -34,14 +35,14 @@ export function CandidatePicker({
                             <li key={option.value} className="min-w-0">
                                 <label
                                     htmlFor={inputId}
-                                    className="flex min-w-0 cursor-pointer items-center gap-2 text-[13px]"
+                                    className="flex min-w-0 cursor-pointer items-center gap-2 text-body-compact"
                                 >
-                                    <input
+                                    <NativeCheckbox
                                         id={inputId}
-                                        type="checkbox"
                                         checked={checked}
-                                        onChange={() => onToggle(option.value)}
-                                        className="size-4 shrink-0"
+                                        onCheckedChange={() =>
+                                            onToggle(option.value)
+                                        }
                                     />
                                     <span className="min-w-0 truncate">
                                         {option.label}

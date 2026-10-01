@@ -53,6 +53,8 @@ export type OptionComboboxProps = {
     allowClear?: boolean
     required?: boolean
     id?: string
+    /** 保留既有自动化选项 ID；未传入时由输入框 ID 派生。 */
+    getOptionId?: (value: string) => string
     "aria-label"?: string
     "aria-invalid"?: boolean
     "aria-describedby"?: string
@@ -94,6 +96,7 @@ export function OptionCombobox({
     allowClear = true,
     required = false,
     id,
+    getOptionId,
     "aria-label": ariaLabel,
     "aria-invalid": ariaInvalid,
     "aria-describedby": ariaDescribedBy,
@@ -167,7 +170,7 @@ export function OptionCombobox({
                     className={cn(
                         "w-full",
                         size === "sm" &&
-                            "h-7 min-h-7 *:data-[slot=input-group-control]:h-7 *:data-[slot=input-group-control]:text-xs",
+                            "h-control-sm min-h-control-sm *:data-[slot=input-group-control]:h-control-sm *:data-[slot=input-group-control]:text-xs",
                         inputClassName,
                     )}
                 >
@@ -186,9 +189,10 @@ export function OptionCombobox({
                             <ComboboxItem
                                 key={item.value}
                                 id={
-                                    id
+                                    getOptionId?.(item.value) ??
+                                    (id
                                         ? `${id}-option-${toAutomationIdSegment(item.value)}`
-                                        : undefined
+                                        : undefined)
                                 }
                                 value={item}
                                 disabled={item.disabled}

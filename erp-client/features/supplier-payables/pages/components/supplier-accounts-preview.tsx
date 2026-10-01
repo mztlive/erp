@@ -131,7 +131,6 @@ export function SupplierAccountsPreview({
                     if (!open) onClosed?.()
                 }}
                 size="detail"
-                contentClassName="data-[side=right]:sm:w-[480px] data-[side=right]:sm:max-w-[480px]"
                 title="付款冲正"
                 identity={
                     reversalQuery.data
@@ -225,7 +224,6 @@ export function SupplierAccountsPreview({
                     if (!open) onClosed?.()
                 }}
                 size="detail"
-                contentClassName="data-[side=right]:sm:w-[480px] data-[side=right]:sm:max-w-[480px]"
                 title="供应商退款"
                 identity={
                     refundQuery.data
@@ -400,7 +398,6 @@ export function SupplierAccountsPreview({
                 if (!open) onClosed?.()
             }}
             size="detail"
-            contentClassName="data-[side=right]:sm:w-[480px] data-[side=right]:sm:max-w-[480px]"
             title={payable?.supplierName ?? "应付详情"}
             identity={
                 payable

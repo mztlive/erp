@@ -44,7 +44,7 @@ export function LineItemsTable({ order }: { order: SalesOrderDetailView }) {
     return (
         <div className="overflow-hidden rounded-lg border-b border-border">
             <Table
-                data-density="compact"
+                data-density="comfortable"
                 className={isCard ? "min-w-[54rem]" : "min-w-[40rem]"}
             >
                 <TableHeader>
@@ -67,7 +67,7 @@ export function LineItemsTable({ order }: { order: SalesOrderDetailView }) {
                 <TableBody>
                     {order.lineItems.map((line) => (
                         <TableRow key={line.id}>
-                            <TableCell className="min-w-44 whitespace-normal py-4">
+                            <TableCell className="min-w-44 whitespace-normal">
                                 <div>{line.name}</div>
                                 {line.sku ? (
                                     <div className="num text-xs text-muted-foreground">

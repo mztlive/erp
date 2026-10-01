@@ -185,7 +185,7 @@ function SkuRow({
                                 </Label>
                                 <Input
                                     id={`master-data-product-sku-${skuSegment}-code`}
-                                    className="h-8"
+                                    className="h-control-sm"
                                     value={sku.skuNo}
                                     disabled={!canRevise}
                                     onChange={(event) =>
@@ -209,7 +209,7 @@ function SkuRow({
                                 </Label>
                                 <Input
                                     id={`master-data-product-sku-${skuSegment}-name`}
-                                    className="h-8"
+                                    className="h-control-sm"
                                     value={sku.name}
                                     disabled={!canRevise}
                                     onChange={(event) =>
@@ -236,7 +236,7 @@ function SkuRow({
                                 </Label>
                                 <Input
                                     id={`master-data-product-sku-${skuSegment}-barcode`}
-                                    className="h-8"
+                                    className="h-control-sm"
                                     value={sku.barcode ?? ""}
                                     disabled={!canRevise}
                                     onChange={(event) =>

@@ -2,6 +2,7 @@
 
 import * as React from "react"
 
+import { Button } from "@/components/ui/button"
 import { MultiOptionCombobox } from "@/components/business/multi-option-combobox"
 import { OptionCombobox } from "@/components/business/option-combobox"
 import { personDirectoryLabel } from "@/features/entity-selectors/api/person-directory"
@@ -95,19 +96,21 @@ export function PersonDirectoryFilter({
     }
     const options = [
         ...pages.flatMap((page) =>
-            page.items.filter((item) => !ids.includes(item.id)).map((item) => ({
-                value: item.id,
-                label: personDirectoryLabel(item),
-            })),
+            page.items
+                .filter((item) => !ids.includes(item.id))
+                .map((item) => ({
+                    value: item.id,
+                    label: personDirectoryLabel(item),
+                })),
         ),
         ...ids.map((id) => ({
-                value: id,
-                label:
-                    names.get(id) ??
-                    (selected.isSuccess && !selected.isFetching
-                        ? "已选人员（当前不可用）"
-                        : "已选人员"),
-            })),
+            value: id,
+            label:
+                names.get(id) ??
+                (selected.isSuccess && !selected.isFetching
+                    ? "已选人员（当前不可用）"
+                    : "已选人员"),
+        })),
     ]
     const seen = new Set<string>()
     const uniqueOptions = options.filter((option) => {
@@ -151,64 +154,72 @@ export function PersonDirectoryFilter({
                         placeholder={`全部${label}`}
                     />
                     {hasMore && (
-                        <button
+                        <Button
                             id={`${id}-more`}
                             type="button"
-                            className="text-xs underline"
+                            variant="link"
+                            size="xs"
+                            className="h-auto px-0"
                             onClick={() => {
                                 setPageKey(filterKey)
                                 setPageCount(effectivePageCount + 1)
                             }}
                         >
                             加载更多
-                        </button>
+                        </Button>
                     )}
                 </>
-            ) : <MultiOptionCombobox
-                id={id}
-                aria-label={label}
-                filterLabel={hideLabel ? label : undefined}
-                value={ids}
-                options={uniqueOptions}
-                filterMode="remote"
-                onSearchChange={search.onSearchChange}
-                loading={list.isFetching}
-                hasMore={hasMore}
-                onLoadMore={() => {
-                    setPageKey(filterKey)
-                    setPageCount(effectivePageCount + 1)
-                }}
-                loadMoreId={`${id}-more`}
-                emptyLabel={emptyLabel}
-                onValueChange={(next) =>
-                    onChange([...new Set(next)].sort().join(","))
-                }
-                placeholder={`全部${label}`}
-            />}
+            ) : (
+                <MultiOptionCombobox
+                    id={id}
+                    aria-label={label}
+                    filterLabel={hideLabel ? label : undefined}
+                    value={ids}
+                    options={uniqueOptions}
+                    filterMode="remote"
+                    onSearchChange={search.onSearchChange}
+                    loading={list.isFetching}
+                    hasMore={hasMore}
+                    onLoadMore={() => {
+                        setPageKey(filterKey)
+                        setPageCount(effectivePageCount + 1)
+                    }}
+                    loadMoreId={`${id}-more`}
+                    emptyLabel={emptyLabel}
+                    onValueChange={(next) =>
+                        onChange([...new Set(next)].sort().join(","))
+                    }
+                    placeholder={`全部${label}`}
+                />
+            )}
             {list.isError ? (
                 <p className="text-xs text-destructive" role="alert">
                     {listFailureCopy(list.error)}
-                    <button
+                    <Button
                         id={`${id}-retry`}
                         type="button"
-                        className="ml-2 underline"
+                        variant="link"
+                        size="xs"
+                        className="ml-2 h-auto px-0 text-inherit"
                         onClick={() => void list.refetch()}
                     >
                         重试
-                    </button>
+                    </Button>
                 </p>
             ) : null}
             {selected.isError ? (
                 <p className="text-xs text-destructive" role="alert">
                     {selectedFailureCopy(selected.error)}
-                    <button
+                    <Button
                         id={`${id}-selected-retry`}
                         type="button"
-                        className="ml-2 underline"
+                        variant="link"
+                        size="xs"
+                        className="ml-2 h-auto px-0 text-inherit"
                         onClick={() => void selected.refetch()}
                     >
                         重试
-                    </button>
+                    </Button>
                 </p>
             ) : null}
         </div>

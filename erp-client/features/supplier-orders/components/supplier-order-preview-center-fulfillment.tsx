@@ -94,8 +94,8 @@ export function FulfillmentSection({
                 className={cn(surfaceInsetClassName, "shadow-none ring-0")}
             >
                 <CardHeader className="rounded-t-lg border-b border-grid pb-2">
-                    <CardTitle className="text-sm">收货信息</CardTitle>
-                    <CardDescription className="text-xs">
+                    <CardTitle>收货信息</CardTitle>
+                    <CardDescription>
                         默认打码；仅履约所需角色可短时揭示，揭示写入审计。
                     </CardDescription>
                 </CardHeader>

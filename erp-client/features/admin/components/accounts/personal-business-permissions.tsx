@@ -83,7 +83,7 @@ export function PersonalBusinessPermissions({
                     placeholder="搜索业务"
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
-                    className="h-8 w-full sm:w-56"
+                    className="h-control-sm w-full sm:w-56"
                 />
             </div>
             {notice && (

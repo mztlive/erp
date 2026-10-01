@@ -133,7 +133,7 @@ export function ApprovalSubmittedMaterials({
                 {source.more_count > 0 && (
                     <p
                         role="status"
-                        className="rounded-md bg-amber-50 p-3 text-sm text-amber-900"
+                        className="rounded-md border border-warning-border bg-warning-soft p-3 text-sm text-warning-soft-foreground"
                     >
                         当前仅展示 {source.lines.length} 行摘要，另有{" "}
                         {source.more_count}{" "}

@@ -357,6 +357,15 @@ export function taxAmountToneClass(label: unknown): string {
         : ""
 }
 
+type MoneyValueSize = "inherit" | "section" | "summary" | "hero"
+
+const moneyValueSizeClassNames: Record<MoneyValueSize, string> = {
+    inherit: "",
+    section: "text-2xl font-semibold tracking-tight",
+    summary: "text-value-summary font-semibold tracking-tight",
+    hero: "text-value-hero font-semibold tracking-tight",
+}
+
 interface MoneyValueProps extends Omit<
     React.ComponentProps<"span">,
     "children"
@@ -364,6 +373,8 @@ interface MoneyValueProps extends Omit<
     value?: string | null
     taxBasis?: TaxBasis
     unavailableReason?: React.ReactNode
+    /** 只调整金额数字；税口径徽章与不可用原因保持辅助字号。 */
+    size?: MoneyValueSize
 }
 
 /** 精确展示 CNY 十进制字符串；仅格式化，不执行金额计算。 */
@@ -371,6 +382,7 @@ function MoneyValue({
     value,
     taxBasis,
     unavailableReason,
+    size = "inherit",
     className,
     ...props
 }: MoneyValueProps) {
@@ -381,6 +393,7 @@ function MoneyValue({
             data-slot="money-value"
             data-tax-basis={taxBasis}
             data-unavailable={isUnavailable || undefined}
+            data-size={size}
             className={cn(
                 "inline-flex min-w-0 flex-nowrap items-baseline gap-2 font-medium",
                 className,
@@ -388,7 +401,12 @@ function MoneyValue({
             {...props}
         >
             <span
-                className={cn("num", isUnavailable && "text-muted-foreground")}
+                data-slot="money-value-number"
+                className={cn(
+                    "num",
+                    moneyValueSizeClassNames[size],
+                    isUnavailable && "text-muted-foreground",
+                )}
             >
                 {isUnavailable ? "—" : formatDecimal(value, 2, "cny")}
             </span>
@@ -550,6 +568,7 @@ export {
     type DocumentTotalItem,
     type DocumentTotalsProps,
     type MoneyValueProps,
+    type MoneyValueSize,
     type QuantityValueProps,
     type RateValueProps,
     type StatusTrack,

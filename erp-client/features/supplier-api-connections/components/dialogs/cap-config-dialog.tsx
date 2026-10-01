@@ -6,6 +6,7 @@ import { z } from "zod"
 
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Dialog,
@@ -129,16 +130,24 @@ export function CapConfigDialog({
                                         <span>
                                             {capability.capabilityLabel}
                                         </span>
-                                        <input
+                                        <Checkbox
                                             id={`supplier-api-connections-cap-config-${toAutomationIdSegment(capability.capabilityCode)}`}
-                                            type="checkbox"
+                                            nativeButton
+                                            render={
+                                                <button
+                                                    type="button"
+                                                    aria-label={`${
+                                                        field.state.value
+                                                            ? "停用"
+                                                            : "启用"
+                                                    } ${capability.capabilityLabel}`}
+                                                />
+                                            }
                                             checked={field.state.value}
                                             disabled={pending || isSubmitting}
                                             onBlur={field.handleBlur}
-                                            onChange={(event) =>
-                                                field.handleChange(
-                                                    event.target.checked,
-                                                )
+                                            onCheckedChange={(checked) =>
+                                                field.handleChange(checked)
                                             }
                                             aria-label={`${
                                                 field.state.value

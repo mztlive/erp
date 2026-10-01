@@ -58,8 +58,17 @@ export function PurchaseOrderDetailSidebar({
                 <p className="mt-5 text-sm text-muted-foreground">
                     采购金额（含税）
                 </p>
-                <div className="mt-1 wrap-anywhere text-[44px] leading-tight font-semibold tracking-tight">
-                    {amount(order.currentContent.totals.gross)}
+                <div className="mt-1 wrap-anywhere">
+                    {costMasked ? (
+                        <span className="text-value-hero leading-tight font-semibold tracking-tight">
+                            •••
+                        </span>
+                    ) : (
+                        <MoneyValue
+                            value={order.currentContent.totals.gross}
+                            size="hero"
+                        />
+                    )}
                 </div>
                 <dl className="mt-5 grid grid-cols-3 gap-3">
                     {amounts.map((item) => (

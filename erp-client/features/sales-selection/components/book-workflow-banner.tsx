@@ -191,16 +191,19 @@ export function BookWorkflowBanner({
 
             {/* 阶段引导横幅 */}
             {detail.status === "DRAFT" ? (
-                <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-blue-500/20 bg-blue-50/50 p-4 dark:bg-blue-950/20">
+                <Alert
+                    variant="info"
+                    className="flex flex-wrap items-center justify-between gap-4"
+                >
                     <div className="min-w-0 space-y-0.5">
-                        <div className="flex items-center gap-2 text-sm font-semibold text-blue-950 dark:text-blue-100">
+                        <div className="flex items-center gap-2 text-sm font-semibold">
                             <SparklesIcon
-                                className="size-4 text-blue-600 dark:text-blue-400"
+                                className="size-4"
                                 aria-hidden="true"
                             />
                             <span>选品册已创建，请开始准备陈列</span>
                         </div>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-sm">
                             选品形态：
                             {SELECTION_FORM_LABEL[detail.selection_form]} ·
                             商品来源：{POOL_SOURCE_LABEL[detail.source_kind]}
@@ -218,25 +221,20 @@ export function BookWorkflowBanner({
                             调整来源与档位
                         </Button>
                     ) : null}
-                </div>
+                </Alert>
             ) : null}
 
             {detail.status === "PREPARING" ? (
-                <Alert
-                    variant="info"
-                    className="border-blue-500/20 bg-blue-50/50 dark:bg-blue-950/20"
-                >
+                <Alert variant="info">
                     <LoaderCircleIcon
-                        className="animate-spin text-blue-600"
+                        className="animate-spin"
                         aria-hidden="true"
                     />
-                    <AlertTitle className="text-blue-950 dark:text-blue-100">
-                        正在准备陈列商品
-                    </AlertTitle>
+                    <AlertTitle>正在准备陈列商品</AlertTitle>
                     <AlertDescription className="space-y-2.5">
-                        <p className="text-xs text-muted-foreground">
+                        <p>
                             当前处理环节：
-                            <span className="font-medium text-foreground">
+                            <span className="font-medium">
                                 {STAGE_LABELS[
                                     detail.prepare_stage ?? "QUEUED"
                                 ] ?? "处理商品"}
@@ -260,18 +258,21 @@ export function BookWorkflowBanner({
             ) : null}
 
             {detail.status === "PENDING_PUBLISH" ? (
-                <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-amber-500/30 bg-amber-50/60 p-4 dark:bg-amber-950/20">
+                <Alert
+                    variant="warning"
+                    className="flex flex-wrap items-center justify-between gap-4"
+                >
                     <div className="min-w-0 space-y-0.5">
-                        <div className="flex items-center gap-2 text-sm font-semibold text-amber-950 dark:text-amber-100">
+                        <div className="flex items-center gap-2 text-sm font-semibold">
                             <FileCheck2Icon
-                                className="size-4 text-amber-600 dark:text-amber-400"
+                                className="size-4"
                                 aria-hidden="true"
                             />
                             <span>陈列已就绪，请核对并删减商品</span>
                         </div>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-sm">
                             下方已列出本次所有陈列项（共{" "}
-                            <span className="num font-medium text-foreground">
+                            <span className="num font-medium">
                                 {detail.display_count}
                             </span>{" "}
                             项）。请检查卡片，点击「删除该项」剔除不合适商品；确认无误后点击右上角「发布」。
@@ -288,20 +289,20 @@ export function BookWorkflowBanner({
                             调整来源与档位
                         </Button>
                     ) : null}
-                </div>
+                </Alert>
             ) : null}
 
             {detail.status === "PUBLISHED" ? (
-                <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-emerald-500/20 bg-emerald-50/50 p-4 dark:bg-emerald-950/20">
+                <Alert
+                    variant="success"
+                    className="flex flex-wrap items-center justify-between gap-4"
+                >
                     <div className="min-w-0 space-y-0.5">
-                        <div className="flex items-center gap-2 text-sm font-semibold text-emerald-950 dark:text-emerald-100">
-                            <SendIcon
-                                className="size-4 text-emerald-600 dark:text-emerald-400"
-                                aria-hidden="true"
-                            />
+                        <div className="flex items-center gap-2 text-sm font-semibold">
+                            <SendIcon className="size-4" aria-hidden="true" />
                             <span>选品册已发布，客户专属链接生效中</span>
                         </div>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-sm">
                             专属安全链接已生成（30天有效）。可复制右侧链接发送给客户，客户在手机端打开即可选品。
                         </p>
                     </div>
@@ -323,25 +324,25 @@ export function BookWorkflowBanner({
                             复制对客选品链接
                         </LoadingButton>
                     ) : null}
-                </div>
+                </Alert>
             ) : null}
 
             {detail.status === "SUBMITTED" ? (
-                <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-emerald-500/30 bg-emerald-50/70 p-4 dark:bg-emerald-950/20">
+                <Alert
+                    variant="success"
+                    className="flex flex-wrap items-center justify-between gap-4"
+                >
                     <div className="min-w-0 space-y-0.5">
-                        <div className="flex items-center gap-2 text-sm font-semibold text-emerald-950 dark:text-emerald-100">
-                            <CheckIcon
-                                className="size-4 text-emerald-600 dark:text-emerald-400"
-                                aria-hidden="true"
-                            />
+                        <div className="flex items-center gap-2 text-sm font-semibold">
+                            <CheckIcon className="size-4" aria-hidden="true" />
                             <span>客户已完成选品并提交方案</span>
                         </div>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-sm">
                             选品册陈列已冻结。
                             {detail.proposal_no ? (
                                 <>
                                     销售方案编号：
-                                    <span className="font-semibold text-foreground">
+                                    <span className="font-semibold">
                                         {detail.proposal_no}
                                     </span>
                                     ，
@@ -364,7 +365,7 @@ export function BookWorkflowBanner({
                             查看销售方案
                         </Button>
                     ) : null}
-                </div>
+                </Alert>
             ) : null}
 
             {isTerminal ? (

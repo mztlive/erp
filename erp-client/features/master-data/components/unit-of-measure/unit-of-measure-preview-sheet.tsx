@@ -113,7 +113,7 @@ export function UnitOfMeasurePreviewSheet({
                                 <dt className="shrink-0 text-xs text-muted-foreground">
                                     {label}
                                 </dt>
-                                <dd className="num min-w-0 break-all text-right text-[13px]">
+                                <dd className="num min-w-0 break-all text-right text-body-compact">
                                     {row.keyFacts.find(
                                         (fact) => fact.label === label,
                                     )?.value || "—"}

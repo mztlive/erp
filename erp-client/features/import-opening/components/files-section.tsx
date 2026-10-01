@@ -126,9 +126,9 @@ export function FilesSection({ batch }: { batch: ImportBatchView }) {
                                 <Button
                                     id={`operations-import-batch-detail-files-asset-${toAutomationIdSegment(a.assetId)}-preview`}
                                     type="button"
-                                    size="sm"
+                                    size="xs"
                                     variant="outline"
-                                    className="mt-2 h-7 text-xs"
+                                    className="mt-2"
                                     onClick={() => setPreviewAsset(a.fileName)}
                                 >
                                     查看（示例）

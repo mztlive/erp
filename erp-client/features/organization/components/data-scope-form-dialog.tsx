@@ -4,6 +4,7 @@ import * as React from "react"
 import { z } from "zod"
 import { useAppForm, toFieldErrors } from "@/components/form"
 import { Button } from "@/components/ui/button"
+import { NativeCheckbox } from "@/components/ui/checkbox"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
     Dialog,
@@ -13,6 +14,7 @@ import {
     DialogDescription,
 } from "@/components/ui/dialog"
 import { MultiOptionCombobox } from "@/components/business/multi-option-combobox"
+import { OptionCombobox } from "@/components/business/option-combobox"
 import { Field, FieldLabel, FieldError } from "@/components/ui/field"
 import { actionLabel, resourceLabel } from "@/lib/permission-catalog"
 import { hasPermission } from "@/lib/permissions"
@@ -228,12 +230,13 @@ export function DataScopeFormDialog({
                             <FieldLabel htmlFor="organization-scope-resource">
                                 业务
                             </FieldLabel>
-                            <select
+                            <OptionCombobox
                                 id="organization-scope-resource"
-                                className="h-10 w-full rounded-md border bg-background px-3"
+                                aria-label="业务"
                                 value={field.state.value}
-                                onChange={(event) => {
-                                    const resource = event.target.value
+                                placeholder="请选择业务"
+                                onValueChange={(value) => {
+                                    const resource = value ?? ""
                                     field.handleChange(resource)
                                     form.setFieldValue("actions", [])
                                     const dimension =
@@ -250,9 +253,7 @@ export function DataScopeFormDialog({
                                     )
                                     form.setFieldValue("targets", [])
                                 }}
-                            >
-                                <option value="">请选择业务</option>
-                                {resources
+                                options={resources
                                     .filter(
                                         (item) =>
                                             !permissions ||
@@ -263,15 +264,11 @@ export function DataScopeFormDialog({
                                                 ),
                                             ),
                                     )
-                                    .map((item) => (
-                                        <option
-                                            key={item.resource}
-                                            value={item.resource}
-                                        >
-                                            {resourceLabel(item.resource)}
-                                        </option>
-                                    ))}
-                            </select>
+                                    .map((item) => ({
+                                        value: item.resource,
+                                        label: resourceLabel(item.resource),
+                                    }))}
+                            />
                             <FieldError
                                 errors={toFieldErrors(field.state.meta.errors)}
                             />
@@ -333,19 +330,19 @@ export function DataScopeFormDialog({
                                         <FieldLabel htmlFor="organization-scope-dimension">
                                             本条规则限制什么
                                         </FieldLabel>
-                                        <select
+                                        <OptionCombobox
                                             id="organization-scope-dimension"
-                                            className="h-10 w-full rounded-md border bg-background px-3"
+                                            aria-label="本条规则限制什么"
                                             value={field.state.value}
-                                            onChange={(event) => {
+                                            allowClear={false}
+                                            onValueChange={(value) => {
+                                                if (!value) return
                                                 field.handleChange(
-                                                    event.target
-                                                        .value as ScopeDimension,
+                                                    value as ScopeDimension,
                                                 )
                                                 form.setFieldValue(
                                                     "range",
-                                                    event.target.value ===
-                                                        "internal_org"
+                                                    value === "internal_org"
                                                         ? "self_owned"
                                                         : "explicit",
                                                 )
@@ -354,22 +351,20 @@ export function DataScopeFormDialog({
                                                     [],
                                                 )
                                             }}
-                                        >
-                                            {dimensions.map((dimension) => (
-                                                <option
-                                                    key={dimension}
-                                                    value={dimension}
-                                                >
-                                                    {dimension ===
-                                                    "internal_org"
-                                                        ? "负责人及部门"
-                                                        : dimension ===
-                                                            "warehouse"
-                                                          ? "允许的仓库"
-                                                          : "允许的结算主体"}
-                                                </option>
-                                            ))}
-                                        </select>
+                                            options={dimensions.map(
+                                                (dimension) => ({
+                                                    value: dimension,
+                                                    label:
+                                                        dimension ===
+                                                        "internal_org"
+                                                            ? "负责人及部门"
+                                                            : dimension ===
+                                                                "warehouse"
+                                                              ? "允许的仓库"
+                                                              : "允许的结算主体",
+                                                }),
+                                            )}
+                                        />
                                         <p className="text-xs text-muted-foreground">
                                             本业务需要同时满足各项范围；可以分条配置，公司范围覆盖适用维度。
                                         </p>
@@ -471,14 +466,15 @@ export function DataScopeFormDialog({
                                                 className="flex items-center gap-2 text-sm"
                                                 htmlFor="organization-scope-descendants"
                                             >
-                                                <input
+                                                <NativeCheckbox
                                                     id="organization-scope-descendants"
-                                                    type="checkbox"
+                                                    aria-label="包含下级部门"
                                                     checked={field.state.value}
-                                                    onChange={(event) =>
+                                                    onCheckedChange={(
+                                                        checked,
+                                                    ) =>
                                                         field.handleChange(
-                                                            event.target
-                                                                .checked,
+                                                            checked === true,
                                                         )
                                                     }
                                                 />
@@ -493,7 +489,7 @@ export function DataScopeFormDialog({
                                 </p>
                             )}
                             {value.range === "company" && (
-                                <p className="text-sm text-amber-700">
+                                <p className="text-sm text-warning">
                                     公司范围会扩大所选操作的适用数据。新增较窄规则不会覆盖已有的公司范围。
                                 </p>
                             )}

@@ -67,15 +67,14 @@ export function SupplierTaxRatesField({
                         <Badge
                             key={rate}
                             variant="secondary"
-                            className="h-8 gap-1 pl-3 pr-1 text-sm"
+                            className="h-control-sm gap-1 pl-3 pr-1 text-sm"
                         >
                             <span className="num">{percent}%</span>
                             <Button
                                 id={`${id}-${toAutomationIdSegment(rate)}-remove`}
                                 type="button"
                                 variant="ghost"
-                                size="icon-sm"
-                                className="size-6"
+                                size="icon-xs"
                                 aria-label={`删除税率 ${percent}%`}
                                 disabled={disabled}
                                 onClick={() => {

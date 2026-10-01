@@ -43,9 +43,7 @@ export function LoginForm() {
         <Card className="w-full max-w-md border-0 bg-transparent shadow-none">
             <CardHeader className="gap-4">
                 <div className="flex flex-col gap-1.5">
-                    <CardTitle className="text-[28px] leading-10">
-                        登录
-                    </CardTitle>
+                    <CardTitle className="text-login-title">登录</CardTitle>
                     <CardDescription>使用后台账号进入工作台</CardDescription>
                 </div>
             </CardHeader>

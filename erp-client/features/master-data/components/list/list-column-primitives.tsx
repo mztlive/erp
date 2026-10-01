@@ -34,7 +34,7 @@ export function nameColumn({
         id: "name",
         accessorKey: "name",
         header: masterDataCopy.colName,
-        meta: { label: masterDataCopy.colName },
+        meta: { label: masterDataCopy.colName, width: "flex" },
         cell: ({ row }) => (
             <div className="min-w-0">
                 <div className="truncate text-sm font-medium">
@@ -64,7 +64,7 @@ export function revisionNoColumn(): ColumnDef<MasterDataListItem> {
         header: masterDataCopy.colVersion,
         meta: {
             label: masterDataCopy.colVersion,
-            width: "amount",
+            width: "quantity",
         },
         cell: ({ row }) => (
             <span className="num text-sm">v{row.original.revisionNo}</span>
@@ -76,7 +76,7 @@ export function lifecycleColumn(): ColumnDef<MasterDataListItem> {
     return {
         id: "lifecycle",
         header: masterDataCopy.colLifecycle,
-        meta: { label: masterDataCopy.colLifecycle },
+        meta: { label: masterDataCopy.colLifecycle, width: "status" },
         cell: ({ row }) => (
             <div className="flex flex-col gap-1">
                 <BusinessStatusBadge
@@ -103,7 +103,7 @@ export function revisionTimingColumn(): ColumnDef<MasterDataListItem> {
     return {
         id: "revisionTiming",
         header: masterDataCopy.colVersionState,
-        meta: { label: masterDataCopy.colVersionState },
+        meta: { label: masterDataCopy.colVersionState, width: "status" },
         cell: ({ row }) => (
             <Badge
                 variant={
@@ -124,7 +124,7 @@ export function effectivePeriodColumn(): ColumnDef<MasterDataListItem> {
         header: masterDataCopy.colEffective,
         meta: { label: masterDataCopy.colEffective },
         cell: ({ row }) => (
-            <span className="num text-[13px]">
+            <span className="num text-body-compact">
                 {formatEffectiveRange(
                     row.original.effectiveFrom,
                     row.original.effectiveTo,

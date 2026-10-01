@@ -365,10 +365,7 @@ export function PersonalGrantForm({
                         className="min-h-0 space-y-5 overflow-y-auto px-6 pb-5"
                     >
                         {stale && (
-                            <div
-                                role="status"
-                                className="text-xs text-amber-700"
-                            >
+                            <div role="status" className="text-xs text-warning">
                                 配置已变化，当前草稿不能直接保存。
                                 <Button
                                     id="person-scope-reload"
@@ -414,7 +411,7 @@ export function PersonalGrantForm({
                                     </p>
                                 </div>
                                 {legacy.length > 0 && (
-                                    <section className="space-y-3 rounded-md border border-amber-400/50 bg-amber-50/30 p-3">
+                                    <section className="space-y-3 rounded-md border border-warning-border bg-warning-soft p-3">
                                         <h3 className="font-medium">
                                             原授权仍按原条件生效
                                         </h3>
@@ -437,7 +434,7 @@ export function PersonalGrantForm({
                                             保存将把以上操作统一转换为新方式。
                                         </p>
                                         {complexLegacy.length > 0 && (
-                                            <p className="text-xs text-amber-800">
+                                            <p className="text-xs text-warning-soft-foreground">
                                                 {complexLegacy
                                                     .map((scope) =>
                                                         actionLabel(

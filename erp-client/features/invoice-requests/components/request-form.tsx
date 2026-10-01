@@ -158,31 +158,18 @@ export function InvoiceRequestForm({
             (accounts.data?.items.length ?? 0) > 1 ? (
                 <form.AppField name="receivableAccountId">
                     {(field) => (
-                        <div className="space-y-2 text-sm">
-                            <label htmlFor="invoice-request-account">
-                                开票结算主体
-                            </label>
-                            <select
-                                id="invoice-request-account"
-                                className="h-9 w-full rounded-md border bg-background px-3"
-                                value={field.state.value}
-                                disabled={locked}
-                                onChange={(event) =>
-                                    field.handleChange(event.target.value)
-                                }
-                            >
-                                <option value="">选择本次开票的应收</option>
-                                {accounts.data?.items.map((account) => (
-                                    <option key={account.id} value={account.id}>
-                                        第 {account.account_seq} 笔 ·{" "}
-                                        {account.counterparty_party_name ??
-                                            account.customer_name}{" "}
-                                        · 未开票{" "}
-                                        {account.open_invoiceable_total} 元
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
+                        <field.SelectField
+                            id="invoice-request-account"
+                            label="开票结算主体"
+                            placeholder="选择本次开票的应收"
+                            disabled={locked}
+                            options={(accounts.data?.items ?? []).map(
+                                (account) => ({
+                                    value: account.id,
+                                    label: `第 ${account.account_seq} 笔 · ${account.counterparty_party_name ?? account.customer_name} · 未开票 ${account.open_invoiceable_total} 元`,
+                                }),
+                            )}
+                        />
                     )}
                 </form.AppField>
             ) : null}

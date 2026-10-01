@@ -39,7 +39,7 @@ export function SupplierOrderPreviewPanel({ order }: Props) {
                         <AlertTitle className="text-sm">
                             客户款项已收
                         </AlertTitle>
-                        <AlertDescription className="text-xs leading-relaxed">
+                        <AlertDescription>
                             {o.paymentOccurredNotice}
                         </AlertDescription>
                     </Alert>
@@ -129,7 +129,7 @@ export function SupplierOrderPreviewPanel({ order }: Props) {
                             <Separator />
                             <Alert variant="warning">
                                 <AlertTitle>结果未知</AlertTitle>
-                                <AlertDescription className="text-xs leading-relaxed">
+                                <AlertDescription>
                                     请先「查询原结果」；确认无结果且系统允许重试前，不要再次下单。
                                     {order.lastInvestigation ? (
                                         <span className="mt-1 block">

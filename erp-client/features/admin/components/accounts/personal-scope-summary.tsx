@@ -92,7 +92,7 @@ export function ProposedScopeSummary({
                 </p>
             ))}
             {incompleteKeys.size > 0 && (
-                <p className="text-xs text-amber-700">
+                <p className="text-xs text-warning">
                     还有 {incompleteKeys.size}{" "}
                     条范围未完善，暂不计入预览，填写完整后才能保存。
                 </p>

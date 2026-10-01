@@ -469,7 +469,6 @@ export function SupplierScopePage() {
                     if (!nextOpen) setPreview(null)
                 }}
                 size="preview"
-                contentClassName="data-[side=right]:sm:w-[460px] data-[side=right]:sm:max-w-[460px]"
                 title={
                     detail?.kind === "payable"
                         ? `应付子账 ${detail.payable.id}`
@@ -489,11 +488,11 @@ export function SupplierScopePage() {
                 }
             >
                 {detailQuery.isPending ? (
-                    <div className="space-y-3 px-7 py-6">
+                    <div className="space-y-3">
                         <div className="h-24 animate-pulse rounded-xl bg-muted" />
                     </div>
                 ) : detailQuery.isError ? (
-                    <div className="space-y-3 px-7 py-6">
+                    <div className="space-y-3">
                         <p className="text-sm text-muted-foreground">
                             {getErrorMessage(
                                 detailQuery.error,
@@ -511,7 +510,7 @@ export function SupplierScopePage() {
                         </Button>
                     </div>
                 ) : detail?.kind === "payable" ? (
-                    <div className="min-h-0 flex-1 space-y-6 overflow-auto px-7 py-6 text-sm">
+                    <div className="space-y-6 text-sm">
                         <PreviewAmount
                             label="获授权已核销"
                             value={detail.payable.visible_settled_share}
@@ -555,7 +554,7 @@ export function SupplierScopePage() {
                         ) : null}
                     </div>
                 ) : detail?.kind === "payment" ? (
-                    <div className="min-h-0 flex-1 space-y-6 overflow-auto px-7 py-6 text-sm">
+                    <div className="space-y-6 text-sm">
                         <PreviewAmount
                             label="获授权已分配"
                             value={detail.payment.visible_allocated_share}
@@ -590,7 +589,7 @@ export function SupplierScopePage() {
                         ) : null}
                     </div>
                 ) : (
-                    <div className="px-7 py-6 text-sm text-muted-foreground">
+                    <div className="text-sm text-muted-foreground">
                         未找到该笔记录，可能已超出当前数据范围。
                     </div>
                 )}

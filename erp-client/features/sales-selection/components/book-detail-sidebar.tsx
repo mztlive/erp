@@ -173,7 +173,7 @@ export function BookDetailSidebar({
                                 缺少图片
                             </div>
                             <div
-                                className={`num mt-1 text-lg font-bold ${detail.missing_image_count > 0 ? "text-amber-600 dark:text-amber-400" : "text-foreground"}`}
+                                className={`num mt-1 text-lg font-bold ${detail.missing_image_count > 0 ? "text-warning-soft-foreground" : "text-foreground"}`}
                             >
                                 {detail.missing_image_count}
                             </div>
@@ -308,14 +308,14 @@ export function BookDetailSidebar({
                                             {report?.stop_label ? (
                                                 <Badge
                                                     variant="outline"
-                                                    className="h-4 px-1 text-3xs"
+                                                    className="h-4 px-1 text-2xs"
                                                 >
                                                     {report.stop_label}
                                                 </Badge>
                                             ) : null}
                                         </div>
                                         {report && report.image_failures > 0 ? (
-                                            <p className="mt-0.5 text-3xs text-amber-600 dark:text-amber-400">
+                                            <p className="mt-0.5 text-2xs text-warning-soft-foreground">
                                                 图片失败 {report.image_failures}{" "}
                                                 项
                                             </p>
@@ -334,7 +334,7 @@ export function BookDetailSidebar({
                                                 size="xs"
                                                 variant="ghost"
                                                 disabled={pending}
-                                                className="mt-1.5 h-6 text-2xs text-primary hover:bg-primary/10"
+                                                className="mt-1.5"
                                                 onClick={() =>
                                                     operations.regenerate.mutate(
                                                         {

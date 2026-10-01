@@ -32,7 +32,7 @@ function SkuBulkPriceBar({
                 </Label>
                 <Input
                     id="master-data-product-sku-bulk-sale-price"
-                    className="h-8 bg-background"
+                    className="h-control-sm bg-background"
                     value={batchSalePrice}
                     disabled={!canRevise}
                     onChange={(event) => setBatchSalePrice(event.target.value)}
@@ -48,7 +48,7 @@ function SkuBulkPriceBar({
                 </Label>
                 <Input
                     id="master-data-product-sku-bulk-market-price"
-                    className="h-8 bg-background"
+                    className="h-control-sm bg-background"
                     value={batchMarketPrice}
                     disabled={!canRevise}
                     onChange={(event) =>

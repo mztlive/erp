@@ -125,7 +125,7 @@ export function StatusAlertsPanel({
 
             <Alert variant="info">
                 <AlertTitle>客户款项已收</AlertTitle>
-                <AlertDescription className="text-xs leading-relaxed">
+                <AlertDescription>
                     {order.paymentOccurredNotice} 支付凭证{" "}
                     <span className="num">{order.paymentFactKey}</span> ·
                     支付时间{" "}
@@ -143,7 +143,7 @@ export function StatusAlertsPanel({
                 <Alert variant="warning" aria-live="polite">
                     <TriangleAlertIcon />
                     <AlertTitle>结果未知 — 请先查询原结果</AlertTitle>
-                    <AlertDescription className="text-xs leading-relaxed">
+                    <AlertDescription>
                         不得把结果未知直接改成成功，也不得在未查询前直接再次下单。
                         {lastInvestigation ? (
                             <span className="mt-1 block">
@@ -171,7 +171,7 @@ export function StatusAlertsPanel({
             order.refundStatus === "PARTIAL" ? (
                 <Alert variant="info">
                     <AlertTitle>已完成 + 部分退款</AlertTitle>
-                    <AlertDescription className="text-xs">
+                    <AlertDescription>
                         履约与退款状态独立记录，互不覆盖
                     </AlertDescription>
                 </Alert>
@@ -190,10 +190,10 @@ export function WorkItemCard({
     return (
         <Card size="sm" className={surfacePanelClassName}>
             <CardHeader className="rounded-t-lg border-b border-grid pb-2">
-                <CardTitle className="text-sm">
+                <CardTitle>
                     {WORK_ITEM_TYPE_LABEL[workItem.workItemType]}
                 </CardTitle>
-                <CardDescription className="text-xs">
+                <CardDescription>
                     关联订单 {orderNo}
                     {workItem.ownerUser
                         ? ` · 当前处理人 ${workItem.ownerUser.displayName}`

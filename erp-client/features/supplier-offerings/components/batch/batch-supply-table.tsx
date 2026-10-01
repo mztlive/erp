@@ -2,6 +2,16 @@
 import * as React from "react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
+import { OptionCombobox } from "@/components/business/option-combobox"
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { BatchEditor } from "../../hooks/use-batch-supply-editor"
 import {
@@ -13,6 +23,10 @@ import {
     type TextFieldKey,
 } from "../../lib/batch-supply"
 import { AVAILABILITY_STATUS_LABELS } from "../../types"
+
+const availabilityOptions = Object.entries(AVAILABILITY_STATUS_LABELS).map(
+    ([value, label]) => ({ value, label }),
+)
 
 export function BatchSupplyTable({
     editor,
@@ -77,21 +91,28 @@ export function BatchSupplyTable({
         )
     }
     return (
-        <div className="overflow-x-auto rounded-lg border">
-            <table
+        <div className="overflow-hidden rounded-lg border">
+            <Table
+                data-density="comfortable"
                 className={
                     editor.mode === "availability"
-                        ? "w-full min-w-[620px] text-sm"
-                        : "w-full min-w-[1080px] text-sm"
+                        ? "min-w-[620px]"
+                        : "min-w-[1080px]"
                 }
             >
-                <thead className="bg-muted/40">
-                    <tr>
-                        <th className="w-10 p-3">
-                            <input
+                <TableHeader>
+                    <TableRow>
+                        <TableHead className="w-10">
+                            <Checkbox
                                 id="batch-supply-select-all"
-                                type="checkbox"
                                 aria-label="勾选全部未完成行"
+                                nativeButton
+                                render={
+                                    <button
+                                        type="button"
+                                        aria-label="勾选全部未完成行"
+                                    />
+                                }
                                 disabled={editor.busy}
                                 checked={
                                     rows.some(
@@ -103,7 +124,7 @@ export function BatchSupplyTable({
                                             row.status === "SUCCEEDED",
                                     )
                                 }
-                                onChange={(event) =>
+                                onCheckedChange={(checked) =>
                                     editor.form.setFieldValue(
                                         "rows",
                                         rows.map((row) =>
@@ -111,55 +132,57 @@ export function BatchSupplyTable({
                                                 ? row
                                                 : {
                                                       ...row,
-                                                      selected:
-                                                          event.target.checked,
+                                                      selected: checked,
                                                   },
                                         ),
                                     )
                                 }
                             />
-                        </th>
-                        <th className="min-w-44 p-3 text-left">
+                        </TableHead>
+                        <TableHead className="min-w-44">
                             公司商品 / SKU
-                        </th>
+                        </TableHead>
                         {fields.map((field) => (
-                            <th
-                                key={field.key}
-                                className="min-w-28 p-2 text-left text-xs"
-                            >
+                            <TableHead key={field.key} className="min-w-28">
                                 {field.label}
-                            </th>
+                            </TableHead>
                         ))}
-                        <th className="min-w-32 p-2 text-left">可供状态</th>
-                        <th className="min-w-32 p-2 text-left">处理结果</th>
-                    </tr>
-                </thead>
-                <tbody>
+                        <TableHead className="min-w-32">可供状态</TableHead>
+                        <TableHead className="min-w-32">处理结果</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
                     {rows.map((row) => {
                         const id = `batch-supply-${toAutomationIdSegment(row.rowId)}`
                         const locked = lockedRow(row) || editor.busy
                         return (
                             <React.Fragment key={row.rowId}>
-                                <tr className="border-t align-top">
-                                    <td className="p-3">
-                                        <input
+                                <TableRow>
+                                    <TableCell className="align-top">
+                                        <Checkbox
                                             id={`${id}-selected`}
-                                            type="checkbox"
                                             aria-label={`勾选 ${row.skuCode}`}
+                                            nativeButton
+                                            render={
+                                                <button
+                                                    type="button"
+                                                    aria-label={`勾选 ${row.skuCode}`}
+                                                />
+                                            }
                                             disabled={
                                                 editor.busy ||
                                                 row.status === "SUCCEEDED"
                                             }
                                             checked={row.selected}
-                                            onChange={(event) =>
+                                            onCheckedChange={(checked) =>
                                                 editor.selectRow(
                                                     row.rowId,
-                                                    event.target.checked,
+                                                    checked,
                                                 )
                                             }
                                         />
-                                    </td>
-                                    <td className="p-3">
+                                    </TableCell>
+                                    <TableCell className="align-top">
                                         <p className="font-medium">
                                             {row.skuName}
                                         </p>
@@ -171,55 +194,52 @@ export function BatchSupplyTable({
                                                 订货码：{row.supplierSkuCode}
                                             </p>
                                         )}
-                                    </td>
+                                    </TableCell>
                                     {fields.map((field) => (
-                                        <td key={field.key} className="p-2">
+                                        <TableCell
+                                            key={field.key}
+                                            className="align-top"
+                                        >
                                             {input(
                                                 row,
                                                 field.key,
                                                 field.label,
                                                 true,
                                             )}
-                                        </td>
+                                        </TableCell>
                                     ))}
-                                    <td className="p-2">
+                                    <TableCell className="align-top">
                                         {editor.mode === "revise" ? (
                                             <span className="text-muted-foreground">
                                                 保持现状
                                             </span>
                                         ) : (
-                                            <select
+                                            <OptionCombobox
                                                 id={`${id}-availability`}
                                                 aria-label={`${row.skuCode} 可供状态`}
                                                 disabled={locked}
-                                                className="h-9 w-full rounded-md border bg-background px-2"
+                                                allowClear={false}
+                                                options={availabilityOptions}
                                                 value={row.availabilityStatus}
-                                                onChange={(event) =>
-                                                    editor.editRow(row.rowId, {
-                                                        availabilityStatus:
-                                                            event.target
-                                                                .value as BatchRow["availabilityStatus"],
-                                                    })
-                                                }
-                                            >
-                                                {Object.entries(
-                                                    AVAILABILITY_STATUS_LABELS,
-                                                ).map(([key, label]) => (
-                                                    <option
-                                                        key={key}
-                                                        value={key}
-                                                    >
-                                                        {label}
-                                                    </option>
-                                                ))}
-                                            </select>
+                                                onValueChange={(value) => {
+                                                    if (value) {
+                                                        editor.editRow(
+                                                            row.rowId,
+                                                            {
+                                                                availabilityStatus:
+                                                                    value as BatchRow["availabilityStatus"],
+                                                            },
+                                                        )
+                                                    }
+                                                }}
+                                            />
                                         )}
-                                    </td>
-                                    <td className="p-2">
+                                    </TableCell>
+                                    <TableCell className="align-top">
                                         <span
                                             className={
                                                 row.status === "SUCCEEDED"
-                                                    ? "text-emerald-700"
+                                                    ? "text-success-soft-foreground"
                                                     : row.message
                                                       ? "text-destructive"
                                                       : "text-muted-foreground"
@@ -248,13 +268,13 @@ export function BatchSupplyTable({
                                                     移除
                                                 </Button>
                                             )}
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td aria-label="行补充信息" />
-                                    <td
+                                    </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                    <TableCell aria-label="行补充信息" />
+                                    <TableCell
                                         colSpan={fields.length + 3}
-                                        className="px-3 pb-3"
+                                        className="whitespace-normal"
                                     >
                                         {row.message && (
                                             <p
@@ -270,21 +290,29 @@ export function BatchSupplyTable({
                                                 htmlFor={`${id}-unknown`}
                                                 className="flex items-center gap-2 text-xs text-muted-foreground"
                                             >
-                                                <input
+                                                <Checkbox
                                                     id={`${id}-unknown`}
-                                                    type="checkbox"
+                                                    aria-label="数量未提供；0 表示明确为零"
+                                                    nativeButton
+                                                    render={
+                                                        <button
+                                                            type="button"
+                                                            aria-label="数量未提供；0 表示明确为零"
+                                                        />
+                                                    }
                                                     disabled={locked}
                                                     checked={
                                                         row.quantityMode ===
                                                         "unknown"
                                                     }
-                                                    onChange={(event) =>
+                                                    onCheckedChange={(
+                                                        checked,
+                                                    ) =>
                                                         editor.editRow(
                                                             row.rowId,
                                                             {
                                                                 quantityMode:
-                                                                    event.target
-                                                                        .checked
+                                                                    checked
                                                                         ? "unknown"
                                                                         : "provided",
                                                                 availableQuantity:
@@ -350,25 +378,30 @@ export function BatchSupplyTable({
                                                         htmlFor={`${id}-same-price`}
                                                         className="flex items-center gap-2 text-xs"
                                                     >
-                                                        <input
+                                                        <Checkbox
                                                             id={`${id}-same-price`}
-                                                            type="checkbox"
+                                                            aria-label="两种价格相同"
+                                                            nativeButton
+                                                            render={
+                                                                <button
+                                                                    type="button"
+                                                                    aria-label="两种价格相同"
+                                                                />
+                                                            }
                                                             disabled={locked}
                                                             checked={
                                                                 row.samePrice
                                                             }
-                                                            onChange={(event) =>
+                                                            onCheckedChange={(
+                                                                checked,
+                                                            ) =>
                                                                 editor.editRow(
                                                                     row.rowId,
                                                                     {
                                                                         samePrice:
-                                                                            event
-                                                                                .target
-                                                                                .checked,
+                                                                            checked,
                                                                         bulkPrice:
-                                                                            event
-                                                                                .target
-                                                                                .checked
+                                                                            checked
                                                                                 ? row.dropshipPrice
                                                                                 : row.bulkPrice,
                                                                     },
@@ -380,13 +413,13 @@ export function BatchSupplyTable({
                                                 </div>
                                             </details>
                                         )}
-                                    </td>
-                                </tr>
+                                    </TableCell>
+                                </TableRow>
                             </React.Fragment>
                         )
                     })}
-                </tbody>
-            </table>
+                </TableBody>
+            </Table>
             {!rows.length && (
                 <div className="p-10 text-center text-muted-foreground">
                     先添加公司 SKU，或导入供给配置文件。每批最多 100 行。

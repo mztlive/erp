@@ -54,7 +54,7 @@ export function AccountOperationPermissions({
                         placeholder="搜索业务、操作或来源角色"
                         value={search}
                         onChange={(event) => setSearch(event.target.value)}
-                        className="h-8 w-full sm:w-64"
+                        className="h-control-sm w-full sm:w-64"
                     />
                 )}
             </div>
@@ -74,10 +74,7 @@ export function AccountOperationPermissions({
             ) : (
                 <>
                     {preview.missingRoleCount > 0 && (
-                        <p
-                            role="status"
-                            className="text-amber-700 dark:text-amber-400"
-                        >
+                        <p role="status" className="text-warning">
                             有 {preview.missingRoleCount}{" "}
                             个角色信息未返回，以下仅展示已读取的权限，请联系管理员核对。
                         </p>

@@ -10,7 +10,6 @@ import {
     PageHeader,
     PageScaffold,
 } from "@/components/business"
-import { listWorkspaceStyles } from "@/components/business/list-workspace"
 import { toFieldErrors, useAppForm } from "@/components/form"
 import { getErrorMessage } from "@/lib/api/errors"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -91,10 +90,7 @@ export function RoleFormPage({
 
     if (rolesQuery.isPending) {
         return (
-            <PageScaffold
-                density="compact"
-                className={listWorkspaceStyles.page}
-            >
+            <PageScaffold density="compact">
                 <div className="h-10 w-56 animate-pulse rounded-lg bg-muted" />
                 <div className="h-16 animate-pulse rounded-lg bg-muted" />
                 <div className="h-96 animate-pulse rounded-lg bg-muted" />
@@ -104,10 +100,7 @@ export function RoleFormPage({
 
     if (rolesQuery.isError) {
         return (
-            <PageScaffold
-                density="compact"
-                className={listWorkspaceStyles.page}
-            >
+            <PageScaffold density="compact">
                 <PageHeader title={isEdit ? "编辑角色" : "新建角色"} />
                 <BusinessFailureState
                     error={rolesQuery.error}
@@ -130,10 +123,7 @@ export function RoleFormPage({
 
     if (isEdit && !role) {
         return (
-            <PageScaffold
-                density="compact"
-                className={listWorkspaceStyles.page}
-            >
+            <PageScaffold density="compact">
                 <PageHeader title="编辑角色" />
                 <BusinessFailureState
                     kind="system"
@@ -264,10 +254,7 @@ function RoleForm({
     }
 
     return (
-        <PageScaffold
-            density="compact"
-            className="min-h-0 gap-0 px-4 py-4 md:h-full md:px-6 md:py-5"
-        >
+        <PageScaffold density="compact" className="min-h-0 gap-0 md:h-full">
             <form
                 className="flex min-h-0 flex-1 flex-col"
                 onSubmit={(event) => {
@@ -275,81 +262,92 @@ function RoleForm({
                     void form.handleSubmit()
                 }}
             >
-                <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 pb-4">
-                    <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
-                        <SidebarTrigger
-                            id="role-workbench-navigation"
-                            className="md:hidden"
-                            aria-label="打开导航"
-                        />
-                        <Button
-                            id="governance-admin-role-form-back"
-                            type="button"
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label={
-                                returnTo ? "返回人员资料" : "返回角色列表"
-                            }
-                            disabled={pending}
-                            onClick={leave}
-                        >
-                            <ArrowLeftIcon className="size-4" />
-                        </Button>
-                        <form.Subscribe selector={(state) => state.values.name}>
-                            {(name) => (
-                                <h1 className="text-xl font-semibold tracking-tight">
-                                    {role ? name || "未命名角色" : "新建角色"}
-                                </h1>
-                            )}
-                        </form.Subscribe>
-                        {role && (
+                <PageHeader
+                    className="pb-4"
+                    leading={
+                        <>
+                            <SidebarTrigger
+                                id="role-workbench-navigation"
+                                className="md:hidden"
+                                aria-label="打开导航"
+                            />
                             <Button
-                                id="governance-admin-role-form-rename"
+                                id="governance-admin-role-form-back"
                                 type="button"
                                 variant="ghost"
-                                size="sm"
+                                size="icon-sm"
+                                aria-label={
+                                    returnTo ? "返回人员资料" : "返回角色列表"
+                                }
                                 disabled={pending}
-                                aria-expanded={editingName}
-                                onClick={() => setEditingName(true)}
+                                onClick={leave}
                             >
-                                <PencilIcon
-                                    className="size-3.5"
-                                    aria-hidden="true"
-                                />
-                                修改名称
+                                <ArrowLeftIcon className="size-4" />
                             </Button>
-                        )}
-                        <span className="text-xs text-muted-foreground">
-                            {role
-                                ? `角色权限${boundAccounts === null ? "" : ` · ${boundAccounts} 个关联账号`}`
-                                : "设置名称与操作权限"}
-                        </span>
-                    </div>
-                    <form.Subscribe
-                        selector={(state) => state.values.permissions}
-                    >
-                        {(permissions) => (
-                            <CopyRolePermissions
-                                roles={otherRoles}
-                                disabled={hasWildcard || pending}
-                                currentCount={permissions.length}
-                                onCopy={(codes) => {
-                                    form.setFieldValue("permissions", [
-                                        ...form.state.values.permissions.filter(
-                                            (code) =>
-                                                !PERMISSION_BY_CODE.has(code),
-                                        ),
-                                        ...codes,
-                                    ])
-                                    void form.validateField(
-                                        "permissions",
-                                        "change",
-                                    )
-                                }}
-                            />
-                        )}
-                    </form.Subscribe>
-                </header>
+                        </>
+                    }
+                    title={
+                        <form.Subscribe selector={(state) => state.values.name}>
+                            {(name) =>
+                                role ? name || "未命名角色" : "新建角色"
+                            }
+                        </form.Subscribe>
+                    }
+                    metadata={
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                            {role && (
+                                <Button
+                                    id="governance-admin-role-form-rename"
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    disabled={pending}
+                                    aria-expanded={editingName}
+                                    onClick={() => setEditingName(true)}
+                                >
+                                    <PencilIcon
+                                        className="size-3.5"
+                                        aria-hidden="true"
+                                    />
+                                    修改名称
+                                </Button>
+                            )}
+                            <span className="text-xs text-muted-foreground">
+                                {role
+                                    ? `角色权限${boundAccounts === null ? "" : ` · ${boundAccounts} 个关联账号`}`
+                                    : "设置名称与操作权限"}
+                            </span>
+                        </div>
+                    }
+                    actions={
+                        <form.Subscribe
+                            selector={(state) => state.values.permissions}
+                        >
+                            {(permissions) => (
+                                <CopyRolePermissions
+                                    roles={otherRoles}
+                                    disabled={hasWildcard || pending}
+                                    currentCount={permissions.length}
+                                    onCopy={(codes) => {
+                                        form.setFieldValue("permissions", [
+                                            ...form.state.values.permissions.filter(
+                                                (code) =>
+                                                    !PERMISSION_BY_CODE.has(
+                                                        code,
+                                                    ),
+                                            ),
+                                            ...codes,
+                                        ])
+                                        void form.validateField(
+                                            "permissions",
+                                            "change",
+                                        )
+                                    }}
+                                />
+                            )}
+                        </form.Subscribe>
+                    }
+                />
                 {editingName && (
                     <div className="flex shrink-0 items-start gap-2 pb-4">
                         <form.AppField name="name">
@@ -393,7 +391,7 @@ function RoleForm({
                     </p>
                 </div>
                 {savedMessage && (
-                    <p role="status" className="py-3 text-sm text-emerald-700">
+                    <p role="status" className="py-3 text-sm text-success">
                         {savedMessage}
                     </p>
                 )}
@@ -489,12 +487,12 @@ function RoleForm({
                                     dirty={dirty && !pending}
                                 />
                                 <footer className="sticky bottom-0 z-10 flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-border bg-card py-3">
-                                    <div className="flex min-w-0 flex-wrap items-center gap-x-1 gap-y-1 text-xs text-muted-foreground [&_button]:px-1.5 [&_button]:text-xs">
+                                    <div className="flex min-w-0 flex-wrap items-center gap-x-1 gap-y-1 text-xs text-muted-foreground">
                                         <Button
                                             id="governance-admin-role-form-review-selected"
                                             type="button"
                                             variant="ghost"
-                                            size="sm"
+                                            size="xs"
                                             onClick={() =>
                                                 setReview("selected")
                                             }
@@ -507,7 +505,7 @@ function RoleForm({
                                             id="governance-admin-role-form-review-changes"
                                             type="button"
                                             variant="ghost"
-                                            size="sm"
+                                            size="xs"
                                             onClick={() => setReview("changes")}
                                         >
                                             {dirty
@@ -519,7 +517,7 @@ function RoleForm({
                                                 id="governance-admin-role-form-review-dangerous"
                                                 type="button"
                                                 variant="ghost"
-                                                size="sm"
+                                                size="xs"
                                                 className="text-destructive"
                                                 onClick={() =>
                                                     setReview("dangerous")
@@ -538,7 +536,7 @@ function RoleForm({
                                                     id="governance-admin-role-form-review-preserved"
                                                     type="button"
                                                     variant="ghost"
-                                                    size="sm"
+                                                    size="xs"
                                                     onClick={() =>
                                                         setReview("preserved")
                                                     }

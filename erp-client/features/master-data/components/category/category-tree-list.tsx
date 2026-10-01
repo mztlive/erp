@@ -32,7 +32,7 @@ export function CategoryName({ name, query }: { name: string; query: string }) {
     return (
         <>
             {name.slice(0, index)}
-            <mark className="rounded-sm bg-amber-100 text-inherit dark:bg-amber-900/50">
+            <mark className="rounded-sm bg-highlight text-highlight-foreground">
                 {name.slice(index, index + query.length)}
             </mark>
             {name.slice(index + query.length)}

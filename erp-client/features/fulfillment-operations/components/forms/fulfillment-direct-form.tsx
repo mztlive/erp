@@ -111,7 +111,7 @@ export function FulfillmentDirectForm({
                     return (
                         <div
                             key={line.salesOrderLineId}
-                            className="space-y-3 rounded-lg border border-border bg-muted/20 p-3"
+                            className="space-y-3 rounded-xl border border-border p-3"
                         >
                             <div className="space-y-0.5">
                                 <p className="text-sm font-medium">

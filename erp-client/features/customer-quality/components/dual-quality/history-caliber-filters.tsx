@@ -1,6 +1,8 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { OptionCombobox } from "@/components/business/option-combobox"
 import { BusinessFailureState } from "@/components/business"
 import type { useHistoricalDirectory } from "@/lib/historical-directory"
 import { serializeCsvIds } from "../../lib/dual-url-state"
@@ -54,7 +56,7 @@ export function HistoryCaliberFilters({
                     >
                         搜索客户或单号
                     </label>
-                    <input
+                    <Input
                         id="customers-quality-dual-search"
                         type="search"
                         value={qDraft}
@@ -66,7 +68,7 @@ export function HistoryCaliberFilters({
                             }
                         }}
                         placeholder="客户名称 / 单号"
-                        className="h-9 min-w-0 flex-1 rounded-lg border border-border bg-background px-3 text-sm"
+                        className="min-w-0 flex-1"
                     />
                     <Button
                         id="customers-quality-dual-apply"
@@ -84,7 +86,7 @@ export function HistoryCaliberFilters({
                     >
                         历史归属销售 ID
                     </label>
-                    <input
+                    <Input
                         id="customers-quality-dual-attribution-id"
                         value={idDraft}
                         onChange={(e) => setIdDraft(e.target.value)}
@@ -95,7 +97,7 @@ export function HistoryCaliberFilters({
                             }
                         }}
                         placeholder="历史归属销售 ID（逗号分隔）"
-                        className="h-9 min-w-0 flex-1 rounded-lg border border-border bg-background px-3 font-mono text-sm"
+                        className="min-w-0 flex-1 font-mono"
                     />
                     <Button
                         id="customers-quality-dual-attribution-add"
@@ -109,59 +111,57 @@ export function HistoryCaliberFilters({
                 </div>
             </div>
 
-            <div className="flex min-w-0 flex-wrap items-center gap-2 text-[13px]">
+            <div className="flex min-w-0 flex-wrap items-center gap-2 text-body-compact">
                 <label
                     htmlFor="customers-quality-dual-dimension"
                     className="text-muted-foreground"
                 >
                     分组
                 </label>
-                <select
+                <OptionCombobox
                     id="customers-quality-dual-dimension"
                     value={dimension}
-                    onChange={(e) =>
+                    aria-label="分组"
+                    allowClear={false}
+                    onValueChange={(value) => {
+                        if (value === null) return
                         patchDual({
                             dualDimension:
-                                e.target.value === "attribution_user"
-                                    ? null
-                                    : e.target.value,
+                                value === "attribution_user" ? null : value,
                             attributionGroup: null,
                             scopeVersion: null,
                             dualPage: null,
                         })
-                    }
-                    className="h-9 min-w-0 rounded-lg border border-border bg-background px-2"
-                >
-                    <option value="attribution_user">按历史归属销售</option>
-                    <option value="attribution_org">按历史归属组织</option>
-                </select>
+                    }}
+                    options={[
+                        { value: "attribution_user", label: "按历史归属销售" },
+                        { value: "attribution_org", label: "按历史归属组织" },
+                    ]}
+                    className="w-auto min-w-40"
+                />
                 <label
                     htmlFor="customers-quality-dual-sort"
                     className="text-muted-foreground"
                 >
                     排序
                 </label>
-                <select
+                <OptionCombobox
                     id="customers-quality-dual-sort"
                     value={sort}
-                    onChange={(e) =>
+                    aria-label="排序"
+                    allowClear={false}
+                    onValueChange={(value) => {
+                        if (value === null) return
                         patchDual({
                             dualSort:
-                                e.target.value === "orderCount:desc"
-                                    ? null
-                                    : e.target.value,
+                                value === "orderCount:desc" ? null : value,
                             scopeVersion: null,
                             dualPage: null,
                         })
-                    }
-                    className="h-9 min-w-0 rounded-lg border border-border bg-background px-2"
-                >
-                    {HISTORY_SORT_OPTIONS.map((o) => (
-                        <option key={o.value} value={o.value}>
-                            {o.label}
-                        </option>
-                    ))}
-                </select>
+                    }}
+                    options={HISTORY_SORT_OPTIONS}
+                    className="w-auto min-w-40"
+                />
                 {hasFilters ? (
                     <Button
                         id="customers-quality-dual-clear"
@@ -186,7 +186,7 @@ export function HistoryCaliberFilters({
             </div>
 
             {attributionGroup ? (
-                <div className="flex min-w-0 flex-wrap items-center gap-2 rounded-xl border border-border p-2 text-[13px]">
+                <div className="flex min-w-0 flex-wrap items-center gap-2 rounded-xl border border-border p-2 text-body-compact">
                     <span className="min-w-0 truncate">
                         历史分组下钻：{attributionGroup}
                     </span>

@@ -28,7 +28,7 @@ export function SummaryStrip({
     scopeVersion: string
 }) {
     return (
-        <dl className="grid min-w-0 grid-cols-2 gap-2 rounded-xl border border-border p-3 text-[13px] sm:grid-cols-4">
+        <dl className="grid min-w-0 grid-cols-2 gap-2 rounded-xl border border-border p-3 text-body-compact sm:grid-cols-4">
             <div className="min-w-0">
                 <dt className="text-xs text-muted-foreground">范围</dt>
                 <dd className="truncate font-medium">{scopeSummary}</dd>

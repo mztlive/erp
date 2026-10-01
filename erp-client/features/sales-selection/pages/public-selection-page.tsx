@@ -57,15 +57,15 @@ export const PublicSelectionPage = ({ token }: { token: string }) => {
     if (query.isError && (!page || requestFailure(query.error) === "ended"))
         return (
             <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center p-6 text-center">
-                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
                     <Clock className="h-7 w-7" />
                 </div>
-                <h1 className="text-xl font-bold text-slate-900">
+                <h1 className="text-xl font-bold text-foreground">
                     {requestFailure(query.error) === "ended"
                         ? "选品链接已失效"
                         : "暂时无法打开选品页"}
                 </h1>
-                <p className="my-3 text-sm leading-relaxed text-slate-500">
+                <p className="my-3 text-sm leading-relaxed text-muted-foreground">
                     {requestFailure(query.error) === "ended"
                         ? "请联系销售核对当前链接。"
                         : "请检查网络连接后重试。"}
@@ -84,8 +84,8 @@ export const PublicSelectionPage = ({ token }: { token: string }) => {
 
     if (!page)
         return (
-            <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center p-6 text-center text-sm text-slate-500">
-                <RefreshCw className="mb-3 h-6 w-6 animate-spin text-blue-600" />
+            <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center p-6 text-center text-sm text-muted-foreground">
+                <RefreshCw className="mb-3 h-6 w-6 animate-spin text-primary" />
                 正在打开选品页…
             </main>
         )
@@ -106,15 +106,15 @@ export const PublicSelectionPage = ({ token }: { token: string }) => {
 /** 结束后移除所有可写表单。 */
 const Ended = () => {
     return (
-        <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center p-6 text-center bg-slate-50">
-            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-slate-200/70 text-slate-400">
+        <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center p-6 text-center bg-background">
+            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-muted/70 text-muted-foreground">
                 <Clock className="h-8 w-8" />
             </div>
-            <h1 className="text-xl font-bold text-slate-900">选品已结束</h1>
-            <p className="mt-2 text-sm text-slate-500">
+            <h1 className="text-xl font-bold text-foreground">选品已结束</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
                 链接已失效，请联系销售核对。
             </p>
-            <p className="mt-4 text-xs text-slate-400">
+            <p className="mt-4 text-xs text-muted-foreground">
                 如需重新选品或确认报价，请联系您的专属销售经理获取新链接。
             </p>
         </main>
@@ -125,20 +125,22 @@ const Ended = () => {
 const Receipt = ({ page }: { page: PublicPageView }) => {
     const receipt = page.receipt!
     return (
-        <main className="mx-auto min-h-screen max-w-lg bg-slate-100 p-4 pb-12">
-            <div className="mb-4 rounded-3xl bg-white p-6 text-center shadow-xs border border-slate-200/80">
-                <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+        <main className="mx-auto min-h-screen max-w-lg bg-muted p-4 pb-12">
+            <div className="mb-4 rounded-3xl bg-card p-6 text-center shadow-xs border border-border/80">
+                <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-success-soft text-success-soft-foreground">
                     <CheckCircle2 className="h-8 w-8" />
                 </div>
-                <h1 className="text-xl font-bold text-slate-900">已提交选品</h1>
-                <p className="mt-1 text-sm font-semibold text-slate-800">
+                <h1 className="text-xl font-bold text-foreground">
+                    已提交选品
+                </h1>
+                <p className="mt-1 text-sm font-semibold text-foreground">
                     {receipt.customer_name}
                 </p>
-                <div className="mt-3 inline-flex flex-col items-center gap-1 rounded-xl bg-slate-50 px-4 py-2 text-xs text-slate-600 border border-slate-200">
+                <div className="mt-3 inline-flex flex-col items-center gap-1 rounded-xl bg-background px-4 py-2 text-xs text-muted-foreground border border-border">
                     <span className="font-mono font-medium">
                         方案编号 {receipt.proposal_no}
                     </span>
-                    <span className="text-slate-400">
+                    <span className="text-muted-foreground">
                         提交时间：{formatTime(receipt.submitted_at)}
                     </span>
                 </div>
@@ -146,8 +148,8 @@ const Receipt = ({ page }: { page: PublicPageView }) => {
 
             <div className="space-y-3">
                 <div className="flex items-center gap-2 px-1">
-                    <FileCheck className="h-4 w-4 text-blue-600" />
-                    <h2 className="text-sm font-semibold text-slate-900">
+                    <FileCheck className="h-4 w-4 text-primary" />
+                    <h2 className="text-sm font-semibold text-foreground">
                         确认选品清单
                     </h2>
                 </div>
@@ -155,7 +157,7 @@ const Receipt = ({ page }: { page: PublicPageView }) => {
                 {page.notices.map((notice) => (
                     <div
                         key={notice}
-                        className="rounded-xl bg-white p-3 text-xs text-slate-500 border border-slate-200/60 leading-relaxed"
+                        className="rounded-xl bg-card p-3 text-xs text-muted-foreground border border-border/60 leading-relaxed"
                     >
                         {notice}
                     </div>
@@ -176,7 +178,7 @@ const ChoiceSummary = ({
     const choices = receipt ? page.receipt!.items : page.choices
     const total = receipt ? page.receipt!.total_amount : page.total_amount
     return (
-        <div className="space-y-3 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
+        <div className="space-y-3 rounded-2xl border border-border/80 bg-card p-4 shadow-xs">
             {choices.map((choice) => {
                 const item = page.items.find(
                     (item) => item.item_id === choice.item_id,
@@ -184,10 +186,10 @@ const ChoiceSummary = ({
                 return (
                     <div
                         key={choice.item_id}
-                        className="border-b border-slate-100 pb-3 last:border-b-0 last:pb-0"
+                        className="border-b border-grid pb-3 last:border-b-0 last:pb-0"
                     >
                         <div className="flex items-baseline justify-between gap-2">
-                            <p className="font-medium text-slate-900 text-sm leading-snug">
+                            <p className="font-medium text-foreground text-sm leading-snug">
                                 {item?.name ??
                                     "商品资料暂不可用，请联系销售核对"}
                                 {choice.quantity != null
@@ -195,7 +197,7 @@ const ChoiceSummary = ({
                                     : ""}
                             </p>
                             {choice.line_amount != null && (
-                                <p className="font-semibold text-blue-600 text-sm shrink-0">
+                                <p className="font-semibold text-primary text-sm shrink-0">
                                     ¥ {choice.line_amount}
                                 </p>
                             )}
@@ -206,7 +208,7 @@ const ChoiceSummary = ({
                                     {item.specification.map((spec) => (
                                         <span
                                             key={spec.name}
-                                            className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-500"
+                                            className="rounded-md bg-muted px-1.5 py-0.5 text-tiny text-muted-foreground"
                                         >
                                             {spec.name}：{spec.value}
                                         </span>
@@ -214,11 +216,11 @@ const ChoiceSummary = ({
                                 </div>
                             )}
                         {item?.members && item.members.length > 0 && (
-                            <div className="mt-1.5 space-y-0.5 pl-2 border-l-2 border-slate-200 text-xs text-slate-500">
+                            <div className="mt-1.5 space-y-0.5 pl-2 border-l-2 border-border text-xs text-muted-foreground">
                                 {item.members.map((member, index) => (
                                     <p
                                         key={`${member.name}-${index}`}
-                                        className="text-[11px]"
+                                        className="text-tiny"
                                     >
                                         {member.name} ·{" "}
                                         {member.specification
@@ -233,16 +235,16 @@ const ChoiceSummary = ({
                 )
             })}
             {!choices.length && (
-                <p className="py-2 text-center text-xs text-slate-400">
+                <p className="py-2 text-center text-xs text-muted-foreground">
                     尚未选择商品
                 </p>
             )}
             {page.submit_mode === "BY_QUANTITY" && total != null && (
-                <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-                    <span className="text-xs font-medium text-slate-500">
+                <div className="flex items-center justify-between pt-2 border-t border-grid">
+                    <span className="text-xs font-medium text-muted-foreground">
                         方案合计金额（含税）
                     </span>
-                    <p className="font-bold text-base text-blue-600">
+                    <p className="font-bold text-base text-primary">
                         合计 ¥ {total}
                     </p>
                 </div>
@@ -445,85 +447,80 @@ const SelectionReviewCenter = ({
     }
 
     return (
-        <div className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-xs flex flex-col overflow-hidden animate-in fade-in duration-200">
-            <div className="mx-auto w-full max-w-lg h-full flex flex-col bg-slate-50 shadow-2xl overflow-hidden relative">
+        <div className="fixed inset-0 z-40 bg-overlay backdrop-blur-xs flex flex-col overflow-hidden animate-in fade-in duration-200">
+            <div className="mx-auto w-full max-w-lg h-full flex flex-col bg-background shadow-2xl overflow-hidden relative">
                 {/* 1. 顶部导航栏 */}
-                <header className="shrink-0 bg-white border-b border-slate-200/80 px-4 py-2.5 flex items-center justify-between z-10 shadow-2xs">
+                <header className="shrink-0 bg-card border-b border-border/80 px-4 py-2.5 flex items-center justify-between z-10 shadow-2xs">
                     <button
                         type="button"
                         onClick={onBack}
-                        className="flex items-center gap-1 text-slate-700 hover:text-blue-600 text-xs font-semibold py-1 px-2 rounded-lg hover:bg-slate-100 transition-colors border-0 bg-transparent cursor-pointer"
+                        className="flex items-center gap-1 text-foreground hover:text-primary text-xs font-semibold py-1 px-2 rounded-lg hover:bg-muted transition-colors border-0 bg-transparent cursor-pointer"
                     >
                         <ArrowLeft className="h-4 w-4" />
                         <span>返回选品</span>
                     </button>
                     <div className="text-center">
-                        <h1 className="text-xs sm:text-sm font-bold text-slate-900">
+                        <h1 className="text-xs sm:text-sm font-bold text-foreground">
                             方案核对与确认
                         </h1>
-                        <p className="text-[10px] text-slate-400 font-medium truncate max-w-[160px]">
+                        <p className="text-2xs text-muted-foreground font-medium truncate max-w-[160px]">
                             {page.customer_name}
                         </p>
                     </div>
-                    <Badge
-                        variant="outline"
-                        className="text-[10px] border-blue-200 bg-blue-50 text-blue-700 font-medium px-2 py-0.5"
-                    >
-                        核对中
-                    </Badge>
+                    <Badge variant="info">核对中</Badge>
                 </header>
 
                 {/* 2. 中间可滚动核对区域 */}
                 <div className="flex-1 overflow-y-auto p-3.5 space-y-3.5">
                     {/* 方案 KPI 看板 */}
-                    <div className="rounded-2xl bg-white p-3.5 border border-slate-200/80 shadow-2xs space-y-3">
+                    <div className="rounded-2xl bg-card p-3.5 border border-border/80 shadow-2xs space-y-3">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                                <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                                <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-info-soft text-info-soft-foreground">
                                     <CheckCircle2 className="h-4 w-4" />
                                 </div>
                                 <div>
-                                    <h2 className="text-xs font-bold text-slate-900">
+                                    <h2 className="text-xs font-bold text-foreground">
                                         已选方案概览
                                     </h2>
-                                    <p className="text-[10px] text-slate-400">
+                                    <p className="text-2xs text-muted-foreground">
                                         涵盖 {groupedChoices.length} 个商品大类
                                     </p>
                                 </div>
                             </div>
-                            <span className="text-[11px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
+                            <span className="text-tiny font-semibold text-info-soft-foreground bg-info-soft px-2 py-0.5 rounded-full border border-info-border">
                                 {mall ? "商城意向可选" : "批量采购方案"}
                             </span>
                         </div>
 
-                        <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100 text-center">
-                            <div className="rounded-xl bg-slate-50/80 p-2 border border-slate-150">
-                                <p className="text-[10px] text-slate-400">
+                        <div className="grid grid-cols-3 gap-2 pt-2 border-t border-grid text-center">
+                            <div className="rounded-xl bg-background/80 p-2 border border-border">
+                                <p className="text-2xs text-muted-foreground">
                                     已选款式
                                 </p>
-                                <p className="text-sm font-bold text-slate-800 mt-0.5">
+                                <p className="text-sm font-bold text-foreground mt-0.5">
                                     {page.choices.length}{" "}
-                                    <span className="text-[10px] font-normal text-slate-500">
+                                    <span className="text-2xs font-normal text-muted-foreground">
                                         款
                                     </span>
                                 </p>
                             </div>
-                            <div className="rounded-xl bg-slate-50/80 p-2 border border-slate-150">
-                                <p className="text-[10px] text-slate-400">
+                            <div className="rounded-xl bg-background/80 p-2 border border-border">
+                                <p className="text-2xs text-muted-foreground">
                                     采购总件数
                                 </p>
-                                <p className="text-sm font-bold text-slate-800 mt-0.5">
+                                <p className="text-sm font-bold text-foreground mt-0.5">
                                     {totalPieces}{" "}
-                                    <span className="text-[10px] font-normal text-slate-500">
+                                    <span className="text-2xs font-normal text-muted-foreground">
                                         份
                                     </span>
                                 </p>
                             </div>
-                            <div className="rounded-xl bg-blue-50/60 p-2 border border-blue-100">
-                                <p className="text-[10px] text-blue-600 font-medium">
+                            <div className="rounded-xl bg-info-soft/60 p-2 border border-info-border">
+                                <p className="text-2xs text-primary font-medium">
                                     {mall ? "模式" : "方案总金额"}
                                 </p>
-                                <p className="text-sm font-bold text-blue-600 mt-0.5 truncate">
+                                <p className="text-sm font-bold text-primary mt-0.5 truncate">
                                     {page.total_amount
                                         ? `¥ ${page.total_amount}`
                                         : "意向库"}
@@ -535,19 +532,19 @@ const SelectionReviewCenter = ({
                     {/* 搜索与品类筛选工具栏 */}
                     <div className="space-y-2">
                         <div className="relative">
-                            <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                            <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
                             <Input
                                 type="text"
                                 placeholder="在已选商品中检索名称或规格..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className="h-8.5 w-full rounded-full bg-white pl-8.5 pr-8 text-xs placeholder:text-slate-400 border border-slate-200 shadow-2xs focus-visible:ring-1 focus-visible:ring-blue-500"
+                                className="h-control-sm w-full rounded-full pl-8 pr-8"
                             />
                             {searchQuery && (
                                 <button
                                     type="button"
                                     onClick={() => setSearchQuery("")}
-                                    className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 border-0 bg-transparent cursor-pointer"
+                                    className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-muted-foreground border-0 bg-transparent cursor-pointer"
                                 >
                                     <X className="h-3.5 w-3.5" />
                                 </button>
@@ -561,10 +558,10 @@ const SelectionReviewCenter = ({
                                     type="button"
                                     onClick={() => setActiveCategory("ALL")}
                                     className={cn(
-                                        "rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors border cursor-pointer",
+                                        "rounded-full px-2.5 py-1 text-tiny font-semibold transition-colors border cursor-pointer",
                                         activeCategory === "ALL"
-                                            ? "bg-slate-900 text-white border-slate-900 shadow-2xs"
-                                            : "bg-white text-slate-600 hover:bg-slate-100 border-slate-200",
+                                            ? "bg-primary text-primary-foreground border-primary shadow-2xs"
+                                            : "bg-card text-muted-foreground hover:bg-muted border-border",
                                     )}
                                 >
                                     全部 ({page.choices.length})
@@ -577,10 +574,10 @@ const SelectionReviewCenter = ({
                                             setActiveCategory(g.category)
                                         }
                                         className={cn(
-                                            "rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors shrink-0 border cursor-pointer",
+                                            "rounded-full px-2.5 py-1 text-tiny font-semibold transition-colors shrink-0 border cursor-pointer",
                                             activeCategory === g.category
-                                                ? "bg-slate-900 text-white border-slate-900 shadow-2xs"
-                                                : "bg-white text-slate-600 hover:bg-slate-100 border-slate-200",
+                                                ? "bg-primary text-primary-foreground border-primary shadow-2xs"
+                                                : "bg-card text-muted-foreground hover:bg-muted border-border",
                                         )}
                                     >
                                         {g.category} ({g.items.length})
@@ -588,19 +585,19 @@ const SelectionReviewCenter = ({
                                 ))}
                             </div>
 
-                            <div className="flex items-center gap-1 shrink-0 text-[10px] text-slate-500">
+                            <div className="flex items-center gap-1 shrink-0 text-2xs text-muted-foreground">
                                 <button
                                     type="button"
                                     onClick={expandAll}
-                                    className="hover:text-blue-600 px-1 border-0 bg-transparent cursor-pointer font-medium"
+                                    className="hover:text-primary px-1 border-0 bg-transparent cursor-pointer font-medium"
                                 >
                                     全部展开
                                 </button>
-                                <span className="text-slate-300">|</span>
+                                <span className="text-muted-foreground">|</span>
                                 <button
                                     type="button"
                                     onClick={collapseAll}
-                                    className="hover:text-blue-600 px-1 border-0 bg-transparent cursor-pointer font-medium"
+                                    className="hover:text-primary px-1 border-0 bg-transparent cursor-pointer font-medium"
                                 >
                                     全部收起
                                 </button>
@@ -619,7 +616,7 @@ const SelectionReviewCenter = ({
                             return (
                                 <div
                                     key={group.category}
-                                    className="rounded-2xl bg-white border border-slate-200/80 shadow-2xs overflow-hidden transition-all"
+                                    className="rounded-2xl bg-card border border-border/80 shadow-2xs overflow-hidden transition-all"
                                 >
                                     {/* 分类栏标头（点击折叠/展开） */}
                                     <button
@@ -627,23 +624,23 @@ const SelectionReviewCenter = ({
                                         onClick={() =>
                                             toggleCollapse(group.category)
                                         }
-                                        className="w-full flex items-center justify-between px-3.5 py-2.5 bg-slate-50/70 hover:bg-slate-100/70 transition-colors border-0 text-left cursor-pointer"
+                                        className="w-full flex items-center justify-between px-3.5 py-2.5 bg-background/70 hover:bg-muted/70 transition-colors border-0 text-left cursor-pointer"
                                     >
                                         <div className="flex items-center gap-2">
                                             {isGroupCollapsed ? (
-                                                <ChevronRight className="h-4 w-4 text-slate-400" />
+                                                <ChevronRight className="h-4 w-4 text-muted-foreground" />
                                             ) : (
-                                                <ChevronDown className="h-4 w-4 text-slate-400" />
+                                                <ChevronDown className="h-4 w-4 text-muted-foreground" />
                                             )}
-                                            <span className="text-xs font-bold text-slate-900">
+                                            <span className="text-xs font-bold text-foreground">
                                                 {group.category}
                                             </span>
-                                            <span className="rounded-full bg-slate-200/70 text-slate-600 px-1.5 py-0.2 text-[10px] font-bold">
+                                            <span className="rounded-full bg-muted/70 text-muted-foreground px-1.5 py-0.2 text-2xs font-bold">
                                                 {group.items.length} 款
                                             </span>
                                         </div>
                                         {!mall && group.subtotalCents > 0 && (
-                                            <span className="text-xs font-semibold text-blue-600">
+                                            <span className="text-xs font-semibold text-primary">
                                                 小计 ¥ {groupSubtotal}
                                             </span>
                                         )}
@@ -651,7 +648,7 @@ const SelectionReviewCenter = ({
 
                                     {/* 分类内商品明细 */}
                                     {!isGroupCollapsed && (
-                                        <div className="divide-y divide-slate-100 px-3.5">
+                                        <div className="divide-y divide-grid px-3.5">
                                             {group.items.map(
                                                 ({ choice, item }) => {
                                                     if (!item) return null
@@ -665,7 +662,7 @@ const SelectionReviewCenter = ({
                                                             className="py-2.5 flex items-start gap-2.5"
                                                         >
                                                             {/* 商品小缩略图 */}
-                                                            <div className="h-12 w-12 rounded-lg bg-slate-50 shrink-0 overflow-hidden border border-slate-100">
+                                                            <div className="h-12 w-12 rounded-lg bg-background shrink-0 overflow-hidden border border-grid">
                                                                 {img ? (
                                                                     // eslint-disable-next-line @next/next/no-img-element
                                                                     <img
@@ -677,7 +674,7 @@ const SelectionReviewCenter = ({
                                                                         referrerPolicy="no-referrer"
                                                                     />
                                                                 ) : (
-                                                                    <div className="flex h-full w-full items-center justify-center text-slate-400">
+                                                                    <div className="flex h-full w-full items-center justify-center text-muted-foreground">
                                                                         <Package className="h-5 w-5" />
                                                                     </div>
                                                                 )}
@@ -685,7 +682,7 @@ const SelectionReviewCenter = ({
 
                                                             {/* 名称与规格 */}
                                                             <div className="flex-1 min-w-0">
-                                                                <p className="text-xs font-semibold text-slate-900 leading-snug">
+                                                                <p className="text-xs font-semibold text-foreground leading-snug">
                                                                     {item.name}
                                                                 </p>
                                                                 {item
@@ -701,7 +698,7 @@ const SelectionReviewCenter = ({
                                                                                     key={
                                                                                         s.name
                                                                                     }
-                                                                                    className="rounded bg-slate-100 px-1 py-0.2 text-[9px] text-slate-500"
+                                                                                    className="rounded bg-muted px-1 py-0.2 text-2xs text-muted-foreground"
                                                                                 >
                                                                                     {
                                                                                         s.name
@@ -718,7 +715,7 @@ const SelectionReviewCenter = ({
                                                                 {item.members
                                                                     .length >
                                                                     0 && (
-                                                                    <div className="mt-1 pl-1.5 border-l-2 border-slate-200 text-[10px] text-slate-400 space-y-0.5">
+                                                                    <div className="mt-1 pl-1.5 border-l-2 border-border text-2xs text-muted-foreground space-y-0.5">
                                                                         {item.members.map(
                                                                             (
                                                                                 m,
@@ -759,7 +756,7 @@ const SelectionReviewCenter = ({
                                                             <div className="text-right shrink-0">
                                                                 {choice.quantity !=
                                                                     null && (
-                                                                    <span className="inline-block rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700">
+                                                                    <span className="inline-block rounded bg-muted px-1.5 py-0.5 text-2xs font-semibold text-foreground">
                                                                         ×{" "}
                                                                         {
                                                                             choice.quantity
@@ -769,7 +766,7 @@ const SelectionReviewCenter = ({
                                                                 )}
                                                                 {choice.line_amount !=
                                                                     null && (
-                                                                    <p className="mt-0.5 text-xs font-bold text-blue-600">
+                                                                    <p className="mt-0.5 text-xs font-bold text-primary">
                                                                         ¥{" "}
                                                                         {
                                                                             choice.line_amount
@@ -797,7 +794,7 @@ const SelectionReviewCenter = ({
                                                                             item.item_id,
                                                                         )
                                                                     }
-                                                                    className="mt-1 h-auto text-[10px] text-slate-400 hover:text-blue-600 disabled:opacity-40 transition-colors border-0 bg-transparent p-0 cursor-pointer ml-auto"
+                                                                    className="mt-1 h-auto text-2xs text-muted-foreground hover:text-primary disabled:opacity-40 transition-colors border-0 bg-transparent p-0 cursor-pointer ml-auto"
                                                                 >
                                                                     {removingId ===
                                                                     item.item_id
@@ -816,7 +813,7 @@ const SelectionReviewCenter = ({
                         })}
 
                         {filteredGroups.length === 0 && (
-                            <div className="py-12 text-center text-xs text-slate-400 bg-white rounded-2xl border border-slate-100">
+                            <div className="py-12 text-center text-xs text-muted-foreground bg-card rounded-2xl border border-grid">
                                 未找到与 &quot;{searchQuery}&quot;
                                 匹配的已选商品
                             </div>
@@ -824,16 +821,19 @@ const SelectionReviewCenter = ({
                     </div>
 
                     {/* 业务提醒与锁定说明 */}
-                    <div className="rounded-2xl bg-amber-50/70 p-3 border border-amber-200/60 text-amber-900 space-y-1">
+                    <div className="rounded-2xl bg-warning-soft/70 p-3 border border-warning-border/60 text-warning-soft-foreground space-y-1">
                         <div className="flex items-center gap-1.5 text-xs font-bold">
-                            <FileCheck className="h-4 w-4 text-amber-600 shrink-0" />
+                            <FileCheck className="h-4 w-4 text-warning-soft-foreground shrink-0" />
                             <span>确认提交须知</span>
                         </div>
-                        <p className="text-[11px] leading-relaxed text-amber-800/90">
+                        <p className="text-tiny leading-relaxed text-warning-soft-foreground/90">
                             确认提交后系统将锁定会话并生成唯一的正式销售方案编号，专属销售团队将按此方案推进合同签署、配货与开票。
                         </p>
                         {page.notices.map((n) => (
-                            <p key={n} className="text-[10px] text-amber-700">
+                            <p
+                                key={n}
+                                className="text-2xs text-warning-soft-foreground"
+                            >
                                 · {n}
                             </p>
                         ))}
@@ -843,15 +843,15 @@ const SelectionReviewCenter = ({
                 {/* 3. 吸底结算栏 */}
                 <aside
                     aria-label="核对并提交"
-                    className="shrink-0 border-t border-slate-200/80 bg-white/95 backdrop-blur-md px-4 py-3 shadow-[0_-8px_20px_rgba(0,0,0,0.08)] z-30"
+                    className="shrink-0 border-t border-border/80 bg-card/95 backdrop-blur-md px-4 py-3 shadow-footer z-30"
                 >
                     <div className="flex items-center justify-between gap-3">
                         <div>
-                            <p className="text-[11px] text-slate-500">
+                            <p className="text-tiny text-muted-foreground">
                                 {mall ? "已选款式总计" : "方案总计金额（含税）"}
                             </p>
                             {page.total_amount != null && !mall ? (
-                                <div className="flex items-baseline text-blue-600 font-bold">
+                                <div className="flex items-baseline text-primary font-bold">
                                     <span className="text-xs mr-0.5 font-bold">
                                         ¥
                                     </span>
@@ -860,7 +860,7 @@ const SelectionReviewCenter = ({
                                     </span>
                                 </div>
                             ) : (
-                                <p className="text-base font-bold text-blue-600">
+                                <p className="text-base font-bold text-primary">
                                     已选 {page.choices.length} 款
                                 </p>
                             )}
@@ -869,16 +869,14 @@ const SelectionReviewCenter = ({
                         <div className="flex items-center gap-2">
                             <Button
                                 variant="outline"
-                                size="sm"
-                                className="rounded-full border-slate-300 text-xs text-slate-700 px-4 h-9"
+                                className="rounded-full"
                                 onClick={onBack}
                             >
                                 返回修改
                             </Button>
                             <LoadingButton
                                 id="sales-selection-public-submit"
-                                size="sm"
-                                className="rounded-full bg-gradient-to-r from-emerald-500 to-emerald-600 text-xs font-bold text-white shadow-md hover:opacity-95 px-6 h-9 active:scale-95 transition-all"
+                                className="rounded-full"
                                 disabled={locked || conflict || dirty}
                                 loading={submitting}
                                 onClick={onSubmit}
@@ -1254,15 +1252,15 @@ const SelectionForm = ({
                 className={cn(
                     "group relative flex gap-3 rounded-2xl p-3 border transition-all duration-200",
                     isSelected
-                        ? "bg-gradient-to-r from-blue-50/25 via-white to-white border-blue-200/90 shadow-xs"
-                        : "bg-white border-slate-200/70 hover:border-slate-300 shadow-2xs",
+                        ? "bg-gradient-to-r from-info-soft/25 via-card to-card border-info-border/90 shadow-xs"
+                        : "bg-card border-border/70 hover:border-input shadow-2xs",
                 )}
             >
                 {/* 左侧: 1:1 方形图片/占位 */}
                 <button
                     type="button"
                     aria-label={`查看${item.name}详情`}
-                    className="relative size-20 sm:size-22 rounded-xl overflow-hidden bg-slate-50 shrink-0 text-left block cursor-pointer border border-slate-100 p-0"
+                    className="relative size-20 sm:size-22 rounded-xl overflow-hidden bg-background shrink-0 text-left block cursor-pointer border border-grid p-0"
                     onClick={() => setDetailItem(item)}
                 >
                     {image ? (
@@ -1275,9 +1273,9 @@ const SelectionForm = ({
                             referrerPolicy="no-referrer"
                         />
                     ) : (
-                        <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-slate-50 via-slate-100/60 to-slate-50 p-2 text-center">
-                            <Package className="h-6 w-6 stroke-[1.25] text-slate-400" />
-                            <span className="mt-1 text-[9px] font-medium text-slate-400 tracking-wider">
+                        <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-background via-muted/60 to-background p-2 text-center">
+                            <Package className="h-6 w-6 stroke-[1.25] text-muted-foreground" />
+                            <span className="mt-1 text-2xs font-medium text-muted-foreground tracking-wider">
                                 严选品质
                             </span>
                         </div>
@@ -1285,14 +1283,14 @@ const SelectionForm = ({
 
                     {/* 档位微标 */}
                     {item.tier_name && (
-                        <span className="absolute left-1 top-1 rounded-md bg-slate-900/80 px-1.5 py-0.5 text-[9px] font-medium text-white backdrop-blur-xs">
+                        <span className="absolute left-1 top-1 rounded-md bg-primary/80 px-1.5 py-0.5 text-2xs font-medium text-primary-foreground backdrop-blur-xs">
                             {item.tier_name}
                         </span>
                     )}
 
                     {/* 套餐件数 */}
                     {item.members.length > 0 && (
-                        <span className="absolute left-1 bottom-1 rounded-md bg-slate-900/80 px-1.5 py-0.5 text-[9px] text-white flex items-center gap-1 backdrop-blur-xs font-medium">
+                        <span className="absolute left-1 bottom-1 rounded-md bg-primary/80 px-1.5 py-0.5 text-2xs text-primary-foreground flex items-center gap-1 backdrop-blur-xs font-medium">
                             <Layers className="h-2.5 w-2.5" />
                             {item.members.length}件装
                         </span>
@@ -1305,7 +1303,7 @@ const SelectionForm = ({
                         <button
                             type="button"
                             onClick={() => setDetailItem(item)}
-                            className="text-left w-full text-xs sm:text-sm font-semibold text-slate-900 leading-snug line-clamp-2 hover:text-blue-600 transition-colors p-0 border-0 bg-transparent cursor-pointer"
+                            className="text-left w-full text-xs sm:text-sm font-semibold text-foreground leading-snug line-clamp-2 hover:text-primary transition-colors p-0 border-0 bg-transparent cursor-pointer"
                         >
                             {item.name}
                         </button>
@@ -1316,7 +1314,7 @@ const SelectionForm = ({
                                 {item.specification.slice(0, 2).map((s) => (
                                     <span
                                         key={s.name}
-                                        className="rounded-md bg-slate-100/80 px-1.5 py-0.5 text-[10px] text-slate-500 font-normal truncate max-w-full"
+                                        className="rounded-md bg-muted/80 px-1.5 py-0.5 text-2xs text-muted-foreground font-normal truncate max-w-full"
                                     >
                                         {s.value || s.name}
                                     </span>
@@ -1326,17 +1324,17 @@ const SelectionForm = ({
                     </div>
 
                     {/* 价格与操作 */}
-                    <div className="mt-2 flex items-end justify-between gap-1.5 pt-1.5 border-t border-slate-100/80">
+                    <div className="mt-2 flex items-end justify-between gap-1.5 pt-1.5 border-t border-grid/80">
                         <div>
                             <div className="flex items-baseline font-bold tracking-tight">
-                                <span className="text-xs font-bold text-blue-600 mr-0.5">
+                                <span className="text-xs font-bold text-primary mr-0.5">
                                     ¥
                                 </span>
-                                <span className="text-base sm:text-lg font-black text-slate-900 leading-none">
+                                <span className="text-base sm:text-lg font-black text-foreground leading-none">
                                     {intPart}
                                 </span>
                                 {decPart !== undefined && (
-                                    <span className="text-[11px] font-semibold text-slate-400 leading-none">
+                                    <span className="text-tiny font-semibold text-muted-foreground leading-none">
                                         .{decPart}
                                     </span>
                                 )}
@@ -1346,10 +1344,10 @@ const SelectionForm = ({
                         {/* 选品或步进器 */}
                         <div className="flex items-center gap-1.5">
                             {isSelected && !mall ? (
-                                <div className="flex items-center gap-0.5 rounded-lg bg-slate-100/80 p-0.5 border border-slate-200/80">
+                                <div className="flex items-center gap-0.5 rounded-lg bg-muted/80 p-0.5 border border-border/80">
                                     <button
                                         type="button"
-                                        className="flex h-5 w-5 items-center justify-center rounded bg-white text-slate-700 shadow-2xs hover:bg-slate-50 disabled:opacity-40"
+                                        className="flex h-5 w-5 items-center justify-center rounded bg-card text-foreground shadow-2xs hover:bg-background disabled:opacity-40"
                                         disabled={
                                             locked ||
                                             conflict ||
@@ -1382,7 +1380,7 @@ const SelectionForm = ({
                                     <Input
                                         id={`sales-selection-public-qty-${item.item_id}`}
                                         inputMode="numeric"
-                                        className="h-5 w-8 border-0 bg-transparent text-center text-xs font-bold p-0 shadow-none focus-visible:ring-0"
+                                        className="h-control-xs w-10 px-1 py-0 text-center"
                                         value={pick.quantity}
                                         onChange={(e) =>
                                             change(item.item_id, {
@@ -1393,7 +1391,7 @@ const SelectionForm = ({
                                     />
                                     <button
                                         type="button"
-                                        className="flex h-5 w-5 items-center justify-center rounded bg-white text-slate-700 shadow-2xs hover:bg-slate-50"
+                                        className="flex h-5 w-5 items-center justify-center rounded bg-card text-foreground shadow-2xs hover:bg-background"
                                         disabled={locked || conflict}
                                         onClick={(e) => {
                                             e.preventDefault()
@@ -1424,8 +1422,8 @@ const SelectionForm = ({
                                 className={cn(
                                     "flex items-center justify-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition-all cursor-pointer select-none active:scale-95",
                                     isSelected
-                                        ? "bg-blue-600 text-white shadow-xs shadow-blue-500/25"
-                                        : "bg-white text-blue-600 border border-blue-500/40 hover:bg-blue-50/60 shadow-2xs",
+                                        ? "bg-primary text-primary-foreground shadow-xs"
+                                        : "bg-card text-primary border border-primary/40 hover:bg-accent/60 shadow-2xs",
                                 )}
                             >
                                 <input
@@ -1457,52 +1455,51 @@ const SelectionForm = ({
     }
 
     return (
-        <main className="fixed inset-0 h-[100dvh] max-h-[100dvh] overflow-hidden flex flex-col bg-slate-100">
-            <div className="mx-auto w-full max-w-lg h-full flex flex-col bg-white shadow-xl overflow-hidden relative">
+        <main className="fixed inset-0 h-[100dvh] max-h-[100dvh] overflow-hidden flex flex-col bg-muted">
+            <div className="mx-auto w-full max-w-lg h-full flex flex-col bg-card shadow-xl overflow-hidden relative">
                 {/* 1. 顶部电商商城头部 + 搜索框 (固定不滚动) */}
-                <header className="shrink-0 bg-white border-b border-slate-200/80 px-3.5 py-2 z-20">
+                <header className="shrink-0 bg-card border-b border-border/80 px-3.5 py-2 z-20">
                     <div className="flex items-center justify-between gap-2.5">
                         <div className="flex items-center gap-2 min-w-0">
-                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-xs">
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-xs">
                                 <Store className="h-4.5 w-4.5" />
                             </div>
                             <div className="min-w-0">
-                                <h1 className="text-xs sm:text-sm font-bold text-slate-900 truncate">
+                                <h1 className="text-xs sm:text-sm font-bold text-foreground truncate">
                                     {page.customer_name}
                                 </h1>
-                                <p className="text-[10px] text-slate-500 flex items-center gap-1">
-                                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                <p className="text-2xs text-muted-foreground flex items-center gap-1">
+                                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
                                     <span>专属选品会场</span>
-                                    <span className="text-slate-300">|</span>
+                                    <span className="text-muted-foreground">
+                                        |
+                                    </span>
                                     <span>
                                         {mall ? "商城兑换" : "按份采购"}
                                     </span>
                                 </p>
                             </div>
                         </div>
-                        <Badge
-                            variant="outline"
-                            className="shrink-0 text-[11px] border-blue-200/80 bg-blue-50/70 text-blue-700 font-medium px-2.5 py-0.5 rounded-full"
-                        >
+                        <Badge variant="info" className="shrink-0 rounded-full">
                             {mall ? "意向可选库" : "批量采购"}
                         </Badge>
                     </div>
 
                     {/* 搜索框 */}
                     <div className="relative mt-1.5">
-                        <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                        <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
                         <Input
                             type="text"
                             placeholder="搜索几百款商品、规格或名称..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="h-8.5 w-full rounded-full bg-slate-100/90 pl-8.5 pr-8 text-xs placeholder:text-slate-400 border border-slate-200/60 shadow-none focus-visible:bg-white focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500/15 transition-all"
+                            className="h-control-sm w-full rounded-full pl-8 pr-8"
                         />
                         {searchQuery && (
                             <button
                                 type="button"
                                 onClick={() => setSearchQuery("")}
-                                className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600"
+                                className="absolute right-2.5 top-2 text-muted-foreground hover:text-muted-foreground"
                             >
                                 <X className="h-4 w-4" />
                             </button>
@@ -1512,8 +1509,8 @@ const SelectionForm = ({
 
                 {/* 2. 业务公告 (固定不滚动) */}
                 {page.notices.length > 0 && (
-                    <div className="shrink-0 bg-amber-50/90 border-b border-amber-200/60 px-3.5 py-1 text-[11px] text-amber-900 flex items-center gap-1.5 font-medium z-10">
-                        <Megaphone className="h-3 w-3 shrink-0 text-amber-600" />
+                    <div className="shrink-0 bg-warning-soft/90 border-b border-warning-border/60 px-3.5 py-1 text-tiny text-warning-soft-foreground flex items-center gap-1.5 font-medium z-10">
+                        <Megaphone className="h-3 w-3 shrink-0 text-warning-soft-foreground" />
                         <div className="truncate flex-1 space-x-2">
                             {page.notices.map((notice, i) => (
                                 <span key={notice}>
@@ -1529,10 +1526,10 @@ const SelectionForm = ({
                 {(message || request) && (
                     <div
                         role="status"
-                        className="shrink-0 mx-3 my-2 rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900 shadow-2xs z-10"
+                        className="shrink-0 mx-3 my-2 rounded-xl border border-warning-border bg-warning-soft p-2.5 text-xs text-warning-soft-foreground shadow-2xs z-10"
                     >
                         <div className="flex items-start gap-2">
-                            <AlertCircle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
+                            <AlertCircle className="h-4 w-4 shrink-0 text-warning-soft-foreground mt-0.5" />
                             <div className="flex-1">
                                 <p className="font-semibold leading-relaxed">
                                     {message ||
@@ -1547,7 +1544,7 @@ const SelectionForm = ({
                                                 reconciling
                                             }
                                             size="sm"
-                                            className="mt-1.5 h-6 rounded-lg bg-amber-600 text-white hover:bg-amber-700 text-xs px-2"
+                                            className="mt-1.5"
                                             onClick={() => {
                                                 setReconciling(true)
                                                 mutation.mutate(request)
@@ -1564,22 +1561,22 @@ const SelectionForm = ({
                 {/* 冲突处理区域 */}
                 {conflict && (
                     <section
-                        className="shrink-0 mx-3 my-2 rounded-2xl border-2 border-amber-300 bg-amber-50/80 p-3 space-y-2 z-10"
+                        className="shrink-0 mx-3 my-2 rounded-2xl border-2 border-warning-border bg-warning-soft/80 p-3 space-y-2 z-10"
                         aria-label="最新保存的选择"
                     >
-                        <div className="flex items-center gap-1.5 text-amber-900">
-                            <ShieldAlert className="h-4 w-4 text-amber-600" />
+                        <div className="flex items-center gap-1.5 text-warning-soft-foreground">
+                            <ShieldAlert className="h-4 w-4 text-warning-soft-foreground" />
                             <h2 className="font-bold text-xs">
                                 其他页面最新保存的选择
                             </h2>
                         </div>
-                        <p className="text-[11px] text-amber-800">
+                        <p className="text-tiny text-warning-soft-foreground">
                             其他设备刚刚更新了该选品册。您的本地修改已保留，请仔细核对最新清单：
                         </p>
                         {latest ? (
                             <ChoiceSummary page={latest} />
                         ) : (
-                            <p className="text-xs text-slate-500">
+                            <p className="text-xs text-muted-foreground">
                                 最新清单暂时无法读取，请重试。
                             </p>
                         )}
@@ -1588,7 +1585,6 @@ const SelectionForm = ({
                                 id="sales-selection-public-reload-conflict"
                                 variant="outline"
                                 size="sm"
-                                className="h-7 text-xs rounded-lg"
                                 onClick={async () =>
                                     setLatest((await refresh()) ?? null)
                                 }
@@ -1598,7 +1594,6 @@ const SelectionForm = ({
                             <Button
                                 id="sales-selection-public-acknowledge"
                                 size="sm"
-                                className="h-7 text-xs rounded-lg bg-amber-600 text-white hover:bg-amber-700"
                                 disabled={
                                     !latest || latest.kind !== "SELECTING"
                                 }
@@ -1623,7 +1618,7 @@ const SelectionForm = ({
                     {/* 左侧品类侧边栏 */}
                     <aside
                         ref={leftAsideRef}
-                        className="w-20 sm:w-22 shrink-0 bg-[#f8fafc] border-r border-slate-200/70 overflow-y-auto no-scrollbar select-none"
+                        className="w-20 sm:w-22 shrink-0 bg-background border-r border-border/70 overflow-y-auto no-scrollbar select-none"
                     >
                         {sections.map((section) => {
                             const isActive =
@@ -1643,15 +1638,15 @@ const SelectionForm = ({
                                     className={cn(
                                         "relative flex w-full flex-col items-center justify-center py-3.5 px-2 text-center transition-colors border-0 cursor-pointer",
                                         isActive
-                                            ? "bg-white text-slate-900 font-semibold before:absolute before:left-0 before:top-3 before:bottom-3 before:w-1 before:rounded-r-full before:bg-blue-600"
-                                            : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/60 font-normal bg-transparent",
+                                            ? "bg-card text-foreground font-semibold before:absolute before:left-0 before:top-3 before:bottom-3 before:w-1 before:rounded-r-full before:bg-primary"
+                                            : "text-muted-foreground hover:text-foreground hover:bg-muted/60 font-normal bg-transparent",
                                     )}
                                 >
                                     <span className="text-xs line-clamp-2 leading-tight">
                                         {section.name}
                                     </span>
                                     {sectionSelectedCount > 0 && (
-                                        <span className="absolute top-1.5 right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 text-[9px] font-bold text-white shadow-xs">
+                                        <span className="absolute top-1.5 right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-2xs font-bold text-primary-foreground shadow-xs">
                                             {sectionSelectedCount}
                                         </span>
                                     )}
@@ -1670,7 +1665,7 @@ const SelectionForm = ({
                         onTouchStart={() => {
                             isManualScrolling.current = false
                         }}
-                        className="flex-1 overflow-y-auto p-2.5 sm:p-3 space-y-4 bg-white"
+                        className="flex-1 overflow-y-auto p-2.5 sm:p-3 space-y-4 bg-card"
                     >
                         <fieldset
                             disabled={locked || conflict}
@@ -1679,15 +1674,15 @@ const SelectionForm = ({
                             {/* 如果处于搜索状态，显示搜索结果 */}
                             {searchResults ? (
                                 <div className="space-y-2.5">
-                                    <div className="flex items-center justify-between pb-1 border-b border-slate-100">
-                                        <span className="text-xs font-bold text-slate-800">
+                                    <div className="flex items-center justify-between pb-1 border-b border-grid">
+                                        <span className="text-xs font-bold text-foreground">
                                             搜索结果 &quot;{searchQuery}&quot; (
                                             {searchResults.length})
                                         </span>
                                     </div>
                                     {searchResults.map(renderCard)}
                                     {searchResults.length === 0 && (
-                                        <div className="py-16 text-center text-xs text-slate-400">
+                                        <div className="py-16 text-center text-xs text-muted-foreground">
                                             未找到匹配的商品
                                         </div>
                                     )}
@@ -1704,13 +1699,13 @@ const SelectionForm = ({
                                         className="space-y-2"
                                     >
                                         {/* 品类楼层吸顶标题 */}
-                                        <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-sm py-2 px-0.5 flex items-center justify-between border-b border-slate-150/70">
+                                        <div className="sticky top-0 z-10 bg-card/95 backdrop-blur-sm py-2 px-0.5 flex items-center justify-between border-b border-border/70">
                                             <div className="flex items-center gap-2">
-                                                <span className="h-3.5 w-1 rounded-full bg-blue-600" />
-                                                <h2 className="text-xs font-bold text-slate-900 tracking-tight">
+                                                <span className="h-3.5 w-1 rounded-full bg-primary" />
+                                                <h2 className="text-xs font-bold text-foreground tracking-tight">
                                                     {section.name}
                                                 </h2>
-                                                <span className="text-[11px] font-normal text-slate-400">
+                                                <span className="text-tiny font-normal text-muted-foreground">
                                                     共 {section.items.length} 款
                                                 </span>
                                             </div>
@@ -1730,7 +1725,7 @@ const SelectionForm = ({
                 {/* 4. 底部吸底结算栏 (固定不滚动) */}
                 <aside
                     aria-label="核对并提交"
-                    className="shrink-0 border-t border-slate-200/80 bg-white/95 backdrop-blur-md px-4 py-2.5 shadow-[0_-6px_20px_rgba(0,0,0,0.06)] z-30"
+                    className="shrink-0 border-t border-border/80 bg-card/95 backdrop-blur-md px-4 py-2.5 shadow-footer z-30"
                 >
                     <div className="flex items-center justify-between gap-3">
                         {/* 左侧：点击呼出已选清单 */}
@@ -1739,10 +1734,10 @@ const SelectionForm = ({
                             className="flex items-center gap-2.5 text-left cursor-pointer select-none active:opacity-80 transition-opacity border-0 bg-transparent p-0"
                             onClick={() => setCartDrawerOpen(true)}
                         >
-                            <div className="relative flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-sm active:scale-95 transition-transform">
+                            <div className="relative flex h-10 w-10 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm active:scale-95 transition-transform">
                                 <ShoppingBag className="h-5 w-5" />
                                 {selectedCount > 0 && (
-                                    <span className="absolute -right-1 -top-1 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-amber-400 px-1 text-[10px] font-bold text-slate-950 shadow-xs animate-in zoom-in">
+                                    <span className="absolute -right-1 -top-1 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-warning px-1 text-2xs font-bold text-warning-foreground shadow-xs animate-in zoom-in">
                                         {selectedCount}
                                     </span>
                                 )}
@@ -1750,14 +1745,14 @@ const SelectionForm = ({
                             <div>
                                 {mall ? (
                                     <div>
-                                        <p className="text-xs sm:text-sm font-bold text-slate-900">
+                                        <p className="text-xs sm:text-sm font-bold text-foreground">
                                             已选{" "}
-                                            <span className="text-blue-600">
+                                            <span className="text-primary">
                                                 {selectedCount}
                                             </span>{" "}
                                             款
                                         </p>
-                                        <p className="text-[10px] text-slate-400">
+                                        <p className="text-2xs text-muted-foreground">
                                             {dirty
                                                 ? "修改待保存"
                                                 : "点击查看清单"}
@@ -1765,10 +1760,10 @@ const SelectionForm = ({
                                     </div>
                                 ) : (
                                     <div>
-                                        <p className="text-sm sm:text-base font-bold text-blue-600 leading-none">
+                                        <p className="text-sm sm:text-base font-bold text-primary leading-none">
                                             已选 {selectedCount} 项
                                         </p>
-                                        <p className="text-[10px] text-slate-500 mt-0.5">
+                                        <p className="text-2xs text-muted-foreground mt-0.5">
                                             {dirty
                                                 ? "尚有修改未保存"
                                                 : "已选内容已同步"}
@@ -1789,8 +1784,7 @@ const SelectionForm = ({
                                     !mutation.variables.confirm
                                 }
                                 variant="outline"
-                                size="sm"
-                                className="rounded-full border-slate-200 bg-slate-50 hover:bg-slate-100 text-xs font-medium text-slate-700 px-4 h-9 shadow-2xs"
+                                className="rounded-full"
                                 disabled={locked || conflict}
                                 onClick={() => persist(false)}
                             >
@@ -1805,8 +1799,7 @@ const SelectionForm = ({
                                         mutation.variables?.kind === "save" &&
                                         mutation.variables.confirm
                                     }
-                                    size="sm"
-                                    className="rounded-full bg-blue-600 hover:bg-blue-700 text-xs font-bold text-white shadow-sm shadow-blue-500/25 px-5 h-9 active:scale-95 transition-all"
+                                    className="rounded-full"
                                     disabled={locked || conflict}
                                     onClick={() => persist(true)}
                                 >
@@ -1851,13 +1844,13 @@ const SelectionForm = ({
                     {detailItem && (
                         <>
                             <DialogHeader>
-                                <DialogTitle className="text-base font-bold text-slate-900 line-clamp-1">
+                                <DialogTitle className="line-clamp-1">
                                     {detailItem.name}
                                 </DialogTitle>
                             </DialogHeader>
 
                             {/* 大图预览 */}
-                            <div className="relative aspect-video w-full rounded-2xl overflow-hidden bg-slate-50">
+                            <div className="relative aspect-video w-full rounded-2xl overflow-hidden bg-background">
                                 {publicImageUrl(
                                     token,
                                     detailItem.cover_path,
@@ -1872,9 +1865,9 @@ const SelectionForm = ({
                                         className="h-full w-full object-cover"
                                     />
                                 ) : (
-                                    <div className="flex h-full w-full flex-col items-center justify-center text-slate-400 bg-slate-100">
+                                    <div className="flex h-full w-full flex-col items-center justify-center text-muted-foreground bg-muted">
                                         <Package className="h-10 w-10 stroke-[1.5]" />
-                                        <span className="mt-2 text-xs font-medium text-slate-500">
+                                        <span className="mt-2 text-xs font-medium text-muted-foreground">
                                             精选商品快照
                                         </span>
                                     </div>
@@ -1883,35 +1876,33 @@ const SelectionForm = ({
 
                             {/* 价格与信息 */}
                             <div className="flex items-baseline justify-between">
-                                <div className="flex items-baseline text-blue-700 font-bold">
+                                <div className="flex items-baseline text-primary font-bold">
                                     <span className="text-xs mr-0.5">¥</span>
                                     <span className="text-2xl">
                                         {detailItem.price}
                                     </span>
                                     {mall && (
-                                        <span className="ml-2 text-xs text-slate-400 font-normal">
+                                        <span className="ml-2 text-xs text-muted-foreground font-normal">
                                             商城兑换参考价值
                                         </span>
                                     )}
                                 </div>
                                 {detailItem.tier_name && (
-                                    <Badge className="bg-slate-900 text-white">
-                                        {detailItem.tier_name}
-                                    </Badge>
+                                    <Badge>{detailItem.tier_name}</Badge>
                                 )}
                             </div>
 
                             {/* 详细规格 */}
                             {detailItem.specification.length > 0 && (
-                                <div className="rounded-2xl bg-slate-50 p-3 text-xs space-y-1.5 border border-slate-150">
-                                    <p className="font-semibold text-slate-700">
+                                <div className="rounded-2xl bg-background p-3 text-xs space-y-1.5 border border-border">
+                                    <p className="font-semibold text-foreground">
                                         规格参数
                                     </p>
-                                    <div className="grid grid-cols-2 gap-2 text-slate-600">
+                                    <div className="grid grid-cols-2 gap-2 text-muted-foreground">
                                         {detailItem.specification.map(
                                             (spec) => (
                                                 <p key={spec.name}>
-                                                    <span className="text-slate-400">
+                                                    <span className="text-muted-foreground">
                                                         {spec.name}：
                                                     </span>
                                                     {spec.value}
@@ -1924,22 +1915,24 @@ const SelectionForm = ({
 
                             {/* 套餐明细清单 */}
                             {detailItem.members.length > 0 && (
-                                <div className="rounded-2xl bg-blue-50/40 p-3 text-xs space-y-2 border border-blue-100">
-                                    <p className="font-bold text-blue-950 flex items-center gap-1.5">
-                                        <Layers className="h-4 w-4 text-blue-600" />
-                                        套餐包含 {detailItem.members.length}{" "}
+                                <div className="rounded-2xl bg-info-soft/40 p-3 text-xs space-y-2 border border-info-border">
+                                    <p className="font-bold text-info-soft-foreground flex items-center gap-1.5">
+                                        <Layers className="h-4 w-4" />
+                                        套餐包含 {
+                                            detailItem.members.length
+                                        }{" "}
                                         款组合商品
                                     </p>
                                     <div className="space-y-1.5">
                                         {detailItem.members.map((m, idx) => (
                                             <div
                                                 key={idx}
-                                                className="flex items-center justify-between text-slate-700 border-b border-blue-100/60 pb-1 last:border-0 last:pb-0"
+                                                className="flex items-center justify-between text-foreground border-b border-info-border/60 pb-1 last:border-0 last:pb-0"
                                             >
                                                 <span className="font-medium">
                                                     {m.name}
                                                 </span>
-                                                <span className="text-slate-400">
+                                                <span className="text-muted-foreground">
                                                     {m.specification
                                                         .map((s) => s.value)
                                                         .join("/")}{" "}
@@ -1953,7 +1946,8 @@ const SelectionForm = ({
 
                             <div className="pt-2">
                                 <Button
-                                    className="w-full rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-bold h-11 shadow-sm"
+                                    size="lg"
+                                    className="w-full rounded-2xl"
                                     onClick={() => {
                                         change(detailItem.item_id, {
                                             selected:
@@ -1977,8 +1971,8 @@ const SelectionForm = ({
             <Dialog open={cartDrawerOpen} onOpenChange={setCartDrawerOpen}>
                 <DialogContent className="max-w-lg rounded-3xl p-5 max-h-[75vh] flex flex-col">
                     <DialogHeader>
-                        <DialogTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
-                            <ShoppingBag className="h-5 w-5 text-blue-600" />
+                        <DialogTitle className="flex items-center gap-2">
+                            <ShoppingBag className="h-5 w-5 text-primary" />
                             已选商品清单 ({selectedCount} 款)
                         </DialogTitle>
                     </DialogHeader>
@@ -1991,26 +1985,25 @@ const SelectionForm = ({
                                 return (
                                     <div
                                         key={item.item_id}
-                                        className="flex items-center justify-between gap-3 border-b border-slate-100 pb-2.5"
+                                        className="flex items-center justify-between gap-3 border-b border-grid pb-2.5"
                                     >
                                         <div className="min-w-0 flex-1">
-                                            <p className="font-medium text-xs sm:text-sm text-slate-900 truncate">
+                                            <p className="font-medium text-xs sm:text-sm text-foreground truncate">
                                                 {item.name}
                                             </p>
-                                            <p className="text-xs font-bold text-blue-700 mt-0.5">
+                                            <p className="text-xs font-bold text-primary mt-0.5">
                                                 ¥ {item.price}
                                             </p>
                                         </div>
                                         <div className="flex items-center gap-2">
                                             {!mall && (
-                                                <span className="text-xs font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md">
+                                                <span className="text-xs font-semibold text-foreground bg-muted px-2 py-0.5 rounded-md">
                                                     {pick?.quantity} 份
                                                 </span>
                                             )}
                                             <Button
                                                 variant="ghost"
                                                 size="sm"
-                                                className="h-7 text-xs text-blue-600 hover:bg-blue-50 px-2"
                                                 onClick={() =>
                                                     change(item.item_id, {
                                                         selected: false,
@@ -2024,15 +2017,15 @@ const SelectionForm = ({
                                 )
                             })}
                         {selectedCount === 0 && (
-                            <p className="text-center py-8 text-xs text-slate-400">
+                            <p className="text-center py-8 text-xs text-muted-foreground">
                                 尚未选择任何商品
                             </p>
                         )}
                     </div>
 
-                    <div className="pt-2 border-t border-slate-100">
+                    <div className="pt-2 border-t border-grid">
                         <Button
-                            className="w-full rounded-full bg-slate-900 text-white"
+                            className="w-full rounded-full"
                             onClick={() => setCartDrawerOpen(false)}
                         >
                             继续选品

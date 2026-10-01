@@ -4,6 +4,7 @@ import { useStore } from "@tanstack/react-form"
 import { z } from "zod"
 import { useAppForm } from "@/components/form"
 import { Checkbox } from "@/components/ui/checkbox"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { OptionCombobox } from "@/components/business/option-combobox"
 import { ScopeTargetPicker } from "@/features/organization/components/scope-target-picker"
 import type { OrgUnit } from "@/features/organization/types"
@@ -258,49 +259,69 @@ export function PersonalGrantEditor({
             <form.Field name="mode">
                 {(field) => (
                     <fieldset className="space-y-2">
-                        <legend className="mb-2 font-medium">
+                        <legend
+                            id={`${idPrefix}-mode-label`}
+                            className="mb-2 font-medium"
+                        >
                             追加哪些数据？
                         </legend>
-                        {(
-                            [
-                                ...(dimensions.includes("internal_org") &&
-                                !business.default_self
-                                    ? [
-                                          [
-                                              "self",
-                                              business.resource.endsWith(
-                                                  "_person",
-                                              )
-                                                  ? "本人"
-                                                  : "本人负责的业务",
-                                          ],
-                                      ]
-                                    : []),
-                                ...(dimensions.includes("internal_org")
-                                    ? [["own_org", `${name}所属部门的数据`]]
-                                    : []),
+                        <RadioGroup
+                            id={`${idPrefix}-mode`}
+                            name={`${idPrefix}-mode`}
+                            aria-labelledby={`${idPrefix}-mode-label`}
+                            value={field.state.value}
+                            onValueChange={(mode) =>
+                                field.handleChange(
+                                    mode as PersonGrantEditorInput["mode"],
+                                )
+                            }
+                        >
+                            {(
                                 [
-                                    "explicit",
-                                    `指定${dimensions.map(scopeDimensionLabel).join("及")}`,
-                                ],
-                                ["company", "公司范围"],
-                            ] as [PersonGrantEditorInput["mode"], string][]
-                        ).map(([mode, label]) => (
-                            <label
-                                key={mode}
-                                htmlFor={`${idPrefix}-mode-${mode}`}
-                                className="flex items-center gap-2"
-                            >
-                                <input
-                                    id={`${idPrefix}-mode-${mode}`}
-                                    name={`${idPrefix}-mode`}
-                                    type="radio"
-                                    checked={field.state.value === mode}
-                                    onChange={() => field.handleChange(mode)}
-                                />
-                                {label}
-                            </label>
-                        ))}
+                                    ...(dimensions.includes("internal_org") &&
+                                    !business.default_self
+                                        ? [
+                                              [
+                                                  "self",
+                                                  business.resource.endsWith(
+                                                      "_person",
+                                                  )
+                                                      ? "本人"
+                                                      : "本人负责的业务",
+                                              ],
+                                          ]
+                                        : []),
+                                    ...(dimensions.includes("internal_org")
+                                        ? [["own_org", `${name}所属部门的数据`]]
+                                        : []),
+                                    [
+                                        "explicit",
+                                        `指定${dimensions.map(scopeDimensionLabel).join("及")}`,
+                                    ],
+                                    ["company", "公司范围"],
+                                ] as [PersonGrantEditorInput["mode"], string][]
+                            ).map(([mode, label]) => (
+                                <label
+                                    key={mode}
+                                    htmlFor={`${idPrefix}-mode-${mode}`}
+                                    className="flex items-center gap-2"
+                                >
+                                    <RadioGroupItem
+                                        id={`${idPrefix}-mode-${mode}`}
+                                        value={mode}
+                                        aria-label={label}
+                                        nativeButton
+                                        render={
+                                            <button
+                                                type="button"
+                                                aria-label={label}
+                                            />
+                                        }
+                                    />
+                                    {label}
+                                </label>
+                            ))}
+                        </RadioGroup>
                     </fieldset>
                 )}
             </form.Field>

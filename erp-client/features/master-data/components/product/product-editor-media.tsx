@@ -49,7 +49,7 @@ function MoneyInput({
             ) : null}
             <Input
                 id={id}
-                className={cn("h-8", showPrefix && "pl-6")}
+                className={cn("h-control-sm", showPrefix && "pl-6")}
                 value={value}
                 disabled={disabled}
                 onChange={(event) =>

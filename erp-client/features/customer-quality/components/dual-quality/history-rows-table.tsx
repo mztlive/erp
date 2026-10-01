@@ -2,6 +2,14 @@
 
 import { MoneyValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { HistoryQualityRow } from "../../dual-types"
 import type { PatchDual } from "../../lib/dual-filter-state"
@@ -16,31 +24,23 @@ export function HistoryRowsTable({
     patchDual: PatchDual
 }) {
     return (
-        <div className="min-w-0 overflow-x-auto rounded-xl border border-border">
-            <table className="w-full min-w-[560px] border-collapse text-sm">
-                <thead>
-                    <tr className="border-b border-border text-left text-xs text-muted-foreground">
-                        <th className="px-3 py-2 font-medium">
+        <div className="min-w-0">
+            <Table data-density="comfortable" className="min-w-[560px]">
+                <TableHeader>
+                    <TableRow>
+                        <TableHead>
                             {dimension === "attribution_user"
                                 ? "历史归属销售"
                                 : "历史归属组织"}
-                        </th>
-                        <th className="px-3 py-2 font-medium">归属客户</th>
-                        <th className="px-3 py-2 text-right font-medium">
-                            订单数
-                        </th>
-                        <th className="px-3 py-2 text-right font-medium">
-                            含税总额
-                        </th>
-                        <th className="px-3 py-2 text-right font-medium">
-                            缺版本
-                        </th>
-                        <th className="px-3 py-2 text-right font-medium">
-                            下钻
-                        </th>
-                    </tr>
-                </thead>
-                <tbody>
+                        </TableHead>
+                        <TableHead>归属客户</TableHead>
+                        <TableHead data-align="end">订单数</TableHead>
+                        <TableHead data-align="end">含税总额</TableHead>
+                        <TableHead data-align="end">缺版本</TableHead>
+                        <TableHead data-align="end">下钻</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
                     {items.map((row) => {
                         const drill =
                             row.groupId != null
@@ -59,11 +59,8 @@ export function HistoryRowsTable({
                                   row.label ??
                                   row.rowId)
                         return (
-                            <tr
-                                key={row.rowId}
-                                className="border-b border-border last:border-0"
-                            >
-                                <td className="max-w-48 px-3 py-2">
+                            <TableRow key={row.rowId}>
+                                <TableCell className="max-w-48">
                                     <div className="truncate font-medium">
                                         {identity}
                                     </div>
@@ -72,23 +69,23 @@ export function HistoryRowsTable({
                                             {row.orderNo}
                                         </div>
                                     ) : null}
-                                </td>
-                                <td className="max-w-40 truncate px-3 py-2 text-[13px]">
+                                </TableCell>
+                                <TableCell className="max-w-40 truncate">
                                     {row.customerName ?? row.customerId ?? "—"}
-                                </td>
-                                <td className="num px-3 py-2 text-right">
+                                </TableCell>
+                                <TableCell className="num" data-align="end">
                                     {row.orderCount ?? "—"}
-                                </td>
-                                <td className="px-3 py-2 text-right">
+                                </TableCell>
+                                <TableCell data-align="end">
                                     <MoneyValue
                                         value={row.grossTotal}
                                         taxBasis="gross"
                                     />
-                                </td>
-                                <td className="num px-3 py-2 text-right">
+                                </TableCell>
+                                <TableCell className="num" data-align="end">
                                     {row.unpricedCount}
-                                </td>
-                                <td className="px-3 py-2 text-right">
+                                </TableCell>
+                                <TableCell data-align="end">
                                     {drill ? (
                                         <Button
                                             id={`customers-quality-dual-drill-${toAutomationIdSegment(row.rowId)}`}
@@ -108,12 +105,12 @@ export function HistoryRowsTable({
                                     ) : (
                                         "—"
                                     )}
-                                </td>
-                            </tr>
+                                </TableCell>
+                            </TableRow>
                         )
                     })}
-                </tbody>
-            </table>
+                </TableBody>
+            </Table>
         </div>
     )
 }

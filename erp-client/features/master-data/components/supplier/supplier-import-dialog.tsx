@@ -8,6 +8,14 @@ import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { Input } from "@/components/ui/input"
 import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table"
+import {
     Dialog,
     DialogContent,
     DialogHeader,
@@ -137,45 +145,46 @@ export const SupplierImportDialog = ({
                         </p>
                     )}
                     {rows.length > 0 && (
-                        <div className="max-h-80 overflow-auto rounded-lg border">
-                            <table className="w-full text-left text-sm">
-                                <thead className="sticky top-0 bg-muted">
-                                    <tr>
-                                        <th className="p-3">Excel 行</th>
-                                        <th className="p-3">供应商全称</th>
-                                        <th className="p-3">结果</th>
-                                        <th className="p-3">说明</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
+                        <div className="overflow-hidden rounded-lg border [&>[data-slot=table-container]]:max-h-80 [&>[data-slot=table-container]]:overflow-auto">
+                            <Table data-density="compact">
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead scope="col">
+                                            Excel 行
+                                        </TableHead>
+                                        <TableHead scope="col">
+                                            供应商全称
+                                        </TableHead>
+                                        <TableHead scope="col">结果</TableHead>
+                                        <TableHead scope="col">说明</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
                                     {rows.map((row) => {
                                         return (
-                                            <tr
-                                                key={row.row_number}
-                                                className="border-t"
-                                            >
-                                                <td className="p-3">
+                                            <TableRow key={row.row_number}>
+                                                <TableCell className="num">
                                                     {row.row_number}
-                                                </td>
-                                                <td className="min-w-48 p-3">
+                                                </TableCell>
+                                                <TableCell className="min-w-48 whitespace-normal">
                                                     {row.cells[1] || "未填写"}
-                                                </td>
-                                                <td className="whitespace-nowrap p-3">
+                                                </TableCell>
+                                                <TableCell>
                                                     {row.parse_errors.length
                                                         ? "读取失败"
                                                         : "待导入"}
-                                                </td>
-                                                <td className="min-w-56 p-3">
+                                                </TableCell>
+                                                <TableCell className="min-w-56 whitespace-normal">
                                                     {row.parse_errors.join(
                                                         "；",
                                                     ) ||
                                                         "提交时核对必填数据、公司主体及重复记录"}
-                                                </td>
-                                            </tr>
+                                                </TableCell>
+                                            </TableRow>
                                         )
                                     })}
-                                </tbody>
-                            </table>
+                                </TableBody>
+                            </Table>
                         </div>
                     )}
                     <div className="flex flex-wrap justify-end gap-2">

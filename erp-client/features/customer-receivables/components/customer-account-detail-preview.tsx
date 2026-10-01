@@ -123,7 +123,6 @@ export function CustomerAccountDetailPreview({
                 if (!nextOpen) onClosed?.()
             }}
             size="detail"
-            contentClassName="data-[side=right]:sm:w-[480px] data-[side=right]:sm:max-w-[480px]"
             title={
                 data?.receivable?.counterpartyPartyName ??
                 data?.receipt?.counterpartyPartyName ??

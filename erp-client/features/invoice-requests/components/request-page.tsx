@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
 import { OptionCombobox, PageScaffold } from "@/components/business"
@@ -9,6 +8,8 @@ import {
     ListSearchField,
     ListWorkspaceFilterBar,
     ListWorkspaceFilterField,
+    ListWorkspaceHeader,
+    ListWorkspaceViews,
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
 import { CustomerSearchCombobox } from "@/features/entity-selectors/components/customer-search-combobox"
@@ -173,38 +174,35 @@ export function InvoiceRequestsPage() {
 
     return (
         <PageScaffold density="compact" className="space-y-6">
-            <header>
-                <h1 className="text-2xl font-semibold">客户往来</h1>
-                <p className="mt-2 text-sm text-muted-foreground">
-                    管理客户开票申请，跟踪审批与财务开票进度。
-                </p>
-            </header>
-            <nav
-                aria-label="客户往来工作视图"
-                className="flex gap-5 overflow-x-auto border-b pb-3 text-sm"
-            >
-                {[
-                    ["receivable", "应收"],
-                    ["receipt", "回款"],
-                    ["sales_invoice", "销项发票"],
-                    ["unallocated", "待分配"],
-                ].map(([view, label]) => (
-                    <Link
-                        id={`invoice-request-nav-${view}`}
-                        key={view}
-                        href={`/finance/customer-accounts?view=${view}`}
-                        className="whitespace-nowrap text-muted-foreground"
-                    >
-                        {label}
-                    </Link>
-                ))}
-                <span
-                    aria-current="page"
-                    className="whitespace-nowrap font-semibold"
-                >
-                    开票申请
-                </span>
-            </nav>
+            <ListWorkspaceHeader
+                eyebrow="财务"
+                title="客户往来"
+                description="管理客户开票申请，跟踪审批与财务开票进度。"
+            />
+            <ListWorkspaceViews
+                ariaLabel="客户往来工作视图"
+                items={[
+                    ...[
+                        ["receivable", "应收"],
+                        ["receipt", "回款"],
+                        ["sales_invoice", "销项发票"],
+                        ["unallocated", "待分配"],
+                    ].map(([view, label]) => ({
+                        id: `invoice-request-nav-${view}`,
+                        label,
+                        href: `/finance/customer-accounts?view=${view}`,
+                        active: false,
+                    })),
+                    {
+                        id: "invoice-request-nav-requests",
+                        label: "开票申请",
+                        href: appliedQuery
+                            ? `${pathname}?${appliedQuery}`
+                            : pathname,
+                        active: true,
+                    },
+                ]}
+            />
             <InvoiceRequestPanel
                 key={appliedQuery}
                 query={query}

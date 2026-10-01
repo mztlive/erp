@@ -247,7 +247,7 @@ export function RegisterSupplyForSkuDialog({
                         <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-5 pb-5 sm:px-6">
                             <fieldset
                                 disabled={mutation.isPending}
-                                className="min-w-0 space-y-4 [&_[data-slot=field]]:gap-1.5 [&_[data-slot=field-description]]:text-xs [&_[data-slot=input]]:h-9"
+                                className="min-w-0 space-y-4"
                             >
                                 {!fixedSku && (
                                     <form.AppField name="skuId">
@@ -778,7 +778,7 @@ export function RegisterSupplyForSkuDialog({
                                             ) ? (
                                                 <p
                                                     role="status"
-                                                    className="text-xs text-amber-700 dark:text-amber-400"
+                                                    className="text-sm text-warning-soft-foreground"
                                                 >
                                                     {status !== "AVAILABLE"
                                                         ? "当前状态不支持销售；恢复可供后还需满足价格和有效期等销售条件。"

@@ -3,7 +3,7 @@
 import { ChevronDownIcon, DownloadIcon, RefreshCwIcon } from "lucide-react"
 
 import { PageActions } from "@/components/business"
-import { listWorkspaceStyles } from "@/components/business/list-workspace"
+import { ListWorkspaceHeader } from "@/components/business/list-workspace"
 import { formatDateTime } from "@/lib/datetime"
 
 interface LedgerHeaderProps {
@@ -28,11 +28,11 @@ export function LedgerHeader({
     onExport,
 }: LedgerHeaderProps) {
     return (
-        <header className="flex flex-col gap-3 pb-4 md:flex-row md:items-start md:justify-between md:gap-6">
-            <div className="min-w-0">
-                <p className="mb-1 text-xs text-muted-foreground">库存</p>
-                <h1 className={listWorkspaceStyles.title}>库存台账</h1>
-                <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-[13px] leading-[22px] text-muted-foreground">
+        <ListWorkspaceHeader
+            eyebrow="库存"
+            title="库存台账"
+            description={
+                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                     <p>查看账面现存、预占与可用数量。</p>
                     {excludedKindsNote || openingStockNote ? (
                         <details className="group min-w-0 open:basis-full">
@@ -55,8 +55,9 @@ export function LedgerHeader({
                         </details>
                     ) : null}
                 </div>
-            </div>
-            <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 md:pt-1">
+            }
+        >
+            <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2">
                 <span className="text-xs text-muted-foreground" role="status">
                     {queriedAt ? (
                         <time dateTime={queriedAt}>
@@ -68,6 +69,7 @@ export function LedgerHeader({
                     )}
                 </span>
                 <PageActions
+                    size="default"
                     actions={[
                         {
                             actionKey: "refresh",
@@ -90,6 +92,6 @@ export function LedgerHeader({
                     ]}
                 />
             </div>
-        </header>
+        </ListWorkspaceHeader>
     )
 }

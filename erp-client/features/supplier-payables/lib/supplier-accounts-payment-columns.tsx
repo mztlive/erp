@@ -73,9 +73,8 @@ export function buildPaymentColumns(input: {
                         <Button
                             id={`supplier-payables-table-row-${toAutomationIdSegment(row.original.paymentId)}-reversal-${toAutomationIdSegment(latest.reversalId)}-open`}
                             type="button"
-                            size="xs"
-                            variant="ghost"
-                            className="num h-auto px-0 text-sm font-medium"
+                            variant="link"
+                            className="num h-auto px-0"
                             onClick={(event) => {
                                 event.stopPropagation()
                                 openReversalPreview(latest.reversalId)
@@ -121,7 +120,7 @@ export function buildPaymentColumns(input: {
             header: "付款时间",
             meta: { label: "时间", width: "default", numeric: true },
             cell: ({ row }) => (
-                <span className="num text-[13px] text-muted-foreground">
+                <span className="num text-body-compact text-muted-foreground">
                     {formatDateTime(row.original.paidAt, "full", "passthrough")}
                 </span>
             ),

@@ -51,8 +51,7 @@ export function WarehousePreviewSheet({
                     }
                 }
             }}
-            size="detail"
-            contentClassName="data-[side=right]:sm:w-preview data-[side=right]:sm:max-w-preview"
+            size="preview"
             title={previewRow?.name ?? "基础资料预览"}
             identity={
                 previewRow ? (

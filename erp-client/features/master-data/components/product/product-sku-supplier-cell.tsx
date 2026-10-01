@@ -67,7 +67,6 @@ function SkuSupplierCell({
                             type="button"
                             variant="link"
                             size="xs"
-                            className="h-7 px-0"
                             disabled={!canRevise}
                             onClick={() =>
                                 onRegisterSupply(toFixedSku(fields, sku, name))

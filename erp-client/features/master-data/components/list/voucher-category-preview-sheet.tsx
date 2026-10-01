@@ -49,7 +49,6 @@ export function VoucherCategoryPreviewSheet({
                 }
             }}
             size="preview"
-            contentClassName="data-[side=right]:sm:w-[460px] data-[side=right]:sm:max-w-[460px]"
             title={detail?.name ?? row?.name ?? "卡券类目详情"}
             identity={
                 row ? (
@@ -116,7 +115,7 @@ export function VoucherCategoryPreviewSheet({
                                 <dt className="shrink-0 text-xs text-muted-foreground">
                                     类目编号
                                 </dt>
-                                <dd className="num min-w-0 break-all text-right text-[13px]">
+                                <dd className="num min-w-0 break-all text-right text-body-compact">
                                     {row.stableNo}
                                 </dd>
                             </div>
@@ -195,7 +194,7 @@ export function VoucherCategoryPreviewSheet({
                                                 hour12: false,
                                             })}
                                         </p>
-                                        <p className="whitespace-pre-wrap break-words text-[13px] leading-6">
+                                        <p className="whitespace-pre-wrap break-words text-body-compact leading-6">
                                             {revision.descriptionSnapshot ||
                                                 "暂无描述"}
                                         </p>

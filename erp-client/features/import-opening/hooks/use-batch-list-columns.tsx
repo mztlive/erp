@@ -133,7 +133,7 @@ export function useBatchListColumns({
                 id: "updated",
                 header: "更新时间",
                 cell: ({ row }) => (
-                    <span className="num text-[13px] text-muted-foreground">
+                    <span className="num text-body-compact text-muted-foreground">
                         {formatDateTime(
                             row.original.updatedAt,
                             "dateStyle",

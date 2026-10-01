@@ -249,7 +249,6 @@ export function PersonalPolicyTable({
                                                             id={`person-scope-${segment}-edit`}
                                                             variant="ghost"
                                                             size="sm"
-                                                            className="h-7"
                                                             disabled={Boolean(
                                                                 editing,
                                                             )}

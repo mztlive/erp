@@ -134,7 +134,7 @@ function useConfirmColumns(onRemove: (id: string) => void, pending: boolean) {
                     }
                     return (
                         <span
-                            className="text-[13px] text-muted-foreground"
+                            className="text-body-compact text-muted-foreground"
                             title={regions.join("、")}
                         >
                             {regions.slice(0, 2).join("、")}
@@ -160,8 +160,8 @@ function useConfirmColumns(onRemove: (id: string) => void, pending: boolean) {
                         <span
                             className={
                                 atRisk
-                                    ? "inline-flex items-center gap-1.5 text-[13px] text-warning-soft-foreground"
-                                    : "inline-flex items-center gap-1.5 text-[13px] text-muted-foreground"
+                                    ? "inline-flex items-center gap-1.5 text-body-compact text-warning-soft-foreground"
+                                    : "inline-flex items-center gap-1.5 text-body-compact text-muted-foreground"
                             }
                         >
                             {atRisk ? (

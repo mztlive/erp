@@ -14,10 +14,7 @@ export function PreviewAmount({
     return (
         <section className="border-b border-border pb-6">
             <p className="text-xs font-medium text-muted-foreground">{label}</p>
-            <MoneyValue
-                value={value}
-                className="mt-2 [&>span:first-child]:text-[32px] [&>span:first-child]:font-semibold [&>span:first-child]:tracking-tight"
-            />
+            <MoneyValue value={value} size="summary" className="mt-2" />
             {children ? (
                 <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
                     {children}
@@ -52,7 +49,7 @@ export function PreviewFact({
     return (
         <div className="flex min-w-0 items-baseline justify-between gap-5">
             <dt className="shrink-0 text-xs text-muted-foreground">{label}</dt>
-            <dd className="min-w-0 break-words text-right text-[13px]">
+            <dd className="min-w-0 break-words text-right text-body-compact">
                 {children ?? "—"}
             </dd>
         </div>

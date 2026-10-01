@@ -441,7 +441,6 @@ function DataTable<TData>({
                 ) : null}
 
                 <Table
-                    className="[--table-cell-inline:0.75rem] [&_[data-slot=badge]]:text-xs [&_[data-slot=money-value]]:text-sm"
                     data-density={density}
                     data-striped={striped ? "true" : undefined}
                     data-placeholder={

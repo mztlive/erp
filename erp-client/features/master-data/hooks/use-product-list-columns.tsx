@@ -272,7 +272,7 @@ export function useProductListColumns({
             {
                 id: "listing",
                 header: "上架状态",
-                meta: { label: "上架状态" },
+                meta: { label: "上架状态", width: "status" },
                 cell: ({ row }) => {
                     const item = row.original
                     const inherited = item.listingStatus ?? "UNLISTED"

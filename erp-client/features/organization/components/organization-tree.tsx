@@ -30,7 +30,7 @@ function TreeItems({
                             type="button"
                             variant={selected ? "secondary" : "ghost"}
                             className={cn(
-                                "h-auto min-h-10 w-full min-w-0 justify-start gap-2 whitespace-normal rounded-md px-2 py-2 text-left text-[13px]",
+                                "h-auto min-h-10 w-full min-w-0 justify-start gap-2 whitespace-normal rounded-md px-2 py-2 text-left text-body-compact",
                                 selected
                                     ? "bg-primary/10 font-medium text-primary hover:bg-primary/15"
                                     : "text-muted-foreground hover:text-foreground",

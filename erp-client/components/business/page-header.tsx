@@ -22,13 +22,15 @@ export type PageHeaderProps = Omit<
      * page 变体必填；object-chrome 时可选（通常省略，避免与 DocumentHeader 双标题）。
      */
     title?: React.ReactNode
+    /** 标题前的返回等轻操作；独立于 h1。 */
+    leading?: React.ReactNode
     description?: React.ReactNode
     status?: Pick<StatusBadgeProps, "label" | "tone" | "icon">
     metadata?: React.ReactNode
     actions?: React.ReactNode
     /**
      * compact（默认）：标题、状态与 metadata 同排，供高频作业页压缩首屏。
-     * default：标题 text-2xl、metadata 独占一行，用于需要展示语气的落地页。
+     * default：metadata 独占一行，用于需要展示语气的落地页；两种密度均消费页面标题字号。
      * object-chrome 变体始终按 compact 节奏渲染，本 prop 仅影响 page 变体。
      */
     density?: PageHeaderDensity
@@ -48,6 +50,7 @@ const metaSlotClassName =
 
 function PageHeader({
     title,
+    leading,
     description,
     status,
     metadata,
@@ -64,6 +67,7 @@ function PageHeader({
     const showTitleBlock =
         !objectChrome &&
         (title != null ||
+            leading != null ||
             status != null ||
             description != null ||
             metadata != null)
@@ -107,15 +111,9 @@ function PageHeader({
                                 compact ? "gap-x-2.5 gap-y-1" : "gap-2.5",
                             )}
                         >
+                            {leading}
                             {title != null ? (
-                                <h1
-                                    className={cn(
-                                        "font-semibold tracking-tight text-foreground",
-                                        compact
-                                            ? "text-[26px] leading-9"
-                                            : "text-[26px] leading-9",
-                                    )}
-                                >
+                                <h1 className="text-page-title font-semibold tracking-tight text-foreground">
                                     {title}
                                 </h1>
                             ) : null}
@@ -129,7 +127,7 @@ function PageHeader({
                         {description ? (
                             <p
                                 className={cn(
-                                    "max-w-3xl text-[13px] leading-6 text-muted-foreground",
+                                    "max-w-3xl text-body-compact text-muted-foreground",
                                     compact ? "mt-1" : "mt-1.5",
                                 )}
                             >

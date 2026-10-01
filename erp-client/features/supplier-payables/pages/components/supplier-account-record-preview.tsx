@@ -37,7 +37,7 @@ export interface SupplierAccountRecordPreviewProps {
     onRefund: (request: SupplierRefundRequest) => void
 }
 
-/** 付款、进项发票与待核销记录共用的轻预览及操作入口。 */
+/** 付款、进项发票与待核销记录共用的详情抽屉及操作入口。 */
 export function SupplierAccountRecordPreview({
     kind,
     payment,
@@ -92,7 +92,7 @@ export function SupplierAccountRecordPreview({
                 onOpenChangeComplete={(open) => {
                     if (!open && !paymentDetailOpen) onClosed?.()
                 }}
-                contentClassName="data-[side=right]:sm:w-[480px] data-[side=right]:sm:max-w-[480px]"
+                size="detail"
                 identity={
                     documentNo
                         ? `${isPayment ? "付款单" : "发票号码"}：${documentNo}`
@@ -216,34 +216,36 @@ export function SupplierAccountRecordPreview({
                     </>
                 }
             >
-                {row ? (
-                    <SupplierAccountRecordBody
-                        payment={payment}
-                        invoice={invoice}
-                        unallocated={unallocated}
-                        isPayment={isPayment}
-                        allocationReason={allocationReason}
-                        onOpenPayable={onOpenPayable}
-                        onOpenReversal={onOpenReversal}
-                    />
-                ) : loading ? (
-                    <div className="h-40 animate-pulse rounded-lg bg-muted" />
-                ) : (
-                    <div className="space-y-3">
-                        <p className="text-muted-foreground">
-                            {error ?? "未找到往来记录"}
-                        </p>
-                        {error && onRetry ? (
-                            <Button
-                                id="supplier-payables-preview-record-retry"
-                                variant="outline"
-                                onClick={onRetry}
-                            >
-                                重试
-                            </Button>
-                        ) : null}
-                    </div>
-                )}
+                <div className="min-h-0 flex-1 space-y-6 overflow-auto px-7 py-6">
+                    {row ? (
+                        <SupplierAccountRecordBody
+                            payment={payment}
+                            invoice={invoice}
+                            unallocated={unallocated}
+                            isPayment={isPayment}
+                            allocationReason={allocationReason}
+                            onOpenPayable={onOpenPayable}
+                            onOpenReversal={onOpenReversal}
+                        />
+                    ) : loading ? (
+                        <div className="h-40 animate-pulse rounded-lg bg-muted" />
+                    ) : (
+                        <div className="space-y-3">
+                            <p className="text-muted-foreground">
+                                {error ?? "未找到往来记录"}
+                            </p>
+                            {error && onRetry ? (
+                                <Button
+                                    id="supplier-payables-preview-record-retry"
+                                    variant="outline"
+                                    onClick={onRetry}
+                                >
+                                    重试
+                                </Button>
+                            ) : null}
+                        </div>
+                    )}
+                </div>
             </QuickPreviewSheet>
             {paymentDetailOpen ? (
                 <SupplierPaymentDetailDialog

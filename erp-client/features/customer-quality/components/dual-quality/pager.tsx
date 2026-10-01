@@ -21,7 +21,7 @@ export function Pager({
     const pageCount = Math.max(1, Math.ceil(total / pageSize))
     const safePage = Math.min(page, pageCount)
     return (
-        <div className="flex min-w-0 flex-wrap items-center gap-2 text-[13px]">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 text-body-compact">
             <Button
                 id={`${idPrefix}-prev-page`}
                 type="button"

@@ -104,7 +104,7 @@ export function OrganizationUnitFilter({
                     id={id}
                     label={label}
                     aria-describedby={message ? `${id}-hint` : undefined}
-                    className="min-w-0 [&_[data-slot=combobox-chips]]:min-h-control [&_[data-slot=combobox-chips]]:rounded-lg [&_[data-slot=combobox-chip]]:max-w-full [&_[data-slot=combobox-chip-remove]]:shrink-0"
+                    className="min-w-0 [&_[data-slot=combobox-chip]]:max-w-full [&_[data-slot=combobox-chip-remove]]:shrink-0"
                     nodes={nodes}
                     value={selected}
                     placeholder="搜索组织名称"

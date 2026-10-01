@@ -4,6 +4,7 @@ import { SearchIcon, ShieldAlertIcon } from "lucide-react"
 
 import { OptionCombobox } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { NativeCheckbox } from "@/components/ui/checkbox"
 import {
     InputGroup,
     InputGroupAddon,
@@ -118,7 +119,7 @@ export function PermissionOptionsPanel({
                         id={`${id}-view`}
                         aria-label="权限显示范围"
                         className="w-36 shrink-0"
-                        inputClassName="h-9"
+                        inputClassName="h-control"
                         value={view}
                         options={Object.entries(PERMISSION_VIEWS).map(
                             ([value, label]) => ({ value, label }),
@@ -216,25 +217,23 @@ export function PermissionOptionsPanel({
                     id={`${id}-content`}
                 >
                     {panel.visibleGroups.length > 0 && (
-                        <select
+                        <OptionCombobox
                             id={`${id}-module`}
                             aria-label="当前权限模块"
                             value={panel.activeGroup?.name ?? ""}
-                            onChange={(event) =>
-                                panel.setActiveGroup(event.target.value)
+                            onValueChange={(value) =>
+                                value && panel.setActiveGroup(value)
                             }
-                            className="mb-4 h-10 w-full rounded-lg border border-input bg-background px-3 text-sm md:hidden"
-                        >
-                            {panel.visibleGroups.map((group) => (
-                                <option
-                                    key={group.name}
-                                    id={`${id}-module-${permissionGroupSegment(group.name)}`}
-                                    value={group.name}
-                                >
-                                    {group.name}
-                                </option>
-                            ))}
-                        </select>
+                            options={panel.visibleGroups.map((group) => ({
+                                value: group.name,
+                                label: group.name,
+                            }))}
+                            getOptionId={(value) =>
+                                `${id}-module-${permissionGroupSegment(value)}`
+                            }
+                            allowClear={false}
+                            className="mb-4 w-full md:hidden"
+                        />
                     )}
                     {panel.activeGroup ? (
                         <PermissionSection
@@ -409,17 +408,15 @@ function PermissionSection({
                                                 "cursor-default opacity-60",
                                         )}
                                     >
-                                        <input
+                                        <NativeCheckbox
                                             id={checkboxId}
-                                            type="checkbox"
                                             checked={checked}
                                             disabled={readOnly}
                                             aria-label={`${row.label} · ${actionLabel(item.action)}`}
-                                            className="size-4 shrink-0 accent-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                                            onChange={(event) =>
+                                            onCheckedChange={(nextChecked) =>
                                                 onToggle(
                                                     [item.code],
-                                                    event.target.checked,
+                                                    nextChecked === true,
                                                 )
                                             }
                                         />

@@ -192,12 +192,12 @@ export function HistoryCaliberPanel({
                                 : "导出历史口径 CSV"}
                         </LoadingButton>
                         {exportError ? (
-                            <span className="min-w-0 break-all text-[13px] text-destructive">
+                            <span className="min-w-0 break-all text-body-compact text-destructive">
                                 {exportError}
                             </span>
                         ) : null}
                         {exportDone ? (
-                            <span className="min-w-0 break-all text-[13px] text-muted-foreground">
+                            <span className="min-w-0 break-all text-body-compact text-muted-foreground">
                                 {exportDone}
                             </span>
                         ) : null}

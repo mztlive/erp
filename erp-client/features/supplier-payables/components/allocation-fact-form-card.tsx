@@ -80,8 +80,12 @@ export function AllocationAmountSummary({
                     )}
                 >
                     <DescriptionTerm>{label}</DescriptionTerm>
-                    <DescriptionDetails className="num text-lg font-semibold">
-                        <MoneyValue value={value} taxBasis="gross" />
+                    <DescriptionDetails>
+                        <MoneyValue
+                            value={value}
+                            taxBasis="gross"
+                            size="section"
+                        />
                     </DescriptionDetails>
                 </DescriptionItem>
             ))}

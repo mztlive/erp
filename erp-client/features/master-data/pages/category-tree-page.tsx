@@ -102,9 +102,8 @@ export function CategoryTreePage() {
                         <Button
                             id={`${prefix}-expand`}
                             type="button"
-                            size="sm"
+                            size="xs"
                             variant="ghost"
-                            className="h-7 px-2 text-xs"
                             onClick={state.expandAll}
                         >
                             展开
@@ -112,9 +111,8 @@ export function CategoryTreePage() {
                         <Button
                             id={`${prefix}-collapse`}
                             type="button"
-                            size="sm"
+                            size="xs"
                             variant="ghost"
-                            className="h-7 px-2 text-xs"
                             onClick={state.collapseAll}
                         >
                             收起

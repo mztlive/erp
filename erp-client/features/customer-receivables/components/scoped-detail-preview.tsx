@@ -81,8 +81,7 @@ export function ReceivableScopeDetailPreview({
             onOpenChangeComplete={(nextOpen) => {
                 if (!nextOpen) onClosed?.()
             }}
-            size="preview"
-            contentClassName="data-[side=right]:sm:w-[460px] data-[side=right]:sm:max-w-[460px]"
+            size="detail"
             title={title}
             identity={identity}
             summary={

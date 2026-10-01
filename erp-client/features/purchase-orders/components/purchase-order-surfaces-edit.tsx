@@ -10,6 +10,7 @@ import {
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Card,
@@ -118,15 +119,13 @@ function LineNumberInput({
 }) {
     return (
         <>
-            <input
+            <Input
                 id={id}
-                className={cn(
-                    "num rounded border border-border bg-background px-2 py-1 text-right text-sm",
-                    widthClass,
-                )}
+                className={cn("num text-right", widthClass)}
                 value={value}
                 onChange={(event) => onValueChange(event.target.value)}
                 aria-label={ariaLabel}
+                aria-invalid={invalid || undefined}
             />
             {suffix ? (
                 <span className="ml-1 text-xs text-muted-foreground">

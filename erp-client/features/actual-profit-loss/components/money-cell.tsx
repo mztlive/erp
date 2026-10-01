@@ -29,7 +29,7 @@ export function MoneyCell({
     }
     const content = (
         <span
-            className={`num text-sm ${isNeg ? "text-destructive" : ""}`}
+            className={`num text-sm font-medium ${isNeg ? "text-destructive" : ""}`}
             aria-label={
                 ariaLabel ??
                 (value == null

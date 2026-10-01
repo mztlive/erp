@@ -128,7 +128,7 @@ export function AccountsPage() {
                             person.own_org_unit_id,
                         )
                     ) : (
-                        <span className="text-amber-700">未分配部门</span>
+                        <span className="text-warning">未分配部门</span>
                     )
                 },
             },
@@ -146,7 +146,7 @@ export function AccountsPage() {
                 size: 190,
                 header: "创建时间",
                 cell: ({ row }) => (
-                    <span className="num text-[13px] text-muted-foreground">
+                    <span className="num text-body-compact text-muted-foreground">
                         {formatDateTime(
                             new Date(
                                 row.original.created_at * 1000,

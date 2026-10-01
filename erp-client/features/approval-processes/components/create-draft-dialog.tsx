@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import { Label } from "@/components/ui/label"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 
 import { newCommandKey } from "../errors"
 import { DRAFT_SOURCE_LABEL, documentTypeLabel } from "../labels"
@@ -132,56 +133,82 @@ export function CreateDraftDialog({
                     <form.AppField name="draft_source">
                         {(field) => (
                             <Field data-invalid={!field.state.meta.isValid}>
-                                <FieldLabel>
+                                <FieldLabel id={`${id}-draft-source-label`}>
                                     草稿来源
                                     <span className="text-destructive">*</span>
                                 </FieldLabel>
-                                <div className="flex flex-col gap-2">
-                                    <Label className="flex items-center gap-2 font-normal">
-                                        <input
+                                <RadioGroup
+                                    id={`${id}-draft-source`}
+                                    aria-labelledby={`${id}-draft-source-label`}
+                                    aria-invalid={!field.state.meta.isValid}
+                                    name={field.name}
+                                    value={field.state.value}
+                                    className="gap-2"
+                                    onValueChange={(value) => {
+                                        if (
+                                            value !== "EMPTY" &&
+                                            value !== "CURRENT_PUBLISHED"
+                                        ) {
+                                            return
+                                        }
+                                        if (
+                                            value === "CURRENT_PUBLISHED" &&
+                                            !canCopy
+                                        ) {
+                                            return
+                                        }
+                                        field.handleChange(value)
+                                    }}
+                                >
+                                    <Label
+                                        htmlFor={`${id}-draft-source-empty`}
+                                        className="flex items-center gap-2 font-normal"
+                                    >
+                                        <RadioGroupItem
                                             id={`${id}-draft-source-empty`}
-                                            type="radio"
-                                            name={field.name}
                                             value="EMPTY"
+                                            nativeButton
+                                            render={
+                                                <button
+                                                    type="button"
+                                                    aria-label={
+                                                        DRAFT_SOURCE_LABEL.EMPTY
+                                                    }
+                                                />
+                                            }
                                             aria-label={
                                                 DRAFT_SOURCE_LABEL.EMPTY
-                                            }
-                                            checked={
-                                                field.state.value === "EMPTY"
-                                            }
-                                            onChange={() =>
-                                                field.handleChange("EMPTY")
                                             }
                                         />
                                         {DRAFT_SOURCE_LABEL.EMPTY}
                                     </Label>
-                                    <Label className="flex items-center gap-2 font-normal">
-                                        <input
+                                    <Label
+                                        htmlFor={`${id}-draft-source-current-published`}
+                                        className="flex items-center gap-2 font-normal"
+                                    >
+                                        <RadioGroupItem
                                             id={`${id}-draft-source-current-published`}
-                                            type="radio"
-                                            name={field.name}
                                             value="CURRENT_PUBLISHED"
+                                            nativeButton
+                                            render={
+                                                <button
+                                                    type="button"
+                                                    aria-label={
+                                                        DRAFT_SOURCE_LABEL.CURRENT_PUBLISHED
+                                                    }
+                                                />
+                                            }
                                             aria-label={
                                                 DRAFT_SOURCE_LABEL.CURRENT_PUBLISHED
                                             }
                                             disabled={!canCopy}
-                                            checked={
-                                                field.state.value ===
-                                                "CURRENT_PUBLISHED"
-                                            }
-                                            onChange={() => {
-                                                if (!canCopy) return
-                                                field.handleChange(
-                                                    "CURRENT_PUBLISHED",
-                                                )
-                                            }}
                                         />
                                         {DRAFT_SOURCE_LABEL.CURRENT_PUBLISHED}
                                         {!canCopy
                                             ? "（当前没有已发布版本）"
                                             : null}
                                     </Label>
-                                </div>
+                                </RadioGroup>
                                 {field.state.meta.errors.length > 0 ? (
                                     <FieldError
                                         errors={field.state.meta.errors.map(

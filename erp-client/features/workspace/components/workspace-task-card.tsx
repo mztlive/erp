@@ -26,28 +26,23 @@ export const workspaceTaskColumns =
 const FAMILY_APPEARANCE = {
     approval: {
         icon: FileTextIcon,
-        className:
-            "bg-violet-50 text-violet-600 dark:bg-violet-950/40 dark:text-violet-300",
+        className: "bg-violet-soft text-violet-soft-foreground",
     },
     procurement: {
         icon: FileTextIcon,
-        className:
-            "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300",
+        className: "bg-info-soft text-info-soft-foreground",
     },
     fulfillment: {
         icon: TruckIcon,
-        className:
-            "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300",
+        className: "bg-info-soft text-info-soft-foreground",
     },
     finance: {
         icon: WalletIcon,
-        className:
-            "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300",
+        className: "bg-warning-soft text-warning-soft-foreground",
     },
     exception: {
         icon: CircleAlertIcon,
-        className:
-            "bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300",
+        className: "bg-orange-soft text-orange-soft-foreground",
     },
 }
 

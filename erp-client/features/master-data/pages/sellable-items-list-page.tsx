@@ -306,8 +306,7 @@ export function SellableItemsListPage() {
                                             id="master-data-sellable-items-launch-selection"
                                             type="button"
                                             variant="default"
-                                            size="xs"
-                                            className="h-7 rounded-md px-2 text-xs font-medium"
+                                            size="sm"
                                             disabled={launchDisabled}
                                             title={sourceSummary}
                                             onClick={() =>
@@ -349,9 +348,7 @@ export function SellableItemsListPage() {
                         onClear={selection.clear}
                     />
                 }
-                tableClassName={
-                    isGallery ? productStyles.gallery : productStyles.table
-                }
+                tableClassName={isGallery ? productStyles.gallery : undefined}
                 table={
                     isGallery ? (
                         <SellableItemsGallery

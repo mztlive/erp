@@ -99,8 +99,8 @@ export function CategoryTreeToolbar({
                         aria-pressed={lifecycleStatus === value}
                         className={
                             lifecycleStatus === value
-                                ? "h-7 bg-background shadow-xs"
-                                : "h-7 text-muted-foreground"
+                                ? "bg-background shadow-xs"
+                                : "text-muted-foreground"
                         }
                         onClick={() => onLifecycleStatusChange(value)}
                     >
