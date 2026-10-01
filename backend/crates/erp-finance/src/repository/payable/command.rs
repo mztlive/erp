@@ -57,7 +57,7 @@ impl<'a> PayableRepository<'a> {
     ) -> Result<()> {
         mongo_ops::insert_many(
             &self.db.collection::<PaymentAllocation>(<mongodb::Database as PayableExt>::PAYMENT_ALLOCATIONS),
-            allocations.to_vec(),
+            allocations,
             executor,
         )
         .await
@@ -90,7 +90,7 @@ impl<'a> PayableRepository<'a> {
             &self.db.collection::<PurchaseInvoiceAllocation>(
                 <mongodb::Database as PayableExt>::PURCHASE_INVOICE_ALLOCATIONS,
             ),
-            allocations.to_vec(),
+            allocations,
             executor,
         )
         .await

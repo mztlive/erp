@@ -350,7 +350,7 @@ impl<'a> SupplierApiRepository<'a> {
         .await?;
         mongo_ops::insert_many(
             &self.db.collection::<SupplierApiCapability>(SUPPLIER_API_CAPABILITIES),
-            capabilities.to_vec(),
+            capabilities,
             executor,
         )
         .await?;

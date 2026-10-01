@@ -6,6 +6,7 @@ use erp_core::money::Quantity;
 
 use crate::Result;
 use crate::entity::facts::{AcceptanceSalesLineFact, AcceptanceSalesQuantityFact};
+use crate::entity::fulfillment::acceptance_eligibility::AcceptanceAllocationIndex;
 use crate::entity::fulfillment::{
     AcceptanceFactEligibility, AcceptanceFulfillmentAllocation, AcceptanceLineEligibility, DeliveryLine,
     ElectronicDelivery, ServiceFulfillment,
@@ -51,14 +52,10 @@ pub struct EligibilitySources<'a> {
 /// 事实/分配入参由数据模型 §6.7 固定为三类来源，字段不可压缩。
 pub fn build_line_eligibilities(sources: &EligibilitySources<'_>) -> Result<Vec<AcceptanceLineEligibility>> {
     let mut facts_by_line = group_facts_by_line(sources)?;
-    let mut line_inputs = group_revision_quantities(sources);
-    for (key, facts) in facts_by_line.drain() {
-        if let Some(entry) = line_inputs.iter_mut().find(|(line_key, _, _)| *line_key == key) {
-            entry.2 = facts;
-        }
-    }
+    let line_inputs = group_revision_quantities(sources);
     let mut lines = Vec::with_capacity(line_inputs.len());
-    for (sales_order_line_id, required_quantity, facts) in line_inputs {
+    for (sales_order_line_id, required_quantity, _) in line_inputs {
+        let facts = facts_by_line.remove(&sales_order_line_id).unwrap_or_default();
         lines.push(AcceptanceLineEligibility::from_facts(sales_order_line_id, required_quantity, facts)?);
     }
     Ok(lines)
@@ -77,17 +74,16 @@ pub fn build_line_eligibilities(sources: &EligibilitySources<'_>) -> Result<Vec<
 fn group_facts_by_line(
     sources: &EligibilitySources<'_>,
 ) -> Result<HashMap<String, Vec<AcceptanceFactEligibility>>> {
+    let delivery_allocations = AcceptanceAllocationIndex::new(sources.delivery_allocations);
+    let electronic_allocations = AcceptanceAllocationIndex::new(sources.electronic_allocations);
+    let service_allocations = AcceptanceAllocationIndex::new(sources.service_allocations);
     let mut facts_by_line: HashMap<String, Vec<AcceptanceFactEligibility>> = HashMap::new();
     for revision_line in sources.revision_lines {
         facts_by_line.insert(revision_line.sales_order_line_id.to_string(), Vec::new());
     }
     for line in sources.delivery_lines {
         if let Some(facts) = facts_by_line.get_mut(&line.sales_order_line_id.to_string()) {
-            facts.push(AcceptanceFactEligibility::from_fact(
-                &line.base.id,
-                line.quantity,
-                sources.delivery_allocations,
-            )?);
+            facts.push(delivery_allocations.fact(&line.base.id, line.quantity)?);
         }
     }
     for record in sources.electronic {
@@ -96,20 +92,12 @@ fn group_facts_by_line(
             continue;
         }
         if let Some(facts) = facts_by_line.get_mut(&record.sales_order_line_id.to_string()) {
-            facts.push(AcceptanceFactEligibility::from_fact(
-                &record.base.id,
-                record.quantity,
-                sources.electronic_allocations,
-            )?);
+            facts.push(electronic_allocations.fact(&record.base.id, record.quantity)?);
         }
     }
     for record in sources.service {
         if let Some(facts) = facts_by_line.get_mut(&record.sales_order_line_id.to_string()) {
-            facts.push(AcceptanceFactEligibility::from_fact(
-                &record.base.id,
-                record.quantity,
-                sources.service_allocations,
-            )?);
+            facts.push(service_allocations.fact(&record.base.id, record.quantity)?);
         }
     }
     Ok(facts_by_line)
@@ -151,14 +139,28 @@ fn group_revision_quantities(
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
+    use std::time::Instant as Stopwatch;
 
-    use erp_core::ids::{SalesOrderLineId, SalesOrderRevisionLineId};
+    use erp_core::Error as CoreError;
+    use erp_core::ids::{
+        AcceptanceFulfillmentAllocationId, CustomerAcceptanceLineId, DeliveryId, DeliveryLineId,
+        ElectronicDeliveryId, SalesOrderLineId, SalesOrderRevisionLineId, ServiceFulfillmentId,
+        StockReservationId,
+    };
     use erp_core::money::Quantity;
 
     use super::{EligibilitySources, build_line_eligibilities};
+    use crate::Error;
     use crate::entity::facts::{AcceptanceSalesLineFact, AcceptanceSalesQuantityFact};
-    use crate::entity::fulfillment::AcceptanceProgress;
+    use crate::entity::fulfillment::electronic_delivery::tests::data as electronic_data;
+    use crate::entity::fulfillment::service_fulfillment::tests::data as service_data;
+    use crate::entity::fulfillment::{
+        AcceptanceFulfillmentAllocation, AcceptanceFulfillmentAllocationData, AcceptanceProgress,
+        AllocationAction, DeliveryLine, DeliveryLineData, DeliveryType, ElectronicDelivery,
+        ElectronicDeliveryState, FulfillmentFactType, ServiceFulfillment,
+    };
 
+    /// 构造只有销售数量快照的资格输入。
     fn sources<'a>(
         lines: &'a [AcceptanceSalesLineFact],
         quantities: &'a [AcceptanceSalesQuantityFact],
@@ -216,5 +218,168 @@ mod tests {
         let lines = build_line_eligibilities(&sources(&[], &[])).unwrap();
         assert!(lines.is_empty());
         assert!(AcceptanceProgress::derive(&lines).is_none());
+    }
+
+    /// 构造数量为二的已筛选仓发明细。
+    fn delivery(id: &str, sales_line: &str) -> DeliveryLine {
+        DeliveryLine::new(
+            DeliveryLineId::new(id),
+            DeliveryLineData {
+                delivery_id: DeliveryId::new("delivery-1"),
+                line_no: 1,
+                sales_order_line_id: SalesOrderLineId::new(sales_line),
+                quantity: Quantity::from_str("2").unwrap(),
+                stock_reservation_id: Some(StockReservationId::new("reservation-1")),
+                purchase_line_sales_allocation_id: None,
+            },
+            DeliveryType::WarehouseShip,
+        )
+        .unwrap()
+    }
+
+    /// 构造关联指定发货事实的正向验收分配。
+    fn allocation(id: &str, quantity: &str) -> AcceptanceFulfillmentAllocation {
+        AcceptanceFulfillmentAllocation::new(
+            AcceptanceFulfillmentAllocationId::new(format!("allocation-{id}")),
+            AcceptanceFulfillmentAllocationData {
+                customer_acceptance_line_id: CustomerAcceptanceLineId::new("acceptance-1"),
+                fulfillment_fact_type: FulfillmentFactType::Delivery,
+                fulfillment_line_id: id.into(),
+                allocation_action: AllocationAction::Apply,
+                allocated_quantity: Quantity::from_str(quantity).unwrap(),
+                reverses_allocation_id: None,
+            },
+        )
+        .unwrap()
+    }
+
+    /// 大批资格计算保持销售行顺序，并逐事实计算净验收与剩余数量。
+    #[test]
+    fn large_eligibility_projection_sample() {
+        let lines = (0..1000)
+            .map(|index| AcceptanceSalesLineFact {
+                id: format!("revision-{index}"),
+                sales_order_line_id: SalesOrderLineId::new(format!("sales-{index}")),
+            })
+            .collect::<Vec<_>>();
+        let deliveries = (0..1000)
+            .map(|index| delivery(&format!("delivery-{index}"), &format!("sales-{index}")))
+            .collect::<Vec<_>>();
+        let allocations =
+            (0..1000).map(|index| allocation(&format!("delivery-{index}"), "1")).collect::<Vec<_>>();
+        let mut input = sources(&lines, &[]);
+        input.delivery_lines = &deliveries;
+        input.delivery_allocations = &allocations;
+        let one = Quantity::from_str("1").unwrap();
+        let started = Stopwatch::now();
+        for _ in 0..10 {
+            let result = build_line_eligibilities(&input).unwrap();
+            assert_eq!(result.first().unwrap().sales_order_line_id, "sales-0");
+            assert_eq!(result.last().unwrap().sales_order_line_id, "sales-999");
+            assert!(
+                result
+                    .iter()
+                    .all(|line| line.net_accepted_quantity == one && line.remaining_eligible_quantity == one)
+            );
+        }
+        eprintln!("fulfillment_1000_line_projections_10_runs={:?}", started.elapsed());
+    }
+
+    /// 未消费事实的错误分配不提前报错；重复事实与原输入顺序均保留。
+    #[test]
+    fn grouping_only_validates_consumed_facts_and_preserves_duplicates() {
+        let lines =
+            [AcceptanceSalesLineFact { id: "r1".into(), sales_order_line_id: SalesOrderLineId::new("s1") }];
+        let deliveries = [
+            delivery("dl-2", "s1"),
+            delivery("dl-1", "s1"),
+            delivery("dl-2", "s1"),
+            delivery("ignored", "other-sales-line"),
+        ];
+        let allocations = [
+            allocation("dl-1", "1"),
+            allocation("ignored", "3"),
+            allocation("dl-2", "1"),
+            allocation("no-fact", "3"),
+        ];
+        let mut input = sources(&lines, &[]);
+        input.delivery_lines = &deliveries;
+        input.delivery_allocations = &allocations;
+        let result = build_line_eligibilities(&input).unwrap();
+        assert_eq!(
+            result[0].facts.iter().map(|fact| fact.fulfillment_line_id.as_str()).collect::<Vec<_>>(),
+            ["dl-2", "dl-1", "dl-2"]
+        );
+        assert_eq!(result[0].net_accepted_quantity, Quantity::from_str("3").unwrap());
+        assert_eq!(result[0].remaining_eligible_quantity, Quantity::from_str("3").unwrap());
+    }
+
+    /// 多条事实出错时按原事实处理顺序报告，索引不提前汇总其他组。
+    #[test]
+    fn grouping_preserves_first_fact_error() {
+        let lines =
+            [AcceptanceSalesLineFact { id: "r1".into(), sales_order_line_id: SalesOrderLineId::new("s1") }];
+        let mut reversed = allocation("negative", "1");
+        reversed.allocation_action = AllocationAction::Reverse;
+        reversed.reverses_allocation_id = Some(AcceptanceFulfillmentAllocationId::new("original"));
+        let allocations = [allocation("excess", "3"), reversed];
+        for (deliveries, message) in [
+            ([delivery("negative", "s1"), delivery("excess", "s1")], "履约事实的净验收数量不得为负"),
+            (
+                [delivery("excess", "s1"), delivery("negative", "s1")],
+                "履约事实的净验收数量超过其净成功履约数量",
+            ),
+        ] {
+            let mut input = sources(&lines, &[]);
+            input.delivery_lines = &deliveries;
+            input.delivery_allocations = &allocations;
+            assert_eq!(
+                build_line_eligibilities(&input).unwrap_err().to_string(),
+                Error::Logic(CoreError::from(message)).to_string()
+            );
+        }
+    }
+
+    /// 三类事实同 ID 仍独立消费各自分配；无效电子交付不触发其分配错误。
+    #[test]
+    fn grouping_keeps_fact_types_separate_and_skips_invalid_electronic_records() {
+        let lines = [AcceptanceSalesLineFact {
+            id: "r1".into(),
+            sales_order_line_id: SalesOrderLineId::new("so-line-1"),
+        }];
+        let deliveries = [delivery("shared-id", "so-line-1")];
+        let mut confirmed =
+            ElectronicDelivery::new(ElectronicDeliveryId::new("shared-id"), electronic_data()).unwrap();
+        confirmed.status = ElectronicDeliveryState::Confirmed;
+        let electronic = [
+            confirmed,
+            ElectronicDelivery::new(ElectronicDeliveryId::new("invalid"), electronic_data()).unwrap(),
+        ];
+        let service =
+            [ServiceFulfillment::new(ServiceFulfillmentId::new("shared-id"), service_data()).unwrap()];
+        let delivery_allocations = [allocation("shared-id", "0.5")];
+        let mut electronic_allocation = allocation("shared-id", "1");
+        electronic_allocation.fulfillment_fact_type = FulfillmentFactType::ElectronicDelivery;
+        let electronic_allocations = [electronic_allocation, allocation("invalid", "3")];
+        let mut service_allocation = allocation("shared-id", "0.25");
+        service_allocation.fulfillment_fact_type = FulfillmentFactType::ServiceFulfillment;
+        let service_allocations = [service_allocation];
+        let mut input = sources(&lines, &[]);
+        input.delivery_lines = &deliveries;
+        input.electronic = &electronic;
+        input.service = &service;
+        input.delivery_allocations = &delivery_allocations;
+        input.electronic_allocations = &electronic_allocations;
+        input.service_allocations = &service_allocations;
+        let result = build_line_eligibilities(&input).unwrap();
+        assert_eq!(result[0].facts.len(), 3);
+        assert_eq!(
+            result[0].facts.iter().map(|fact| fact.net_accepted_quantity.to_string()).collect::<Vec<_>>(),
+            ["0.5", "1", "0.25"]
+        );
+        assert_eq!(
+            result[0].facts.iter().map(|fact| fact.eligible_quantity.to_string()).collect::<Vec<_>>(),
+            ["1.5", "1", "0.75"]
+        );
     }
 }

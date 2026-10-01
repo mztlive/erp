@@ -211,7 +211,7 @@ impl FileAssetRepositoryExt for persistence_core::Repository<'_, FileAsset> {
         if assets.is_empty() {
             return Ok(());
         }
-        mongo_ops::insert_many(&self.collection(), assets.to_vec(), executor).await?;
+        mongo_ops::insert_many(&self.collection(), assets, executor).await?;
         Ok(())
     }
 

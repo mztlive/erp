@@ -62,14 +62,14 @@ impl<'a> SupplierSettlementRepository<'a> {
         .await?;
         mongo_ops::insert_many(
             &self.db.collection::<SupplierSettlementItem>(SUPPLIER_SETTLEMENT_ITEMS),
-            items.to_vec(),
+            items,
             executor,
         )
         .await?;
         if !differences.is_empty() {
             mongo_ops::insert_many(
                 &self.db.collection::<SupplierSettlementDifference>(SUPPLIER_SETTLEMENT_DIFFERENCES),
-                differences.to_vec(),
+                differences,
                 executor,
             )
             .await?;

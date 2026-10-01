@@ -304,7 +304,7 @@ impl<'a> SalesOrderDomainRepository<'a> {
         .await?;
         mongo_ops::insert_many(
             &self.db.collection::<SalesOrderSubmissionLine>(SALES_ORDER_SUBMISSION_LINES),
-            lines.to_vec(),
+            lines,
             executor,
         )
         .await?;

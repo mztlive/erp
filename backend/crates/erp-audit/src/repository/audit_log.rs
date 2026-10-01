@@ -269,7 +269,7 @@ impl AuditLogRepositoryExt for Repository<'_, AuditLog> {
         if logs.is_empty() {
             return Ok(());
         }
-        persistence_core::mongo_ops::insert_many(&self.collection(), logs.to_vec(), executor).await?;
+        persistence_core::mongo_ops::insert_many(&self.collection(), logs, executor).await?;
         Ok(())
     }
 

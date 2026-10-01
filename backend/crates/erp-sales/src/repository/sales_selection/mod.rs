@@ -505,20 +505,12 @@ impl<'a> SalesSelectionDomainRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         if !members.is_empty() {
-            mongo_ops::insert_many(
-                &self.db.collection::<SalesSelectionPoolMember>(POOL),
-                members.to_vec(),
-                executor,
-            )
-            .await?;
+            mongo_ops::insert_many(&self.db.collection::<SalesSelectionPoolMember>(POOL), members, executor)
+                .await?;
         }
         if !items.is_empty() {
-            mongo_ops::insert_many(
-                &self.db.collection::<SalesSelectionDisplayItem>(ITEMS),
-                items.to_vec(),
-                executor,
-            )
-            .await?;
+            mongo_ops::insert_many(&self.db.collection::<SalesSelectionDisplayItem>(ITEMS), items, executor)
+                .await?;
         }
         Ok(())
     }
@@ -573,13 +565,13 @@ impl<'a> SalesSelectionDomainRepository<'a> {
     ) -> Result<()> {
         mongo_ops::insert_many(
             &self.db.collection::<SalesSelectionProposalDisplayLine>(PROPOSAL_DISPLAY_LINES),
-            display_lines.to_vec(),
+            display_lines,
             executor,
         )
         .await?;
         mongo_ops::insert_many(
             &self.db.collection::<SalesSelectionProposalSkuLine>(PROPOSAL_SKU_LINES),
-            sku_lines.to_vec(),
+            sku_lines,
             executor,
         )
         .await

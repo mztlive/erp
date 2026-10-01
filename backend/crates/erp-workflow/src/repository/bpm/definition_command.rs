@@ -82,6 +82,7 @@ impl<'a> BpmWorkflowRepository<'a> {
         .await
     }
 
+    /// 在调用方执行器中按原顺序替换节点与连线，空批次保持直接成功语义。
     async fn replace_graph_docs(
         &self,
         definition_id: &str,
@@ -102,8 +103,17 @@ impl<'a> BpmWorkflowRepository<'a> {
             executor,
         )
         .await?;
-        mongo_ops::insert_many(&self.db.collection(NODE_DEFINITIONS), nodes.to_vec(), executor).await?;
-        mongo_ops::insert_many(&self.db.collection(TRANSITION_DEFINITIONS), transitions.to_vec(), executor)
-            .await
+        mongo_ops::insert_many(
+            &self.db.collection::<ApprovalNodeDefinition>(NODE_DEFINITIONS),
+            nodes,
+            executor,
+        )
+        .await?;
+        mongo_ops::insert_many(
+            &self.db.collection::<ApprovalTransitionDefinition>(TRANSITION_DEFINITIONS),
+            transitions,
+            executor,
+        )
+        .await
     }
 }

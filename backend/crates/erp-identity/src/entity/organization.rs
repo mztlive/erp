@@ -99,20 +99,33 @@ pub struct OrgManagementAssignment {
 /// 当前组织树的已验证索引。
 pub struct OrgTree<'a> {
     nodes: BTreeMap<&'a str, &'a OrgUnit>,
+    children: BTreeMap<&'a str, Vec<&'a OrgUnit>>,
 }
 
 impl<'a> OrgTree<'a> {
     /// 验证唯一身份、父节点存在及无环，建立组织树索引。
     ///
+    /// # 参数
+    /// * `nodes` - 完整组织树节点，按输入顺序验证
+    ///
+    /// # 返回
+    /// 返回包含节点与子节点索引的完整、已验证组织树。
+    ///
     /// # 错误
     /// 重复节点、悬空父节点、自引用或环均拒绝。
     pub fn new(nodes: &'a [OrgUnit]) -> Result<Self> {
-        let tree = Self { nodes: nodes.iter().map(|node| (node.base.id.as_str(), node)).collect() };
+        let mut tree = Self {
+            nodes: nodes.iter().map(|node| (node.base.id.as_str(), node)).collect(),
+            children: BTreeMap::new(),
+        };
         if tree.nodes.len() != nodes.len() {
             return Err(Error::ValidationError("组织身份重复".into()));
         }
         for node in nodes {
             tree.path(&node.base.id)?;
+            if let Some(parent) = node.parent_id.as_deref() {
+                tree.children.entry(parent).or_default().push(node);
+            }
         }
         Ok(tree)
     }
@@ -139,6 +152,13 @@ impl<'a> OrgTree<'a> {
 
     /// 展开明确目标及可选的有效下级。
     ///
+    /// # 参数
+    /// * `id` - 目标组织 ID
+    /// * `descendants` - 是否包含目标的启用下级
+    ///
+    /// # 返回
+    /// 返回按 ID 排序的有效范围；停用分支不贡献节点。
+    ///
     /// # 错误
     /// 未知节点拒绝；停用节点及位于停用祖先下的节点不贡献范围。
     pub fn expand(&self, id: &str, descendants: bool) -> Result<BTreeSet<String>> {
@@ -150,10 +170,13 @@ impl<'a> OrgTree<'a> {
         if !descendants {
             return Ok(result);
         }
-        for candidate in self.nodes.keys() {
-            let path = self.path(candidate)?;
-            if path.iter().all(|node| node.enabled) && path.iter().any(|node| node.base.id == id) {
-                result.insert((*candidate).to_string());
+        let mut pending = vec![id];
+        while let Some(parent) = pending.pop() {
+            if let Some(children) = self.children.get(parent) {
+                for child in children.iter().filter(|child| child.enabled) {
+                    result.insert(child.base.id.clone());
+                    pending.push(child.base.id.as_str());
+                }
             }
         }
         Ok(result)
@@ -187,6 +210,9 @@ impl OrgUnit {
 
 #[cfg(test)]
 mod tests {
+    use std::iter::once;
+    use std::time::Instant as Stopwatch;
+
     use super::*;
 
     fn unit(id: &str, parent: Option<&str>) -> OrgUnit {
@@ -220,6 +246,67 @@ mod tests {
         );
         nodes[1].enabled = false;
         assert_eq!(OrgTree::new(&nodes).unwrap().expand("a", true).unwrap(), BTreeSet::from(["a".into()]));
+    }
+
+    /// 多根组织树只展开目标分支，并保留有序结果。
+    #[test]
+    fn large_subtree_expansion_sample() {
+        let mut nodes = Vec::new();
+        for root in 0..100 {
+            let id = format!("root-{root:03}");
+            nodes.push(unit(&id, None));
+            for child in 0..50 {
+                nodes.push(unit(&format!("{id}-{child:03}"), Some(&id)));
+            }
+        }
+        let tree = OrgTree::new(&nodes).unwrap();
+        let expected = once("root-042".to_string())
+            .chain((0..50).map(|child| format!("root-042-{child:03}")))
+            .collect::<BTreeSet<_>>();
+        let started = Stopwatch::now();
+        for _ in 0..20 {
+            assert_eq!(tree.expand("root-042", true).unwrap(), expected);
+        }
+        eprintln!("org_subtree_5100_nodes_20_runs={:?}", started.elapsed());
+    }
+
+    /// 子节点输入顺序不限制展开；停用祖先下的目标返回空范围，未知目标仍报错。
+    #[test]
+    fn subtree_index_preserves_disabled_ancestor_and_sorted_output_rules() {
+        let mut nodes = vec![
+            unit("z", Some("b")),
+            unit("b", Some("a")),
+            unit("a", None),
+            unit("c", Some("a")),
+            unit("x", None),
+        ];
+        let tree = OrgTree::new(&nodes).unwrap();
+        assert_eq!(
+            tree.expand("a", true).unwrap(),
+            BTreeSet::from(["a".into(), "b".into(), "c".into(), "z".into()])
+        );
+        assert!(tree.expand("unknown", true).is_err());
+        nodes[1].enabled = false;
+        let tree = OrgTree::new(&nodes).unwrap();
+        for descendants in [false, true] {
+            assert!(tree.expand("z", descendants).unwrap().is_empty());
+            assert!(tree.expand("b", descendants).unwrap().is_empty());
+        }
+        assert_eq!(tree.expand("a", true).unwrap(), BTreeSet::from(["a".into(), "c".into()]));
+    }
+
+    /// 建索引仍验证完整输入，重复节点优先报错，路径错误按节点输入顺序报告。
+    #[test]
+    fn subtree_index_keeps_full_tree_validation_and_error_precedence() {
+        let duplicate = [unit("a", Some("missing")), unit("a", None)];
+        assert!(matches!(OrgTree::new(&duplicate), Err(Error::ValidationError(message))
+            if message == "组织身份重复"));
+        let cycle_first = [unit("a", Some("a")), unit("b", Some("missing"))];
+        assert!(matches!(OrgTree::new(&cycle_first), Err(Error::ValidationError(message))
+            if message == "组织父子关系不得形成环"));
+        let missing_first = [unit("b", Some("missing")), unit("a", Some("a"))];
+        assert!(matches!(OrgTree::new(&missing_first), Err(Error::ValidationError(message))
+            if message == "组织节点不存在"));
     }
 
     #[test]

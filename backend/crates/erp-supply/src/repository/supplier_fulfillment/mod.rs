@@ -195,7 +195,7 @@ impl<'a> SupplierFulfillmentRepository<'a> {
         .await?;
         mongo_ops::insert_many(
             &self.db.collection::<SupplierFulfillmentItem>(SUPPLIER_FULFILLMENT_ITEMS),
-            items.to_vec(),
+            items,
             executor,
         )
         .await?;
@@ -239,7 +239,7 @@ impl<'a> SupplierFulfillmentRepository<'a> {
         .await?;
         mongo_ops::insert_many(
             &self.db.collection::<SupplierRefundAllocation>(SUPPLIER_REFUND_ALLOCATIONS),
-            allocations.to_vec(),
+            allocations,
             executor,
         )
         .await?;

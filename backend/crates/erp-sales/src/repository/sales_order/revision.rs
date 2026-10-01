@@ -423,7 +423,7 @@ impl<'a> SalesOrderDomainRepository<'a> {
         .await?;
         mongo_ops::insert_many(
             &self.db.collection::<SalesOrderRevisionLine>(SALES_ORDER_REVISION_LINES),
-            revision_lines.to_vec(),
+            revision_lines,
             executor,
         )
         .await?;
@@ -431,13 +431,13 @@ impl<'a> SalesOrderDomainRepository<'a> {
             &self
                 .db
                 .collection::<SalesOrderGoodsServiceLineRevision>(SALES_ORDER_GOODS_SERVICE_LINE_REVISIONS),
-            goods_lines.to_vec(),
+            goods_lines,
             executor,
         )
         .await?;
         mongo_ops::insert_many(
             &self.db.collection::<SalesOrderVoucherLineRevision>(SALES_ORDER_VOUCHER_LINE_REVISIONS),
-            voucher_lines.to_vec(),
+            voucher_lines,
             executor,
         )
         .await?;

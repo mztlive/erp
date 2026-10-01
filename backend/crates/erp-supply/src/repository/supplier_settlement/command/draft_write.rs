@@ -100,7 +100,7 @@ impl DraftSnapshotStore for MongoDraftSnapshotStore<'_> {
     ) -> Result<()> {
         mongo_ops::insert_many(
             &self.db.collection::<SupplierSettlementItem>(SUPPLIER_SETTLEMENT_ITEMS),
-            items.to_vec(),
+            items,
             executor,
         )
         .await?;
@@ -114,7 +114,7 @@ impl DraftSnapshotStore for MongoDraftSnapshotStore<'_> {
     ) -> Result<()> {
         mongo_ops::insert_many(
             &self.db.collection::<SupplierSettlementDifference>(SUPPLIER_SETTLEMENT_DIFFERENCES),
-            differences.to_vec(),
+            differences,
             executor,
         )
         .await?;

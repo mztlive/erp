@@ -531,7 +531,7 @@ impl<'a> SalesReviewRepository<'a> {
         .await?;
         mongo_ops::insert_many(
             &self.db.collection::<SalesChangeSubmissionLine>(SALES_CHANGE_SUBMISSION_LINES),
-            lines.to_vec(),
+            lines,
             executor,
         )
         .await?;

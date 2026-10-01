@@ -7,6 +7,8 @@
 //! 跨聚合加载、按销售行组织输入与最终视图映射。数量汇总一律受检：精度或溢出
 //! 错误向上传递，禁止静默回退为零（FUL-E07）。
 
+use std::collections::HashMap;
+
 use erp_core::money::Quantity;
 use erp_core::{Error, Result};
 use rust_decimal::Decimal;
@@ -51,16 +53,70 @@ impl AcceptanceFactEligibility {
     ) -> Result<Self> {
         let net_accepted_quantity =
             AcceptanceFulfillmentAllocation::net_quantity_for_fact(allocations, fulfillment_line_id)?;
-        let eligible_quantity = AcceptanceFulfillmentAllocation::eligible_quantity_for_fact(
+        Self::from_net_quantity(fulfillment_line_id, net_successful_quantity, net_accepted_quantity)
+    }
+
+    /// 复用净验收数量创建投影，并保留剩余数量的领域校验与错误。
+    fn from_net_quantity(
+        fulfillment_line_id: &str,
+        net_successful_quantity: Quantity,
+        net_accepted_quantity: Quantity,
+    ) -> Result<Self> {
+        let eligible_quantity = AcceptanceFulfillmentAllocation::eligible_quantity(
             net_successful_quantity,
-            allocations,
-            fulfillment_line_id,
+            net_accepted_quantity,
         )?;
         Ok(Self {
             fulfillment_line_id: fulfillment_line_id.to_string(),
             net_accepted_quantity,
             eligible_quantity,
         })
+    }
+}
+
+/// 按事实主键保存分配引用；各组保持原顺序，仅在消费事实时执行数量校验。
+pub(crate) struct AcceptanceAllocationIndex<'a> {
+    allocations: HashMap<&'a str, Vec<&'a AcceptanceFulfillmentAllocation>>,
+}
+
+impl<'a> AcceptanceAllocationIndex<'a> {
+    /// 建立当前计算使用的引用索引，不提前汇总或校验未消费的分配。
+    ///
+    /// # 参数
+    /// * `allocations` - 当前事实类型的已加载分配
+    ///
+    /// # 返回
+    /// 返回按事实 ID 分组、组内保持原顺序的引用索引。
+    ///
+    /// # 错误
+    /// 无；数量校验延迟到事实消费时执行。
+    pub(crate) fn new(allocations: &'a [AcceptanceFulfillmentAllocation]) -> Self {
+        let mut grouped: HashMap<&str, Vec<&AcceptanceFulfillmentAllocation>> = HashMap::new();
+        for allocation in allocations {
+            grouped.entry(allocation.fulfillment_line_id.as_str()).or_default().push(allocation);
+        }
+        Self { allocations: grouped }
+    }
+
+    /// 在原事实处理位置计算资格，按组内原顺序汇总并传递原数量错误。
+    ///
+    /// # 参数
+    /// * `fulfillment_line_id` - 履约事实主键
+    /// * `net_successful_quantity` - 当前事实净成功履约数量
+    ///
+    /// # 返回
+    /// 返回当前事实的净验收与剩余资格数量。
+    ///
+    /// # 错误
+    /// 净验收为负、超额或数量精度非法时返回原领域错误。
+    pub(crate) fn fact(
+        &self,
+        fulfillment_line_id: &str,
+        net_successful_quantity: Quantity,
+    ) -> Result<AcceptanceFactEligibility> {
+        let allocations = self.allocations.get(fulfillment_line_id).into_iter().flatten().copied();
+        let net = AcceptanceFulfillmentAllocation::net_quantity(allocations)?;
+        AcceptanceFactEligibility::from_net_quantity(fulfillment_line_id, net_successful_quantity, net)
     }
 }
 
@@ -199,6 +255,7 @@ impl AcceptanceProgress {
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
+    use std::time::Instant as Stopwatch;
 
     use erp_core::ids::AcceptanceFulfillmentAllocationId;
     use rust_decimal::Decimal;
@@ -261,6 +318,49 @@ mod tests {
         assert_eq!(projection.fulfillment_line_id, "dl-1");
         assert_eq!(projection.net_accepted_quantity, Quantity::from_str("2.5").unwrap());
         assert_eq!(projection.eligible_quantity, Quantity::from_str("2.5").unwrap());
+    }
+
+    /// 大批履约事实仍只消费各自的分配，并保持数量守恒。
+    #[test]
+    fn large_fact_projection_sample() {
+        let allocations =
+            (0..1000).map(|index| apply_allocation(&format!("fact-{index}"), "1")).collect::<Vec<_>>();
+        let successful = Quantity::from_str("2").unwrap();
+        let one = Quantity::from_str("1").unwrap();
+        let started = Stopwatch::now();
+        for _ in 0..10 {
+            for index in 0..1000 {
+                let result =
+                    AcceptanceFactEligibility::from_fact(&format!("fact-{index}"), successful, &allocations)
+                        .unwrap();
+                assert_eq!(result.net_accepted_quantity, one);
+                assert_eq!(result.eligible_quantity, one);
+            }
+        }
+        eprintln!("fulfillment_1000_facts_10_runs={:?}", started.elapsed());
+    }
+
+    /// 引用索引与公开逐事实入口一致，保持 APPLY/REVERSE 守恒及空组语义。
+    #[test]
+    fn indexed_fact_matches_slice_projection_for_interleaved_allocations() {
+        let first = apply_allocation("dl-1", "4");
+        let reversed = reverse_allocation("dl-1", "1.5", &first);
+        let allocations = [first, apply_allocation("dl-2", "2"), reversed, apply_allocation("dl-1", "0.5")];
+        let index = AcceptanceAllocationIndex::new(&allocations);
+        for id in ["dl-1", "dl-2", "missing"] {
+            let successful = Quantity::from_str("5").unwrap();
+            assert_eq!(
+                index.fact(id, successful).unwrap(),
+                AcceptanceFactEligibility::from_fact(id, successful, &allocations).unwrap()
+            );
+        }
+        for id in ["dl-1", "dl-2"] {
+            let successful = Quantity::from_str("1").unwrap();
+            assert_eq!(
+                index.fact(id, successful).unwrap_err().to_string(),
+                AcceptanceFactEligibility::from_fact(id, successful, &allocations).unwrap_err().to_string()
+            );
+        }
     }
 
     /// 净验收为负、净验收超过成功履约数量时投影明确失败，不得回退为零。

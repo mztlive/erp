@@ -203,7 +203,7 @@ impl<'a> ReceivableRepository<'a> {
             &self.db.collection::<SalesInvoiceAllocation>(
                 <mongodb::Database as ReceivableExt>::SALES_INVOICE_ALLOCATIONS,
             ),
-            allocations.to_vec(),
+            allocations,
             executor,
         )
         .await

@@ -166,7 +166,9 @@ impl StockAdjustmentLine {
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
+    use std::time::Instant as Stopwatch;
 
+    use erp_core::Error;
     use erp_core::ids::{SkuId, StockAdjustmentId, StockAdjustmentLineId, WarehouseId};
 
     use super::super::{StockAdjustment, StockAdjustmentData};
@@ -269,5 +271,71 @@ mod tests {
         assert_eq!(changed.len(), 2);
         assert_eq!(lines[0].quantity, Quantity::from_str("3").unwrap());
         assert_eq!(lines[1].quantity, Quantity::from_str("4").unwrap());
+    }
+
+    /// 大批明细按请求顺序返回变更，持久化明细顺序保持不变。
+    #[test]
+    fn large_line_updates_sample() {
+        let adjustment = StockAdjustment::new(StockAdjustmentId::new("adj-1"), data(), "creator-1").unwrap();
+        let original = (0..2000)
+            .map(|index| {
+                StockAdjustmentLine::new(StockAdjustmentLineId::new(format!("al-{index}")), line_data())
+                    .unwrap()
+            })
+            .collect::<Vec<_>>();
+        let updates = (0..2000)
+            .rev()
+            .map(|index| StockAdjustmentLineUpdate::new(format!("al-{index}"), "3", None).unwrap())
+            .collect::<Vec<_>>();
+        let started = Stopwatch::now();
+        for _ in 0..10 {
+            let mut lines = original.clone();
+            let changed = adjustment.apply_line_updates(&mut lines, &updates, true).unwrap();
+            assert_eq!(changed.first().unwrap().base.id, "al-1999");
+            assert_eq!(changed.last().unwrap().base.id, "al-0");
+            assert_eq!(lines.first().unwrap().base.id, "al-0");
+            assert!(lines.iter().all(|line| line.quantity == Quantity::from_str("3").unwrap()));
+        }
+        eprintln!("inventory_2000_updates_10_runs={:?}", started.elapsed());
+    }
+
+    /// 重复持久化 ID 沿用首次匹配行为，未选中的副本保持原值。
+    #[test]
+    fn line_update_uses_first_matching_persisted_id() {
+        let adjustment = StockAdjustment::new(StockAdjustmentId::new("adj-1"), data(), "creator-1").unwrap();
+        let first = StockAdjustmentLine::new(StockAdjustmentLineId::new("al-1"), line_data()).unwrap();
+        let duplicate = first.clone();
+        let mut lines = vec![first, duplicate.clone()];
+        let changed = adjustment
+            .apply_line_updates(
+                &mut lines,
+                &[StockAdjustmentLineUpdate::new("al-1", "3", None).unwrap()],
+                false,
+            )
+            .unwrap();
+        assert_eq!(changed, lines[..1]);
+        assert_eq!(lines[0].quantity, Quantity::from_str("3").unwrap());
+        assert_eq!(lines[1], duplicate);
+    }
+
+    /// 首个缺失或重复请求错误不受索引顺序影响，失败时整组明细保持原值。
+    #[test]
+    fn line_update_errors_preserve_request_order_and_atomicity() {
+        let adjustment = StockAdjustment::new(StockAdjustmentId::new("adj-1"), data(), "creator-1").unwrap();
+        let original =
+            vec![StockAdjustmentLine::new(StockAdjustmentLineId::new("al-1"), line_data()).unwrap()];
+        let update = StockAdjustmentLineUpdate::new("al-1", "3", None).unwrap();
+        let missing = StockAdjustmentLineUpdate::new("missing", "3", None).unwrap();
+        for (updates, message) in [
+            (vec![update.clone(), missing, update.clone()], "明细行不属于该调整单"),
+            (vec![update.clone(), update], "调整明细行不得重复"),
+        ] {
+            let mut lines = original.clone();
+            let error = adjustment.apply_line_updates(&mut lines, &updates, false).unwrap_err();
+            assert_eq!(error.to_string(), Error::from(message).to_string());
+            assert_eq!(lines, original);
+        }
+        let mut empty = Vec::new();
+        assert!(adjustment.apply_line_updates(&mut empty, &[], true).unwrap().is_empty());
     }
 }

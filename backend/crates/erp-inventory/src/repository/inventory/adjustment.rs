@@ -406,7 +406,7 @@ impl<'a> InventoryRepository<'a> {
         .await?;
         mongo_ops::insert_many(
             &self.db.collection::<StockAdjustmentLine>(STOCK_ADJUSTMENT_LINES),
-            lines.to_vec(),
+            lines,
             executor,
         )
         .await

@@ -164,7 +164,7 @@ impl<'a> ReceivableRepository<'a> {
             &self
                 .db
                 .collection::<ReceiptAllocation>(<mongodb::Database as ReceivableExt>::RECEIPT_ALLOCATIONS),
-            allocations.to_vec(),
+            allocations,
             executor,
         )
         .await

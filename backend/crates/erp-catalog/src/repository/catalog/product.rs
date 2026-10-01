@@ -704,7 +704,7 @@ impl<'a> CatalogRepository<'a> {
             .await?;
         mongo_ops::insert_many(
             &self.db.collection::<ProductRevisionMedia>(PRODUCT_REVISION_MEDIAS),
-            medias.to_vec(),
+            medias,
             executor,
         )
         .await?;

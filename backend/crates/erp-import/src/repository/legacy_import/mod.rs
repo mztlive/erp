@@ -687,12 +687,8 @@ impl<'a> LegacyImportRepository<'a> {
             executor,
         )
         .await?;
-        mongo_ops::insert_many(
-            &self.db.collection::<LegacyImportRow>(LEGACY_IMPORT_ROWS),
-            rows.to_vec(),
-            executor,
-        )
-        .await?;
+        mongo_ops::insert_many(&self.db.collection::<LegacyImportRow>(LEGACY_IMPORT_ROWS), rows, executor)
+            .await?;
         Ok(())
     }
 }

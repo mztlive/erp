@@ -4,6 +4,8 @@
 //! `&mut ClientSession`，`find` 还会返回类型不同的 `SessionCursor`。本模块把这层分支
 //! 收敛到一处，使 Repository 只面向 [`Executor`](crate::Executor) 编写一份实现。
 
+use std::borrow::Borrow;
+
 use futures_util::StreamExt;
 use mongodb::Collection;
 use mongodb::bson::{Document, doc};
@@ -55,11 +57,12 @@ where
 
 /// 按执行器语义批量插入文档。
 ///
-/// 文档集合为空时直接返回，避免向 MongoDB 发送空批量写入命令。
+/// 文档集合为空时直接返回；拥有型集合与借用切片均直接交给驱动序列化，
+/// 不要求克隆业务实体。输入顺序及驱动默认的有序插入语义保持不变。
 ///
 /// # 参数
 /// * `collection` - 目标集合
-/// * `documents` - 待插入文档集合
+/// * `documents` - 待插入文档集合或借用切片
 /// * `executor` - 数据访问执行器
 ///
 /// # 返回值
@@ -67,15 +70,19 @@ where
 ///
 /// # 错误
 /// 当唯一索引冲突或 MongoDB 写入失败时返回错误。
-pub async fn insert_many<T>(
+pub async fn insert_many<T, D>(
     collection: &Collection<T>,
-    documents: Vec<T>,
+    documents: D,
     executor: &mut dyn Executor,
 ) -> Result<()>
 where
     T: Serialize + Send + Sync,
+    D: IntoIterator + Send,
+    D::IntoIter: ExactSizeIterator + Send,
+    D::Item: Borrow<T> + Send,
 {
-    if documents.is_empty() {
+    let documents = documents.into_iter();
+    if documents.len() == 0 {
         return Ok(());
     }
 
@@ -315,10 +322,83 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::result::Result as SerializationResult;
+    use std::sync::{Arc, Mutex};
+
     use mongodb::bson::oid::ObjectId;
     use mongodb::bson::{Bson, deserialize_from_document};
+    use mongodb::options::{ClientOptions, ServerAddress};
+    use mongodb::{Client, ClientSession};
+    use serde::Serializer;
+    use serde::ser::Error as SerializeError;
 
     use super::*;
+    use crate::NoTransaction;
+    use crate::errors::Error;
+
+    /// 不实现 Clone 的文档；记录序列化顺序并在指定位置终止。
+    struct TracedDocument {
+        id: u32,
+        visits: Arc<Mutex<Vec<u32>>>,
+        fail: bool,
+    }
+
+    impl Serialize for TracedDocument {
+        /// 执行真实驱动调用的序列化，并返回可识别的首个错误。
+        fn serialize<S: Serializer>(&self, serializer: S) -> SerializationResult<S::Ok, S::Error> {
+            self.visits.lock().unwrap().push(self.id);
+            if self.fail {
+                return Err(S::Error::custom(format!("document-{}-failed", self.id)));
+            }
+            doc! { "_id": self.id }.serialize(serializer)
+        }
+    }
+
+    /// 构造驱动集合句柄；测试在空集合或序列化阶段返回，不执行数据库操作。
+    fn traced_collection() -> Collection<TracedDocument> {
+        let options = ClientOptions::builder()
+            .hosts(vec![ServerAddress::Tcp { host: "127.0.0.1".into(), port: Some(1) }])
+            .build();
+        Client::with_options(options).unwrap().database("unit_test").collection("documents")
+    }
+
+    /// 空输入不得访问执行器会话。
+    struct UnusedExecutor;
+
+    impl Executor for UnusedExecutor {
+        /// 空输入若触发会话访问则使测试失败。
+        fn session(&mut self) -> Option<&mut ClientSession> {
+            panic!("empty input must not access a session")
+        }
+    }
+
+    /// 拥有型及借用型空集合都直接成功，不调用执行器。
+    #[tokio::test]
+    async fn insert_many_accepts_empty_owned_and_borrowed_non_clone_documents() {
+        let collection = traced_collection();
+        let documents = Vec::<TracedDocument>::new();
+        insert_many(&collection, documents.as_slice(), &mut UnusedExecutor).await.unwrap();
+        insert_many(&collection, documents, &mut UnusedExecutor).await.unwrap();
+    }
+
+    /// 两种输入均保持序列化顺序、首个错误及数据库错误分类，不要求实体 Clone。
+    #[tokio::test]
+    async fn insert_many_preserves_first_serialization_error_for_owned_and_borrowed_inputs() {
+        let collection = traced_collection();
+        let visits = Arc::new(Mutex::new(Vec::new()));
+        let documents = (1..=3)
+            .map(|id| TracedDocument { id, visits: visits.clone(), fail: id == 2 })
+            .collect::<Vec<_>>();
+        let borrowed = insert_many(&collection, documents.as_slice(), &mut NoTransaction).await.unwrap_err();
+        assert!(matches!(borrowed, Error::DatabaseError(_)));
+        assert!(borrowed.to_string().contains("document-2-failed"));
+        assert_eq!(*visits.lock().unwrap(), [1, 2]);
+        visits.lock().unwrap().clear();
+        let owned = insert_many(&collection, documents, &mut NoTransaction).await.unwrap_err();
+        assert!(matches!(owned, Error::DatabaseError(_)));
+        assert_eq!(owned.to_string(), borrowed.to_string());
+        assert_eq!(*visits.lock().unwrap(), [1, 2]);
+    }
 
     #[derive(Debug, Deserialize)]
     struct NamedEntity {

@@ -407,7 +407,7 @@ impl<'a> CatalogRepository<'a> {
         mongo_ops::insert_one(&self.db.collection::<SkuRevision>(SKU_REVISIONS), revision, executor).await?;
         mongo_ops::insert_many(
             &self.db.collection::<SkuRevisionAttributeValue>(SKU_REVISION_ATTRIBUTE_VALUES),
-            attribute_values.to_vec(),
+            attribute_values,
             executor,
         )
         .await?;

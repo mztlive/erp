@@ -13,6 +13,7 @@ use entity_macros::Entity;
 use erp_core::ids::{AcceptanceFulfillmentAllocationId, CustomerAcceptanceLineId};
 use erp_core::money::Quantity;
 use erp_core::{Error, Result};
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
 /// 履约事实类型（数据模型 §6.7：发货、电子交付或服务履约事实）。
@@ -187,14 +188,27 @@ impl AcceptanceFulfillmentAllocation {
         allocations: &[AcceptanceFulfillmentAllocation],
         fulfillment_line_id: &str,
     ) -> Result<Quantity> {
-        let net = allocations
-            .iter()
-            .filter(|allocation| allocation.fulfillment_line_id == fulfillment_line_id)
-            .fold(rust_decimal::Decimal::ZERO, |net, allocation| match allocation.allocation_action {
-                AllocationAction::Apply => net + allocation.allocated_quantity.to_decimal(),
-                AllocationAction::Reverse => net - allocation.allocated_quantity.to_decimal(),
-            });
-        if net < rust_decimal::Decimal::ZERO {
+        Self::net_quantity(
+            allocations.iter().filter(|allocation| allocation.fulfillment_line_id == fulfillment_line_id),
+        )
+    }
+
+    /// 按输入顺序汇总已筛选分配；净数量为负或精度非法时返回原数量错误。
+    ///
+    /// # 参数
+    /// * `allocations` - 当前事实的分配引用，保持原顺序
+    ///
+    /// # 返回
+    /// 返回 `APPLY - REVERSE` 的净数量。
+    ///
+    /// # 错误
+    /// 净数量为负或结果超出数量精度时返回错误。
+    pub(crate) fn net_quantity<'a>(allocations: impl Iterator<Item = &'a Self>) -> Result<Quantity> {
+        let net = allocations.fold(Decimal::ZERO, |net, allocation| match allocation.allocation_action {
+            AllocationAction::Apply => net + allocation.allocated_quantity.to_decimal(),
+            AllocationAction::Reverse => net - allocation.allocated_quantity.to_decimal(),
+        });
+        if net < Decimal::ZERO {
             return Err(Error::from("履约事实的净验收数量不得为负"));
         }
         Quantity::try_from(net).map_err(|error| Error::from(error.to_string()))
@@ -218,6 +232,21 @@ impl AcceptanceFulfillmentAllocation {
         fulfillment_line_id: &str,
     ) -> Result<Quantity> {
         let net = Self::net_quantity_for_fact(allocations, fulfillment_line_id)?;
+        Self::eligible_quantity(successful_quantity, net)
+    }
+
+    /// 从已计算的净验收数量派生剩余数量；超额或精度非法时返回原数量错误。
+    ///
+    /// # 参数
+    /// * `successful_quantity` - 净成功履约数量
+    /// * `net` - 已校验的净验收数量
+    ///
+    /// # 返回
+    /// 返回成功数量减去净验收数量的剩余数量。
+    ///
+    /// # 错误
+    /// 净验收超额或结果超出数量精度时返回错误。
+    pub(crate) fn eligible_quantity(successful_quantity: Quantity, net: Quantity) -> Result<Quantity> {
         if net.to_decimal() > successful_quantity.to_decimal() {
             return Err(Error::from("履约事实的净验收数量超过其净成功履约数量"));
         }

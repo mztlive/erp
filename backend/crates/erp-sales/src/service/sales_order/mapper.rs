@@ -1,6 +1,6 @@
 //! DTO ↔ 实体/视图映射：构建稳定明细、工作副本、提交快照与视图转换。
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
@@ -131,11 +131,14 @@ fn build_working_copy_line_datas(
     stable_lines: &[SalesOrderLine],
     lines: &[SalesOrderDraftLineRequest],
 ) -> Result<Vec<SalesOrderWorkingCopyLineData>> {
+    let mut stable_by_no = HashMap::with_capacity(stable_lines.len());
+    for stable in stable_lines {
+        stable_by_no.entry(stable.line_no).or_insert(stable);
+    }
     let mut datas = Vec::with_capacity(lines.len());
     for line in lines {
-        let stable_id = stable_lines
-            .iter()
-            .find(|stable| stable.line_no == line.line_no)
+        let stable_id = stable_by_no
+            .get(&line.line_no)
             .map(|stable| stable.base.id.clone())
             .ok_or_else(|| Error::ValidationError(format!("行号 {} 无对应稳定明细", line.line_no)))?;
         datas.push(SalesOrderWorkingCopyLineData {
@@ -494,6 +497,7 @@ fn submission_line_view(line: SalesOrderSubmissionLine) -> SalesOrderWorkingCopy
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
+    use std::time::Instant as Stopwatch;
 
     use erp_core::common::time::Instant;
     use erp_core::ids::{
@@ -502,7 +506,9 @@ mod tests {
     };
     use erp_core::money::{Amount, Rate};
 
-    use super::{revision_line_summary, revision_view};
+    use super::{build_stable_lines, build_working_copy_line_datas, revision_line_summary, revision_view};
+    use crate::Error;
+    use crate::dto::sales_order::SalesOrderDraftLineRequest;
     use crate::entity::sales_order::{
         HeaderSnapshotData, LineType, RevisionSource, SalesOrderRevision, SalesOrderRevisionData,
         SalesOrderRevisionLine, SalesOrderRevisionLineData,
@@ -582,5 +588,60 @@ mod tests {
         let lines = vec![revision_line("年货礼盒", 1), revision_line("企业福利卡", 2)];
         assert_eq!(revision_line_summary(&lines), "年货礼盒、企业福利卡 共 2 项");
         assert_eq!(revision_line_summary(&[]), "");
+    }
+
+    /// 构造用于草稿身份映射的行请求，不执行金额物化。
+    fn draft_line(line_no: u32) -> SalesOrderDraftLineRequest {
+        SalesOrderDraftLineRequest {
+            line_no,
+            line_type: LineType::GoodsService,
+            sales_tax_rate: Rate::from_str("0.13").unwrap(),
+            item_name_snapshot: format!("商品-{line_no}"),
+            spec_snapshot: None,
+            unit_snapshot: None,
+            goods: None,
+            voucher: None,
+        }
+    }
+
+    /// 重复稳定行取第一条；输出保持请求顺序及重复请求，不按索引顺序输出。
+    #[test]
+    fn draft_mapping_uses_first_matching_identity_and_preserves_request_order() {
+        let requests = [draft_line(2), draft_line(1), draft_line(2)];
+        let mut stable = build_stable_lines(&SalesOrderId::new("order-1"), &requests[..2]).unwrap();
+        let mut duplicate = stable[0].clone();
+        duplicate.base.id = "later-duplicate".into();
+        stable.push(duplicate);
+        let result = build_working_copy_line_datas(&stable, &requests).unwrap();
+        assert_eq!(
+            result.iter().map(|line| line.sales_order_line_id.as_ref()).collect::<Vec<_>>(),
+            [stable[0].base.id.as_str(), stable[1].base.id.as_str(), stable[0].base.id.as_str()]
+        );
+        assert_eq!(result.iter().map(|line| line.line_no).collect::<Vec<_>>(), [2, 1, 2]);
+        assert!(build_working_copy_line_datas(&stable, &[]).unwrap().is_empty());
+    }
+
+    /// 缺失身份按请求顺序报告首个错误，错误文本保持原合同。
+    #[test]
+    fn draft_mapping_reports_first_missing_requested_number() {
+        let error = build_working_copy_line_datas(&[], &[draft_line(9), draft_line(3)]).unwrap_err();
+        assert!(matches!(error, Error::ValidationError(ref message)
+            if message == "行号 9 无对应稳定明细"));
+    }
+
+    /// 大批草稿行按请求顺序匹配稳定身份。
+    #[test]
+    fn large_draft_mapping_sample() {
+        let mut lines = (1..=2000).map(draft_line).collect::<Vec<_>>();
+        let stable = build_stable_lines(&SalesOrderId::new("order-1"), &lines).unwrap();
+        lines.reverse();
+        let started = Stopwatch::now();
+        for _ in 0..20 {
+            let mapped = build_working_copy_line_datas(&stable, &lines).unwrap();
+            assert_eq!(mapped.first().unwrap().sales_order_line_id.as_ref(), stable[1999].base.id);
+            assert_eq!(mapped.last().unwrap().sales_order_line_id.as_ref(), stable[0].base.id);
+            assert_eq!(mapped.first().unwrap().item_name_snapshot, "商品-2000");
+        }
+        eprintln!("sales_2000_draft_lines_20_runs={:?}", started.elapsed());
     }
 }

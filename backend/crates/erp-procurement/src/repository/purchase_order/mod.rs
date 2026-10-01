@@ -120,7 +120,7 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
         .await?;
         mongo_ops::insert_many(
             &self.db.collection::<PurchaseOrderSubmissionLine>(PURCHASE_ORDER_SUBMISSION_LINES),
-            lines.to_vec(),
+            lines,
             executor,
         )
         .await?;
@@ -157,7 +157,7 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
         .await?;
         mongo_ops::insert_many(
             &self.db.collection::<PurchaseOrderRevisionLine>(PURCHASE_ORDER_REVISION_LINES),
-            lines.to_vec(),
+            lines,
             executor,
         )
         .await?;
@@ -197,7 +197,7 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
         .await?;
         mongo_ops::insert_many(
             &self.db.collection::<PurchaseChangeSubmissionLine>(PURCHASE_CHANGE_SUBMISSION_LINES),
-            lines.to_vec(),
+            lines,
             executor,
         )
         .await?;

@@ -7,7 +7,7 @@
 //! 库存流水、余额和必要预占释放，原出入库流水不改写——由 P3 完成（§8.2
 //! 第 3 条）。
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
@@ -578,7 +578,7 @@ impl StockAdjustment {
             return Err(Error::from("提交必须包含全部调整明细"));
         }
         self.ensure_group_directions(&staged)?;
-        lines.clone_from_slice(&staged);
+        lines.swap_with_slice(&mut staged);
         Ok(changed)
     }
 
@@ -619,16 +619,21 @@ impl StockAdjustment {
         staged: &mut [StockAdjustmentLine],
         updates: &[StockAdjustmentLineUpdate],
     ) -> Result<Vec<StockAdjustmentLine>> {
+        let mut indexes = HashMap::with_capacity(staged.len());
+        for (index, line) in staged.iter().enumerate() {
+            indexes.entry(line.base.id.clone()).or_insert(index);
+        }
         let mut seen = HashSet::with_capacity(updates.len());
         let mut changed = Vec::with_capacity(updates.len());
         for update in updates {
             if !seen.insert(update.line_id.as_str()) {
                 return Err(Error::from("调整明细行不得重复"));
             }
-            let line = staged
-                .iter_mut()
-                .find(|line| line.base.id == update.line_id)
+            let index = indexes
+                .get(update.line_id.as_str())
+                .copied()
                 .ok_or_else(|| Error::from("明细行不属于该调整单"))?;
+            let line = &mut staged[index];
             line.apply_update(self.reason_type, update.quantity, update.direction)?;
             changed.push(line.clone());
         }

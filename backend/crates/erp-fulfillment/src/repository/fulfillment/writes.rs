@@ -157,7 +157,7 @@ impl FulfillmentRepository<'_> {
         Line: serde::Serialize + Clone + Sync + Send,
     {
         mongo_ops::insert_one(header_collection, header, executor).await?;
-        mongo_ops::insert_many(lines_collection, lines.to_vec(), executor).await
+        mongo_ops::insert_many(lines_collection, lines, executor).await
     }
 
     /// 原子替换草稿客户验收单的全部行。
@@ -197,7 +197,7 @@ impl FulfillmentRepository<'_> {
         .await?;
         mongo_ops::insert_many(
             &self.db.collection::<CustomerAcceptanceLine>(CUSTOMER_ACCEPTANCE_LINES),
-            lines.to_vec(),
+            lines,
             executor,
         )
         .await

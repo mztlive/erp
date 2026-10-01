@@ -62,7 +62,12 @@ impl<'a> BpmWorkflowRepository<'a> {
             executor,
         )
         .await?;
-        mongo_ops::insert_many(&self.db.collection(ASSIGNEES), assignees.to_vec(), executor).await?;
+        mongo_ops::insert_many(
+            &self.db.collection::<ApprovalInstanceAssignee>(ASSIGNEES),
+            assignees,
+            executor,
+        )
+        .await?;
         mongo_ops::insert_one(&self.db.collection(EXECUTIONS), first_execution, executor).await
     }
 
@@ -290,7 +295,12 @@ impl<'a> BpmWorkflowRepository<'a> {
         assignees: &[ApprovalInstanceAssignee],
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        mongo_ops::insert_many(&self.db.collection(ASSIGNEES), assignees.to_vec(), executor).await
+        mongo_ops::insert_many(
+            &self.db.collection::<ApprovalInstanceAssignee>(ASSIGNEES),
+            assignees,
+            executor,
+        )
+        .await
     }
 
     /// 插入命令收据。唯一键冲突由调用方按同/异载荷回读分类。
