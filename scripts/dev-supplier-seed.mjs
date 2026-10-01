@@ -62,8 +62,18 @@ export async function ensureCompanyParty(call, token) {
   });
 }
 
+/** 按岗位账号读取实际用户 ID，不使用操作管理员或固定数据库身份代替维护人。 */
+export function resolveSupplierMaintainer(admins, account, label = "供应商") {
+  const user = admins.find((row) => row.account === account);
+  const id = user?.id?.trim();
+  if (!id) throw new Error(`未找到开发${label}维护账号 ${account} 的用户 ID，请先完成岗位账号初始化`);
+  return id;
+}
+
 /** 仅构造完整开发样例，实际创建仍复用供应商根命令。 */
-export function supplierCommand(spec, companyPartyId, today = todayBusinessDate()) {
+export function supplierCommand(spec, companyPartyId, maintainerUserId, today = todayBusinessDate()) {
+  const ownerId = maintainerUserId?.trim();
+  if (!ownerId) throw new Error("开发供应商维护人用户 ID 不能为空");
   return {
     idempotency_key: `seed-supplier-${spec.supplierNo}`,
     party_no: spec.partyNo, supplier_no: spec.supplierNo,
@@ -79,7 +89,10 @@ export function supplierCommand(spec, companyPartyId, today = todayBusinessDate(
     payment_term_snapshot: spec.paymentTerm, business_category: spec.businessCategory,
     invoice_type: spec.invoiceType, invoice_tax_rates: [...spec.invoiceTaxRates],
     signing_entity_party_id: companyPartyId, payment_entity_party_id: companyPartyId,
-    capability_codes: [...spec.capabilityCodes], qualifications: [supplierContract(spec, today)],
+    maintainer_user_id: ownerId,
+    capability_codes: [...spec.capabilityCodes],
+    capability_owners: spec.capabilityCodes.map((code) => ({ capability_code: code, owner_user_id: ownerId })),
+    qualifications: [supplierContract(spec, today)],
     rating: { initial_score: spec.score, rating: spec.rating, current_score: spec.score, valid_from: today },
     effective_from: today, change_reason: "主数据初始化：供应商建档",
   };
@@ -103,7 +116,7 @@ export function verifyOffering(row, spec, supplierId, skuId, today = todayBusine
 }
 
 /** 已有种子必须满足当前合同，不能只凭编号宣告成功或覆盖历史商务资料。 */
-export async function verifySupplier(call, token, supplier, spec, companyPartyId, today = todayBusinessDate()) {
+export async function verifySupplier(call, token, supplier, spec, companyPartyId, maintainerUserId, today = todayBusinessDate()) {
   const detail = await call("GET", `/admin/suppliers/${encodeURIComponent(supplier.id)}`, { token });
   const profile = detail.current_profile;
   const rates = profile?.invoice_tax_rates ?? (profile?.invoice_tax_rate == null ? [] : [profile.invoice_tax_rate]);
@@ -114,25 +127,26 @@ export async function verifySupplier(call, token, supplier, spec, companyPartyId
   const expectedDates = spec.contractState === "unverified" ? contract?.valid_from == null && !!contract?.valid_to
     : spec.contractState === "expired" ? !!contract?.valid_from && contract.valid_to < today : validDates;
   if (!profile || detail.status !== "active" || detail.party_status !== "active" ||
+      detail.maintainer_user_id !== maintainerUserId ||
       profile.settlement_mode !== spec.settlementMode || profile.reconciliation_cycle !== spec.reconciliationCycle ||
       profile.payment_term_snapshot !== spec.paymentTerm || ratesKey(rates) !== ratesKey(spec.invoiceTaxRates) ||
       profile.signing_entity_party_id !== companyPartyId || profile.payment_entity_party_id !== companyPartyId ||
       contract?.status !== "active" || !expectedDates ||
-      !spec.capabilityCodes.every((code) => capabilities.some((cap) => cap.capability_code === code && linked.has(cap.id)))) {
-    throw new Error(`供应商 ${spec.supplierNo} 的公司、结算、税率或合同与最新种子不一致，请核对后重新准备开发库；不会覆盖已有业务资料`);
+      !spec.capabilityCodes.every((code) => capabilities.some((cap) => cap.capability_code === code && cap.owner_user_id === maintainerUserId && linked.has(cap.id)))) {
+    throw new Error(`供应商 ${spec.supplierNo} 的负责人、公司、结算、税率或合同与最新种子不一致，请核对后重新准备开发库；不会覆盖已有业务资料`);
   }
   return detail;
 }
 
 /** 新建后回读验证；重跑复用原供应商身份。 */
-export async function ensureSupplier(call, token, spec, companyPartyId) {
+export async function ensureSupplier(call, token, spec, companyPartyId, maintainerUserId) {
   const page = await call("GET", `/admin/suppliers?keyword=${encodeURIComponent(spec.supplierNo)}&page=1&page_size=100`, { token });
   let supplier = (page.items ?? []).find((row) => row.supplier_no === spec.supplierNo);
   if (!supplier) {
-    const created = await call("POST", "/admin/supplier-profiles", { token, body: supplierCommand(spec, companyPartyId) });
+    const created = await call("POST", "/admin/supplier-profiles", { token, body: supplierCommand(spec, companyPartyId, maintainerUserId) });
     supplier = { id: created.supplier_id, supplier_no: created.supplier_no };
   }
-  await verifySupplier(call, token, supplier, spec, companyPartyId);
+  await verifySupplier(call, token, supplier, spec, companyPartyId, maintainerUserId);
   return supplier;
 }
 

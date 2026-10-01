@@ -17,7 +17,7 @@ async function ensureDefaultSupplierBankAccount(keyword: string): Promise<void> 
     }>(token, "/admin/suppliers", { keyword, page: 1, page_size: 5 })
     const supplier = suppliers.items?.find((row) => row.party_id)
     if (!supplier?.party_id) throw new Error(`未找到供应商收款主体：${keyword}`)
-    const config = fileURLToPath(new URL("../../backend/config.toml", import.meta.url))
+    const config = process.env.ERP_E2E_CONFIG_PATH ?? fileURLToPath(new URL("../../backend/config.toml", import.meta.url))
     const settings = JSON.parse(
         execFileSync(
             "python3",
@@ -26,7 +26,7 @@ async function ensureDefaultSupplierBankAccount(keyword: string): Promise<void> 
                 "import json,sys,tomllib; print(json.dumps(tomllib.load(open(sys.argv[1], 'rb'))['database']))",
                 config,
             ],
-            { encoding: "utf8" },
+            { encoding: "utf8", timeout: 10_000 },
         ),
     ) as { uri: string; db_name: string }
     const now = Math.floor(Date.now() / 1000)

@@ -27,8 +27,14 @@ export default defineConfig({
     workers: 1,
     timeout: 15 * 60 * 1000,
     expect: { timeout: 20_000 },
-    reporter: [["list"], ["html", { open: "never" }]],
-    outputDir: "test-results",
+    reporter: [
+        ["list"],
+        ["html", { open: "never", outputFolder: process.env.ERP_E2E_REPORT_DIR ?? "playwright-report" }],
+        ...(process.env.ERP_E2E_RESULT_JSON
+            ? [["json", { outputFile: process.env.ERP_E2E_RESULT_JSON }] as [string, { outputFile: string }]]
+            : []),
+    ],
+    outputDir: process.env.ERP_E2E_OUTPUT_DIR ?? "test-results",
     use: {
         baseURL: FRONTEND_BASE_URL,
         locale: "zh-CN",

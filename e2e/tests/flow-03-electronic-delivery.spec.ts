@@ -8,7 +8,7 @@
  *       销售登记客户验收。交付不走审批，不影响自有库存。
  * 目录种子无 VIRTUAL SKU 时，通过 UI 补齐本流程使用的商品。
  */
-import { test, expect, type Locator, type Page } from '@playwright/test'
+import { test, expect, type Locator, type Page } from '../helpers/test'
 import fs from 'node:fs'
 import path from 'node:path'
 

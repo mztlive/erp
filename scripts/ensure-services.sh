@@ -2,6 +2,7 @@
 # E2E 服务管理：确保前端/后端已启动（已启动则复用，不重复拉起）。
 #
 # 后端: web-api（dev 二进制，依赖已开优化；CWD=backend，端口 10001，健康检查 /health）
+#       E2E_SKIP_BACKEND=1 只准备前端，适用于由隔离 runner 管理 API 的运行。
 # 前端: 默认 E2E_FRONTEND=prod，用 next build 的 standalone server（端口 E2E_FRONT_PORT，默认 3100）。
 #       源码比构建新（或 E2E_FRONT_BUILD=1）时先重建再重启；不占用开发用的 next dev 端口 3000。
 #       E2E_FRONTEND=dev 时沿用 next dev（端口 3000，已启动则复用）。
@@ -28,6 +29,8 @@ fi
 FRONT_PID_FILE="${E2E_DIR}/logs/next-e2e.pid"
 FRONT_BUILD_ID="${CLIENT_DIR}/.next/BUILD_ID"
 STANDALONE_DIR="${CLIENT_DIR}/.next/standalone"
+FRONT_ASSETS_BUILD_ID="${STANDALONE_DIR}/.next/e2e-assets-build-id"
+FRONT_RUNNING_BUILD_ID="${E2E_DIR}/logs/next-e2e.build-id"
 
 wait_healthy() {
     local url="$1" name="$2" timeout="$3"
@@ -49,7 +52,9 @@ wait_healthy() {
 }
 
 # ---- 后端 ----
-if curl -sf --max-time 3 "${API_HEALTH}" >/dev/null 2>&1; then
+if [[ "${E2E_SKIP_BACKEND:-0}" == "1" ]]; then
+    echo "跳过默认后端准备（E2E_SKIP_BACKEND=1），仅准备前端"
+elif curl -sf --max-time 3 "${API_HEALTH}" >/dev/null 2>&1; then
     echo "后端已启动（端口 ${API_PORT}），复用"
 else
     echo "后端健康检查未通过，启动或重启后端..."
@@ -70,6 +75,30 @@ front_build_stale() {
     [[ -n "${newer}" ]]
 }
 
+# next build 可以由开发者单独执行。资源同步必须独立于是否需要重建，否则 standalone
+# 的 HTML 可以返回 200，但缺少的 JS 会使浏览器一直等待登录页。
+front_assets_stale() {
+    [[ -s "${FRONT_ASSETS_BUILD_ID}" ]] || return 0
+    cmp -s "${FRONT_BUILD_ID}" "${FRONT_ASSETS_BUILD_ID}" || return 0
+    diff -qr "${CLIENT_DIR}/.next/static" "${STANDALONE_DIR}/.next/static" >/dev/null 2>&1 || return 0
+    if [[ -d "${CLIENT_DIR}/public" ]]; then
+        diff -qr "${CLIENT_DIR}/public" "${STANDALONE_DIR}/public" >/dev/null 2>&1 || return 0
+    elif [[ -d "${STANDALONE_DIR}/public" ]]; then
+        return 0
+    fi
+    return 1
+}
+
+prod_front_healthy() {
+    curl -sf -o /dev/null --max-time 3 "${FRONT_URL}" 2>/dev/null || return 1
+    # 检查本次构建的 JS，而不只检查 HTML，提前暴露静态资源 404/500。
+    local asset
+    asset="$(find "${CLIENT_DIR}/.next/static" -type f -name '*.js' -print -quit)"
+    [[ -n "${asset}" ]] || return 1
+    curl -sf -o /dev/null --max-time 3 \
+        "${FRONT_URL}/_next/static/${asset#"${CLIENT_DIR}/.next/static/"}" 2>/dev/null
+}
+
 stop_prod_front() {
     if [[ -s "${FRONT_PID_FILE}" ]]; then
         local pid
@@ -84,6 +113,7 @@ stop_prod_front() {
         fi
         rm -f "${FRONT_PID_FILE}"
     fi
+    rm -f "${FRONT_RUNNING_BUILD_ID}"
     if curl -sf -o /dev/null --max-time 3 "${FRONT_URL}" 2>/dev/null; then
         echo "错误: 端口 ${FRONT_PORT} 仍被非本脚本启动的进程占用，请先释放或改 E2E_FRONT_PORT。" >&2
         exit 1
@@ -97,20 +127,42 @@ build_prod_front() {
         tail -50 "${E2E_DIR}/logs/next-build.log" >&2 || true
         exit 1
     }
+}
+
+sync_prod_front_assets() {
+    echo "同步前端 standalone 静态资源（BUILD_ID $(cat "${FRONT_BUILD_ID}")）..."
     # standalone server.js 不自带静态资源，按官方做法复制进 standalone 目录。
+    rm -f "${FRONT_ASSETS_BUILD_ID}"
     rm -rf "${STANDALONE_DIR}/.next/static" "${STANDALONE_DIR}/public"
     cp -R "${CLIENT_DIR}/.next/static" "${STANDALONE_DIR}/.next/static"
     if [[ -d "${CLIENT_DIR}/public" ]]; then
         cp -R "${CLIENT_DIR}/public" "${STANDALONE_DIR}/public"
     fi
+    cp "${FRONT_BUILD_ID}" "${FRONT_ASSETS_BUILD_ID}"
 }
 
 start_prod_front() {
     echo "启动前端生产服务（端口 ${FRONT_PORT}），日志: ${E2E_DIR}/logs/next-e2e.log"
-    (cd "${STANDALONE_DIR}" && NODE_ENV=production PORT="${FRONT_PORT}" HOSTNAME=127.0.0.1 \
-        nohup node server.js > "${E2E_DIR}/logs/next-e2e.log" 2>&1 < /dev/null &
-        printf '%s\n' "$!" > "${FRONT_PID_FILE}")
+    # 与后端默认启动方式一致：脱离调用进程组，并记录实际 node 的 PID。
+    # nohup 只能忽略 SIGHUP，执行器清理进程组的 SIGTERM 仍会关闭服务。
+    local node_bin
+    node_bin="$(command -v node)"
+    (cd "${STANDALONE_DIR}" && python3 -c '
+import os, sys
+if os.fork() > 0:
+    os._exit(0)
+os.setsid()
+with open(sys.argv[2], "w") as pid_file:
+    pid_file.write(str(os.getpid()))
+env = dict(os.environ, NODE_ENV="production", PORT=sys.argv[3], HOSTNAME="127.0.0.1")
+os.execve(sys.argv[1], [sys.argv[1], "server.js"], env)
+' "${node_bin}" "${FRONT_PID_FILE}" "${FRONT_PORT}" > "${E2E_DIR}/logs/next-e2e.log" 2>&1 < /dev/null)
     wait_healthy "${FRONT_URL}" "前端" 60
+    if ! prod_front_healthy; then
+        echo "错误: 前端 HTML 可达，但当前构建的静态 JS 不可达，请检查 ${E2E_DIR}/logs/next-e2e.log。" >&2
+        exit 1
+    fi
+    cp "${FRONT_BUILD_ID}" "${FRONT_RUNNING_BUILD_ID}"
 }
 
 mkdir -p "${E2E_DIR}/logs"
@@ -125,8 +177,13 @@ if [[ "${FRONT_MODE}" == "dev" ]]; then
 elif front_build_stale; then
     stop_prod_front
     build_prod_front
+    sync_prod_front_assets
     start_prod_front
-elif curl -sf -o /dev/null --max-time 3 "${FRONT_URL}" 2>/dev/null; then
+elif front_assets_stale || ! cmp -s "${FRONT_BUILD_ID}" "${FRONT_RUNNING_BUILD_ID}"; then
+    stop_prod_front
+    sync_prod_front_assets
+    start_prod_front
+elif prod_front_healthy; then
     echo "前端生产服务已启动（端口 ${FRONT_PORT}），构建未过期，复用"
 else
     stop_prod_front

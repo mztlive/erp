@@ -3,7 +3,7 @@
  * 用 105/102/3 条模拟数据验证同名候选人、跨页与导出。
  * 不作为真实库、组织范围或业务验收证据。
  */
-import { expect, test, type Page } from "@playwright/test"
+import { expect, test, type Page } from "../helpers/test"
 
 import { loginViaUi } from "../helpers/login"
 

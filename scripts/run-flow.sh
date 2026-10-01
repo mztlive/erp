@@ -3,14 +3,16 @@
 #   1. 确保前后端服务已启动（已启动则复用）；
 #   2. reset-db.sh 以 ERP_RESET_ONLY=1 清空业务数据（保留账号/主数据/已发布审批定义，
 #      不停止 web-api）；若健康检查失败才重启；
-#   3. 发布审批定义（已发布则跳过）；全量模式只 reset/发布一次；
+#   3. 发布审批定义（已发布则跳过）；全量模式默认使用独立数据库并行；
 #   4. 执行对应 playwright spec。
 #
 # 用法:
 #   bash scripts/run-flow.sh e2e/tests/flow-01-sales-warehouse.spec.ts
 #   bash scripts/run-flow.sh tests/flow-01-sales-warehouse.spec.ts
 #   bash scripts/run-flow.sh flow-01-sales-warehouse.spec.ts
-#   bash scripts/run-flow.sh all          # 依序运行全部 spec
+#   bash scripts/run-flow.sh all          # 6 个独立数据库并行运行全部 spec
+#   E2E_WORKERS=4 bash scripts/run-flow.sh all  # 调整隔离并行数
+#   E2E_ISOLATE=0 bash scripts/run-flow.sh all  # 原共享开发库串行模式
 #   E2E_RESET=0 bash scripts/run-flow.sh e2e/tests/xxx.spec.ts   # 跳过 reset（调试用）
 #   E2E_ALLOW_REMOTE_RESET=1 bash scripts/run-flow.sh e2e/tests/xxx.spec.ts  # 远程开发库需显式放行
 #   E2E_HEADED=1 bash scripts/run-flow.sh e2e/tests/xxx.spec.ts  # 有界面观察浏览器操作
@@ -27,7 +29,10 @@ RESET="${E2E_RESET:-1}"
 HEADED="${E2E_HEADED:-0}"
 SLOW_MO="${E2E_SLOW_MO:-}"
 TRACE="${E2E_TRACE:-0}"
+ISOLATE="${E2E_ISOLATE:-1}"
+TARGET="${1:-all}"
 PREFLIGHT_DONE=0
+RUN_STARTED=${SECONDS}
 
 if [[ ! -f "${E2E_DIR}/playwright.config.ts" ]]; then
     echo "找不到 ${E2E_DIR}/playwright.config.ts，Playwright 工程应在 e2e/ 目录。" >&2
@@ -143,13 +148,22 @@ run_one() {
     return "${status}"
 }
 
-if [[ "${1:-}" == "all" ]]; then
+if [[ "${TARGET}" == "all" ]]; then
     shopt -s nullglob
     specs=("${E2E_DIR}"/tests/*.spec.ts)
     if (( ${#specs[@]} == 0 )); then
         echo "未找到 ${E2E_DIR}/tests/*.spec.ts" >&2
         exit 1
     fi
+    if [[ "${ISOLATE}" == "1" ]]; then
+        echo "-- 全量流程：独立数据库/API 并行，开发库仅作只读基线 --"
+        E2E_SKIP_BACKEND=1 bash "${SCRIPT_DIR}/ensure-services.sh"
+        status=0
+        python3 "${SCRIPT_DIR}/run-e2e-parallel.py" all || status=$?
+        echo "-- 全量编排总耗时（含服务准备）：$((SECONDS - RUN_STARTED))s --"
+        exit "${status}"
+    fi
+    [[ "${ISOLATE}" == "0" ]] || { echo "错误: E2E_ISOLATE 只能是 0 或 1" >&2; exit 2; }
     echo ""
     echo "############################################################"
     echo "# 全量流程：reset 一次后一次跑 Playwright"
@@ -172,6 +186,5 @@ if [[ "${1:-}" == "all" ]]; then
     report_trace
     exit "${status}"
 else
-    [[ -n "${1:-}" ]] || { echo "用法: bash scripts/run-flow.sh <spec 文件|all>" >&2; exit 2; }
-    run_one "$1"
+    run_one "${TARGET}"
 fi

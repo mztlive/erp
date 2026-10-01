@@ -28,7 +28,7 @@ import {
     type BrowserContext,
     type Locator,
     type Page,
-} from "@playwright/test"
+} from "../helpers/test"
 
 import { apiGet, apiToken } from "../helpers/api"
 import { createCustomerViaUi } from "../helpers/customers"

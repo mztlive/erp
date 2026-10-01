@@ -46,11 +46,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### 全栈与 E2E（在仓库根执行）
 
 - 跑单个流程：`bash scripts/run-flow.sh e2e/tests/flow-01-sales-warehouse.spec.ts`；跑全部：`bash scripts/run-flow.sh all`。
-  - 每次运行都会先清空业务数据（保留账号、主数据和已发布审批定义）。
-  - `E2E_RESET=0` 跳过清库；`E2E_HEADED=1` 有界面；`E2E_SLOW_MO=500` 慢动作。
-- `ensure-services.sh` 会复用已在运行的 web-api。**改了后端代码要先执行 `bash scripts/restart-backend.sh --build`**，否则 E2E 跑的是旧二进制。
+  - 全量默认 6 个隔离 shard：按 `e2e/fixtures/flow-durations.json` 的文件耗时均衡分组，每个 spec 只执行一次且不拆分串行用例。源开发库只读复制一次，每个 shard 使用独立数据库、API 进程、配置、端口、S3 上传前缀和报告目录；同一 shard 内串行执行完整 spec，flow-18 排在普通流程之后，S2 始终在所属组最后执行。临时库先清业务数据，再补齐固定岗位、职责、审批定义和商品种子；每份后续 spec 开始前再次清业务数据，保留账号、主数据、已发布定义和索引，禁止前一流程的库存、单据影响后一流程。
+  - `E2E_WORKERS=4` 调整全量并行数；全量命令需要 Python 3.11+、`mongodump`、`mongorestore` 和 `mongosh`。运行结束清理本次 API 进程、临时配置与临时数据库，失败返回非零。
+  - 单流程入口仍清空配置指定的开发库业务数据，保留账号、主数据和已发布审批定义。`E2E_ISOLATE=0` 可将全量切回该共享库串行模式。
+  - `E2E_RESET=0` 跳过清库；隔离全量仍默认补固定种子，`E2E_SEED=0` 跳过种子补齐。`E2E_HEADED=1` 有界面；`E2E_SLOW_MO=500` 慢动作。
+  - 隔离单流程：`python3 scripts/run-e2e-parallel.py e2e/tests/<spec>.spec.ts`，执行前先运行 `bash scripts/ensure-services.sh`。完整结果、分段耗时和各 shard 报告写入 `logs/e2e/<run_id>/`。
+  - 外置盘临时 MongoDB：复制 `e2e/local.config.example.toml` 为已忽略的 `e2e/local.config.toml`，填写 `mongo_data_root`；也可设置 `E2E_MONGO_DATA_ROOT`。外置盘必须已挂载。填写 `mongo_binary`（环境变量 `E2E_MONGOD_BINARY`）时使用原生 `mongod`；未填写时使用已有 Docker MongoDB 8 镜像（默认 `docker.1ms.run/mongo:8.0`，可用 `E2E_MONGO_IMAGE` 指定）。每次运行创建独立副本集实例和临时数据目录，只复制源库数据，结束后清理本次实例和数据目录。原生执行文件与 Docker 镜像必须兼容本机系统或虚拟机内核。
+- `ensure-services.sh` 会复用已在运行的 web-api。改了后端代码，共享库单流程先执行 `bash scripts/restart-backend.sh --build`；隔离运行先在 `backend/` 执行 `cargo build -p web-api --locked`，隔离进程使用新二进制，不需要重启开发 API。
 - 查流程慢在哪：`E2E_TRACE=1 bash scripts/run-flow.sh <spec>` 录 trace 并自动运行 `e2e/scripts/trace-slow-steps.mjs`，输出被吞掉的超时、按代码位置汇总的耗时和最慢单步。也可在 `e2e/` 下对已有 trace 执行 `npm run trace:slow [-- <trace.zip|目录>]`。
 - E2E 前端默认跑生产构建（standalone，`http://127.0.0.1:3100`，日志 `logs/next-e2e.log`），不占开发用的 3000；源码比构建新时自动 `next build` 并重启。`E2E_FRONT_BUILD=1` 强制重建，`E2E_FRONTEND=dev` 改连 next dev（3000）。
+  - standalone 静态资源和运行实例必须匹配当前 `BUILD_ID`，准备阶段检查实际 JS 可达。隔离运行通过浏览器上下文将真实 API 请求转发到当前 shard，所有直接写库 helper 必须读取 `ERP_E2E_CONFIG_PATH`。
 - 新库初始化或全量种子：`E2E_RESET=1 bash scripts/reset-db.sh`。开发开单准备（同时清空目录主数据后重建）：`E2E_RESET=1 bash scripts/prepare-dev.sh`。目标是远程开发库时还要加 `E2E_ALLOW_REMOTE_RESET=1`。
 - 种子岗位账号密码均为 `123456`：`admin` 超管、`xiaoshou` 周晓彤（销售）、`lisiyong` 李思勇（销售领导）、`caigou` 陈国平（采购）、`yunying` 林晓燕（运营）、`cangchu` 赵卫东（仓储）、`caiwu` 王慧敏（财务总监，只审批）、`fukuan` 孙立新（出纳）、`kaipiao` 吴倩（开票）、`guanli` 郑远山（管理层）、`xitong` 何建明（系统管理员）。审批链见 `scripts/prepare-dev.sh` 头注释。
 - 运行日志和 PID 写在根目录 `logs/`。

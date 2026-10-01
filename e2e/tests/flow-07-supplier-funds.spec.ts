@@ -23,7 +23,7 @@ import {
     expect,
     type Browser,
     type Page,
-} from "@playwright/test";
+} from "../helpers/test";
 
 import { createCustomerViaUi } from "../helpers/customers";
 import { headedAwareViewport } from "../helpers/headed";

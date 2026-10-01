@@ -13,7 +13,7 @@
  */
 import { existsSync } from 'node:fs'
 import path from 'node:path'
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Page } from '../helpers/test'
 
 import { createCustomerViaUi } from '../helpers/customers'
 import { openLoggedInWorkspace } from '../helpers/login'
@@ -88,7 +88,7 @@ async function gotoHeading(page: Page, href: string, heading: string | RegExp) {
 
 async function clickWithoutToastOverlay(
   page: Page,
-  target: import('@playwright/test').Locator,
+  target: import('../helpers/test').Locator,
   settled?: () => Promise<boolean>,
 ) {
   // Toast 可能在关闭后再次出现导致遮挡：循环关闭后短超时点按，成功即返回（与 flow-03 同款）。

@@ -14,7 +14,7 @@
  * - 销售单票款页只读，回款改在客户往来页登记
  */
 import path from "node:path";
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page } from "../helpers/test";
 
 import { createCustomerViaUi } from "../helpers/customers";
 import { submitSalesInvoiceRequest } from "../helpers/invoices";

@@ -22,7 +22,7 @@
  *   7. 自动推荐按含税成本优先，实物默认更可能选「入仓」；本流程必须显式改选「供应商直发」。
  */
 
-import { test, expect, type Page } from "@playwright/test"
+import { test, expect, type Page } from "../helpers/test"
 import fs from "node:fs"
 import path from "node:path"
 

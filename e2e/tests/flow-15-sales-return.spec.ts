@@ -32,7 +32,7 @@ import {
     expect,
     type BrowserContext,
     type Page,
-} from "@playwright/test";
+} from "../helpers/test";
 
 import { createCustomerViaUi } from "../helpers/customers";
 import { submitSalesInvoiceRequest } from "../helpers/invoices";

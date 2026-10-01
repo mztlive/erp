@@ -1,97 +1,50 @@
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { API_BASE, apiGet, apiToken } from "./api";
-
-type StockScopeRow = {
-  enabled?: boolean;
-  scope_type?: string;
-  scope_targets?: string[];
-  actions?: string[];
-};
+import { apiGet, apiToken } from "./api";
+import { ensurePersonWarehouseScope } from "./person-data-scope";
 
 const WAREHOUSE_STOCK_GRANTS: ReadonlyArray<{
-  roleId: string;
+  account: string;
   resource: string;
   actions: readonly string[];
 }> = [
-  { roleId: "role-warehouse", resource: "stock_balance", actions: ["list", "detail"] },
-  { roleId: "role-warehouse", resource: "stock_movement", actions: ["list"] },
-  { roleId: "role-warehouse", resource: "stock_reservation", actions: ["list"] },
+  { account: "cangchu", resource: "stock_balance", actions: ["list", "detail"] },
+  { account: "cangchu", resource: "stock_movement", actions: ["list"] },
+  { account: "cangchu", resource: "stock_reservation", actions: ["list"] },
   {
-    roleId: "role-warehouse",
+    account: "cangchu",
     resource: "stock_adjustment",
     actions: ["list", "detail", "create", "update", "submit"],
   },
-  { roleId: "role-procurement", resource: "stock_reservation", actions: ["list"] },
+  { account: "caigou", resource: "stock_reservation", actions: ["list"] },
 ];
 
-async function apiPost<T>(token: string, path: string, body: unknown): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(15_000),
-  });
-  const text = await response.text();
-  const parsed = text
-    ? (JSON.parse(text) as { success?: boolean; errorMessage?: string; data?: T })
-    : null;
-  if (!response.ok || parsed?.success === false || parsed?.data == null) {
-    throw new Error(
-      `API POST ${path} 失败（HTTP ${response.status}）: ${parsed?.errorMessage ?? text.slice(0, 300)}`,
-    );
-  }
-  return parsed.data;
-}
-
-function scopeCovers(row: StockScopeRow, actions: readonly string[], warehouseId: string): boolean {
-  if (row.enabled === false) return false;
-  const granted = new Set(row.actions ?? []);
-  if (!actions.every((action) => granted.has(action))) return false;
-  if (row.scope_type === "company") return true;
-  const targets = row.scope_targets ?? [];
-  return targets.includes(warehouseId) || targets.includes("*");
-}
-
 /**
- * 仓储角色没有库存默认范围时，台账停在「未配置仓库数据范围」，
- * 余额视图和搜索框都不会挂载。按仓库显式补上本流程要用的范围。
+ * 仓储人员没有库存范围时，台账停在「未配置仓库数据范围」。
+ * 对实际岗位人员按仓库追加本流程范围，保留既有授权，不修改角色资格。
  */
 export async function ensureWarehouseStockScope(warehouseCode: string): Promise<void> {
   const token = await apiToken("admin");
-  const warehouses = await apiGet<{ items: Array<{ id: string; warehouse_code: string }> }>(
-    token,
-    "/admin/warehouses",
-    { warehouse_code: warehouseCode, page: 1, page_size: 100 },
-  );
+  const [warehouses, people] = await Promise.all([
+    apiGet<{ items: Array<{ id: string; warehouse_code: string }> }>(
+      token,
+      "/admin/warehouses",
+      { warehouse_code: warehouseCode, page: 1, page_size: 100 },
+    ),
+    apiGet<Array<{ id: string; account: string }>>(token, "/admin/admins"),
+  ]);
   const warehouse = warehouses.items.find((row) => row.warehouse_code === warehouseCode);
   if (!warehouse) throw new Error(`缺少库存测试仓库：${warehouseCode}`);
-  for (const grant of WAREHOUSE_STOCK_GRANTS) {
-    const page = await apiGet<{ items?: StockScopeRow[] }>(token, "/admin/data-scopes", {
-      subject_type: "role",
-      subject_id: grant.roleId,
-      resource: grant.resource,
-      page: 1,
-      page_size: 100,
-    });
-    if ((page.items ?? []).some((row) => scopeCovers(row, grant.actions, warehouse.id))) continue;
-    await apiPost(token, "/admin/data-scopes", {
-      schema_version: 2,
-      subject_type: "role",
-      subject_id: grant.roleId,
-      resource: grant.resource,
-      actions: grant.actions,
-      target_dimension: "warehouse",
-      scope_type: "organization",
-      scope_targets: [warehouse.id],
-      target_mode: "explicit",
-      include_descendants: null,
-      enabled: true,
-    });
+  for (const account of new Set(WAREHOUSE_STOCK_GRANTS.map((grant) => grant.account))) {
+    const person = people.find((row) => row.account === account);
+    if (!person) throw new Error(`缺少库存测试人员：${account}`);
+    await ensurePersonWarehouseScope(
+      token,
+      person.id,
+      WAREHOUSE_STOCK_GRANTS.filter((grant) => grant.account === account),
+      warehouse.id,
+    );
   }
 }
 
@@ -101,20 +54,23 @@ export async function ensureZeroBalanceDimension(
   skuNo: string,
 ): Promise<void> {
   const token = await apiToken("cangchu");
-  const warehouses = await apiGet<{ items: Array<{ id: string; warehouse_code: string }> }>(
-    token,
-    "/admin/warehouses",
-    { warehouse_code: warehouseCode, page: 1, page_size: 100 },
-  );
-  const skus = await apiGet<{ items: Array<{ id: string; sku_no: string }> }>(
-    token,
-    "/admin/skus",
-    { q: skuNo, page: 1, page_size: 100 },
-  );
+  const [warehouses, skus] = await Promise.all([
+    apiGet<{ items: Array<{ id: string; warehouse_code: string }> }>(
+      token,
+      "/admin/warehouses",
+      { warehouse_code: warehouseCode, page: 1, page_size: 100 },
+    ),
+    apiGet<{ items: Array<{ id: string; sku_no: string }> }>(
+      token,
+      "/admin/skus",
+      { q: skuNo, page: 1, page_size: 100 },
+    ),
+  ]);
   const warehouse = warehouses.items.find((row) => row.warehouse_code === warehouseCode);
   const sku = skus.items.find((row) => row.sku_no === skuNo);
   if (!warehouse || !sku) throw new Error(`缺少库存测试主数据：${warehouseCode} / ${skuNo}`);
-  const config = fileURLToPath(new URL("../../backend/config.toml", import.meta.url));
+  const config = process.env.ERP_E2E_CONFIG_PATH ??
+    fileURLToPath(new URL("../../backend/config.toml", import.meta.url));
   const settings = JSON.parse(
     execFileSync(
       "python3",

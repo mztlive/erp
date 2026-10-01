@@ -17,7 +17,7 @@
  */
 import fs from "node:fs"
 import path from "node:path"
-import { expect, test, type BrowserContext, type Locator, type Page } from "@playwright/test"
+import { expect, test, type BrowserContext, type Locator, type Page } from "../helpers/test"
 
 import { createCustomerViaUi } from "../helpers/customers"
 import { FRONTEND_BASE_URL } from "../helpers/env"
@@ -78,8 +78,33 @@ async function searchInventoryLedger(
 ) {
     const tab = page.locator(`#inventory-ledger-view-${view}`)
     await expect(tab).toBeVisible({ timeout: TIMEOUT })
-    await tab.click()
-    await searchAndSubmit(page.locator("#inventory-ledger-search"), query)
+    if ((await tab.getAttribute("aria-pressed")) !== "true") {
+        await tab.click()
+        await page.waitForURL(url => url.searchParams.get("view") === view, {
+            waitUntil: "load", timeout: TIMEOUT,
+        })
+        await expect(tab).toHaveAttribute("aria-pressed", "true", { timeout: TIMEOUT })
+    }
+
+    // 旧行在搜索导航期间仍可见；必须等本次查询落到当前页面，才能创建调整草稿。
+    const [response] = await Promise.all([
+        page.waitForResponse(response => {
+            const url = new URL(response.url())
+            return response.request().method() === "GET"
+                && url.pathname === `/admin/stock-${view === "balance" ? "balances" : "reservations"}`
+                && url.searchParams.get("q") === query
+                && url.searchParams.get("page_size") === "20"
+        }, { timeout: TIMEOUT }),
+        page.waitForURL(url => url.searchParams.get("q") === query
+            && (url.searchParams.get("view") ?? "balance") === view, {
+            waitUntil: "load", timeout: TIMEOUT,
+        }),
+        searchAndSubmit(page.locator("#inventory-ledger-search"), query),
+    ])
+    expect(response.ok(), "库存台账查询应成功").toBe(true)
+    expect(await response.finished(), "库存台账查询响应应完整返回").toBeNull()
+    await expect(page.getByText(`搜索：${query}`, { exact: true })).toBeVisible({ timeout: TIMEOUT })
+    await expect(page.getByText("正在加载库存…", { exact: true })).toBeHidden({ timeout: TIMEOUT })
 }
 
 function uniqueCreditCode(): string {
@@ -109,7 +134,7 @@ async function submitInventoryCountGain(page: Page): Promise<string> {
         timeout: TIMEOUT,
     })
     await searchInventoryLedger(page, SKU_NO)
-    const warehouseRow = page.getByRole("row").filter({ hasText: WAREHOUSE_NAME })
+    const warehouseRow = page.getByRole("row").filter({ hasText: WAREHOUSE_NAME }).filter({ hasText: SKU_NO })
     await expect(warehouseRow).toBeVisible({ timeout: TIMEOUT })
     await warehouseRow.getByRole("button", { name: "库存调整" }).click()
     const dialog = page.getByRole("dialog", { name: "发起库存调整" })

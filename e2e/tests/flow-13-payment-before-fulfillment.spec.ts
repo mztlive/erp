@@ -23,9 +23,10 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { test, expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { test, expect, type Browser, type BrowserContext, type Page } from "../helpers/test";
 
 import { createCustomerViaUi } from "../helpers/customers";
+import { apiGet } from "../helpers/api";
 import { openLoggedInWorkspace } from "../helpers/login";
 import {
     ensureDefaultProcurementOwner,
@@ -213,7 +214,7 @@ async function assertPurchaseOrderPrepayFacts(page: Page, responsibility: Purcha
     await expect(page.getByText("履约进度")).toBeVisible({ timeout: UI_TIMEOUT });
 }
 
-async function readPurchaseOrders(page: Page, salesOrderNo: string): Promise<PurchaseRef[]> {
+async function readPurchaseOrders(page: Page, salesOrderId: string, salesOrderNo: string): Promise<PurchaseRef[]> {
     await gotoHeading(page, "/procurement/orders", "采购单");
     const search = page.locator("#procurement-orders-list-search");
     await search.fill(salesOrderNo);
@@ -221,22 +222,31 @@ async function readPurchaseOrders(page: Page, salesOrderNo: string): Promise<Pur
     await expect(page.getByText("2 条")).toBeVisible({ timeout: UI_TIMEOUT });
     await expect(page.getByRole("table").getByText("草稿", { exact: true })).toHaveCount(0);
     await expect(page.getByText(PAYMENT_TERM_SUPPLIER).first()).toBeVisible({ timeout: UI_TIMEOUT });
-    const links = page.getByRole("button", { name: /打开采购单/ });
-    await expect(links).toHaveCount(2, { timeout: UI_TIMEOUT });
-    const hrefs = await links.evaluateAll((nodes) =>
-        nodes
-            .map((node) => (node as HTMLAnchorElement).getAttribute("href") ?? "")
-            .filter(Boolean),
-    );
+    const rows = page.getByRole("table").getByRole("row").filter({ hasText: salesOrderNo });
+    await expect(rows).toHaveCount(2, { timeout: UI_TIMEOUT });
+    await expect(rows.getByRole("button", { name: /打开采购单/ })).toHaveCount(2, { timeout: UI_TIMEOUT });
+    // 列表的打开按钮没有 href；同一采购账号只读定位本销售单的 ID，业务事实仍逐详情验收。
+    const token = await page.evaluate(() => localStorage.getItem("erp.token"));
+    expect(token, "采购登录 token 必须存在").toBeTruthy();
+    const orders = await apiGet<{
+        items: Array<{ id: string; sales_order_id: string; sales_order_no: string }>;
+    }>(token!, "/admin/purchase-orders", { sales_order_id: salesOrderId, page: 1, page_size: 10 });
+    const ids = orders.items.filter(row => row.sales_order_id === salesOrderId && row.sales_order_no === salesOrderNo)
+        .map(row => row.id);
+    expect(ids, "本销售单必须对应两张独立采购单").toHaveLength(2);
+    expect(new Set(ids).size).toBe(2);
     const refs: PurchaseRef[] = [];
-    for (const href of hrefs) {
-        await page.goto(href);
+    for (const id of ids) {
+        expect(id.length).toBeGreaterThan(0);
+        await page.goto(`/procurement/orders/${id}`);
         await expect(page.getByText("采购单").first()).toBeVisible({ timeout: UI_TIMEOUT });
         await expect(page.getByText("已生效").first()).toBeVisible({ timeout: UI_TIMEOUT });
         const no = await readHeaderDocumentNumber(page)
         expect(no.length).toBeGreaterThan(0);
+        await expect(page.getByText("入仓", { exact: true }).or(page.getByText("供应商直发", { exact: true })).filter({ visible: true }).first())
+            .toBeVisible({ timeout: UI_TIMEOUT });
         const responsibility: PurchaseRef["responsibility"] =
-            (await page.getByText("供应商直发").count()) > 0 ? "供应商直发" : "入仓";
+            (await page.getByText("供应商直发", { exact: true }).filter({ visible: true }).count()) > 0 ? "供应商直发" : "入仓";
         await assertPurchaseOrderPrepayFacts(page, responsibility);
         refs.push({ no, responsibility });
     }
@@ -628,7 +638,7 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
         await assertNoPaymentApproval(page);
 
         page = await switchTo("caigou");
-        const purchases = await readPurchaseOrders(page, salesOrderNo);
+        const purchases = await readPurchaseOrders(page, salesOrderId, salesOrderNo);
         inboundPo = purchases.find((row) => row.responsibility === "入仓")!.no;
         directPo = purchases.find((row) => row.responsibility === "供应商直发")!.no;
 

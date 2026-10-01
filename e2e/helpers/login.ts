@@ -1,6 +1,7 @@
 import { expect, type Browser, type BrowserContext, type Page } from "@playwright/test"
 
 import { resolveAccount, type LoginIdentity } from "./accounts"
+import { rememberApiToken } from "./api"
 import { headedContextOptions, maximizePageIfHeaded } from "./headed"
 
 export type { LoginIdentity }
@@ -38,41 +39,45 @@ export async function loginViaUi(
     await expect(accountInput).toBeVisible({ timeout: LOGIN_TIMEOUT })
     await accountInput.fill(cred.account)
     await page.locator("#governance-auth-login-password").fill(cred.password)
-    await page.locator("#governance-auth-login-submit").click()
-
-    const loginError = page.getByRole("alert").filter({ hasText: "无法登录" })
-    // 同一来源 60 秒内登录超过 20 次会返回「频繁」；等待窗口滑过后重试。
+    const submit = page.locator("#governance-auth-login-submit")
+    // 在点击前订阅响应。失败无需先耗尽 URL 超时；429 按服务器窗口重试。
     for (let attempt = 0; ; attempt += 1) {
-        try {
-            await page.waitForURL((url) => !url.pathname.startsWith("/login"), {
-                timeout: LOGIN_TIMEOUT,
-            })
+        const [response] = await Promise.all([
+            page.waitForResponse(
+                (candidate) =>
+                    candidate.request().method() === "POST" &&
+                    new URL(candidate.url()).pathname === "/login",
+                { timeout: LOGIN_TIMEOUT },
+            ),
+            submit.click(),
+        ])
+        const result = await response.json().catch(() => null) as
+            | { success?: boolean; errorMessage?: string; data?: { token?: string } }
+            | null
+        if (response.ok() && result?.success !== false) {
+            if (result?.data?.token) rememberApiToken(cred, result.data.token)
             break
-        } catch (error) {
-            if (await loginError.isVisible().catch(() => false)) {
-                const detail = (await loginError.textContent())?.trim() ?? "无法登录"
-                if (detail.includes("频繁") && attempt < 2) {
-                    await page.waitForTimeout(35_000)
-                    await page
-                        .locator('[data-slot="toast-close"]')
-                        .click({ timeout: 1_000 })
-                        .catch(() => undefined)
-                    await page.locator("#governance-auth-login-submit").click({ force: true })
-                    continue
-                }
-                throw new Error(`UI 登录失败 (${cred.account}): ${detail}`)
-            }
-            throw error
         }
+        if (response.status() === 429 && attempt < 2) {
+            const seconds = Number(response.headers()["retry-after"])
+            const delay = Number.isFinite(seconds) && seconds > 0
+                ? Math.ceil(seconds * 1_000) + 250
+                : 35_000
+            await page.waitForTimeout(delay)
+            continue
+        }
+        throw new Error(
+            `UI 登录失败 (${cred.account}, HTTP ${response.status()}): ${result?.errorMessage ?? response.statusText()}`,
+        )
     }
 
+    await page.waitForURL((url) => !url.pathname.startsWith("/login"), {
+        timeout: LOGIN_TIMEOUT,
+    })
+    // returnTo 可能指向业务页。直接打开工作台，无需先等一个不会出现的标题。
+    if (new URL(page.url()).pathname !== "/workspace") await page.goto("/workspace")
     const workspace = page.getByRole("heading", { name: "我的工作台" })
-    try {
-        await expect(workspace).toBeVisible({ timeout: LOGIN_TIMEOUT })
-    } catch {
-        await page.goto("/workspace")
-        await expect(workspace).toBeVisible({ timeout: LOGIN_TIMEOUT })
-    }
+    await expect(workspace).toBeVisible({ timeout: LOGIN_TIMEOUT })
 }
 
 const sessionPool = new WeakMap<Browser, Map<string, LoggedInSession>>()

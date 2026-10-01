@@ -203,6 +203,8 @@ async fn persist_created_adjustment(
                 if !balance.matches_adjustment_dimensions(&adjustment, &lines) {
                     return Err(Error::ValidationError("库存余额与调整单维度不一致".to_string()));
                 }
+                // 提交资格沿已持久化的来源对象检查仓库范围，须先在同一事务内写入新单据。
+                db.inventory().create_stock_adjustment_with_lines(&adjustment, &lines, executor).await?;
                 let can_submit =
                     match start_approval::ensure_stock_adjustment_submit_authorized_with_executor(
                         &db,
@@ -217,7 +219,6 @@ async fn persist_created_adjustment(
                         Err(Error::Forbidden(_)) => false,
                         Err(error) => return Err(error),
                     };
-                db.inventory().create_stock_adjustment_with_lines(&adjustment, &lines, executor).await?;
                 let binding = persist_bound_document(
                     &db,
                     &rbac,
@@ -339,11 +340,75 @@ fn build_adjustment_lines(
 mod tests {
     use std::str::FromStr;
 
-    use erp_core::ids::{SkuId, StockAdjustmentId};
+    use bpm::ids::ApprovalProcessDefinitionId;
+    use entity_core::BaseModel;
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{SkuId, StockAdjustmentId, WarehouseId};
     use erp_core::money::Quantity;
-    use erp_inventory::{AdjustmentReasonType, MovementDirection};
+    use erp_inventory::{AdjustmentReasonType, MovementDirection, StockAdjustment, StockAdjustmentState};
+    use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 
-    use super::{StockAdjustmentLineInput, build_adjustment_lines};
+    use super::{StockAdjustmentLineInput, build_adjustment_lines, created_adjustment_detail};
+    use crate::Error;
+
+    /// 使用固定元数据构造尚未提交的调整单与完整审批绑定。
+    fn created_draft() -> (StockAdjustment, ApprovalDefinitionBinding) {
+        let adjustment = StockAdjustment {
+            base: BaseModel::fake(),
+            created_by: "user-1".to_string(),
+            adjustment_no: "ADJ-1".to_string(),
+            warehouse_id: WarehouseId::new("wh-1"),
+            reason_type: AdjustmentReasonType::StockGain,
+            status: StockAdjustmentState::Draft,
+            prepared_by: "user-1".to_string(),
+            reviewed_by: None,
+            finance_reviewed_by: None,
+            note: None,
+            occurred_at: None,
+            approval_subject_version: 0,
+        };
+        let binding = ApprovalDefinitionBinding::new(
+            ApprovalProcessDefinitionId::new("def-1"),
+            2,
+            Instant::from_unix_secs(1),
+        )
+        .unwrap();
+        (adjustment, binding)
+    }
+
+    /// 已获提交资格的新草稿立即返回权威版本令牌与提交动作。
+    #[test]
+    fn created_draft_with_submit_authorization_returns_command() {
+        let (mut adjustment, binding) = created_draft();
+        adjustment.base.version = 7;
+        let view = created_adjustment_detail(adjustment, Vec::new(), binding, true).unwrap();
+        let token = view.approval.submit_command.unwrap();
+        assert_eq!(token.expected_version, "7");
+        assert_eq!(token.expected_subject_version, "1");
+        assert_eq!(view.approval.allowed_actions, ["SUBMIT"]);
+        assert_eq!(view.approval.definition.unwrap().id, "def-1");
+        assert!(view.approval.instance.is_none());
+    }
+
+    /// 仅有创建资格时保留成功草稿与绑定，不能返回提交令牌。
+    #[test]
+    fn created_draft_without_submit_authorization_has_no_command() {
+        let (adjustment, binding) = created_draft();
+        let view = created_adjustment_detail(adjustment, Vec::new(), binding, false).unwrap();
+        assert_eq!(view.adjustment.adjustment_no, "ADJ-1");
+        assert_eq!(view.approval.definition.unwrap().id, "def-1");
+        assert!(view.approval.submit_command.is_none());
+        assert!(view.approval.allowed_actions.is_empty());
+    }
+
+    /// 主题版本达到上限时返回具体冲突，不能生成回绕的提交令牌。
+    #[test]
+    fn created_draft_rejects_submit_subject_version_overflow() {
+        let (mut adjustment, binding) = created_draft();
+        adjustment.approval_subject_version = u32::MAX;
+        let error = created_adjustment_detail(adjustment, Vec::new(), binding, true).unwrap_err();
+        assert!(matches!(error, Error::ConflictError(message) if message == "库存调整审批主题版本已达上限"));
+    }
 
     #[test]
     fn adjustment_lines_are_built_with_entity_validation() {

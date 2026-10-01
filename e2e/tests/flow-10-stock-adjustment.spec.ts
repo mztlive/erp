@@ -17,7 +17,7 @@
  * helpers：openLoggedInWorkspace / openWorkspaceTask / approveCurrentDocument /
  *   ensureZeroBalanceDimension；工作台 h2 是「库存调整单审批」，单号在任务卡。
  */
-import { expect, test, type Browser, type Locator, type Page } from "@playwright/test"
+import { expect, test, type Browser, type Locator, type Page } from "../helpers/test"
 
 import { apiGet, apiToken } from "../helpers/api"
 import { ensureZeroBalanceDimension } from "../helpers/inventory"

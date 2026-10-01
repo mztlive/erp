@@ -23,7 +23,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { test, expect, type Browser, type BrowserContext, type Page } from "@playwright/test"
+import { test, expect, type Browser, type BrowserContext, type Page } from "../helpers/test"
 
 import { createCustomerViaUi } from "../helpers/customers"
 import { headedAwareViewport } from "../helpers/headed"

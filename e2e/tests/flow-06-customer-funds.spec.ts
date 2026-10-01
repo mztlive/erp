@@ -13,7 +13,7 @@
  * - 销售单开票进度完成态文案是「已开齐」，不是文档表格里的「已完成」。
  * - 财务三人共用 role-finance：caiwu 可能看见「登记回款」，提交时被 ForbidSubmitterAsApprover 拒绝。
  */
-import { test, expect, type Browser, type BrowserContext, type Page } from "@playwright/test"
+import { test, expect, type Browser, type BrowserContext, type Page } from "../helpers/test"
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -227,7 +227,7 @@ async function openRole(
 
 async function clickWithoutToastOverlay(
     page: Page,
-    target: import("@playwright/test").Locator,
+    target: import("../helpers/test").Locator,
     settled?: () => Promise<boolean>,
 ): Promise<void> {
     // Toast 可能在关闭后再次出现导致遮挡：循环关闭后短超时点按，成功即返回（与 flow-03/04/05 同款）。

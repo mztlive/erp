@@ -12,8 +12,8 @@
  * 环境变量: API_BASE（默认 http://127.0.0.1:10001）
  */
 import { pathToFileURL } from "node:url";
-import { COMPANY_PARTY, SUPPLIER_SCENARIOS, todayBusinessDate, ensureCompanyParty, ensureSupplier, verifyOffering } from "./dev-supplier-seed.mjs";
-import { ACCOUNTS, login as loginAccount } from "./dev-seed-lib.mjs";
+import { COMPANY_PARTY, SUPPLIER_SCENARIOS, todayBusinessDate, ensureCompanyParty, ensureSupplier, resolveSupplierMaintainer, verifyOffering } from "./dev-supplier-seed.mjs";
+import { ACCOUNTS, FOUNDATION, listAdmins, login as loginAccount } from "./dev-seed-lib.mjs";
 
 const API_BASE = process.env.API_BASE || "http://127.0.0.1:10001";
 
@@ -414,9 +414,9 @@ async function verifySupplierPaymentRecipient(token, supplier, spec) {
   return account;
 }
 
-async function findProduct(token, productNo) {
+async function findProduct(token, productNo, request = call) {
   const items = pageItems(
-    await call(
+    await request(
       "GET",
       `/admin/products?product_no=${encodeURIComponent(productNo)}&page=1&page_size=10`,
       { token },
@@ -425,36 +425,39 @@ async function findProduct(token, productNo) {
   return items.find((row) => row.product_no === productNo) ?? null;
 }
 
-async function findSku(token, { skuNo, productId }) {
+async function findSku(token, { skuNo, productId }, request = call) {
   const query = productId
     ? `product_id=${encodeURIComponent(productId)}`
     : `sku_no=${encodeURIComponent(skuNo)}`;
-  const items = pageItems(await call("GET", `/admin/skus?${query}&page=1&page_size=10`, { token }));
+  const items = pageItems(await request("GET", `/admin/skus?${query}&page=1&page_size=10`, { token }));
   return items.find((row) => row.sku_no === skuNo) ?? items[0] ?? null;
 }
 
-async function ensureProductListed(token, productId) {
-  await call("PUT", `/admin/products/${encodeURIComponent(productId)}/listing-status`, {
+async function ensureProductListed(token, productId, request = call) {
+  await request("PUT", `/admin/products/${encodeURIComponent(productId)}/listing-status`, {
     token,
     body: { listing_status: "listed" },
   });
 }
 
-async function createPhysicalOrServiceProduct(token, spec, refs) {
-  const existing = await findProduct(token, spec.productNo);
+export async function createPhysicalOrServiceProduct(token, spec, refs, maintainerUserId, request = call) {
+  const ownerId = maintainerUserId?.trim();
+  if (!ownerId) throw new Error("开发商品维护人用户 ID 不能为空");
+  const existing = await findProduct(token, spec.productNo, request);
   if (existing) {
     console.log("商品已存在:", existing.product_no, spec.name);
-    await ensureProductListed(token, existing.id);
-    const sku = await findSku(token, { skuNo: spec.skuNo, productId: existing.id });
+    await ensureProductListed(token, existing.id, request);
+    const sku = await findSku(token, { skuNo: spec.skuNo, productId: existing.id }, request);
     if (!sku) throw new Error(`商品 ${spec.productNo} 已存在但找不到 SKU ${spec.skuNo}`);
     return { productId: existing.id, skuId: sku.id, skuNo: sku.sku_no };
   }
-  const created = await call("POST", "/admin/products", {
+  const created = await request("POST", "/admin/products", {
     token,
     body: {
       change_reason: "主数据初始化：商品建档",
       product_no: spec.productNo,
       product_kind: spec.kind,
+      maintainer_user_id: ownerId,
       name: spec.name,
       description: spec.description,
       specification: spec.specification,
@@ -481,24 +484,25 @@ async function createPhysicalOrServiceProduct(token, spec, refs) {
     },
   });
   console.log("商品已创建:", created.product_no, spec.name);
-  await ensureProductListed(token, created.id);
-  const sku = await findSku(token, { skuNo: spec.skuNo, productId: created.id });
+  await ensureProductListed(token, created.id, request);
+  const sku = await findSku(token, { skuNo: spec.skuNo, productId: created.id }, request);
   if (!sku) throw new Error(`商品 ${spec.productNo} 已创建但找不到 SKU ${spec.skuNo}`);
   return { productId: created.id, skuId: sku.id, skuNo: sku.sku_no };
 }
 
-async function createVoucherProduct(token, spec, refs) {
-  const existingSku = await findSku(token, { skuNo: spec.skuNo });
+/** admin 合法创建并维护卡券；岗位选择器访问由实际目录回读另行验证。 */
+export async function createVoucherProduct(token, spec, refs, request = call) {
+  const existingSku = await findSku(token, { skuNo: spec.skuNo }, request);
   if (existingSku) {
     console.log("卡券类目已存在:", existingSku.sku_no, spec.name);
-    await ensureProductListed(token, existingSku.product_id);
+    await ensureProductListed(token, existingSku.product_id, request);
     return {
       productId: existingSku.product_id,
       skuId: existingSku.id,
       skuNo: existingSku.sku_no,
     };
   }
-  await call("POST", "/admin/voucher-categories", {
+  await request("POST", "/admin/voucher-categories", {
     token,
     body: {
       voucher_no: spec.productNo,
@@ -517,9 +521,9 @@ async function createVoucherProduct(token, spec, refs) {
     },
   });
   console.log("卡券类目已创建:", spec.productNo, spec.name);
-  const sku = await findSku(token, { skuNo: spec.skuNo });
+  const sku = await findSku(token, { skuNo: spec.skuNo }, request);
   if (!sku) throw new Error(`卡券 ${spec.productNo} 已创建但找不到 SKU`);
-  await ensureProductListed(token, sku.product_id);
+  await ensureProductListed(token, sku.product_id, request);
   return { productId: sku.product_id, skuId: sku.id, skuNo: sku.sku_no };
 }
 
@@ -565,8 +569,8 @@ async function ensureOffering(token, spec, sku, supplierId) {
   return verifyOffering(saved, spec, supplierId, sku.skuId);
 }
 
-async function verifySellable(token, spec) {
-  const page = await call(
+async function verifySellable(token, spec, request = call) {
+  const page = await request(
     "GET",
     `/admin/sellable-skus?product_kind=${encodeURIComponent(spec.kind)}&page=1&page_size=50`,
     { token },
@@ -578,10 +582,27 @@ async function verifySellable(token, spec) {
   return hit;
 }
 
+/** 按采购岗位回读卡券界面和销售项目选择器实际使用的目录，不以 admin 成功代替。 */
+export async function verifyVoucherProcurementAccess(token, spec, sku, request = call) {
+  const skus = await request("GET", `/admin/skus?sku_no=${encodeURIComponent(spec.skuNo)}&page=1&page_size=10`, { token });
+  if (!pageItems(skus).some(row => row.id === sku.skuId && row.sku_no === spec.skuNo)) {
+    throw new Error(`采购岗位无法选择卡券 SKU ${spec.skuNo}`);
+  }
+  const profiles = await request("GET", `/admin/voucher-category-profiles?sku_id=${encodeURIComponent(sku.skuId)}&page=1&page_size=10`, { token });
+  const profile = pageItems(profiles).filter(row => row.sku_id === sku.skuId)
+    .sort((left, right) => right.revision_no - left.revision_no)[0];
+  if (profile?.status !== "active") {
+    throw new Error(`采购岗位无法读取卡券类目 ${spec.skuNo}`);
+  }
+  await verifySellable(token, spec, request);
+}
+
 /** 核对实际岗位能读公司列表与详情；不能只用超级管理员证明选择器可用。 */
 async function verifyCompanyAccess(company) {
+  const tokens = {};
   for (const spec of [ACCOUNTS.procurement, ACCOUNTS.sysadmin]) {
     const token = await loginAccount(spec.account, spec.password);
+    tokens[spec.account] = token;
     for (const alias of COMPANY_PARTY.aliases) {
       const list = await call("GET", `/admin/companies?keyword=${encodeURIComponent(alias)}&status=active&page=1&page_size=100`, { token });
       if (!(list.items ?? []).some((row) => row.id === company.id && row.aliases?.includes(alias))) {
@@ -591,12 +612,16 @@ async function verifyCompanyAccess(company) {
     const detail = await call("GET", `/admin/companies/${encodeURIComponent(company.id)}`, { token });
     if (detail.id !== company.id) throw new Error(`${spec.label}公司主体详情回显不一致`);
   }
+  return tokens;
 }
 
 async function main() {
   const token = await login();
+  const admins = await listAdmins(token);
+  const maintainerUserId = resolveSupplierMaintainer(admins, FOUNDATION.supplier_maintainer_account);
+  const productMaintainerUserId = resolveSupplierMaintainer(admins, FOUNDATION.product_maintainer_account, "商品");
   const companyParty = await ensureCompanyParty(call, token);
-  await verifyCompanyAccess(companyParty);
+  const companyAccessTokens = await verifyCompanyAccess(companyParty);
 
   const units = {};
   for (const spec of UNITS) {
@@ -613,7 +638,7 @@ async function main() {
 
   const suppliers = {};
   for (const spec of [...SUPPLIERS, ...SUPPLIER_SCENARIOS]) {
-    const row = await ensureSupplier(call, token, spec, companyParty.id);
+    const row = await ensureSupplier(call, token, spec, companyParty.id, maintainerUserId);
     await verifySupplierPaymentRecipient(token, row, spec);
     console.log("供应商资料及收款账户已核对:", spec.supplierNo, spec.shortName);
     suppliers[spec.supplierNo] = row;
@@ -630,12 +655,15 @@ async function main() {
     const sku =
       spec.kind === "VOUCHER"
         ? await createVoucherProduct(token, spec, refs)
-        : await createPhysicalOrServiceProduct(token, spec, refs);
+        : await createPhysicalOrServiceProduct(token, spec, refs, productMaintainerUserId);
     if (spec === PRODUCTS[0]) scenarioSku = sku;
     const supplier = suppliers[spec.supplierNo];
     if (!supplier) throw new Error(`商品 ${spec.productNo} 缺少供应商 ${spec.supplierNo}`);
     await ensureOffering(token, spec, sku, supplier.id);
     const sellable = await verifySellable(token, spec);
+    if (spec.kind === "VOUCHER") {
+      await verifyVoucherProcurementAccess(companyAccessTokens[ACCOUNTS.procurement.account], spec, sku);
+    }
     seeded.push(`${spec.kind} ${sellable.sku_no} ${sellable.name}`);
   }
 

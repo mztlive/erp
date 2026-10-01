@@ -27,7 +27,7 @@ import {
     test,
     type BrowserContext,
     type Page,
-} from "@playwright/test"
+} from "../helpers/test"
 
 import { API_BASE, apiGet, apiToken } from "../helpers/api"
 import { createCustomerViaUi } from "../helpers/customers"
@@ -114,16 +114,26 @@ async function expectNoPurchaseOrders(page: Page, salesOrderNo: string) {
     await expect(page.getByRole("button", { name: /打开采购单/ })).toHaveCount(0)
 }
 
-async function expectAllocationCannotCreatePurchase(page: Page, salesOrderNo: string) {
-    await openWorkspaceTask(page, "待供给分配", salesOrderNo, "procurement")
-    await page.getByRole("button", { name: "刷新", exact: true }).click()
+async function expectAllocationCannotCreatePurchase(page: Page, salesOrderNo: string, salesOrderId: string) {
+    const [response] = await Promise.all([
+        page.waitForResponse((response) => {
+            const url = new URL(response.url())
+            return response.request().method() === "GET"
+                && url.pathname === "/admin/purchase-creation-bases"
+                && url.searchParams.get("sales_order_id") === salesOrderId
+        }),
+        openWorkspaceTask(page, "待供给分配", salesOrderNo, "procurement"),
+    ])
+    expect(response.ok()).toBeTruthy()
+    const envelope = await response.json()
+    expect(envelope.success).toBe(true)
+    expect(Array.isArray(envelope.data)).toBe(true)
     await expect(page.getByRole("heading", { name: "供给分配", exact: true })).toBeVisible({ timeout: UI_TIMEOUT })
 
     const empty = page.getByText("当前没有待分配供给", { exact: true })
     const table = page.getByRole("heading", { name: "销售明细与供给方案" })
-    await expect(empty.or(table)).toBeVisible({ timeout: UI_TIMEOUT })
-
-    if (await empty.isVisible()) {
+    if (envelope.data.length === 0) {
+        await expect(empty).toBeVisible({ timeout: UI_TIMEOUT })
         await expect(
             page.getByText(/既无可用库存也无合格采购供给|请检查已生效销售单、库存余额和供应商供给/),
         ).toBeVisible({ timeout: UI_TIMEOUT })
@@ -131,6 +141,7 @@ async function expectAllocationCannotCreatePurchase(page: Page, salesOrderNo: st
         await expect(page.getByRole("button", { name: "确认提交" })).toHaveCount(0)
         return
     }
+    await expect(table).toBeVisible({ timeout: UI_TIMEOUT })
 
     const rematch = page.getByRole("button", { name: "重新自动分配" })
     if (await rematch.count()) {
@@ -502,7 +513,7 @@ test("flow-18 停止可供后供给分配不得建采购单，必须走销售变
 
         // 6) 负向：供给分配不得创建采购单，不得预览确认，不得虚增库存预留
         page = await switchTo("caigou")
-        await expectAllocationCannotCreatePurchase(page, salesOrderNo)
+        await expectAllocationCannotCreatePurchase(page, salesOrderNo, salesOrderId)
         await expectNoPurchaseOrders(page, salesOrderNo)
 
         // 不带销售单打开时，页面会落到队列里另一张待分配单。本单已在上面确认无法建采购单。
@@ -660,7 +671,7 @@ test("flow-18 停止可供后供给分配不得建采购单，必须走销售变
         await expect(page.getByRole("button", { name: "添加商品" })).toHaveCount(0)
 
         page = await switchTo("caigou")
-        await expectAllocationCannotCreatePurchase(page, salesOrderNo)
+        await expectAllocationCannotCreatePurchase(page, salesOrderNo, salesOrderId)
         await expectNoPurchaseOrders(page, salesOrderNo)
     } finally {
         try {

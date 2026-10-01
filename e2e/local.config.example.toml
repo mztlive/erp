@@ -1,0 +1,7 @@
+# 可选：隔离全量使用当前机器上的外置盘临时 MongoDB。
+# 复制为 local.config.toml 后填写已挂载的外置盘路径；每次运行单独建库并清理。
+# E2E_MONGO_DATA_ROOT 优先于此项。未设置时使用源配置所在 MongoDB 的临时库。
+mongo_data_root = "/Volumes/Kingston/erp-e2e"
+# 可选：填写本机可执行 mongod 路径，使用原生进程；未设置时使用 Docker。
+# E2E_MONGOD_BINARY 优先于此项。
+# mongo_binary = "/Volumes/Kingston/erp-e2e-tools/mongodb-macos-aarch64--8.0.30/bin/mongod"

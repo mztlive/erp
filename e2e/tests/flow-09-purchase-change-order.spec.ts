@@ -12,7 +12,7 @@
  */
 import path from "node:path"
 
-import { test, expect, type Page } from "@playwright/test"
+import { test, expect, type Page } from "../helpers/test"
 
 import { createCustomerViaUi } from "../helpers/customers"
 import { openLoggedInWorkspace } from "../helpers/login"

@@ -14,7 +14,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-import { test, expect, type Browser, type Locator, type Page } from '@playwright/test'
+import { test, expect, type Browser, type Locator, type Page } from '../helpers/test'
 
 import { createCustomerViaUi } from '../helpers/customers'
 import { openLoggedInWorkspace } from '../helpers/login'
@@ -470,6 +470,12 @@ test('销售单审批驳回后可照原条件承接、撤回改单重提或作�
     await test.step('场景B 撤回改单重提后审批通过生效', async () => {
       await withdrawApproval(sales.page, orderB)
       await expect(sales.page.getByRole('button', { name: '发起改单' })).toHaveCount(0)
+      // 继续编辑会异步回填合同修订、客户和结算主体；等表单实际同步后再编辑重提。
+      const contractSection = sales.page.locator('#contractId').locator('..')
+      await expect(contractSection.getByText(`${contractNo}@v1`, { exact: true })).toBeVisible(VISIBLE)
+      await expect(contractSection).toContainText(`客户 ${customerName}`, VISIBLE)
+      await expect(contractSection).toContainText(`结算主体 ${customerName}`, VISIBLE)
+      await expect(contractSection.getByText('加载中…', { exact: true })).toBeHidden(VISIBLE)
       await sales.page.getByLabel('数量').first().fill('5')
       // 改数后工作副本自动保存完成前提交保持禁用：等提交可用再点，避免确认框空关。
       await expect(sales.page.locator('#sales-orders-create-submit')).toBeEnabled(VISIBLE)

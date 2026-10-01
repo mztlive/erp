@@ -18,7 +18,7 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { expect, test, type BrowserContext, type Page } from "@playwright/test"
+import { expect, test, type BrowserContext, type Page } from "../helpers/test"
 
 import { createCustomerViaUi } from "../helpers/customers"
 import { openLoggedInWorkspace } from "../helpers/login"
@@ -32,7 +32,9 @@ import {
 } from "../helpers/ui"
 
 const TIMEOUT = 20_000
-const SKU_KEYWORD = "龙井"
+const SKU_NO = "TEA-SF-LJ-250"
+const SKU_NAME = "狮峰明前龙井礼盒"
+const UNIT_PRICE_RE = /^(?:1,288|1288)(?:\.0+)?$/
 const LINE_QTY = "2"
 const GROSS_RE = /2,576\.00|2576\.00/
 
@@ -123,16 +125,23 @@ async function createPhysicalSalesOrder(page: Page, customerName: string, contra
     await expect(skuDialog).toBeVisible({ timeout: TIMEOUT })
     await skuDialog
         .getByPlaceholder("搜索 SKU、商品名称、编号或规格")
-        .fill(SKU_KEYWORD)
+        .fill(SKU_NO)
     await skuDialog.getByPlaceholder("搜索 SKU、商品名称、编号或规格").press("Enter")
-    const skuRow = skuDialog.getByRole("checkbox", { name: new RegExp(SKU_KEYWORD) }).first()
+    const skuRow = skuDialog.getByRole("row").filter({
+        has: page.getByText(SKU_NO, { exact: true }),
+    })
+    await expect(skuRow).toHaveCount(1, { timeout: TIMEOUT })
     await expect(skuRow).toBeVisible({ timeout: TIMEOUT })
-    await skuRow.check()
+    await expect(skuRow).toContainText(SKU_NAME)
+    await expect(skuRow).toContainText(/1,288\.00|1288\.00/)
+    await skuRow.getByRole("checkbox").check()
     await skuDialog.getByRole("button", { name: /加入所选（/ }).click()
     await expect(skuDialog).toHaveCount(0, { timeout: TIMEOUT })
-    await expect(page.getByText(new RegExp(SKU_KEYWORD)).first()).toBeVisible({
-        timeout: TIMEOUT,
+    const selectedLine = page.getByRole("row").filter({
+        has: page.getByRole("button", { name: new RegExp(`^更换销售项目 ${SKU_NAME}`) }),
     })
+    await expect(selectedLine).toHaveCount(1, { timeout: TIMEOUT })
+    await expect(selectedLine.getByLabel("含税单价", { exact: true })).toHaveValue(UNIT_PRICE_RE)
 
     await page.getByLabel("数量").fill(LINE_QTY)
     await page.locator("#sales-orders-create-batch-due-date-open").click()

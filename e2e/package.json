@@ -3,8 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test:e2e": "playwright test --workers=1",
+    "test:e2e": "bash ../scripts/run-flow.sh",
     "test:e2e:list": "playwright test --list",
+    "test:helpers": "playwright test --config playwright.self-test.config.ts",
     "trace:slow": "node scripts/trace-slow-steps.mjs"
   },
   "devDependencies": {

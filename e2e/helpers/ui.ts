@@ -122,16 +122,21 @@ export async function dismissToasts(page: Page): Promise<void> {
     }
 }
 
-function visibleComboboxPopup(page: Page): Locator {
-    return page.locator('[data-slot="combobox-content"]:visible')
+function visibleComboboxPopup(page: Page, controlledId?: string | null): Locator {
+    const opened = page.locator(
+        '[data-slot="combobox-content"][data-open]:not([data-closed]):not([data-ending-style]):visible',
+    )
+    // aria-controls 指向 Popup 内的 Listbox。不要把上一个字段的退场浮层算进当前选择。
+    return controlledId
+        ? opened.filter({ has: page.locator(`[id=${JSON.stringify(controlledId)}]`) })
+        : opened
 }
 
 function comboboxOption(
-    page: Page,
+    popup: Locator,
     inputId: string | null,
     option: string | RegExp,
 ): Locator {
-    const popup = visibleComboboxPopup(page)
     const byRole = popup.getByRole("option", { name: option })
     const bySlot = popup.locator('[data-slot="combobox-item"]').filter({ hasText: option })
     if (!inputId) return byRole.or(bySlot).first()
@@ -147,9 +152,8 @@ export async function expectComboboxValue(
     input: Locator,
     option: string,
 ): Promise<void> {
-    const popup = visibleComboboxPopup(page)
     try {
-        await expect(popup).toBeHidden({ timeout: 5_000 })
+        await expect(input).toHaveAttribute("aria-expanded", "false", { timeout: 5_000 })
     } catch {
         const current = await input.inputValue().catch(() => "")
         throw new Error(
@@ -177,57 +181,35 @@ export async function chooseOption(
     await input.click()
     const query = typed ?? (typeof option === "string" ? option : "")
     if (query) {
-        await input.fill("")
         await input.fill(query)
     }
 
-    const popup = visibleComboboxPopup(page)
-    if (!(await popup.isVisible().catch(() => false))) {
-        if (inputId) {
-            const trigger = page.locator(`#${inputId}-trigger`)
-            if (await trigger.count()) await trigger.click()
-        }
-    }
+    // Base UI 默认 input 点击即打开。等所属 Listbox 挂载，避免加载期间误点 trigger 又关掉浮层。
+    await expect(input).toHaveAttribute("aria-expanded", "true", { timeout: UI_TIMEOUT })
+    await expect(input).toHaveAttribute("aria-controls", /.+/, { timeout: UI_TIMEOUT })
+    const popup = visibleComboboxPopup(page, await input.getAttribute("aria-controls"))
 
-    const listed = comboboxOption(page, inputId, option)
+    const listed = comboboxOption(popup, inputId, option)
     try {
         await expect(listed).toBeVisible({ timeout: UI_TIMEOUT })
     } catch {
-        const empty = (
-            await page.locator('[data-slot="combobox-empty"]').innerText().catch(() => "")
-        ).trim()
+        const empty = (await popup
+            .locator('[data-slot="combobox-empty"]')
+            .allTextContents()).join(" ").trim()
         throw new Error(
             `未找到 combobox 选项 ${String(option)}${empty ? `（${empty}）` : ""}`,
         )
     }
     await listed.click()
-    if (await popup.isVisible().catch(() => false)) {
-        await listed.click({ force: true }).catch(() => undefined)
-    }
-    if (await popup.isVisible().catch(() => false)) {
-        // 过滤词和选项全文不一致时，Enter 会清空输入且不选中。只确认当前高亮的目标项。
-        const highlighted = popup.locator("[data-highlighted]").first()
-        const highlightedText = ((await highlighted.innerText().catch(() => "")) || "")
-            .replace(/\s+/g, " ")
-            .trim()
-        const matches =
-            typeof option === "string"
-                ? highlightedText.length > 0 &&
-                  (highlightedText.includes(option) || option.includes(highlightedText))
-                : highlightedText.length > 0 && option.test(highlightedText)
-        if (matches) {
-            await highlighted.click().catch(async () => {
-                await page.keyboard.press("Enter")
-            })
-        }
-    }
-
+    // Base UI 选中后仍会播放退场动画。等待提交状态，不再点击正在消失的选项：
+    // 退场期间 isVisible 可能为 true，而下一次 click/innerText 会空等默认 actionTimeout。
     if (typeof option === "string") {
         await expectComboboxValue(page, input, option)
         return
     }
     try {
-        await expect(popup).toBeHidden({ timeout: 5_000 })
+        await expect(input).toHaveAttribute("aria-expanded", "false", { timeout: 5_000 })
+        await expect(input).not.toHaveValue("", { timeout: 5_000 })
     } catch {
         throw new Error(`combobox 选项未提交：下拉仍打开（${String(option)}）`)
     }
@@ -616,7 +598,7 @@ export async function openWorkspaceTask(
                 nodes.map((node) => node.getAttribute("aria-label") || node.textContent || ""),
             )
             .catch(() => [] as string[])
-        const emptyText = (await empty.first().innerText().catch(() => "")).trim()
+        const emptyText = (await empty.allTextContents()).join(" ").trim()
         const scopeNote = searchedManaged ? "（已查看待我处理与范围内待办）" : ""
         throw new Error(
             `工作台未找到任务: ${String(typeLabel)}${hint ? ` / ${hint}` : ""}${scopeNote}\n现有: ${labels.filter(Boolean).join(" | ") || emptyText || "（空）"}`,

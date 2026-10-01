@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "measured_run": "20261001t190706_cc0a61f16f17",
+  "measured_file_runs": {
+    "flow-13-payment-before-fulfillment.spec.ts": "20261001t184721_e171486ab47d"
+  },
+  "estimated_files": [],
+  "duration_seconds": {
+    "flow-01-sales-warehouse.spec.ts": 71.017,
+    "flow-02-supplier-direct-ship.spec.ts": 70.517,
+    "flow-03-electronic-delivery.spec.ts": 53.676,
+    "flow-04-service-fulfillment.spec.ts": 39.442,
+    "flow-05-approval-rejection.spec.ts": 87.397,
+    "flow-06-customer-funds.spec.ts": 72.058,
+    "flow-07-supplier-funds.spec.ts": 61.224,
+    "flow-08-sales-change-order.spec.ts": 38.147,
+    "flow-09-purchase-change-order.spec.ts": 49.17,
+    "flow-10-stock-adjustment.spec.ts": 51.329,
+    "flow-11-inventory-warehouse.spec.ts": 61.666,
+    "flow-12-split-allocation.spec.ts": 70.456,
+    "flow-13-payment-before-fulfillment.spec.ts": 107.64,
+    "flow-14-purchase-order-rejection.spec.ts": 50.174,
+    "flow-15-sales-return.spec.ts": 123.459,
+    "flow-16-customer-refund.spec.ts": 110.269,
+    "flow-17-red-invoice.spec.ts": 75.602,
+    "flow-18-supply-invalid.spec.ts": 31.238,
+    "flow-19-void-release-reservation.spec.ts": 58.9,
+    "s1-owner-query-mock.spec.ts": 14.144,
+    "s2-org-data-scope-browser.spec.ts": 45.126
+  }
+}
