@@ -34,6 +34,7 @@
 | [src/transaction.rs](src/transaction.rs) | Transactional |
 | [src/repository/mod.rs](src/repository/mod.rs) | Repository、PageResult、Pagination 和 QueryFilter |
 | [src/mongo_ops.rs](src/mongo_ops.rs) | 统一执行器下的 MongoDB 操作 |
+| [src/reset.rs](src/reset.rs) | 显式全库重置机制，按领域提供的物理身份保留文档，须在事务中调用 |
 
 ## 验证要求
 

@@ -5,10 +5,11 @@ mod errors;
 mod executor;
 pub mod mongo_ops;
 pub mod repository;
+mod reset;
 mod transaction;
-
 pub use connection::{connect, ensure_transaction_support};
 pub use errors::{Error, Result};
 pub use executor::{Executor, NoTransaction};
 pub use repository::{PageResult, Pagination, QueryFilter, Repository, insert_literal_regex_filter};
+pub use reset::{DatabaseReset, ResetRetention};
 pub use transaction::Transactional;

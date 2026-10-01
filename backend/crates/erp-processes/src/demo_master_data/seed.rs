@@ -177,7 +177,7 @@ mod tests {
     use serde_json::{Value, json};
 
     use super::{SeedRequest, load};
-    use crate::demo_master_data::plan::{apply_window, count_records, planned_counts, removal_batch};
+    use crate::demo_master_data::plan::{apply_window, count_records, planned_counts};
 
     #[test]
     fn embedded_seed_preserves_catalog_and_business_values() {
@@ -211,10 +211,8 @@ mod tests {
     }
 
     #[test]
-    fn reverse_removal_keeps_legacy_keys_and_chunk_boundaries() {
+    fn generation_chunk_boundaries_and_counts() {
         let steps = load(include_str!("master-data.json")).unwrap();
-        let keys = vec![steps[0].key.clone(), steps.last().unwrap().key.clone(), "legacy".into()];
-        assert_eq!(removal_batch(&steps, &keys, 8), vec![keys[1].clone(), keys[0].clone(), keys[2].clone()]);
         assert_eq!(apply_window(0, steps.len()), 0..8);
         assert_eq!(apply_window(steps.len(), steps.len()), steps.len()..steps.len());
         let (active, removed) = count_records(&[(steps[0].kind, false), (steps[0].kind, true)]);

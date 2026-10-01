@@ -10,7 +10,11 @@
 //! 工作台角色入口（W01 今日工作台）以及二期销售领导审批轨。
 //! `role-root` 由 [`super::ensure_root_role`] 单独维护，不在本清单中。
 
+use application_core::AuditActor;
+use persistence_core::NoTransaction;
+
 use super::SharedRbacService;
+use crate::{AccessControlExt, CreateRoleParams};
 
 pub(crate) mod permission_tables;
 mod upgrades;
@@ -50,6 +54,34 @@ pub fn predefined_role_permissions(role_id: &str) -> Result<Vec<Permission>> {
         .find(|role| role.id == role_id)
         .ok_or_else(|| Error::ValidationError(format!("未登记的业务岗位角色：{role_id}")))?;
     parse_permissions(role.permissions)
+}
+
+/// 由显式初始化命令以当前操作人的权限创建缺失岗位角色，保留一切已有配置。
+/// # 参数
+/// `rbac` 为授权服务，`role_id` 为内建岗位键，`actor` 为发起人。
+/// # 返回
+/// 缺失时创建；包括软删除在内的已有角色保持原样。
+/// # 错误
+/// 岗位键无效、操作人不能授予推荐权限或角色写入失败时拒绝。
+pub async fn create_missing_predefined_role(
+    rbac: &SharedRbacService,
+    role_id: &str,
+    actor: &AuditActor,
+) -> Result<()> {
+    let role = PREDEFINED_ROLES
+        .iter()
+        .find(|role| role.id == role_id)
+        .ok_or_else(|| Error::ValidationError(format!("未登记的业务岗位角色：{role_id}")))?;
+    if rbac.database().roles().find_by_id_including_deleted(role_id, &mut NoTransaction).await?.is_some() {
+        return Ok(());
+    }
+    rbac.ensure_seeded_role(
+        role_id,
+        CreateRoleParams { name: role.name.into(), permissions: parse_permissions(role.permissions)? },
+        actor.clone(),
+    )
+    .await?;
+    Ok(())
 }
 
 /// 单条预定义角色的静态定义。

@@ -8,8 +8,10 @@ use futures_util::StreamExt;
 use mongodb::Database;
 use mongodb::bson::{Document, doc, serialize_to_document};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, Result, Transactional, mongo_ops};
+use persistence_core::{Executor, ResetRetention, Result, Transactional, mongo_ops};
 use serde::{Deserialize, Serialize};
+
+use crate::entity::role::ROOT_ROLE_ID;
 
 pub const CASBIN_RULES: &str = "casbin_rules";
 const CASBIN_POLICY_STATE: &str = "casbin_policy_state";
@@ -55,6 +57,24 @@ impl MongoCasbinAdapter {
     /// 返回绑定指定数据库的 Adapter。
     pub fn new(db: Database) -> Self {
         Self { db, filtered: false }
+    }
+
+    /// 保留 admin 的直接 root 绑定、全量动作权限和策略版本，不保留其他授权。
+    pub(crate) async fn retain_root_authorization(
+        &self,
+        account_id: &str,
+        retained: &mut ResetRetention,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let root = format!("role:{ROOT_ROLE_ID}");
+        let subject = format!("user:admin:{account_id}");
+        for (sec, values) in [("p", vec![root.clone(), "*".into(), "*".into()]), ("g", vec![subject, root])] {
+            let rule = CasbinRule::new(sec, sec, values);
+            let filter = doc! { "_id": rule.id, "sec": sec, "ptype": sec, "values": rule.values };
+            retained.require(&self.db, CASBIN_RULES, filter, executor).await?;
+        }
+        retained.require(&self.db, CASBIN_POLICY_STATE, Self::policy_revision_filter(), executor).await?;
+        Ok(())
     }
 
     fn collection(&self) -> mongodb::Collection<CasbinRule> {

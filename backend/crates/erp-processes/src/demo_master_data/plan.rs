@@ -2,8 +2,6 @@
 //!
 //! 清单只描述要写入的主数据。销售单、采购单、库存和票款不在其中。
 
-use std::collections::HashSet;
-
 use serde::Serialize;
 
 use super::seed::{self, SeedRequest};
@@ -174,31 +172,4 @@ pub(super) fn apply_window(cursor: usize, len: usize) -> std::ops::Range<usize> 
     let start = cursor.min(len);
     let end = start.saturating_add(CHUNK_LEN).min(len);
     start..end
-}
-
-/// 取下一批要删除的演示身份，只包含清单里仍有效的记录。
-///
-/// # 参数
-/// * `steps` - 固定清单
-/// * `active_keys` - 仍在列表中的演示身份
-/// * `limit` - 本轮最多删除的条数
-///
-/// # 返回
-/// 按生成顺序的逆序返回。商品先于字典。清单之外的身份不会出现。
-/// 清单里有、但固定计划已经不再包含的身份排在最后，避免旧记录删不掉。
-pub(super) fn removal_batch(steps: &[DemoStep], active_keys: &[String], limit: usize) -> Vec<String> {
-    let active: HashSet<&str> = active_keys.iter().map(String::as_str).collect();
-    let mut ordered = Vec::new();
-    for step in steps.iter().rev() {
-        if active.contains(step.key.as_str()) {
-            ordered.push(step.key.clone());
-        }
-    }
-    for key in active_keys {
-        if !steps.iter().any(|step| step.key == *key) {
-            ordered.push(key.clone());
-        }
-    }
-    ordered.truncate(limit);
-    ordered
 }

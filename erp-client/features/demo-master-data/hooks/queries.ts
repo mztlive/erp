@@ -41,23 +41,6 @@ async function runApply(
     }
 }
 
-async function runRemove(
-    onProgress: (removed: number, derivedRemoved: number) => void,
-): Promise<number> {
-    let removed = 0
-    let derivedRemoved = 0
-    for (;;) {
-        const report = await removeDemoMasterData()
-        removed += report.removed
-        derivedRemoved += report.derived_removed
-        onProgress(removed, derivedRemoved)
-        if (report.done) return derivedRemoved
-        if (report.removed === 0 && report.derived_removed === 0) {
-            throw new Error("演示主数据没有继续删除，请稍后重试")
-        }
-    }
-}
-
 export function useApplyDemoMasterDataMutation(
     onProgress: (current: number, total: number) => void,
 ) {
@@ -70,14 +53,15 @@ export function useApplyDemoMasterDataMutation(
     })
 }
 
-export function useRemoveDemoMasterDataMutation(
-    onProgress: (removed: number, derivedRemoved: number) => void,
-) {
+export function useRemoveDemoMasterDataMutation() {
     const queryClient = useQueryClient()
     return useMutation({
-        mutationFn: () => runRemove(onProgress),
+        mutationFn: removeDemoMasterData,
+        retry: false,
         onSuccess: async () => {
-            await queryClient.invalidateQueries()
+            await queryClient.cancelQueries()
+            queryClient.removeQueries({ type: "inactive" })
+            await queryClient.resetQueries({ type: "active" })
         },
     })
 }

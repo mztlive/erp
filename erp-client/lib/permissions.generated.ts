@@ -5005,7 +5005,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     },
     {
         name: "演示主数据",
-        description: "准备演示主数据、岗位账号、审批流程和默认责任规则，并删除由此产生的单据",
+        description: "生成演示资料；清空数据库时仅保留 admin",
         permissions: [
             {
                 module: "admin",
@@ -5041,7 +5041,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 module: "admin",
                 method: "DELETE",
                 path: "/admin/demo-master-data",
-                description: "删除演示主数据",
+                description: "清空演示数据库（仅保留 admin）",
                 permission: {
                     resource: "demo_master_data",
                     action: "remove",

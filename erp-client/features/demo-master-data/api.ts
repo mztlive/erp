@@ -32,6 +32,10 @@ export type DemoChunkReport = {
     notices: string[]
 }
 
+export type DemoResetReport = {
+    deleted_documents: number
+}
+
 export type DemoFoundationReport = {
     accounts_created: number
     accounts_existing: number
@@ -65,8 +69,8 @@ export function applyDemoMasterData(cursor: number): Promise<DemoChunkReport> {
     )
 }
 
-export function removeDemoMasterData(): Promise<DemoChunkReport> {
-    return apiDelete<DemoChunkReport>("/admin/demo-master-data", {
+export function removeDemoMasterData(): Promise<DemoResetReport> {
+    return apiDelete<DemoResetReport>("/admin/demo-master-data", {
         timeoutMs: REQUEST_TIMEOUT_MS,
     })
 }

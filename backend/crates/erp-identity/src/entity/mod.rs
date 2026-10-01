@@ -3,6 +3,7 @@
 pub mod access_control;
 pub mod account_core;
 pub mod auth;
+pub(crate) mod database_reset;
 pub mod organization;
 pub mod organization_change;
 pub mod person_directory;

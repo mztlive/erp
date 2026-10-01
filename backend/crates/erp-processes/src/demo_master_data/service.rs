@@ -1,4 +1,4 @@
-//! 按固定清单分批生成或删除演示主数据。
+//! 按固定清单分批生成演示主数据。
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -14,7 +14,7 @@ use super::ensure_dictionary::EnsureOutcome;
 use super::plan::{self, DemoCounts, DemoStep};
 use super::record::{self, DemoMasterRecord};
 use super::seed::SeedRequest;
-use super::{DemoMasterDataService, offerings, removal};
+use super::{DemoMasterDataService, offerings};
 use crate::adapters::{party_service, scoped_catalog_service, warehouse_service};
 use crate::{CustomerProfileService, Error, Result, SupplierProfileService};
 
@@ -140,27 +140,6 @@ impl DemoMasterDataService {
             }
             tally(&mut report, outcome)?;
         }
-        Ok(report)
-    }
-
-    /// 硬删除下一批已登记的演示主数据，包含历史软删除记录。
-    ///
-    /// # 参数
-    /// * `actor` - 当前操作人
-    ///
-    /// # 返回
-    /// 返回本批删除条数。没有可删除记录时 `done` 为 true。
-    ///
-    /// # 错误
-    /// 环境未开放或删除失败时返回错误。
-    pub async fn remove_chunk(&self, actor: &AuditActor) -> Result<DemoChunkReport> {
-        self.ensure_enabled()?;
-        let steps = plan::demo_steps()?;
-        let outcome = removal::remove(&self.db, actor, steps.clone()).await?;
-        let mut report = empty_report(0, steps.len());
-        report.removed = outcome.removed;
-        report.derived_removed = outcome.related;
-        report.done = outcome.done;
         Ok(report)
     }
 

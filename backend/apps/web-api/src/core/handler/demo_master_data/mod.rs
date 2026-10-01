@@ -4,7 +4,7 @@ use application_core::AuditActor;
 use axum::Json;
 use axum::extract::{Extension, State};
 use erp_processes::demo_master_data::{
-    ApplyDemoMasterDataRequest, DemoChunkReport, DemoFoundationReport, DemoStatus,
+    ApplyDemoMasterDataRequest, DemoChunkReport, DemoFoundationReport, DemoResetReport, DemoStatus,
 };
 
 use crate::app_state::AppState;
@@ -13,7 +13,7 @@ use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(
     group = "演示主数据",
-    group_desc = "准备演示主数据、岗位账号、审批流程和默认责任规则，并删除由此产生的单据",
+    group_desc = "生成演示资料；清空数据库时仅保留 admin",
     desc = "查看演示主数据",
     resource = "demo_master_data",
     action = "read"
@@ -32,7 +32,7 @@ pub async fn demo_master_data_status(State(state): State<AppState>) -> Result<De
 
 #[permission_macros::permission(
     group = "演示主数据",
-    group_desc = "准备演示主数据、岗位账号、审批流程和默认责任规则，并删除由此产生的单据",
+    group_desc = "生成演示资料；清空数据库时仅保留 admin",
     desc = "准备岗位账号、审批流程和默认责任规则",
     resource = "demo_master_data",
     action = "apply"
@@ -58,7 +58,7 @@ pub async fn demo_master_data_foundation(
 
 #[permission_macros::permission(
     group = "演示主数据",
-    group_desc = "准备演示主数据、岗位账号、审批流程和默认责任规则，并删除由此产生的单据",
+    group_desc = "生成演示资料；清空数据库时仅保留 admin",
     desc = "生成演示主数据",
     resource = "demo_master_data",
     action = "apply"
@@ -83,23 +83,54 @@ pub async fn demo_master_data_apply(
 
 #[permission_macros::permission(
     group = "演示主数据",
-    group_desc = "准备演示主数据、岗位账号、审批流程和默认责任规则，并删除由此产生的单据",
-    desc = "删除演示主数据",
+    group_desc = "生成演示资料；清空数据库时仅保留 admin",
+    desc = "清空演示数据库（仅保留 admin）",
     resource = "demo_master_data",
     action = "remove"
 )]
-/// 硬删除下一批已登记的演示主数据及关联记录，包含旧版软删除记录。
+/// 一次清空数据库，只保留 admin 账号和必要超管授权。
 ///
 /// # 参数
 /// * `state` - 应用状态
 /// * `actor` - 已通过鉴权的操作人
 ///
 /// # 返回
-/// 返回本批删除结果。
+/// 返回事务删除的文档总数。
+///
+/// # 错误
+/// 非 admin 超管、环境未开放或事务失败时拒绝清空。
 pub async fn demo_master_data_remove(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
-) -> Result<DemoChunkReport> {
-    let report = state.demo_master_data_service().remove_chunk(&actor).await?;
+) -> Result<DemoResetReport> {
+    let report = state.demo_master_data_service().reset_database(&actor).await?;
+    tracing::warn!(
+        account = actor.account(),
+        actor_id = actor.id(),
+        deleted_documents = report.deleted_documents,
+        "demo database reset committed; only admin authorization retained"
+    );
     Ok(ApiResponse::ok_with_data(report))
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::body::to_bytes;
+    use axum::http::StatusCode;
+    use axum::response::IntoResponse;
+    use serde_json::{Value, json};
+
+    use super::*;
+
+    #[tokio::test]
+    async fn reset_response_is_a_single_completed_database_operation() {
+        for deleted_documents in [0, 1024] {
+            let response = ApiResponse::ok_with_data(DemoResetReport { deleted_documents }).into_response();
+            assert_eq!(response.status(), StatusCode::OK);
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            let value: Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(value["success"], true);
+            assert_eq!(value["data"], json!({"deleted_documents": deleted_documents}));
+        }
+    }
 }

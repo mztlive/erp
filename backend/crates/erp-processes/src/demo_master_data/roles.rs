@@ -1,25 +1,40 @@
 //! 显式生成时准备专用演示角色，保留共享业务角色及人员范围配置。
 
 use application_core::AuditActor;
-use erp_core::AccountKind;
 use erp_identity::entity::rbac::PermissionSet;
-use erp_identity::service::iam::predefined_role_permissions;
-use erp_identity::{AdminService, CreateRoleParams, Permission, UpdateAdminRoleParams};
+use erp_identity::service::iam::{create_missing_predefined_role, predefined_role_permissions};
+use erp_identity::{CreateRoleParams, Permission};
 
-use super::accounts::PreparedAccounts;
 use super::spec::{AccountSpec, FoundationFile};
 use super::{DemoFoundationReport, DemoMasterDataService, spec};
 use crate::{Error, Result};
 
 /// 一份明确的演示岗位授权输入，不赋予管理员或全局通配权限。
-struct DemoRole {
-    id: String,
+pub(super) struct DemoRole {
+    pub(super) id: String,
     request: CreateRoleParams,
 }
 
 impl DemoRole {
+    /// 同时绑定内建岗位身份和专用演示权限，保留人员目录资格授予来源。
+    /// # 参数
+    /// `account` 为当前岗位规格。
+    /// # 返回
+    /// 内建岗位与专用演示角色 ID。
+    /// # 错误
+    /// 无；角色输入已由构造过程校验。
+    pub(super) fn account_role_ids(&self, account: &AccountSpec) -> Vec<String> {
+        vec![account.role_id.clone(), self.id.clone()]
+    }
+
     /// 合并当前岗位推荐权限和演示必要动作，审批人同时取得读取与决定资格。
-    fn for_account(foundation: &FoundationFile, account: &AccountSpec) -> Result<Self> {
+    /// # 参数
+    /// `foundation` 为基础规格，`account` 为其中一个岗位。
+    /// # 返回
+    /// 固定身份的专用演示角色请求。
+    /// # 错误
+    /// 未登记岗位或必要权限声明缺失时拒绝。
+    pub(super) fn for_account(foundation: &FoundationFile, account: &AccountSpec) -> Result<Self> {
         let mut permissions = predefined_role_permissions(&account.role_id)?;
         let required = foundation
             .required_permissions
@@ -43,46 +58,28 @@ impl DemoRole {
 }
 
 impl DemoMasterDataService {
-    /// 以当前管理员授权准备演示角色并追加绑定，然后由基础准备继续复验资格。
+    /// 以当前管理员授权准备缺失岗位角色和演示角色，由账号步骤绑定并继续复验资格。
     /// # 参数
-    /// `actor` 为请求发起人；`accounts` 为已准备账号；`report` 接收变更说明。
+    /// `actor` 为请求发起人；`report` 接收变更说明。
     /// # 返回
-    /// 所有演示岗位角色均已准备并绑定。
+    /// 所有演示岗位角色均已准备，账号创建步骤负责绑定。
     /// # 错误
     /// 身份冲突、角色失效、越权或策略写入失败时停止，已完成步骤可重试。
     pub(super) async fn ensure_demo_roles(
         &self,
         actor: &AuditActor,
-        accounts: &PreparedAccounts,
         report: &mut DemoFoundationReport,
     ) -> Result<()> {
         let foundation = spec::foundation_spec();
         for account in &foundation.accounts {
-            let user = accounts
-                .by_key
-                .get(&account.key)
-                .ok_or_else(|| Error::NotFound(format!("演示账号 {} 未准备", account.account)))?;
+            create_missing_predefined_role(&self.rbac, &account.role_id, actor).await?;
             let role = DemoRole::for_account(foundation, account)?;
             let changed = self.rbac.ensure_seeded_role(&role.id, role.request, actor.clone()).await?;
-            let bound = self.bind_demo_role(user, &role.id, actor).await?;
-            if changed || bound {
+            if changed {
                 report.notices.push(format!("已补齐演示账号 {} 的专用岗位权限", account.account));
             }
         }
         Ok(())
-    }
-
-    /// 追加专用演示角色绑定，不替换账号已有的其他角色。
-    async fn bind_demo_role(&self, user: &str, role_id: &str, actor: &AuditActor) -> Result<bool> {
-        let mut role_ids = self.rbac.role_ids(AccountKind::Admin, user).await?;
-        if role_ids.iter().any(|id| id == role_id) {
-            return Ok(false);
-        }
-        role_ids.push(role_id.into());
-        AdminService::new(self.db.clone(), self.rbac.clone())
-            .update_admin_role(UpdateAdminRoleParams { id: user.into(), role_ids }, actor.clone())
-            .await?;
-        Ok(true)
     }
 }
 
@@ -101,6 +98,7 @@ mod tests {
             let role = DemoRole::for_account(foundation, account).unwrap();
             assert!(ids.insert(role.id.clone()));
             assert_ne!(role.id, account.role_id);
+            assert_eq!(role.account_role_ids(account), [account.role_id.clone(), role.id.clone()]);
             let permissions = PermissionSet::new(role.request.permissions);
             let baseline = PermissionSet::new(predefined_role_permissions(&account.role_id).unwrap());
             assert!(permissions.covers(&baseline));

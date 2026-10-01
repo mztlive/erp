@@ -1,4 +1,4 @@
-//! 补齐演示用的岗位账号、部门、审批流程和默认责任规则。删除演示数据时保留这些；已有岗位账号会把姓名同步为演示人名。
+//! 补齐演示用的岗位账号、部门、审批流程和默认责任规则。全库重置后重新创建这些；已有岗位账号会把姓名同步为演示人名。
 
 use application_core::AuditActor;
 
@@ -51,8 +51,8 @@ impl DemoMasterDataService {
             responsibilities_existing: 0,
             notices: Vec::new(),
         };
+        self.ensure_demo_roles(actor, &mut report).await?;
         let accounts = self.ensure_accounts(actor, &mut report).await?;
-        self.ensure_demo_roles(actor, &accounts, &mut report).await?;
         self.validate_demo_permissions(&accounts).await?;
         self.ensure_departments(actor, &accounts.by_login, &mut report.notices).await?;
         self.ensure_person_scopes(actor, &accounts.by_login).await?;

@@ -8,16 +8,7 @@ import {
     listWorkspaceStyles as styles,
 } from "@/components/business/list-workspace"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+import { FormalActionConfirmDialog } from "@/components/business/workflow"
 import { Button } from "@/components/ui/button"
 import type { DemoCounts } from "@/features/demo-master-data/api"
 import {
@@ -40,7 +31,7 @@ const COUNT_ROWS: ReadonlyArray<readonly [keyof DemoCounts, string]> = [
 ]
 
 /**
- * 系统管理中的演示主数据：一次生成固定清单，一次只删除这一批。
+ * 系统管理中的演示主数据：分批生成固定清单，删除时全库重置。
  */
 export function DemoMasterDataPage() {
     const profileQuery = useAccountProfileQuery()
@@ -50,27 +41,17 @@ export function DemoMasterDataPage() {
     const apply = useApplyDemoMasterDataMutation((current, total) => {
         setProgress(`正在生成 ${current} / ${total}`)
     })
-    const remove = useRemoveDemoMasterDataMutation(
-        (removed, derivedRemoved) => {
-            setProgress(
-                derivedRemoved > 0
-                    ? `已删除主数据 ${removed} 条，关联记录 ${derivedRemoved} 条`
-                    : `已删除主数据 ${removed} 条`,
-            )
-        },
-    )
+    const remove = useRemoveDemoMasterDataMutation()
     const canApply = hasPermission(
         profileQuery.data?.permissions,
         "demo_master_data:apply",
     )
-    const canRemove = hasPermission(
-        profileQuery.data?.permissions,
-        "demo_master_data:remove",
-    )
+    const canRemove =
+        profileQuery.data?.account === "admin" &&
+        profileQuery.data.role_ids.includes("role-root") &&
+        hasPermission(profileQuery.data?.permissions, "demo_master_data:remove")
     const busy = apply.isPending || remove.isPending
     const enabled = statusQuery.data?.enabled === true
-    const activeTotal = totalOf(statusQuery.data?.active)
-    const removedTotal = totalOf(statusQuery.data?.removed)
 
     if (statusQuery.isPending) {
         return (
@@ -86,7 +67,7 @@ export function DemoMasterDataPage() {
             <ListWorkspaceHeader
                 eyebrow="系统"
                 title="演示主数据"
-                description="生成一批客户、供应商、商品、仓库和字典，并补齐岗位账号、部门、审批流程、默认采购调度人和财务付款、开票负责人。新客户交给销售账号，供应商和商品交给采购账号。再次生成会将已有演示商品的维护人和业务部门对齐到采购账号及其部门。岗位账号已存在时不改密码，新建账号的初始密码是 123456。已有启用的默认责任规则会保留现有负责人。删除时会清掉引用这批客户、供应商或商品的单据、审批和待办，并清掉演示商品自己的库存余额和流水。账号、部门、已发布的审批流程、默认责任规则，以及没有引用这批资料的单据会保留。删除后不可恢复，再次生成会按当前数据模板创建新记录。"
+                description="生成客户、供应商、商品、仓库、字典及供给，并准备岗位账号、部门、审批流程和默认负责人。新建岗位账号初始密码为 123456，已有账号不改密码。删除演示主数据会清空当前数据库，包括非演示数据、所有单据、审批配置、部门和其他账号，仅保留 admin 账号及必要超管授权。清空后不可恢复，可以重新生成演示数据。"
             >
                 {canApply ? (
                     <Button
@@ -95,6 +76,7 @@ export function DemoMasterDataPage() {
                         size="sm"
                         disabled={!enabled || busy}
                         onClick={() => {
+                            remove.reset()
                             setProgress("正在生成")
                             apply.mutate()
                         }}
@@ -110,16 +92,12 @@ export function DemoMasterDataPage() {
                         type="button"
                         size="sm"
                         variant="destructive"
-                        disabled={
-                            !enabled ||
-                            busy ||
-                            (activeTotal === 0 && removedTotal === 0)
-                        }
+                        disabled={!enabled || busy}
                         onClick={() => setConfirmRemove(true)}
                     >
                         {remove.isPending
-                            ? (progress ?? "正在删除")
-                            : "删除演示主数据"}
+                            ? "正在清空数据库"
+                            : "删除演示主数据（清空数据库）"}
                     </Button>
                 ) : null}
             </ListWorkspaceHeader>
@@ -172,7 +150,7 @@ export function DemoMasterDataPage() {
             ) : null}
             {remove.error ? (
                 <Alert variant="destructive" role="alert">
-                    <AlertTitle>删除未完成</AlertTitle>
+                    <AlertTitle>未能确认清空结果</AlertTitle>
                     <AlertDescription>
                         {getErrorMessage(remove.error, "请稍后重试。")}
                     </AlertDescription>
@@ -191,42 +169,40 @@ export function DemoMasterDataPage() {
                 </Alert>
             ) : null}
 
-            {confirmRemove ? (
-                <AlertDialog
-                    open
-                    onOpenChange={(open) => !open && setConfirmRemove(false)}
-                >
-                    <AlertDialogContent>
-                        <AlertDialogHeader>
-                            <AlertDialogTitle>删除演示主数据</AlertDialogTitle>
-                            <AlertDialogDescription>
-                                会永久删除这次生成的客户、供应商、商品、仓库和字典，以及引用它们的单据、审批和待办。演示商品自己的库存余额和流水会一并清掉。关联单据混有非演示商品时，会停止删除，请先处理混用单据。岗位账号、部门、已发布的审批流程、默认采购调度人和财务付款、开票负责人，以及没有引用这批资料的单据会保留。删除后不可恢复，再次生成会按当前数据模板创建新记录。
-                            </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                            <AlertDialogCancel id="demo-master-data-remove-cancel">
-                                取消
-                            </AlertDialogCancel>
-                            <AlertDialogAction
-                                id="demo-master-data-remove-confirm"
-                                variant="destructive"
-                                onClick={() => {
-                                    setConfirmRemove(false)
-                                    setProgress("正在删除")
-                                    remove.mutate()
-                                }}
-                            >
-                                删除
-                            </AlertDialogAction>
-                        </AlertDialogFooter>
-                    </AlertDialogContent>
-                </AlertDialog>
+            {remove.isSuccess ? (
+                <Alert role="status">
+                    <AlertTitle>数据库已清空</AlertTitle>
+                    <AlertDescription>
+                        已删除 {remove.data.deleted_documents} 条记录，仅保留
+                        admin 账号及必要超管授权。可以重新生成演示数据。
+                    </AlertDescription>
+                </Alert>
             ) : null}
+            <FormalActionConfirmDialog
+                idPrefix="demo-master-data-remove"
+                open={confirmRemove}
+                onOpenChange={setConfirmRemove}
+                title="清空数据库，仅保留 admin"
+                description="此操作会删除当前数据库中的全部演示数据和非演示数据。请先停止其他人员及后台任务的写入。"
+                actionLabel="清空数据库"
+                confirmLabel="确认清空，仅保留 admin"
+                cancelLabel="取消"
+                actionVariant="destructive"
+                fromStatus="已有数据"
+                toStatus="仅保留 admin"
+                summary={["保留 admin 账号、原密码和超级管理员权限。"]}
+                irreversibleEffects={[
+                    "所有业务单据、主数据、库存、审批定义与记录、部门、责任规则和其他账号都会永久删除。",
+                    "数据库中的附件资料和审计历史一并清空；文件存储中的附件文件不会删除。",
+                    "清空后无法恢复，重新生成会创建新的岗位账号和业务资料。",
+                ]}
+                pending={remove.isPending}
+                onConfirm={() => {
+                    apply.reset()
+                    setConfirmRemove(false)
+                    remove.mutate()
+                }}
+            />
         </PageScaffold>
     )
-}
-
-function totalOf(counts: DemoCounts | undefined): number {
-    if (!counts) return 0
-    return COUNT_ROWS.reduce((sum, [key]) => sum + counts[key], 0)
 }

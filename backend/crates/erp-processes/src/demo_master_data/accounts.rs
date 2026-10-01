@@ -10,6 +10,7 @@ use erp_identity::{
 };
 use persistence_core::NoTransaction;
 
+use super::roles::DemoRole;
 use super::spec::{self, AccountSpec};
 use super::{DemoFoundationReport, DemoMasterDataService};
 use crate::{Error, Result};
@@ -63,7 +64,7 @@ impl DemoMasterDataService {
                     account: spec.account.clone(),
                     password: spec::foundation_spec().password.clone(),
                     name: spec.name.clone(),
-                    role_ids: vec![spec.role_id.clone()],
+                    role_ids: DemoRole::for_account(spec::foundation_spec(), spec)?.account_role_ids(spec),
                 },
                 actor.clone(),
             )
@@ -81,10 +82,12 @@ impl DemoMasterDataService {
     async fn ensure_account_role(&self, actor: &AuditActor, spec: &AccountSpec) -> Result<()> {
         let id = self.account_id(&spec.account).await?;
         let mut role_ids = self.rbac.role_ids(AccountKind::Admin, &id).await?;
-        if role_ids.iter().any(|role| role == &spec.role_id) {
+        let required = DemoRole::for_account(spec::foundation_spec(), spec)?.account_role_ids(spec);
+        let missing = required.into_iter().filter(|id| !role_ids.contains(id)).collect::<Vec<_>>();
+        if missing.is_empty() {
             return Ok(());
         }
-        role_ids.push(spec.role_id.clone());
+        role_ids.extend(missing);
         AdminService::new(self.db.clone(), self.rbac.clone())
             .update_admin_role(UpdateAdminRoleParams { id, role_ids }, actor.clone())
             .await?;
