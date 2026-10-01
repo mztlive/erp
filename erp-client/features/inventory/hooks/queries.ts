@@ -3,7 +3,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { approvalKeys } from "@/features/approval-workflow/queries"
-import { workItemKeys } from "@/features/work-items/queries"
 import {
     cancelStockAdjustmentApproval,
     createAdjustmentDraft,
@@ -19,6 +18,7 @@ import type {
     InventoryListView,
     InventoryQuery,
 } from "@/features/inventory/types"
+import { workItemKeys } from "@/features/work-items/queries"
 
 export const inventoryKeys = {
     all: ["inventory"] as const,
@@ -28,8 +28,6 @@ export const inventoryKeys = {
         [...inventoryKeys.all, "detail", balanceId] as const,
     adjustment: (stockAdjustmentId: string) =>
         [...inventoryKeys.all, "adjustment", stockAdjustmentId] as const,
-    draft: (stockAdjustmentId: string) =>
-        [...inventoryKeys.all, "draft", stockAdjustmentId] as const,
 }
 
 /**

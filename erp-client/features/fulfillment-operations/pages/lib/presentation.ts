@@ -87,20 +87,3 @@ export function sourceContextFields(
     }
     return fields
 }
-
-export function sourceReturnHref(
-    returnTo: string | undefined,
-    fromWorkspace: string | undefined,
-    operation: FulfillmentOperation | undefined,
-): string | undefined {
-    return (
-        returnTo ??
-        (fromWorkspace === "W05" && operation
-            ? `/sales/orders/${operation.source.salesOrderId}`
-            : fromWorkspace === "W08" && operation?.source.purchaseOrderId
-              ? `/procurement/orders`
-              : fromWorkspace === "W10"
-                ? `/inventory`
-                : undefined)
-    )
-}

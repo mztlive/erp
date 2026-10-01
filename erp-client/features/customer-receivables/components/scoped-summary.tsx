@@ -1,7 +1,5 @@
 "use client"
 
-import * as React from "react"
-
 import { FundsScopeBanner, MoneyValue } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import type { ReceivableScopeListView } from "@/features/customer-receivables/api/scoped"

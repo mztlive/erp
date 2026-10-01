@@ -1,15 +1,9 @@
 "use client"
 
-import {
-    BanIcon,
-    EyeIcon,
-    FilePenLineIcon,
-    PlusIcon,
-    UserRoundCogIcon,
-} from "lucide-react"
+import { BanIcon, EyeIcon, PlusIcon, UserRoundCogIcon } from "lucide-react"
 
-import * as React from "react"
 import type { ColumnDef } from "@tanstack/react-table"
+import * as React from "react"
 
 import { BusinessStatusBadge, TableRowActions } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
@@ -176,47 +170,6 @@ function markFocused(
     lastFocusedRowId.current = item.stableId
 }
 
-export function disableOnlyActionsColumn({
-    lastFocusedRowId,
-    onDisableTarget,
-}: ActionColumnInput): ColumnDef<MasterDataListItem> {
-    return {
-        id: "actions",
-        size: 104,
-        minSize: 104,
-        header: masterDataCopy.colActions,
-        meta: { label: masterDataCopy.colActions, align: "end" },
-        cell: ({ row }) => {
-            const item = row.original
-            const segment = toAutomationIdSegment(item.stableId)
-            const canDisable = item.allowedActions.includes("DISABLE")
-            const disableBlocker = item.actionBlockers.find(
-                (blocker) => blocker.action === "DISABLE",
-            )
-            return (
-                <TableRowActions
-                    moreId={`master-data-list-row-${segment}-more`}
-                    moreLabel={`${item.name} 更多操作`}
-                    actions={[
-                        {
-                            id: `master-data-list-row-${segment}-disable`,
-                            label: masterDataCopy.actionDisable,
-                            icon: BanIcon,
-                            disabled: !canDisable,
-                            disabledReason: disableBlocker?.message,
-                            destructive: true,
-                            onClick: () => {
-                                markFocused(lastFocusedRowId, item)
-                                onDisableTarget?.(item)
-                            },
-                        },
-                    ]}
-                />
-            )
-        },
-    }
-}
-
 export function productActionsColumn({
     lastFocusedRowId,
     onDisableTarget,
@@ -254,116 +207,6 @@ export function productActionsColumn({
                             onClick: () => {
                                 markFocused(lastFocusedRowId, item)
                                 onAddSupply(item)
-                            },
-                        },
-                        {
-                            id: `master-data-list-row-${segment}-disable`,
-                            label: masterDataCopy.actionDisable,
-                            icon: BanIcon,
-                            disabled: !canDisable,
-                            disabledReason: disableBlocker?.message,
-                            destructive: true,
-                            onClick: () => {
-                                markFocused(lastFocusedRowId, item)
-                                onDisableTarget?.(item)
-                            },
-                        },
-                    ]}
-                />
-            )
-        },
-    }
-}
-
-export function updateOnlyActionsColumn({
-    lastFocusedRowId,
-    onReviseTarget,
-}: ActionColumnInput): ColumnDef<MasterDataListItem> {
-    return {
-        id: "actions",
-        size: 104,
-        minSize: 104,
-        header: masterDataCopy.colActions,
-        meta: { label: masterDataCopy.colActions, align: "end" },
-        cell: ({ row }) => {
-            const item = row.original
-            const segment = toAutomationIdSegment(item.stableId)
-            const canRevise = item.allowedActions.includes("CREATE_REVISION")
-            const reviseBlocker = item.actionBlockers.find(
-                (blocker) => blocker.action === "CREATE_REVISION",
-            )
-            return (
-                <TableRowActions
-                    moreId={`master-data-list-row-${segment}-more`}
-                    moreLabel={`${item.name} 更多操作`}
-                    actions={[
-                        {
-                            id: `master-data-list-row-${segment}-revise`,
-                            label: masterDataCopy.actionUpdate,
-                            icon: FilePenLineIcon,
-                            disabled: !canRevise,
-                            disabledReason: reviseBlocker?.message,
-                            onClick: () => {
-                                markFocused(lastFocusedRowId, item)
-                                onReviseTarget?.(item)
-                            },
-                        },
-                    ]}
-                />
-            )
-        },
-    }
-}
-
-export function fullActionsColumn({
-    lastFocusedRowId,
-    onReviseTarget,
-    onDisableTarget,
-    onPreview,
-    onOpen,
-}: ActionColumnInput): ColumnDef<MasterDataListItem> {
-    return {
-        id: "actions",
-        size: 240,
-        minSize: 240,
-        header: masterDataCopy.colActions,
-        meta: { label: masterDataCopy.colActions, align: "end" },
-        cell: ({ row }) => {
-            const item = row.original
-            const segment = toAutomationIdSegment(item.stableId)
-            const canRevise = item.allowedActions.includes("CREATE_REVISION")
-            const canDisable = item.allowedActions.includes("DISABLE")
-            const reviseBlocker = item.actionBlockers.find(
-                (blocker) => blocker.action === "CREATE_REVISION",
-            )
-            const disableBlocker = item.actionBlockers.find(
-                (blocker) => blocker.action === "DISABLE",
-            )
-            return (
-                <TableRowActions
-                    moreId={`master-data-list-row-${segment}-more`}
-                    moreLabel={`${item.name} 更多操作`}
-                    actions={[
-                        {
-                            id: `master-data-list-row-${segment}-view`,
-                            label: masterDataCopy.actionView,
-                            icon: EyeIcon,
-                            onClick: () => {
-                                markFocused(lastFocusedRowId, item)
-                                if (onOpen) onOpen(item)
-                                else onPreview?.(item.stableId)
-                            },
-                        },
-                        {
-                            id: `master-data-list-row-${segment}-revise`,
-                            label: masterDataCopy.actionUpdate,
-                            icon: FilePenLineIcon,
-                            disabled: !canRevise,
-                            disabledReason: reviseBlocker?.message,
-                            onClick: () => {
-                                markFocused(lastFocusedRowId, item)
-                                if (onOpen) onOpen(item)
-                                else onReviseTarget?.(item)
                             },
                         },
                         {

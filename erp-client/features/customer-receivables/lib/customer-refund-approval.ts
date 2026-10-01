@@ -13,9 +13,6 @@ export const CUSTOMER_REFUND_DOCUMENT_TYPE = "CustomerRefund" as const
 /** 工作项上的客户退款对象类型；与合同 DocumentType 并存时只认这两种字面量。 */
 export const CUSTOMER_REFUND_OBJECT_TYPE = "customer_refund" as const
 
-/** 合同 §4.3 对 CustomerRefund 的固定政策。 */
-export const CUSTOMER_REFUND_APPROVAL_REQUIREMENT = "PROCESS_REQUIRED" as const
-
 export type CustomerRefundApprovalPhase = "draft" | "confirm" | "runtime"
 
 const UNSUBMITTED_STATUS_CODES = new Set([
@@ -126,26 +123,6 @@ export const mapCustomerRefundApproval = (
     dto?: DocumentApprovalViewDto | null,
 ): DocumentApprovalView | undefined =>
     dto ? mapDocumentApprovalViewDto(dto) : undefined
-
-/**
- * 只读取实例投影上的当前节点与当前审批人。
- *
- * 缺失时省略，不得用定义首节点、待复核或默认称谓补位。
- *
- * @param approval 只读审批投影。
- */
-export const readCustomerRefundApprovalResponsibility = (
-    approval?: DocumentApprovalView,
-): {
-    nextResponsible?: string
-    currentNodeLabel?: string
-} => ({
-    nextResponsible:
-        approval?.instance?.currentAssigneeName ??
-        approval?.instance?.currentAssignee,
-    currentNodeLabel:
-        approval?.instance?.currentNodeName ?? approval?.instance?.currentNode,
-})
 
 /**
  * 判断当前任务是否属于客户退款单。

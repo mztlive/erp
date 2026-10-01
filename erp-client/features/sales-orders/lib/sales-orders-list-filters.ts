@@ -1,11 +1,4 @@
 import {
-    salesOrderCloseLabel,
-    salesOrderCollectionLabel,
-    salesOrderCommercialStatusLabel,
-    salesOrderFulfillmentLabel,
-    salesOrderInvoiceLabel,
-    salesOrderReviewStatusLabel,
-    salesOrderSummaryLabels,
     type SalesOrderCloseFilter,
     type SalesOrderCollectionFilter,
     type SalesOrderCommercialStatusFilter,
@@ -16,7 +9,6 @@ import {
     type SalesOrderReviewStatusFilter,
     type SalesOrderSummaryFilter,
 } from "@/features/sales-orders/lib/filter-orders"
-import { NATURE_LABEL, ORIGIN_LABEL } from "@/features/sales-orders/lib/labels"
 import type { SalesOrdersUrlState } from "@/features/sales-orders/lib/url-state"
 
 export type SalesOrdersListFilterDraft = {
@@ -210,46 +202,4 @@ export function resolveSalesOrdersListFilterPatch(input: {
         createdTo: createdTo || undefined,
         page: 1,
     }
-}
-
-export function salesOrdersListFilterDescription(
-    url: SalesOrdersUrlState,
-): string {
-    if (!salesOrdersListFiltersActive(url)) {
-        return "设置一个或多个条件后统一搜索；筛选条件会保存在网址中，便于刷新、返回与分享。"
-    }
-    return `当前筛选：${[
-        url.summary !== "all" ? salesOrderSummaryLabels(url.summary) : null,
-        url.nature !== "all" ? NATURE_LABEL[url.nature] : null,
-        url.origin !== "all" ? ORIGIN_LABEL[url.origin] : null,
-        url.commercialStatus !== "all"
-            ? salesOrderCommercialStatusLabel(url.commercialStatus)
-            : null,
-        url.reviewStatus !== "all"
-            ? salesOrderReviewStatusLabel(url.reviewStatus)
-            : null,
-        url.fulfillment !== "all"
-            ? salesOrderFulfillmentLabel(url.fulfillment)
-            : null,
-        url.collection !== "all"
-            ? salesOrderCollectionLabel(url.collection)
-            : null,
-        url.invoice !== "all" ? salesOrderInvoiceLabel(url.invoice) : null,
-        url.closeStatus !== "all"
-            ? salesOrderCloseLabel(url.closeStatus)
-            : null,
-        url.customerId ? "已选客户" : null,
-        url.contractId ? "已选合同" : null,
-        url.createdBy ? "已选创建人" : null,
-        url.ownerUserIds ? "已选负责销售" : null,
-        url.orgUnitIds
-            ? `组织：已选 ${url.orgUnitIds.split(",").length} 个${url.includeDescendants ? "（含下级）" : ""}`
-            : null,
-        url.createdFrom || url.createdTo
-            ? `创建日期 ${url.createdFrom || "不限"} 至 ${url.createdTo || "不限"}`
-            : null,
-        url.search ? `关键词“${url.search}”` : null,
-    ]
-        .filter(Boolean)
-        .join(" · ")}`
 }

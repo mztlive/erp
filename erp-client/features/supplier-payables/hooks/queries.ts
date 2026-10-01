@@ -17,7 +17,6 @@ import {
     fetchSupplierRefund,
     revealPaymentRecipient,
     reverseInvoice,
-    reversePayment,
     saveAllocationDraft,
     submitInvoice,
     submitPayment,
@@ -238,18 +237,6 @@ export function useSubmitInvoiceMutation() {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: submitInvoice,
-        onSuccess: async (result) => {
-            if (result.status === "succeeded") {
-                await invalidateFinanceAndSources(queryClient)
-            }
-        },
-    })
-}
-
-export function useReversePaymentMutation() {
-    const queryClient = useQueryClient()
-    return useMutation({
-        mutationFn: reversePayment,
         onSuccess: async (result) => {
             if (result.status === "succeeded") {
                 await invalidateFinanceAndSources(queryClient)

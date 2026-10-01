@@ -55,18 +55,6 @@ export function canNavigateWithPermission(
     return hasAnyPermission(granted, required)
 }
 
-/**
- * 命令入口：服务端允许 AND 角色有权限。
- * 前端权限不得单独发明服务端未放出的动作。
- */
-export function canCommand(
-    serverAllows: boolean,
-    granted: readonly string[] | undefined | null,
-    required: string,
-): boolean {
-    return serverAllows && hasPermission(granted, required)
-}
-
 export function gateNavigate(
     granted: readonly string[] | undefined | null,
     kind: Exclude<

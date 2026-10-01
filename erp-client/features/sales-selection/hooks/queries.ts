@@ -22,17 +22,6 @@ import {
     voidBook,
     type PrepareKind,
 } from "@/features/sales-selection/api/books"
-import { fetchBookSession } from "@/features/sales-selection/api/sessions"
-import {
-    fetchProposalByBook,
-    fetchProposalDetail,
-} from "@/features/sales-selection/api/proposals"
-import {
-    fetchPublicReceipt,
-    fetchPublicSelection,
-    savePublicSession,
-    submitPublicSelection,
-} from "@/features/sales-selection/api/public"
 import type {
     BookListQuery,
     BookListResult,
@@ -118,48 +107,6 @@ export const useBookDetail = (bookId: string) =>
         queryKey: salesSelectionKeys.detail(bookId),
         queryFn: () => fetchBookDetail(bookId),
         enabled: Boolean(bookId),
-    })
-
-/** 内部会话快照查询（销售查看客户已保存选择）。 */
-export const useBookSession = (bookId: string, enabled = false) =>
-    useQuery({
-        queryKey: salesSelectionKeys.session(bookId),
-        queryFn: () => fetchBookSession(bookId),
-        enabled: Boolean(bookId) && enabled,
-    })
-
-/** 方案详情查询（内部只读）。 */
-export const useProposalDetail = (proposalId: string) =>
-    useQuery({
-        queryKey: salesSelectionKeys.proposal(proposalId),
-        queryFn: () => fetchProposalDetail(proposalId),
-        enabled: Boolean(proposalId),
-    })
-
-/** 按选品册读取方案列表首行；明细用方案详情查询。 */
-export const useProposalByBook = (bookId: string, enabled = false) =>
-    useQuery({
-        queryKey: [...salesSelectionKeys.proposal(bookId), "by-book"] as const,
-        queryFn: () => fetchProposalByBook(bookId),
-        enabled: Boolean(bookId) && enabled,
-    })
-
-/** 公开选品会话查询（客户页事实来源，不带员工鉴权）。 */
-export const usePublicSelection = (token: string) =>
-    useQuery({
-        queryKey: salesSelectionKeys.preview(token),
-        queryFn: () => fetchPublicSelection(token),
-        enabled: Boolean(token),
-        retry: 1,
-    })
-
-/** 公开回执查询（已提交且链接仍有效时）。 */
-export const usePublicReceipt = (token: string, enabled = false) =>
-    useQuery({
-        queryKey: [...salesSelectionKeys.preview(token), "receipt"] as const,
-        queryFn: () => fetchPublicReceipt(token),
-        enabled: Boolean(token) && enabled,
-        retry: 1,
     })
 
 /** 册级操作集合：创建/准备/重生成/发布/链接/关闭/撤销/作废/删项/复制链接。 */
@@ -435,60 +382,4 @@ export const useBookOperations = () => {
         deleteItem,
         copyLink,
     }
-}
-
-/** 公开会话保存：携带会话版本、幂等键与完整选择。 */
-export const useSessionSave = (token: string) => {
-    const queryClient = useQueryClient()
-    return useMutation({
-        mutationFn: (input: {
-            expected_session_version: number
-            idempotency_key: string
-            choices: { item_id: string; quantity?: number | null }[]
-        }) =>
-            savePublicSession({
-                token,
-                expected_session_version: input.expected_session_version,
-                idempotency_key: input.idempotency_key,
-                choices: input.choices,
-            }),
-        onSuccess: async (data) => {
-            await queryClient.invalidateQueries({
-                queryKey: salesSelectionKeys.preview(token),
-            })
-            toast.add({
-                title: "选择已保存",
-                description: `已保存 ${data.choices.length} 项，可继续调整或提交。`,
-                type: "success",
-                timeout: 4000,
-            })
-        },
-    })
-}
-
-/** 公开提交：提交前展示后端确认清单版本，版本变化重示再提交。 */
-export const useSubmit = (token: string) => {
-    const queryClient = useQueryClient()
-    return useMutation({
-        mutationFn: (input: {
-            expected_session_version: number
-            idempotency_key: string
-        }) =>
-            submitPublicSelection({
-                token,
-                expected_session_version: input.expected_session_version,
-                idempotency_key: input.idempotency_key,
-            }),
-        onSuccess: async () => {
-            await queryClient.invalidateQueries({
-                queryKey: salesSelectionKeys.preview(token),
-            })
-            toast.add({
-                title: "选品已提交",
-                description: "已生成销售方案，请保留回执以备核对。",
-                type: "success",
-                timeout: 6000,
-            })
-        },
-    })
 }

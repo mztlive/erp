@@ -1,27 +1,23 @@
 "use client"
 
-import * as React from "react"
 import { useQuery, type UseQueryResult } from "@tanstack/react-query"
+import * as React from "react"
 
 import type { SalesOrderComboboxItem } from "@/components/business/entity-comboboxes"
-import { apiGet, type Page } from "@/lib/api"
 import {
-    fetchPartyOption,
     fetchWarehouseSelection,
     searchCompanySkus,
     searchContracts,
     searchCustomers,
-    searchParties,
-    searchSellableSkus,
     searchSuppliers,
     searchWarehouses,
     type ContractSearch,
     type CustomerSearch,
     type EntitySearch,
-    type SellableSkuSearch,
 } from "@/features/entity-selectors/api/index"
-import type { SelectorPage } from "@/lib/selector-list"
+import { apiGet, type Page } from "@/lib/api"
 import { queryKeyRoots } from "@/lib/query-key-roots"
+import type { SelectorPage } from "@/lib/selector-list"
 
 const STALE_TIME = 0
 
@@ -35,10 +31,6 @@ export const entitySelectorKeys = {
         [...entitySelectorKeys.all, "customer", input] as const,
     customerDetail: (id: string, input?: Omit<CustomerSearch, "query">) =>
         [...entitySelectorKeys.all, "customer", "detail", id, input] as const,
-    party: (input: EntitySearch) =>
-        [...entitySelectorKeys.all, "party", input] as const,
-    partyDetail: (id: string, purpose?: EntitySearch["purpose"]) =>
-        [...entitySelectorKeys.all, "party", "detail", id, purpose] as const,
     warehouse: (input: EntitySearch) =>
         [...entitySelectorKeys.all, "warehouse", input] as const,
     warehouseDetail: (id: string, purpose: EntitySearch["purpose"]) =>
@@ -59,8 +51,6 @@ export const entitySelectorKeys = {
         [...entitySelectorKeys.all, "sales-order", input] as const,
     salesOrderDetail: (id: string) =>
         [...entitySelectorKeys.all, "sales-order", "detail", id] as const,
-    sellableSku: (input: SellableSkuSearch) =>
-        [...entitySelectorKeys.all, "sellable-sku", input] as const,
     companySku: (input: EntitySearch) =>
         [...entitySelectorKeys.all, "company-sku", input] as const,
 }
@@ -171,30 +161,6 @@ export function useCustomerSelectorQuery(
             (item) => item.id,
             selectedId,
         ),
-    }
-}
-
-export function usePartySelectorQuery(
-    input: EntitySearch,
-    selectedId?: string,
-) {
-    const list = useQuery({
-        queryKey: entitySelectorKeys.party(input),
-        queryFn: () => searchParties(input),
-        ...commonQueryOptions(),
-    })
-    const selected = useQuery({
-        queryKey: entitySelectorKeys.partyDetail(
-            selectedId ?? "",
-            input.purpose,
-        ),
-        queryFn: () => fetchPartyOption(selectedId ?? "", input.purpose),
-        enabled: Boolean(selectedId),
-        staleTime: STALE_TIME,
-    })
-    return {
-        list: projectDirectoryList(list),
-        selected,
     }
 }
 
@@ -342,14 +308,6 @@ export function useSalesOrderSelectorQuery(
         staleTime: STALE_TIME,
     })
     return { list, selected }
-}
-
-export function useSellableSkuSelectorQuery(input: SellableSkuSearch) {
-    return useQuery({
-        queryKey: entitySelectorKeys.sellableSku(input),
-        queryFn: () => searchSellableSkus(input),
-        ...commonQueryOptions(),
-    })
 }
 
 export function useCompanySkuSelectorQuery(input: EntitySearch) {

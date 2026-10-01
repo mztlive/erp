@@ -202,18 +202,6 @@ export function adjustmentStatusMap(status: string): {
 export const isDraftAdjustmentStatus = (status?: string): boolean =>
     adjustmentStatusMap(status ?? "").status === "DRAFT"
 
-/**
- * 判断调整单是否已进入合同运行中或过账/冲正终态。
- *
- * 未知态不得伪装为审批中。
- */
-export const isRuntimeAdjustmentStatus = (status?: string): boolean => {
-    const mapped = adjustmentStatusMap(status ?? "").status
-    return (
-        mapped === "IN_APPROVAL" || mapped === "POSTED" || mapped === "REVERSED"
-    )
-}
-
 export function filterSummary(query: InventoryQuery, total: number): string {
     const parts = [
         VIEW_LABEL[query.view],

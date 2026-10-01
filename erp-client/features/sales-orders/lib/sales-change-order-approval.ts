@@ -96,23 +96,3 @@ export const mapSalesChangeOrderApproval = (
     dto?: DocumentApprovalViewDto | null,
 ): DocumentApprovalView | undefined =>
     dto ? mapDocumentApprovalViewDto(dto) : undefined
-
-/**
- * 只读取实例投影上的当前节点与当前审批人。
- *
- * 缺失时省略，不得用定义首节点、影响路径或默认称谓补位。
- *
- * @param approval 只读审批投影。
- */
-export const readSalesChangeOrderApprovalResponsibility = (
-    approval?: DocumentApprovalView,
-): {
-    nextResponsible?: string
-    currentNodeLabel?: string
-} => ({
-    nextResponsible:
-        approval?.instance?.currentAssigneeName ??
-        approval?.instance?.currentAssignee,
-    currentNodeLabel:
-        approval?.instance?.currentNodeName ?? approval?.instance?.currentNode,
-})

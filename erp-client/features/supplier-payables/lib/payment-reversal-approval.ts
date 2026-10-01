@@ -13,9 +13,6 @@ export const PAYMENT_REVERSAL_DOCUMENT_TYPE = "PaymentReversal" as const
 /** 工作项上的付款冲正对象类型；与合同 DocumentType 并存时只认这两种字面量。 */
 export const PAYMENT_REVERSAL_OBJECT_TYPE = "payment_reversal" as const
 
-/** 合同 §4.3 对 PaymentReversal 的固定政策。 */
-export const PAYMENT_REVERSAL_APPROVAL_REQUIREMENT = "PROCESS_REQUIRED" as const
-
 export type PaymentReversalApprovalPhase = "draft" | "confirm" | "runtime"
 
 const UNSUBMITTED_STATUS_CODES = new Set([
@@ -126,26 +123,6 @@ export const mapPaymentReversalApproval = (
     dto?: DocumentApprovalViewDto | null,
 ): DocumentApprovalView | undefined =>
     dto ? mapDocumentApprovalViewDto(dto) : undefined
-
-/**
- * 只读取实例投影上的当前节点与当前审批人。
- *
- * 缺失时省略，不得用定义首节点、待复核或默认称谓补位。
- *
- * @param approval 只读审批投影。
- */
-export const readPaymentReversalApprovalResponsibility = (
-    approval?: DocumentApprovalView,
-): {
-    nextResponsible?: string
-    currentNodeLabel?: string
-} => ({
-    nextResponsible:
-        approval?.instance?.currentAssigneeName ??
-        approval?.instance?.currentAssignee,
-    currentNodeLabel:
-        approval?.instance?.currentNodeName ?? approval?.instance?.currentNode,
-})
 
 /**
  * 判断当前任务是否属于付款冲正单。

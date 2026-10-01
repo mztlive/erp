@@ -154,31 +154,3 @@ export const isCustomerReceiptWorkItem = (workItem?: {
 }): boolean =>
     workItem?.businessObjectType === CUSTOMER_RECEIPT_DOCUMENT_TYPE ||
     workItem?.businessObjectType === CUSTOMER_RECEIPT_OBJECT_TYPE
-
-/**
- * 构造客户回款提交审批请求。只允许版本、幂等键与冻结分配。
- *
- * @param input 提交所需字段。
- */
-export const buildCustomerReceiptSubmitRequest = (input: {
-    expectedVersion: number
-    idempotencyKey: string
-    allocations: readonly {
-        receivableEntryId: string
-        allocatedAmount: string
-    }[]
-}): Readonly<{
-    expected_version: number
-    idempotency_key: string
-    allocations: readonly {
-        receivable_entry_id: string
-        allocated_amount: string
-    }[]
-}> => ({
-    expected_version: input.expectedVersion,
-    idempotency_key: input.idempotencyKey,
-    allocations: input.allocations.map((line) => ({
-        receivable_entry_id: line.receivableEntryId,
-        allocated_amount: line.allocatedAmount,
-    })),
-})

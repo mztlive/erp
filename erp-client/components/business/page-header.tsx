@@ -160,33 +160,4 @@ function PageHeader({
     )
 }
 
-/**
- * 页头约束/口径提示行。描边胶囊，不用灰底，避免和说明文字糊成一层。
- */
-function PageHeaderMeta({ className, ...props }: React.ComponentProps<"div">) {
-    return (
-        <div
-            data-slot="page-header-meta"
-            className={cn("flex flex-wrap items-center gap-1.5", className)}
-            {...props}
-        />
-    )
-}
-
-function PageHeaderMetaItem({
-    className,
-    ...props
-}: React.ComponentProps<"span">) {
-    return (
-        <span
-            data-slot="page-header-meta-item"
-            className={cn(
-                "inline-flex items-center gap-1.5 text-xs text-muted-foreground [&_svg]:size-3.5",
-                className,
-            )}
-            {...props}
-        />
-    )
-}
-
-export { PageHeader, PageHeaderMeta, PageHeaderMetaItem }
+export { PageHeader }

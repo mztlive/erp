@@ -1,15 +1,7 @@
 "use client"
 
 import * as React from "react"
-import {
-    CheckIcon,
-    CircleCheckIcon,
-    CircleXIcon,
-    LoaderCircleIcon,
-    PlusIcon,
-    Trash2Icon,
-    TriangleAlertIcon,
-} from "lucide-react"
+import { PlusIcon, Trash2Icon, TriangleAlertIcon } from "lucide-react"
 
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -38,7 +30,6 @@ import {
 import { GuardedBusinessAction } from "@/components/business/feedback"
 import { taxAmountToneClass } from "@/components/business/values"
 import { WorkspaceTaskFooter } from "@/components/business/workspace-task-pane"
-import { sequentialText } from "@/lib/ui-text"
 import { cn } from "@/lib/utils"
 
 type LineItemMode = "view" | "edit"
@@ -444,189 +435,6 @@ function EditableLineItemTable<TItem>({
     )
 }
 
-interface ApprovalSummaryItem {
-    readonly id: string
-    readonly label: string
-    readonly value: React.ReactNode
-    readonly numeric?: boolean
-}
-
-type ApprovalPendingDecision = "approve" | "reject" | null
-
-interface ApprovalDecisionPanelProps extends Omit<
-    React.ComponentPropsWithoutRef<"section">,
-    "children"
-> {
-    readonly title?: string
-    readonly description?: React.ReactNode
-    readonly summaryItems: readonly ApprovalSummaryItem[]
-    /** 由页面注入的 TanStack Form 审批意见字段。 */
-    readonly opinionField: React.ReactNode
-    readonly effects?: readonly React.ReactNode[]
-    readonly blockers?: readonly React.ReactNode[]
-    readonly approveLabel?: string
-    readonly rejectLabel?: string
-    readonly approveDisabled?: boolean
-    readonly rejectDisabled?: boolean
-    readonly approveDisabledReason?: string
-    readonly rejectDisabledReason?: string
-    readonly pendingDecision?: ApprovalPendingDecision
-    readonly onApprove: () => void
-    readonly onReject: () => void
-    readonly id?: string
-    readonly idPrefix?: string
-}
-
-/** 审批摘要、意见字段及正式决定影响的受控组合面板。 */
-function ApprovalDecisionPanel({
-    title = "审批决定",
-    description = "核对摘要与动作影响，填写审批意见后作出决定。",
-    summaryItems,
-    opinionField,
-    effects = [],
-    blockers = [],
-    approveLabel = "同意",
-    rejectLabel = "驳回",
-    approveDisabled = false,
-    rejectDisabled = false,
-    approveDisabledReason,
-    rejectDisabledReason,
-    pendingDecision = null,
-    onApprove,
-    onReject,
-    id,
-    idPrefix,
-    className,
-    ...props
-}: ApprovalDecisionPanelProps) {
-    const baseId = idPrefix ?? id ?? "approval-decision-panel"
-    const isPending = pendingDecision != null
-
-    return (
-        <section
-            data-slot="approval-decision-panel"
-            id={baseId}
-            className={className}
-            {...props}
-        >
-            <Card>
-                <CardHeader className="border-b border-border">
-                    <CardTitle>{title}</CardTitle>
-                    <CardDescription>{description}</CardDescription>
-                </CardHeader>
-
-                <CardContent className="space-y-5">
-                    <DescriptionList columns="two" aria-label="审批摘要">
-                        {summaryItems.map((item) => (
-                            <DescriptionItem key={item.id}>
-                                <DescriptionTerm>{item.label}</DescriptionTerm>
-                                <DescriptionDetails
-                                    className={cn(item.numeric && "num")}
-                                >
-                                    {item.value}
-                                </DescriptionDetails>
-                            </DescriptionItem>
-                        ))}
-                    </DescriptionList>
-
-                    <div data-slot="approval-opinion-field">{opinionField}</div>
-
-                    {effects.length > 0 ? (
-                        <Alert variant="info">
-                            <CircleCheckIcon aria-hidden="true" />
-                            <AlertTitle>本次决定的影响</AlertTitle>
-                            <AlertDescription>
-                                <ul className="space-y-1">
-                                    {effects.map((effect, index) => (
-                                        <li
-                                            key={index}
-                                            className="flex items-start gap-2"
-                                        >
-                                            <CheckIcon
-                                                aria-hidden="true"
-                                                className="mt-0.5 size-4 shrink-0"
-                                            />
-                                            <span>{effect}</span>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </AlertDescription>
-                        </Alert>
-                    ) : null}
-
-                    {blockers.length > 0 ? (
-                        <Alert variant="warning">
-                            <TriangleAlertIcon aria-hidden="true" />
-                            <AlertTitle>当前动作阻断</AlertTitle>
-                            <AlertDescription>
-                                <ul className="list-disc space-y-1 pl-5">
-                                    {blockers.map((blocker, index) => (
-                                        <li key={index}>{blocker}</li>
-                                    ))}
-                                </ul>
-                            </AlertDescription>
-                        </Alert>
-                    ) : null}
-                </CardContent>
-
-                <CardFooter className="justify-end gap-2 border-t border-border">
-                    <GuardedBusinessAction
-                        id={`${baseId}-reject`}
-                        type="button"
-                        variant="outline"
-                        disabled={isPending || rejectDisabled}
-                        reason={
-                            pendingDecision
-                                ? sequentialText.decisionSubmitting
-                                : rejectDisabledReason
-                        }
-                        onClick={onReject}
-                    >
-                        {pendingDecision === "reject" ? (
-                            <LoaderCircleIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                                className="animate-spin"
-                            />
-                        ) : (
-                            <CircleXIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                        )}
-                        {rejectLabel}
-                    </GuardedBusinessAction>
-                    <GuardedBusinessAction
-                        id={`${baseId}-approve`}
-                        type="button"
-                        disabled={isPending || approveDisabled}
-                        reason={
-                            pendingDecision
-                                ? sequentialText.decisionSubmitting
-                                : approveDisabledReason
-                        }
-                        onClick={onApprove}
-                    >
-                        {pendingDecision === "approve" ? (
-                            <LoaderCircleIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                                className="animate-spin"
-                            />
-                        ) : (
-                            <CircleCheckIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                        )}
-                        {approveLabel}
-                    </GuardedBusinessAction>
-                </CardFooter>
-            </Card>
-        </section>
-    )
-}
-
 interface AllocationSummary {
     readonly totalToAllocate: React.ReactNode
     readonly allocated: React.ReactNode
@@ -761,14 +569,10 @@ function AllocationWorkspace<TAllocation>({
 
 export {
     AllocationWorkspace,
-    ApprovalDecisionPanel,
     EditableLineItemTable,
     StickyTotalBar,
     type AllocationSummary,
     type AllocationWorkspaceProps,
-    type ApprovalDecisionPanelProps,
-    type ApprovalPendingDecision,
-    type ApprovalSummaryItem,
     type CellAlignment,
     type EditableLineItemColumn,
     type EditableLineItemContext,

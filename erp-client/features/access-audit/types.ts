@@ -363,36 +363,3 @@ export type AccessChangeCommand =
           comment?: string
           idempotencyKey: string
       }
-
-export const ACCESS_VIEW_LABEL: Record<AccessView, string> = {
-    roles: "角色权限",
-    users: "用户授权",
-    scopes: "数据范围",
-    fields: "字段策略",
-    audit: "审计查询",
-}
-
-export const ACCESS_LAYER_HELP = [
-    {
-        id: "module",
-        title: "模块与动作权限",
-        description: "能否进入页面、能否执行某类动作（角色权限与授权策略）。",
-    },
-    {
-        id: "scope",
-        title: "数据范围",
-        description:
-            "能看哪些客户、团队、组织和单据（data_scope / 协作关系）。",
-    },
-    {
-        id: "field",
-        title: "字段权限",
-        description: "字段可见、打码、短时查看、编辑或导出到什么程度。",
-    },
-    {
-        id: "object",
-        title: "对象状态与业务条件",
-        description:
-            "单据状态、主责、岗位分离等业务 blocker，不伪装成权限配置问题。",
-    },
-] as const

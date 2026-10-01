@@ -6,10 +6,8 @@ import { approvalKeys } from "@/features/approval-workflow/queries"
 import {
     acquireDraftEditToken,
     cancelPurchaseOrderApproval,
-    createPurchaseOrderFromBasis,
     createPurchaseOrdersFromSourcing,
     fetchCreationBases,
-    fetchPurchaseChangeOrderDetail,
     fetchPurchaseOrderCenter,
     fetchPurchaseOrderExportData,
     fetchPurchaseOrders,
@@ -43,8 +41,6 @@ export const purchaseOrderKeys = {
                 scopeVersion: options?.scopeVersion,
             },
         ] as const,
-    changeOrder: (id: string) =>
-        [...purchaseOrderKeys.all, "change-order", id] as const,
     creationBases: () => [...purchaseOrderKeys.all, "creation-bases"] as const,
     bases: (query: CreationBasesQuery = {}) =>
         [...purchaseOrderKeys.creationBases(), query] as const,
@@ -139,23 +135,6 @@ export function usePurchaseOrderCenterQuery(
                 scopeVersion,
             }),
         enabled: Boolean(purchaseOrderId),
-    })
-}
-
-/**
- * 读取指定采购变更单详情。成功后页面消费只读审批投影。
- *
- * @param changeOrderId 变更单 ID。
- * @param enabled 是否发起请求。
- */
-export function usePurchaseChangeOrderQuery(
-    changeOrderId: string,
-    enabled = true,
-) {
-    return useQuery({
-        queryKey: purchaseOrderKeys.changeOrder(changeOrderId),
-        queryFn: () => fetchPurchaseChangeOrderDetail(changeOrderId),
-        enabled: enabled && Boolean(changeOrderId),
     })
 }
 
@@ -264,36 +243,6 @@ export function useCreateFromSourcingMutation() {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: createPurchaseOrdersFromSourcing,
-        onSuccess: async (result) => {
-            if (result.status !== "succeeded") return
-            await Promise.all([
-                queryClient.invalidateQueries({
-                    queryKey: purchaseOrderKeys.lists(),
-                }),
-                queryClient.invalidateQueries({
-                    queryKey: purchaseOrderKeys.creationBases(),
-                    refetchType: "none",
-                }),
-                queryClient.invalidateQueries({ queryKey: approvalKeys.all }),
-                queryClient.invalidateQueries({ queryKey: workItemKeys.all }),
-                queryClient.invalidateQueries({
-                    queryKey: queryKeyRoots.workspaceHome,
-                }),
-                queryClient.invalidateQueries({
-                    queryKey: queryKeyRoots.salesOrders,
-                }),
-            ])
-        },
-    })
-}
-
-/**
- * 按创建依据建单并提交审批。成功后失效列表、审批绑定与任务缓存。
- */
-export function useCreateFromBasisMutation() {
-    const queryClient = useQueryClient()
-    return useMutation({
-        mutationFn: createPurchaseOrderFromBasis,
         onSuccess: async (result) => {
             if (result.status !== "succeeded") return
             await Promise.all([

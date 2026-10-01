@@ -13,9 +13,6 @@ export const RECEIPT_REVERSAL_DOCUMENT_TYPE = "ReceiptReversal" as const
 /** 工作项上的回款冲正对象类型；与合同 DocumentType 并存时只认这两种字面量。 */
 export const RECEIPT_REVERSAL_OBJECT_TYPE = "receipt_reversal" as const
 
-/** 合同 §4.3 对 ReceiptReversal 的固定政策。 */
-export const RECEIPT_REVERSAL_APPROVAL_REQUIREMENT = "PROCESS_REQUIRED" as const
-
 export type ReceiptReversalApprovalPhase = "draft" | "confirm" | "runtime"
 
 const UNSUBMITTED_STATUS_CODES = new Set([
@@ -126,26 +123,6 @@ export const mapReceiptReversalApproval = (
     dto?: DocumentApprovalViewDto | null,
 ): DocumentApprovalView | undefined =>
     dto ? mapDocumentApprovalViewDto(dto) : undefined
-
-/**
- * 只读取实例投影上的当前节点与当前审批人。
- *
- * 缺失时省略，不得用定义首节点、待复核或默认称谓补位。
- *
- * @param approval 只读审批投影。
- */
-export const readReceiptReversalApprovalResponsibility = (
-    approval?: DocumentApprovalView,
-): {
-    nextResponsible?: string
-    currentNodeLabel?: string
-} => ({
-    nextResponsible:
-        approval?.instance?.currentAssigneeName ??
-        approval?.instance?.currentAssignee,
-    currentNodeLabel:
-        approval?.instance?.currentNodeName ?? approval?.instance?.currentNode,
-})
 
 /**
  * 判断当前任务是否属于回款冲正单。

@@ -24,17 +24,6 @@ export type WorkspaceDocumentBadgeMeta = Readonly<{
     variant: WorkspaceDocumentBadgeVariant
 }>
 
-export const FAMILY_META: Record<
-    WorkspaceFamilyFilter,
-    { label: string; defaultExpanded: boolean }
-> = {
-    approval: { label: "审批与确认", defaultExpanded: true },
-    procurement: { label: "供给与采购", defaultExpanded: true },
-    finance: { label: "票款与结算", defaultExpanded: true },
-    fulfillment: { label: "履约与库存", defaultExpanded: false },
-    exception: { label: "数据治理与异常", defaultExpanded: false },
-}
-
 type TypeMeta = Readonly<{
     label: string
     family: WorkspaceFamilyFilter

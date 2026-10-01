@@ -16,7 +16,6 @@ export {
 export {
     fetchPaymentMergeCandidates,
     fetchSupplierPaymentBankReceiptBlob,
-    reversePayment,
     submitPayment,
 } from "@/features/supplier-payables/api/payments"
 

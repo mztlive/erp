@@ -1,6 +1,5 @@
 import * as React from "react"
 
-import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 
 export type CardProps = React.ComponentProps<typeof Card>
@@ -17,15 +16,6 @@ export function DomainTime({ value }: { value: DomainDateTime }) {
         <time className="num" dateTime={value.dateTime}>
             {value.label}
         </time>
-    )
-}
-
-export function ShanghaiTime({ value }: { value: DomainDateTime }) {
-    return (
-        <span className="flex flex-wrap items-center gap-2">
-            <DomainTime value={value} />
-            <Badge variant="neutral">Asia/Shanghai</Badge>
-        </span>
     )
 }
 

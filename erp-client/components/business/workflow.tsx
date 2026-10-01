@@ -8,14 +8,12 @@ import {
     FilterIcon,
     ListChecksIcon,
     LoaderCircleIcon,
-    PencilIcon,
     RotateCcwIcon,
     SaveIcon,
     ShieldAlertIcon,
     ShieldCheckIcon,
     TriangleAlertIcon,
     UserRoundIcon,
-    UsersRoundIcon,
 } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -38,7 +36,6 @@ import {
     DialogTrigger,
 } from "@/components/ui/dialog"
 import { StatusBadge } from "@/components/ui/status-badge"
-import { cn } from "@/lib/utils"
 import { useControllableDialog } from "@/components/business/workflow-actions"
 import type { ControllableDialogProps } from "@/components/business/workflow-actions"
 
@@ -402,115 +399,7 @@ function ConflictResolutionDialog({
     )
 }
 
-export type EditorPresenceUser = Readonly<{
-    id: React.Key
-    name: React.ReactNode
-}>
-
-export type EditorPresenceProps = Omit<
-    React.ComponentProps<"aside">,
-    "children"
-> & {
-    viewers?: readonly EditorPresenceUser[]
-    editors?: readonly EditorPresenceUser[]
-    reminder?: React.ReactNode
-}
-
-function PresenceNames({ users }: { users: readonly EditorPresenceUser[] }) {
-    return (
-        <>
-            {users.map((user, index) => (
-                <React.Fragment key={user.id}>
-                    {index > 0 ? "、" : null}
-                    <span>{user.name}</span>
-                </React.Fragment>
-            ))}
-        </>
-    )
-}
-
-/** 同一草稿的查看/编辑协作提醒；明确说明它不是业务锁。 */
-function EditorPresence({
-    viewers = [],
-    editors = [],
-    reminder = "这是协作提醒；提交仍以系统最新数据为准。",
-    className,
-    ...props
-}: EditorPresenceProps) {
-    const hasPresence = viewers.length > 0 || editors.length > 0
-
-    return (
-        <aside
-            data-slot="editor-presence"
-            aria-label="协作状态"
-            aria-live="polite"
-            className={cn(
-                "rounded-2xl border border-border bg-card p-4",
-                className,
-            )}
-            {...props}
-        >
-            <div className="flex flex-wrap items-center gap-2">
-                {editors.length > 0 ? (
-                    <StatusBadge
-                        tone="warning"
-                        icon={PencilIcon}
-                        label={`${editors.length.toLocaleString("zh-CN")} 人正在编辑`}
-                    />
-                ) : null}
-                {viewers.length > 0 ? (
-                    <StatusBadge
-                        tone="info"
-                        icon={EyeIcon}
-                        label={`${viewers.length.toLocaleString("zh-CN")} 人正在查看`}
-                    />
-                ) : null}
-                {!hasPresence ? (
-                    <StatusBadge
-                        tone="neutral"
-                        icon={UsersRoundIcon}
-                        label="当前无其他协作者"
-                    />
-                ) : null}
-            </div>
-
-            {editors.length > 0 ? (
-                <p className="mt-3 flex items-start gap-2 text-sm text-foreground">
-                    <PencilIcon
-                        aria-hidden="true"
-                        className="mt-0.5 size-4 shrink-0 text-muted-foreground"
-                    />
-                    <span>
-                        正在编辑：
-                        <PresenceNames users={editors} />
-                    </span>
-                </p>
-            ) : null}
-            {viewers.length > 0 ? (
-                <p className="mt-2 flex items-start gap-2 text-sm text-foreground">
-                    <EyeIcon
-                        aria-hidden="true"
-                        className="mt-0.5 size-4 shrink-0 text-muted-foreground"
-                    />
-                    <span>
-                        正在查看：
-                        <PresenceNames users={viewers} />
-                    </span>
-                </p>
-            ) : null}
-
-            <div className="mt-3 flex items-start gap-2 text-sm text-muted-foreground">
-                <UserRoundIcon
-                    aria-hidden="true"
-                    className="mt-0.5 size-4 shrink-0"
-                />
-                <p>{reminder}</p>
-            </div>
-        </aside>
-    )
-}
-
-export { BatchImpactPreview, ConflictResolutionDialog, EditorPresence }
+export { BatchImpactPreview, ConflictResolutionDialog }
 
 export {
     FormalActionConfirmDialog,

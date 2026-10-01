@@ -7,9 +7,7 @@ import {
     completeSupplierOrderTask,
     createSupplierOrderExportJob,
     fetchSupplierOrderDetail,
-    fetchFulfillmentHandoverCandidates,
     fetchSupplierOrders,
-    handoverFulfillmentOrder,
     querySupplierResult,
     replaySupplierOrder,
     revealSupplierOrderAddress,
@@ -141,33 +139,6 @@ export function useAddNoteMutation() {
         mutationFn: addCollaborationNote,
         onSuccess: async (result) => {
             if (result.status === "succeeded") await invalidate()
-        },
-    })
-}
-
-export function useFulfillmentHandoverCandidatesQuery(orderId: string) {
-    return useQuery({
-        queryKey: [...supplierOrderKeys.all, "handover-candidates", orderId],
-        queryFn: () => fetchFulfillmentHandoverCandidates(orderId),
-        enabled: Boolean(orderId),
-    })
-}
-
-export function useHandoverFulfillmentOrderMutation() {
-    const invalidate = useInvalidateOrders()
-    return useMutation({
-        mutationFn: (input: {
-            orderId: string
-            targetUserId: string
-            targetOrgUnitId?: string
-            reason: string
-            expectedVersion: number
-            idempotencyKey: string
-            transferOpenExceptionTasks?: boolean
-        }) => handoverFulfillmentOrder(input.orderId, input),
-        meta: { affectsDataScope: true },
-        onSuccess: async () => {
-            await invalidate()
         },
     })
 }

@@ -4,11 +4,6 @@ import type {
     QualityCaliber,
 } from "../dual-types"
 
-export const DUAL_CALIBERS: ReadonlyArray<QualityCaliber> = [
-    "current",
-    "history",
-]
-
 const CURRENT_DIMENSIONS: ReadonlyArray<CurrentQualityDimension> = [
     "customer",
     "owner_user",

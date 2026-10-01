@@ -39,11 +39,6 @@ export type PermissionGroupOption = {
 
 export type PermissionPanelTab = "business" | "system"
 
-export const PERMISSION_PANEL_TAB_LABEL: Record<PermissionPanelTab, string> = {
-    business: "业务",
-    system: "系统",
-}
-
 /** 归属「系统」维度的权限组名（平台 / 治理 / 访问控制类）；其余归「业务」。 */
 const SYSTEM_GROUP_NAMES = new Set([
     "账号管理",
@@ -384,11 +379,6 @@ export const PERMISSION_CATALOG: readonly PermissionGroupOption[] = (() => {
     })).filter((group) => group.items.length > 0)
 })()
 
-export const BUSINESS_GROUPS: readonly PermissionGroupOption[] =
-    PERMISSION_CATALOG.filter((group) => !isSystemGroup(group.name))
-export const SYSTEM_GROUPS: readonly PermissionGroupOption[] =
-    PERMISSION_CATALOG.filter((group) => isSystemGroup(group.name))
-
 /**
  * 权限组稳定自动化 id 片段：以目录中首个唯一权限编码为稳定英文键，
  * 避免中文组名经 toAutomationIdSegment 清洗后全部坍缩为 item 导致重复。
@@ -534,20 +524,6 @@ export function matchesKeyword(item: PermissionItemOption, q: string): boolean {
         .join(" ")
         .toLowerCase()
         .includes(q)
-}
-
-/** 按关键词过滤组内权限项，仅保留含匹配项的组；空关键词返回原数组（引用不变）。 */
-export function filterGroupsByKeyword(
-    groups: readonly PermissionGroupOption[],
-    q: string,
-): readonly PermissionGroupOption[] {
-    if (!q) return groups
-    return groups
-        .map((group) => ({
-            ...group,
-            items: group.items.filter((item) => matchesKeyword(item, q)),
-        }))
-        .filter((group) => group.items.length > 0)
 }
 
 /**

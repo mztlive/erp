@@ -7,20 +7,18 @@ import {
     useQueryClient,
 } from "@tanstack/react-query"
 
-import { queryKeyRoots } from "@/lib/query-key-roots"
 import { workItemKeys } from "@/features/work-items/queries"
+import { queryKeyRoots } from "@/lib/query-key-roots"
 
 import {
     cancelBlockedApproval,
     cancelDocumentApproval,
     getRecoveryOptions,
     listApprovalHistory,
-    listApprovalInstances,
     resumeCurrentApprover,
     submitDecision,
     upgradeUnsubmittedBinding,
     type ApprovalHistoryParams,
-    type ApprovalInstanceListParams,
     type CancelDocumentApprovalParams,
     type UpgradeDocumentBindingParams,
 } from "./api"
@@ -38,10 +36,6 @@ export const approvalKeys = {
         [...approvalKeys.all, "document", documentType, documentId] as const,
     history: (instanceId: string) =>
         [...approvalKeys.all, "history", instanceId] as const,
-    instances: (
-        view: ApprovalInstanceListParams["view"],
-        filters: Omit<ApprovalInstanceListParams, "cursor">,
-    ) => [...approvalKeys.all, "instances", view, filters] as const,
     recoveryOptions: (instanceId: string) =>
         [...approvalKeys.all, "recovery-options", instanceId] as const,
 }
@@ -77,26 +71,6 @@ const invalidateApprovalCaches = async (
             : Promise.resolve(),
     ])
 }
-
-/**
- * 按固定 view 查询实例摘要。
- */
-export const useApprovalInstancesQuery = (
-    params: ApprovalInstanceListParams,
-    enabled = true,
-) =>
-    useQuery({
-        queryKey: approvalKeys.instances(params.view, {
-            view: params.view,
-            documentType: params.documentType,
-            status: params.status,
-            query: params.query,
-            limit: params.limit,
-        }),
-        queryFn: () => listApprovalInstances(params),
-        enabled,
-        placeholderData: (previous) => previous,
-    })
 
 /**
  * 游标分页读取执行历史。按 round_no 分组、execution_no 排序由调用方完成。

@@ -1,5 +1,5 @@
 /**
- * W06 客户验收 — 登记 / 冲正 / 草稿变更（mutationFn）。
+ * W06 客户验收 — 登记 / 冲正（mutationFn）。
  * 从 api/acceptance.ts 拆出；api/acceptance.ts 保持原导出名 re-export。
  */
 
@@ -10,7 +10,6 @@ import type {
     PostAcceptanceResult,
     ReverseAcceptanceInput,
     ReverseAcceptanceResult,
-    SaveAcceptanceDraftInput,
 } from "@/features/sales-orders/lib/acceptance-types"
 import { FACT_ONLY_NOTICE } from "@/features/sales-orders/lib/acceptance-types"
 import { compactFixed, compareDecimal, sumFixed } from "@/lib/fixed-decimal"
@@ -22,55 +21,6 @@ import {
     type BackendAcceptanceHeader,
     type BackendEligibilityView,
 } from "@/features/sales-orders/lib/acceptance-mappers"
-
-export async function saveCustomerAcceptanceDraft(
-    input: SaveAcceptanceDraftInput,
-) {
-    // 后端无独立「保存草稿」接口：POST 创建 DRAFT 验收单。
-    // 已有 draft id 时无法局部更新（缺口），重新创建一笔服务端编号的草稿。
-
-    const acceptedAtSecs = input.acceptedAt
-        ? Math.floor(Date.parse(input.acceptedAt) / 1000) ||
-          Math.floor(Date.now() / 1000)
-        : Math.floor(Date.now() / 1000)
-
-    const created = await apiPost<
-        BackendAcceptanceDetail | BackendAcceptanceHeader
-    >("/admin/customer-acceptances", {
-        sales_order_id: input.salesOrderId,
-        accepted_at: acceptedAtSecs,
-        result: mapOverallResultToBackend(input.lines),
-        lines: input.lines.map((line) => ({
-            sales_order_line_id: line.salesOrderLineId,
-            accepted_quantity: line.acceptedQuantity || "0",
-            short_quantity: line.shortQuantity || "0",
-            rejected_quantity: line.rejectedQuantity || "0",
-            reason: line.reason || null,
-            allocations: line.allocations.map((a) => ({
-                fulfillment_line_id: a.fulfillmentLineId,
-                fulfillment_fact_type: mapFactTypeToBackend(
-                    a.fulfillmentFactType,
-                ),
-                allocated_quantity: a.allocatedQuantity || "0",
-            })),
-        })),
-    })
-
-    const header =
-        "acceptance" in created && created.acceptance
-            ? created.acceptance
-            : (created as BackendAcceptanceHeader)
-
-    return {
-        acceptanceDraftId: header.id,
-        draftVersion: header.version,
-        salesOrderId: input.salesOrderId,
-        acceptedAt: input.acceptedAt,
-        comment: input.comment,
-        lines: input.lines,
-        updatedAt: new Date().toISOString(),
-    }
-}
 
 export async function postCustomerAcceptanceWorkspace(
     input: PostAcceptanceInput,

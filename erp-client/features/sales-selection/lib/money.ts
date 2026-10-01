@@ -131,10 +131,3 @@ export const decrementQuantity = (value: string): string => {
         return "1"
     }
 }
-
-/**
- * 按份数展开 SKU 数量：单价行数量 = 份数；套餐成员数量 = 份数（P0 每成员 1 件）。
- * @param quantity 份数字符串
- */
-export const skuQuantityForCopies = (quantity: string): string =>
-    quantity.trim().replace(/^0+(?=\d)/, "") || "0"

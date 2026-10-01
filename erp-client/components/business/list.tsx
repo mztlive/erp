@@ -1,14 +1,11 @@
 "use client"
 
 import * as React from "react"
-import type { LucideIcon } from "lucide-react"
 
 import {
     TableToolbar,
     TableToolbarScope,
 } from "@/components/business/table-toolbar"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import {
@@ -19,7 +16,6 @@ import {
     SheetHeader,
     SheetTitle,
 } from "@/components/ui/sheet"
-import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import { cn } from "@/lib/utils"
 
 type DivProps = React.ComponentPropsWithoutRef<"div">
@@ -135,199 +131,6 @@ function ListToolbar({
                     {secondary}
                 </div>
             ) : null}
-        </div>
-    )
-}
-
-/** 筛选字段统一按窄屏一列、中屏两列、大屏四列排列；区间字段可声明跨列。 */
-function ListFilterGrid({ className, ...props }: DivProps) {
-    return (
-        <div
-            data-slot="list-filter-grid"
-            className={cn(
-                "grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4",
-                className,
-            )}
-            {...props}
-        />
-    )
-}
-
-type SelectionScope = "page" | "filtered"
-
-interface SelectionScopeBarProps extends Omit<DivProps, "children"> {
-    /** 当前选择是当前页记录，还是全部符合筛选的记录。 */
-    readonly scope: SelectionScope
-    /** 当前选择快照中的记录数。 */
-    readonly selectedCount: number
-    /** 当前页可进入选择范围的记录数。 */
-    readonly pageItemCount: number
-    /** 当前筛选命中的总记录数。 */
-    readonly filteredCount: number
-    /** 当前筛选摘要；全筛选批量动作可用它再次说明影响范围。 */
-    readonly filterSummary?: React.ReactNode
-    /** 当前选择范围允许执行的批量动作。 */
-    readonly actions?: React.ReactNode
-    readonly onScopeChange: (scope: SelectionScope) => void
-    readonly onClearSelection?: () => void
-    readonly scopeChangeDisabled?: boolean
-    readonly id?: string
-    readonly idPrefix?: string
-}
-
-/** 明确区分“本页选择”和“全部筛选结果”的受控选择范围条。 */
-function SelectionScopeBar({
-    scope,
-    selectedCount,
-    pageItemCount,
-    filteredCount,
-    filterSummary,
-    actions,
-    onScopeChange,
-    onClearSelection,
-    scopeChangeDisabled = false,
-    id,
-    idPrefix,
-    className,
-    "aria-label": ariaLabel = "批量选择范围",
-    ...props
-}: SelectionScopeBarProps) {
-    const isFilteredScope = scope === "filtered"
-    const formattedSelectedCount = selectedCount.toLocaleString("zh-CN")
-    const formattedPageItemCount = pageItemCount.toLocaleString("zh-CN")
-    const formattedFilteredCount = filteredCount.toLocaleString("zh-CN")
-    const baseId = idPrefix ?? id ?? "selection-scope"
-
-    return (
-        <div
-            id={baseId}
-            role="region"
-            aria-label={ariaLabel}
-            aria-live="polite"
-            data-slot="selection-scope-bar"
-            data-scope={scope}
-            className={cn(
-                "flex flex-col gap-3 rounded-2xl border border-border bg-muted/50 p-3 sm:flex-row sm:items-center sm:justify-between",
-                className,
-            )}
-            {...props}
-        >
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <Badge variant={isFilteredScope ? "info" : "secondary"}>
-                    {isFilteredScope
-                        ? `全部筛选 ${formattedSelectedCount} 条`
-                        : `本页 ${formattedSelectedCount} 条`}
-                </Badge>
-                <span className="text-sm font-medium text-foreground">
-                    {isFilteredScope
-                        ? "已选择全部符合当前筛选的记录"
-                        : "已选择当前页记录"}
-                </span>
-                {filterSummary ? (
-                    <span
-                        data-slot="selection-scope-summary"
-                        className="min-w-0 text-sm text-muted-foreground"
-                    >
-                        {filterSummary}
-                    </span>
-                ) : null}
-                <Button
-                    id={`${baseId}-toggle`}
-                    type="button"
-                    variant="link"
-                    size="sm"
-                    disabled={
-                        scopeChangeDisabled ||
-                        (!isFilteredScope && filteredCount <= selectedCount)
-                    }
-                    onClick={() =>
-                        onScopeChange(isFilteredScope ? "page" : "filtered")
-                    }
-                >
-                    {isFilteredScope
-                        ? `仅选择本页 ${formattedPageItemCount} 条`
-                        : `选择全部符合当前筛选的 ${formattedFilteredCount} 条`}
-                </Button>
-            </div>
-
-            {actions || onClearSelection ? (
-                <div
-                    data-slot="selection-scope-actions"
-                    className="flex shrink-0 flex-wrap items-center gap-2"
-                >
-                    {actions}
-                    {onClearSelection ? (
-                        <Button
-                            id={`${baseId}-clear`}
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={onClearSelection}
-                        >
-                            取消选择
-                        </Button>
-                    ) : null}
-                </div>
-            ) : null}
-        </div>
-    )
-}
-
-interface StatusMatrixItem {
-    /** 同一业务对象内稳定且唯一的状态轴标识。 */
-    readonly id: string
-    /** 状态轴名称，例如“主状态”“履约”“回款”。 */
-    readonly axis: string
-    /** 必填的状态文字；状态不得只靠颜色或图标表达。 */
-    readonly status: string
-    readonly tone?: StatusTone
-    readonly icon?: LucideIcon
-    readonly description?: React.ReactNode
-}
-
-interface StatusMatrixProps extends Omit<
-    React.ComponentPropsWithoutRef<"dl">,
-    "children"
-> {
-    readonly items: readonly StatusMatrixItem[]
-}
-
-/** 并列展示多个互不覆盖的状态轴，每个状态均包含文字与图标。 */
-function StatusMatrix({ items, className, ...props }: StatusMatrixProps) {
-    return (
-        <div data-slot="status-matrix-container" className="@container">
-            <dl
-                data-slot="status-matrix"
-                className={cn(
-                    "grid gap-3 @sm:grid-cols-2 @2xl:grid-cols-3",
-                    className,
-                )}
-                {...props}
-            >
-                {items.map((item) => (
-                    <div
-                        key={item.id}
-                        data-slot="status-matrix-axis"
-                        className="grid grid-cols-2 items-center gap-2 rounded-2xl border border-border bg-muted/50 p-3"
-                    >
-                        <dt className="min-w-0 text-sm font-medium text-muted-foreground">
-                            {item.axis}
-                        </dt>
-                        <dd className="flex min-w-0 justify-end">
-                            <StatusBadge
-                                label={item.status}
-                                tone={item.tone}
-                                icon={item.icon}
-                            />
-                        </dd>
-                        {item.description ? (
-                            <dd className="col-span-2 text-sm text-muted-foreground">
-                                {item.description}
-                            </dd>
-                        ) : null}
-                    </div>
-                ))}
-            </dl>
         </div>
     )
 }
@@ -560,17 +363,10 @@ function QuickPreviewSheet({
 
 export {
     BusinessTableFrame,
-    ListFilterGrid,
     ListToolbar,
     QuickPreviewSheet,
-    SelectionScopeBar,
-    StatusMatrix,
     type BusinessTableFrameProps,
     type ListToolbarProps,
     type QuickPreviewSheetProps,
     type QuickPreviewSheetSize,
-    type SelectionScope,
-    type SelectionScopeBarProps,
-    type StatusMatrixItem,
-    type StatusMatrixProps,
 }

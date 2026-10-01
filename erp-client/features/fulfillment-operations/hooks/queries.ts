@@ -9,33 +9,17 @@ import {
     saveFulfillmentOperation,
     type FulfillmentQueueFilters,
 } from "@/features/fulfillment-operations/api"
-import type { FulfillmentLane } from "@/features/fulfillment-operations/lib/lanes"
 
 export const fulfillmentKeys = {
     all: ["fulfillment-operations"] as const,
     queue: (filters: FulfillmentQueueFilters) =>
         [...fulfillmentKeys.all, "queue", filters] as const,
-    counts: (lane: FulfillmentLane) =>
-        [...fulfillmentKeys.all, "counts", lane] as const,
 }
 
 export function useFulfillmentQueueQuery(filters: FulfillmentQueueFilters) {
     return useQuery({
         queryKey: fulfillmentKeys.queue(filters),
         queryFn: () => fetchFulfillmentQueue(filters),
-    })
-}
-
-/** 角标计数：当前岗位可处理的草稿单据数。 */
-export function useFulfillmentCountQuery(lane: FulfillmentLane) {
-    return useQuery({
-        queryKey: fulfillmentKeys.counts(lane),
-        queryFn: async () => {
-            const view = await fetchFulfillmentQueue({
-                role: lane,
-            })
-            return { pending: view.context.total }
-        },
     })
 }
 

@@ -4,12 +4,10 @@ import { versionText } from "@/lib/ui-text"
 import type {
     ApprovalRequirement,
     ConfigurationStatus,
-    DefinitionAllowedAction,
     DefinitionStatus,
     DocumentType,
     DraftSource,
 } from "./types"
-import { SALES_ORDER_PROCUREMENT_PURPOSE } from "./types"
 
 /** 合同 §4.3 单据类型中文名；目录优先使用服务端 document_type_label。 */
 export const DOCUMENT_TYPE_LABEL: Record<DocumentType, string> = {
@@ -61,14 +59,6 @@ export const DEFINITION_STATUS_LABEL: Record<DefinitionStatus, string> = {
 export const DRAFT_SOURCE_LABEL: Record<DraftSource, string> = {
     EMPTY: "空白流程",
     CURRENT_PUBLISHED: "复制当前已发布版本",
-}
-
-/** 目录动作按钮文案。 */
-export const ALLOWED_ACTION_LABEL: Record<DefinitionAllowedAction, string> = {
-    CREATE_DRAFT: "新建草稿",
-    REPLACE_NODES: "继续编辑",
-    PUBLISH: "发布",
-    RETIRE: "退役",
 }
 
 /**
@@ -162,19 +152,6 @@ export const definitionStatusLabel = (status: DefinitionStatus): string =>
 export const versionLabel = (version: number | null | undefined): string => {
     if (version == null) return "—"
     return `${versionText.version} ${version}`
-}
-
-/**
- * 返回节点用途只读文案。采购确认不得显示内部常量或旧任务类型名。
- *
- * @param purpose 服务端用途
- */
-export const nodePurposeLabel = (
-    purpose: string | null | undefined,
-): string => {
-    if (!purpose) return "普通审批节点"
-    if (purpose === SALES_ORDER_PROCUREMENT_PURPOSE) return "采购确认"
-    return "指定用途节点"
 }
 
 /** 固定驳回语义说明。 */

@@ -1,10 +1,8 @@
-import { createUrlStateCodec } from "@/lib/url-state"
 import type {
-    DataScopeType,
     DataScopeUrlState,
     OrganizationUrlState,
-    OrgUnitKind,
 } from "@/features/organization/types"
+import { createUrlStateCodec } from "@/lib/url-state"
 
 const KINDS: Array<OrganizationUrlState["kind"]> = ["all", "department", "team"]
 const STATUSES: Array<OrganizationUrlState["status"]> = [
@@ -117,15 +115,4 @@ function mergeManaged(
     for (const [key, value] of managed) merged.append(key, value)
     const query = merged.toString()
     return query ? `?${query}` : ""
-}
-
-export function isOrgKind(value: string): value is OrgUnitKind {
-    return value === "department" || value === "team"
-}
-
-export function isDataScopeType(value: string): value is DataScopeType {
-    return (
-        SCOPE_TYPES.includes(value as DataScopeUrlState["scopeType"]) &&
-        value !== "all"
-    )
 }

@@ -5,9 +5,7 @@ import { CircleAlertIcon, type LucideIcon } from "lucide-react"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
-import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
     Tooltip,
     TooltipContent,
@@ -200,72 +198,6 @@ function StatusTrackSummary({
                 </div>
             ))}
         </dl>
-    )
-}
-
-interface BusinessObjectRefProps extends Omit<
-    React.ComponentProps<"div">,
-    "title"
-> {
-    objectType: React.ReactNode
-    stableNumber: string
-    title: React.ReactNode
-    status?: BusinessStatus
-    onOpen?: () => void
-    openLabel?: string
-    id?: string
-    idPrefix?: string
-}
-
-/** 显示稳定业务对象引用；打开行为由调用方提供，不内置路由。 */
-function BusinessObjectRef({
-    objectType,
-    stableNumber,
-    title,
-    status,
-    onOpen,
-    openLabel = `打开 ${stableNumber}`,
-    id,
-    idPrefix,
-    className,
-    ...props
-}: BusinessObjectRefProps) {
-    const baseId = idPrefix ?? id
-    const openId = baseId
-        ? `${baseId}-open`
-        : `business-object-ref-${toAutomationIdSegment(stableNumber)}-open`
-    return (
-        <div
-            data-slot="business-object-ref"
-            id={baseId}
-            className={cn("flex min-w-0 flex-col gap-1", className)}
-            {...props}
-        >
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <Badge variant="secondary">{objectType}</Badge>
-                {onOpen ? (
-                    <Button
-                        id={openId}
-                        type="button"
-                        variant="link"
-                        size="xs"
-                        className="num"
-                        aria-label={openLabel}
-                        onClick={onOpen}
-                    >
-                        {stableNumber}
-                    </Button>
-                ) : (
-                    <span className="num text-sm font-medium text-foreground">
-                        {stableNumber}
-                    </span>
-                )}
-                {status ? (
-                    <BusinessStatusBadge context="list" {...status} />
-                ) : null}
-            </div>
-            <div className="min-w-0 text-sm text-foreground">{title}</div>
-        </div>
     )
 }
 
@@ -606,14 +538,12 @@ function DocumentTotals({
 }
 
 export {
-    BusinessObjectRef,
     BusinessStatusBadge,
     DocumentTotals,
     MoneyValue,
     QuantityValue,
     RateValue,
     StatusTrackSummary,
-    type BusinessObjectRefProps,
     type BusinessStatus,
     type BusinessStatusBadgeProps,
     type BusinessStatusContext,

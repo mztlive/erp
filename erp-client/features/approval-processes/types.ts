@@ -104,10 +104,6 @@ export const DRAFT_SOURCES = ["EMPTY", "CURRENT_PUBLISHED"] as const
 
 export type DraftSource = (typeof DRAFT_SOURCES)[number]
 
-/** 历史销售单采购确认用途。页面不再锁定，请求不得写入该字段。 */
-export const SALES_ORDER_PROCUREMENT_PURPOSE =
-    "SALES_ORDER_PROCUREMENT_CONFIRMATION"
-
 /** 固定单据类型目录行。 */
 export type DefinitionCatalogItem = {
     document_type: DocumentType

@@ -19,20 +19,6 @@ const FAMILY_VALUES = [
 const VIEW_VALUES = ["inbox", "started", "managed"] as const
 const SORT_VALUES = ["priority_due", "due_asc", "created_desc"] as const
 
-export const WORKSPACE_LEGAL_QUERY_KEYS = [
-    "view",
-    "due",
-    "blocked",
-    "family",
-    "type",
-    "q",
-    "handlerUserIds",
-    "salesOrderIds",
-    "purchaseOrderIds",
-    "sort",
-    "currentWorkItemId",
-] as const
-
 export type WorkspaceUrlState = {
     view: WorkspaceViewFilter
     due?: WorkspaceDueFilter

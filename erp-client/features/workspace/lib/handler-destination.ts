@@ -109,17 +109,6 @@ export function getHandlerRegistration(
     return HANDLER_REGISTRY[handlerKey]
 }
 
-/** 仅接受客户端注册且与服务端工作面目标完全一致的处理器。 */
-export function isRegisteredHandlerDestination(
-    handlerKey: string,
-    destinationWorkspaceId?: string,
-): boolean {
-    return (
-        getHandlerRegistration(handlerKey)?.destinationWorkspaceId ===
-        destinationWorkspaceId
-    )
-}
-
 export type HandlerNavigationInput = Readonly<{
     handlerKey: string
     destinationWorkspaceId?: string

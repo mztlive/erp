@@ -10,13 +10,11 @@ import {
 import {
     getWorkItem,
     getWorkItemReassignCandidates,
-    getWorkItemStats,
     listWorkItems,
     parseWorkItemConflict,
     submitWorkItemResponsibility,
     type WorkItemListParams,
     type WorkItemPage,
-    type WorkItemStatsParams,
 } from "./api"
 import type { WorkItemDto, WorkItemResponsibilityCommand } from "./types"
 
@@ -28,8 +26,6 @@ export const workItemKeys = {
         [...workItemKeys.all, "reassign-candidates", workItemId] as const,
     list: (params: WorkItemListParams) =>
         [...workItemKeys.all, "list", params] as const,
-    stats: (params: WorkItemStatsParams) =>
-        [...workItemKeys.all, "stats", params] as const,
     inboxCount: () => [...workItemKeys.all, "mine-count"] as const,
 }
 
@@ -107,13 +103,6 @@ export const useWorkItemReassignCandidatesQuery = (
         queryKey: workItemKeys.reassignCandidates(workItemId),
         queryFn: () => getWorkItemReassignCandidates(workItemId),
         enabled: enabled && workItemId.trim().length > 0,
-    })
-
-/** 查询与队列使用同一授权边界的任务统计。 */
-export const useWorkItemStatsQuery = (params: WorkItemStatsParams) =>
-    useQuery({
-        queryKey: workItemKeys.stats(params),
-        queryFn: () => getWorkItemStats(params),
     })
 
 export function useWorkItemResponsibilityMutation() {

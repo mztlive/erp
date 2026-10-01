@@ -4,7 +4,7 @@
 
 import { formatDateTime } from "@/lib/datetime"
 
-import type { ApprovalAllowedAction, RecoveryOption } from "./types"
+import type { RecoveryOption } from "./types"
 
 /** 与 `StatusBadge` tone 对齐，审批状态同时用文字、图标和颜色。 */
 export type ApprovalStatusTone =
@@ -38,21 +38,6 @@ export const EXECUTION_STATUS_LABEL: Record<string, string> = {
 export const RECOVERY_ACTION_LABEL: Record<RecoveryOption, string> = {
     RESUME_CURRENT_APPROVER: "恢复当前审批人",
     CANCEL_BLOCKED: "取消受阻审批",
-}
-
-export const ALLOWED_ACTION_LABEL: Partial<
-    Record<ApprovalAllowedAction, string>
-> = {
-    APPROVE: "通过",
-    REJECT: "驳回",
-    OPEN_DOCUMENT: "打开单据",
-    VIEW: "查看",
-    SUBMIT: "提交",
-    CANCEL: "撤回审批",
-    CANCEL_APPROVAL: "撤回审批",
-    UPGRADE_BINDING: "更新审批流程版本",
-    RESUME_CURRENT_APPROVER: "恢复当前审批人",
-    CANCEL_BLOCKED_APPROVAL: "取消受阻审批",
 }
 
 /**
@@ -173,21 +158,3 @@ export const isBlockedStatus = (status?: string | null): boolean =>
  */
 export const isOpenInstanceStatus = (status?: string | null): boolean =>
     status === "RUNNING" || status === "BLOCKED"
-
-/**
- * 人员失效类 blocker。仅这些类别可显示恢复原审批人。
- */
-export const PERSONNEL_BLOCKER_CODES = new Set([
-    "APPROVER_ACCOUNT_INACTIVE",
-    "APPROVER_EMPLOYMENT_INVALID",
-    "APPROVER_NOT_ELIGIBLE",
-    "APPROVER_OUT_OF_DATA_SCOPE",
-    "APPROVER_CANNOT_READ_SUBJECT",
-    "SEPARATION_OF_DUTIES_VIOLATION",
-])
-
-/**
- * 判断 blocker 是否属于人员失效类别。页面仍以 `recovery_options` 为准。
- */
-export const isPersonnelBlocker = (code?: string | null): boolean =>
-    Boolean(code && PERSONNEL_BLOCKER_CODES.has(code))

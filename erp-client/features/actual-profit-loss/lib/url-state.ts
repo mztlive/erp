@@ -6,17 +6,6 @@ import type {
     ProjectionFreshnessState,
 } from "@/features/actual-profit-loss/types"
 
-const PERIOD_BASIS_LABEL: Record<string, string> = {
-    sales_revenue_recognition_date: "销售收入确认日",
-    sales_order_effective_date: "销售单生效日（累计实际成本）",
-    fulfillment_complete_date: "履约完成日",
-    cost_occurred_date: "成本发生日",
-}
-
-export function basisLabel(code: string): string {
-    return PERIOD_BASIS_LABEL[code] ?? code
-}
-
 export function parseCoverage(raw: string | null): ProfitLossCoverage {
     if (raw === "uncovered" || raw === "all" || raw === "covered") return raw
     return "covered"

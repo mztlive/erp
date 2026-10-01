@@ -1,28 +1,27 @@
-import { parseSupplierTaxRates } from "@/lib/supplier-tax-rates"
 import { reconciliationCycle } from "@/lib/supplier-payment-terms"
+import { parseSupplierTaxRates } from "@/lib/supplier-tax-rates"
 /** 供应商的创建 / 修订 / 停用命令（走 supplier-profiles 根命令）。 */
 
-import { apiPost, apiPut } from "@/lib/api"
 import type {
     SupplierDto,
     SupplierProfileMutationDto,
 } from "@/features/master-data/api/contracts"
 import {
+    postAssetCommand,
+    putAssetCommand,
+} from "@/features/master-data/api/pending-assets"
+import {
     capabilityToBackend,
     genBusinessCode,
     invoiceToBackend,
-    paymentTermSnapshotOf,
     isoNow,
     parseScore100,
+    paymentTermSnapshotOf,
     ratingToBackend,
     settlementToBackend,
     todayDateOnly,
     tsToIso,
 } from "@/features/master-data/api/presentation"
-import {
-    postAssetCommand,
-    putAssetCommand,
-} from "@/features/master-data/api/pending-assets"
 import { parseMediaList } from "@/features/master-data/lib/resource-fields"
 import type {
     CreateMasterDataInput,
@@ -31,6 +30,7 @@ import type {
     MasterDataMutationResult,
     SupplierFields,
 } from "@/features/master-data/types"
+import { apiPost, apiPut } from "@/lib/api"
 import { mapMutationError } from "./shared"
 
 type SupplierProfileQualificationInput = {
@@ -415,42 +415,4 @@ export async function disableSupplier(
             revisionNo: 0,
         })
     }
-}
-
-/** 显式交接供应商整体维护人。 */
-export async function handoverSupplier(input: {
-    supplierId: string
-    targetUserId: string
-    targetOrgUnitId?: string
-    reason: string
-    expectedVersion: number
-    idempotencyKey: string
-}) {
-    return apiPost(`/admin/suppliers/${input.supplierId}/handover`, {
-        target_user_id: input.targetUserId,
-        target_org_unit_id: input.targetOrgUnitId ?? null,
-        reason: input.reason,
-        expected_version: input.expectedVersion,
-        idempotency_key: input.idempotencyKey,
-    })
-}
-
-/** 显式交接供给能力负责人。 */
-export async function handoverSupplierCapability(input: {
-    supplierId: string
-    capabilityId: string
-    targetUserId: string
-    reason: string
-    expectedVersion: number
-    idempotencyKey: string
-}) {
-    return apiPost(
-        `/admin/suppliers/${input.supplierId}/capabilities/${input.capabilityId}/handover`,
-        {
-            target_user_id: input.targetUserId,
-            reason: input.reason,
-            expected_version: input.expectedVersion,
-            idempotency_key: input.idempotencyKey,
-        },
-    )
 }

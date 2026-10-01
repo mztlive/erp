@@ -3,7 +3,6 @@ import { isApiError } from "@/lib/api/errors"
 import { getErrorMessage } from "@/lib/api/errors"
 import type { FormalActionResponse } from "@/features/purchase-orders/types"
 import type {
-    CreatePurchaseOrderFromBasisInput,
     CreatedStockReservation,
     CreatePurchaseOrdersFromSourcingInput,
     CreatedPurchaseOrderDraft,
@@ -223,58 +222,6 @@ export async function submitPurchaseChange(input: {
             reference: `CHANGE-${submitted.id}`,
         }
     } catch (error) {
-        return formalActionFailure(error, input.idempotencyKey)
-    }
-}
-
-export async function createPurchaseOrderFromBasis(
-    input: CreatePurchaseOrderFromBasisInput,
-): Promise<
-    FormalActionResponse<{
-        purchaseOrderId: string
-        draftLabel: string
-        lockVersion: number
-    }>
-> {
-    try {
-        const data = await apiPost<BackendCreateResult>(
-            "/admin/purchase-orders",
-            {
-                basis_id: input.basisId,
-                work_item_id: input.workItemId,
-                purchase_type: input.purchaseType,
-                payment_term_code: input.paymentTermCode,
-                target_warehouse_id: input.targetWarehouseId,
-                lines: input.lines.map((line) => ({
-                    sales_order_line_id: line.salesOrderLineId,
-                    quantity: line.quantity,
-                    expected_delivery_date: line.expectedDeliveryDate,
-                })),
-                idempotency_key: input.idempotencyKey,
-            },
-        )
-
-        return {
-            status: "succeeded",
-            data: {
-                purchaseOrderId: data.purchase_order_id,
-                draftLabel: data.purchase_no || data.reference,
-                lockVersion: data.lock_version,
-            },
-            reference: data.reference || data.purchase_no,
-        }
-    } catch (error) {
-        if (isApiError(error) && error.status === 409) {
-            return {
-                status: "failed",
-                // 后端冲突码自带具体原因，前端透传不再改写
-                message: getErrorMessage(
-                    error,
-                    "可分配供给数量已更新，请刷新后重试",
-                ),
-                code: "CONFLICT",
-            }
-        }
         return formalActionFailure(error, input.idempotencyKey)
     }
 }

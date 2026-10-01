@@ -41,21 +41,6 @@ export const responsibilityText = {
     currentProcessState: "当前处理状态",
 } as const
 
-// ─── 连续处理条 / 队列动作 ───────────────────────────────────────────────────
-
-export const sequentialText = {
-    goProcess: "前往处理",
-    goProcessReturnQueue: "前往处理 · 处理完返回队列",
-    completeCurrent: "完成当前项",
-    completeAndNext: "完成并处理下一条",
-    completeAndOpenNext: "完成并打开下一条",
-    process: "处理",
-    submitting: "正在提交…",
-    submittingResult: "正在提交处理结果…",
-    minePending: "待我处理",
-    decisionSubmitting: "决定正在提交",
-} as const
-
 // ─── 结果反馈（禁止「正式结果 / 幂等键」） ───────────────────────────────────
 
 export const resultText = {
@@ -147,10 +132,6 @@ export function workspaceLabel(id: WorkspaceId): string {
 
 export function openWorkspaceLabel(id: WorkspaceId): string {
     return `打开${workspaceLabel(id)}`
-}
-
-export function goToWorkspaceLabel(id: WorkspaceId): string {
-    return `前往${workspaceLabel(id)}`
 }
 
 const NEXT_ACTION_HINT_BY_TYPE_LABEL: Record<string, string> = {

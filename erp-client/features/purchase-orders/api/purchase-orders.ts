@@ -21,7 +21,6 @@ export {
 
 export {
     cancelPurchaseOrderApproval,
-    createPurchaseOrderFromBasis,
     createPurchaseOrdersFromSourcing,
     savePurchaseOrderDraft,
     startPurchaseChange,

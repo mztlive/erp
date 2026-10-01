@@ -45,15 +45,3 @@ export async function searchCustomers(
     })
     return { ...page, items: page.items.map(customerItem) }
 }
-
-export async function fetchCustomerOption(
-    customerId: string,
-    input: Omit<CustomerSearch, "query"> = {
-        purpose: "filter",
-        scope: "assigned",
-    },
-): Promise<CustomerComboboxItem | null> {
-    if (!customerId) return null
-    const page = await searchCustomers({ ...input, query: "" })
-    return page.items.find((row) => row.id === customerId) ?? null
-}

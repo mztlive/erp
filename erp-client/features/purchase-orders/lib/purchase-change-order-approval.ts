@@ -123,26 +123,6 @@ export const mapPurchaseChangeOrderApproval = (
     dto ? mapDocumentApprovalViewDto(dto) : undefined
 
 /**
- * 只读取实例投影上的当前节点与当前审批人。
- *
- * 缺失时省略，不得用定义首节点、仓配影响或默认称谓补位。
- *
- * @param approval 只读审批投影。
- */
-export const readPurchaseChangeOrderApprovalResponsibility = (
-    approval?: DocumentApprovalView,
-): {
-    nextResponsible?: string
-    currentNodeLabel?: string
-} => ({
-    nextResponsible:
-        approval?.instance?.currentAssigneeName ??
-        approval?.instance?.currentAssignee,
-    currentNodeLabel:
-        approval?.instance?.currentNodeName ?? approval?.instance?.currentNode,
-})
-
-/**
  * 判断当前任务是否属于采购变更单，而不是原采购单。
  *
  * @param workItem 工作项投影；只读 `businessObjectType`。

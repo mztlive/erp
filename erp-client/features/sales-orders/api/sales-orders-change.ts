@@ -195,31 +195,3 @@ export type SalesChangeReviewDecisionInput = Readonly<{
     decisionReason?: string
     idempotencyKey: string
 }>
-
-/** 提交销售变更复核强命令；任务处理器与决定共同固定唯一业务端点。 */
-export async function submitSalesChangeReviewDecision(
-    input: SalesChangeReviewDecisionInput,
-): Promise<BackendSalesChangeOrder> {
-    const taskVersion = Number(input.expectedTaskVersion)
-    if (!Number.isSafeInteger(taskVersion) || taskVersion <= 0) {
-        throwValidation("待办版本无效，请刷新任务后重试")
-    }
-    const action =
-        input.handlerKey === "sales_change_impact_review"
-            ? input.decision === "APPROVE"
-                ? "impact-confirm"
-                : "impact-reject"
-            : input.decision === "APPROVE"
-              ? "finance-confirm"
-              : "finance-reject"
-    return apiPost<BackendSalesChangeOrder>(
-        `/admin/sales-change-orders/${encodeURIComponent(input.salesChangeOrderId)}/${action}`,
-        {
-            work_item_id: input.workItemId,
-            expected_task_version: taskVersion,
-            expected_subject_version: input.expectedSubjectVersion,
-            decision_reason: input.decisionReason?.trim() || null,
-            idempotency_key: input.idempotencyKey,
-        },
-    )
-}

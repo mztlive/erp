@@ -349,22 +349,6 @@ export type ApprovalWorkItemSummary = Readonly<{
     taskVersion: string
 }>
 
-/** 转换审批专用任务摘要，不读取完整队列 DTO 中不存在的字段。 */
-export function mapApprovalWorkItemSummaryDto(
-    dto: ApprovalWorkItemSummaryDto,
-): ApprovalWorkItemSummary {
-    return {
-        workItemId: dto.id,
-        workItemType: dto.work_item_type,
-        approvalStepInstanceId: dto.approval_step_instance_id ?? undefined,
-        status: dto.status,
-        ownerRole: dto.owner_role,
-        ownerOrganizationId: dto.owner_organization_id,
-        ownerUserId: dto.owner_user_id ?? undefined,
-        taskVersion: String(dto.task_version),
-    }
-}
-
 export type BlockedApprovalViewDto = Readonly<{
     approval_instance_id: string
     instance_version: string | number
@@ -390,26 +374,6 @@ export type BlockedApprovalView = Readonly<{
     blockedAt: number
     allowedActions: readonly "RETRY_CURRENT_STEP"[]
 }>
-
-/** 把受阻审批 HTTP 字段转换为管理视图。 */
-export function mapBlockedApprovalDto(
-    dto: BlockedApprovalViewDto,
-): BlockedApprovalView {
-    return {
-        approvalInstanceId: dto.approval_instance_id,
-        instanceVersion: String(dto.instance_version),
-        currentStepInstanceId: dto.current_step_instance_id,
-        stepVersion: String(dto.step_version),
-        workItem: dto.work_item
-            ? mapApprovalWorkItemSummaryDto(dto.work_item)
-            : undefined,
-        businessObjectLabel: dto.business_object_label,
-        blockerCode: dto.blocker_code,
-        blockerMessage: dto.blocker_message,
-        blockedAt: dto.blocked_at,
-        allowedActions: dto.allowed_actions,
-    }
-}
 
 export type RecoverApprovalCommand = Readonly<{
     approvalInstanceId: string

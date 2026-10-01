@@ -196,61 +196,6 @@ export function CustomerCombobox({
 }
 
 // ---------------------------------------------------------------------------
-// 采购单
-// ---------------------------------------------------------------------------
-
-export type PurchaseOrderComboboxItem = Readonly<{
-    purchaseOrderId: string
-    purchaseNo: string
-    supplierName: string
-    statusLabel: string
-    statusTone: StatusTone
-    salesOrderNo?: string
-    grossAmount?: string
-}>
-
-export type PurchaseOrderComboboxProps = EntityComboboxBaseProps & {
-    orders: readonly PurchaseOrderComboboxItem[]
-}
-
-/** 采购单选择：搜索采购单号、供应商。 */
-export function PurchaseOrderCombobox({
-    orders,
-    placeholder = "搜索采购单号或供应商",
-    emptyLabel = "没有符合条件的采购单",
-    ...props
-}: PurchaseOrderComboboxProps) {
-    const items = React.useMemo(
-        () =>
-            mapToOptions(
-                orders.map((o) => ({
-                    id: o.purchaseOrderId,
-                    code: o.purchaseNo,
-                    label: o.supplierName,
-                    status: { label: o.statusLabel, tone: o.statusTone },
-                    description: [
-                        o.salesOrderNo ? `销售 ${o.salesOrderNo}` : null,
-                        o.grossAmount ? `¥${o.grossAmount}` : null,
-                    ]
-                        .filter(Boolean)
-                        .join(" · "),
-                })),
-            ),
-        [orders],
-    )
-
-    return (
-        <BusinessObjectCombobox
-            {...props}
-            items={items}
-            label="采购单"
-            placeholder={placeholder}
-            emptyLabel={emptyLabel}
-        />
-    )
-}
-
-// ---------------------------------------------------------------------------
 // 供应商
 // ---------------------------------------------------------------------------
 

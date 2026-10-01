@@ -43,17 +43,3 @@ export const canPerformCatalogAction = (
     if (!item.allowed_actions.includes(action)) return false
     return hasPermission(granted, ACTION_PERMISSION[action])
 }
-
-/**
- * 判断目录行是否应显示任何写入口。
- *
- * @param item 目录行
- * @param granted 已授予权限
- */
-export const hasAnyWriteAction = (
-    item: DefinitionCatalogItem,
-    granted: readonly string[] | undefined,
-): boolean =>
-    item.allowed_actions.some((action) =>
-        canPerformCatalogAction(action, item, granted),
-    )

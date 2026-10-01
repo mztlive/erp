@@ -1,13 +1,7 @@
 "use client"
 
 import * as React from "react"
-import {
-    ChevronDownIcon,
-    Clock3Icon,
-    HistoryIcon,
-    LockIcon,
-    UserRoundIcon,
-} from "lucide-react"
+import { ChevronDownIcon, HistoryIcon } from "lucide-react"
 
 import {
     Collapsible,
@@ -663,182 +657,11 @@ function RelatedDocumentList({
     )
 }
 
-type ResponsibilityBlocker = Readonly<{
-    label?: string
-    reason: React.ReactNode
-    tone?: Extract<StatusTone, "warning" | "destructive">
-}>
-
-type ResponsibilityTrackBase = Readonly<{
-    id: string
-    label: string
-    description?: React.ReactNode
-    status: DocumentStatus
-    owner: string
-    dueAt?: DisplayTime
-    blocker?: ResponsibilityBlocker
-}>
-
-type ResponsibilityTrackResolution =
-    | Readonly<{
-          action: React.ReactNode
-          disabledReason?: never
-      }>
-    | Readonly<{
-          action?: never
-          disabledReason: React.ReactNode
-      }>
-
-type ResponsibilityTrack = ResponsibilityTrackBase &
-    ResponsibilityTrackResolution
-
-interface ResponsibilityPanelProps extends Omit<
-    React.ComponentProps<"section">,
-    "children" | "title"
-> {
-    title?: string
-    description?: React.ReactNode
-    tracks: readonly ResponsibilityTrack[]
-    emptyContent?: React.ReactNode
-}
-
-function ResponsibilityPanel({
-    title = "并行责任",
-    description,
-    tracks,
-    emptyContent = "暂无责任轨道",
-    className,
-    ...props
-}: ResponsibilityPanelProps) {
-    return (
-        <section
-            data-slot="responsibility-panel"
-            className={cn(
-                "overflow-hidden rounded-lg border border-border bg-card shadow-sm",
-                className,
-            )}
-            {...props}
-        >
-            <div className="border-b border-grid px-4 py-3">
-                <h2 className="font-heading text-base font-semibold">
-                    {title}
-                </h2>
-                {description != null ? (
-                    <div className="mt-1 text-sm text-muted-foreground">
-                        {description}
-                    </div>
-                ) : null}
-            </div>
-
-            {tracks.length > 0 ? (
-                <ul className="divide-y divide-grid">
-                    {tracks.map((track) => (
-                        <li key={track.id} className="p-4">
-                            <div className="grid gap-4 lg:grid-cols-12 lg:items-start">
-                                <div className="min-w-0 space-y-2 lg:col-span-4">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <h3 className="text-sm font-medium">
-                                            {track.label}
-                                        </h3>
-                                        <StatusBadge
-                                            tone={track.status.tone}
-                                            label={track.status.label}
-                                        />
-                                    </div>
-                                    {track.description != null ? (
-                                        <div className="text-sm text-muted-foreground">
-                                            {track.description}
-                                        </div>
-                                    ) : null}
-                                </div>
-
-                                <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:col-span-4">
-                                    <div>
-                                        <dt className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
-                                            <UserRoundIcon
-                                                aria-hidden="true"
-                                                className="size-3"
-                                            />
-                                            责任人
-                                        </dt>
-                                        <dd className="mt-1 text-sm">
-                                            {track.owner}
-                                        </dd>
-                                    </div>
-                                    <div>
-                                        <dt className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
-                                            <Clock3Icon
-                                                aria-hidden="true"
-                                                className="size-3"
-                                            />
-                                            期限
-                                        </dt>
-                                        <dd className="num mt-1 text-sm">
-                                            {track.dueAt != null ? (
-                                                <time
-                                                    dateTime={
-                                                        track.dueAt.dateTime
-                                                    }
-                                                >
-                                                    {track.dueAt.label}
-                                                </time>
-                                            ) : (
-                                                <span className="text-muted-foreground">
-                                                    未设置
-                                                </span>
-                                            )}
-                                        </dd>
-                                    </div>
-                                </dl>
-
-                                <div className="lg:col-span-4">
-                                    {track.action != null ? (
-                                        <div className="flex lg:justify-end">
-                                            {track.action}
-                                        </div>
-                                    ) : (
-                                        <div className="flex items-start gap-2 rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground lg:justify-end">
-                                            <LockIcon
-                                                aria-hidden="true"
-                                                className="mt-0.5 size-4 shrink-0"
-                                            />
-                                            <span>{track.disabledReason}</span>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            {track.blocker != null ? (
-                                <div className="mt-3 flex flex-col gap-2 rounded-md border border-border bg-surface-sunken px-3 py-2 sm:flex-row sm:items-start">
-                                    <StatusBadge
-                                        tone={
-                                            track.blocker.tone ?? "destructive"
-                                        }
-                                        label={track.blocker.label ?? "已阻塞"}
-                                    />
-                                    <div className="text-sm text-foreground">
-                                        {track.blocker.reason}
-                                    </div>
-                                </div>
-                            ) : null}
-                        </li>
-                    ))}
-                </ul>
-            ) : (
-                <div className="px-4 py-5 text-sm text-muted-foreground">
-                    {emptyContent}
-                </div>
-            )}
-        </section>
-    )
-}
-
 export {
     DocumentHeader,
     DocumentSection,
     DocumentSummary,
     RelatedDocumentList,
-    ResponsibilityPanel,
     RevisionTimeline,
     type DisplayTime,
     type DocumentHeaderDensity,
@@ -852,9 +675,6 @@ export {
     type RelatedDocument,
     type RelatedDocumentListProps,
     type RelatedDocumentMeasure,
-    type ResponsibilityBlocker,
-    type ResponsibilityPanelProps,
-    type ResponsibilityTrack,
     type RevisionSource,
     type RevisionTimelineEntry,
     type RevisionTimelineProps,

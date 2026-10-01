@@ -76,10 +76,3 @@ export const orderNodesForSave = (
     _documentType: DocumentType,
     nodes: readonly EditorNode[],
 ): EditorNode[] => [...nodes]
-
-/**
- * 判断节点是否允许删除或调整结构。全部节点均可删除。
- *
- * @param _node 编辑器节点
- */
-export const canMutateNodeStructure = (_node: EditorNode): boolean => true

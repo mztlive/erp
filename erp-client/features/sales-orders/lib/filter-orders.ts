@@ -115,16 +115,6 @@ export type SalesOrderStatusValue =
 
 export type SalesOrderStatusFilter = "all" | SalesOrderStatusValue
 
-const STATUS_LABEL_BY_VALUE = new Map<string, string>(
-    SALES_ORDER_STATUS_OPTIONS.map((option) => [option.value, option.label]),
-)
-
-/** 主状态中文名（列表渲染 / 高级筛选文案共用）。 */
-export function salesOrderStatusLabel(status: SalesOrderStatusFilter): string {
-    if (status === "all") return "全部状态"
-    return STATUS_LABEL_BY_VALUE.get(status) ?? status
-}
-
 function optionLabel(
     options: readonly { value: string; label: string }[],
     value: string,

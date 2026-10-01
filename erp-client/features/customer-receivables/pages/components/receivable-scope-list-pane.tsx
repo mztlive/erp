@@ -8,11 +8,7 @@ import {
     BusinessTableFrame,
     DataTable,
 } from "@/components/business"
-import {
-    ListWorkSurface,
-    ListWorkspaceViews,
-    listWorkspaceEmptyStateClassName,
-} from "@/components/business/list-workspace"
+import { listWorkspaceEmptyStateClassName } from "@/components/business/list-workspace"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -277,39 +273,5 @@ export function ReceivableScopeListPane({
                 </Button>
             </div>
         </>
-    )
-}
-
-export function ReceivableScopeViewsNav({
-    onOpenLegacy,
-}: {
-    onOpenLegacy: () => void
-}) {
-    return (
-        <ListWorkSurface
-            ariaLabel="客户往来范围"
-            toolbarClassName="pt-3 pb-2"
-            views={
-                <ListWorkspaceViews
-                    ariaLabel="客户往来范围工作视图"
-                    items={[
-                        {
-                            id: "customer-receivables-scope-nav",
-                            label: "按数据范围查询",
-                            active: true,
-                            onClick: () => undefined,
-                        },
-                        {
-                            id: "customer-receivables-legacy-nav",
-                            label: "全部往来视图",
-                            active: false,
-                            onClick: onOpenLegacy,
-                        },
-                    ]}
-                />
-            }
-            toolbar={null}
-            table={null}
-        />
     )
 }

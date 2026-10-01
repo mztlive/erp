@@ -1,28 +1,21 @@
-import { apiGet } from "@/lib/api"
-import { PAYMENT_TERM_OPTIONS } from "@/lib/business-options"
+import type {
+    BackendCustomerDetail,
+    BackendFileAsset,
+} from "@/features/contracts/api/wire-types"
 import type {
     ContractAction,
     ContractAttachmentView,
     ContractListRow,
     ContractStatus,
 } from "@/features/contracts/types"
-import type {
-    BackendCustomerDetail,
-    BackendFileAsset,
-    BackendPartyView,
-} from "@/features/contracts/api/wire-types"
+import { apiGet } from "@/lib/api"
+import { PAYMENT_TERM_OPTIONS } from "@/lib/business-options"
 
 export function tsToIso(seconds: number | undefined | null): string {
     if (seconds == null || !Number.isFinite(seconds)) {
         return new Date().toISOString()
     }
     return new Date(seconds * 1000).toISOString()
-}
-
-export function daysUntil(dateStr: string): number {
-    const end = new Date(`${dateStr}T23:59:59`)
-    const now = new Date()
-    return Math.ceil((end.getTime() - now.getTime()) / (24 * 60 * 60 * 1000))
 }
 
 export function isExpiringWithin30Days(
@@ -135,15 +128,6 @@ export async function loadCustomerBrief(customerId: string): Promise<{
         }
     } catch {
         return null
-    }
-}
-
-export async function loadPartyName(partyId: string): Promise<string> {
-    try {
-        const p = await apiGet<BackendPartyView>(`/admin/parties/${partyId}`)
-        return p.party_no
-    } catch {
-        return partyId
     }
 }
 

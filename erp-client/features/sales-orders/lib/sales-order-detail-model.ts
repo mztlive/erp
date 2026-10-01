@@ -295,15 +295,6 @@ export function buildSelfHref(
         : `/sales/orders/${salesOrderId}`
 }
 
-export function canCreatePurchaseFromSalesOrder(
-    order: SalesOrderListItem,
-): boolean {
-    if (order.related.purchaseCreationAccess) {
-        return order.related.purchaseCreationAccess.allowed
-    }
-    return false
-}
-
 export function navItemsFor(order: SalesOrderDetailView): Array<{
     id: NavSectionId
     label: string

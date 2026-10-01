@@ -1,9 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { SlidersHorizontalIcon } from "lucide-react"
-
-import { Button } from "@/components/ui/button"
 import {
     Combobox,
     ComboboxContent,
@@ -17,16 +14,6 @@ import {
     remoteSearchFromInputChange,
     useStickySelected,
 } from "@/components/business/combobox-input-search"
-import { OptionCombobox } from "@/components/business/option-combobox"
-import {
-    Sheet,
-    SheetContent,
-    SheetDescription,
-    SheetFooter,
-    SheetHeader,
-    SheetTitle,
-} from "@/components/ui/sheet"
-import { Spinner } from "@/components/ui/spinner"
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
@@ -93,12 +80,18 @@ function BusinessObjectCombobox({
         filterMode !== "remote",
     )
     // 远程授权未确认时仅保留身份，不能回退到组件内保存的旧名称。
-    const selected: BusinessObjectOption | null = resolved ?? (value ? {
-        id: value,
-        code: "",
-        label: loading ? "已选对象（正在核对）" : "已选对象（当前不可用）",
-        status: { label: "待核对", tone: "neutral" },
-    } : null)
+    const selected: BusinessObjectOption | null =
+        resolved ??
+        (value
+            ? {
+                  id: value,
+                  code: "",
+                  label: loading
+                      ? "已选对象（正在核对）"
+                      : "已选对象（当前不可用）",
+                  status: { label: "待核对", tone: "neutral" },
+              }
+            : null)
 
     return (
         <Combobox
@@ -204,150 +197,8 @@ function BusinessObjectCombobox({
     )
 }
 
-type SavedView = {
-    id: string
-    label: string
-    scope: "personal" | "team"
-    readOnly?: boolean
-}
-
-interface SavedViewPickerProps {
-    views: readonly SavedView[]
-    value?: string
-    onValueChange: (id?: string) => void
-    placeholder?: string
-    disabled?: boolean
-    id?: string
-    actions?: React.ReactNode
-    className?: string
-}
-
-function SavedViewPicker({
-    views,
-    value,
-    onValueChange,
-    placeholder = "选择保存视图",
-    disabled,
-    id,
-    actions,
-    className,
-}: SavedViewPickerProps) {
-    const options = React.useMemo(
-        () =>
-            views.map((view) => ({
-                value: view.id,
-                label: `${view.label}${view.scope === "team" ? " · 团队" : " · 个人"}${
-                    view.readOnly ? " · 只读" : ""
-                }`,
-                keywords: view.label,
-            })),
-        [views],
-    )
-
-    return (
-        <div
-            data-slot="saved-view-picker"
-            className={cn("flex items-center gap-2", className)}
-        >
-            <OptionCombobox
-                id={id}
-                options={options}
-                value={value ?? null}
-                onValueChange={(next) => onValueChange(next ?? undefined)}
-                placeholder={placeholder}
-                disabled={disabled}
-                allowClear
-                aria-label={placeholder}
-                className="min-w-[12rem]"
-            />
-            {actions}
-        </div>
-    )
-}
-
-interface AdvancedFilterSheetProps {
-    open: boolean
-    onOpenChange: (open: boolean) => void
-    idPrefix?: string
-    title?: React.ReactNode
-    description?: React.ReactNode
-    summary?: React.ReactNode
-    children: React.ReactNode
-    onReset: () => void
-    onApply: () => void
-    applying?: boolean
-}
-
-function AdvancedFilterSheet({
-    open,
-    onOpenChange,
-    idPrefix,
-    title = "高级筛选",
-    description,
-    summary,
-    children,
-    onReset,
-    onApply,
-    applying = false,
-}: AdvancedFilterSheetProps) {
-    return (
-        <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent
-                side="right"
-                size="preview"
-                closeButtonId={idPrefix ? `${idPrefix}-close` : undefined}
-            >
-                <SheetHeader className="border-b">
-                    <SheetTitle className="flex items-center gap-2">
-                        <SlidersHorizontalIcon
-                            className="size-4"
-                            aria-hidden="true"
-                        />
-                        {title}
-                    </SheetTitle>
-                    {description ? (
-                        <SheetDescription>{description}</SheetDescription>
-                    ) : null}
-                    {summary ? (
-                        <div className="pt-2 text-sm text-muted-foreground">
-                            {summary}
-                        </div>
-                    ) : null}
-                </SheetHeader>
-                <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-7 py-6">
-                    {children}
-                </div>
-                <SheetFooter className="border-t">
-                    <Button
-                        id={idPrefix ? `${idPrefix}-reset` : undefined}
-                        type="button"
-                        variant="outline"
-                        onClick={onReset}
-                    >
-                        重置
-                    </Button>
-                    <Button
-                        id={idPrefix ? `${idPrefix}-apply` : undefined}
-                        type="button"
-                        onClick={onApply}
-                        disabled={applying}
-                    >
-                        {applying ? <Spinner /> : null}
-                        应用筛选
-                    </Button>
-                </SheetFooter>
-            </SheetContent>
-        </Sheet>
-    )
-}
-
 export {
-    AdvancedFilterSheet,
     BusinessObjectCombobox,
-    SavedViewPicker,
-    type AdvancedFilterSheetProps,
     type BusinessObjectComboboxProps,
     type BusinessObjectOption,
-    type SavedView,
-    type SavedViewPickerProps,
 }

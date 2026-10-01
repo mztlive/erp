@@ -1,11 +1,11 @@
-import { fetchCompleteList } from "@/lib/collect-pages"
-import { apiDelete, apiPost } from "@/lib/api"
 import type {
     CreateDataScopeInput,
     DataScopeListView,
     DataScopeRecord,
     DataScopeUrlState,
 } from "@/features/organization/types"
+import { apiDelete, apiPost } from "@/lib/api"
+import { fetchCompleteList } from "@/lib/collect-pages"
 
 type BackendDataScope = {
     id: string
@@ -111,14 +111,4 @@ export async function deleteDataScope(id: string) {
 
 export async function createDataScope(input: CreateDataScopeInput) {
     return apiPost<BackendDataScope>("/admin/data-scopes", scopePayload(input))
-}
-
-export async function replaceDataScope(
-    input: CreateDataScopeInput,
-    policyVersion: number,
-) {
-    return apiPost<BackendDataScope>("/admin/data-scopes/replace", {
-        scope: scopePayload(input),
-        expected_policy_version: policyVersion,
-    })
 }

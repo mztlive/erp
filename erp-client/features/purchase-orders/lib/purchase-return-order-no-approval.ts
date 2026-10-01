@@ -2,17 +2,6 @@ import type { StatusTone } from "@/components/ui/status-badge"
 import type { BackendPurchaseReturnOrder } from "@/features/purchase-orders/api/purchase-return-order-wire-types"
 import type { PurchaseReturnOrderRow } from "@/features/purchase-orders/types"
 
-/** 采购退货单作为合同 DocumentType 的固定值。 */
-export const PURCHASE_RETURN_ORDER_DOCUMENT_TYPE =
-    "PurchaseReturnOrder" as const
-
-/** 工作项上的采购退货对象类型；与合同 DocumentType 并存时只认这两种字面量。 */
-export const PURCHASE_RETURN_ORDER_OBJECT_TYPE =
-    "purchase_return_order" as const
-
-/** 合同 §4.3 对 PurchaseReturnOrder 的固定政策。 */
-export const PURCHASE_RETURN_ORDER_APPROVAL_REQUIREMENT = "NO_APPROVAL" as const
-
 type ForbidKey<T, K extends string> = K extends keyof T ? never : true
 
 /** 编译期证明：采购退货 HTTP DTO 不得携带审批绑定。 */
@@ -26,36 +15,6 @@ export const PURCHASE_RETURN_ORDER_ROW_HAS_NO_APPROVAL: ForbidKey<
     PurchaseReturnOrderRow,
     "approval"
 > = true
-
-/** 采购退货业务动作白名单；不得混入审批决定或流程写入口。 */
-const PURCHASE_RETURN_ORDER_BUSINESS_ACTIONS = new Set([
-    "VIEW_DETAIL",
-    "SAVE",
-    "CONFIRM",
-    "EXECUTE",
-    "VOID",
-])
-
-/**
- * 判断当前任务是否属于采购退货。采购退货为无需审批类型，不得当作审批待办。
- *
- * @param workItem 工作项投影；只读 `businessObjectType`。
- * @returns 对象类型为 PurchaseReturnOrder / purchase_return_order 时为 true。
- */
-export const isPurchaseReturnOrderWorkItem = (workItem?: {
-    businessObjectType?: string
-}): boolean =>
-    workItem?.businessObjectType === PURCHASE_RETURN_ORDER_DOCUMENT_TYPE ||
-    workItem?.businessObjectType === PURCHASE_RETURN_ORDER_OBJECT_TYPE
-
-/**
- * 判断采购退货状态是否为待执行分工态。该态不是审批复核。
- *
- * @param status 服务端状态码。
- * @returns `pending_execution` 时为 true。
- */
-export const isPurchaseReturnExecutionStatus = (status?: string): boolean =>
-    status === "pending_execution"
 
 /**
  * 把采购退货状态映射为用户可见中文，不上屏枚举原值。
@@ -134,16 +93,3 @@ export function stripPurchaseReturnApprovalField<T extends object>(
     void _discarded
     return rest
 }
-
-/**
- * 采购退货允许动作是否只含退货业务入口，不含审批入口。
- *
- * @param actions 行上的允许动作。
- * @returns 全部为采购退货业务动作时为 true。
- */
-export const purchaseReturnActionsExcludeApproval = (
-    actions: readonly string[],
-): boolean =>
-    actions.every((action) =>
-        PURCHASE_RETURN_ORDER_BUSINESS_ACTIONS.has(action),
-    )

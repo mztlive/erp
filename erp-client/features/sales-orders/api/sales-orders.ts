@@ -12,8 +12,6 @@ export type {
     SalesOrdersListQuery,
 } from "@/features/sales-orders/api/contracts"
 
-export { createSalesOrderExportJob } from "@/features/sales-orders/api/export"
-
 export { fetchSalesOrders } from "@/features/sales-orders/api/sales-orders-list"
 export {
     cancelSalesOrderApproval,
@@ -34,7 +32,6 @@ export {
     type ActiveSalesChangeOrderResult,
     startSalesChangeOrder,
     submitSalesChangeOrder,
-    submitSalesChangeReviewDecision,
     type SalesChangeReviewDecisionInput,
     type StartSalesChangeOrderInput,
     type StartSalesChangeOrderIntent,

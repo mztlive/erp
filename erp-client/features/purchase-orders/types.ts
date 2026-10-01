@@ -33,15 +33,6 @@ export type PurchaseOrderMetricFilter =
     | "fulfill"
     | "gate_blocked"
 
-export const PO_METRIC_LABEL: Record<PurchaseOrderMetricFilter, string> = {
-    all: "全部采购单",
-    pending_create: "可建单依据",
-    draft: "草稿",
-    review: "审批中",
-    fulfill: "待履约",
-    gate_blocked: "先款门禁阻塞",
-}
-
 export const PO_STATUS_FILTER_LABEL: Record<PurchaseOrderStatusFilter, string> =
     {
         all: "全部状态",

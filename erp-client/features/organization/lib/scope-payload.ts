@@ -352,9 +352,3 @@ export function validateCreateDataScope(
     }
     return null
 }
-
-export function createDataScopePayload(input: CreateDataScopeInput) {
-    const error = validateCreateDataScope(input)
-    if (error) throw new Error(error)
-    return input
-}

@@ -1,10 +1,8 @@
-import { parseSupplierTaxRates } from "@/lib/supplier-tax-rates"
-import { periodicSettlement } from "@/lib/supplier-payment-terms"
+import type { EnableStatus } from "@/features/master-data/api/contracts"
 import {
     WAREHOUSE_WRITE_CODE,
     WAREHOUSE_WRITE_MESSAGE,
 } from "@/features/master-data/lib/data"
-import type { EnableStatus } from "@/features/master-data/api/contracts"
 import type {
     LifecycleStatus,
     MasterDataListItem,
@@ -14,8 +12,7 @@ import type {
 import { PRODUCT_KIND_LABELS } from "@/features/master-data/types"
 import { paymentTermCode } from "@/lib/business-options"
 import { compareDecimal, multiplyFixed } from "@/lib/fixed-decimal"
-
-export const LIST_PAGE_SIZE = 100
+import { periodicSettlement } from "@/lib/supplier-payment-terms"
 
 export const asLifecycle = (status: EnableStatus): LifecycleStatus =>
     status === "active" ? "ENABLED" : "DISABLED"
@@ -210,13 +207,6 @@ export const parseScore100 = (raw: string | undefined): number | undefined => {
     const n = Number.parseInt(String(raw).trim(), 10)
     if (!Number.isFinite(n) || n < 0 || n > 100) return undefined
     return n
-}
-
-/** 将用户输入的整数百分数转换为后端 [0, 1) 税率字符串。 */
-export const normalizeTaxRate = (raw: string | undefined): string | null => {
-    const rates = parseSupplierTaxRates(raw ?? "")
-    if (rates.length > 1) throw new Error("多个税率须使用常用进项税率集合")
-    return rates[0] ?? null
 }
 
 /** 将后端 [0, 1) 税率转换为页面百分数输入值。 */

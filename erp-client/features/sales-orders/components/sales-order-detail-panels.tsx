@@ -1,9 +1,5 @@
 export { SalesOrderIdentityHeader } from "@/features/sales-orders/components/sales-order-detail-identity-header"
-export { FocusTaskBanner } from "@/features/sales-orders/components/sales-order-detail-focus-banner"
-export {
-    SectionLead,
-    LifecycleRail,
-} from "@/features/sales-orders/components/sales-order-detail-lifecycle-rail"
+export { LifecycleRail } from "@/features/sales-orders/components/sales-order-detail-lifecycle-rail"
 export { RelatedLanes } from "@/features/sales-orders/components/sales-order-detail-related-lanes"
 export {
     LineItemsTable,

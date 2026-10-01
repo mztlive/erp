@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button"
 
 import { RECOVERY_ACTION_LABEL } from "../display"
 import type {
-    ApprovalAllowedAction,
     ApprovalCommandView,
     ApprovalDefinitionBinding,
     ApprovalRuntimeInstance,
@@ -243,17 +242,3 @@ export function ApprovalActionBar({
         </div>
     )
 }
-
-/**
- * 判断是否应展示审批决定入口。只读服务端动作，不按单据状态推断。
- */
-export const hasDecisionEntry = (allowedActions: readonly string[]): boolean =>
-    allowedActions.includes("APPROVE") || allowedActions.includes("REJECT")
-
-/**
- * 判断审批任务是否误带通用工作项动作。
- */
-export const hasForbiddenWorkItemActions = (
-    allowedActions: readonly ApprovalAllowedAction[] | readonly string[],
-): boolean =>
-    allowedActions.some((action) => ["REASSIGN", "CLOSE"].includes(action))

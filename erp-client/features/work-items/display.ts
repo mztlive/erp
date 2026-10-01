@@ -80,18 +80,3 @@ export function displayNextActionHint(input: {
             : input.workItemTypeLabel,
     )
 }
-
-export function queueResponsibilityLabel(input: {
-    ownerUser?: { id: string; displayName: string }
-    viewerUserId?: string
-}): string {
-    if (input.ownerUser) {
-        if (input.viewerUserId && input.ownerUser.id === input.viewerUserId) {
-            return "由你处理"
-        }
-        const name = displayOwnerName(input.ownerUser.displayName)
-        if (name === "处理人待确认") return name
-        return `由 ${name} 处理`
-    }
-    return "处理人待确认"
-}

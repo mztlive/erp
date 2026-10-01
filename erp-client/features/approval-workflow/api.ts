@@ -11,7 +11,6 @@ import {
     type ApprovalCommandViewDto,
     type ApprovalHistoryItem,
     type ApprovalHistoryPageDto,
-    type ApprovalInstanceListItemDto,
     type ApprovalInstanceListPage,
     type ApprovalInstanceListPageDto,
     type ApprovalInstanceListView,
@@ -109,16 +108,6 @@ export const listApprovalInstances = async (
         total: page.total ?? undefined,
     }
 }
-
-/**
- * 查询实例详情。首屏历史由调用方改走 `recent_history` 或独立游标接口。
- */
-export const getApprovalInstance = async (
-    instanceId: string,
-): Promise<ApprovalInstanceListItemDto> =>
-    apiGet<ApprovalInstanceListItemDto>(
-        `/admin/approval-instances/${encodeURIComponent(instanceId)}`,
-    )
 
 /**
  * 按轮次与执行序号读取完整历史。

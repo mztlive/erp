@@ -8,8 +8,6 @@
  * 提供只会筛出空列表，故只保留关键词搜索。
  */
 
-import { auditActionLabel } from "@/features/access-audit/lib/audit-labels"
-
 export type AccessResultFilterValue =
     | "SUCCESS"
     | "DENIED"
@@ -67,10 +65,6 @@ export function parseActionFilter(
 
 export function resultFilterLabel(value: AccessResultFilterValue): string {
     return RESULT_FILTER_LABELS[value]
-}
-
-export function actionFilterLabel(value: AccessActionFilterValue): string {
-    return auditActionLabel(value)
 }
 
 /** 审计时间范围校验：提交时执行，失败不写 URL。 */

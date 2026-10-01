@@ -287,30 +287,6 @@ export async function createAllocationSession(
     return view
 }
 
-export async function refreshAllocationSession(
-    session: AllocationSessionView,
-): Promise<AllocationSessionView> {
-    const { pool } = await buildPool(
-        session.mode,
-        session.counterpartyPartyId,
-        {
-            salesOrderId: session.returnContext?.salesOrderId,
-            receivableAccountId: session.returnContext?.receivableAccountId,
-        },
-    )
-    const factAmount =
-        session.mode === "receipt"
-            ? (session.fact.amount ?? "0")
-            : (session.fact.grossAmount ?? "0")
-    const proposed = recomputeProposed(factAmount, session.allocations)
-    return {
-        ...session,
-        pool,
-        factAmount,
-        ...proposed,
-    }
-}
-
 export async function saveAllocationDraft(
     session: AllocationSessionView | null,
     input: SaveAllocationDraftInput,

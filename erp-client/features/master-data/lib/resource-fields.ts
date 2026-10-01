@@ -5,13 +5,7 @@
  * 字段声明表见 resource-fields-defs.ts；本文件统一再导出，保持既有导入路径不变。
  */
 
-import { z } from "zod"
-
-import { masterDataCopy } from "@/features/master-data/lib/copy"
-import {
-    RESOURCE_FIELDS,
-    type ResourceFieldDef,
-} from "@/features/master-data/lib/resource-fields-defs"
+import { RESOURCE_FIELDS } from "@/features/master-data/lib/resource-fields-defs"
 import type {
     MasterDataCenterView,
     MasterDataListItem,
@@ -37,106 +31,9 @@ export type ResourceFormValues = {
     [field: string]: string
 }
 
-/**
- * 品牌 / 商品分类 / 计量单位为即时字典，表单不收集生效期间；
- * 提交时由服务端/会话层默认「立即生效」。
- */
-export function usesEffectivePeriod(resource: MasterDataResource): boolean {
-    return (
-        resource !== "brands" &&
-        resource !== "categories" &&
-        resource !== "unit-of-measures"
-    )
-}
-
-const DATE_FORMAT = /^\d{4}-\d{2}-\d{2}$/
-
-function isValidDate(value: string): boolean {
-    if (!DATE_FORMAT.test(value)) return false
-    const [year, month, day] = value.split("-").map(Number)
-    const date = new Date(Date.UTC(year, month - 1, day))
-    return (
-        date.getUTCFullYear() === year &&
-        date.getUTCMonth() === month - 1 &&
-        date.getUTCDate() === day
-    )
-}
-
-/** 生效开始 / 结束字段共用：格式 + 非空。 */
-function effectiveDateField(label: string): z.ZodString {
-    return z
-        .string()
-        .min(1, `请填写${label}`)
-        .refine(isValidDate, `${label}格式不正确，请使用 YYYY-MM-DD`)
-}
-
-/** 通用基础字段 + 当前资源专属字段（必填规则），供新建 / 更新表单共用。 */
-export function buildResourceSchema(
-    resource: MasterDataResource,
-    defs: readonly ResourceFieldDef[],
-) {
-    const dynamic: Record<string, z.ZodString> = {}
-    for (const def of defs) {
-        if (def.kind === "media" && def.required) {
-            dynamic[def.key] = z
-                .string()
-                .trim()
-                .min(1, masterDataCopy.mediaMainRequired)
-        } else if (def.required) {
-            dynamic[def.key] = z.string().trim().min(1, `请填写${def.label}`)
-        } else {
-            dynamic[def.key] = z.string()
-        }
-    }
-    // 计量单位名称常为单字（张/件/个），其余资源仍要求至少 2 字。
-    const nameSchema =
-        resource === "unit-of-measures"
-            ? z.string().trim().min(1, "请填写名称")
-            : z.string().trim().min(2, "请填写名称")
-
-    return z
-        .object({
-            name: nameSchema,
-            effectiveFrom: usesEffectivePeriod(resource)
-                ? effectiveDateField("生效开始")
-                : z.string(),
-            effectiveTo: z
-                .string()
-                .refine(
-                    (value) => value === "" || isValidDate(value),
-                    "生效结束格式不正确，请使用 YYYY-MM-DD",
-                ),
-            changeReason: z.string().trim().min(2, "请填写变更原因"),
-            ...dynamic,
-        })
-        .refine(
-            (value) =>
-                !usesEffectivePeriod(resource) ||
-                value.effectiveTo === "" ||
-                value.effectiveTo >= value.effectiveFrom,
-            {
-                message: "生效结束不能早于生效开始",
-                path: ["effectiveTo"],
-            },
-        )
-}
-
 /** 字典类资源默认立即生效的业务日。 */
 export function defaultImmediateEffectiveFrom(): string {
     return new Date().toISOString().slice(0, 10)
-}
-
-export function emptyResourceFieldValues(
-    resource: MasterDataResource,
-): Record<string, string> {
-    const defaults = Object.fromEntries(
-        RESOURCE_FIELDS[resource].map((def) => [def.key, ""]),
-    )
-    // 计量单位默认整数数量（小数位 0），减少新建时必填遗漏。
-    if (resource === "unit-of-measures") {
-        defaults.quantityScale = "0"
-    }
-    return defaults
 }
 
 export type ResourceFieldValues = Record<string, string>

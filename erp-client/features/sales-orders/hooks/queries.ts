@@ -9,7 +9,6 @@ import { fetchHasEligibleAcceptance } from "@/features/sales-orders/api/acceptan
 import {
     cancelSalesOrderApproval,
     createSalesOrder,
-    createSalesOrderExportJob,
     fetchSalesOrderDetail,
     fetchSalesChangeOrderDetail,
     fetchSalesOrderDraftForResume,
@@ -17,7 +16,6 @@ import {
     saveSalesOrderDraft,
     startSalesChangeOrder,
     submitSalesChangeOrder,
-    submitSalesChangeReviewDecision,
     submitSalesOrder,
     type SalesOrdersListQuery,
 } from "@/features/sales-orders/api/sales-orders"
@@ -27,12 +25,6 @@ export const salesOrderKeys = {
     list: (query: SalesOrdersListQuery) =>
         [...salesOrderKeys.all, "list", query] as const,
     detail: (id: string) => [...salesOrderKeys.all, "detail", id] as const,
-    changes: (salesOrderId: string, scopeVersion?: string) =>
-        [
-            ...salesOrderKeys.detail(salesOrderId),
-            "changes",
-            { scopeVersion },
-        ] as const,
     acceptanceRoot: (id: string) =>
         [...salesOrderKeys.all, "acceptance", id] as const,
     acceptance: (
@@ -269,28 +261,5 @@ export function useSubmitSalesChangeOrderMutation() {
                 }),
             ])
         },
-    })
-}
-
-export function useSalesChangeReviewDecisionMutation() {
-    const queryClient = useQueryClient()
-    return useMutation({
-        mutationFn: submitSalesChangeReviewDecision,
-        onSuccess: async () => {
-            await Promise.all([
-                queryClient.invalidateQueries({
-                    queryKey: salesOrderKeys.all,
-                }),
-                queryClient.invalidateQueries({
-                    queryKey: ["work-items"],
-                }),
-            ])
-        },
-    })
-}
-
-export function useCreateSalesOrderExportJobMutation() {
-    return useMutation({
-        mutationFn: createSalesOrderExportJob,
     })
 }

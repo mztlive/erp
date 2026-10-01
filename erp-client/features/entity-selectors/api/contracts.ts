@@ -60,12 +60,3 @@ export async function searchContracts(
     })
     return { ...page, items: page.items.map(contractItem) }
 }
-
-export async function fetchContractOption(
-    contractId: string,
-    input: Omit<ContractSearch, "query"> = { purpose: "filter" },
-): Promise<ContractComboboxItem | null> {
-    if (!contractId) return null
-    const page = await searchContracts({ ...input, query: "" })
-    return page.items.find((row) => row.contractId === contractId) ?? null
-}

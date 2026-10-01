@@ -49,8 +49,6 @@ export const FULFILLMENT_ROLES: Record<FulfillmentRole, FulfillmentRoleDef> = {
     },
 }
 
-export const DEFAULT_FULFILLMENT_ROLE: FulfillmentRole = "warehouse"
-
 export function resolveRole(raw: FulfillmentRole): FulfillmentRoleDef {
     return FULFILLMENT_ROLES[raw]
 }

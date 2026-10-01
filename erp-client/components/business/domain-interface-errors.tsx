@@ -117,13 +117,6 @@ type CloseResolutionAction = Readonly<{
     queryResult?: never
 }>
 
-export type InterfaceErrorResolutionActions =
-    | NoInterfaceErrorAction
-    | QueryOriginalAction
-    | RetrySameKeyAction
-    | ManualResolutionAction
-    | CloseResolutionAction
-
 type InterfaceErrorResolutionPanelBaseProps = DomainPanelProps & {
     status: InterfaceErrorStatus
     businessImpact: React.ReactNode

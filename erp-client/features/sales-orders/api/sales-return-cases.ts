@@ -1,10 +1,3 @@
-import {
-    salesReturnCaseStatusLabel,
-    salesReturnCaseTypeLabel,
-    salesReturnRouteLabel,
-    stripSalesReturnCaseApprovalField,
-} from "@/features/sales-orders/lib/sales-return-no-approval"
-
 /** 销售退货处理类型；与后端 `CaseType` snake_case 对齐。 */
 export type SalesReturnCaseType =
     | "return"
@@ -70,41 +63,3 @@ export type SalesReturnCaseRow = Readonly<{
         restockableQuantity?: string
     }[]
 }>
-
-/**
- * 把销售退货处理单投影为页面行。SalesReturnCase 为 NO_APPROVAL，
- * 丢弃误带的审批字段，状态只映射履约分工文案。
- *
- * @param dto 销售退货 HTTP 载荷。
- * @returns 不含 `approval` 的行投影。
- */
-export const mapSalesReturnCase = (
-    dto: BackendSalesReturnCase,
-): SalesReturnCaseRow => {
-    const clean = stripSalesReturnCaseApprovalField(dto)
-    return {
-        id: clean.id,
-        returnNo: clean.return_no,
-        salesOrderId: clean.sales_order_id,
-        acceptanceId: clean.acceptance_id ?? undefined,
-        caseType: clean.case_type,
-        caseTypeLabel: salesReturnCaseTypeLabel(clean.case_type),
-        reason: clean.reason,
-        discoveredAt: clean.discovered_at,
-        returnRoute: clean.return_route,
-        returnRouteLabel: salesReturnRouteLabel(clean.return_route),
-        status: clean.status,
-        statusLabel: salesReturnCaseStatusLabel(clean.status),
-        version: clean.version,
-        createdAt: clean.created_at,
-        allowedActions: ["VIEW_DETAIL"],
-        lines: clean.lines.map((line) => ({
-            id: line.id,
-            salesOrderLineId: line.sales_order_line_id,
-            requestedQuantity: line.requested_quantity,
-            receivedQuantity: line.received_quantity ?? undefined,
-            qualityResult: line.quality_result ?? undefined,
-            restockableQuantity: line.restockable_quantity ?? undefined,
-        })),
-    }
-}

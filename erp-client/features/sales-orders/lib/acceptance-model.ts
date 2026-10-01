@@ -658,15 +658,3 @@ function acceptanceConfirmResultText(draft: AcceptanceBatchDraft): string {
     }
     return `${exceptionWord} ${exception}、通过 ${qtyWithUnit(passed, unit)}`
 }
-
-export function buildFactIndex(
-    salesLines: AcceptanceSalesLineGroup[],
-): Map<string, AcceptanceEligibleFact> {
-    const factIndex = new Map<string, AcceptanceEligibleFact>()
-    for (const line of salesLines) {
-        for (const fact of line.fulfillmentFacts) {
-            factIndex.set(fact.fulfillmentLineId, fact)
-        }
-    }
-    return factIndex
-}

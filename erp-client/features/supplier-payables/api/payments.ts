@@ -10,14 +10,12 @@ import {
     isOutcomeUnknown,
 } from "@/features/supplier-payables/api/shared"
 import { compareDecimal } from "@/lib/fixed-decimal"
-import { commitPaymentReversal } from "@/features/supplier-payables/api/reversals"
 import { BANK_RECEIPT_PENDING_REFERENCE } from "@/features/supplier-payables/lib/allocation-model"
 import type {
     FormalSubmitResult,
     PaymentMergeCandidatesView,
     PaymentRecipient,
     PostPaymentInput,
-    ReversePaymentInput,
 } from "@/features/supplier-payables/types"
 
 type BackendPaymentMergeCandidate = {
@@ -229,65 +227,4 @@ export function fetchSupplierPaymentBankReceiptBlob(
         `/admin/supplier-payments/${encodeURIComponent(paymentId)}/bank-receipt`,
         { timeoutMs: 30_000, cache: "no-store" },
     )
-}
-
-/**
- * 一次创建付款冲正并启动审批。过账只由最终通过动作内部消费。
- *
- * @param input 冲正草稿创建所需字段。
- */
-export async function reversePayment(
-    input: ReversePaymentInput,
-): Promise<FormalSubmitResult> {
-    try {
-        const committed = await commitPaymentReversal({
-            sourcePaymentId: input.paymentId,
-            reason: input.reason,
-            idempotencyKey: input.idempotencyKey,
-        })
-        if (committed.status !== "succeeded") {
-            if (committed.status === "unknown") {
-                const result: FormalSubmitResult = {
-                    status: "unknown",
-                    title: "冲正结果待确认",
-                    description: committed.message,
-                    reference: input.idempotencyKey,
-                    operationId: input.idempotencyKey,
-                }
-                return result
-            }
-            return failedPayment(committed.code, committed.message)
-        }
-        const result: FormalSubmitResult = {
-            status: "succeeded",
-            title: "付款冲正已提交审批",
-            description: "已原子登记付款冲正并启动审批，原付款保留。",
-            reference: committed.reversal.reversalNo,
-            operationId: input.idempotencyKey,
-            documentNo: committed.reversal.reversalNo,
-            approval: committed.reversal.approval,
-            subjectStatus: committed.reversal.status,
-        }
-        return result
-    } catch (err) {
-        if (isOutcomeUnknown(err)) {
-            const result: FormalSubmitResult = {
-                status: "unknown",
-                title: "冲正结果待确认",
-                description: errorMessage(
-                    err,
-                    "冲正结果暂无法确认，请按操作号查询最终结果。",
-                ),
-                reference: input.idempotencyKey,
-                operationId: input.idempotencyKey,
-            }
-            return result
-        }
-        return {
-            status: "failed",
-            title: "冲正失败",
-            description: errorMessage(err, "付款冲正失败"),
-            errorCode: "HTTP_ERROR",
-        }
-    }
 }

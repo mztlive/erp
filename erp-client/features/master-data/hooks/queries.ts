@@ -7,6 +7,7 @@ import {
     useQueryClient,
 } from "@tanstack/react-query"
 
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import {
     createMasterDataObject,
     createMasterDataRevision,
@@ -18,11 +19,8 @@ import {
     fetchSkuSupplierCounts,
     updateProductListingStatus,
 } from "@/features/master-data/api"
-import {
-    handoverSupplier,
-    handoverSupplierCapability,
-} from "@/features/master-data/api/mutations/supplier"
 import { fetchFileAsset } from "@/features/master-data/api/media-assets"
+import { updateVoucherCategoryRevision } from "@/features/master-data/api/mutations/voucher"
 import {
     fetchWarehouseFulfillmentHandlerOptions,
     updateWarehouseFulfillmentHandlers,
@@ -36,9 +34,7 @@ import type {
     MasterDataResource,
     ProductListingStatus,
 } from "@/features/master-data/types"
-import { useAccountProfileQuery } from "@/features/auth/queries"
 import { optionKeys } from "@/hooks/use-options"
-import { updateVoucherCategoryRevision } from "@/features/master-data/api/mutations/voucher"
 import { queryKeyRoots } from "@/lib/query-key-roots"
 
 export const masterDataKeys = {
@@ -121,20 +117,6 @@ export function useProductFilterOptionsQuery(enabled: boolean) {
 export function useMasterDataExportMutation() {
     return useMutation({
         mutationFn: (query: MasterDataListQuery) => fetchMasterDataList(query),
-    })
-}
-
-export function useHandoverSupplierMutation() {
-    return useMutation({
-        mutationFn: handoverSupplier,
-        meta: { affectsDataScope: true },
-    })
-}
-
-export function useHandoverSupplierCapabilityMutation() {
-    return useMutation({
-        mutationFn: handoverSupplierCapability,
-        meta: { affectsDataScope: true },
     })
 }
 

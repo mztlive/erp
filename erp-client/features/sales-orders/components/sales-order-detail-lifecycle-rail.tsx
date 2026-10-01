@@ -1,6 +1,4 @@
 "use client"
-
-import * as React from "react"
 import { CheckCircle2Icon, CircleIcon, CircleDotIcon } from "lucide-react"
 
 import {
@@ -16,10 +14,6 @@ import {
     type LifecycleStep,
 } from "@/features/sales-orders/lib/sales-order-detail-model"
 import { cn } from "@/lib/utils"
-
-export function SectionLead({ children }: { children: React.ReactNode }) {
-    return <p className="mb-2 text-xs text-muted-foreground">{children}</p>
-}
 
 export function LifecycleRail({ order }: { order: SalesOrderDetailView }) {
     const rail = lifecycleSteps(order)
