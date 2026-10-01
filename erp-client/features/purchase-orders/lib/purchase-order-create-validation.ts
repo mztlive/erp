@@ -1,12 +1,9 @@
 import { z } from "zod"
 import { sourcingUnitQuantityError } from "./sourcing-quantity"
 
-import {
-    findSourcingOption,
-    sourcingQuantityError,
-    type SourcingLineInput,
-    type SourcingSalesOrder,
-} from "@/features/purchase-orders/lib/purchase-order-create-model"
+import { findSourcingOption } from "./sourcing/options"
+import { sourcingQuantityError } from "./sourcing/quantity"
+import type { SourcingLineInput, SourcingSalesOrder } from "./sourcing/types"
 import { compareDecimal, sumFixed } from "@/lib/fixed-decimal"
 
 export type SourcingFormValues = {

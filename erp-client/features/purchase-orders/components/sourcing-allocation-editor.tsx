@@ -18,8 +18,8 @@ import {
     SourcingExpectedDeliveryField,
     SourcingOptionField,
     SourcingTargetWarehouseField,
-    type PurchaseOrderCreateSourcingTableProps,
-} from "./purchase-order-create-sourcing-table"
+} from "./create-sourcing/sourcing-fields"
+import type { SourcingEditorProps } from "./create-sourcing/types"
 
 /** 调整区沿用正式表单字段；当前供给摘要与编辑状态共用同一份值。 */
 export function SourcingAllocationEditor({
@@ -30,10 +30,7 @@ export function SourcingAllocationEditor({
     index,
     canRemove,
     onRemoveSplit,
-}: Pick<
-    PurchaseOrderCreateSourcingTableProps,
-    "form" | "order" | "onRemoveSplit"
-> & {
+}: Pick<SourcingEditorProps, "form" | "order" | "onRemoveSplit"> & {
     product: SourcingProductLine
     line: SourcingLineInput
     index: number

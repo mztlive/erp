@@ -17,13 +17,11 @@ import {
     sourcingUnitQuantityError,
 } from "../lib/sourcing-quantity"
 import { FULFILLMENT_RESPONSIBILITY_LABEL } from "../types"
-import type { PurchaseOrderCreateSourcingTableProps } from "./purchase-order-create-sourcing-table"
+import type { SourcingEditorProps } from "./create-sourcing/types"
 import { SourcingAllocationEditor } from "./sourcing-allocation-editor"
 
 /** 默认阅读当前方案，需要调整或补齐信息时才展开表单。 */
-export function PurchaseOrderCreateSourcingCards(
-    props: PurchaseOrderCreateSourcingTableProps,
-) {
+export function PurchaseOrderCreateSourcingCards(props: SourcingEditorProps) {
     const values = props.form.state.values
     const errors =
         sourcingFormValidationError(props.order, values)?.fields ?? {}
@@ -70,7 +68,7 @@ function SourcingProductCard({
     issues,
     onAddSplit,
     onRemoveSplit,
-}: PurchaseOrderCreateSourcingTableProps & {
+}: SourcingEditorProps & {
     product: SourcingProductLine
     allocations: { line: SourcingLineInput; index: number }[]
     issues: string[]
