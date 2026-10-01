@@ -1,7 +1,6 @@
 "use client"
 
 import Link from "next/link"
-import { Loader2Icon } from "lucide-react"
 import type { ColumnDef } from "@tanstack/react-table"
 
 import {
@@ -10,6 +9,7 @@ import {
     StatusTrackSummary,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
     isPendingReviewStage,
     NATURE_LABEL,
@@ -96,31 +96,23 @@ export function buildSalesOrdersListColumns(
                 return (
                     <div className="min-w-0 space-y-1">
                         {order.contractId ? (
-                            <Button
+                            <LoadingButton
                                 id={`sales-orders-list-row-${toAutomationIdSegment(order.id)}-download-contract`}
                                 type="button"
                                 variant="link"
                                 size="xs"
                                 className="num h-auto min-h-0 px-0 text-sm leading-5 font-semibold text-foreground"
+                                loading={downloading}
                                 disabled={downloading}
                                 aria-label={`下载合同 ${contractNo || order.contractId}`}
                                 onClick={() => {
                                     void downloadContract(order)
                                 }}
                             >
-                                {downloading ? (
-                                    <>
-                                        <Loader2Icon
-                                            data-icon="inline-start"
-                                            className="animate-spin"
-                                            aria-hidden="true"
-                                        />
-                                        下载中
-                                    </>
-                                ) : (
-                                    contractNo || "下载合同"
-                                )}
-                            </Button>
+                                {downloading
+                                    ? "下载中"
+                                    : contractNo || "下载合同"}
+                            </LoadingButton>
                         ) : (
                             <span className="num text-sm">
                                 {contractNo || "—"}

@@ -118,6 +118,9 @@ export const CompaniesPage = () => {
                                         ? "停用"
                                         : "启用",
                                 disabled: !canUpdate || mutation.isPending,
+                                loading:
+                                    mutation.isPending &&
+                                    mutation.variables?.id === row.original.id,
                                 onClick: () => void changeStatus(row.original),
                             },
                         ]}

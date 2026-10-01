@@ -1,9 +1,12 @@
 "use client"
 
-import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { useFormContext } from "@/components/form/form-context"
 
-type SubmitButtonProps = Omit<React.ComponentProps<typeof Button>, "type"> & {
+type SubmitButtonProps = Omit<
+    React.ComponentProps<typeof LoadingButton>,
+    "type"
+> & {
     label?: string
     pendingLabel?: string
 }
@@ -17,6 +20,7 @@ export function SubmitButton({
     pendingLabel = "提交中…",
     children,
     disabled,
+    loading = false,
     id,
     ...props
 }: SubmitButtonProps & { id?: string }) {
@@ -27,14 +31,16 @@ export function SubmitButton({
             selector={(state) => [state.canSubmit, state.isSubmitting] as const}
         >
             {([canSubmit, isSubmitting]) => (
-                <Button
+                <LoadingButton
+                    {...props}
                     id={id ?? "form-submit"}
                     type="submit"
-                    disabled={disabled || !canSubmit || isSubmitting}
-                    {...props}
+                    disabled={disabled || !canSubmit}
+                    loading={loading || isSubmitting}
                 >
-                    {children ?? (isSubmitting ? pendingLabel : label)}
-                </Button>
+                    {children ??
+                        (loading || isSubmitting ? pendingLabel : label)}
+                </LoadingButton>
             )}
         </form.Subscribe>
     )

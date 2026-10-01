@@ -178,6 +178,7 @@ export function CancelApprovalDialog({
                         </Button>
                         <form.AppForm>
                             <form.SubmitButton
+                                loading={pending}
                                 id={`${id}-submit`}
                                 label={
                                     mode === "withdraw"

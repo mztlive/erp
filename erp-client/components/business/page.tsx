@@ -3,7 +3,7 @@
 import * as React from "react"
 import type { LucideIcon } from "lucide-react"
 
-import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import {
     Tooltip,
@@ -39,7 +39,7 @@ function MetricDetailTooltip({
     )
 }
 
-type ButtonProps = React.ComponentProps<typeof Button>
+type ButtonProps = React.ComponentProps<typeof LoadingButton>
 type StatusBadgeProps = React.ComponentProps<typeof StatusBadge>
 
 export type SemanticStatus = Pick<StatusBadgeProps, "label" | "tone" | "icon">
@@ -99,21 +99,25 @@ function PageActions({
                     `${baseId}-action-${toAutomationIdSegment(String(actionKey))}`
 
                 return (
-                    <Button
+                    <LoadingButton
                         key={actionKey}
                         id={derivedId}
                         {...buttonProps}
                         size={size}
                         className={actionClassName}
                     >
-                        {Icon && iconPosition === "start" ? (
+                        {Icon &&
+                        !buttonProps.loading &&
+                        iconPosition === "start" ? (
                             <Icon data-icon="inline-start" aria-hidden="true" />
                         ) : null}
                         {label}
-                        {Icon && iconPosition === "end" ? (
+                        {Icon &&
+                        !buttonProps.loading &&
+                        iconPosition === "end" ? (
                             <Icon data-icon="inline-end" aria-hidden="true" />
                         ) : null}
-                    </Button>
+                    </LoadingButton>
                 )
             })}
         </div>

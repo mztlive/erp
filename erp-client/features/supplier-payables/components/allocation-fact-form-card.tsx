@@ -8,7 +8,7 @@ import {
     surfacePanelClassName,
     type ValidationIssue,
 } from "@/components/business"
-import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
     DescriptionDetails,
     DescriptionItem,
@@ -444,24 +444,26 @@ function AllocationFactFormActions({
             </div>
             <div className="flex items-center gap-2">
                 {onSaveDraft ? (
-                    <Button
+                    <LoadingButton
                         id="supplier-payables-allocation-form-save-draft"
                         type="button"
+                        loading={isSavingDraft}
                         variant="outline"
                         disabled={isSavingDraft || isSubmitting}
                         onClick={onSaveDraft}
                     >
                         {isSavingDraft ? "保存中…" : "保存草稿"}
-                    </Button>
+                    </LoadingButton>
                 ) : null}
-                <Button
+                <LoadingButton
                     id="supplier-payables-allocation-form-submit"
                     type="button"
+                    loading={isSubmitting}
                     disabled={!canSubmit || isSubmitting}
                     onClick={onSubmitClick}
                 >
                     {track === "payment" ? "登记付款并核销" : "确认登记并核销"}
-                </Button>
+                </LoadingButton>
             </div>
         </div>
     )

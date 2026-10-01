@@ -5,6 +5,7 @@ import { useStore } from "@tanstack/react-form"
 import { z } from "zod"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
     Dialog,
@@ -524,7 +525,8 @@ export function PersonalGrantForm({
                         >
                             取消
                         </Button>
-                        <Button
+                        <LoadingButton
+                            loading={save.isPending}
                             id="person-scope-save"
                             size="sm"
                             type="submit"
@@ -533,7 +535,7 @@ export function PersonalGrantForm({
                             }
                         >
                             {save.isPending ? "保存中…" : "保存"}
-                        </Button>
+                        </LoadingButton>
                     </div>
                 </form>
                 <AlertDialog open={discarding} onOpenChange={setDiscarding}>

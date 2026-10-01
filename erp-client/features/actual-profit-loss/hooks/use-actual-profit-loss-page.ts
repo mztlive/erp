@@ -284,6 +284,7 @@ export function useActualProfitLossPage() {
         setExportJob,
         exportFailed,
         refreshFailed,
+        refreshing,
         handleRefresh,
         handleExport,
         pageRows,

@@ -10,6 +10,7 @@ export function useSupplyBatchMutation(mode: BatchMode) {
         mutationFn: (input: {
             rows: { row_id: string; input: BatchInput }[]
             validateOnly: boolean
+            recoveryOnly?: boolean
         }) => submitSupplyBatch(mode, input.rows, input.validateOnly),
         retry: false,
         meta: { affectsDataScope: true },

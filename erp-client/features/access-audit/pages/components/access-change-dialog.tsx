@@ -220,6 +220,7 @@ function AccessChangeDialog({
                                     </Button>
                                     <form.AppForm>
                                         <form.SubmitButton
+                                            loading={isSubmitting}
                                             id="operations-access-change-dialog-confirm"
                                             label="确认提交"
                                             pendingLabel="提交中…"

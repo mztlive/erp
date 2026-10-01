@@ -2,6 +2,7 @@
 import * as React from "react"
 import { DiscardConfirmDialog } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Dialog,
     DialogContent,
@@ -261,8 +262,9 @@ function BatchSupplyEditor({
                                                             className="w-full"
                                                         />
                                                     </div>
-                                                    <Button
+                                                    <LoadingButton
                                                         id="batch-supply-template"
+                                                        loading={templateBusy}
                                                         type="button"
                                                         variant="outline"
                                                         size="sm"
@@ -291,7 +293,7 @@ function BatchSupplyEditor({
                                                         }}
                                                     >
                                                         下载供给模板
-                                                    </Button>
+                                                    </LoadingButton>
                                                     <label
                                                         htmlFor="batch-supply-file"
                                                         className="text-xs text-muted-foreground"
@@ -376,24 +378,36 @@ function BatchSupplyEditor({
                                                             <span>
                                                                 将替换异常行的当前输入，请确认。
                                                             </span>
-                                                            <Button
+                                                            <LoadingButton
                                                                 id="batch-supply-reload-confirm"
+                                                                loading={
+                                                                    editor.reloadPending
+                                                                }
                                                                 type="button"
                                                                 size="sm"
-                                                                onClick={() => {
-                                                                    setReloadConfirm(
-                                                                        false,
-                                                                    )
-                                                                    void editor.reloadFailed()
+                                                                disabled={
+                                                                    editor.busy
+                                                                }
+                                                                onClick={async () => {
+                                                                    try {
+                                                                        await editor.reloadFailed()
+                                                                    } finally {
+                                                                        setReloadConfirm(
+                                                                            false,
+                                                                        )
+                                                                    }
                                                                 }}
                                                             >
                                                                 确认重新读取
-                                                            </Button>
+                                                            </LoadingButton>
                                                             <Button
                                                                 id="batch-supply-reload-cancel"
                                                                 type="button"
                                                                 size="sm"
                                                                 variant="ghost"
+                                                                disabled={
+                                                                    editor.busy
+                                                                }
                                                                 onClick={() =>
                                                                     setReloadConfirm(
                                                                         false,
@@ -443,8 +457,13 @@ function BatchSupplyEditor({
                                                 ? "关闭并保留记录"
                                                 : "取消"}
                                         </Button>
-                                        <Button
+                                        <LoadingButton
                                             id="batch-supply-validate"
+                                            loading={
+                                                editor.mutation.isPending &&
+                                                !!editor.mutation.variables
+                                                    ?.validateOnly
+                                            }
                                             type="button"
                                             variant="outline"
                                             disabled={
@@ -455,10 +474,15 @@ function BatchSupplyEditor({
                                             }
                                         >
                                             校验勾选行
-                                        </Button>
+                                        </LoadingButton>
                                         {unknown.length > 0 && (
-                                            <Button
+                                            <LoadingButton
                                                 id="batch-supply-recover"
+                                                loading={
+                                                    editor.mutation.isPending &&
+                                                    !!editor.mutation.variables
+                                                        ?.recoveryOnly
+                                                }
                                                 type="button"
                                                 disabled={editor.busy}
                                                 onClick={() => {
@@ -479,10 +503,17 @@ function BatchSupplyEditor({
                                                 }}
                                             >
                                                 确认待定结果（{unknown.length}）
-                                            </Button>
+                                            </LoadingButton>
                                         )}
-                                        <Button
+                                        <LoadingButton
                                             id="batch-supply-submit"
+                                            loading={
+                                                editor.mutation.isPending &&
+                                                !editor.mutation.variables
+                                                    ?.validateOnly &&
+                                                !editor.mutation.variables
+                                                    ?.recoveryOnly
+                                            }
                                             type="submit"
                                             disabled={
                                                 editor.busy || !selected.length
@@ -491,7 +522,7 @@ function BatchSupplyEditor({
                                             {editor.busy
                                                 ? "正在处理…"
                                                 : `校验并提交 ${selected.length} 行`}
-                                        </Button>
+                                        </LoadingButton>
                                     </DialogFooter>
                                 </form>
                             )

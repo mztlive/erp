@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { DownloadIcon, LoaderCircleIcon, PlusIcon } from "lucide-react"
+import { DownloadIcon, PlusIcon } from "lucide-react"
 
 import { FormalActionResult, PageActions } from "@/components/business"
 import { listWorkspaceStyles as styles } from "@/components/business/list-workspace"
@@ -65,9 +65,8 @@ export function SalesOrdersListHeader(props: {
                                 actionKey: "export",
                                 id: "sales-orders-list-header-export",
                                 label: isExporting ? "导出中…" : "导出",
-                                icon: isExporting
-                                    ? LoaderCircleIcon
-                                    : DownloadIcon,
+                                icon: DownloadIcon,
+                                loading: isExporting,
                                 variant: "outline",
                                 disabled: exportDisabled,
                                 onClick: onExport,

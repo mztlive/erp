@@ -15,6 +15,7 @@ import {
 import { DetailPageHeader } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { useBookOperations } from "@/features/sales-selection/hooks/queries"
 import {
     bookIdentity,
@@ -59,8 +60,9 @@ export function BookDetailHeader({
     const primaryAction = (() => {
         if (detail.status === "DRAFT") {
             return (
-                <Button
+                <LoadingButton
                     id="sales-selection-detail-prepare"
+                    loading={operations.prepare.isPending}
                     type="button"
                     size="sm"
                     disabled={pending}
@@ -74,13 +76,14 @@ export function BookDetailHeader({
                 >
                     <SparklesIcon data-icon="inline-start" aria-hidden="true" />
                     开始准备
-                </Button>
+                </LoadingButton>
             )
         }
         if (detail.status === "PENDING_PUBLISH") {
             return (
-                <Button
+                <LoadingButton
                     id="sales-selection-detail-publish"
+                    loading={operations.publish.isPending}
                     type="button"
                     size="sm"
                     disabled={pending}
@@ -94,13 +97,14 @@ export function BookDetailHeader({
                 >
                     <SendIcon data-icon="inline-start" aria-hidden="true" />
                     发布
-                </Button>
+                </LoadingButton>
             )
         }
         if (detail.status === "PUBLISHED") {
             return (
-                <Button
+                <LoadingButton
                     id="sales-selection-detail-copy-link"
+                    loading={operations.copyLink.isPending}
                     type="button"
                     size="sm"
                     disabled={operations.copyLink.isPending || pending}
@@ -108,7 +112,7 @@ export function BookDetailHeader({
                 >
                     <CopyIcon data-icon="inline-start" aria-hidden="true" />
                     复制链接
-                </Button>
+                </LoadingButton>
             )
         }
         if (detail.status === "SUBMITTED" && detail.proposal_id) {
@@ -149,8 +153,9 @@ export function BookDetailHeader({
                         />
                         调整来源与档位
                     </Button>
-                    <Button
+                    <LoadingButton
                         id="sales-selection-detail-void"
+                        loading={operations.void.isPending}
                         type="button"
                         size="sm"
                         variant="outline"
@@ -161,14 +166,19 @@ export function BookDetailHeader({
                     >
                         <BanIcon data-icon="inline-start" aria-hidden="true" />
                         作废
-                    </Button>
+                    </LoadingButton>
                 </>
             ) : null}
             {detail.status === "PENDING_PUBLISH" ? (
                 <>
                     {detail.selection_form === "PACKAGE" ? (
-                        <Button
+                        <LoadingButton
                             id="sales-selection-detail-regenerate"
+                            loading={
+                                operations.regenerate.isPending &&
+                                !operations.regenerate.variables?.tier_ids
+                                    ?.length
+                            }
                             type="button"
                             size="sm"
                             variant="outline"
@@ -185,7 +195,7 @@ export function BookDetailHeader({
                                 aria-hidden="true"
                             />
                             整册重生成
-                        </Button>
+                        </LoadingButton>
                     ) : null}
                     <Button
                         id="sales-selection-detail-reprepare"
@@ -201,8 +211,9 @@ export function BookDetailHeader({
                         />
                         调整来源与档位
                     </Button>
-                    <Button
+                    <LoadingButton
                         id="sales-selection-detail-void"
+                        loading={operations.void.isPending}
                         type="button"
                         size="sm"
                         variant="outline"
@@ -213,13 +224,14 @@ export function BookDetailHeader({
                     >
                         <BanIcon data-icon="inline-start" aria-hidden="true" />
                         作废
-                    </Button>
+                    </LoadingButton>
                 </>
             ) : null}
             {detail.status === "PUBLISHED" ? (
                 <>
-                    <Button
+                    <LoadingButton
                         id="sales-selection-detail-replace-link"
+                        loading={operations.replaceLink.isPending}
                         type="button"
                         size="sm"
                         variant="outline"
@@ -236,9 +248,10 @@ export function BookDetailHeader({
                             aria-hidden="true"
                         />
                         更换链接
-                    </Button>
-                    <Button
+                    </LoadingButton>
+                    <LoadingButton
                         id="sales-selection-detail-close"
+                        loading={operations.close.isPending}
                         type="button"
                         size="sm"
                         variant="outline"
@@ -251,12 +264,13 @@ export function BookDetailHeader({
                         }
                     >
                         关闭
-                    </Button>
+                    </LoadingButton>
                 </>
             ) : null}
             {detail.status === "SUBMITTED" ? (
-                <Button
+                <LoadingButton
                     id="sales-selection-detail-revoke"
+                    loading={operations.revoke.isPending}
                     type="button"
                     size="sm"
                     variant="outline"
@@ -267,7 +281,7 @@ export function BookDetailHeader({
                 >
                     <Link2OffIcon data-icon="inline-start" aria-hidden="true" />
                     撤销链接访问
-                </Button>
+                </LoadingButton>
             ) : null}
             {detail.proposal_id &&
             detail.proposal_no &&

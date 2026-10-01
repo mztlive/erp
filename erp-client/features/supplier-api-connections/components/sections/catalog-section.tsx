@@ -7,7 +7,7 @@ import {
     BackgroundJobProgress,
     surfaceInsetClassName,
 } from "@/components/business"
-import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Card,
     CardContent,
@@ -15,7 +15,6 @@ import {
     CardHeader,
     CardTitle,
 } from "@/components/ui/card"
-import { Spinner } from "@/components/ui/spinner"
 import { Row } from "@/features/supplier-api-connections/components/detail-row"
 import type { ConnectionCenterView } from "@/features/supplier-api-connections/types"
 import { formatDateTime } from "@/lib/datetime"
@@ -86,22 +85,17 @@ export function CatalogSection({
                     ) : null}
                     {canSync || syncBlocker ? (
                         <div className="flex flex-wrap gap-2">
-                            <Button
+                            <LoadingButton
                                 id="supplier-api-connections-catalog-sync"
+                                loading={syncing}
                                 type="button"
                                 size="sm"
                                 disabled={!canSync || syncing}
                                 title={syncBlocker?.message}
                                 onClick={() => void onSync()}
                             >
-                                {syncing ? (
-                                    <Spinner
-                                        className="size-4 animate-spin"
-                                        aria-hidden="true"
-                                    />
-                                ) : null}
                                 {syncing ? "同步中…" : "触发目录同步"}
-                            </Button>
+                            </LoadingButton>
                         </div>
                     ) : null}
                 </CardContent>

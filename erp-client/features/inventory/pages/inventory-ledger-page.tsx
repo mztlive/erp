@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query"
 import { entitySelectorKeys } from "@/features/entity-selectors/hooks/queries"
 import { selectedObjectDirectory } from "@/lib/object-directory"
 
-import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 
 import * as React from "react"
 
@@ -525,11 +525,12 @@ export function InventoryLedgerPage() {
                             <Alert>
                                 <AlertDescription>
                                     {adjustment.lastResult.description}
-                                    <Button
+                                    <LoadingButton
                                         id="inventory-adjustment-dialog-resolve"
                                         type="button"
                                         variant="outline"
                                         disabled={adjustment.isResolving}
+                                        loading={adjustment.isResolving}
                                         onClick={() =>
                                             void adjustment.resolveLastUnknown()
                                         }
@@ -537,7 +538,7 @@ export function InventoryLedgerPage() {
                                         {adjustment.isResolving
                                             ? "查询中…"
                                             : "查询提交结果"}
-                                    </Button>
+                                    </LoadingButton>
                                 </AlertDescription>
                             </Alert>
                         ) : null}

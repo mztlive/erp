@@ -3,12 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import type { ColumnDef } from "@tanstack/react-table"
-import {
-    ArrowUpRightIcon,
-    EyeIcon,
-    Loader2Icon,
-    SearchIcon,
-} from "lucide-react"
+import { ArrowUpRightIcon, EyeIcon, SearchIcon } from "lucide-react"
 
 import { StatusTrackSummary, TableRowActions } from "@/components/business"
 import { Button } from "@/components/ui/button"
@@ -236,20 +231,11 @@ export function useSupplierOrdersListColumns({
                                                       : "查询原结果",
                                                   disabled:
                                                       !canQuery || queryPending,
+                                                  loading: queryPending,
                                                   emphasis: "outline" as const,
                                                   onClick: () => {
                                                       void onQueryResult(r)
                                                   },
-                                                  ...(queryPending
-                                                      ? {
-                                                            leading: (
-                                                                <Loader2Icon
-                                                                    className="size-3.5 animate-spin"
-                                                                    aria-hidden="true"
-                                                                />
-                                                            ),
-                                                        }
-                                                      : {}),
                                               },
                                           ]
                                         : []),

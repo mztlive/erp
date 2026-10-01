@@ -560,6 +560,7 @@ function RoleForm({
                                         </Button>
                                         <form.AppForm>
                                             <form.SubmitButton
+                                                loading={pending}
                                                 id="governance-admin-role-form-submit"
                                                 label={
                                                     role

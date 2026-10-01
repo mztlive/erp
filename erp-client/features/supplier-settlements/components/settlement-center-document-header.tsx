@@ -8,6 +8,7 @@ import {
     WorkspaceTaskFooter,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import type { SettlementDetailView } from "@/features/supplier-settlements/types"
 import { formatDateTime } from "@/lib/datetime"
 
@@ -116,23 +117,18 @@ function SettlementCenterHeaderActions({
     return (
         <div className="flex flex-wrap gap-2">
             {allowed.has("REFRESH_TRIAL") ? (
-                <Button
+                <LoadingButton
                     id="supplier-settlements-center-refresh"
+                    loading={refreshPending}
                     type="button"
                     variant="outline"
                     size="sm"
                     disabled={refreshPending}
                     onClick={() => void onRefresh()}
                 >
-                    <RefreshCwIcon
-                        className={
-                            refreshPending
-                                ? "size-3.5 animate-spin"
-                                : "size-3.5"
-                        }
-                    />
+                    <RefreshCwIcon className="size-3.5" />
                     {refreshPending ? "刷新中…" : "刷新试算"}
-                </Button>
+                </LoadingButton>
             ) : null}
             {allowed.has("SUBMIT_REVIEW") ? (
                 <Button

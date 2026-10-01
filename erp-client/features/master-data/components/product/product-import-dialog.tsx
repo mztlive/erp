@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
 import {
@@ -158,27 +159,30 @@ export function ProductImportDialog({
                         )}
                         {legacyFallback && !direct.active ? (
                             <>
-                                <Button
+                                <LoadingButton
                                     id="product-import-retry"
+                                    loading={direct.active}
                                     variant="outline"
                                     disabled={!file || locked}
                                     onClick={() => void submitDirect()}
                                 >
                                     重试
-                                </Button>
-                                <Button
+                                </LoadingButton>
+                                <LoadingButton
                                     id="product-import-legacy"
+                                    loading={legacy.isPending}
                                     disabled={!file || locked}
                                     onClick={() => void submitLegacy()}
                                 >
                                     {legacy.isPending
                                         ? "提交中…"
                                         : "改用普通上传"}
-                                </Button>
+                                </LoadingButton>
                             </>
                         ) : (
-                            <Button
+                            <LoadingButton
                                 id="product-import-submit"
+                                loading={direct.active}
                                 disabled={!file || locked}
                                 onClick={() => void submitDirect()}
                             >
@@ -187,7 +191,7 @@ export function ProductImportDialog({
                                         ? "登记中…"
                                         : "上传中…"
                                     : "开始导入"}
-                            </Button>
+                            </LoadingButton>
                         )}
                     </div>
                 </div>

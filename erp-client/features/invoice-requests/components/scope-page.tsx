@@ -18,6 +18,7 @@ import { OrganizationUnitFilter } from "@/features/organization/components/organ
 import { ListSearchField } from "@/components/business/list-search-field"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Table,
     TableBody,
@@ -358,16 +359,17 @@ export function InvoiceRequestScopePage() {
             />
 
             <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-                <Button
+                <LoadingButton
                     id="invoice-request-scope-export"
                     type="button"
+                    loading={exporting}
                     variant="outline"
                     size="sm"
                     disabled={exporting || !data || data.total === 0}
                     onClick={() => void handleExport()}
                 >
                     {exporting ? "导出中…" : "导出当前范围"}
-                </Button>
+                </LoadingButton>
             </div>
 
             {detailId ? (

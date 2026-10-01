@@ -4,6 +4,7 @@ import { ArrowRightIcon } from "lucide-react"
 
 import { PaperDocumentViewport } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Dialog,
     DialogContent,
@@ -70,8 +71,9 @@ export function SalesOrderSubmitConfirmDialog({
                     >
                         返回修改
                     </Button>
-                    <Button
+                    <LoadingButton
                         id="sales-orders-submit-confirm-confirm"
+                        loading={pending}
                         type="button"
                         disabled={pending}
                         onClick={() => {
@@ -79,7 +81,7 @@ export function SalesOrderSubmitConfirmDialog({
                         }}
                     >
                         {pending ? "提交中…" : "确认提交"}
-                    </Button>
+                    </LoadingButton>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

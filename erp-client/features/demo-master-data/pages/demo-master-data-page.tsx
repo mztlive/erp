@@ -10,6 +10,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { FormalActionConfirmDialog } from "@/components/business/workflow"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import type { DemoCounts } from "@/features/demo-master-data/api"
 import {
     useApplyDemoMasterDataMutation,
@@ -70,11 +71,12 @@ export function DemoMasterDataPage() {
                 description="生成客户、供应商、商品、仓库、字典及供给，并准备岗位账号、部门、审批流程和默认负责人。新建岗位账号初始密码为 123456，已有账号不改密码。删除演示主数据会清空当前数据库，包括非演示数据、所有单据、审批配置、部门和其他账号，仅保留 admin 账号及必要超管授权。清空后不可恢复，可以重新生成演示数据。"
             >
                 {canApply ? (
-                    <Button
+                    <LoadingButton
                         id="demo-master-data-apply"
                         type="button"
                         size="sm"
                         disabled={!enabled || busy}
+                        loading={apply.isPending}
                         onClick={() => {
                             remove.reset()
                             setProgress("正在生成")
@@ -84,7 +86,7 @@ export function DemoMasterDataPage() {
                         {apply.isPending
                             ? (progress ?? "正在生成")
                             : "生成演示主数据"}
-                    </Button>
+                    </LoadingButton>
                 ) : null}
                 {canRemove ? (
                     <Button

@@ -4,6 +4,7 @@ import * as React from "react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Dialog,
     DialogContent,
@@ -125,14 +126,15 @@ export function PublishDialog({
                     >
                         取消
                     </Button>
-                    <Button
+                    <LoadingButton
+                        loading={publish.isPending}
                         id={`${id}-confirm`}
                         type="button"
                         disabled={publish.isPending}
                         onClick={() => void handlePublish()}
                     >
                         {publish.isPending ? "正在发布…" : "确认发布"}
-                    </Button>
+                    </LoadingButton>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

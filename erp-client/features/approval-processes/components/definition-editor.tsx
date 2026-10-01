@@ -283,6 +283,7 @@ export function DefinitionEditor({
                 ) : (
                     <form.AppForm>
                         <form.SubmitButton
+                            loading={replaceNodes.isPending}
                             id={`${id}-save`}
                             label="保存草稿"
                             pendingLabel="保存中…"

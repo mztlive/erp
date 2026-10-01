@@ -4,6 +4,7 @@ import type { ReactNode } from "react"
 import { ChevronDownIcon, FilterIcon, XIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Popover,
     PopoverContent,
@@ -140,13 +141,13 @@ export function ListFilterPopover({
                             >
                                 {listFilterText.cancel}
                             </Button>
-                            <Button
+                            <LoadingButton
                                 id={`${idPrefix}-more-apply`}
                                 type="submit"
                                 size="sm"
                             >
                                 {listFilterText.apply}
-                            </Button>
+                            </LoadingButton>
                         </div>
                     </div>
                 </form>

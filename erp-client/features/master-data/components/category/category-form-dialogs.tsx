@@ -185,7 +185,8 @@ export function CategoryReviseDialog({
             form={form as never}
             result={result}
             error={mutation.error}
-            pending={mutation.isPending || !target}
+            pending={mutation.isPending}
+            disabled={!target}
             submitLabel={mode === "move" ? "保存上级调整" : "保存修改"}
             excludeStableId={ids.stableId || undefined}
         />

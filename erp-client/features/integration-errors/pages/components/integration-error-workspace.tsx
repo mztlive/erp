@@ -117,6 +117,8 @@ export function IntegrationErrorWorkspace({
                             item={item}
                             can={actions.can}
                             formalPending={actions.formalPending}
+                            pendingTaskAction={actions.pendingTaskAction}
+                            pendingDirectAction={actions.pendingDirectAction}
                             responsibilityStatus={actions.responsibilityStatus}
                             comment={actions.comment}
                             onCommentChange={actions.setComment}

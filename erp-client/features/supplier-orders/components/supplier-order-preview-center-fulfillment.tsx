@@ -1,10 +1,11 @@
 "use client"
 
-import { EyeIcon, EyeOffIcon, Loader2Icon } from "lucide-react"
+import { EyeIcon, EyeOffIcon } from "lucide-react"
 
 import { DocumentSection, surfaceInsetClassName } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Card,
     CardContent,
@@ -116,24 +117,18 @@ export function FulfillmentSection({
                         </p>
                     ) : null}
                     <div className="flex gap-2 pt-1">
-                        <Button
+                        <LoadingButton
                             id="supplier-order-center-fulfillment-reveal"
+                            loading={revealPending}
                             type="button"
                             size="sm"
                             variant="outline"
                             disabled={!canReveal || revealPending}
                             onClick={onReveal}
                         >
-                            {revealPending ? (
-                                <Loader2Icon
-                                    className="size-3.5 animate-spin"
-                                    aria-hidden="true"
-                                />
-                            ) : (
-                                <EyeIcon className="size-3.5" />
-                            )}
+                            {!revealPending && <EyeIcon className="size-3.5" />}
                             {revealPending ? "揭示中…" : "短时揭示"}
-                        </Button>
+                        </LoadingButton>
                         {address.revealed ? (
                             <Button
                                 id="supplier-order-center-fulfillment-hide"

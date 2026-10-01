@@ -6,6 +6,7 @@ import { z } from "zod"
 
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Dialog,
     DialogContent,
@@ -14,7 +15,6 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
-import { Spinner } from "@/components/ui/spinner"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type {
     CapabilityCode,
@@ -161,21 +161,16 @@ export function CapConfigDialog({
                         >
                             取消
                         </Button>
-                        <Button
+                        <LoadingButton
                             id="supplier-api-connections-cap-config-submit"
+                            loading={pending || isSubmitting}
                             type="submit"
                             disabled={
                                 pending || isSubmitting || !dirty || !canSubmit
                             }
                         >
-                            {pending || isSubmitting ? (
-                                <Spinner
-                                    className="size-4 animate-spin"
-                                    aria-hidden="true"
-                                />
-                            ) : null}
                             {pending || isSubmitting ? "提交中…" : "保存配置"}
-                        </Button>
+                        </LoadingButton>
                     </DialogFooter>
                 </form>
             </DialogContent>

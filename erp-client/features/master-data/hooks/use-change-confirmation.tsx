@@ -1,6 +1,7 @@
 "use client"
 import * as React from "react"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Dialog,
     DialogContent,
@@ -70,12 +71,13 @@ export function useChangeConfirmation(id: string) {
                     >
                         取消
                     </Button>
-                    <Button
+                    <LoadingButton
                         id={`${id}-confirm`}
                         variant={
                             request?.destructive ? "destructive" : "default"
                         }
                         disabled={pending}
+                        loading={pending}
                         onClick={async () => {
                             if (!request || running.current) return
                             running.current = true
@@ -95,7 +97,7 @@ export function useChangeConfirmation(id: string) {
                         }}
                     >
                         {pending ? "处理中…" : request?.confirmLabel}
-                    </Button>
+                    </LoadingButton>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

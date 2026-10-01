@@ -1,7 +1,8 @@
-import { LoaderCircleIcon, PlusIcon } from "lucide-react"
+import { PlusIcon } from "lucide-react"
 
 import { MoneyValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Dialog,
     DialogContent,
@@ -108,32 +109,27 @@ export function ReceivableActionDialogs({
                         >
                             取消
                         </Button>
-                        <Button
+                        <LoadingButton
                             id="customer-receivables-party-picker-confirm"
                             type="button"
+                            loading={createPending}
                             disabled={!selectedPartyId || createPending}
                             onClick={() =>
                                 onStartSession(partyPickerMode, selectedPartyId)
                             }
                         >
-                            {createPending ? (
-                                <LoaderCircleIcon
-                                    data-icon="inline-start"
-                                    aria-hidden="true"
-                                    className="animate-spin"
-                                />
-                            ) : (
+                            {!createPending ? (
                                 <PlusIcon
                                     data-icon="inline-start"
                                     aria-hidden="true"
                                 />
-                            )}
+                            ) : null}
                             {createPending
                                 ? "创建中…"
                                 : partyPickerMode === "receipt"
                                   ? "登记回款"
                                   : "登记销项发票"}
-                        </Button>
+                        </LoadingButton>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
@@ -223,9 +219,10 @@ export function ReceivableActionDialogs({
                         >
                             取消
                         </Button>
-                        <Button
+                        <LoadingButton
                             id="customer-receivables-reverse-confirm"
                             type="button"
+                            loading={reversePending}
                             disabled={
                                 reversePending ||
                                 !reverseReason.trim() ||
@@ -233,15 +230,8 @@ export function ReceivableActionDialogs({
                             }
                             onClick={onConfirmReverse}
                         >
-                            {reversePending ? (
-                                <LoaderCircleIcon
-                                    data-icon="inline-start"
-                                    aria-hidden="true"
-                                    className="animate-spin"
-                                />
-                            ) : null}
                             {reversePending ? "提交中…" : "提交红票"}
-                        </Button>
+                        </LoadingButton>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

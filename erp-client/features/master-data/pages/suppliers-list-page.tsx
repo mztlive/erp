@@ -106,6 +106,7 @@ export function SuppliersListPage() {
                     icon: DownloadIcon,
                     variant: "outline",
                     disabled: exportPending || state.rows.length === 0,
+                    loading: exportPending,
                     onClick: state.onExport,
                 },
                 {

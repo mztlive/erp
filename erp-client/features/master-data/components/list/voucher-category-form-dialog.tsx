@@ -311,6 +311,7 @@ export function VoucherCategoryFormDialog({
                                 </DialogClose>
                                 <form.AppForm>
                                     <form.SubmitButton
+                                        loading={mutationPending}
                                         id={`${baseId}-submit`}
                                         label={submitLabel}
                                         pendingLabel="提交中…"

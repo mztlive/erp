@@ -1,11 +1,6 @@
 "use client"
 
-import {
-    ChevronDownIcon,
-    DownloadIcon,
-    LoaderCircleIcon,
-    RefreshCwIcon,
-} from "lucide-react"
+import { ChevronDownIcon, DownloadIcon, RefreshCwIcon } from "lucide-react"
 
 import { PageActions } from "@/components/business"
 import { listWorkspaceStyles } from "@/components/business/list-workspace"
@@ -86,7 +81,8 @@ export function LedgerHeader({
                             actionKey: "export",
                             id: "inventory-ledger-export",
                             label: isExporting ? "导出中…" : "导出",
-                            icon: isExporting ? LoaderCircleIcon : DownloadIcon,
+                            icon: DownloadIcon,
+                            loading: isExporting,
                             variant: "outline",
                             disabled: isExporting || !canExport || total === 0,
                             onClick: onExport,

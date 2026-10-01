@@ -251,6 +251,7 @@ export function WarehouseReviseDialog({
                                 {([inboundUserId, outboundUserId]) => (
                                     <form.AppForm>
                                         <form.SubmitButton
+                                            loading={updateMutation.isPending}
                                             id="master-data-warehouse-handler-save"
                                             label="保存配置"
                                             pendingLabel="保存中…"

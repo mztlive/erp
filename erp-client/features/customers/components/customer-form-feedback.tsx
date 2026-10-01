@@ -2,6 +2,7 @@
 
 import { FormalActionResult } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import type { CustomerMutationResult } from "@/features/customers/types"
 import type { CustomerFormApi } from "@/features/customers/components/customer-form-values"
 
@@ -38,16 +39,17 @@ export function CustomerFormResultPanel({
             reference={result.idempotencyKey}
             referenceLabel="原任务号"
             actions={
-                <Button
+                <LoadingButton
                     id={`customers-form-${mode}-query-result`}
                     type="button"
                     size="sm"
                     variant="outline"
                     disabled={isQueryingIdempotency}
+                    loading={isQueryingIdempotency}
                     onClick={() => onQueryFinalResult(result.idempotencyKey)}
                 >
                     查询最终结果
-                </Button>
+                </LoadingButton>
             }
         />
     )
@@ -58,6 +60,7 @@ export function CustomerFormActionBar({
     form,
     result,
     isPending,
+    isSubmitting,
     submitLabel,
     dirty,
     onCancel,
@@ -67,6 +70,7 @@ export function CustomerFormActionBar({
     form: Pick<CustomerFormApi, "AppForm" | "SubmitButton">
     result: CustomerMutationResult | null
     isPending: boolean
+    isSubmitting: boolean
     submitLabel: string
     dirty: boolean
     onCancel: () => void
@@ -102,6 +106,7 @@ export function CustomerFormActionBar({
                         id="customers-form-submit"
                         label={submitLabel}
                         disabled={isPending}
+                        loading={isSubmitting}
                     />
                 </form.AppForm>
             ) : (

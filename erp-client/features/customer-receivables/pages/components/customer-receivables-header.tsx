@@ -89,7 +89,8 @@ export function CustomerReceivablesHeader({
                         ? "customer-receivables-header-embedded-register-receipt"
                         : "customer-receivables-header-register-receipt",
                     label: startSessionPending ? "创建中…" : "登记回款",
-                    icon: startSessionPending ? LoaderCircleIcon : WalletIcon,
+                    icon: WalletIcon,
+                    loading: startSessionPending,
                     disabled: !canRegisterReceipt || startSessionPending,
                     title: canRegisterReceipt
                         ? undefined

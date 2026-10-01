@@ -18,6 +18,7 @@ import {
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button, buttonVariants } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
     DescriptionDetails,
     DescriptionItem,
@@ -911,15 +912,17 @@ function FulfillmentEvidenceLink({ assetId }: { assetId: string }) {
     })
     return (
         <span className="inline-flex flex-col gap-1">
-            <button
+            <LoadingButton
                 id={`workspace-fulfillment-evidence-${toAutomationIdSegment(assetId)}`}
                 type="button"
-                className="text-left text-primary underline-offset-2 hover:underline"
+                variant="link"
+                className="h-auto justify-start p-0 text-left text-primary underline-offset-2 hover:underline"
                 disabled={download.isPending}
+                loading={download.isPending}
                 onClick={() => download.mutate()}
             >
                 {download.isPending ? "正在读取…" : "下载凭证"}
-            </button>
+            </LoadingButton>
             {download.isError ? (
                 <span role="alert" className="text-xs text-destructive">
                     凭证读取失败，请重试

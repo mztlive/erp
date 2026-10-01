@@ -12,7 +12,7 @@ import {
     UserRoundIcon,
 } from "lucide-react"
 
-import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import {
@@ -182,7 +182,8 @@ export function ExecutionHistory({
                     ))
                 )}
                 {hasMore && onLoadMore ? (
-                    <Button
+                    <LoadingButton
+                        loading={loadingMore}
                         id={`${id}-load-more`}
                         type="button"
                         variant="outline"
@@ -191,7 +192,7 @@ export function ExecutionHistory({
                         onClick={onLoadMore}
                     >
                         {loadingMore ? "加载中" : "加载更多"}
-                    </Button>
+                    </LoadingButton>
                 ) : null}
             </CardContent>
         </Card>

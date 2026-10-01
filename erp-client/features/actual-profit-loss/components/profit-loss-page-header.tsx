@@ -1,4 +1,4 @@
-import { DownloadIcon, LoaderCircleIcon, RefreshCwIcon } from "lucide-react"
+import { DownloadIcon, RefreshCwIcon } from "lucide-react"
 
 import { DataFreshness, PageActions } from "@/components/business"
 import { ListWorkspaceHeader } from "@/components/business/list-workspace"
@@ -13,6 +13,7 @@ export function ProfitLossPageHeader({
     analysisReady,
     exportDisabled,
     exportPending = false,
+    refreshing = false,
     onRefresh,
     onExport,
 }: {
@@ -22,6 +23,7 @@ export function ProfitLossPageHeader({
     analysisReady: boolean
     exportDisabled: boolean
     exportPending?: boolean
+    refreshing?: boolean
     onRefresh: () => void
     onExport: () => void
 }) {
@@ -53,6 +55,7 @@ export function ProfitLossPageHeader({
                         {
                             actionKey: "refresh",
                             id: "actual-profit-loss-header-refresh",
+                            loading: refreshing,
                             label: "刷新",
                             icon: RefreshCwIcon,
                             variant: "ghost",
@@ -66,10 +69,9 @@ export function ProfitLossPageHeader({
                         {
                             actionKey: "export",
                             id: "actual-profit-loss-header-export",
+                            loading: exportPending,
                             label: exportPending ? "导出中…" : "导出",
-                            icon: exportPending
-                                ? LoaderCircleIcon
-                                : DownloadIcon,
+                            icon: DownloadIcon,
                             variant: "outline",
                             disabled: exportDisabled,
                             onClick: () => {

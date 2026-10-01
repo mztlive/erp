@@ -10,6 +10,7 @@ import {
     surfacePanelClassName,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
     ProductBasicSection,
     ProductHistorySection,
@@ -383,8 +384,9 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                         >
                                             取消修改
                                         </Button>
-                                        <Button
+                                        <LoadingButton
                                             id="master-data-product-detail-save-bottom"
+                                            loading={saving}
                                             type="button"
                                             size="sm"
                                             disabled={saving}
@@ -392,7 +394,7 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                         >
                                             <SaveIcon aria-hidden />
                                             保存更新
-                                        </Button>
+                                        </LoadingButton>
                                     </div>
                                 ) : null}
                             </form>

@@ -1,6 +1,7 @@
 import { OptionCombobox } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 
 import type { TerminalConfirm } from "../../components/terminal-action-dialog"
 import type {
@@ -13,6 +14,7 @@ export function IntegrationDirectReconciliation({
     item,
     can,
     formalPending,
+    pendingDirectAction,
     reconReasonId,
     onReconReasonIdChange,
     reasonMismatches,
@@ -22,6 +24,7 @@ export function IntegrationDirectReconciliation({
     item: IntegrationResolutionItemView
     can: (action: IntegrationActionKind) => boolean
     formalPending: boolean
+    pendingDirectAction?: IntegrationTaskActionKind
     reconReasonId: string
     onReconReasonIdChange: (value: string) => void
     reasonMismatches: (
@@ -105,8 +108,11 @@ export function IntegrationDirectReconciliation({
             )}
             <div className="flex flex-wrap gap-2">
                 {can("QUERY_ORIGINAL_RESULT") ? (
-                    <Button
+                    <LoadingButton
                         id="integration-direct-query-original-result"
+                        loading={
+                            pendingDirectAction === "QUERY_ORIGINAL_RESULT"
+                        }
                         type="button"
                         size="sm"
                         variant="outline"
@@ -116,11 +122,12 @@ export function IntegrationDirectReconciliation({
                         }
                     >
                         查询原结果
-                    </Button>
+                    </LoadingButton>
                 ) : null}
                 {can("REPLAY_ORIGINAL") ? (
-                    <Button
+                    <LoadingButton
                         id="integration-direct-replay-original"
+                        loading={pendingDirectAction === "REPLAY_ORIGINAL"}
                         type="button"
                         size="sm"
                         variant="outline"
@@ -128,11 +135,12 @@ export function IntegrationDirectReconciliation({
                         onClick={() => void onDirectAction("REPLAY_ORIGINAL")}
                     >
                         重新提交
-                    </Button>
+                    </LoadingButton>
                 ) : null}
                 {can("REATTRIBUTE") ? (
-                    <Button
+                    <LoadingButton
                         id="integration-direct-reatribute"
+                        loading={pendingDirectAction === "REATTRIBUTE"}
                         type="button"
                         size="sm"
                         variant="outline"
@@ -140,11 +148,12 @@ export function IntegrationDirectReconciliation({
                         onClick={() => void onDirectAction("REATTRIBUTE")}
                     >
                         重新归集
-                    </Button>
+                    </LoadingButton>
                 ) : null}
                 {can("LINK_COMPENSATION") ? (
-                    <Button
+                    <LoadingButton
                         id="integration-direct-link-compensation"
+                        loading={pendingDirectAction === "LINK_COMPENSATION"}
                         type="button"
                         size="sm"
                         variant="outline"
@@ -154,11 +163,12 @@ export function IntegrationDirectReconciliation({
                         onClick={() => void onDirectAction("LINK_COMPENSATION")}
                     >
                         关联补偿
-                    </Button>
+                    </LoadingButton>
                 ) : null}
                 {can("ADD_EVIDENCE") ? (
-                    <Button
+                    <LoadingButton
                         id="integration-direct-add-evidence"
+                        loading={pendingDirectAction === "ADD_EVIDENCE"}
                         type="button"
                         size="sm"
                         variant="outline"
@@ -168,7 +178,7 @@ export function IntegrationDirectReconciliation({
                         onClick={() => void onDirectAction("ADD_EVIDENCE")}
                     >
                         补充证据（暂不完成对账）
-                    </Button>
+                    </LoadingButton>
                 ) : null}
             </div>
         </div>

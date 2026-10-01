@@ -19,6 +19,7 @@ import {
 import { useAppForm } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Dialog,
     DialogClose,
@@ -340,14 +341,15 @@ function RuleDialog({
                                 const pending =
                                     isSubmitting || mutation.isPending
                                 return (
-                                    <Button
+                                    <LoadingButton
+                                        loading={pending}
                                         id="finance-responsibilities-rule-submit"
                                         type="submit"
                                         data-testid="finance-responsibility-save"
                                         disabled={!canSubmit || pending}
                                     >
                                         {pending ? "保存中…" : "保存规则"}
-                                    </Button>
+                                    </LoadingButton>
                                 )
                             }}
                         </form.Subscribe>

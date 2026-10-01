@@ -5,6 +5,8 @@ import Link from "next/link"
 import { MoreHorizontalIcon, type LucideIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
+import { Spinner } from "@/components/ui/spinner"
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -29,6 +31,8 @@ export type TableRowAction = {
     /** 有 href 且未禁用时，控件渲染为链接。 */
     href?: string
     disabled?: boolean
+    /** 当前动作正在执行；禁用重复点击并显示转圈。 */
+    loading?: boolean
     /** 同时作为 title。禁用时再包一层，保证悬停能看到原因。 */
     disabledReason?: string
     hidden?: boolean
@@ -47,7 +51,7 @@ function ActionLabel({ action }: { action: TableRowAction }) {
     const Icon = action.icon
     return (
         <>
-            {action.leading ? (
+            {action.loading ? null : action.leading ? (
                 <span aria-hidden="true" className="inline-flex shrink-0">
                     {action.leading}
                 </span>
@@ -74,7 +78,7 @@ function ActionControl({
     variant: "ghost" | "outline"
 }) {
     const button =
-        action.href && !action.disabled ? (
+        action.href && !action.disabled && !action.loading ? (
             <Button
                 id={action.id}
                 type="button"
@@ -91,7 +95,7 @@ function ActionControl({
                 <ActionLabel action={action} />
             </Button>
         ) : (
-            <Button
+            <LoadingButton
                 id={action.id}
                 type="button"
                 size="sm"
@@ -99,6 +103,7 @@ function ActionControl({
                 className={actionButtonClassName}
                 ref={action.buttonRef}
                 disabled={action.disabled}
+                loading={action.loading}
                 title={action.disabledReason}
                 onClick={(event) => {
                     event.stopPropagation()
@@ -106,7 +111,7 @@ function ActionControl({
                 }}
             >
                 <ActionLabel action={action} />
-            </Button>
+            </LoadingButton>
         )
     if (!action.disabled || !action.disabledReason) return button
     return (
@@ -121,11 +126,12 @@ function MenuAction({ action }: { action: TableRowAction }) {
         <DropdownMenuItem
             id={action.id}
             variant={action.destructive ? "destructive" : "default"}
-            disabled={action.disabled}
+            disabled={action.disabled || action.loading}
+            aria-busy={action.loading || undefined}
             title={action.disabledReason}
             className="min-h-8 gap-2 rounded-md text-[13px] [&_svg]:text-muted-foreground data-[variant=destructive]:[&_svg]:text-destructive"
             render={
-                action.href && !action.disabled ? (
+                action.href && !action.disabled && !action.loading ? (
                     <Link href={action.href} />
                 ) : undefined
             }
@@ -134,6 +140,13 @@ function MenuAction({ action }: { action: TableRowAction }) {
                 action.onClick?.(event)
             }}
         >
+            {action.loading ? (
+                <Spinner
+                    aria-hidden="true"
+                    role="presentation"
+                    aria-label={undefined}
+                />
+            ) : null}
             <ActionLabel action={action} />
         </DropdownMenuItem>
     )

@@ -145,6 +145,7 @@ export function SupplierAllocationSessionPage({
                         {
                             actionKey: "save-draft",
                             id: "supplier-payables-session-page-save-draft",
+                            loading: isSavingDraft,
                             label: "保存草稿",
                             icon: SaveIcon,
                             variant: "outline",

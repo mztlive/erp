@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { ArrowRightIcon, FilePenLineIcon, LoaderCircleIcon } from "lucide-react"
+import { ArrowRightIcon, FilePenLineIcon } from "lucide-react"
 
 import {
     AlertDialog,
@@ -147,18 +147,12 @@ export function SalesOrderDetailCommandDialogs({
                         取消
                     </AlertDialogCancel>
                     <AlertDialogAction
+                        loading={pending}
                         id="sales-orders-detail-change-confirm"
                         type="button"
                         disabled={pending}
                         onClick={() => void handleConfirm()}
                     >
-                        {pending ? (
-                            <LoaderCircleIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                                className="animate-spin"
-                            />
-                        ) : null}
                         {pending ? "创建中" : "确认创建"}
                     </AlertDialogAction>
                 </AlertDialogFooter>

@@ -145,6 +145,7 @@ export function FinancialRequestDialog({
                             <form.SubmitButton
                                 id={`${id}-submit`}
                                 label={unknown ? "核对提交结果" : submitLabel}
+                                loading={pending}
                                 disabled={pending}
                             />
                         </form.AppForm>

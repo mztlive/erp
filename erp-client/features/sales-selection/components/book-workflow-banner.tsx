@@ -13,6 +13,7 @@ import {
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Progress,
     ProgressLabel,
@@ -305,8 +306,9 @@ export function BookWorkflowBanner({
                         </p>
                     </div>
                     {publicHref ? (
-                        <Button
+                        <LoadingButton
                             id="sales-selection-detail-copy-link-banner"
+                            loading={operations.copyLink.isPending}
                             type="button"
                             size="sm"
                             disabled={operations.copyLink.isPending || pending}
@@ -319,7 +321,7 @@ export function BookWorkflowBanner({
                                 aria-hidden="true"
                             />
                             复制对客选品链接
-                        </Button>
+                        </LoadingButton>
                     ) : null}
                 </div>
             ) : null}

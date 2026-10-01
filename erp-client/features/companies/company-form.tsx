@@ -3,6 +3,7 @@ import { useState } from "react"
 import { z } from "zod"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Dialog,
     DialogContent,
@@ -166,17 +167,18 @@ export const CompanyForm = ({
                         >
                             取消
                         </Button>
-                        <Button
+                        <LoadingButton
                             id="company-form-submit"
                             type="submit"
                             disabled={mutation.isPending}
+                            loading={mutation.isPending}
                         >
                             {mutation.isPending
                                 ? "保存中…"
                                 : uncertain
                                   ? "重试核对"
                                   : "保存"}
-                        </Button>
+                        </LoadingButton>
                     </div>
                 </form>
             </DialogContent>

@@ -246,6 +246,9 @@ function useAccessAuditPage(surface: "access" | "audit" = "access") {
         openExplain,
         openEvent,
         startChange,
+        previewingCommand: changeFlow.previewMutation.isPending
+            ? changeFlow.previewMutation.variables
+            : null,
         setRoleAssignment,
         setDeletingRole,
     })

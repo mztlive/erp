@@ -44,6 +44,7 @@ export function CategoryFormDialogFrame({
     result,
     error,
     pending,
+    disabled = false,
     submitLabel,
     excludeStableId,
     onReset,
@@ -86,6 +87,7 @@ export function CategoryFormDialogFrame({
             label?: string
             pendingLabel?: string
             disabled?: boolean
+            loading?: boolean
         }>
         state: { isDirty: boolean }
         handleSubmit: () => unknown
@@ -93,6 +95,7 @@ export function CategoryFormDialogFrame({
     error?: unknown
     result: MasterDataMutationResult | null
     pending: boolean
+    disabled?: boolean
     submitLabel: string
     excludeStableId?: string
     onReset?: () => void
@@ -130,18 +133,19 @@ export function CategoryFormDialogFrame({
     React.useEffect(() => {
         if (!open) return
         const beforeUnload = (event: BeforeUnloadEvent) => {
-            if (pending || form.state.isDirty) event.preventDefault()
+            if (pending || disabled || form.state.isDirty)
+                event.preventDefault()
         }
         window.addEventListener("beforeunload", beforeUnload)
         return () => window.removeEventListener("beforeunload", beforeUnload)
-    }, [open, pending, form])
+    }, [open, pending, disabled, form])
 
     return (
         <>
             <Dialog
                 open={open}
                 onOpenChange={(next) => {
-                    if (pending) return
+                    if (pending || disabled) return
                     if (!next && form.state.isDirty) {
                         setDiscardOpen(true)
                         return
@@ -192,7 +196,7 @@ export function CategoryFormDialogFrame({
                                 }}
                             >
                                 <fieldset
-                                    disabled={pending}
+                                    disabled={pending || disabled}
                                     className="grid min-w-0 gap-4"
                                 >
                                     {mode !== "move" ? (
@@ -352,7 +356,7 @@ export function CategoryFormDialogFrame({
                                                 id={`${prefix}-cancel`}
                                                 type="button"
                                                 variant="outline"
-                                                disabled={pending}
+                                                disabled={pending || disabled}
                                             />
                                         }
                                     >
@@ -367,7 +371,8 @@ export function CategoryFormDialogFrame({
                                                     : submitLabel
                                             }
                                             pendingLabel="提交中…"
-                                            disabled={pending}
+                                            loading={pending}
+                                            disabled={pending || disabled}
                                         />
                                     </form.AppForm>
                                 </DialogFooter>

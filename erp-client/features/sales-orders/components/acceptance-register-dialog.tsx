@@ -256,6 +256,7 @@ export function AcceptanceRegisterDialog({
                                 size="sm"
                                 label={postPending ? "提交中…" : primaryLabel}
                                 pendingLabel="提交中…"
+                                loading={postPending}
                                 disabled={
                                     !canPost ||
                                     postPending ||

@@ -8,9 +8,9 @@ import {
     QuickPreviewSheet,
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
-import { LoaderCircleIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { Separator } from "@/components/ui/separator"
 import type {
     BalanceDetailView,
@@ -93,10 +93,11 @@ function InventoryBalancePreview({
                         {detail.balance.allowedActions.includes(
                             "CREATE_ADJUSTMENT",
                         ) ? (
-                            <Button
+                            <LoadingButton
                                 id="inventory-balance-preview-start-adjustment"
                                 type="button"
                                 disabled={isCreating}
+                                loading={isCreating}
                                 title={
                                     detail.balance.actionBlockers.find(
                                         (b) => b.action === "CREATE_ADJUSTMENT",
@@ -106,15 +107,8 @@ function InventoryBalancePreview({
                                     void onStartAdjustment(detail.balance)
                                 }
                             >
-                                {isCreating ? (
-                                    <LoaderCircleIcon
-                                        data-icon="inline-start"
-                                        aria-hidden="true"
-                                        className="animate-spin"
-                                    />
-                                ) : null}
                                 {isCreating ? "创建中…" : "发起库存调整"}
-                            </Button>
+                            </LoadingButton>
                         ) : null}
                     </>
                 ) : null

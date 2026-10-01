@@ -1,7 +1,7 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { Spinner } from "@/components/ui/spinner"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Dialog,
     DialogContent,
@@ -83,21 +83,16 @@ export function DisableConnectionDialog({
                     >
                         取消
                     </Button>
-                    <Button
+                    <LoadingButton
                         id="supplier-api-connections-disable-confirm"
+                        loading={pending}
                         type="button"
                         variant="destructive"
                         disabled={!canDisable || pending}
                         onClick={() => void onSubmit()}
                     >
-                        {pending ? (
-                            <Spinner
-                                className="size-4 animate-spin"
-                                aria-hidden="true"
-                            />
-                        ) : null}
                         {pending ? "停用中…" : "确认停用"}
-                    </Button>
+                    </LoadingButton>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

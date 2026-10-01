@@ -64,7 +64,7 @@ export function FulfillmentOperationsWorkspace({
                     <FulfillmentResultPanel
                         lastResult={controller.lastResult}
                         currentUrl={controller.currentUrl}
-                        resolvePending={controller.formalPending}
+                        resolvePending={controller.resolvePending}
                         onResolveUnknown={() =>
                             void controller.handleResolveUnknown()
                         }
@@ -157,6 +157,7 @@ export function FulfillmentOperationsWorkspace({
                         canExecute={controller.canExecute}
                         canPost={controller.canPost}
                         formalPending={controller.formalPending}
+                        savePending={controller.savePending}
                         supportsSave={controller.supportsSave}
                         dirty={controller.dirty}
                         autoNext={controller.autoNext}

@@ -11,6 +11,7 @@ import {
 import { listWorkspaceEmptyStateClassName } from "@/components/business/list-workspace"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type {
     ReceivableScopeListView,
@@ -261,16 +262,17 @@ export function ReceivableScopeListPane({
             />
 
             <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-                <Button
+                <LoadingButton
                     id="customer-receivables-scope-export"
                     type="button"
+                    loading={exporting}
                     variant="outline"
                     size="sm"
                     disabled={exporting || !data || data.total === 0}
                     onClick={onExport}
                 >
                     {exporting ? "导出中…" : "导出当前范围"}
-                </Button>
+                </LoadingButton>
             </div>
         </>
     )

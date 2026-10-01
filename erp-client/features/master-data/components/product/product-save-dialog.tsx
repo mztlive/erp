@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Dialog,
     DialogContent,
@@ -102,13 +103,14 @@ export function ProductSaveDialog({
                         >
                             继续编辑
                         </Button>
-                        <Button
+                        <LoadingButton
                             id="master-data-product-save-confirm"
+                            loading={pending}
                             type="submit"
                             disabled={pending || !effective.canRevise}
                         >
                             {pending ? "保存中…" : "确认保存"}
-                        </Button>
+                        </LoadingButton>
                     </DialogFooter>
                 </form>
             </DialogContent>

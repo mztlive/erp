@@ -389,6 +389,7 @@ export function AccountFormDialog({
                         </Button>
                         <form.AppForm>
                             <form.SubmitButton
+                                loading={pending}
                                 id={`${id}-submit`}
                                 label={isEdit ? "保存" : "创建"}
                             />

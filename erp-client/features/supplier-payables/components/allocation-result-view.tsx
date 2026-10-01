@@ -4,7 +4,7 @@ import Link from "next/link"
 
 import { FormalActionResult } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import { Spinner } from "@/components/ui/spinner"
+import { LoadingButton } from "@/components/ui/loading-button"
 import type { FormalSubmitResult } from "@/features/supplier-payables/types"
 
 export type AllocationResultViewProps = {
@@ -59,22 +59,17 @@ export function AllocationResultView({
             actions={
                 <>
                     {result.status === "unknown" && hasSubmitKey ? (
-                        <Button
+                        <LoadingButton
                             id="supplier-payables-allocation-result-resolve"
                             type="button"
+                            loading={pending}
                             variant="outline"
                             size="sm"
                             disabled={pending}
                             onClick={() => void onResolveUnknown()}
                         >
-                            {pending ? (
-                                <Spinner
-                                    className="size-4 animate-spin"
-                                    aria-hidden="true"
-                                />
-                            ) : null}
                             {pending ? "查询中…" : "按操作号查询最终结果"}
-                        </Button>
+                        </LoadingButton>
                     ) : null}
                     {result.status === "blocked" &&
                     result.existingDocumentId &&

@@ -29,6 +29,7 @@ export function BrandFormDialogFrame({
     form,
     result,
     pending,
+    disabled = false,
     submitLabel,
     onReset,
     logoPreviewUrl,
@@ -63,11 +64,13 @@ export function BrandFormDialogFrame({
             label?: string
             pendingLabel?: string
             disabled?: boolean
+            loading?: boolean
         }>
         handleSubmit: () => unknown
     }
     result: MasterDataMutationResult | null
     pending: boolean
+    disabled?: boolean
     submitLabel: string
     onReset?: () => void
     logoPreviewUrl: string
@@ -170,7 +173,7 @@ export function BrandFormDialogFrame({
                                             id={`${prefix}-cancel`}
                                             type="button"
                                             variant="outline"
-                                            disabled={pending}
+                                            disabled={pending || disabled}
                                         />
                                     }
                                 >
@@ -183,7 +186,8 @@ export function BrandFormDialogFrame({
                                             pending ? "提交中…" : submitLabel
                                         }
                                         pendingLabel="提交中…"
-                                        disabled={pending}
+                                        loading={pending}
+                                        disabled={pending || disabled}
                                     />
                                 </form.AppForm>
                             </DialogFooter>

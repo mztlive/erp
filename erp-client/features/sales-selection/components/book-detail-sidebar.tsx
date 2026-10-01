@@ -12,6 +12,7 @@ import {
 import { MoneyValue } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Card,
     CardContent,
@@ -100,6 +101,7 @@ export function BookDetailSidebar({
                             <InputGroupAddon align="inline-end">
                                 <InputGroupButton
                                     id="sales-selection-detail-copy-link-inline"
+                                    loading={operations.copyLink.isPending}
                                     disabled={
                                         operations.copyLink.isPending || pending
                                     }
@@ -319,8 +321,15 @@ export function BookDetailSidebar({
                                             </p>
                                         ) : null}
                                         {detail.status === "PENDING_PUBLISH" ? (
-                                            <Button
+                                            <LoadingButton
                                                 id={`selection-regenerate-${tier.tier_id}`}
+                                                loading={
+                                                    operations.regenerate
+                                                        .isPending &&
+                                                    operations.regenerate.variables?.tier_ids?.includes(
+                                                        tier.tier_id,
+                                                    ) === true
+                                                }
                                                 type="button"
                                                 size="xs"
                                                 variant="ghost"
@@ -346,7 +355,7 @@ export function BookDetailSidebar({
                                                     aria-hidden="true"
                                                 />
                                                 重生成此档
-                                            </Button>
+                                            </LoadingButton>
                                         ) : null}
                                     </div>
                                 )

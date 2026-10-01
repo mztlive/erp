@@ -7,7 +7,6 @@ import {
     EyeIcon,
     FilterIcon,
     ListChecksIcon,
-    LoaderCircleIcon,
     RotateCcwIcon,
     SaveIcon,
     ShieldAlertIcon,
@@ -18,6 +17,7 @@ import {
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Card,
     CardContent,
@@ -331,68 +331,53 @@ function ConflictResolutionDialog({
                     >
                         取消
                     </DialogClose>
-                    <Button
+                    <LoadingButton
                         id={`${baseId}-compare`}
                         type="button"
+                        loading={pendingAction === "compare"}
                         variant="outline"
                         disabled={isPending}
                         onClick={onCompare}
                     >
-                        {pendingAction === "compare" ? (
-                            <LoaderCircleIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                                className="animate-spin"
-                            />
-                        ) : (
+                        {!(pendingAction === "compare") ? (
                             <EyeIcon
                                 data-icon="inline-start"
                                 aria-hidden="true"
                             />
-                        )}
+                        ) : null}
                         查看差异
-                    </Button>
-                    <Button
+                    </LoadingButton>
+                    <LoadingButton
                         id={`${baseId}-save-copy`}
                         type="button"
+                        loading={pendingAction === "save-copy"}
                         variant="secondary"
                         disabled={isPending}
                         onClick={onSaveCopy}
                     >
-                        {pendingAction === "save-copy" ? (
-                            <LoaderCircleIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                                className="animate-spin"
-                            />
-                        ) : (
+                        {!(pendingAction === "save-copy") ? (
                             <SaveIcon
                                 data-icon="inline-start"
                                 aria-hidden="true"
                             />
-                        )}
+                        ) : null}
                         保留为新草稿
-                    </Button>
-                    <Button
+                    </LoadingButton>
+                    <LoadingButton
                         id={`${baseId}-reload`}
                         type="button"
+                        loading={pendingAction === "reload"}
                         disabled={isPending}
                         onClick={onReload}
                     >
-                        {pendingAction === "reload" ? (
-                            <LoaderCircleIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                                className="animate-spin"
-                            />
-                        ) : (
+                        {!(pendingAction === "reload") ? (
                             <RotateCcwIcon
                                 data-icon="inline-start"
                                 aria-hidden="true"
                             />
-                        )}
+                        ) : null}
                         重新加载
-                    </Button>
+                    </LoadingButton>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

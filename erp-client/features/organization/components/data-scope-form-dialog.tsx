@@ -517,6 +517,7 @@ export function DataScopeFormDialog({
                     </Button>
                     <form.AppForm>
                         <form.SubmitButton
+                            loading={submitting}
                             id="organization-scope-submit"
                             label="保存范围"
                             disabled={submitting}

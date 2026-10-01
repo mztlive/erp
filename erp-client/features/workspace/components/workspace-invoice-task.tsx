@@ -12,6 +12,7 @@ import {
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { AllocationSessionScreen } from "@/features/customer-receivables/pages/components/allocation-session-screen"
 import {
     useCreateAllocationSessionMutation,
@@ -285,17 +286,18 @@ function WorkspaceInvoiceSession({
                 <AlertTitle>无法开始本次开票</AlertTitle>
                 <AlertDescription className="flex flex-col gap-3">
                     <span>{getErrorMessage(createError, "请刷新后重试")}</span>
-                    <Button
+                    <LoadingButton
                         id={`workspace-invoice-session-retry-${toAutomationIdSegment(item.workItemId)}`}
                         type="button"
                         variant="outline"
                         size="sm"
                         className="self-start"
                         disabled={createSession.isPending}
+                        loading={createSession.isPending}
                         onClick={() => setResetNonce((value) => value + 1)}
                     >
                         {createSession.isPending ? "重试中…" : "重试"}
-                    </Button>
+                    </LoadingButton>
                 </AlertDescription>
             </Alert>
         )

@@ -209,6 +209,7 @@ export function CustomerAssignmentDialog({
                                 id="customers-assignment-dialog-submit"
                                 label="确认调整"
                                 disabled={mutation.isPending}
+                                loading={mutation.isPending}
                             />
                         </form.AppForm>
                     </DialogFooter>

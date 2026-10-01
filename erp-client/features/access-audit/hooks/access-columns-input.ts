@@ -22,6 +22,7 @@ export type AccessColumnsInput = {
     openExplain: (type: "ROLE" | "USER", id: string) => void
     openEvent: (id: string) => void
     startChange: (command: AccessChangeCommand) => Promise<void>
+    previewingCommand?: AccessChangeCommand | null
     setRoleAssignment: React.Dispatch<
         React.SetStateAction<RoleAssignmentTarget | null>
     >

@@ -166,6 +166,7 @@ export function UpdateAvailabilityDialog({
                             <form.SubmitButton
                                 id="supplier-offerings-dialog-availability-submit"
                                 label="保存可供情况"
+                                loading={mutation.isPending}
                                 disabled={mutation.isPending}
                             />
                         </form.AppForm>

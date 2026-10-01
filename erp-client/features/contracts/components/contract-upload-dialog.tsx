@@ -278,6 +278,7 @@ export function ContractUploadDialog({
                         <form.AppForm>
                             <form.SubmitButton
                                 id="card-contracts-upload-submit"
+                                loading={uploadMutation.isPending}
                                 label={
                                     uploadMutation.isPending
                                         ? "上传中…"

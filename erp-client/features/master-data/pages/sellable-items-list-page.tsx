@@ -14,7 +14,7 @@ import {
     PageScaffold,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import { Spinner } from "@/components/ui/spinner"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { toast } from "@/components/ui/toast"
 import {
     Popover,
@@ -194,8 +194,9 @@ export function SellableItemsListPage() {
                         </p>
                     </PopoverContent>
                 </Popover>
-                <Button
+                <LoadingButton
                     id="master-data-sellable-items-list-export"
+                    loading={exportPending}
                     type="button"
                     variant="outline"
                     size="sm"
@@ -209,20 +210,18 @@ export function SellableItemsListPage() {
                         }
                     }}
                 >
-                    {exportPending ? (
-                        <Spinner data-icon="inline-start" />
-                    ) : (
+                    {!exportPending ? (
                         <DownloadIcon
                             data-icon="inline-start"
                             aria-hidden="true"
                         />
-                    )}
+                    ) : null}
                     {exportPending
                         ? "导出中…"
                         : exportsSelection
                           ? `${masterDataCopy.sellableExportSelected}${selection.selectedCount > 0 ? ` ${selection.selectedCount}` : ""}`
                           : "导出当前结果"}
-                </Button>
+                </LoadingButton>
             </ListWorkspaceHeader>
 
             {exportMeta ? (

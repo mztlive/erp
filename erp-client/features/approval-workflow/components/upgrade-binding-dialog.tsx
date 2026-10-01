@@ -158,6 +158,7 @@ export function UpgradeBindingDialog({
                         </Button>
                         <form.AppForm>
                             <form.SubmitButton
+                                loading={upgrade.isPending}
                                 id={`${id}-submit`}
                                 label="确认更新"
                                 disabled={upgrade.isPending}

@@ -209,6 +209,7 @@ export function CreateDraftDialog({
                         </Button>
                         <form.AppForm>
                             <form.SubmitButton
+                                loading={createDraft.isPending}
                                 id={`${id}-submit`}
                                 label="创建草稿"
                                 disabled={createDraft.isPending}

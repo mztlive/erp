@@ -95,6 +95,7 @@ export function ActualProfitLossPage() {
                     page.exportMutation.isPending
                 }
                 exportPending={page.exportMutation.isPending}
+                refreshing={page.refreshing}
                 onRefresh={() => void page.handleRefresh()}
                 onExport={() => void page.handleExport()}
             />

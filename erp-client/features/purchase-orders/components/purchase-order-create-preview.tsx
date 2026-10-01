@@ -12,6 +12,7 @@ import {
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Dialog,
     DialogContent,
@@ -180,8 +181,9 @@ export function PurchaseOrderCreatePreviewDialog({
                     >
                         返回编辑
                     </Button>
-                    <Button
+                    <LoadingButton
                         id="procurement-orders-create-preview-confirm"
+                        loading={creating}
                         type="button"
                         data-testid="purchase-create-from-basis"
                         disabled={
@@ -197,7 +199,7 @@ export function PurchaseOrderCreatePreviewDialog({
                             : unresolved
                               ? "核对提交结果"
                               : confirmLabel}
-                    </Button>
+                    </LoadingButton>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

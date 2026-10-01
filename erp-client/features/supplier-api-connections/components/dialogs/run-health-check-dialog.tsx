@@ -3,7 +3,7 @@
 import { RefreshCwIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { Spinner } from "@/components/ui/spinner"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Dialog,
     DialogContent,
@@ -54,25 +54,21 @@ export function RunHealthCheckDialog({
                     >
                         取消
                     </Button>
-                    <Button
+                    <LoadingButton
                         id="supplier-api-connections-health-check-confirm"
+                        loading={pending}
                         type="button"
                         disabled={!canRunHealth || pending}
                         onClick={() => void onSubmit()}
                     >
-                        {pending ? (
-                            <Spinner
-                                className="size-4 animate-spin"
-                                aria-hidden="true"
-                            />
-                        ) : (
+                        {!pending && (
                             <RefreshCwIcon
                                 className="size-4"
                                 aria-hidden="true"
                             />
                         )}
                         {pending ? "执行中…" : "确认执行"}
-                    </Button>
+                    </LoadingButton>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

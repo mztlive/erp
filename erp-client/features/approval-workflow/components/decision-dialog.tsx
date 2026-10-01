@@ -233,6 +233,7 @@ export function DecisionDialog({
                         </Button>
                         <form.AppForm>
                             <form.SubmitButton
+                                loading={submitDecision.isPending}
                                 id={`${id}-submit`}
                                 label={
                                     defaultDecision === "REJECT"

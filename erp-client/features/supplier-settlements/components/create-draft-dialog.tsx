@@ -146,6 +146,7 @@ export function CreateDraftDialog({
                             <form.SubmitButton
                                 id="supplier-settlements-create-confirm"
                                 label="确认创建草稿"
+                                loading={createMutation.isPending}
                                 disabled={createMutation.isPending}
                             />
                         </form.AppForm>

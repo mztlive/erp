@@ -1,11 +1,12 @@
 "use client"
 
 import Link from "next/link"
-import { ArrowRightIcon, LoaderCircleIcon } from "lucide-react"
+import { ArrowRightIcon } from "lucide-react"
 
 import { FormalActionResult } from "@/components/business"
 import type { ResultState as SharedResultState } from "@/components/business/feedback"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { buildPostedFacts } from "@/features/fulfillment-operations/lib/validation"
 import type { FulfillmentFormalOutcome } from "@/features/fulfillment-operations/types"
 import { NOT_ACCEPTANCE_NOTICE } from "@/features/fulfillment-operations/types"
@@ -74,22 +75,16 @@ export function FulfillmentResultPanel({
             actions={
                 <div className="flex flex-wrap gap-2">
                     {lastResult.status === "unknown" ? (
-                        <Button
+                        <LoadingButton
                             id="fulfillment-operations-result-resolve-unknown"
                             type="button"
                             size="sm"
                             disabled={resolvePending}
+                            loading={resolvePending}
                             onClick={() => void onResolveUnknown()}
                         >
-                            {resolvePending ? (
-                                <LoaderCircleIcon
-                                    data-icon="inline-start"
-                                    aria-hidden="true"
-                                    className="animate-spin"
-                                />
-                            ) : null}
                             {resolvePending ? "查询中…" : "查询最终结果"}
-                        </Button>
+                        </LoadingButton>
                     ) : null}
                     {lastResult.outcome?.kind === "POSTED" &&
                     lastResult.outcome.operationType === "RECEIPT" &&

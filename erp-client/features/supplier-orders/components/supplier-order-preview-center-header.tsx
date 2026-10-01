@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { ExternalLinkIcon, Loader2Icon } from "lucide-react"
+import { ExternalLinkIcon } from "lucide-react"
 
 import { DetailPageHeader, GuardedBusinessAction } from "@/components/business"
 import { Button } from "@/components/ui/button"
@@ -68,6 +68,7 @@ export function SupplierOrderCenterHeader({
                     isResultUnknown ? (
                         <GuardedBusinessAction
                             id="supplier-order-center-header-query-result"
+                            loading={queryPending}
                             type="button"
                             size="sm"
                             disabled={!canQuery || queryPending}
@@ -80,13 +81,6 @@ export function SupplierOrderCenterHeader({
                             }
                             onClick={onQueryResult}
                         >
-                            {queryPending ? (
-                                <Loader2Icon
-                                    data-icon="inline-start"
-                                    className="size-4 animate-spin"
-                                    aria-hidden="true"
-                                />
-                            ) : null}
                             {queryPending ? "查询中…" : "查询原结果"}
                         </GuardedBusinessAction>
                     ) : undefined

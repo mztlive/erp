@@ -346,6 +346,7 @@ function WorkspaceFulfillmentReassignDialog({
                                         id={`workspace-fulfillment-reassign-submit-${toAutomationIdSegment(item.workItemId)}`}
                                         label="确认转交"
                                         pendingLabel="转交中…"
+                                        loading={mutation.isPending}
                                         disabled={
                                             mutation.isPending ||
                                             candidatesQuery.isPending ||

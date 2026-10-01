@@ -218,7 +218,8 @@ export function UnitOfMeasureReviseDialog({
             }
             form={form as never}
             result={result}
-            pending={mutation.isPending || !target}
+            pending={mutation.isPending}
+            disabled={!target}
             submitLabel={masterDataCopy.reviseSubmit}
             codeReadOnly
         />
@@ -235,6 +236,7 @@ function UnitFormDialogFrame({
     form,
     result,
     pending,
+    disabled = false,
     submitLabel,
     codeReadOnly,
     onReset,
@@ -275,11 +277,13 @@ function UnitFormDialogFrame({
             label?: string
             pendingLabel?: string
             disabled?: boolean
+            loading?: boolean
         }>
         handleSubmit: () => unknown
     }
     result: MasterDataMutationResult | null
     pending: boolean
+    disabled?: boolean
     submitLabel: string
     codeReadOnly: boolean
     onReset?: () => void
@@ -389,7 +393,7 @@ function UnitFormDialogFrame({
                                         <Button
                                             type="button"
                                             variant="outline"
-                                            disabled={pending}
+                                            disabled={pending || disabled}
                                         />
                                     }
                                 >
@@ -402,7 +406,8 @@ function UnitFormDialogFrame({
                                             pending ? "提交中…" : submitLabel
                                         }
                                         pendingLabel="提交中…"
-                                        disabled={pending}
+                                        loading={pending}
+                                        disabled={pending || disabled}
                                     />
                                 </form.AppForm>
                             </DialogFooter>

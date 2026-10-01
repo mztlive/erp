@@ -5,6 +5,7 @@ import { ApprovalMaterialPreview } from "./approval-material-preview"
 import type { ApprovalMaterials } from "../api/materials"
 import { BusinessFailureState } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { Spinner } from "@/components/ui/spinner"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { getErrorMessage } from "@/lib/api"
@@ -171,7 +172,13 @@ export function ApprovalSubmittedMaterials({
                                             查看
                                         </Button>
                                     )}
-                                    <Button
+                                    <LoadingButton
+                                        loading={
+                                            download.isPending &&
+                                            download.variables
+                                                ?.file_asset_id ===
+                                                file.file_asset_id
+                                        }
                                         id={`approval-submitted-material-${toAutomationIdSegment(file.file_asset_id)}-download`}
                                         type="button"
                                         variant="outline"
@@ -184,7 +191,7 @@ export function ApprovalSubmittedMaterials({
                                             file.file_asset_id
                                             ? "读取中…"
                                             : "下载"}
-                                    </Button>
+                                    </LoadingButton>
                                 </div>
                             </li>
                         ))}

@@ -1,10 +1,10 @@
 "use client"
 
-import { DownloadIcon, LoaderCircleIcon, RefreshCwIcon } from "lucide-react"
+import { DownloadIcon, RefreshCwIcon } from "lucide-react"
 
 import { DataFreshness, GuardedBusinessAction } from "@/components/business"
 import { ListWorkspaceHeader } from "@/components/business/list-workspace"
-import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { formatClock, freshnessPresentation } from "../lib/presentation"
 import type { CustomerQualityView } from "../types"
 
@@ -56,9 +56,10 @@ export function CustomerQualityPageHeader({
                     label="经营质量汇总"
                 />
                 <div className="flex flex-wrap items-center gap-2">
-                    <Button
+                    <LoadingButton
                         id="customers-quality-refresh"
                         type="button"
+                        loading={refreshing}
                         variant="ghost"
                         size="sm"
                         className="text-muted-foreground hover:text-foreground"
@@ -67,11 +68,14 @@ export function CustomerQualityPageHeader({
                             void onRefresh()
                         }}
                     >
-                        <RefreshCwIcon className="size-4" aria-hidden />
+                        {!refreshing ? (
+                            <RefreshCwIcon className="size-4" aria-hidden />
+                        ) : null}
                         {refreshing ? "刷新中" : "刷新"}
-                    </Button>
+                    </LoadingButton>
                     <GuardedBusinessAction
                         id="customers-quality-export"
+                        loading={exportPending}
                         type="button"
                         variant="outline"
                         size="sm"
@@ -89,14 +93,9 @@ export function CustomerQualityPageHeader({
                         }
                         onClick={() => void onExport()}
                     >
-                        {exportPending ? (
-                            <LoaderCircleIcon
-                                className="size-4 animate-spin"
-                                aria-hidden
-                            />
-                        ) : (
+                        {!exportPending ? (
                             <DownloadIcon className="size-4" aria-hidden />
-                        )}
+                        ) : null}
                         {exportPending ? "导出中…" : "导出"}
                     </GuardedBusinessAction>
                 </div>

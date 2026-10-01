@@ -4,7 +4,7 @@ import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 
@@ -82,12 +82,12 @@ function InputGroupButton({
     variant = "ghost",
     size = "xs",
     ...props
-}: Omit<React.ComponentProps<typeof Button>, "size" | "type"> &
+}: Omit<React.ComponentProps<typeof LoadingButton>, "size" | "type"> &
     VariantProps<typeof inputGroupButtonVariants> & {
         type?: "button" | "submit" | "reset"
     }) {
     return (
-        <Button
+        <LoadingButton
             type={type}
             data-size={size}
             variant={variant}

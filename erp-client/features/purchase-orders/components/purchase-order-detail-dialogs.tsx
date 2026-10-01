@@ -1,9 +1,8 @@
 "use client"
 
-import { LoaderCircleIcon } from "lucide-react"
-
 import { FormalActionConfirmDialog } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Dialog,
     DialogClose,
@@ -141,22 +140,16 @@ export function PurchaseOrderDetailDialogs({
                         >
                             继续编辑
                         </DialogClose>
-                        <Button
+                        <LoadingButton
                             id="procurement-orders-detail-leave-save"
+                            loading={savePending}
                             type="button"
                             variant="outline"
                             disabled={savePending}
                             onClick={onSaveAndLeave}
                         >
-                            {savePending ? (
-                                <LoaderCircleIcon
-                                    data-icon="inline-start"
-                                    aria-hidden="true"
-                                    className="animate-spin"
-                                />
-                            ) : null}
                             {savePending ? "保存中…" : "保存并离开"}
-                        </Button>
+                        </LoadingButton>
                         <Button
                             id="procurement-orders-detail-leave-discard"
                             type="button"

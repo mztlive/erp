@@ -115,6 +115,7 @@ function useAccessChangeFlow({
         setPendingCommand,
         impact,
         setImpact,
+        previewMutation,
         submitMutation,
         startChange,
         applyOutcome,

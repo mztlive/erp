@@ -289,6 +289,7 @@ export function ReviseOfferingDialog({
                             <form.SubmitButton
                                 id="supplier-offerings-dialog-revise-submit"
                                 label="保存新版本"
+                                loading={mutation.isPending}
                                 disabled={mutation.isPending}
                             />
                         </form.AppForm>

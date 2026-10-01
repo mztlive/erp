@@ -122,6 +122,7 @@ export function ChangeOfferingStatusDialog({
                             <form.SubmitButton
                                 id="supplier-offerings-dialog-status-submit"
                                 label={intent.submitLabel}
+                                loading={mutation.isPending}
                                 disabled={mutation.isPending}
                             />
                         </form.AppForm>

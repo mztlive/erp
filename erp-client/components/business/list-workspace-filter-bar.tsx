@@ -9,6 +9,7 @@ import { ListFilterPopover } from "@/components/business/list-filter-popover"
 import { ListToolbar } from "@/components/business/list"
 import { useTableFilterStatusHost } from "@/components/business/table-toolbar"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 import { listFilterText } from "@/lib/ui-text"
@@ -265,13 +266,13 @@ export function ListWorkspaceFilterBar({
                 filters={
                     <>
                         {primaryFilters}
-                        <Button
+                        <LoadingButton
                             id={queryButtonId ?? `${idPrefix}-query`}
                             type="submit"
                         >
                             <SearchIcon aria-hidden="true" />
                             查询
-                        </Button>
+                        </LoadingButton>
                         {extraPrimary}
                         {showMore && morePresentation === "popover" ? (
                             <ListFilterPopover

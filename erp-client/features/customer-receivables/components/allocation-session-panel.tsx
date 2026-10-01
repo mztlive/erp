@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { LoaderCircleIcon, SaveIcon } from "lucide-react"
+import { SaveIcon } from "lucide-react"
 
 import {
     AllocationWorkspace,
@@ -13,6 +13,7 @@ import {
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { Input } from "@/components/ui/input"
 import { SessionFactFields } from "@/features/customer-receivables/components/session-fact-fields"
 import { SessionHeader } from "@/features/customer-receivables/components/session-header"
@@ -128,24 +129,18 @@ export function AllocationSessionPanel({
                     actions={
                         <>
                             {result.pendingKey ? (
-                                <Button
+                                <LoadingButton
                                     id="customer-receivables-session-result-resolve"
                                     type="button"
+                                    loading={resolveMutation.isPending}
                                     size="sm"
                                     onClick={() => void resolveUnknown()}
                                     disabled={resolveMutation.isPending}
                                 >
-                                    {resolveMutation.isPending ? (
-                                        <LoaderCircleIcon
-                                            data-icon="inline-start"
-                                            aria-hidden="true"
-                                            className="animate-spin"
-                                        />
-                                    ) : null}
                                     {resolveMutation.isPending
                                         ? "查询中…"
                                         : "查询最终结果"}
-                                </Button>
+                                </LoadingButton>
                             ) : null}
                             {result.returnTo ? (
                                 <Button
@@ -342,9 +337,10 @@ export function AllocationSessionPanel({
                 }
                 actions={
                     <>
-                        <Button
+                        <LoadingButton
                             id="customer-receivables-session-save-draft"
                             type="button"
+                            loading={saveMutation.isPending}
                             variant="outline"
                             disabled={
                                 !canOperate ||
@@ -355,23 +351,18 @@ export function AllocationSessionPanel({
                             title={canOperate ? undefined : permissionReason}
                             onClick={() => void doSaveDraft()}
                         >
-                            {saveMutation.isPending ? (
-                                <LoaderCircleIcon
-                                    data-icon="inline-start"
-                                    aria-hidden="true"
-                                    className="animate-spin"
-                                />
-                            ) : (
+                            {!saveMutation.isPending ? (
                                 <SaveIcon
                                     data-icon="inline-start"
                                     aria-hidden="true"
                                 />
-                            )}
+                            ) : null}
                             {saveMutation.isPending ? "保存中…" : "保存草稿"}
-                        </Button>
-                        <Button
+                        </LoadingButton>
+                        <LoadingButton
                             id="customer-receivables-session-submit"
                             type="button"
+                            loading={postMutation.isPending}
                             disabled={
                                 !canOperate ||
                                 !canSubmit ||
@@ -383,17 +374,10 @@ export function AllocationSessionPanel({
                                 void form.handleSubmit()
                             }}
                         >
-                            {postMutation.isPending ? (
-                                <LoaderCircleIcon
-                                    data-icon="inline-start"
-                                    aria-hidden="true"
-                                    className="animate-spin"
-                                />
-                            ) : null}
                             {postMutation.isPending
                                 ? "提交中…"
                                 : "确认登记并核销"}
-                        </Button>
+                        </LoadingButton>
                     </>
                 }
             />

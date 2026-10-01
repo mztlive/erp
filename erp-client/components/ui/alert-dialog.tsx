@@ -5,6 +5,7 @@ import { AlertDialog as AlertDialogPrimitive } from "@base-ui/react/alert-dialog
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 
 function AlertDialog({ ...props }: AlertDialogPrimitive.Root.Props) {
     return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} />
@@ -155,9 +156,9 @@ function AlertDialogAction({
     className,
     id,
     ...props
-}: React.ComponentProps<typeof Button> & { id?: string }) {
+}: React.ComponentProps<typeof LoadingButton> & { id?: string }) {
     return (
-        <Button
+        <LoadingButton
             id={id}
             data-slot="alert-dialog-action"
             className={cn(className)}

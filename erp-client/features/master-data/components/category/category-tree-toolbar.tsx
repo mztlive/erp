@@ -3,6 +3,7 @@
 import * as React from "react"
 import { SearchIcon, XIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { Input } from "@/components/ui/input"
 
 /** 分类导航专用查询条；搜索提交与状态切换均保持可见反馈。 */
@@ -66,15 +67,16 @@ export function CategoryTreeToolbar({
                         <XIcon className="size-3.5" />
                     </Button>
                 ) : null}
-                <Button
+                <LoadingButton
                     id={`${idPrefix}-query`}
                     type="submit"
+                    loading={loading}
                     variant="outline"
                     size="icon"
                     aria-label="查询分类"
                 >
                     <SearchIcon className="size-4" />
-                </Button>
+                </LoadingButton>
             </form>
             <div
                 role="group"

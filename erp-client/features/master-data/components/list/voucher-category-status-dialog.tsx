@@ -1,8 +1,9 @@
 "use client"
 
 import { useState } from "react"
-import { CirclePauseIcon, CirclePlayIcon, LoaderCircleIcon } from "lucide-react"
+import { CirclePauseIcon, CirclePlayIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Dialog,
     DialogContent,
@@ -167,23 +168,18 @@ export function VoucherCategoryStatusDialog({
                     >
                         取消
                     </Button>
-                    <Button
+                    <LoadingButton
                         id={`${prefix}-confirm`}
                         variant={disabling ? "destructive" : "default"}
+                        loading={mutation.isPending}
                         disabled={!canUpdate || mutation.isPending || conflict}
                         onClick={() => void submit()}
                     >
-                        {mutation.isPending ? (
-                            <LoaderCircleIcon
-                                data-icon="inline-start"
-                                className="animate-spin"
-                                aria-hidden
-                            />
-                        ) : (
+                        {!mutation.isPending ? (
                             <ActionIcon data-icon="inline-start" aria-hidden />
-                        )}
+                        ) : null}
                         {mutation.isPending ? "提交中…" : `确认${action}`}
-                    </Button>
+                    </LoadingButton>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

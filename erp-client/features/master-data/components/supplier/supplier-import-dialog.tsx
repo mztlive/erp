@@ -5,6 +5,7 @@ import type { BackgroundJobView } from "@/features/background-jobs/api"
 import Link from "next/link"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { Input } from "@/components/ui/input"
 import {
     Dialog,
@@ -186,8 +187,9 @@ export const SupplierImportDialog = ({
                         >
                             关闭
                         </Button>
-                        <Button
+                        <LoadingButton
                             id="supplier-import-submit"
+                            loading={mutation.isPending}
                             disabled={
                                 !rows.length || reading || mutation.isPending
                             }
@@ -198,7 +200,7 @@ export const SupplierImportDialog = ({
                                 : uncertain
                                   ? "重试核对"
                                   : "提交后台导入"}
-                        </Button>
+                        </LoadingButton>
                     </div>
                 </div>
             </DialogContent>

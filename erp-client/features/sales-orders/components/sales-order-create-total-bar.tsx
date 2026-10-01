@@ -1,6 +1,5 @@
 "use client"
 
-import { LoaderCircleIcon } from "lucide-react"
 import { useSelector } from "@tanstack/react-form"
 
 import {
@@ -139,6 +138,7 @@ export function SalesOrderCreateTotalBar({
                                                 : "保存草稿"
                                         }
                                         pendingLabel="正在保存草稿…"
+                                        loading={isSubmitting}
                                         disabled={isSubmitting}
                                         onClick={onSaveDraftClick}
                                     />
@@ -147,16 +147,10 @@ export function SalesOrderCreateTotalBar({
                                         data-testid="sales-order-submit"
                                         label="提交审批"
                                         pendingLabel="正在提交…"
+                                        loading={isSubmitting}
                                         disabled={isSubmitting}
                                         onClick={onSubmitClick}
                                     >
-                                        {isSubmitting ? (
-                                            <LoaderCircleIcon
-                                                data-icon="inline-start"
-                                                aria-hidden="true"
-                                                className="animate-spin"
-                                            />
-                                        ) : null}
                                         {isSubmitting ? "处理中…" : "提交审批"}
                                     </form.SubmitButton>
                                 </form.AppForm>

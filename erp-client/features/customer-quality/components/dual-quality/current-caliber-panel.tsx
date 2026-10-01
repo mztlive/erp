@@ -4,6 +4,7 @@ import * as React from "react"
 
 import { BusinessEmptyState, BusinessFailureState } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { getErrorMessage } from "@/lib/api/errors"
 import { isDataScopeChanged } from "@/features/data-scope/cache"
 import { downloadQualityCsv } from "../../api/dual-caliber"
@@ -165,9 +166,10 @@ export function CurrentCaliberPanel({
                         patchDual={patchDual}
                     />
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
-                        <Button
+                        <LoadingButton
                             id="customers-quality-dual-current-export"
                             type="button"
+                            loading={exportMutation.isPending}
                             variant="outline"
                             size="sm"
                             disabled={
@@ -180,7 +182,7 @@ export function CurrentCaliberPanel({
                             {exportMutation.isPending
                                 ? "导出中…"
                                 : "导出当前口径 CSV"}
-                        </Button>
+                        </LoadingButton>
                         {exportError ? (
                             <span className="min-w-0 break-all text-[13px] text-destructive">
                                 {exportError}

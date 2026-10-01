@@ -64,6 +64,7 @@ export function UnitOfMeasuresListPage() {
                         : masterDataCopy.actionExport,
                     icon: DownloadIcon,
                     variant: "outline",
+                    loading: exportPending,
                     disabled: exportPending || state.rows.length === 0,
                     onClick: state.onExport,
                 },

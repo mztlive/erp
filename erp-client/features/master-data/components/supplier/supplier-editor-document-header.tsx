@@ -7,6 +7,7 @@ import {
     type DetailPageHeaderProps,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import type { SupplierEditorFormValues } from "@/features/master-data/lib/supplier-editor-model"
 import type { MasterDataCenterView } from "@/features/master-data/types"
@@ -90,10 +91,11 @@ export function SupplierEditorDocumentHeader({
                 ) : null
             }
             primaryAction={
-                <Button
+                <LoadingButton
                     id="master-data-supplier-document-header-submit"
                     type="submit"
                     size="sm"
+                    loading={pending}
                     disabled={!canEdit || pending}
                 >
                     <SaveIcon data-icon="inline-start" aria-hidden />
@@ -102,7 +104,7 @@ export function SupplierEditorDocumentHeader({
                         : isCreate
                           ? masterDataCopy.createSubmit
                           : masterDataCopy.reviseSubmit}
-                </Button>
+                </LoadingButton>
             }
         />
     )

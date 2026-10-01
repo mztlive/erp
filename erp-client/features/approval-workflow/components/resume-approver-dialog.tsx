@@ -3,6 +3,7 @@
 import * as React from "react"
 
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Dialog,
     DialogContent,
@@ -97,14 +98,15 @@ export function ResumeApproverDialog({
                     >
                         取消
                     </Button>
-                    <Button
+                    <LoadingButton
+                        loading={resume.isPending}
                         id={`${id}-confirm`}
                         type="button"
                         disabled={resume.isPending}
                         onClick={() => void submit()}
                     >
                         {resume.isPending ? "提交中" : "确认恢复"}
-                    </Button>
+                    </LoadingButton>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

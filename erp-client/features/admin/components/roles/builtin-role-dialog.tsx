@@ -6,6 +6,7 @@ import { LayersIcon } from "lucide-react"
 import { z } from "zod"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
     Dialog,
@@ -226,7 +227,8 @@ function TemplateSelection({
                 </Button>
                 <form.Subscribe selector={(state) => state.values.ids}>
                     {(ids) => (
-                        <Button
+                        <LoadingButton
+                            loading={pending}
                             id="roles-builtin-generate"
                             type="submit"
                             disabled={pending || stale || ids.length === 0}
@@ -234,7 +236,7 @@ function TemplateSelection({
                             {pending
                                 ? "正在生成…"
                                 : `生成所选 ${ids.length} 个岗位`}
-                        </Button>
+                        </LoadingButton>
                     )}
                 </form.Subscribe>
             </DialogFooter>

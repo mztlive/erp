@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useAppForm } from "@/components/form"
-import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -208,15 +208,16 @@ export const ReprepareDialog = ({
                             {error}
                         </p>
                     )}
-                    <Button
+                    <LoadingButton
                         id="selection-reprepare-submit"
                         type="submit"
                         disabled={operations.prepare.isPending}
+                        loading={operations.prepare.isPending}
                     >
                         {operations.prepare.isPending
                             ? "正在创建准备任务…"
                             : "按以上规则准备"}
-                    </Button>
+                    </LoadingButton>
                 </form>
             </DialogContent>
         </Dialog>

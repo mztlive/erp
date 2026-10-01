@@ -214,6 +214,7 @@ export function ConnectionCreateDialog({
                             <form.SubmitButton
                                 id="supplier-api-connections-create-submit"
                                 label="创建"
+                                loading={createMutation.isPending}
                                 disabled={createMutation.isPending}
                             />
                         </form.AppForm>

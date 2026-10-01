@@ -155,6 +155,17 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
                         }))}
                         selectionForm={detail.selection_form}
                         tiers={detail.tiers}
+                        pending={pending}
+                        deletingItemId={
+                            operations.deleteItem.isPending
+                                ? operations.deleteItem.variables?.itemId
+                                : undefined
+                        }
+                        regeneratingTierIds={
+                            operations.regenerate.isPending
+                                ? operations.regenerate.variables?.tier_ids
+                                : undefined
+                        }
                         onRegenerateTier={
                             detail.status === "PENDING_PUBLISH"
                                 ? (tierId) =>

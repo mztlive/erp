@@ -8,6 +8,7 @@ import { useAppForm } from "@/components/form"
 import { Checkbox } from "@/components/ui/checkbox"
 import type { RoleOption } from "../../hooks/use-role-filter"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { BusinessDiffPanel } from "@/components/business"
 import { getErrorMessage } from "@/lib/api/errors"
 import { toAutomationIdSegment } from "@/lib/automation-id"
@@ -458,13 +459,14 @@ export function AccountProfileEditor({
                 >
                     取消
                 </Button>
-                <Button
+                <LoadingButton
+                    loading={pending}
                     id="account-profile-save"
                     type="submit"
                     disabled={!changed || pending}
                 >
                     {pending ? "处理中…" : confirmed ? "确认保存" : "保存"}
-                </Button>
+                </LoadingButton>
             </div>
         </form>
     )

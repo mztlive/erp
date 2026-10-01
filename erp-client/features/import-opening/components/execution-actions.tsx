@@ -124,6 +124,7 @@ function CancelPendingDialog({
                                 label="确认取消未应用项"
                                 pendingLabel="正在取消"
                                 disabled={pending}
+                                loading={pending}
                             />
                         </form.AppForm>
                     </DialogFooter>

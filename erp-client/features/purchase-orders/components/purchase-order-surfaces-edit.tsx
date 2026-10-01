@@ -10,6 +10,7 @@ import {
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Card,
     CardContent,
@@ -407,15 +408,16 @@ export function EditSurface({
                     />
 
                     <div className="flex flex-wrap gap-2">
-                        <Button
+                        <LoadingButton
                             id={`procurement-orders-detail-edit-save-${order.identity.purchaseOrderId}`}
+                            loading={savePending}
                             type="button"
                             variant="outline"
                             disabled={!draftEditToken || savePending}
                             onClick={onSave}
                         >
                             {savePending ? "保存中…" : "保存草稿"}
-                        </Button>
+                        </LoadingButton>
                         <Button
                             id={`procurement-orders-detail-edit-submit-${order.identity.purchaseOrderId}`}
                             type="button"

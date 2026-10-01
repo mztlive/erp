@@ -8,7 +8,7 @@ import {
     OptionCombobox,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import { Spinner } from "@/components/ui/spinner"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Dialog,
     DialogContent,
@@ -121,20 +121,15 @@ function SettlementResolveDialog({
                     >
                         取消
                     </Button>
-                    <Button
+                    <LoadingButton
                         id="supplier-settlements-resolve-confirm"
+                        loading={pending}
                         type="button"
                         disabled={pending}
                         onClick={() => void onSubmit()}
                     >
-                        {pending ? (
-                            <Spinner
-                                className="size-4 animate-spin"
-                                aria-hidden="true"
-                            />
-                        ) : null}
                         {pending ? "提交中…" : "提交结论"}
-                    </Button>
+                    </LoadingButton>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
@@ -201,20 +196,15 @@ function SettlementEvidenceDialog({
                     >
                         取消
                     </Button>
-                    <Button
+                    <LoadingButton
                         id="supplier-settlements-evidence-confirm"
+                        loading={pending}
                         type="button"
                         disabled={pending || !referenceId.trim()}
                         onClick={() => void onSubmit()}
                     >
-                        {pending ? (
-                            <Spinner
-                                className="size-4 animate-spin"
-                                aria-hidden="true"
-                            />
-                        ) : null}
                         {pending ? "保存中…" : "保存证据"}
-                    </Button>
+                    </LoadingButton>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
@@ -279,20 +269,15 @@ function SettlementRejectDialog({
                     >
                         取消
                     </Button>
-                    <Button
+                    <LoadingButton
                         id="supplier-settlements-reject-confirm"
+                        loading={pending}
                         type="button"
                         disabled={!reasonCode || pending}
                         onClick={() => void onSubmit()}
                     >
-                        {pending ? (
-                            <Spinner
-                                className="size-4 animate-spin"
-                                aria-hidden="true"
-                            />
-                        ) : null}
                         {pending ? "提交中…" : "确认驳回"}
-                    </Button>
+                    </LoadingButton>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

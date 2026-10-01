@@ -28,6 +28,7 @@ import {
     CardTitle,
 } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { FulfillmentDraftForm } from "@/features/fulfillment-operations/components/forms/fulfillment-draft-form"
 import {
     OPERATION_ACTION_LABEL,
@@ -50,6 +51,7 @@ export type FulfillmentWorkSurfaceProps = {
     canExecute: boolean
     canPost: boolean
     formalPending: boolean
+    savePending?: boolean
     supportsSave: boolean
     dirty: boolean
     autoNext: boolean
@@ -85,6 +87,7 @@ export function FulfillmentWorkSurface({
     canExecute,
     canPost,
     formalPending,
+    savePending = false,
     supportsSave,
     dirty,
     autoNext,
@@ -244,6 +247,7 @@ export function FulfillmentWorkSurface({
                                         dirty={dirty}
                                         supportsSave={supportsSave}
                                         formalPending={formalPending}
+                                        savePending={savePending}
                                         canPost={canPost}
                                         autoNext={autoNext}
                                         onSkip={onSkip}
@@ -260,6 +264,7 @@ export function FulfillmentWorkSurface({
                                 dirty={dirty}
                                 supportsSave={supportsSave}
                                 formalPending={formalPending}
+                                savePending={savePending}
                                 canPost={canPost}
                                 autoNext={autoNext}
                                 onSkip={onSkip}
@@ -305,6 +310,7 @@ function FulfillmentExecuteActions({
     dirty,
     supportsSave,
     formalPending,
+    savePending,
     canPost,
     autoNext,
     onSkip,
@@ -317,6 +323,7 @@ function FulfillmentExecuteActions({
     dirty: boolean
     supportsSave: boolean
     formalPending: boolean
+    savePending: boolean
     canPost: boolean
     autoNext: boolean
     onSkip: () => void
@@ -351,25 +358,20 @@ function FulfillmentExecuteActions({
                 </Button>
             ) : null}
             {supportsSave ? (
-                <Button
+                <LoadingButton
                     id="fulfillment-operations-work-surface-save"
                     type="button"
                     variant="secondary"
                     className="rounded-lg shadow-none"
                     disabled={formalPending || !dirty}
+                    loading={savePending}
                     onClick={() => void onSave()}
                 >
-                    {formalPending ? (
-                        <LoaderCircleIcon
-                            data-icon="inline-start"
-                            aria-hidden="true"
-                            className="animate-spin"
-                        />
-                    ) : (
+                    {!savePending ? (
                         <SaveIcon data-icon="inline-start" />
-                    )}
-                    {formalPending ? "保存中…" : "保存"}
-                </Button>
+                    ) : null}
+                    {savePending ? "保存中…" : "保存"}
+                </LoadingButton>
             ) : null}
             <Button
                 id="fulfillment-operations-work-surface-confirm"

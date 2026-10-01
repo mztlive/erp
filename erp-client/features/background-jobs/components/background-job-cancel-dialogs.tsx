@@ -50,6 +50,7 @@ export function BackgroundJobCancelDialog({
                     <AlertDialogAction
                         id={`${ID_PREFIX}-cancel-confirm`}
                         disabled={pending}
+                        loading={pending}
                         onClick={() => {
                             void onConfirm()
                         }}
@@ -112,6 +113,7 @@ export function BackgroundJobsStopAllDialog({
                             <AlertDialogAction
                                 id={`${ID_PREFIX}-stop-all-confirm`}
                                 disabled={pending}
+                                loading={pending}
                                 onClick={() => {
                                     void onConfirm()
                                 }}

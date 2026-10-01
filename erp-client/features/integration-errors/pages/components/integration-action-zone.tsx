@@ -2,6 +2,7 @@ import * as React from "react"
 import { surfacePanelClassName } from "@/components/business"
 import type { ResponsibilityStatus } from "@/components/business/workflow-actions"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Card,
     CardContent,
@@ -26,6 +27,8 @@ export function IntegrationActionZone({
     item,
     can,
     formalPending,
+    pendingTaskAction,
+    pendingDirectAction,
     responsibilityStatus,
     comment,
     onCommentChange,
@@ -42,6 +45,8 @@ export function IntegrationActionZone({
     item: IntegrationResolutionItemView
     can: (action: IntegrationActionKind) => boolean
     formalPending: boolean
+    pendingTaskAction?: IntegrationTaskActionKind
+    pendingDirectAction?: IntegrationTaskActionKind
     responsibilityStatus: ResponsibilityStatus
     comment: string
     onCommentChange: (value: string) => void
@@ -95,8 +100,11 @@ export function IntegrationActionZone({
 
                 <div className="flex flex-wrap gap-2">
                     {can("QUERY_ORIGINAL_RESULT") && item.workItem ? (
-                        <Button
+                        <LoadingButton
                             id="integration-action-query-original-result"
+                            loading={
+                                pendingTaskAction === "QUERY_ORIGINAL_RESULT"
+                            }
                             type="button"
                             disabled={assignedDisabled}
                             onClick={() =>
@@ -104,33 +112,36 @@ export function IntegrationActionZone({
                             }
                         >
                             查询原结果
-                        </Button>
+                        </LoadingButton>
                     ) : null}
                     {can("REPLAY_ORIGINAL") && item.workItem ? (
-                        <Button
+                        <LoadingButton
                             id="integration-action-replay-original"
+                            loading={pendingTaskAction === "REPLAY_ORIGINAL"}
                             type="button"
                             variant="secondary"
                             disabled={assignedDisabled}
                             onClick={() => void onTaskAction("REPLAY_ORIGINAL")}
                         >
                             重新提交
-                        </Button>
+                        </LoadingButton>
                     ) : null}
                     {can("ADD_EVIDENCE") && item.workItem ? (
-                        <Button
+                        <LoadingButton
                             id="integration-action-add-evidence"
+                            loading={pendingTaskAction === "ADD_EVIDENCE"}
                             type="button"
                             variant="outline"
                             disabled={assignedDisabled}
                             onClick={() => void onTaskAction("ADD_EVIDENCE")}
                         >
                             补充证据
-                        </Button>
+                        </LoadingButton>
                     ) : null}
                     {can("LINK_COMPENSATION") && item.workItem ? (
-                        <Button
+                        <LoadingButton
                             id="integration-action-link-compensation"
+                            loading={pendingTaskAction === "LINK_COMPENSATION"}
                             type="button"
                             variant="outline"
                             disabled={assignedDisabled}
@@ -139,18 +150,19 @@ export function IntegrationActionZone({
                             }
                         >
                             关联补偿
-                        </Button>
+                        </LoadingButton>
                     ) : null}
                     {can("REATTRIBUTE") && item.workItem ? (
-                        <Button
+                        <LoadingButton
                             id="integration-action-reatribute"
+                            loading={pendingTaskAction === "REATTRIBUTE"}
                             type="button"
                             variant="outline"
                             disabled={assignedDisabled}
                             onClick={() => void onTaskAction("REATTRIBUTE")}
                         >
                             重新归集
-                        </Button>
+                        </LoadingButton>
                     ) : null}
                     {can("RESOLVE") &&
                     item.workItem &&
@@ -222,6 +234,7 @@ export function IntegrationActionZone({
                         item={item}
                         can={can}
                         formalPending={formalPending}
+                        pendingDirectAction={pendingDirectAction}
                         reconReasonId={reconReasonId}
                         onReconReasonIdChange={onReconReasonIdChange}
                         reasonMismatches={reasonMismatches}

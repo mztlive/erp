@@ -20,6 +20,7 @@ import { ListWorkspaceHeader } from "@/components/business/list-workspace"
 import { PageScaffold } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { QuickPreviewSheet } from "@/components/business"
 import {
     PreviewAmount,
@@ -448,16 +449,17 @@ export function SupplierScopePage() {
             />
 
             <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-                <Button
+                <LoadingButton
                     id="supplier-payables-scope-export"
                     type="button"
+                    loading={exporting}
                     variant="outline"
                     size="sm"
                     disabled={exporting || !data || data.total === 0}
                     onClick={() => void handleExport()}
                 >
                     {exporting ? "导出中…" : "导出当前范围"}
-                </Button>
+                </LoadingButton>
             </div>
 
             <QuickPreviewSheet

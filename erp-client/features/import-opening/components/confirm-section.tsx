@@ -134,6 +134,7 @@ function ReturnForFixDialog({
                                 label="确认退回修复"
                                 pendingLabel="正在提交"
                                 disabled={pending}
+                                loading={pending}
                             />
                         </form.AppForm>
                     </DialogFooter>

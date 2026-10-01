@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { DownloadIcon, FileUpIcon, LoaderCircleIcon } from "lucide-react"
+import { DownloadIcon, FileUpIcon } from "lucide-react"
 
 import { PageActions, PageScaffold } from "@/components/business"
 import {
@@ -85,9 +85,8 @@ export function ContractsListPage() {
                         {
                             actionKey: "export",
                             label: actions.exportPending ? "导出中…" : "导出",
-                            icon: actions.exportPending
-                                ? LoaderCircleIcon
-                                : DownloadIcon,
+                            icon: DownloadIcon,
+                            loading: actions.exportPending,
                             variant: "outline",
                             disabled: list.total === 0 || actions.exportPending,
                             onClick: () => {

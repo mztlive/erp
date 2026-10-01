@@ -5,6 +5,7 @@ import { useStore } from "@tanstack/react-form"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -35,6 +36,7 @@ import {
     X,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { publicImageUrl, savePublicSession, submitPublicSession } from "../api"
 import { usePublicSelectionQuery, salesSelectionKeys } from "../queries"
 import {
@@ -312,6 +314,8 @@ interface SelectionReviewCenterProps {
     token: string
     page: PublicPageView
     locked: boolean
+    submitting: boolean
+    saving: boolean
     conflict: boolean
     dirty: boolean
     onBack: () => void
@@ -324,6 +328,8 @@ const SelectionReviewCenter = ({
     token,
     page,
     locked,
+    submitting,
+    saving,
     conflict,
     dirty,
     onBack,
@@ -369,7 +375,7 @@ const SelectionReviewCenter = ({
         >()
 
         for (const choice of page.choices) {
-            if (optimisticRemoved.has(choice.item_id)) continue
+            if (optimisticRemoved.has(choice.item_id) && !saving) continue
             const item = page.items.find((i) => i.item_id === choice.item_id)
             const cat = item ? inferItemCategory(item) : "精选好物"
             const entry = map.get(cat) ?? {
@@ -389,7 +395,7 @@ const SelectionReviewCenter = ({
         }
 
         return Array.from(map.values())
-    }, [page.choices, page.items, optimisticRemoved])
+    }, [page.choices, page.items, optimisticRemoved, saving])
 
     // 计算总件数/份数
     const totalPieces = React.useMemo(() => {
@@ -770,8 +776,16 @@ const SelectionReviewCenter = ({
                                                                         }
                                                                     </p>
                                                                 )}
-                                                                <button
+                                                                <LoadingButton
+                                                                    id={`sales-selection-public-review-remove-${toAutomationIdSegment(item.item_id)}`}
                                                                     type="button"
+                                                                    variant="link"
+                                                                    size="sm"
+                                                                    loading={
+                                                                        saving &&
+                                                                        removingId ===
+                                                                            item.item_id
+                                                                    }
                                                                     disabled={
                                                                         locked ||
                                                                         conflict ||
@@ -783,13 +797,13 @@ const SelectionReviewCenter = ({
                                                                             item.item_id,
                                                                         )
                                                                     }
-                                                                    className="mt-1 text-[10px] text-slate-400 hover:text-blue-600 disabled:opacity-40 transition-colors border-0 bg-transparent p-0 cursor-pointer block ml-auto"
+                                                                    className="mt-1 h-auto text-[10px] text-slate-400 hover:text-blue-600 disabled:opacity-40 transition-colors border-0 bg-transparent p-0 cursor-pointer ml-auto"
                                                                 >
                                                                     {removingId ===
                                                                     item.item_id
                                                                         ? "移除中…"
                                                                         : "移除"}
-                                                                </button>
+                                                                </LoadingButton>
                                                             </div>
                                                         </div>
                                                     )
@@ -861,15 +875,16 @@ const SelectionReviewCenter = ({
                             >
                                 返回修改
                             </Button>
-                            <Button
+                            <LoadingButton
                                 id="sales-selection-public-submit"
                                 size="sm"
                                 className="rounded-full bg-gradient-to-r from-emerald-500 to-emerald-600 text-xs font-bold text-white shadow-md hover:opacity-95 px-6 h-9 active:scale-95 transition-all"
                                 disabled={locked || conflict || dirty}
+                                loading={submitting}
                                 onClick={onSubmit}
                             >
                                 确认并提交选品
-                            </Button>
+                            </LoadingButton>
                         </div>
                     </div>
                 </aside>
@@ -910,6 +925,7 @@ const SelectionForm = ({
     const [ended, setEnded] = React.useState(false)
     const [dirty, setDirty] = React.useState(false)
     const [message, setMessage] = React.useState("")
+    const [reconciling, setReconciling] = React.useState(false)
     const mall = page.submit_mode === "MALL_REDEEM"
 
     // 交互状态
@@ -1068,6 +1084,7 @@ const SelectionForm = ({
                 ? savePublicSession(token, operation.input)
                 : submitPublicSession(token, operation.input),
         onSuccess: (saved, operation) => {
+            setReconciling(false)
             client.setQueryData(salesSelectionKeys.public(token), saved)
             keepRequest(null)
             setMessage(operation.kind === "save" ? "选择已保存" : "选品已提交")
@@ -1083,6 +1100,7 @@ const SelectionForm = ({
             )
         },
         onError: async (error) => {
+            setReconciling(false)
             setConfirmed(null)
             const kind = requestFailure(error)
             if (kind === "ended") {
@@ -1520,16 +1538,24 @@ const SelectionForm = ({
                                     {message ||
                                         "上次操作结果待核对，请先恢复本次请求。"}
                                 </p>
-                                {request && !mutation.isPending && (
-                                    <Button
-                                        id="sales-selection-public-reconcile"
-                                        size="sm"
-                                        className="mt-1.5 h-6 rounded-lg bg-amber-600 text-white hover:bg-amber-700 text-xs px-2"
-                                        onClick={() => mutation.mutate(request)}
-                                    >
-                                        核对并恢复本次操作
-                                    </Button>
-                                )}
+                                {request &&
+                                    (!mutation.isPending || reconciling) && (
+                                        <LoadingButton
+                                            id="sales-selection-public-reconcile"
+                                            loading={
+                                                mutation.isPending &&
+                                                reconciling
+                                            }
+                                            size="sm"
+                                            className="mt-1.5 h-6 rounded-lg bg-amber-600 text-white hover:bg-amber-700 text-xs px-2"
+                                            onClick={() => {
+                                                setReconciling(true)
+                                                mutation.mutate(request)
+                                            }}
+                                        >
+                                            核对并恢复本次操作
+                                        </LoadingButton>
+                                    )}
                             </div>
                         </div>
                     </div>
@@ -1754,8 +1780,14 @@ const SelectionForm = ({
 
                         {/* 右侧：电商结算按钮组 */}
                         <div className="flex items-center gap-2">
-                            <Button
+                            <LoadingButton
                                 id="sales-selection-public-save"
+                                loading={
+                                    mutation.isPending &&
+                                    !reconciling &&
+                                    mutation.variables?.kind === "save" &&
+                                    !mutation.variables.confirm
+                                }
                                 variant="outline"
                                 size="sm"
                                 className="rounded-full border-slate-200 bg-slate-50 hover:bg-slate-100 text-xs font-medium text-slate-700 px-4 h-9 shadow-2xs"
@@ -1763,17 +1795,23 @@ const SelectionForm = ({
                                 onClick={() => persist(false)}
                             >
                                 保存选择
-                            </Button>
+                            </LoadingButton>
                             {!confirmed && (
-                                <Button
+                                <LoadingButton
                                     id="sales-selection-public-review"
+                                    loading={
+                                        mutation.isPending &&
+                                        !reconciling &&
+                                        mutation.variables?.kind === "save" &&
+                                        mutation.variables.confirm
+                                    }
                                     size="sm"
                                     className="rounded-full bg-blue-600 hover:bg-blue-700 text-xs font-bold text-white shadow-sm shadow-blue-500/25 px-5 h-9 active:scale-95 transition-all"
                                     disabled={locked || conflict}
                                     onClick={() => persist(true)}
                                 >
                                     核对并提交
-                                </Button>
+                                </LoadingButton>
                             )}
                         </div>
                     </div>
@@ -1786,6 +1824,14 @@ const SelectionForm = ({
                     token={token}
                     page={confirmed}
                     locked={locked}
+                    submitting={
+                        mutation.isPending &&
+                        mutation.variables?.kind === "submit"
+                    }
+                    saving={
+                        mutation.isPending &&
+                        mutation.variables?.kind === "save"
+                    }
                     conflict={conflict}
                     dirty={dirty}
                     onBack={() => setConfirmed(null)}

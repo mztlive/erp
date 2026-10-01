@@ -136,7 +136,8 @@ export function BrandReviseDialog({
             }
             form={form as never}
             result={result}
-            pending={mutation.isPending || !target}
+            pending={mutation.isPending}
+            disabled={!target}
             submitLabel={masterDataCopy.reviseSubmit}
             logoPreviewUrl={logoPreviewUrl}
             onLogoFiles={(files) => {

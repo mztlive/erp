@@ -1,11 +1,12 @@
 "use client"
 
 import Link from "next/link"
-import { Loader2Icon, TriangleAlertIcon } from "lucide-react"
+import { TriangleAlertIcon } from "lucide-react"
 
 import { BusinessStatusBadge, QuickPreviewSheet } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { SupplierOrderPreviewPanel } from "@/features/supplier-orders/components/supplier-order-preview-panel"
 import type { QueryFromPreviewInput } from "@/features/supplier-orders/hooks/use-supplier-orders-query-result"
 import type { SupplierOrderDetailView } from "@/features/supplier-orders/types"
@@ -95,8 +96,9 @@ export function SupplierOrdersListPreviewSheet({
                         </Button>
                         {preview.allowedActions.includes("QUERY_RESULT") &&
                         !preview.workItem ? (
-                            <Button
+                            <LoadingButton
                                 id="supplier-orders-list-preview-query"
+                                loading={queryPending}
                                 type="button"
                                 disabled={queryPending}
                                 onClick={() => {
@@ -107,14 +109,8 @@ export function SupplierOrdersListPreviewSheet({
                                     })
                                 }}
                             >
-                                {queryPending ? (
-                                    <Loader2Icon
-                                        className="size-4 animate-spin"
-                                        aria-hidden="true"
-                                    />
-                                ) : null}
                                 {queryPending ? "查询中…" : "查询原结果"}
-                            </Button>
+                            </LoadingButton>
                         ) : null}
                     </>
                 ) : null

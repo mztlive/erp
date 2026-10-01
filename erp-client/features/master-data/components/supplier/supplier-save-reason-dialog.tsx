@@ -3,6 +3,7 @@
 import { SaveIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Dialog,
     DialogClose,
@@ -84,9 +85,10 @@ export function SupplierSaveReasonDialog({
                     >
                         取消
                     </DialogClose>
-                    <Button
+                    <LoadingButton
                         id="master-data-supplier-supplier-save-reason-dialog-button-2"
                         type="button"
+                        loading={pending}
                         disabled={pending}
                         onClick={onConfirm}
                     >
@@ -96,7 +98,7 @@ export function SupplierSaveReasonDialog({
                             : isCreate
                               ? masterDataCopy.createSubmit
                               : masterDataCopy.reviseSubmit}
-                    </Button>
+                    </LoadingButton>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

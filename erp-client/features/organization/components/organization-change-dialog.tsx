@@ -8,6 +8,7 @@ import { BatchImpactPreview, BusinessDiffPanel } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Dialog,
     DialogContent,
@@ -414,13 +415,14 @@ export function OrganizationChangeDialog({
                         >
                             取消
                         </Button>
-                        <Button
+                        <LoadingButton
+                            loading={previewing || submitting}
                             id="organization-change-submit"
                             type="submit"
                             disabled={previewing || submitting}
                         >
                             {receipt ? "确认提交" : "预览影响"}
-                        </Button>
+                        </LoadingButton>
                     </DialogFooter>
                 </form>
             </DialogContent>

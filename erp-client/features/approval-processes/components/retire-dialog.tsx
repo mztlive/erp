@@ -4,6 +4,7 @@ import * as React from "react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Dialog,
     DialogContent,
@@ -106,7 +107,8 @@ export function RetireDialog({
                     >
                         取消
                     </Button>
-                    <Button
+                    <LoadingButton
+                        loading={retire.isPending}
                         id={`${id}-confirm`}
                         type="button"
                         variant="destructive"
@@ -114,7 +116,7 @@ export function RetireDialog({
                         onClick={() => void handleRetire()}
                     >
                         {retire.isPending ? "正在退役…" : "确认退役"}
-                    </Button>
+                    </LoadingButton>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

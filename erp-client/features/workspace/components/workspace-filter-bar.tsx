@@ -330,6 +330,7 @@ export function WorkspaceQueueToolbar({
                             <InputGroupButton
                                 id="workspace-queue-toolbar-query"
                                 type="submit"
+                                loading={loading}
                                 size="icon-xs"
                                 aria-label="查询"
                             >

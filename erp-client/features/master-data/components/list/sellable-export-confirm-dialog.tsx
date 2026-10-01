@@ -6,6 +6,7 @@ import type { ColumnDef } from "@tanstack/react-table"
 
 import { DataTable, MoneyValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Dialog,
     DialogContent,
@@ -14,7 +15,6 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
-import { Spinner } from "@/components/ui/spinner"
 import { SellableItemThumbnail } from "@/features/master-data/components/list/sellable-item-thumbnail"
 import { DialogScrollBody } from "@/features/master-data/components/shared/action-dialog-shared"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
@@ -270,17 +270,17 @@ export function SellableExportConfirmDialog({
                     >
                         {masterDataCopy.sellableExportConfirmCancel}
                     </Button>
-                    <Button
+                    <LoadingButton
                         id={`${prefix}-submit`}
+                        loading={pending}
                         type="button"
                         disabled={pending || rows.length === 0}
                         onClick={onConfirm}
                     >
-                        {pending ? <Spinner data-icon="inline-start" /> : null}
                         {pending
                             ? "导出中…"
                             : `${masterDataCopy.sellableExportConfirmSubmit} ${rows.length} 件`}
-                    </Button>
+                    </LoadingButton>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

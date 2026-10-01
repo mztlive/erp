@@ -4,6 +4,7 @@ import { useState, useRef } from "react"
 import { z } from "zod"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { MoneyValue } from "@/components/business"
 import { ApprovalReadonly } from "@/features/approval-workflow/components/approval-readonly"
 import {
@@ -295,13 +296,14 @@ function CancelRequestForm({
                 >
                     返回
                 </Button>
-                <Button
+                <LoadingButton
                     id="invoice-request-cancel-submit"
                     type="submit"
+                    loading={cancel.isPending}
                     disabled={cancel.isPending}
                 >
                     {uncertain ? "核对撤回结果" : "撤回申请"}
-                </Button>
+                </LoadingButton>
             </div>
         </form>
     )

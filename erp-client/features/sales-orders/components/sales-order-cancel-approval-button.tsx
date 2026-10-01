@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { LoaderCircleIcon } from "lucide-react"
 
 import {
     AlertDialog,
@@ -130,6 +129,7 @@ export function SalesOrderCancelApprovalButton({
                             取消
                         </AlertDialogCancel>
                         <AlertDialogAction
+                            loading={cancelMutation.isPending}
                             id="sales-orders-detail-cancel-approval-confirm"
                             disabled={
                                 cancelMutation.isPending || !reason.trim()
@@ -169,13 +169,6 @@ export function SalesOrderCancelApprovalButton({
                                     })
                             }}
                         >
-                            {cancelMutation.isPending ? (
-                                <LoaderCircleIcon
-                                    data-icon="inline-start"
-                                    aria-hidden="true"
-                                    className="animate-spin"
-                                />
-                            ) : null}
                             {cancelMutation.isPending ? "撤回中" : "确认撤回"}
                         </AlertDialogAction>
                     </AlertDialogFooter>

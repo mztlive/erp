@@ -163,10 +163,9 @@ export function CustomerForm({
         form.reset()
     }
 
-    const isPending =
-        (mode === "create"
-            ? createMutation.isPending
-            : saveMutation.isPending) || queryIdempotency.isPending
+    const isSubmitting =
+        mode === "create" ? createMutation.isPending : saveMutation.isPending
+    const isPending = isSubmitting || queryIdempotency.isPending
     const submitLabel =
         mode === "create"
             ? createMutation.isPending
@@ -343,6 +342,7 @@ export function CustomerForm({
                 form={form}
                 result={result}
                 isPending={isPending}
+                isSubmitting={isSubmitting}
                 submitLabel={submitLabel}
                 dirty={dirty}
                 onCancel={onCancel}

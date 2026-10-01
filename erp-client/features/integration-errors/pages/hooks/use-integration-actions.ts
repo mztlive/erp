@@ -262,6 +262,14 @@ export function useIntegrationActions({
         terminalConfirm,
         setTerminalConfirm,
         formalPending,
+        pendingTaskAction: actionMutation.isPending
+            ? actionMutation.variables?.kind
+            : undefined,
+        pendingDirectAction:
+            directMutation.isPending &&
+            directMutation.variables?.decision.kind === "NON_TERMINAL_ACTION"
+                ? directMutation.variables.decision.action
+                : undefined,
         responsibilityStatus,
         can,
         reasonMismatches,

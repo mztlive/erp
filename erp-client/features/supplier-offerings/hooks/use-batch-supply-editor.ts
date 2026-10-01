@@ -325,6 +325,7 @@ export function useBatchSupplyEditor({
             const result = await mutation.mutateAsync({
                 rows: inputs,
                 validateOnly,
+                recoveryOnly,
             })
             snapshot = {
                 ...snapshot,
@@ -423,6 +424,7 @@ export function useBatchSupplyEditor({
         busy,
         storageKey,
         mutation,
+        reloadPending: reloadMutation.isPending,
         message,
         editRow,
         editCell,

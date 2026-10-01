@@ -147,6 +147,7 @@ export function CancelAdjustmentApprovalDialog({
                                     id={`${id}-submit`}
                                     label="确认撤回"
                                     disabled={cancelApproval.isPending}
+                                    loading={cancelApproval.isPending}
                                 />
                             </form.AppForm>
                         </DialogFooter>

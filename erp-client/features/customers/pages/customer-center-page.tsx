@@ -19,6 +19,7 @@ import {
     listWorkspaceStyles as styles,
 } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { CustomerCreateDialog } from "@/features/customers/components/customer-create-dialog"
 import {
     useCustomerCenterDirectoryState,
@@ -200,14 +201,15 @@ export function CustomerCenterPage() {
                     </>
                 }
             >
-                <Button
+                <LoadingButton
                     id="customers-directory-export"
                     variant="outline"
                     disabled={exportMutation.isPending || !data?.totalInScope}
+                    loading={exportMutation.isPending}
                     onClick={() => exportMutation.mutate()}
                 >
                     {exportMutation.isPending ? "正在导出…" : "导出"}
-                </Button>
+                </LoadingButton>
                 {canCreate ? (
                     <Button
                         id="customers-directory-create"

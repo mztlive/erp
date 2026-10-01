@@ -5,6 +5,7 @@ import { useStore } from "@tanstack/react-form"
 import { z } from "zod"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { MoneyValue } from "@/components/business"
 import { SalesOrderSearchCombobox } from "@/features/entity-selectors/components/sales-order-search-combobox"
 import { loadReceivables } from "@/features/customer-receivables/api/loaders"
@@ -269,20 +270,22 @@ export function InvoiceRequestForm({
                     取消
                 </Button>
                 {uncertain ? (
-                    <Button
+                    <LoadingButton
                         id="invoice-request-resolve"
                         type="button"
+                        loading={commands.submit.isPending}
                         disabled={commands.submit.isPending}
                         onClick={() =>
                             pending.current && void send(pending.current)
                         }
                     >
                         核对提交结果
-                    </Button>
+                    </LoadingButton>
                 ) : (
-                    <Button
+                    <LoadingButton
                         id="invoice-request-submit"
                         type="submit"
+                        loading={commands.submit.isPending}
                         disabled={
                             locked ||
                             !amounts.data ||
@@ -290,7 +293,7 @@ export function InvoiceRequestForm({
                         }
                     >
                         提交审批
-                    </Button>
+                    </LoadingButton>
                 )}
             </div>
         </form>

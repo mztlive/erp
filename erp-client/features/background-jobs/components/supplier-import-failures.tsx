@@ -1,6 +1,6 @@
 "use client"
 import { useMutation } from "@tanstack/react-query"
-import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { apiGet } from "@/lib/api"
 import { getErrorMessage } from "@/lib/api/errors"
 import {
@@ -23,14 +23,15 @@ export const SupplierImportFailures = ({ jobId }: { jobId: string }) => {
     })
     return (
         <div className="space-y-2">
-            <Button
+            <LoadingButton
                 id="supplier-import-download-failures"
                 variant="outline"
                 disabled={download.isPending}
+                loading={download.isPending}
                 onClick={() => download.mutate()}
             >
                 {download.isPending ? "准备下载…" : "下载待处理行"}
-            </Button>
+            </LoadingButton>
             {download.isError && (
                 <p role="alert" className="text-sm text-destructive">
                     {getErrorMessage(download.error, "下载失败，请重试")}

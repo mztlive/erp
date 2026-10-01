@@ -20,7 +20,6 @@ import {
 } from "@/components/business/list-workspace"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { Button } from "@/components/ui/button"
-import { Spinner } from "@/components/ui/spinner"
 import { usePurchaseOrdersListController } from "@/features/purchase-orders/hooks/use-purchase-orders-list-controller"
 import { buildPurchaseOrdersListColumns } from "@/features/purchase-orders/pages/purchase-orders-list-columns"
 import { PurchaseOrdersListToolbar } from "@/features/purchase-orders/pages/purchase-orders-list-toolbar"
@@ -86,18 +85,9 @@ export function PurchaseOrdersListPage() {
                     actions={[
                         {
                             actionKey: "export",
-                            label: exportPending ? (
-                                <>
-                                    <Spinner
-                                        data-icon="inline-start"
-                                        aria-hidden="true"
-                                    />
-                                    导出中…
-                                </>
-                            ) : (
-                                "导出"
-                            ),
-                            icon: exportPending ? undefined : DownloadIcon,
+                            label: exportPending ? "导出中…" : "导出",
+                            icon: DownloadIcon,
+                            loading: exportPending,
                             variant: "outline",
                             disabled: exportPending || ctrl.total === 0,
                             onClick: () => void ctrl.exportCsv(),

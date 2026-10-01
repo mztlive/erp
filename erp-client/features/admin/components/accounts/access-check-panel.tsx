@@ -180,6 +180,7 @@ export function AccessCheckPanel({ accountId }: { accountId: string }) {
                 </form.Subscribe>
                 <form.AppForm>
                     <form.SubmitButton
+                        loading={query.isFetching}
                         id="account-check-submit"
                         label="开始检查"
                         disabled={query.isFetching}

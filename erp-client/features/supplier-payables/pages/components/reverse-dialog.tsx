@@ -1,6 +1,7 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Dialog,
     DialogContent,
@@ -11,7 +12,6 @@ import {
 } from "@/components/ui/dialog"
 import { InputGroup, InputGroupInput } from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
-import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import type { ReverseTarget } from "@/features/supplier-payables/types"
 
@@ -99,9 +99,10 @@ export function ReverseDialog({
                     >
                         取消
                     </Button>
-                    <Button
+                    <LoadingButton
                         id="supplier-payables-reverse-dialog-confirm"
                         type="button"
+                        loading={submitting}
                         disabled={
                             reason.trim().length < 2 ||
                             (target.kind === "invoice" &&
@@ -110,18 +111,12 @@ export function ReverseDialog({
                         }
                         onClick={onSubmit}
                     >
-                        {submitting ? (
-                            <Spinner
-                                className="size-4 animate-spin"
-                                aria-hidden="true"
-                            />
-                        ) : null}
                         {submitting
                             ? "提交中…"
                             : target.kind === "payment"
                               ? "提交冲正审批"
                               : "提交红票"}
-                    </Button>
+                    </LoadingButton>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

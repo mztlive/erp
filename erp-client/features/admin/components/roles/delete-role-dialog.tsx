@@ -52,6 +52,7 @@ export function DeleteRoleDialog({
                         取消
                     </AlertDialogCancel>
                     <AlertDialogAction
+                        loading={isDeleting}
                         id={`${id}-confirm`}
                         variant="destructive"
                         disabled={isDeleting}

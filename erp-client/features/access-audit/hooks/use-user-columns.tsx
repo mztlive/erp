@@ -20,6 +20,7 @@ type UseUserColumnsInput = {
     rowFocusRef: { current: Map<string, HTMLButtonElement | null> }
     openExplain: (type: "ROLE" | "USER", id: string) => void
     startChange: (command: AccessChangeCommand) => Promise<void>
+    previewingCommand?: AccessChangeCommand | null
     setRoleAssignment: React.Dispatch<
         React.SetStateAction<RoleAssignmentTarget | null>
     >
@@ -35,6 +36,7 @@ function useUserColumns({
     data,
     rowFocusRef,
     startChange,
+    previewingCommand,
     setRoleAssignment,
 }: UseUserColumnsInput) {
     return React.useMemo<ColumnDef<UserRow>[]>(
@@ -150,6 +152,11 @@ function useUserColumns({
                                               label: "紧急撤权",
                                               icon: ShieldOffIcon,
                                               destructive: true,
+                                              loading:
+                                                  previewingCommand?.subjectId ===
+                                                      user.userId &&
+                                                  previewingCommand.action ===
+                                                      "EMERGENCY_REVOKE_USER_ROLE",
                                               onClick: () =>
                                                   void startChange({
                                                       subjectType: "USER",
@@ -172,7 +179,13 @@ function useUserColumns({
                 },
             },
         ],
-        [startChange, data?.permissionVersion, rowFocusRef, setRoleAssignment],
+        [
+            startChange,
+            previewingCommand,
+            data?.permissionVersion,
+            rowFocusRef,
+            setRoleAssignment,
+        ],
     )
 }
 

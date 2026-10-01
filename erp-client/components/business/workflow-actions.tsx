@@ -9,7 +9,6 @@ import {
     CircleDashedIcon,
     FileCheck2Icon,
     ListChecksIcon,
-    LoaderCircleIcon,
     LockIcon,
     ShieldAlertIcon,
     ShieldCheckIcon,
@@ -32,6 +31,7 @@ import {
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import { WorkspaceTaskFooter } from "@/components/business/workspace-task-pane"
 import { getErrorMessage } from "@/lib/api/errors"
@@ -419,20 +419,15 @@ function FormalActionConfirmDialog({
                                 : "default")
                         }
                         disabled={isPending || confirmDisabled}
+                        loading={isPending}
                         onClick={() => void handleConfirm()}
                     >
-                        {isPending ? (
-                            <LoaderCircleIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                                className="animate-spin"
-                            />
-                        ) : (
+                        {!isPending ? (
                             <CheckIcon
                                 data-icon="inline-start"
                                 aria-hidden="true"
                             />
-                        )}
+                        ) : null}
                         {isPending ? `正在${actionLabel}` : confirmLabel}
                     </AlertDialogAction>
                 </AlertDialogFooter>
@@ -608,50 +603,40 @@ function SequentialProcessBar({
                 ) : null}
 
                 {showProcess ? (
-                    <Button
+                    <LoadingButton
                         id={`${baseId}-process`}
                         type="button"
+                        loading={pending}
                         /* 隐藏「并打开下一条」时，本按钮就是唯一主动作 */
                         variant={showProcessNext ? "secondary" : "default"}
                         disabled={!canProcess}
                         onClick={onProcess}
                     >
-                        {pending ? (
-                            <LoaderCircleIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                                className="animate-spin"
-                            />
-                        ) : (
+                        {!pending ? (
                             <ProcessIcon
                                 data-icon="inline-start"
                                 aria-hidden="true"
                             />
-                        )}
+                        ) : null}
                         {pending ? "正在处理" : processLabel}
-                    </Button>
+                    </LoadingButton>
                 ) : null}
                 {showProcess && showProcessNext ? (
-                    <Button
+                    <LoadingButton
                         id={`${baseId}-process-next`}
                         type="button"
+                        loading={pending}
                         disabled={!canProcessNext}
                         onClick={onProcessNext}
                     >
-                        {pending ? (
-                            <LoaderCircleIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                                className="animate-spin"
-                            />
-                        ) : (
+                        {!pending ? (
                             <ArrowRightIcon
                                 data-icon="inline-end"
                                 aria-hidden="true"
                             />
-                        )}
+                        ) : null}
                         {pending ? "正在处理" : processNextLabel}
-                    </Button>
+                    </LoadingButton>
                 ) : null}
             </div>
         </section>

@@ -2,10 +2,9 @@
 
 import { KeyRoundIcon } from "lucide-react"
 
-import { Spinner } from "@/components/ui/spinner"
-
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Dialog,
     DialogContent,
@@ -115,18 +114,14 @@ export function ReferenceBindDialog({
                     >
                         取消
                     </Button>
-                    <Button
+                    <LoadingButton
                         id={`supplier-api-connections-reference-bind-${kind}-confirm`}
+                        loading={pending}
                         type="button"
                         disabled={!allowed || !value || pending}
                         onClick={() => void onSubmit()}
                     >
-                        {pending ? (
-                            <Spinner
-                                className="size-4 animate-spin"
-                                aria-hidden="true"
-                            />
-                        ) : (
+                        {!pending && (
                             <KeyRoundIcon
                                 className="size-4"
                                 aria-hidden="true"
@@ -137,7 +132,7 @@ export function ReferenceBindDialog({
                             : kind === "credential"
                               ? "保存密钥配置"
                               : "保存地址配置"}
-                    </Button>
+                    </LoadingButton>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

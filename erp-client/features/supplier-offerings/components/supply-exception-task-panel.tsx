@@ -377,6 +377,7 @@ export function SupplyExceptionTaskPanel({
                                 id="supplier-offerings-exception-submit"
                                 label="确认已核对"
                                 pendingLabel="正在提交"
+                                loading={completeMutation.isPending}
                                 disabled={
                                     !canProcess || completeMutation.isPending
                                 }

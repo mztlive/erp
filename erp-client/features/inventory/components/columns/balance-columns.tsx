@@ -2,7 +2,7 @@
 
 import type { ColumnDef } from "@tanstack/react-table"
 
-import { EyeIcon, LoaderCircleIcon, SlidersHorizontalIcon } from "lucide-react"
+import { EyeIcon, SlidersHorizontalIcon } from "lucide-react"
 
 import {
     BusinessStatusBadge,
@@ -161,22 +161,12 @@ export function buildBalanceColumns({
                         icon: SlidersHorizontalIcon,
                         emphasis: "outline",
                         disabled: isCreating,
+                        loading: isCreating,
                         onClick: () => {
                             void startAdjustment(row.original)
                         },
                         ...(blockerMessage
                             ? { disabledReason: blockerMessage }
-                            : {}),
-                        ...(isCreating
-                            ? {
-                                  leading: (
-                                      <LoaderCircleIcon
-                                          data-icon="inline-start"
-                                          aria-hidden="true"
-                                          className="size-3.5 animate-spin"
-                                      />
-                                  ),
-                              }
                             : {}),
                     })
                 }

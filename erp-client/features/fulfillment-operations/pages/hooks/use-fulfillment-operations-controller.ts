@@ -600,6 +600,8 @@ export function useFulfillmentOperationsController({
         validationIssues,
         canPost,
         formalPending,
+        savePending: saveMutation.isPending,
+        resolvePending: resolveUnknownMutation.isPending,
         supportsSave: actions.supportsSave,
         autoNext,
         currentUrl,

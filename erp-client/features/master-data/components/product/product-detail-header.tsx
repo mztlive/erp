@@ -11,6 +11,7 @@ import {
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -144,15 +145,16 @@ export function ProductDetailHeader({
                 </>
             }
             primaryAction={
-                <Button
+                <LoadingButton
                     id="master-data-product-detail-header-submit"
+                    loading={pending}
                     type="button"
                     disabled={!canRevise || pending}
                     onClick={onSave}
                 >
                     <SaveIcon aria-hidden />
                     {pending ? "提交中…" : isCreate ? "创建商品" : "保存更新"}
-                </Button>
+                </LoadingButton>
             }
         />
     )

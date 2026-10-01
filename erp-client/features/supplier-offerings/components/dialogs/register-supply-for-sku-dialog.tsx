@@ -11,6 +11,7 @@ import { useAppForm } from "@/components/form"
 import { toFieldErrors } from "@/components/form/utils"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Dialog,
     DialogClose,
@@ -889,8 +890,11 @@ export function RegisterSupplyForSkuDialog({
                                 selector={(state) => state.isSubmitting}
                             >
                                 {(isSubmitting) => (
-                                    <Button
+                                    <LoadingButton
                                         id={`${prefix}-submit`}
+                                        loading={
+                                            mutation.isPending || isSubmitting
+                                        }
                                         type="submit"
                                         disabled={
                                             mutation.isPending || isSubmitting
@@ -899,7 +903,7 @@ export function RegisterSupplyForSkuDialog({
                                         {mutation.isPending || isSubmitting
                                             ? "正在保存…"
                                             : "保存供给"}
-                                    </Button>
+                                    </LoadingButton>
                                 )}
                             </form.Subscribe>
                         </DialogFooter>

@@ -1,10 +1,8 @@
 "use client"
 
-import { LoaderCircleIcon } from "lucide-react"
-
 import { FormalActionResult } from "@/components/business"
 import type { ResultState } from "@/components/business/feedback"
-import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 
 interface AdjustmentResultBannerProps {
     result: NonNullable<ResultState>
@@ -35,25 +33,19 @@ export function AdjustmentResultBanner({
             actions={
                 result.pendingIdempotencyKey ? (
                     <div className="flex flex-wrap gap-2">
-                        <Button
+                        <LoadingButton
                             id="inventory-adjustment-result-resolve"
                             type="button"
                             size="sm"
                             variant="outline"
                             disabled={isResolving}
+                            loading={isResolving}
                             onClick={() => {
                                 void onResolve()
                             }}
                         >
-                            {isResolving ? (
-                                <LoaderCircleIcon
-                                    data-icon="inline-start"
-                                    aria-hidden="true"
-                                    className="animate-spin"
-                                />
-                            ) : null}
                             {isResolving ? "查询中…" : "查询最终结果"}
-                        </Button>
+                        </LoadingButton>
                     </div>
                 ) : undefined
             }

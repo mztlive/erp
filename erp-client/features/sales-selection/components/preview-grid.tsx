@@ -17,6 +17,7 @@ import { SnapshotImage } from "./snapshot-image"
 import { BusinessEmptyState, MoneyValue } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { DisplayItem } from "@/features/sales-selection/types"
@@ -32,10 +33,14 @@ const PreviewCard = ({
     item,
     onDelete,
     canDelete,
+    pending,
+    deleting,
 }: {
     item: DisplayItem
     onDelete?: (itemId: string) => void
     canDelete: boolean
+    pending: boolean
+    deleting: boolean
 }) => {
     const cardKey = toAutomationIdSegment(item.item_id)
     const members = item.kind === "PACKAGE" ? (item.members ?? []) : []
@@ -125,12 +130,14 @@ const PreviewCard = ({
 
                 {canDelete && onDelete ? (
                     <div className="border-t border-border/50 p-2 pt-1.5">
-                        <Button
+                        <LoadingButton
                             id={`sales-selection-preview-${cardKey}-delete`}
                             type="button"
                             variant="ghost"
                             size="xs"
                             className="h-7 w-full justify-center text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            disabled={pending}
+                            loading={deleting}
                             onClick={() => onDelete(item.item_id)}
                         >
                             <Trash2Icon
@@ -139,7 +146,7 @@ const PreviewCard = ({
                                 aria-hidden="true"
                             />
                             删除该项
-                        </Button>
+                        </LoadingButton>
                     </div>
                 ) : null}
             </Card>
@@ -169,12 +176,18 @@ export const PreviewGrid = ({
     tiers,
     onRegenerateTier,
     onDelete,
+    pending = false,
+    deletingItemId,
+    regeneratingTierIds,
 }: {
     items: readonly DisplayItem[]
     selectionForm: "SINGLE_SKU" | "PACKAGE"
     tiers?: readonly PreviewTierConfig[]
     onRegenerateTier?: (tierId: string) => void
     onDelete?: (itemId: string) => void
+    pending?: boolean
+    deletingItemId?: string
+    regeneratingTierIds?: readonly string[]
 }) => {
     const canDelete = typeof onDelete === "function"
     const [tierFilter, setTierFilter] = React.useState<string>("ALL")
@@ -317,6 +330,8 @@ export const PreviewGrid = ({
                                 item={item}
                                 onDelete={onDelete}
                                 canDelete={canDelete}
+                                pending={pending}
+                                deleting={deletingItemId === item.item_id}
                             />
                         ))}
                     </div>
@@ -368,11 +383,15 @@ export const PreviewGrid = ({
                                         </div>
 
                                         {onRegenerateTier && tierConfig ? (
-                                            <Button
+                                            <LoadingButton
                                                 id={`selection-regenerate-inline-${tierConfig.tier_id}`}
                                                 type="button"
                                                 size="xs"
                                                 variant="outline"
+                                                disabled={pending}
+                                                loading={regeneratingTierIds?.includes(
+                                                    tierConfig.tier_id,
+                                                )}
                                                 onClick={() =>
                                                     onRegenerateTier(
                                                         tierConfig.tier_id,
@@ -385,7 +404,7 @@ export const PreviewGrid = ({
                                                     aria-hidden="true"
                                                 />
                                                 重生成此档
-                                            </Button>
+                                            </LoadingButton>
                                         ) : null}
                                     </div>
 
@@ -396,6 +415,11 @@ export const PreviewGrid = ({
                                                 item={item}
                                                 onDelete={onDelete}
                                                 canDelete={canDelete}
+                                                pending={pending}
+                                                deleting={
+                                                    deletingItemId ===
+                                                    item.item_id
+                                                }
                                             />
                                         ))}
                                     </div>

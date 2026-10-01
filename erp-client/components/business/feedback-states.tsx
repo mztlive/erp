@@ -20,6 +20,7 @@ import {
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Empty,
     EmptyContent,
@@ -43,7 +44,7 @@ import { freshnessText, versionText, workspaceLabel } from "@/lib/ui-text"
 import { cn } from "@/lib/utils"
 
 type GuardedBusinessActionProps = Omit<
-    React.ComponentProps<typeof Button>,
+    React.ComponentProps<typeof LoadingButton>,
     "disabled"
 > & {
     disabled?: boolean
@@ -76,9 +77,9 @@ function GuardedBusinessAction({
 
     if (!hasExplanation) {
         return (
-            <Button id={baseId} {...buttonProps}>
+            <LoadingButton id={baseId} {...buttonProps}>
                 {children}
-            </Button>
+            </LoadingButton>
         )
     }
 
@@ -113,13 +114,13 @@ function GuardedBusinessAction({
                             />
                         }
                     >
-                        <Button id={baseId} disabled {...buttonProps}>
+                        <LoadingButton id={baseId} disabled {...buttonProps}>
                             {children}
-                        </Button>
+                        </LoadingButton>
                     </TooltipTrigger>
                 ) : (
                     <TooltipTrigger
-                        render={<Button id={baseId} {...buttonProps} />}
+                        render={<LoadingButton id={baseId} {...buttonProps} />}
                     >
                         {children}
                     </TooltipTrigger>

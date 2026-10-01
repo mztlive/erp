@@ -356,6 +356,7 @@ export const BookCreateDialog = ({
                                 id="sales-selection-create-submit"
                                 label="创建并开始准备"
                                 pendingLabel="提交中…"
+                                loading={operations.create.isPending}
                             />
                         </form.AppForm>
                     </DialogFooter>

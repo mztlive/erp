@@ -2,7 +2,6 @@
 
 import * as React from "react"
 import { useQuery } from "@tanstack/react-query"
-import { LoaderCircleIcon } from "lucide-react"
 
 import {
     AlertDialog,
@@ -238,6 +237,7 @@ export function SalesOrderHandoverButton({
                             取消
                         </AlertDialogCancel>
                         <AlertDialogAction
+                            loading={handoverMutation.isPending}
                             id="sales-orders-detail-handover-confirm"
                             disabled={
                                 handoverMutation.isPending ||
@@ -281,13 +281,6 @@ export function SalesOrderHandoverButton({
                                     })
                             }}
                         >
-                            {handoverMutation.isPending ? (
-                                <LoaderCircleIcon
-                                    data-icon="inline-start"
-                                    aria-hidden="true"
-                                    className="animate-spin"
-                                />
-                            ) : null}
                             {handoverMutation.isPending ? "交接中" : "确认交接"}
                         </AlertDialogAction>
                     </AlertDialogFooter>
