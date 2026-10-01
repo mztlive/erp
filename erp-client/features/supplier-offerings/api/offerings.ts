@@ -12,6 +12,8 @@ import type {
     ReviseSupplierOfferingInput,
     SupplierOfferingListQuery,
     SupplierOfferingPage,
+    SupplierOfferingView,
+    OfferingHistoryPage,
     SupplierSupplyExceptionWorkItem,
     UpdateOfferingAvailabilityInput,
 } from "@/features/supplier-offerings/types"
@@ -166,5 +168,25 @@ export function updateSupplierOfferingAvailability(
     }>(
         `/admin/supplier-offerings/${encodeURIComponent(offeringId)}/availability`,
         body,
+    )
+}
+
+/** 按稳定供给身份读取资料，独立打开或刷新均不依赖列表缓存。 */
+export function fetchSupplierOffering(
+    id: string,
+): Promise<SupplierOfferingView> {
+    return apiGet(`/admin/supplier-offerings/${encodeURIComponent(id)}`)
+}
+
+/** 条款历史使用版本游标，翻页时重新校验权限。 */
+export function fetchOfferingHistory(
+    id: string,
+    before?: number,
+): Promise<OfferingHistoryPage> {
+    return apiGet(
+        `/admin/supplier-offerings/${encodeURIComponent(id)}/revisions`,
+        {
+            before_revision_no: before,
+        },
     )
 }

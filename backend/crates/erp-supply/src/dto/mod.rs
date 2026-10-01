@@ -14,3 +14,5 @@ pub mod supplier_settlement;
 pub use offering_scope::{
     HandoverCandidateView, HandoverSupplierOfferingRequest, HandoverSupplierOfferingView,
 };
+
+pub mod offering_history;

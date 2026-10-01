@@ -229,6 +229,15 @@ export async function ensureRoleBoundAdmin(adminToken, spec, roles, options = {}
  * @returns {Promise<Record<string, { id: string, account: string, name: string, role_ids: string[] }>>}
  */
 export async function ensureDevAccounts(adminToken, options = {}) {
+  const catalog = await call("GET", "/admin/role-templates", { token: adminToken });
+  const requiredRoles = new Set(Object.values(ACCOUNTS).map((account) => account.roleId));
+  const missing = catalog.templates.filter((template) => requiredRoles.has(template.id) && template.state === "missing");
+  if (missing.length > 0) {
+    await call("POST", "/admin/role-templates/generate", {
+      token: adminToken,
+      body: { template_ids: missing.map((template) => template.id), expected_policy_version: catalog.policy_version },
+    });
+  }
   const roles = await listRoles(adminToken);
   const seeded = {};
   for (const [key, spec] of Object.entries(ACCOUNTS)) {

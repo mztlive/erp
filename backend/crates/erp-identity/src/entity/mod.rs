@@ -10,6 +10,7 @@ pub mod person_directory;
 pub mod policy_permission;
 pub mod rbac;
 pub mod role;
+pub mod role_template;
 
 pub use account_core::*;
 pub use auth::*;

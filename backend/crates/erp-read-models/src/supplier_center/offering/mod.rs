@@ -8,6 +8,7 @@ use erp_party::{Party, PartyRevision};
 use erp_supplier::SupplierAccount;
 use erp_supply::OfferingDataScopePort;
 use erp_supply::entity::supplier_offering::{SupplierOfferingAvailability, SupplierOfferingRevision};
+use erp_supply::repository::supplier_offering::SupplierOfferingRow;
 use mongodb::Database;
 use validator::Validate;
 
@@ -16,6 +17,7 @@ use super::repository::offering::{
     SupplierOfferingReadRepository,
 };
 use crate::Result;
+mod detail;
 pub mod dto;
 mod procurement;
 mod scope;
@@ -118,8 +120,9 @@ pub(super) fn page_view(
         .collect();
     Ok(PageView { items, total: bundle.page.total, page: query.page, page_size: query.page_size })
 }
+/// 装配当前指针下的名称、商业条款和实时可供情况，缺失关联保留空值。
 fn build_view(
-    row: erp_supply::repository::supplier_offering::SupplierOfferingRow,
+    row: SupplierOfferingRow,
     revision: Option<SupplierOfferingRevision>,
     availability: Option<SupplierOfferingAvailability>,
     context: &OfferingListContext,
@@ -134,61 +137,24 @@ fn build_view(
     let party_revision = party
         .and_then(|party| party.stable.current_revision_id.as_deref())
         .and_then(|id| context.party_revisions.get(id));
-    SupplierOfferingView {
-        id: row.id,
-        sku_id: row.sku_id.to_string(),
-        sku_no: sku.map(|value| value.sku_no.clone()),
-        product_no: product.map(|value| value.product_no.clone()),
-        sku_name: sku_revision.map(|value| value.name.clone()),
-        specification: sku_revision.and_then(|value| value.specification.clone()),
-        supplier_id: row.supplier_id.to_string(),
-        supplier_no: supplier.map(|value| value.supplier_no.clone()),
-        supplier_name: party_revision.map(|value| value.legal_name.clone()),
-        supplier_product_code: row.supplier_product_code,
-        supplier_sku_code: row.supplier_sku_code,
-        source_type: row.source_type,
-        source_connection_id: row.source_connection_id.map(|value| value.to_string()),
-        status: row.status,
-        current_revision_id: row.current_revision_id,
-        current_revision_no: revision.as_ref().map(|value| value.revision.revision_no),
-        dropship_supply_price_gross: revision
-            .as_ref()
-            .map(|value| value.dropship_supply_price_gross.to_string()),
-        dropship_supply_price_net: revision.as_ref().map(|value| value.dropship_supply_price_net.to_string()),
-        bulk_supply_price_gross: revision.as_ref().map(|value| value.bulk_supply_price_gross.to_string()),
-        bulk_supply_price_net: revision.as_ref().map(|value| value.bulk_supply_price_net.to_string()),
-        input_tax_rate: revision.as_ref().map(|value| value.input_tax_rate.to_string()),
-        bulk_minimum_order_quantity: revision
-            .as_ref()
-            .map(|value| value.bulk_minimum_order_quantity.to_string()),
-        supply_region: revision.as_ref().map(|value| value.supply_region.clone()).unwrap_or_default(),
-        product_capabilities: revision
-            .as_ref()
-            .map(|value| value.product_capabilities.clone())
-            .unwrap_or_default(),
-        dropship_express: revision.as_ref().and_then(|value| value.dropship_express.clone()),
-        freight_amount: revision
-            .as_ref()
-            .and_then(|value| value.freight_amount.map(|amount| amount.to_string())),
-        service_fee_amount: revision
-            .as_ref()
-            .and_then(|value| value.service_fee_amount.map(|amount| amount.to_string())),
-        valid_from: revision.as_ref().map(|value| value.valid_from.to_string()),
-        valid_to: revision.as_ref().and_then(|value| value.valid_to.map(|date| date.to_string())),
-        availability_status: availability.as_ref().map(|value| value.availability_status),
-        available_quantity: availability
-            .as_ref()
-            .and_then(|value| value.available_quantity.map(|quantity| quantity.to_string())),
-        availability_source_updated_at: availability
-            .as_ref()
-            .map(|value| value.source_updated_at.unix_secs()),
-        availability_version: availability.as_ref().map(|value| value.base.version),
-        version: row.version,
-        created_at: row.created_at,
-        maintainer_user_id: row.maintainer_user_id,
-        maintainer_user_name: None,
-        business_org_unit_id: row.business_org_unit_id,
+    let mut view = SupplierOfferingView::from_row(row);
+    view.sku_no = sku.map(|value| value.sku_no.clone());
+    view.product_id = product.map(|value| value.base.id.clone());
+    view.product_no = product.map(|value| value.product_no.clone());
+    view.sku_name = sku_revision.map(|value| value.name.clone());
+    view.specification = sku_revision.and_then(|value| value.specification.clone());
+    view.supplier_no = supplier.map(|value| value.supplier_no.clone());
+    view.supplier_name = party_revision.map(|value| value.legal_name.clone());
+    if let Some(revision) = revision {
+        view.apply_revision(revision);
     }
+    if let Some(availability) = availability {
+        view.availability_status = Some(availability.availability_status);
+        view.available_quantity = availability.available_quantity.map(|value| value.to_string());
+        view.availability_source_updated_at = Some(availability.source_updated_at.unix_secs());
+        view.availability_version = Some(availability.base.version);
+    }
+    view
 }
 
 trait HasId {
@@ -233,6 +199,28 @@ fn by_id<T: HasId>(values: Vec<T>) -> HashMap<String, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn detail_and_list_mapping_preserve_identity_when_related_records_are_missing() {
+        let row: SupplierOfferingRow = serde_json::from_value(serde_json::json!({
+            "id": "offering-a", "sku_id": "sku-a", "supplier_id": "supplier-a",
+            "supplier_sku_code": "0000123", "source_type": "MANUAL", "status": "PAUSED",
+            "current_revision_id": "revision-a", "version": 3, "created_at": 1,
+            "maintainer_user_id": "owner-a", "business_org_unit_id": "org-a"
+        }))
+        .unwrap();
+        let view = build_view(row, None, None, &OfferingListContext::default());
+        assert_eq!(view.id, "offering-a");
+        assert_eq!(view.supplier_sku_code, "0000123");
+        assert_eq!(view.maintainer_user_id, "owner-a");
+        assert_eq!(view.current_revision_id.as_deref(), Some("revision-a"));
+        assert!(view.product_id.is_none());
+        assert!(view.sku_name.is_none());
+        assert!(view.supplier_name.is_none());
+        assert!(view.current_revision_no.is_none());
+        assert!(view.available_quantity.is_none());
+        assert!(view.dropship_supply_price_gross.is_none());
+    }
 
     #[test]
     fn prepare_list_query_maps_owner_ids_not_created_by() {

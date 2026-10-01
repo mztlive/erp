@@ -14,6 +14,7 @@ export type SupplierOfferingView = Readonly<{
     id: string
     sku_id: string
     sku_no?: string | null
+    product_id?: string | null
     product_no?: string | null
     sku_name?: string | null
     specification?: string | null
@@ -203,3 +204,29 @@ export const SOURCE_TYPE_LABELS: Readonly<Record<OfferingSourceType, string>> =
         EXCEL: "Excel",
         API: "API",
     }
+
+/** 历史版本只包含当时的商业条款，不包含实时状态或数量。 */
+export type OfferingRevisionView = Pick<
+    SupplierOfferingView,
+    | "id"
+    | "created_at"
+    | "dropship_supply_price_gross"
+    | "dropship_supply_price_net"
+    | "bulk_supply_price_gross"
+    | "bulk_supply_price_net"
+    | "input_tax_rate"
+    | "bulk_minimum_order_quantity"
+    | "supply_region"
+    | "product_capabilities"
+    | "dropship_express"
+    | "freight_amount"
+    | "service_fee_amount"
+    | "valid_from"
+    | "valid_to"
+> &
+    Readonly<{ revision_no: number; is_current: boolean }>
+
+export type OfferingHistoryPage = Readonly<{
+    items: OfferingRevisionView[]
+    next_before_revision_no: number | null
+}>

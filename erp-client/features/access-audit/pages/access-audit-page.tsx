@@ -4,7 +4,6 @@ import {
     DownloadIcon,
     PlusIcon,
     TriangleAlertIcon,
-    UsersIcon,
 } from "lucide-react"
 
 import {
@@ -28,6 +27,7 @@ import { useAccessAuditPage } from "@/features/access-audit/pages/hooks/use-acce
 import { AccessChangeDialog } from "@/features/access-audit/pages/components/access-change-dialog"
 import { AccessViewTable } from "@/features/access-audit/pages/components/access-view-table"
 import { DeleteRoleDialog } from "@/features/admin/delete-role-dialog"
+import { BuiltinRoleDialog } from "@/features/admin/components/roles/builtin-role-dialog"
 import type { RoleRow } from "@/features/access-audit/types"
 
 /**
@@ -103,21 +103,9 @@ export function AccessAuditPage() {
                 description="管理角色的操作权限，查看关联人员。"
             >
                 <div className="flex flex-wrap items-center gap-2">
-                    {hasPermission(
-                        profile.data?.permissions,
-                        "data_scope:list",
-                    ) ? (
-                        <Button
-                            id="operations-access-advanced-scopes"
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            onClick={() =>
-                                page.routerPush("/system/organization/scopes")
-                            }
-                        >
-                            高级范围配置
-                        </Button>
+                    {hasPermission(profile.data?.permissions, "role:create") &&
+                    hasPermission(profile.data?.permissions, "role:list") ? (
+                        <BuiltinRoleDialog />
                     ) : null}
                     <Button
                         id="operations-access-export"
@@ -134,16 +122,6 @@ export function AccessAuditPage() {
                     >
                         <DownloadIcon className="size-3.5" aria-hidden="true" />
                         导出配置
-                    </Button>
-                    <Button
-                        id="operations-access-config-manage-accounts"
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => page.routerPush("/system/accounts")}
-                    >
-                        <UsersIcon className="size-3.5" aria-hidden="true" />
-                        组织与人员
                     </Button>
                     <Button
                         id="operations-access-config-create-role"

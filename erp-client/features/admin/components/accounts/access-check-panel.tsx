@@ -11,6 +11,7 @@ import { SalesOrderSearchCombobox } from "@/features/entity-selectors/components
 import { Field, FieldLabel } from "@/components/ui/field"
 import { useAccessCheck } from "../../hooks/use-access-check"
 import type { AccessCheckInput } from "../../api/access-check"
+import { AccessCheckResult } from "./access-check-result"
 
 export function AccessCheckPanel({ accountId }: { accountId: string }) {
     const [input, setInput] = React.useState<AccessCheckInput | null>(null)
@@ -54,7 +55,7 @@ export function AccessCheckPanel({ accountId }: { accountId: string }) {
                 检查访问权限
             </h2>
             <p className="text-sm text-muted-foreground">
-                由服务端检查当前账号、角色与实际访问政策。销售单查看和修改可选择具体单据；来源继承与任务指派需要对应业务上下文，未核对具体对象时不会判定可处理。结果不代替业务执行时校验。检查他人权限需要公司范围的组织读取及账号、角色、数据范围读取权限。
+                检查此人能否执行所选操作。未选择单据时，只检查权限配置；选择销售单后，可进一步确认此人能否查看或修改这张单据。
             </p>
             <form
                 className="space-y-3"
@@ -143,7 +144,7 @@ export function AccessCheckPanel({ accountId }: { accountId: string }) {
                                 {(field) => (
                                     <Field>
                                         <FieldLabel htmlFor="account-check-order">
-                                            销售单（可选，仅列出你可查看的单据）
+                                            要检查的销售单（可选）
                                         </FieldLabel>
                                         <SalesOrderSearchCombobox
                                             id="account-check-order"
@@ -155,17 +156,22 @@ export function AccessCheckPanel({ accountId }: { accountId: string }) {
                                                 setInput(null)
                                             }}
                                         />
-                                        <Button
-                                            id="account-check-order-clear"
-                                            type="button"
-                                            variant="ghost"
-                                            onClick={() => {
-                                                field.handleChange("")
-                                                setInput(null)
-                                            }}
-                                        >
-                                            清除单据，仅检查配置
-                                        </Button>
+                                        <p className="text-xs text-muted-foreground">
+                                            这里列出的是你能查看的单据。选中后，检查的是此人对该单据的权限。
+                                        </p>
+                                        {field.state.value ? (
+                                            <Button
+                                                id="account-check-order-clear"
+                                                type="button"
+                                                variant="ghost"
+                                                onClick={() => {
+                                                    field.handleChange("")
+                                                    setInput(null)
+                                                }}
+                                            >
+                                                清除选择，改查权限配置
+                                            </Button>
+                                        ) : null}
                                     </Field>
                                 )}
                             </form.AppField>
@@ -189,29 +195,7 @@ export function AccessCheckPanel({ accountId }: { accountId: string }) {
                     id="account-check-retry"
                 />
             ) : input && query.data ? (
-                <div role="status" className="space-y-3">
-                    {query.data.steps.map((step, index) => (
-                        <div
-                            key={`${step.layer}-${index}`}
-                            className="border-l-2 pl-3"
-                        >
-                            <p className="text-sm font-medium">
-                                {step.layer} ·{" "}
-                                {step.status === "passed"
-                                    ? "已通过"
-                                    : step.status === "blocked"
-                                      ? "未通过"
-                                      : "需要继续核对"}
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                                {step.message}
-                            </p>
-                        </div>
-                    ))}
-                    <p className="text-xs text-muted-foreground">
-                        配置或业务数据变化后，请重新检查。
-                    </p>
-                </div>
+                <AccessCheckResult input={input} result={query.data} />
             ) : null}
         </section>
     )

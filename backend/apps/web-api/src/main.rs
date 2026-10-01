@@ -8,6 +8,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use config::{Config, S3Config, SafeConfig};
+use erp_identity::service::iam::ensure_identity_foundation;
 use erp_identity::{AdminService, InitializeSuperAdminParams};
 use erp_processes::background::{
     BackgroundRunner, ProductImportTaskAdapter, SalesSelectionTaskAdapter, SupplierImportTaskAdapter,
@@ -120,7 +121,7 @@ async fn start(cfg: SafeConfig) -> Result<()> {
     crate::indexes::ensure_indexes(&state.db()).await?;
     ensure_registered_approval_policies()?;
     erp_identity::ensure_root_role(&state.rbac()).await?;
-    erp_identity::ensure_predefined_roles(&state.rbac()).await?;
+    ensure_identity_foundation(&state.rbac()).await?;
     bootstrap_initial_admin(&state, config.bootstrap.initial_admin_password()).await?;
 
     spawn_config_watcher(

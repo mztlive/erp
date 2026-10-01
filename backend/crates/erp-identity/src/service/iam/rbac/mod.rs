@@ -3,6 +3,7 @@
 mod database_reset;
 mod seed;
 mod seed_command;
+mod templates;
 
 mod authorize;
 mod command;

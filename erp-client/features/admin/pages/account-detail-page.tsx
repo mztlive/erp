@@ -36,6 +36,7 @@ import { AccountFormDialog } from "../components/accounts/account-form-dialog"
 import { useOrganizationStateQuery } from "@/features/organization/hooks/queries"
 import { unitLabel } from "@/features/organization/lib/tree"
 import { AccessCheckPanel } from "../components/accounts/access-check-panel"
+import { AccountOperationPermissions } from "../components/accounts/account-operation-permissions"
 import { PersonalBusinessPermissions } from "../components/accounts/personal-business-permissions"
 import { usePersonalGrantDraft } from "../hooks/use-personal-grant-draft"
 
@@ -384,6 +385,12 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                                 )}
                             </section>
                         )}
+                        <AccountOperationPermissions
+                            key={accountId}
+                            account={account}
+                            roles={roles}
+                            canRead={can("role:list")}
+                        />
                     </TabsContent>
                     <TabsContent
                         value="access"

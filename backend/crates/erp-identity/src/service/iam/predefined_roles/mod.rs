@@ -1,6 +1,7 @@
 //! 业务预定义角色种子。
 //!
-//! 应用启动时按固定角色 ID 幂等写入：
+//! 管理页面显式生成岗位角色；启动仅初始化组织基础与目录资格。
+//! 以下旧种子升级入口保留供历史显式调用，不接入应用启动：
 //! - 数据库中尚不存在（含软删除记录）时创建角色与推荐权限；
 //! - 已存在且权限仍等于已知旧种子时，整集升级到当前推荐权限；
 //! - 其余已存在角色只追加旧业务种子权限；查询目录权限仅在首次创建角色时初始化，
@@ -14,10 +15,26 @@ use application_core::AuditActor;
 use persistence_core::NoTransaction;
 
 use super::SharedRbacService;
+use crate::service::organization::ensure_home_department;
+use crate::service::person_directory::sync_role_grants;
 use crate::{AccessControlExt, CreateRoleParams};
 
 pub(crate) mod permission_tables;
+mod templates;
 mod upgrades;
+pub use templates::builtin_role_templates;
+
+/// 启动时仅准备组织基础与目录资格，不创建或补权业务角色。
+/// # 参数
+/// `rbac` 为当前身份授权服务。
+/// # 返回
+/// 基础数据检查完成。
+/// # 错误
+/// 组织或目录持久化失败时返回错误。
+pub async fn ensure_identity_foundation(rbac: &SharedRbacService) -> Result<()> {
+    ensure_home_department(rbac.database().clone()).await?;
+    sync_role_grants(rbac).await
+}
 
 pub(crate) use permission_tables::{
     FINANCE_PERMISSIONS, MANAGEMENT_PERMISSIONS, OPERATIONS_PERMISSIONS, PROCUREMENT_PERMISSIONS,

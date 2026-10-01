@@ -80,6 +80,26 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "GET",
+                path: "/admin/role-templates",
+                description: "查询角色列表",
+                permission: {
+                    resource: "role",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/role-templates/generate",
+                description: "创建角色",
+                permission: {
+                    resource: "role",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
                 path: "/admin/roles",
                 description: "查询角色列表",
                 permission: {
@@ -4379,6 +4399,46 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         permissions: [
             {
                 module: "admin",
+                method: "GET",
+                path: "/admin/supplier-offerings/{id}",
+                description: "查询供应商供给列表",
+                permission: {
+                    resource: "supplier_offering",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-offerings/{id}/revisions",
+                description: "查询供应商供给列表",
+                permission: {
+                    resource: "supplier_offering",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-offerings",
+                description: "查询供应商供给列表",
+                permission: {
+                    resource: "supplier_offering",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-offerings/{id}/handover-candidates",
+                description: "查询供给交接候选",
+                permission: {
+                    resource: "supplier_offering",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
                 method: "POST",
                 path: "/admin/supplier-offerings/batch/create",
                 description: "新增供应商供给",
@@ -4405,16 +4465,6 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 permission: {
                     resource: "supplier_offering_availability",
                     action: "update",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/supplier-offerings",
-                description: "查询供应商供给列表",
-                permission: {
-                    resource: "supplier_offering",
-                    action: "list",
                 },
             },
             {
@@ -4462,16 +4512,6 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 method: "POST",
                 path: "/admin/supplier-offerings/{id}/handover",
                 description: "交接供给维护人",
-                permission: {
-                    resource: "supplier_offering",
-                    action: "update",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/supplier-offerings/{id}/handover-candidates",
-                description: "查询供给交接候选",
                 permission: {
                     resource: "supplier_offering",
                     action: "update",

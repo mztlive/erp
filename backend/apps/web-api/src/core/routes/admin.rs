@@ -119,6 +119,32 @@ fn account_routes(rbac_service: &SharedRbacService) -> Router<AppState> {
 /// # 返回值
 /// 返回角色相关路由集合
 fn role_routes(rbac_service: &SharedRbacService) -> Router<AppState> {
+    role_template_routes(rbac_service).merge(role_crud_routes(rbac_service))
+}
+
+/// 内建岗位模板预览和生成，复用角色查看与创建权限。
+fn role_template_routes(rbac_service: &SharedRbacService) -> Router<AppState> {
+    Router::new()
+        .route(
+            "/role-templates",
+            with_permission(
+                get(admin::role_template::list_role_templates),
+                rbac_service,
+                admin::role_template::list_role_templates_permission_key(),
+            ),
+        )
+        .route(
+            "/role-templates/generate",
+            with_permission(
+                post(admin::role_template::generate_builtin_roles),
+                rbac_service,
+                admin::role_template::generate_builtin_roles_permission_key(),
+            ),
+        )
+}
+
+/// 普通角色的列表、创建、修改和删除入口。
+fn role_crud_routes(rbac_service: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
             "/roles",

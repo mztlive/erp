@@ -2,6 +2,8 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { usePathname, useSearchParams } from "next/navigation"
+import { OfferingPreviewSheet } from "../components/offering-preview-sheet"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
 import { BatchSupplyDialog } from "../components/batch/batch-supply-dialog"
@@ -42,6 +44,20 @@ const PAGE_SIZE = 50
 /** 供应商供给列表与维护入口。 */
 export const SupplierOfferingsPage = () => {
     const state = useSupplierOfferingsPageState()
+    const pathname = usePathname()
+    const searchParams = useSearchParams()
+    const returnTo = `${pathname}?${searchParams.toString()}`
+    const [previewId, setPreviewId] = React.useState<string | null>(null)
+    const lastFocusedRowId = React.useRef<string | null>(null)
+    const closePreview = () => setPreviewId(null)
+    const restorePreviewFocus = () => {
+        const id = lastFocusedRowId.current
+        if (id) {
+            document
+                .querySelector<HTMLElement>(`[data-row-id="${CSS.escape(id)}"]`)
+                ?.focus()
+        }
+    }
     const account = useAccountProfileQuery()
     const canBatchCreate = hasPermission(
         account.data?.permissions,
@@ -410,6 +426,15 @@ export const SupplierOfferingsPage = () => {
                                                   })
                                             : undefined
                                     }
+                                    onRowPreview={(offering) => {
+                                        lastFocusedRowId.current = offering.id
+                                        setPreviewId(offering.id)
+                                    }}
+                                    highlightedRowId={previewId ?? undefined}
+                                    canRevise={canBatchRevise}
+                                    canAvailability={canBatchAvailability}
+                                    returnTo={returnTo}
+                                    total={query.data?.total ?? 0}
                                     items={items}
                                     isPending={query.isPending}
                                     isError={query.isError}
@@ -448,6 +473,12 @@ export const SupplierOfferingsPage = () => {
                 />
             ) : null}
 
+            <OfferingPreviewSheet
+                offering={items.find((item) => item.id === previewId) ?? null}
+                returnTo={returnTo}
+                onClose={closePreview}
+                onClosed={restorePreviewFocus}
+            />
             {batch && (
                 <BatchSupplyDialog
                     mode={batch.mode}

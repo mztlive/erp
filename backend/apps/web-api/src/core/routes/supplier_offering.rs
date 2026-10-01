@@ -15,7 +15,48 @@ use crate::core::middleware::with_permission;
 ///
 /// # 返回
 /// 返回已挂载权限门禁的路由。
+///
+/// # 错误
+/// 无。
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new().merge(read_routes(rbac)).merge(batch_routes(rbac)).merge(command_routes(rbac))
+}
+
+/// 注册供给列表、单条资料和历史条款的读取入口。
+fn read_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
+        .route(
+            "/supplier-offerings/{id}",
+            with_permission(
+                get(supplier_offering::read::detail),
+                rbac,
+                supplier_offering::read::detail_permission_key(),
+            ),
+        )
+        .route(
+            "/supplier-offerings/{id}/revisions",
+            with_permission(
+                get(supplier_offering::read::history),
+                rbac,
+                supplier_offering::read::history_permission_key(),
+            ),
+        )
+        .route(
+            "/supplier-offerings",
+            with_permission(get(supplier_offering::list), rbac, supplier_offering::list_permission_key()),
+        )
+        .route(
+            "/supplier-offerings/{id}/handover-candidates",
+            with_permission(
+                get(supplier_offering::offering_handover_candidates),
+                rbac,
+                supplier_offering::offering_handover_candidates_permission_key(),
+            ),
+        )
+}
+
+/// 注册独立的批量新增、修订和可供更新命令。
+fn batch_routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
             "/supplier-offerings/batch/create",
@@ -41,10 +82,11 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 supplier_offering::batch::availability_permission_key(),
             ),
         )
-        .route(
-            "/supplier-offerings",
-            with_permission(get(supplier_offering::list), rbac, supplier_offering::list_permission_key()),
-        )
+}
+
+/// 注册单条供给维护与任务处置命令。
+fn command_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
         .route(
             "/supplier-offerings",
             with_permission(
@@ -83,14 +125,6 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 post(supplier_offering::offering_handover),
                 rbac,
                 supplier_offering::offering_handover_permission_key(),
-            ),
-        )
-        .route(
-            "/supplier-offerings/{id}/handover-candidates",
-            with_permission(
-                get(supplier_offering::offering_handover_candidates),
-                rbac,
-                supplier_offering::offering_handover_candidates_permission_key(),
             ),
         )
 }

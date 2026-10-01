@@ -13,7 +13,8 @@ pub use account::{
     ResetAdminPasswordResult, UpdateAdminParams, UpdateAdminRoleParams,
 };
 pub use predefined_roles::{
-    create_missing_predefined_role, ensure_predefined_roles, predefined_role_permissions,
+    builtin_role_templates, create_missing_predefined_role, ensure_identity_foundation,
+    ensure_predefined_roles, predefined_role_permissions,
 };
 pub use rbac::{
     AuthorizedAccountManagement, AuthorizedRoleGrant, ROOT_ROLE_ID, RbacService, RolePermissionSnapshot,

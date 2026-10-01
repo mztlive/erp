@@ -2,7 +2,10 @@
 pub use application_core::PageView;
 pub(crate) use application_core::{SortDir, normalize_sort};
 use erp_core::ids::{SkuId, SupplierAccountId};
-use erp_supply::entity::supplier_offering::{AvailabilityStatus, OfferingSourceType, OfferingStatus};
+use erp_supply::entity::supplier_offering::{
+    AvailabilityStatus, OfferingSourceType, OfferingStatus, SupplierOfferingRevision,
+};
+use erp_supply::repository::supplier_offering::SupplierOfferingRow;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 pub(crate) const OFFERING_SORT_FIELDS: &[&str] = &["created_at", "supplier_sku_code", "status"];
@@ -58,6 +61,8 @@ pub struct SupplierOfferingView {
     pub sku_id: String,
     /// 公司 SKU 编号。
     pub sku_no: Option<String>,
+    /// 公司商品稳定 ID，用于打开资料，不能作为展示编号。
+    pub product_id: Option<String>,
     /// 公司商品编号。
     pub product_no: Option<String>,
     /// 公司 SKU 名称。
@@ -153,6 +158,87 @@ pub struct SupplierOfferingListView {
 }
 
 impl SupplierOfferingView {
+    /// 由供给行初始化稳定身份，关联资料留给跨域装配。
+    ///
+    /// # 参数
+    /// * `row` - 已授权的供给稳定身份
+    ///
+    /// # 返回
+    /// 返回仅填充身份、责任与状态的视图。
+    ///
+    /// # 错误
+    /// 无。
+    pub(super) fn from_row(row: SupplierOfferingRow) -> Self {
+        Self {
+            id: row.id,
+            sku_id: row.sku_id.to_string(),
+            sku_no: None,
+            product_id: None,
+            product_no: None,
+            sku_name: None,
+            specification: None,
+            supplier_id: row.supplier_id.to_string(),
+            supplier_no: None,
+            supplier_name: None,
+            supplier_product_code: row.supplier_product_code,
+            supplier_sku_code: row.supplier_sku_code,
+            source_type: row.source_type,
+            source_connection_id: row.source_connection_id.map(|value| value.to_string()),
+            status: row.status,
+            current_revision_id: row.current_revision_id,
+            current_revision_no: None,
+            dropship_supply_price_gross: None,
+            dropship_supply_price_net: None,
+            bulk_supply_price_gross: None,
+            bulk_supply_price_net: None,
+            input_tax_rate: None,
+            bulk_minimum_order_quantity: None,
+            supply_region: Vec::new(),
+            product_capabilities: Vec::new(),
+            dropship_express: None,
+            freight_amount: None,
+            service_fee_amount: None,
+            valid_from: None,
+            valid_to: None,
+            availability_status: None,
+            available_quantity: None,
+            availability_source_updated_at: None,
+            availability_version: None,
+            version: row.version,
+            created_at: row.created_at,
+            maintainer_user_id: row.maintainer_user_id,
+            maintainer_user_name: None,
+            business_org_unit_id: row.business_org_unit_id,
+        }
+    }
+
+    /// 仅映射当前商业修订，不改稳定身份或可供状态。
+    ///
+    /// # 参数
+    /// * `revision` - 当前指针所引用的修订
+    ///
+    /// # 返回
+    /// 原地填充商业字段。
+    ///
+    /// # 错误
+    /// 无。
+    pub(super) fn apply_revision(&mut self, revision: SupplierOfferingRevision) {
+        self.current_revision_no = Some(revision.revision.revision_no);
+        self.dropship_supply_price_gross = Some(revision.dropship_supply_price_gross.to_string());
+        self.dropship_supply_price_net = Some(revision.dropship_supply_price_net.to_string());
+        self.bulk_supply_price_gross = Some(revision.bulk_supply_price_gross.to_string());
+        self.bulk_supply_price_net = Some(revision.bulk_supply_price_net.to_string());
+        self.input_tax_rate = Some(revision.input_tax_rate.to_string());
+        self.bulk_minimum_order_quantity = Some(revision.bulk_minimum_order_quantity.to_string());
+        self.supply_region = revision.supply_region;
+        self.product_capabilities = revision.product_capabilities;
+        self.dropship_express = revision.dropship_express;
+        self.freight_amount = revision.freight_amount.map(|value| value.to_string());
+        self.service_fee_amount = revision.service_fee_amount.map(|value| value.to_string());
+        self.valid_from = Some(revision.valid_from.to_string());
+        self.valid_to = revision.valid_to.map(|value| value.to_string());
+    }
+
     /// 清除采购成本、税率和费用字段。
     pub fn redact_costs(&mut self) {
         self.dropship_supply_price_gross = None;
@@ -273,6 +359,7 @@ mod tests {
             id: "o1".to_string(),
             sku_id: "s1".to_string(),
             sku_no: Some("SKU-1".to_string()),
+            product_id: None,
             product_no: None,
             sku_name: Some("商品".to_string()),
             specification: None,

@@ -87,7 +87,38 @@ impl DemoMasterDataService {
 mod tests {
     use std::collections::HashSet;
 
+    use erp_identity::service::iam::builtin_role_templates;
+    use erp_workflow::FinanceResponsibilityOperation;
+
     use super::*;
+
+    /// 部署模板覆盖真实演示岗位合同，细分岗位满足付款与开票执行资格。
+    #[test]
+    fn builtin_templates_cover_demo_and_finance_execution_contracts() {
+        let catalog = builtin_role_templates().unwrap();
+        let foundation = spec::foundation_spec();
+        for account in &foundation.accounts {
+            let template = catalog.iter().find(|template| template.id == account.role_id).unwrap();
+            let permissions = PermissionSet::new(template.permissions.clone());
+            for required in &foundation.required_permissions[&account.key] {
+                assert!(
+                    permissions.covers_one(&Permission::parse(required).unwrap()),
+                    "{}: {required}",
+                    account.key
+                );
+            }
+        }
+        for (id, operation) in [
+            ("role-cashier", FinanceResponsibilityOperation::SupplierPayment),
+            ("role-invoice-clerk", FinanceResponsibilityOperation::SalesInvoice),
+        ] {
+            let template = catalog.iter().find(|template| template.id == id).unwrap();
+            let permissions = PermissionSet::new(template.permissions.clone());
+            for required in operation.required_permission_codes().unwrap() {
+                assert!(permissions.covers_one(&Permission::parse(required).unwrap()), "{id}: {required}");
+            }
+        }
+    }
 
     /// 运行真实岗位输入构造，覆盖新目录权限、整账及同角色审批权限。
     #[test]

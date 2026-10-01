@@ -5,6 +5,7 @@
 //! 商业条款修订；库存与可供状态只更新独立投影。
 
 //! 供给单域命令：身份、商业修订、实时可供及命令重放。
+mod history;
 use erp_core::common::time::Instant;
 use erp_core::ids::{SupplierOfferingAvailabilityId, SupplierOfferingId, SupplierOfferingRevisionId};
 use id_generator::next_id;

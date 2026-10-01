@@ -32,8 +32,16 @@ export function SupplierOfferingRowActions({
     onUpdateAvailability,
     onReviseOffering,
     onChangeStatus,
+    canRevise = true,
+    canAvailability = true,
+    maxInline = 0,
+    idPrefix = "supplier-offerings-table-row",
 }: {
     offering: SupplierOfferingView
+    canRevise?: boolean
+    canAvailability?: boolean
+    maxInline?: number
+    idPrefix?: string
     onUpdateAvailability: (offering: SupplierOfferingView) => void
     onReviseOffering: (offering: SupplierOfferingView) => void
     onChangeStatus: (
@@ -49,31 +57,42 @@ export function SupplierOfferingRowActions({
         offering.supplier_sku_code
     return (
         <TableRowActions
-            moreId={`supplier-offerings-table-row-${rowId}-actions`}
+            className={maxInline > 0 ? "flex-wrap" : undefined}
+            moreId={`${idPrefix}-${rowId}-actions`}
             moreLabel={`${label} 操作`}
-            maxInline={0}
+            maxInline={maxInline}
             actions={[
-                {
-                    id: `supplier-offerings-table-row-${rowId}-update-availability`,
-                    label: "更新可供",
-                    icon: PackageCheckIcon,
-                    onClick: () => onUpdateAvailability(offering),
-                },
-                {
-                    id: `supplier-offerings-table-row-${rowId}-revise`,
-                    label: "修订条款",
-                    icon: FilePenLineIcon,
-                    onClick: () => onReviseOffering(offering),
-                },
-                ...statusIntentsFor(offering.status).map((intent) => ({
-                    id: `supplier-offerings-table-row-${rowId}-${intent.actionId}`,
-                    label: intent.label,
-                    icon: statusIntentIcon(intent.nextStatus),
-                    destructive: intent.destructive,
-                    disabled: blocker != null,
-                    disabledReason: blocker ?? undefined,
-                    onClick: () => onChangeStatus(offering, intent),
-                })),
+                ...(canAvailability
+                    ? [
+                          {
+                              id: `${idPrefix}-${rowId}-update-availability`,
+                              label: "更新可供",
+                              icon: PackageCheckIcon,
+                              onClick: () => onUpdateAvailability(offering),
+                          },
+                      ]
+                    : []),
+                ...(canRevise
+                    ? [
+                          {
+                              id: `${idPrefix}-${rowId}-revise`,
+                              label: "修订条款",
+                              icon: FilePenLineIcon,
+                              onClick: () => onReviseOffering(offering),
+                          },
+                      ]
+                    : []),
+                ...(canRevise ? statusIntentsFor(offering.status) : []).map(
+                    (intent) => ({
+                        id: `${idPrefix}-${rowId}-${intent.actionId}`,
+                        label: intent.label,
+                        icon: statusIntentIcon(intent.nextStatus),
+                        destructive: intent.destructive,
+                        disabled: blocker != null,
+                        disabledReason: blocker ?? undefined,
+                        onClick: () => onChangeStatus(offering, intent),
+                    }),
+                ),
             ]}
         />
     )

@@ -5,6 +5,7 @@
 
 #![allow(async_fn_in_trait)]
 
+pub mod history;
 use std::collections::HashMap;
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
