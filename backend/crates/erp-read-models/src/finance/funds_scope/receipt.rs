@@ -1,21 +1,21 @@
 //! 客户回款范围查询与金额裁剪。
 
 use std::collections::{BTreeSet, HashMap};
-use std::hash::{Hash, Hasher};
 
 use application_core::AuditActor;
 use erp_core::ids::CustomerReceiptId;
 use erp_core::money::Amount;
-use erp_finance::dto::receivable::{CustomerReceiptListQuery, SortDir};
+use erp_finance::dto::receivable::CustomerReceiptListQuery;
 use erp_finance::entity::read_coverage::whole_document_readable;
 use erp_finance::entity::receivable::{AllocationAction, ReceiptAllocation};
 use erp_finance::repository::keyword::FinanceSearchTarget;
 use erp_finance::repository::prelude::*;
-use erp_finance::repository::{ReceivableExt, ReceivableListScope, ScopedCustomerReceiptQuery};
+use erp_finance::repository::{CustomerReceiptFilter, ReceivableExt};
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::authorization::*;
+use super::repository::{flow, receipt as receipt_repository};
 use super::rows::*;
 use crate::finance::search::keyword_ids;
 use crate::{Error, Result};
@@ -103,6 +103,7 @@ pub(super) fn sum_all(links: &[ReceiptLink]) -> Amount {
 }
 
 /// 汇总输入：匹配份额与未分配份额进入汇总，未授权订单份额不得进入。
+#[cfg(test)]
 pub(super) fn summary_inputs(
     links: &[ReceiptLink],
     matched: &[String],
@@ -167,7 +168,12 @@ impl FundsAccess {
         actor: &AuditActor,
         expected: Option<&str>,
     ) -> Result<FundsScopedPage<ScopedCustomerReceiptRow>> {
-        checked_twice(expected, || self.snapshot_customer_receipts(params, query, actor)).await
+        checked_revalidated(
+            expected,
+            || self.snapshot_customer_receipts(params, query, actor),
+            || self.revalidate_customer_receipts(query, actor),
+        )
+        .await
     }
 
     /// 身份和业务事实均使用调用方同一事务，不缓存权限解析结果。
@@ -190,72 +196,131 @@ impl FundsAccess {
             .await
     }
 
-    /// 保持完整关键词、来源、排序和候选上限，授权裁剪仍发生在分页之前。
-    async fn receipt_candidates(
-        &self,
-        query: &CustomerReceiptListQuery,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<CustomerReceiptRow>> {
-        let keyword_ids = keyword_ids(&self.db, query.q.as_deref(), FinanceSearchTarget::Receipt).await?;
-        let scope_query = ScopedCustomerReceiptQuery {
-            keyword_ids,
+    /// 基础条件只构造明确仓储筛选，关联销售和子账由最终聚合判定。
+    async fn receipt_filter(&self, query: &CustomerReceiptListQuery) -> Result<CustomerReceiptFilter> {
+        Ok(CustomerReceiptFilter {
+            keyword_ids: keyword_ids(&self.db, query.q.as_deref(), FinanceSearchTarget::Receipt).await?,
             receipt_no: query.receipt_no.clone(),
             counterparty_party_id: query.counterparty_party_id.clone(),
             status: query.status,
-            scope: ReceivableListScope {
-                sales_order_id: query.sales_order_id.clone(),
-                receivable_account_id: query.receivable_account_id.clone(),
-            },
-            page: 1,
-            page_size: 10_000,
-            sort_by: Some(query.paging.sort_by.to_string()),
-            sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
-        };
-        let candidates =
-            self.db.receivable().search_customer_receipts_in_account_scope(&scope_query, executor).await?;
-        if candidates.items.len() >= 10_000 {
-            return Err(Error::ValidationError("回款查询超过上限，请收窄组织或负责人条件".into()));
-        }
-        Ok(candidates.items)
+            ..Default::default()
+        })
     }
 
-    /// 业务筛选复用现有仓储查询，授权过滤与金额裁剪在同一事务内完成。
+    /// 最终授权份额和业务条件在数据库形成后分页，页外只装载窄汇总及版本。
     pub(super) async fn load_customer_receipts(
         &self,
         params: &erp_finance::dto::receivable::CustomerReceiptListParams,
-        query: &erp_finance::dto::receivable::CustomerReceiptListQuery,
+        query: &CustomerReceiptListQuery,
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<FundsScopedPage<ScopedCustomerReceiptRow>> {
-        let (_access, authorization) = self.resolve(actor, "customer_receipt", "list", executor).await?;
+        let (_, authorization) = self.resolve(actor, "customer_receipt", "list", executor).await?;
         if authorization.empty() {
             return Ok(empty_page(&authorization, "no_scope", "回款无可见范围"));
         }
-        let candidates = self.receipt_candidates(query, executor).await?;
-        let ReceiptSnapshot { decided, links, facts } =
-            self.assemble_customer_receipts(query, candidates, &authorization, executor).await?;
-        let ids = decided.iter().map(|(row, _)| row.id.clone()).collect::<Vec<_>>();
-        let links = self.receipt_decided_links(&ids, &links, executor).await?;
-        let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
-        authorization.context.scope_version.hash(&mut fingerprint);
-        for (row, matched) in decided.iter() {
-            row.id.hash(&mut fingerprint);
-            row.version.hash(&mut fingerprint);
-            for order in matched.iter().filter_map(|id| facts.get(id)) {
-                order.version.hash(&mut fingerprint);
-            }
+        let condition = self.receipt_condition(query, executor).await?;
+        let filter = self.receipt_filter(query).await?;
+        let snapshot =
+            receipt_repository::page(&self.db, query, &filter, &authorization, &condition, executor).await?;
+        let total = snapshot.count()?;
+        let version = flow::version(&authorization.context.scope_version, &snapshot.versions);
+        ensure_version(params.scope_version.as_deref(), &version).map_err(|_| changed())?;
+        let summary = flow::summary(&snapshot.summary, &version)?;
+        let items = self
+            .receipt_page(snapshot.items, &snapshot.versions, authorization.ledger_read, executor)
+            .await?;
+        Ok(FundsScopedPage {
+            items,
+            total,
+            summary,
+            page: query.paging.page,
+            page_size: query.paging.page_size,
+            scope_version: version,
+            policy_version: authorization.context.policy_version,
+            organization_version: authorization.context.organizations.version,
+            as_of: authorization.context.as_of.as_utc().to_rfc3339(),
+            empty_reason: None,
+            scope_summary: "回款继承销售核销来源范围；整单另需财务整账职责及全部来源可见",
+            ownership_basis: "linked_sales_owner_and_receipt_operator",
+        })
+    }
+
+    /// 新事务只重读完整候选责任版本，权限变化拒绝交付第一次页面。
+    async fn revalidate_customer_receipts(
+        &self,
+        query: &CustomerReceiptListQuery,
+        actor: &AuditActor,
+    ) -> Result<String> {
+        let this = self.clone();
+        let query = query.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let (_, authorization) =
+                        this.resolve(&actor, "customer_receipt", "list", executor).await?;
+                    if authorization.empty() {
+                        return Ok(authorization.context.scope_version);
+                    }
+                    let condition = this.receipt_condition(&query, executor).await?;
+                    let filter = this.receipt_filter(&query).await?;
+                    let versions = receipt_repository::versions(
+                        &this.db,
+                        &query,
+                        &filter,
+                        &authorization,
+                        &condition,
+                        executor,
+                    )
+                    .await?;
+                    if u64::try_from(versions.len()).unwrap_or(u64::MAX) >= flow::FLOW_LIMIT {
+                        return Err(Error::ValidationError(
+                            "回款查询超过上限，请收窄组织或负责人条件".into(),
+                        ));
+                    }
+                    Ok(flow::version(&authorization.context.scope_version, &versions))
+                })
+            })
+            .await
+    }
+
+    /// 当前页复用正式分配裁剪规则，最终授权来源取同拍数据库完整版本分支。
+    async fn receipt_page(
+        &self,
+        rows: Vec<CustomerReceiptRow>,
+        versions: &[flow::FlowVersion],
+        ledger_read: bool,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ScopedCustomerReceiptRow>> {
+        let ids = rows.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
+        let links = self.receipt_matched_links(&ids, executor).await?;
+        let facts = self
+            .sales_fact_map(
+                &links.values().flatten().filter_map(|link| link.order.clone()).collect::<Vec<_>>(),
+                executor,
+            )
+            .await?;
+        let allowed = Some(
+            versions.iter().flat_map(|row| row.sources.iter().map(|source| source.id.clone())).collect(),
+        );
+        let expected = rows.len();
+        let decided = decide_receipt_rows(
+            rows,
+            &links,
+            &facts,
+            &allowed,
+            &HashMap::new(),
+            &FundsLinkedCondition::default(),
+            ledger_read,
+        );
+        if decided.len() != expected {
+            return Err(Error::Internal("回款来源聚合与正式裁剪规则不一致".into()));
         }
-        self.finish_customer_receipts(
-            params,
-            query,
-            decided,
-            links,
-            facts,
-            authorization,
-            fingerprint,
-            executor,
-        )
-        .await
+        let links = self.receipt_decided_links(&ids, &links, executor).await?;
+        Ok(self.receipt_page_items(&decided, &links, ledger_read))
     }
 }
 
@@ -274,33 +339,6 @@ impl FundsAccess {
         let orders =
             candidate_links.values().flatten().map(|link| (link.id.clone(), link.order.clone())).collect();
         Ok(receipt_links_from_allocations(allocations, &orders))
-    }
-
-    /// 回款经办人事实：登记取创建审计，核销取审批提交人；无过滤条件时不读审计。
-    pub(super) async fn receipt_operators(
-        &self,
-        ids: &[String],
-        kind: Option<erp_finance::dto::receivable::ReceiptOperatorKind>,
-        want: bool,
-        executor: &mut dyn Executor,
-    ) -> Result<HashMap<String, Vec<String>>> {
-        use erp_finance::dto::receivable::ReceiptOperatorKind;
-        if !want {
-            return Ok(HashMap::new());
-        }
-        match kind {
-            Some(ReceiptOperatorKind::Register) => {
-                self.audit_operators(
-                    "customer_receipt",
-                    ids,
-                    |action| action == "customer_receipt.create",
-                    executor,
-                )
-                .await
-            },
-            Some(ReceiptOperatorKind::Settle) => self.receipt_settle_operators(ids, executor).await,
-            None => Ok(HashMap::new()),
-        }
     }
 
     /// 回款关联筛选条件：负责人、经办人与组织分别精确匹配，同字段 OR、异字段 AND。
@@ -326,43 +364,6 @@ impl FundsAccess {
             org_unit_ids,
         })
     }
-
-    /// 回款候选逐行判定可见性与筛选；授权集合外的关联份额不进入行与汇总。
-    pub(super) async fn assemble_customer_receipts(
-        &self,
-        query: &erp_finance::dto::receivable::CustomerReceiptListQuery,
-        rows: Vec<CustomerReceiptRow>,
-        authorization: &FundsAuthorization,
-        executor: &mut dyn Executor,
-    ) -> Result<ReceiptSnapshot> {
-        let ids = rows.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
-        let links = self.receipt_matched_links(&ids, executor).await?;
-        let order_ids = links.values().flatten().filter_map(|link| link.order.clone()).collect::<Vec<_>>();
-        let facts = self.sales_fact_map(&order_ids, executor).await?;
-        let authorized = self.authorized_sales_ids(authorization, executor).await?;
-        let allowed = authorized.map(|list| list.into_iter().collect::<BTreeSet<_>>());
-        let operators = self
-            .receipt_operators(&ids, query.operator_kind, query.operator_user_ids.is_some(), executor)
-            .await?;
-        let condition = self.receipt_condition(query, executor).await?;
-        let decided = decide_receipt_rows(
-            rows,
-            &links,
-            &facts,
-            &allowed,
-            &operators,
-            &condition,
-            authorization.ledger_read,
-        );
-        Ok(ReceiptSnapshot { decided, links, facts })
-    }
-}
-
-/// 同一回款快照的已决行和来源事实；金额另按原已决集合重新装载核销以保持返回顺序。
-pub(super) struct ReceiptSnapshot {
-    decided: Vec<(CustomerReceiptRow, Vec<String>)>,
-    links: HashMap<String, Vec<ReceiptLink>>,
-    facts: HashMap<String, LinkedSalesFact>,
 }
 
 /// 核销按本次查询返回流生成金额和展示视图，缺失来源仍保留 None。
@@ -430,66 +431,6 @@ fn decide_receipt_rows(
 }
 
 impl FundsAccess {
-    /// 回款候选分页裁剪与汇总装配；明细、汇总与导出复用同一已决集合。
-    // 查询+分页+执行器参数为既有签名，保持调用方一致不拆。
-    #[allow(clippy::too_many_arguments)]
-    pub(super) async fn finish_customer_receipts(
-        &self,
-        params: &erp_finance::dto::receivable::CustomerReceiptListParams,
-        query: &erp_finance::dto::receivable::CustomerReceiptListQuery,
-        decided: Vec<(CustomerReceiptRow, Vec<String>)>,
-        links: HashMap<String, Vec<ReceiptLink>>,
-        facts: HashMap<String, LinkedSalesFact>,
-        authorization: FundsAuthorization,
-        fingerprint: std::collections::hash_map::DefaultHasher,
-        _executor: &mut dyn Executor,
-    ) -> Result<FundsScopedPage<ScopedCustomerReceiptRow>> {
-        let total = decided.len() as u64;
-        let page = query.paging.page.max(1);
-        let page_size = query.paging.page_size.max(1);
-        let start = ((page - 1) as usize).saturating_mul(page_size as usize);
-        let end = start.saturating_add(page_size as usize).min(decided.len());
-        let items = self.receipt_page_items(
-            decided.get(start..end).unwrap_or_default(),
-            &links,
-            authorization.ledger_read,
-        );
-        let mut triples = Vec::new();
-        let mut whole = true;
-        let mut whole_sum = zero_amount();
-        for (row, matched) in decided.iter() {
-            let row_links = links.get(&row.id).map(Vec::as_slice).unwrap_or_default();
-            triples.extend(summary_inputs(row_links, matched));
-            whole &= whole_document_readable(
-                authorization.ledger_read,
-                row_links.iter().map(|link| link.order.as_deref()),
-                matched,
-            );
-            whole_sum = whole_sum.checked_add(row.amount);
-        }
-        let owner_of = facts
-            .iter()
-            .map(|(id, fact)| (id.clone(), fact.owner_user_id.clone()))
-            .collect::<HashMap<_, _>>();
-        let version = format!("{:x}", fingerprint.finish());
-        ensure_version(params.scope_version.as_deref(), &version).map_err(|_| changed())?;
-        let summary = build_summary(&triples, &owner_of, whole_amount(whole, whole_sum), &version, !whole)?;
-        Ok(FundsScopedPage {
-            items,
-            total,
-            summary,
-            page,
-            page_size,
-            scope_version: version.clone(),
-            policy_version: authorization.context.policy_version,
-            organization_version: authorization.context.organizations.version,
-            as_of: authorization.context.as_of.as_utc().to_rfc3339(),
-            empty_reason: None,
-            scope_summary: "回款继承销售核销来源范围；整单另需财务整账职责及全部来源可见",
-            ownership_basis: "linked_sales_owner_and_receipt_operator",
-        })
-    }
-
     /// 单行金额裁剪；整单金额与完整分配仅整单资格返回，否则为 null。
     pub(super) fn cut_receipt_row(
         &self,

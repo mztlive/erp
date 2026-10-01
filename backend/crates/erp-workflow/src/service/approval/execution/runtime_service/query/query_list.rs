@@ -16,16 +16,94 @@ use crate::entity::document_registry::DocumentType;
 use crate::entity::work_item::WorkItem;
 use crate::error::{Error, Result};
 use crate::repository::approval_integration::{
-    ApprovalRuntimeReadRepository, ApprovalRuntimeReadRow, ApprovalRuntimeReadScope,
+    ApprovalRuntimeReadPage, ApprovalRuntimeReadRepository, ApprovalRuntimeReadRow, ApprovalRuntimeReadScope,
     ApprovalRuntimeReadTypeScope,
 };
-use crate::repository::bpm::{ApprovalInstanceListCursor, ApprovalInstanceListFilter};
+use crate::repository::bpm::{
+    ApprovalInstanceListCursor, ApprovalInstanceListFilter, ApprovalInstanceListView, ApprovalInstanceSummary,
+};
 use crate::repository::prelude::*;
 use crate::repository::{ApprovalIntegrationExt, BpmExt, WorkItemExt};
 use crate::service::approval::approval_participant_permissions_with_executor;
 use crate::service::approval::business_adapter::adapter_spec_of;
 use crate::service::approval::policy::{ALL_DOCUMENT_TYPES, DocumentApprovalPolicy, policy_of};
 use crate::service::approval::process_kind::process_kind_of;
+
+/// 保持现有授权结果规模上限；流式读取不会保留完整 ID 集合。
+const MAX_AUTHORIZED_INSTANCES: u64 = 20_000;
+
+/// 仅累计完整授权数量并保留当前页与一条下一页探针。
+#[derive(Default)]
+struct AuthorizedRuntimePage {
+    rows: Vec<ApprovalRuntimeReadRow>,
+    total: u64,
+}
+
+impl AuthorizedRuntimePage {
+    /// 已证明来源可读的行计入总数，只有游标后的有界页行进入内存。
+    fn append(&mut self, row: ApprovalRuntimeReadRow, filter: &ApprovalInstanceListFilter) -> Result<()> {
+        self.total += 1;
+        ensure_runtime_result_limit(self.total)?;
+        if self.rows.len() < usize::try_from(filter.limit).unwrap_or(usize::MAX)
+            && runtime_row_after_cursor(&row.instance, filter.view, filter.cursor.as_ref())
+        {
+            self.rows.push(row);
+        }
+        Ok(())
+    }
+
+    /// 交付完整授权总数与有界页面，不需要再次查询授权 ID 集合。
+    fn into_page(self) -> ApprovalRuntimeReadPage {
+        ApprovalRuntimeReadPage { items: self.rows, total: self.total }
+    }
+}
+
+/// 保留原有超限拒绝错误，Started 与 Managed 使用相同结果上限。
+fn ensure_runtime_result_limit(total: u64) -> Result<()> {
+    if total > MAX_AUTHORIZED_INSTANCES {
+        return Err(Error::ValidationError("审批查询授权结果超过 20000 条，请增加类型或业务筛选".into()));
+    }
+    Ok(())
+}
+
+/// 与 Repository 的时间降序、ID 降序游标及 MongoDB 数值比较口径一致。
+fn runtime_row_after_cursor(
+    row: &ApprovalInstanceSummary,
+    view: ApprovalInstanceListView,
+    cursor: Option<&ApprovalInstanceListCursor>,
+) -> bool {
+    let Some(cursor) = cursor else {
+        return true;
+    };
+    let sort_time = match view {
+        ApprovalInstanceListView::Started => Some(row.started_at),
+        ApprovalInstanceListView::Blocked => row.blocked_at,
+        ApprovalInstanceListView::Managed => i64::try_from(row.updated_at).ok(),
+    };
+    sort_time.is_some_and(|time| time < cursor.sort_time || (time == cursor.sort_time && row.id < cursor.id))
+}
+
+/// 原始候选末行必须具有真实排序时间，且下一批游标严格向后推进。
+fn checked_scan_cursor(
+    view: ApprovalInstanceListView,
+    last: &ApprovalInstanceSummary,
+    previous: Option<&ApprovalInstanceListCursor>,
+) -> Result<ApprovalInstanceListCursor> {
+    let sort_time = match view {
+        ApprovalInstanceListView::Started => Some(last.started_at),
+        ApprovalInstanceListView::Blocked => last.blocked_at,
+        ApprovalInstanceListView::Managed => i64::try_from(last.updated_at).ok(),
+    }
+    .ok_or_else(|| Error::version_conflict("审批候选"))?;
+    let cursor = ApprovalInstanceListCursor { sort_time, id: last.id.clone() };
+    if previous.is_some_and(|previous| {
+        cursor.sort_time > previous.sort_time
+            || (cursor.sort_time == previous.sort_time && cursor.id >= previous.id)
+    }) {
+        return Err(Error::version_conflict("审批候选"));
+    }
+    Ok(cursor)
+}
 
 impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     /// 返回由开放审批任务映射的运行实例列表页。
@@ -132,7 +210,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     /// * `query` - 已规范化查询，可含字面量检索
     ///
     /// # 返回
-    /// 返回 MongoDB 联合不可变快照完成授权过滤、检索、计数与分页后的实例页。
+    /// Started 返回数据库分页及计数；管理视图返回有界候选扫描形成的真实来源授权页及总数。
     ///
     /// # 错误
     /// 单据类型未登记或仓储失败时返回错误。
@@ -156,6 +234,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             .await
     }
 
+    /// 在同一事务中形成类型范围、完整授权总数与稳定页面。
     async fn list_scoped_instances(
         &self,
         actor: &AuditActor,
@@ -173,9 +252,12 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         } else {
             ApprovalRuntimeReadScope::Managed { type_scopes: type_scopes.clone() }
         };
-        filter.authorized_instance_ids =
-            Some(self.authorized_instance_ids(actor, query, &filter, &scope, executor).await?);
-        let mut page = ApprovalRuntimeReadRepository::new(&self.db).search(&filter, &scope, executor).await?;
+        let mut page = if query.view == RuntimeInstanceListView::Started {
+            ApprovalRuntimeReadRepository::new(&self.db).search(&filter, &scope, executor).await?
+        } else {
+            self.authorized_runtime_page(actor, &filter, &scope, executor).await?
+        };
+        ensure_runtime_result_limit(page.total)?;
         let has_more = page.items.len() > query.limit as usize;
         if has_more {
             page.items.truncate(query.limit as usize);
@@ -191,63 +273,56 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         Ok(RuntimeInstanceListPage { items, total: page.total, next_cursor })
     }
 
-    /// 候选按稳定游标分批读取；当前对象授权完成后才交 Repository 计数与分页。
-    async fn authorized_instance_ids(
+    /// 有界扫描不计算候选总数，只保留授权页；最终总数覆盖全部真实来源授权行。
+    async fn authorized_runtime_page(
         &self,
         actor: &AuditActor,
-        query: &RuntimeInstanceListQuery,
         filter: &ApprovalInstanceListFilter,
         scope: &ApprovalRuntimeReadScope,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<String>> {
+    ) -> Result<ApprovalRuntimeReadPage> {
         let mut scan = filter.clone();
         scan.cursor = None;
         scan.limit = 100;
-        let mut allowed = Vec::new();
+        let mut page = AuthorizedRuntimePage::default();
         loop {
-            let page = ApprovalRuntimeReadRepository::new(&self.db).search(&scan, scope, executor).await?;
-            if page.items.is_empty() {
+            let (items, last) =
+                ApprovalRuntimeReadRepository::new(&self.db).scan(&scan, scope, executor).await?;
+            let Some(last) = last else {
                 break;
-            }
-            self.append_authorized_batch(actor, query, &page.items, &mut allowed, executor).await?;
-            let last = page.items.last().expect("nonempty batch");
-            let cursor = cursor_from_summary(scan.view, &last.instance);
-            scan.cursor = Some(ApprovalInstanceListCursor { sort_time: cursor.sort_time, id: cursor.id });
+            };
+            self.append_authorized_batch(actor, items, filter, &mut page, executor).await?;
+            scan.cursor = Some(checked_scan_cursor(scan.view, &last, scan.cursor.as_ref())?);
         }
-        Ok(allowed)
+        Ok(page.into_page())
     }
 
+    /// 每个来源在当前事务中独立证明，缺失快照或不可读来源均不计入页面及总数。
     async fn append_authorized_batch(
         &self,
         actor: &AuditActor,
-        query: &RuntimeInstanceListQuery,
-        items: &[ApprovalRuntimeReadRow],
-        allowed: &mut Vec<String>,
+        items: Vec<ApprovalRuntimeReadRow>,
+        filter: &ApprovalInstanceListFilter,
+        page: &mut AuthorizedRuntimePage,
         executor: &mut dyn Executor,
     ) -> Result<()> {
         for row in items {
             let Some(snapshot) = &row.snapshot else {
                 continue;
             };
-            if query.view != RuntimeInstanceListView::Started
-                && !self
-                    .auth
-                    .approval_source_readable(
-                        actor,
-                        snapshot.document_type,
-                        &snapshot.business_object_id,
-                        executor,
-                    )
-                    .await?
+            if !self
+                .auth
+                .approval_source_readable(
+                    actor,
+                    snapshot.document_type,
+                    &snapshot.business_object_id,
+                    executor,
+                )
+                .await?
             {
                 continue;
             }
-            if allowed.len() >= 20_000 {
-                return Err(Error::ValidationError(
-                    "审批查询授权结果超过 20000 条，请增加类型或业务筛选".into(),
-                ));
-            }
-            allowed.push(row.instance.id.clone());
+            page.append(row, filter)?;
         }
         Ok(())
     }
@@ -309,4 +384,142 @@ fn process_required_document_types() -> Result<Vec<DocumentType>> {
         }
     }
     Ok(document_types)
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::{
+        AuthorizedRuntimePage, MAX_AUTHORIZED_INSTANCES, checked_scan_cursor, ensure_runtime_result_limit,
+        runtime_row_after_cursor,
+    };
+    use crate::error::Error;
+    use crate::repository::approval_integration::ApprovalRuntimeReadRow;
+    use crate::repository::bpm::{
+        ApprovalInstanceListCursor, ApprovalInstanceListFilter, ApprovalInstanceListView,
+        ApprovalInstanceSummary,
+    };
+
+    /// 构造不收窄候选的管理视图分页参数。
+    fn filter(limit: u32) -> ApprovalInstanceListFilter {
+        ApprovalInstanceListFilter {
+            view: ApprovalInstanceListView::Managed,
+            process_kind: None,
+            status: None,
+            started_by: None,
+            subject_kind: None,
+            authorized_instance_ids: None,
+            subject_ids: None,
+            text_query: None,
+            cursor: None,
+            limit,
+        }
+    }
+
+    /// 构造真实摘要类型，用同一排序时间覆盖所有列表视图。
+    fn summary(id: &str, sort_time: u64) -> ApprovalInstanceSummary {
+        serde_json::from_value(json!({
+            "id": id, "process_kind": "sales_order", "process_definition_id": "definition-1",
+            "definition_version": 1, "subject": { "subject_kind": "sales_order", "subject_id": "order-1" },
+            "subject_version": 1, "status": "RUNNING", "current_round_no": 1,
+            "current_node_execution_id": null, "started_by": "starter-1", "started_at": sort_time,
+            "blocked_at": sort_time, "version": 1, "updated_at": sort_time,
+        }))
+        .unwrap()
+    }
+
+    /// 构造已完成授权的页输入，冻结快照不会参与分页游标判断。
+    fn row(id: &str, sort_time: u64) -> ApprovalRuntimeReadRow {
+        ApprovalRuntimeReadRow { instance: summary(id, sort_time), snapshot: None }
+    }
+
+    /// 第一页保留 limit+1，之后的授权行只计数，不增加保存行数。
+    #[test]
+    fn authorized_page_counts_full_result_and_keeps_bounded_probe() {
+        let filter = filter(3);
+        let mut page = AuthorizedRuntimePage::default();
+        for index in (1..=100).rev() {
+            page.append(row(&format!("inst-{index:03}"), index), &filter).unwrap();
+        }
+        let page = page.into_page();
+        assert_eq!(page.total, 100);
+        assert_eq!(
+            page.items.iter().map(|row| row.instance.id.as_str()).collect::<Vec<_>>(),
+            ["inst-100", "inst-099", "inst-098"]
+        );
+    }
+
+    /// 翻页时 total 不受游标影响，等时间按 ID 降序继续，空页仍保留完整 total。
+    #[test]
+    fn authorized_page_uses_stable_cursor_and_full_total_for_tail_and_empty_pages() {
+        let mut filter = filter(3);
+        filter.cursor = Some(ApprovalInstanceListCursor { sort_time: 10, id: "inst-b".into() });
+        let mut page = AuthorizedRuntimePage::default();
+        for (id, time) in [("inst-d", 11), ("inst-c", 10), ("inst-b", 10), ("inst-a", 10), ("inst-z", 9)] {
+            page.append(row(id, time), &filter).unwrap();
+        }
+        let page = page.into_page();
+        assert_eq!(page.total, 5);
+        assert_eq!(
+            page.items.iter().map(|row| row.instance.id.as_str()).collect::<Vec<_>>(),
+            ["inst-a", "inst-z"]
+        );
+        filter.cursor = Some(ApprovalInstanceListCursor { sort_time: 0, id: "inst-0".into() });
+        let mut empty = AuthorizedRuntimePage::default();
+        empty.append(row("inst-a", 10), &filter).unwrap();
+        assert!(empty.rows.is_empty());
+        assert_eq!(empty.total, 1);
+    }
+
+    /// 三视图的游标使用对应时间，阻塞时间缺失及超出 i64 的更新时间不会错误进入后续页。
+    #[test]
+    fn runtime_cursor_keeps_view_time_and_numeric_type_boundaries() {
+        let mut row = summary("inst-a", 10);
+        row.started_at = 3;
+        row.blocked_at = Some(7);
+        let cursor = ApprovalInstanceListCursor { sort_time: 5, id: "inst-z".into() };
+        assert!(runtime_row_after_cursor(&row, ApprovalInstanceListView::Started, Some(&cursor)));
+        assert!(!runtime_row_after_cursor(&row, ApprovalInstanceListView::Blocked, Some(&cursor)));
+        assert!(!runtime_row_after_cursor(&row, ApprovalInstanceListView::Managed, Some(&cursor)));
+        row.blocked_at = None;
+        row.updated_at = u64::MAX;
+        assert!(!runtime_row_after_cursor(&row, ApprovalInstanceListView::Blocked, Some(&cursor)));
+        assert!(!runtime_row_after_cursor(&row, ApprovalInstanceListView::Managed, Some(&cursor)));
+        assert!(runtime_row_after_cursor(&row, ApprovalInstanceListView::Blocked, None));
+    }
+
+    /// 精确保持原授权结果上限：20000 成功，20001 返回原校验错误。
+    #[test]
+    fn runtime_authorized_limit_preserves_existing_failure() {
+        assert!(ensure_runtime_result_limit(MAX_AUTHORIZED_INSTANCES).is_ok());
+        assert!(matches!(ensure_runtime_result_limit(MAX_AUTHORIZED_INSTANCES + 1),
+            Err(Error::ValidationError(message))
+                if message == "审批查询授权结果超过 20000 条，请增加类型或业务筛选"));
+        let filter = filter(2);
+        let mut page = AuthorizedRuntimePage { rows: Vec::new(), total: MAX_AUTHORIZED_INSTANCES };
+        assert!(page.append(row("inst-a", 1), &filter).is_err());
+        assert!(page.rows.is_empty());
+    }
+
+    /// 原始批次的阻塞时间缺失必须失败关闭，不能以更新时间重扫已经经过的实例。
+    #[test]
+    fn runtime_scan_cursor_rejects_missing_block_time_and_nonadvancing_rows() {
+        let previous = ApprovalInstanceListCursor { sort_time: 10, id: "inst-b".into() };
+        let mut last = summary("inst-a", 10);
+        let cursor = checked_scan_cursor(ApprovalInstanceListView::Blocked, &last, Some(&previous)).unwrap();
+        assert_eq!(cursor.sort_time, 10);
+        assert_eq!(cursor.id, "inst-a");
+        last.blocked_at = None;
+        assert!(matches!(checked_scan_cursor(ApprovalInstanceListView::Blocked, &last, None),
+            Err(Error::ConflictError(message)) if message == "审批候选版本已变化，请刷新后重试"));
+        for (id, time) in [("inst-b", 10), ("inst-c", 10), ("inst-a", 11)] {
+            assert!(
+                matches!(checked_scan_cursor(ApprovalInstanceListView::Managed, &summary(id, time), Some(&previous)),
+                Err(Error::ConflictError(message)) if message == "审批候选版本已变化，请刷新后重试")
+            );
+        }
+        last.updated_at = u64::MAX;
+        assert!(checked_scan_cursor(ApprovalInstanceListView::Managed, &last, None).is_err());
+    }
 }

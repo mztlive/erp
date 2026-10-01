@@ -19,6 +19,13 @@ impl MongoCatalogSupplyQuery {
 }
 #[async_trait]
 impl CatalogSupplyQueryPort for MongoCatalogSupplyQuery {
+    async fn product_candidate_ids(
+        &self,
+        filter: &ProductFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<String>> {
+        CatalogSupplyRepository::new(&self.db).product_candidate_ids(filter, executor).await
+    }
     async fn product_page(
         &self,
         filter: &ProductFilter,

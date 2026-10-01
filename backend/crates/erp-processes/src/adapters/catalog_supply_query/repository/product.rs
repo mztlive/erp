@@ -7,7 +7,13 @@ use persistence_core::{Executor, PageResult, Result};
 use serde::Deserialize;
 
 use super::CatalogSupplyRepository;
-use super::product_pipeline::product_list_pipeline;
+use super::product_pipeline::{product_candidate_pipeline, product_list_pipeline};
+
+/// 采购责任筛选候选仅返回稳定身份。
+#[derive(Debug, Deserialize)]
+struct ProductCandidate {
+    id: String,
+}
 
 /// 商品列表聚合分页结果。
 #[derive(Debug, Default, Deserialize)]
@@ -26,6 +32,46 @@ struct ProductTotal {
 }
 
 impl CatalogSupplyRepository<'_> {
+    /// 读取已经满足完整筛选的商品身份，不生成页面、展示字段或总数。
+    ///
+    /// # 参数
+    /// * `filter` - 已规范化且包含授权范围的完整商品筛选
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 返回至多 10001 个稳定身份，供调用方整体检查规模上限。
+    ///
+    /// # 错误
+    /// 聚合、游标读取或投影反序列化失败时返回仓储错误。
+    pub async fn product_candidate_ids(
+        &self,
+        filter: &ProductFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<String>> {
+        let collection = self.db.collection::<Product>(<mongodb::Database as CatalogExt>::PRODUCTS);
+        let pipeline = product_candidate_pipeline(filter);
+        let rows = match executor.session() {
+            Some(session) => {
+                collection
+                    .aggregate(pipeline)
+                    .with_type::<ProductCandidate>()
+                    .session(&mut *session)
+                    .await?
+                    .stream(session)
+                    .try_collect::<Vec<_>>()
+                    .await?
+            },
+            None => {
+                collection
+                    .aggregate(pipeline)
+                    .with_type::<ProductCandidate>()
+                    .await?
+                    .try_collect::<Vec<_>>()
+                    .await?
+            },
+        };
+        Ok(rows.into_iter().map(|row| row.id).collect())
+    }
     /// 分页查询商品及当前启用 SKU 的聚合筛选结果。
     ///
     /// 统一关键字覆盖商品编号/名称与 SKU 编号/名称/规格/条码；上架状态、

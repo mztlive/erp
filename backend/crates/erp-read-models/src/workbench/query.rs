@@ -118,11 +118,12 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         ensure_queue_context(&query.queue_context_id, &queue_context_id)?;
         let mut filter = self.scope_filter(&query, &actor, &access)?;
         apply_due_filter(&mut filter, query.due)?;
+        filter.narrow_current_handlers(&query.handler_user_ids);
         let (authorized_page, result_version) =
             self.authorized_page_fields(&filter, &query, &access, executor).await?;
         let scope_version = queue_scope_version(&identity_version, &queue_context_id, &result_version);
         ensure_scope_version(query.page, query.scope_version.as_deref(), &scope_version)?;
-        let fields = self
+        let mut fields = self
             .focused_fields(
                 authorized_page.items,
                 query.current_work_item_id.as_deref(),
@@ -132,6 +133,9 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
                 executor,
             )
             .await?;
+        if query.query.is_none() {
+            self.page_display_fields(&mut fields, executor).await?;
+        }
         let items =
             self.project_fields(fields, query.scope, &actor, &access, &queue_context_id, executor).await?;
         let current_version = self.auth.queue_scope_version(&actor, executor).await?;
@@ -211,7 +215,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             if candidate_count == 0 {
                 break;
             }
-            let mut facts = self.object_facts_for_rows(&rows, executor).await?;
+            let mut facts = self.candidate_object_facts(&rows, filter.query.is_some(), executor).await?;
             let fields = self.authorize_queue_rows(rows, access, &mut facts, executor).await?;
             for fields in fields.into_iter().filter(|fields| {
                 matches_keyword(fields, filter.query.as_deref())

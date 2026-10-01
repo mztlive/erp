@@ -32,6 +32,37 @@ impl<'a> CategoryChainCache<'a> {
         Self { db, parents: HashMap::new() }
     }
 
+    /// 按层批量预读候选分类祖先，只缓存成功取得或已确认缺失的节点。
+    ///
+    /// # 参数
+    /// * `category_ids` - 候选商品当前修订所引用的分类
+    /// * `executor` - 本次筛选的同一执行器
+    ///
+    /// # 返回
+    /// 成功时缓存最多 32 层父指针；异常链仍由 `ids` 验证并拒绝。
+    ///
+    /// # 错误
+    /// 某层数据库读取失败时返回原错误，失败层不入缓存，调用方可按原策略重试。
+    pub(crate) async fn prefetch<'id>(
+        &mut self,
+        category_ids: impl IntoIterator<Item = &'id str> + Send,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let mut pending = category_ids.into_iter().map(ToString::to_string).collect::<HashSet<_>>();
+        for _ in 0..CATEGORY_CHAIN_LIMIT {
+            pending.retain(|id| !self.parents.contains_key(id));
+            if pending.is_empty() {
+                break;
+            }
+            let ids = pending.into_iter().collect::<Vec<_>>();
+            let rows = self.db.catalog().procurement_categories(&ids, executor).await?;
+            let loaded =
+                rows.into_iter().map(|row| (row.id, row.parent_category_id)).collect::<HashMap<_, _>>();
+            pending = cache_parent_batch(&mut self.parents, &ids, loaded);
+        }
+        Ok(())
+    }
+
     /// 按原顺序读取分类链，并记住成功取得的父节点或终止事实。
     ///
     /// # 参数
@@ -60,6 +91,23 @@ impl<'a> CategoryChainCache<'a> {
         }
         Ok(chain.ids)
     }
+}
+
+/// 缺失节点保留为空父引用，并只安排尚未缓存的父分类进入下一层批量读取。
+fn cache_parent_batch(
+    parents: &mut HashMap<String, Option<String>>,
+    ids: &[String],
+    mut loaded: HashMap<String, Option<String>>,
+) -> HashSet<String> {
+    let mut pending = HashSet::new();
+    for id in ids {
+        let parent = loaded.remove(id).flatten();
+        if let Some(parent) = &parent {
+            pending.insert(parent.clone());
+        }
+        parents.insert(id.clone(), parent);
+    }
+    pending
 }
 
 /// 分类链的读取游标；缓存命中时推进，未加载的节点留给拥有领域仓储读取。
@@ -99,6 +147,26 @@ mod tests {
     /// 构造无需数据库的父分类读取结果。
     fn parents(rows: &[(&str, Option<&str>)]) -> HashMap<String, Option<String>> {
         rows.iter().map(|(id, parent)| (id.to_string(), parent.map(ToString::to_string))).collect()
+    }
+
+    #[test]
+    /// 同层多叶节点共用一个父节点，缺失末节点保留，并继续按原有序链解析。
+    fn category_parent_batch_deduplicates_ancestors_and_keeps_missing_nodes() {
+        let mut known = HashMap::new();
+        let pending = cache_parent_batch(
+            &mut known,
+            &["leaf-a".into(), "leaf-b".into(), "missing".into()],
+            parents(&[("leaf-a", Some("parent")), ("leaf-b", Some("parent"))]),
+        );
+        assert_eq!(pending, HashSet::from(["parent".to_string()]));
+        assert_eq!(known.get("missing"), Some(&None));
+        let pending = cache_parent_batch(&mut known, &["parent".into()], parents(&[("parent", None)]));
+        assert!(pending.is_empty());
+        for leaf in ["leaf-a", "leaf-b"] {
+            let mut chain = CategoryChain::new(leaf);
+            assert_eq!(chain.advance(&known).unwrap(), None);
+            assert_eq!(chain.ids, [leaf, "parent"].map(ProductCategoryId::new));
+        }
     }
 
     #[test]

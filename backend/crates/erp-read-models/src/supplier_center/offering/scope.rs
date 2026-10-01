@@ -1,13 +1,16 @@
 //! 供给列表的一致授权快照；范围与业务版本跨页携带。
 
+use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use application_core::{AuditActor, OwnershipPage};
+use erp_core::ids::SupplierOfferingId;
 use erp_identity::AccessControlExt;
 use erp_identity::repository::prelude::*;
-use erp_supply::repository::prelude::*;
-use erp_supply::{OfferingAccess, OfferingDataScopePort, OfferingReadScope, SupplierOfferingExt};
+use erp_supply::repository::supplier_offering::SupplierOfferingFilter;
+use erp_supply::repository::supplier_offering::procurement::ProcurementOfferingRepositoryExt;
+use erp_supply::{OfferingAccess, OfferingDataScopePort, SupplierOfferingExt};
 use persistence_core::Transactional;
 
 use super::procurement::{OfferingProcurementOwners, ensure_authorized_count};
@@ -93,8 +96,15 @@ async fn build_snapshot(
     let mut query = super::prepare_list_query(&params)?;
     query.scope = Some(scope.clone());
     apply_org_filter(&mut query, data_scope.as_ref(), &params, executor).await?;
-    apply_procurement_filter(&db, &mut query, &scope, procurement.as_ref(), &params, executor).await?;
-    let bundle = super::repository_page(&db, &query, executor).await?;
+    let filter = apply_procurement_filter(&db, &query, procurement.as_ref(), &params, executor).await?;
+    let bundle = match filter {
+        Some(filter) => {
+            super::SupplierOfferingReadRepository::new(&db)
+                .load_offering_list_page_by_filter(&filter, executor)
+                .await?
+        },
+        None => super::repository_page(&db, &query, executor).await?,
+    };
     let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
     bundle.page.total.hash(&mut fingerprint);
     context.scope_version = format!("{}:{:x}", context.scope_version, fingerprint.finish());
@@ -142,48 +152,125 @@ fn requested_org_expansion(params: &SupplierOfferingListParams) -> Result<Option
     }
 }
 
+/// 先用完整查询条件读取身份，再解析负责人，禁止对页面先切片后过滤。
 async fn apply_procurement_filter(
     db: &mongodb::Database,
-    query: &mut crate::supplier_center::repository::offering::SupplierOfferingListQuery,
-    scope: &OfferingReadScope,
+    query: &crate::supplier_center::repository::offering::SupplierOfferingListQuery,
     procurement: &dyn OfferingProcurementOwners,
     params: &SupplierOfferingListParams,
     executor: &mut dyn persistence_core::Executor,
-) -> Result<()> {
+) -> Result<Option<SupplierOfferingFilter>> {
     let Some(owners) = &params.procurement_owner_user_ids else {
-        return Ok(());
+        return Ok(None);
     };
-    let authorized = if scope.is_company() {
-        None
-    } else {
-        let ids = db.supplier_offerings().list_authorized_ids(scope, executor).await?;
-        ensure_authorized_count(ids.len())?;
-        Some(ids)
-    };
-    let matched =
-        procurement.matching_offering_ids(authorized.as_deref(), owners.as_slice(), executor).await?;
-    let matched_ids: Vec<erp_core::ids::SupplierOfferingId> =
-        matched.into_iter().map(erp_core::ids::SupplierOfferingId::new).collect();
-    query.offering_ids = Some(intersect_ids(query.offering_ids.take(), matched_ids));
+    let mut filter =
+        super::SupplierOfferingReadRepository::new(db).resolve_list_filter(query, executor).await?;
+    let candidates = db.supplier_offerings().procurement_candidate_ids(&filter, executor).await?;
+    apply_candidate_filter(&mut filter, &candidates, procurement, owners.as_slice(), executor).await?;
+    Ok(Some(filter))
+}
+
+/// 解析已筛选候选并收窄身份，复用原过滤的授权、搜索、状态及页面字段。
+async fn apply_candidate_filter(
+    filter: &mut SupplierOfferingFilter,
+    candidates: &[String],
+    procurement: &dyn OfferingProcurementOwners,
+    owner_ids: &[String],
+    executor: &mut dyn persistence_core::Executor,
+) -> Result<()> {
+    ensure_authorized_count(candidates.len())?;
+    let matched = procurement.matching_offering_ids(Some(candidates), owner_ids, executor).await?;
+    let matched_ids = matched.into_iter().map(SupplierOfferingId::new).collect();
+    filter.offering_ids = Some(intersect_ids(filter.offering_ids.take(), matched_ids));
     Ok(())
 }
 
+/// 保留可供状态与其它既有身份筛选，仅收窄到采购责任命中项；空命中保持空集。
 fn intersect_ids(
-    existing: Option<Vec<erp_core::ids::SupplierOfferingId>>,
-    matched: Vec<erp_core::ids::SupplierOfferingId>,
-) -> Vec<erp_core::ids::SupplierOfferingId> {
+    existing: Option<Vec<SupplierOfferingId>>,
+    matched: Vec<SupplierOfferingId>,
+) -> Vec<SupplierOfferingId> {
     let Some(existing) = existing else {
         return matched;
     };
-    existing.into_iter().filter(|id| matched.iter().any(|other| other == id)).collect()
+    let matched = matched.into_iter().collect::<HashSet<_>>();
+    existing.into_iter().filter(|id| matched.contains(id)).collect()
 }
 
 #[cfg(test)]
 mod tests {
-    use persistence_core::NoTransaction;
+    use erp_core::ids::{SkuId, SupplierAccountId};
+    use erp_supply::OfferingReadScope;
+    use erp_supply::entity::supplier_offering::{OfferingSourceType, OfferingStatus};
+    use persistence_core::{NoTransaction, QueryFilter};
 
     use super::*;
     use crate::supplier_center::offering::procurement::MapOfferingProcurementOwners;
+
+    #[test]
+    /// 最终负责人身份与已解析的可供状态/既有身份求交，不能放宽候选或丢掉空筛选。
+    fn offering_procurement_ids_preserve_existing_filter_intersection() {
+        let ids = |values: &[&str]| values.iter().map(|id| SupplierOfferingId::new(*id)).collect();
+        assert_eq!(
+            intersect_ids(Some(ids(&["off-a", "off-b"])), ids(&["off-b", "outside"])),
+            ids(&["off-b"])
+        );
+        assert!(intersect_ids(Some(ids(&["off-a"])), Vec::new()).is_empty());
+        assert!(intersect_ids(Some(Vec::new()), ids(&["outside"])).is_empty());
+        assert_eq!(intersect_ids(None, ids(&["off-b"])), ids(&["off-b"]));
+    }
+
+    #[tokio::test]
+    /// 实际候选编排仅收窄身份，其余已解析的关键词、编号、授权和深页条件全部保留。
+    async fn offering_candidate_filter_keeps_complete_query_and_page_fields() {
+        let mut filter = SupplierOfferingFilter {
+            offering_ids: Some(vec![SupplierOfferingId::new("off-a"), SupplierOfferingId::new("off-b")]),
+            sku_ids: Some(vec![SkuId::new("sku")]),
+            keyword_sku_ids: Some(vec![SkuId::new("keyword-sku")]),
+            supplier_id: Some(SupplierAccountId::new("supplier")),
+            supplier_sku_code: Some("礼盒.*".into()),
+            source_type: Some(OfferingSourceType::Excel),
+            status: Some(OfferingStatus::Active),
+            scope: Some(OfferingReadScope::default()),
+            maintainer_user_ids: Some(vec!["maintainer".into()]),
+            business_org_unit_ids: Some(vec!["org".into()]),
+            page: 7,
+            page_size: 1,
+            sort_by: Some("supplier_sku_code".into()),
+            sort_ascending: true,
+            ..Default::default()
+        };
+        let mut expected = filter.clone();
+        expected.offering_ids = Some(vec![SupplierOfferingId::new("off-b")]);
+        let port = MapOfferingProcurementOwners {
+            owners: [("off-b".into(), "buyer".into()), ("outside".into(), "buyer".into())].into(),
+        };
+        apply_candidate_filter(
+            &mut filter,
+            &["off-a".into(), "off-b".into()],
+            &port,
+            &["buyer".into()],
+            &mut NoTransaction,
+        )
+        .await
+        .unwrap();
+        assert_eq!(filter.to_doc(), expected.to_doc());
+        assert_eq!((filter.page, filter.page_size, filter.sort_ascending), (7, 1, true));
+        assert_eq!(filter.sort_by.as_deref(), Some("supplier_sku_code"));
+        apply_candidate_filter(&mut filter, &[], &port, &["buyer".into()], &mut NoTransaction).await.unwrap();
+        assert_eq!(filter.offering_ids, Some(Vec::new()));
+        assert!(
+            apply_candidate_filter(
+                &mut filter,
+                &vec!["id".into(); 10001],
+                &port,
+                &["buyer".into()],
+                &mut NoTransaction
+            )
+            .await
+            .is_err()
+        );
+    }
 
     #[tokio::test]
     async fn procurement_owner_filter_does_not_expand_maintainer_authorization() {

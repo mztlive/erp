@@ -23,6 +23,14 @@ struct RecordingQuery {
 
 #[async_trait]
 impl CatalogSupplyQueryPort for RecordingQuery {
+    /// 销售资格复验必须继续使用精确引用查询。
+    async fn product_candidate_ids(
+        &self,
+        _: &ProductFilter,
+        _: &mut dyn Executor,
+    ) -> persistence_core::Result<Vec<String>> {
+        panic!("sales qualification must use the exact-reference query")
+    }
     async fn product_page(
         &self,
         _: &ProductFilter,

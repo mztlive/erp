@@ -4,10 +4,10 @@ use std::collections::{HashMap, HashSet};
 
 use erp_core::common::time::Instant;
 use erp_integration::entity::integration_ops::{ErrorClass, IntegrationErrorTask, ReconciliationDifference};
-use erp_workflow::WorkflowAuthorizationPort;
 use erp_workflow::entity::work_item::{WorkItemBriefRelation, WorkItemType};
 pub(crate) use erp_workflow::ports::ObjectKind;
 use erp_workflow::service::work_item::order_access::filter_order_facts;
+use erp_workflow::{WorkItemRow, WorkflowAuthorizationPort};
 use persistence_core::Executor;
 
 pub(crate) use super::authority::object_ids;
@@ -446,6 +446,70 @@ fn restore_owned_fulfillment_facts<'a>(
 }
 
 impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
+    /// 无关键词扫描只装载授权、版本与订单来源；关键词保持原富显示检索语义。
+    ///
+    /// # 参数
+    /// `rows` 为本批候选；`with_display` 表示搜索依赖对象富显示；沿用调用方执行器。
+    /// # 返回
+    /// 返回与原显示投影共享权威构造器的本批事实。
+    /// # 错误
+    /// 任一权威或显示事实读取失败时传播原错误。
+    pub(super) async fn candidate_object_facts(
+        &self,
+        rows: &[WorkItemRow],
+        with_display: bool,
+        executor: &mut dyn Executor,
+    ) -> Result<WorkbenchObjectFactMap> {
+        if with_display {
+            return self.object_facts_for_rows(rows, executor).await;
+        }
+        let keys = rows
+            .iter()
+            .filter_map(|row| {
+                object_policy(row.work_item_type, &row.business_object_type)
+                    .map(|policy| (policy.object_kind, row.business_object_id.clone()))
+            })
+            .collect();
+        Ok(self
+            .facts_reader()
+            .load(&keys, executor)
+            .await?
+            .into_iter()
+            .map(|(key, fact)| (key, WorkbenchObjectFact::from_authority(fact)))
+            .collect())
+    }
+
+    /// 已完成授权和分页后只给当前页恢复对象富显示，不改变身份、顺序和任务版本。
+    ///
+    /// # 参数
+    /// `fields` 为当前授权页，`executor` 沿用候选扫描的事务快照。
+    /// # 返回
+    /// 原地补齐对象展示字段。
+    /// # 错误
+    /// 页面对象或审批展示读取失败时传播原错误。
+    pub(super) async fn page_display_fields(
+        &self,
+        fields: &mut [dto::WorkItemFields],
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let keys = fields
+            .iter()
+            .filter_map(|item| {
+                object_policy(item.work_item_type, &item.business_object_type)
+                    .map(|policy| (policy.object_kind, item.business_object_id.clone()))
+            })
+            .collect();
+        let facts = self.load_object_facts(&keys, executor).await?;
+        for item in fields {
+            if let Some(policy) = object_policy(item.work_item_type, &item.business_object_type)
+                && let Some(fact) = facts.get(&(policy.object_kind, item.business_object_id.clone()))
+            {
+                apply_object_display(item, fact);
+            }
+        }
+        Ok(())
+    }
+
     /// 批量读取当前页任务的权威对象事实，避免按行 N+1。
     pub(super) async fn object_facts_for_rows(
         &self,
@@ -764,6 +828,72 @@ mod authority_display_tests {
         )
         .unwrap()
         .into()
+    }
+
+    /// 富显示只影响页面字段；最小权威事实保持授权、版本与来源筛选结果。
+    #[test]
+    fn candidate_authority_and_rich_display_keep_identical_admission_and_versions() {
+        use erp_identity::Permission;
+        use erp_workflow::entity::work_item::WorkItemSubjectVersions;
+        use erp_workflow::ports::OrderTaskSource;
+
+        let item = WorkItem::new_with_responsibility_key(
+            WorkItemId::new("task"),
+            WorkItemData {
+                work_item_type: WorkItemType::FulfillmentOperation,
+                business_object_type: "purchase_receipt".into(),
+                business_object_id: "receipt".into(),
+                subject_version: "current-version".into(),
+                owner_role: "warehouse_inbound_handler".into(),
+                owner_organization_id: "warehouse".into(),
+                owner_user_id: "actor".into(),
+                assignment_source: AssignmentSource::SystemRule,
+                priority: WorkItemPriority::Normal,
+                due_at: None,
+                reason_code: None,
+                impact_summary: None,
+            },
+            "purchase_order:order",
+        )
+        .unwrap();
+        let row: WorkItemRow = serde_json::from_value(serde_json::to_value(&item).unwrap()).unwrap();
+        let policy = object_policy(row.work_item_type, &row.business_object_type).unwrap();
+        let access = ActorAccess::new("actor".into())
+            .with_permissions(vec![Permission::parse(policy.read_permission).unwrap()]);
+        let mut authority = ObjectFact::new("order", "采购入库", "__system__")
+            .with_order_source(OrderTaskSource::Purchase("order".into()));
+        authority.subject_versions =
+            WorkItemSubjectVersions::constrained(vec!["current-version".into()]).unwrap();
+        let key = (policy.object_kind, "receipt".into());
+        let minimal = WorkbenchObjectFactMap::from([(
+            key.clone(),
+            WorkbenchObjectFact::from_authority(authority.clone()),
+        )]);
+        let mut rich_fact = WorkbenchObjectFact::from_authority(authority);
+        rich_fact.display.label = "采购入库 · 采购单 PO-1".into();
+        rich_fact.display.counterparty_label = Some("供应商名称".into());
+        let rich = WorkbenchObjectFactMap::from([(key, rich_fact)]);
+        let minimal_fields = super::super::access::authorized_fields(vec![row.clone()], &access, &minimal);
+        let rich_fields = super::super::access::authorized_fields(vec![row.clone()], &access, &rich);
+        assert_eq!(minimal_fields.len(), 1);
+        assert_eq!(rich_fields.len(), 1);
+        assert_eq!(minimal_fields[0].id, rich_fields[0].id);
+        assert_eq!(minimal_fields[0].task_version, rich_fields[0].task_version);
+        assert_eq!(minimal_fields[0].root_business_object_id, rich_fields[0].root_business_object_id);
+        let order_ids = vec!["order".to_string()];
+        assert!(super::super::query::matches_order_sources(&minimal_fields[0], &minimal, &[], &order_ids));
+        assert!(super::super::query::matches_order_sources(&rich_fields[0], &rich, &[], &order_ids));
+        assert!(super::super::query::matches_keyword(&rich_fields[0], Some("供应商名称")));
+        let mut stale = row.clone();
+        stale.subject_version = "old-version".into();
+        let mut other = row;
+        other.owner_user_id = Some("other-owner".into());
+        for facts in [&minimal, &rich] {
+            assert!(
+                super::super::access::authorized_fields(vec![stale.clone(), other.clone()], &access, facts)
+                    .is_empty()
+            );
+        }
     }
 
     #[test]

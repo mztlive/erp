@@ -1,5 +1,7 @@
 //! 同一应收快照的核销净额与当前页分录事实。
 
+mod order_guard;
+
 use std::collections::{BTreeSet, HashMap};
 
 use erp_core::ids::{ReceivableAccountId, ReceivableEntryId};
@@ -23,6 +25,7 @@ pub(super) struct ReceivableFacts {
 
 impl ReceivableFacts {
     /// 合并当前页之外的子账事实；调用方保证每个子账只装载一批。
+    #[cfg(test)]
     pub(super) fn extend(&mut self, other: Self) {
         self.shares.extend(other.shares);
         self.entries.extend(other.entries);
@@ -47,6 +50,37 @@ impl ReceivableFacts {
             net = allocation.allocation_action.apply_to_net(net, allocation.allocated_amount);
         }
         self.shares.insert(account_id.to_string(), net);
+    }
+
+    /// 同批分配按原返回流归入其真实子账，保持每个子账的逐笔金额顺序。
+    fn append_batch_allocations(
+        &mut self,
+        account_ids: &[String],
+        entries: &[ReceivableEntry],
+        allocations: Vec<ReceiptAllocation>,
+    ) -> BTreeSet<String> {
+        let account_of = entries
+            .iter()
+            .map(|entry| (entry.base.id.as_str(), entry.receivable_account_id.as_ref()))
+            .collect::<HashMap<_, _>>();
+        let mut grouped: HashMap<String, Vec<ReceiptAllocation>> = HashMap::new();
+        for allocation in allocations {
+            if let Some(account) = account_of.get(allocation.receivable_entry_id.as_ref()) {
+                grouped.entry((*account).to_owned()).or_default().push(allocation);
+            }
+        }
+        let mut fallback = BTreeSet::new();
+        for account in account_ids {
+            let allocations = grouped.remove(account).unwrap_or_default();
+            if order_guard::order_independent(
+                allocations.iter().map(|allocation| allocation.allocated_amount),
+            ) {
+                self.append_allocations(account, allocations);
+            } else {
+                fallback.insert(account.clone());
+            }
+        }
+        fallback
     }
 
     /// 当前页的批量分录按仓储返回顺序保留，稳定排序仅在生成展示时执行。
@@ -74,7 +108,7 @@ fn entry_ids_by_account(entries: &[ReceivableEntry]) -> HashMap<String, Vec<Rece
 }
 
 impl FundsAccess {
-    /// 本次事务批量装载分录，核销沿用单子账查询边界；页行与汇总共享事实。
+    /// 本次事务批量装载分录，核销按同批完整分录一次查询；页行与汇总共享事实。
     ///
     /// # 参数
     /// * `account_ids` - 已授权、已筛选的全部子账
@@ -82,7 +116,7 @@ impl FundsAccess {
     /// * `executor` - 本次快照事务，不跨快照复用
     ///
     /// # 返回
-    /// 返回全部子账净额和当前页分录；分录每批最多 500 个子账，核销逐子账读取。
+    /// 返回全部子账净额和当前页分录；分录每批最多 500 个子账，核销每批一次读取。
     ///
     /// # 错误
     /// 读取失败时返回仓储错误；金额溢出语义沿用原逐笔折叠。
@@ -96,12 +130,17 @@ impl FundsAccess {
         for chunk in account_ids.chunks(500) {
             let ids = chunk.iter().map(ReceivableAccountId::new).collect::<Vec<_>>();
             let entries = self.db.receivable_entries().find_entries_by_accounts(&ids, executor).await?;
-            let mut ids = entry_ids_by_account(&entries);
-            for account_id in chunk {
-                let keys = ids.remove(account_id).unwrap_or_default();
-                let allocations =
-                    self.db.receipt_allocations().find_allocations_by_entries(&keys, executor).await?;
-                facts.append_allocations(account_id, allocations);
+            let ids = entry_ids_by_account(&entries);
+            let keys =
+                chunk.iter().filter_map(|account| ids.get(account)).flatten().cloned().collect::<Vec<_>>();
+            let allocations =
+                self.db.receipt_allocations().find_allocations_by_entries(&keys, executor).await?;
+            let fallback = facts.append_batch_allocations(chunk, &entries, allocations);
+            for account in chunk.iter().filter(|account| fallback.contains(*account)) {
+                let keys = ids.get(account).map(Vec::as_slice).unwrap_or_default();
+                let original =
+                    self.db.receipt_allocations().find_allocations_by_entries(keys, executor).await?;
+                facts.append_allocations(account, original);
             }
             facts.append_entries(entries, display_ids);
         }
@@ -121,8 +160,14 @@ mod tests {
     use erp_finance::repository::receivable::ReceivableAccountRow;
     use erp_sales::entity::sales_order::{BusinessType, OriginSystem, SalesOrder, SalesOrderData};
 
+    use super::super::super::repository::accounts::{AccountPageRow, AccountSource, AccountSummaryRow};
     use super::super::list::{receivable_page_rows, receivable_summary};
     use super::*;
+
+    /// 测试使用真实分配金额进入生产顺序证明。
+    fn guard_for_test(rows: &[ReceiptAllocation]) -> bool {
+        order_guard::order_independent(rows.iter().map(|row| row.allocated_amount))
+    }
 
     /// 构造来自仓储的有效分录事实。
     fn entry(id: &str, account: &str, sequence: u32) -> ReceivableEntry {
@@ -201,8 +246,8 @@ mod tests {
     /// 页行取走分录后，汇总仍使用同一净额并覆盖全部匹配行。
     #[test]
     fn batched_receivable_facts_page_and_summary_share_net_amounts_without_reloading() {
-        let rows = vec![account("a", "so-a", "100"), account("b", "so-b", "60")];
-        let orders =
+        let rows = [account("a", "so-a", "100"), account("b", "so-b", "60")];
+        let orders: HashMap<String, SalesOrder> =
             HashMap::from([("so-a".into(), order("so-a", "owner")), ("so-b".into(), order("so-b", "owner"))]);
         let mut facts = ReceivableFacts::default();
         facts.append_allocations(
@@ -213,11 +258,37 @@ mod tests {
             ],
         );
         facts.append_entries(vec![entry("a-1", "a", 1)], &BTreeSet::from(["a".into()]));
-        let page = receivable_page_rows(&rows[..1], &orders, &mut facts);
+        let page_rows = rows
+            .iter()
+            .map(|row| {
+                let order = &orders[&row.sales_order_id];
+                AccountPageRow {
+                    row: row.clone(),
+                    source: AccountSource {
+                        id: order.base.id.clone(),
+                        owner_user_id: Some(order.sales_owner_user_id.clone()),
+                        business_org_unit_id: order.business_org_unit_id.clone(),
+                        version: order.base.version,
+                        document_no: order.order_no.clone(),
+                    },
+                }
+            })
+            .collect::<Vec<_>>();
+        let summary_rows = rows
+            .iter()
+            .map(|row| AccountSummaryRow {
+                id: row.id.clone(),
+                order_id: row.sales_order_id.clone(),
+                owner_user_id: Some(orders[&row.sales_order_id].sales_owner_user_id.clone()),
+                gross_total: row.gross_total,
+                settled_total: row.settled_total,
+            })
+            .collect::<Vec<_>>();
+        let page = receivable_page_rows(&page_rows[..1], &mut facts);
         let mut rest = ReceivableFacts::default();
         rest.append_allocations("b", vec![allocation("b-1", AllocationAction::Apply, "20.02")]);
         facts.extend(rest);
-        let summary = receivable_summary(&rows, &orders, &facts, "v").unwrap();
+        let summary = receivable_summary(&summary_rows, &facts, "v").unwrap();
         assert_eq!(page.len(), 1);
         assert_eq!(page[0].id, "a");
         assert_eq!(page[0].sales_order_no, "SO-so-a");
@@ -278,6 +349,57 @@ mod tests {
         assert_eq!(entries[0].offset_total, Amount::zero());
         assert!(facts.take_entries("b").is_empty());
         assert_eq!(facts.share("a"), "50.02".parse().unwrap());
+    }
+
+    /// 批量查询结果按真实分录归账，交错正反流不能混入另一子账。
+    #[test]
+    fn batch_allocations_group_by_real_entry_and_keep_each_account_order() {
+        let mut facts = ReceivableFacts::default();
+        let fallback = facts.append_batch_allocations(
+            &["a".into(), "b".into(), "empty".into()],
+            &[entry("a-1", "a", 1), entry("b-1", "b", 1)],
+            vec![
+                allocation("a-1", AllocationAction::Apply, "70.01"),
+                allocation("b-1", AllocationAction::Apply, "20.02"),
+                allocation("a-1", AllocationAction::Reverse, "20"),
+                allocation("missing", AllocationAction::Apply, "1000"),
+            ],
+        );
+        assert!(fallback.is_empty());
+        assert_eq!(facts.share("a"), "50.01".parse().unwrap());
+        assert_eq!(facts.share("b"), "20.02".parse().unwrap());
+        assert_eq!(facts.share("empty"), Amount::zero());
+        assert_eq!(facts.shares.len(), 3);
+    }
+
+    /// 极值不进入新批流折叠，必须由调用方回读原单账 find；常规金额仍批量。
+    #[test]
+    fn batch_guard_falls_back_before_any_extreme_decimal_operation() {
+        let maximum = "79228162514264337593543950335";
+        let extreme = vec![
+            allocation("e", AllocationAction::Apply, maximum),
+            allocation("e", AllocationAction::Reverse, "1"),
+            allocation("e", AllocationAction::Apply, "1"),
+        ];
+        assert!(!guard_for_test(&extreme));
+        let mut facts = ReceivableFacts::default();
+        let fallback = facts.append_batch_allocations(&["a".into()], &[entry("e", "a", 1)], extreme);
+        assert_eq!(fallback, BTreeSet::from(["a".into()]));
+        assert!(!facts.shares.contains_key("a"));
+        assert!(guard_for_test(&[]));
+        assert!(guard_for_test(&[
+            allocation("e", AllocationAction::Apply, "12.3400"),
+            allocation("e", AllocationAction::Reverse, "0.01")
+        ]));
+        assert!(guard_for_test(&[allocation(
+            "e",
+            AllocationAction::Apply,
+            "792281625142643375935439503.35"
+        )]));
+        assert!(!guard_for_test(&[
+            allocation("e", AllocationAction::Apply, "792281625142643375935439503.35"),
+            allocation("e", AllocationAction::Reverse, "0.01")
+        ]));
     }
 
     /// 空事实、缺失子账和完全反向仍返回零额。

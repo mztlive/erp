@@ -6,11 +6,9 @@ use std::sync::Arc;
 
 use application_core::{AuditActor, OwnershipPage};
 use erp_catalog::ports::supply::CatalogSupplyQueryPort;
-use erp_catalog::repository::prelude::*;
 use erp_catalog::service::catalog::{prepare_product_list, product_page_view};
 use erp_catalog::{
-    CatalogAccess, CatalogDataScopePort, CatalogExt, CatalogReadScope, ProductFilter, ProductListParams,
-    ProductListView, ProductView,
+    CatalogAccess, CatalogDataScopePort, ProductFilter, ProductListParams, ProductListView, ProductView,
 };
 use erp_identity::AccessControlExt;
 use erp_identity::repository::prelude::*;
@@ -125,7 +123,7 @@ async fn build_snapshot(
     let mut filter = prepare_product_list(&params)?;
     filter.scope = Some(scope.clone());
     apply_org_filter(&mut filter, data_scope.as_ref(), &params, executor).await?;
-    apply_procurement_filter(&db, &mut filter, &scope, procurement.as_ref(), &params, executor).await?;
+    apply_procurement_filter(query.as_ref(), &mut filter, procurement.as_ref(), &params, executor).await?;
     let page = query.product_page(&filter, executor).await?;
     let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
     page.total.hash(&mut fingerprint);
@@ -174,10 +172,10 @@ async fn apply_org_filter(
     Ok(())
 }
 
-async fn apply_procurement_filter(
-    db: &mongodb::Database,
+/// 先按完整查询读取候选身份，再在候选内解析采购责任，最终列表仍按全部条件分页。
+pub(super) async fn apply_procurement_filter(
+    query: &dyn CatalogSupplyQueryPort,
     filter: &mut ProductFilter,
-    scope: &CatalogReadScope,
     procurement: &dyn ProductProcurementOwners,
     params: &ProductListParams,
     executor: &mut dyn persistence_core::Executor,
@@ -185,17 +183,11 @@ async fn apply_procurement_filter(
     let Some(owners) = &params.procurement_owner_user_ids else {
         return Ok(());
     };
-    let authorized = if scope.is_company() {
-        None
-    } else {
-        let ids = db.products().list_authorized_ids(scope, executor).await?;
-        if ids.len() > 10_000 {
-            return Err(Error::ValidationError("采购负责人筛选超过上限，请收窄组织或维护人条件".into()));
-        }
-        Some(ids)
-    };
-    let matched =
-        procurement.matching_product_ids(authorized.as_deref(), owners.as_slice(), executor).await?;
+    let candidates = query.product_candidate_ids(filter, executor).await?;
+    if candidates.len() > 10_000 {
+        return Err(Error::ValidationError("采购负责人筛选超过上限，请收窄组织或维护人条件".into()));
+    }
+    let matched = procurement.matching_product_ids(Some(&candidates), owners.as_slice(), executor).await?;
     filter.ids = Some(matched);
     Ok(())
 }

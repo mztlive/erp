@@ -9,6 +9,7 @@ use erp_finance::dto::cost::{
 use erp_identity::SharedRbacService;
 use mongodb::Database;
 use serde::Serialize;
+use snapshot::CostSelection;
 
 use crate::{Error, Result};
 
@@ -54,8 +55,16 @@ impl CostReadModel {
     ) -> Result<CostReadResult<PageView<ScopedCostEntryView>>> {
         let query = params.normalized()?;
         ensure_page(query.paging.page, params.scope_version.as_deref())?;
-        let mut snapshot =
-            self.checked(&params, None, "cost_entry", "list", actor, params.scope_version.as_deref()).await?;
+        let mut snapshot = self
+            .checked(
+                &params,
+                &CostSelection::default(),
+                "cost_entry",
+                "list",
+                actor,
+                params.scope_version.as_deref(),
+            )
+            .await?;
         let rows = std::mem::take(&mut snapshot.rows);
         Ok(snapshot.result(paging::costs(rows, query.paging)))
     }
@@ -65,8 +74,9 @@ impl CostReadModel {
     /// # 错误
     /// 不可见与不存在统一为 NotFound；撤权后不交付旧宽范围事实。
     pub async fn detail(&self, id: &str, actor: &AuditActor) -> Result<CostReadResult<ScopedCostEntryView>> {
-        let mut snapshot =
-            self.checked(&empty_query(), Some(id), "cost_entry", "detail", actor, None).await?;
+        let mut snapshot = self
+            .checked(&empty_query(), &CostSelection::entry(id), "cost_entry", "detail", actor, None)
+            .await?;
         let row = snapshot.rows.pop().ok_or_else(|| Error::NotFound("成本不存在或无权查看".into()))?;
         Ok(snapshot.result(row))
     }
@@ -82,9 +92,16 @@ impl CostReadModel {
         validator::Validate::validate(&params)?;
         let query = params.normalized()?;
         ensure_page(query.paging.page, params.scope_version.as_deref())?;
-        let id = query.cost_entry_id.as_ref().map(|id| id.as_ref());
+        let selection = CostSelection::allocations(query.clone());
         let mut snapshot = self
-            .checked(&empty_query(), id, "cost_allocation", "list", actor, params.scope_version.as_deref())
+            .checked(
+                &empty_query(),
+                &selection,
+                "cost_allocation",
+                "list",
+                actor,
+                params.scope_version.as_deref(),
+            )
             .await?;
         let entries = std::mem::take(&mut snapshot.rows);
         let rows = entries.into_iter().flat_map(|entry| entry.allocations).collect();
@@ -100,6 +117,7 @@ fn ensure_page(page: u64, version: Option<&str>) -> Result<()> {
 fn page_offset(page: u64, size: u32) -> usize {
     usize::try_from(page.saturating_sub(1).saturating_mul(u64::from(size))).unwrap_or(usize::MAX)
 }
+/// 构造仅依赖来源授权的成本筛选，分配条件单独前置到分配仓储。
 fn empty_query() -> CostEntryListParams {
     CostEntryListParams {
         scope_version: None,

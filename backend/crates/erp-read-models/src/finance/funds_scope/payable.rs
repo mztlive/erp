@@ -1,17 +1,17 @@
 //! 应付子账范围查询。
 
 use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
 
 use application_core::AuditActor;
 use erp_finance::repository::prelude::*;
-use erp_finance::repository::{PayableAccountFilter, PayableAccountRow, PayableExt};
+use erp_finance::repository::{PayableAccountRow, PayableExt};
 use erp_procurement::PurchaseAccess;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::authorization::*;
 use super::payable_source::source_key;
+use super::repository::accounts::{AccountPageRow, AccountSummaryRow};
 use super::rows::*;
 use crate::{Error, Result};
 
@@ -63,8 +63,12 @@ impl FundsAccess {
         purchase_access: &PurchaseAccess,
         expected: Option<&str>,
     ) -> Result<FundsScopedPage<ScopedPayableAccountRow>> {
-        checked_twice(expected, || self.snapshot_payable_accounts(params, query, actor, purchase_access))
-            .await
+        checked_revalidated(
+            expected,
+            || self.snapshot_payable_accounts(params, query, actor, purchase_access),
+            || self.revalidate_payable_accounts(query, actor, purchase_access),
+        )
+        .await
     }
 
     /// 身份和业务事实均使用调用方同一事务，不缓存权限解析结果。
@@ -105,64 +109,58 @@ impl FundsAccess {
         if authorization.empty() {
             return Ok(empty_page(&authorization, "no_scope", "应付子账无可见范围"));
         }
-        let keyword_ids = crate::finance::search::keyword_ids(
-            &self.db,
-            query.q.as_deref(),
-            erp_finance::repository::keyword::FinanceSearchTarget::Payable,
-        )
-        .await?;
-        let filter = PayableAccountFilter {
-            source_document_id: query.source_document_id.clone(),
-            keyword_ids,
-            supplier_id: query.supplier_id.clone(),
-            source_type: query.source_type,
-            status: query.status,
-            page: 1,
-            page_size: 10_000,
-            sort_by: Some(query.paging.sort_by.to_string()),
-            sort_ascending: matches!(query.paging.sort_dir, application_core::SortDir::Asc),
-        };
-        let candidates = self.db.payable_accounts().search_payable_accounts(&filter, executor).await?;
-        if candidates.items.len() >= 10_000 {
-            return Err(Error::ValidationError("应付查询超过上限，请收窄组织或负责人条件".into()));
-        }
-        let po_ids = candidates
-            .items
-            .iter()
-            .map(|row| source_key(row.source_type, &row.source_document_id))
-            .collect::<Vec<_>>();
-        let purchase_facts = self.purchase_fact_map(&po_ids, executor).await?;
         let condition = self.payable_account_condition(query, executor).await?;
-        let mut decided = Vec::new();
-        let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
-        authorization.context.scope_version.hash(&mut fingerprint);
-        for row in candidates.items {
-            let key = source_key(row.source_type, &row.source_document_id);
-            let Some(fact) =
-                purchase_facts.get(&key).filter(|fact| authorization.payable_fact_allowed(&key, fact))
-            else {
-                continue;
-            };
-            let fact = Some(fact);
-            let row_facts = FundsLinkedFacts {
-                owner_user_id: fact.and_then(|order| order.owner_user_id.clone()),
-                business_org_unit_id: fact.map(|order| order.business_org_unit_id.clone()),
-                operator_user_ids: Vec::new(),
-                secondary_operator_user_ids: Vec::new(),
-                linked_document_id: row.source_document_id.clone(),
-                linked_document_version: fact.map(|order| order.version).unwrap_or(0),
-            };
-            if !matches_linked_condition(&row_facts, &condition) {
-                continue;
-            }
-            let whole = true;
-            row.id.hash(&mut fingerprint);
-            row.version.hash(&mut fingerprint);
-            row.source_document_id.hash(&mut fingerprint);
-            fact.map(|order| order.version).unwrap_or(0).hash(&mut fingerprint);
-            decided.push((row, fact.cloned(), whole));
-        }
-        self.finish_payable_accounts(params, query, decided, authorization, fingerprint, executor).await
+        let snapshot =
+            self.payable_database_snapshot(query, &authorization, &condition, true, executor).await?;
+        let version = snapshot.version(&authorization)?;
+        ensure_version(params.scope_version.as_deref(), &version)?;
+        let items = self.payable_page_items(&snapshot.items, executor).await?;
+        let summary = payable_summary(&snapshot.summary, &version)?;
+        Ok(FundsScopedPage {
+            items,
+            total: snapshot.total(),
+            summary,
+            page: query.paging.page,
+            page_size: query.paging.page_size,
+            scope_version: version,
+            policy_version: authorization.context.policy_version,
+            organization_version: authorization.context.organizations.version,
+            as_of: authorization.context.as_of.as_utc().to_rfc3339(),
+            empty_reason: None,
+            scope_summary: "应付子账继承采购或供应商结算的真实来源边界",
+            ownership_basis: "linked_purchase_owner",
+        })
+    }
+
+    /// 独立新事务只重验资格、真实来源与全部匹配行版本。
+    async fn revalidate_payable_accounts(
+        &self,
+        query: &erp_finance::dto::payable::PayableAccountListQuery,
+        actor: &AuditActor,
+        purchase_access: &PurchaseAccess,
+    ) -> Result<String> {
+        let this = self.clone();
+        let query = query.clone();
+        let actor = actor.clone();
+        let purchase_access = purchase_access.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let (_, authorization) = this
+                        .resolve_with_purchase(&actor, "payable_account", "list", &purchase_access, executor)
+                        .await?;
+                    if authorization.empty() {
+                        return Ok(authorization.context.scope_version);
+                    }
+                    let condition = this.payable_account_condition(&query, executor).await?;
+                    this.payable_database_snapshot(&query, &authorization, &condition, false, executor)
+                        .await?
+                        .version(&authorization)
+                })
+            })
+            .await
     }
 
     /// 应付子账关联筛选条件：采购负责人与组织分别精确匹配，只收窄授权结果。
@@ -189,94 +187,29 @@ impl FundsAccess {
         })
     }
 
-    /// 应付子账候选分页裁剪与汇总装配；明细、汇总与导出复用同一已决集合。
-    pub(super) async fn finish_payable_accounts(
-        &self,
-        params: &erp_finance::dto::payable::PayableAccountListParams,
-        query: &erp_finance::dto::payable::PayableAccountListQuery,
-        decided: Vec<(PayableAccountRow, Option<LinkedPurchaseFact>, bool)>,
-        authorization: FundsAuthorization,
-        fingerprint: std::collections::hash_map::DefaultHasher,
-        executor: &mut dyn Executor,
-    ) -> Result<FundsScopedPage<ScopedPayableAccountRow>> {
-        let total = decided.len() as u64;
-        let page = query.paging.page.max(1);
-        let page_size = u64::from(query.paging.page_size).max(1);
-        let start = ((page - 1) as usize).saturating_mul(page_size as usize);
-        let end = start.saturating_add(page_size as usize).min(decided.len());
-        let items = self.payable_page_items(&decided, start, end, executor).await?;
-        let mut triples = Vec::new();
-        let mut whole_sum = zero_amount();
-        let mut all_whole = true;
-        for (row, fact, whole) in decided.iter() {
-            all_whole &= *whole;
-            let order = fact.as_ref().map(|_| row.source_document_id.clone());
-            triples.push((row.id.clone(), row.settled_total, order));
-            if *whole {
-                whole_sum = whole_sum.checked_add(row.gross_total);
-            }
-        }
-        let owner_of = decided
-            .iter()
-            .filter_map(|(row, fact, _)| {
-                fact.as_ref()
-                    .and_then(|order| order.owner_user_id.clone())
-                    .map(|owner| (row.source_document_id.clone(), owner))
-            })
-            .collect::<HashMap<_, _>>();
-        let version = format!("{:x}", fingerprint.finish());
-        ensure_version(params.scope_version.as_deref(), &version).map_err(|_| changed())?;
-        let summary =
-            build_summary(&triples, &owner_of, whole_amount(all_whole, whole_sum), &version, !all_whole)?;
-        Ok(FundsScopedPage {
-            items,
-            total,
-            summary,
-            page,
-            page_size: page_size as u32,
-            scope_version: version.clone(),
-            policy_version: authorization.context.policy_version,
-            organization_version: authorization.context.organizations.version,
-            as_of: authorization.context.as_of.as_utc().to_rfc3339(),
-            empty_reason: None,
-            scope_summary: "应付子账继承采购或供应商结算的真实来源边界",
-            ownership_basis: "linked_purchase_owner",
-        })
-    }
-
-    /// 当前页应付行，并补上供应商法定名称。
-    ///
-    /// # 参数
-    /// * `decided` - 已通过范围裁剪的应付行
-    /// * `start` - 页起始下标
-    /// * `end` - 页结束下标
-    /// * `executor` - 调用方事务
-    ///
-    /// # 返回
-    /// 返回带来源单号和供应商名称的范围行。
-    ///
-    /// # 错误
-    /// 供应商名称读取失败时返回错误。
+    /// 只为数据库当前页补齐供应商名称和真实来源单号。
     async fn payable_page_items(
         &self,
-        decided: &[(PayableAccountRow, Option<LinkedPurchaseFact>, bool)],
-        start: usize,
-        end: usize,
+        page: &[AccountPageRow<PayableAccountRow>],
         executor: &mut dyn Executor,
     ) -> Result<Vec<ScopedPayableAccountRow>> {
-        if start >= end {
-            return Ok(Vec::new());
-        }
-        let supplier_ids =
-            decided[start..end].iter().map(|(row, _, _)| row.supplier_id.clone()).collect::<Vec<_>>();
-        let supplier_names = self.supplier_legal_names(&supplier_ids, executor).await?;
-        let mut items = Vec::with_capacity(end - start);
-        for (row, fact, whole) in decided[start..end].iter() {
-            let mut item = cut_payable_account_row(row, fact.as_ref(), *whole);
-            item.supplier_name = supplier_names.get(&row.supplier_id).cloned();
-            items.push(item);
-        }
-        Ok(items)
+        let ids = page.iter().map(|item| item.row.supplier_id.clone()).collect::<Vec<_>>();
+        let names = self.supplier_legal_names(&ids, executor).await?;
+        Ok(page
+            .iter()
+            .map(|item| {
+                let source = &item.source;
+                let fact = LinkedPurchaseFact {
+                    owner_user_id: source.owner_user_id.clone(),
+                    business_org_unit_id: source.business_org_unit_id.clone(),
+                    version: source.version,
+                    document_no: source.document_no.clone(),
+                };
+                let mut row = cut_payable_account_row(&item.row, Some(&fact), true);
+                row.supplier_name = names.get(&item.row.supplier_id).cloned();
+                row
+            })
+            .collect())
     }
 
     /// 应付子账详情同一事务内解析、取数与裁剪；版本绑定来源采购单。
@@ -378,6 +311,21 @@ impl FundsAccess {
     }
 }
 
+/// 全范围窄金额摘要按原列表顺序折叠，保持负责人归组与整单口径。
+fn payable_summary(rows: &[AccountSummaryRow], version: &str) -> Result<FundsSummaryView> {
+    let mut triples = Vec::with_capacity(rows.len());
+    let mut whole_sum = zero_amount();
+    let mut owner_of = HashMap::new();
+    for row in rows {
+        triples.push((row.id.clone(), row.settled_total, Some(row.order_id.clone())));
+        whole_sum = whole_sum.checked_add(row.gross_total);
+        if let Some(owner) = &row.owner_user_id {
+            owner_of.insert(row.order_id.clone(), owner.clone());
+        }
+    }
+    build_summary(&triples, &owner_of, Some(whole_sum), version, false)
+}
+
 /// 应付子账单行裁剪；整单金额仅整单资格返回，否则为 null。
 pub(super) fn cut_payable_account_row(
     row: &PayableAccountRow,
@@ -470,5 +418,34 @@ mod tests {
         assert!(partial_json["open_invoiceable_total"].is_null());
         assert!(partial_json.get("invoiced_total").is_some());
         assert!(partial_json["invoiced_total"].is_null());
+    }
+
+    /// 窄摘要与原列表汇总同口径；没有负责人时保留未知归属并保证可加总。
+    #[test]
+    fn database_account_summary_keeps_full_totals_and_unknown_ownership() {
+        let rows = vec![
+            AccountSummaryRow {
+                id: "a".into(),
+                order_id: "po-a".into(),
+                owner_user_id: Some("buyer".into()),
+                gross_total: amount("100.01"),
+                settled_total: amount("60.01"),
+            },
+            AccountSummaryRow {
+                id: "b".into(),
+                order_id: "settlement-b".into(),
+                owner_user_id: None,
+                gross_total: amount("40.02"),
+                settled_total: amount("20.02"),
+            },
+        ];
+        let summary = payable_summary(&rows, "v").unwrap();
+        assert_eq!(summary.whole_total, Some(amount("140.03")));
+        assert_eq!(summary.grouped.len(), 1);
+        assert_eq!(summary.grouped[0].visible_share, amount("60.01"));
+        assert_eq!(summary.unassigned, amount("20.02"));
+        assert_eq!(summary.scope_version, "v");
+        assert!(!summary.permission_limited);
+        assert_eq!(payable_summary(&[], "empty").unwrap().whole_total, Some(Amount::zero()));
     }
 }

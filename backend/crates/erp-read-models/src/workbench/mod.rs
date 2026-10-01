@@ -1,6 +1,7 @@
 //! Workbench read model: authorized work-item list, detail, stats and briefs.
 
 mod access;
+mod action_projection;
 mod approval_access;
 mod material_transfer;
 pub use material_transfer::authorize_material_transfer;

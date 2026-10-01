@@ -19,6 +19,7 @@ mod dictionary;
 mod import_lookup;
 mod listing;
 mod parent_chain;
+pub mod procurement_facts;
 mod product;
 mod scope;
 mod sellable;

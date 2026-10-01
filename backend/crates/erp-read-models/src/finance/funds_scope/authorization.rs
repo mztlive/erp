@@ -518,6 +518,33 @@ where
     Ok(first)
 }
 
+/// 首次返回页面，第二次只重新解析资格并读取完整匹配集合的版本材料。
+///
+/// # 参数
+/// 调用方版本、页面快照闭包及独立新事务的轻量版本重验闭包。
+/// # 返回
+/// 两段版本比较都通过时交付第一次页面。
+/// # 错误
+/// 调用方版本失配或第二轮授权/业务版本变化时拒绝；首次失配不执行重验。
+pub(super) async fn checked_revalidated<T, F, Fut, V, VersionFut>(
+    expected: Option<&str>,
+    snapshot: F,
+    revalidate: V,
+) -> Result<FundsScopedPage<T>>
+where
+    F: FnOnce() -> Fut,
+    Fut: Future<Output = Result<FundsScopedPage<T>>>,
+    V: FnOnce() -> VersionFut,
+    VersionFut: Future<Output = Result<String>>,
+{
+    let first = snapshot().await?;
+    ensure_version(expected, &first.scope_version)?;
+    if revalidate().await? != first.scope_version {
+        return Err(changed());
+    }
+    Ok(first)
+}
+
 /// 版本不一致时返回可识别的范围变化错误并要求从第一页刷新。
 pub(super) fn changed() -> Error {
     crate::support::data_scope_changed("数据范围已变化，请从第一页刷新")
@@ -644,6 +671,39 @@ mod tests {
         assert_eq!(calls.get(), 2);
         assert_eq!(page.page, 1);
         assert_eq!(page.scope_version, "v1");
+    }
+
+    /// 初次失配立即失败；完整集合重验变化不得返回首次页面。
+    #[tokio::test]
+    async fn lightweight_revalidation_preserves_comparison_order_and_first_page() {
+        use std::cell::Cell;
+        let calls = Cell::new(0);
+        let result = checked_revalidated(
+            Some("old"),
+            || async { Ok(test_page("new", 7)) },
+            || {
+                calls.set(calls.get() + 1);
+                async { Ok("new".into()) }
+            },
+        )
+        .await;
+        assert!(matches!(result, Err(Error::ConflictError(_))));
+        assert_eq!(calls.get(), 0);
+        let changed = checked_revalidated(
+            Some("new"),
+            || async { Ok(test_page("new", 7)) },
+            || async { Ok("changed-outside-page".into()) },
+        )
+        .await;
+        assert!(matches!(changed, Err(Error::ConflictError(_))));
+        let page = checked_revalidated(
+            Some("new"),
+            || async { Ok(test_page("new", 7)) },
+            || async { Ok("new".into()) },
+        )
+        .await
+        .unwrap();
+        assert_eq!(page.page, 7);
     }
 
     #[test]

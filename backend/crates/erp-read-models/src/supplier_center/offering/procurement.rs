@@ -5,14 +5,17 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use erp_catalog::CatalogExt;
-use erp_catalog::entity::catalog::{Product, ProductRevision};
-use erp_catalog::repository::prelude::*;
-use erp_core::ids::{SkuId, SupplierOfferingId};
+use erp_catalog::repository::catalog::procurement_facts::{
+    ProcurementProductFact, ProcurementRevisionFact, ProcurementSkuFact,
+};
 use erp_procurement::entity::procurement_responsibility::ProcurementResponsibilityRuleSet;
 use erp_procurement::repository::ProcurementResponsibilityExt;
 use erp_procurement::repository::prelude::*;
 use erp_supply::SupplierOfferingExt;
 use erp_supply::repository::prelude::*;
+use erp_supply::repository::supplier_offering::procurement::{
+    ProcurementOfferingFact, ProcurementOfferingRepositoryExt,
+};
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -96,7 +99,7 @@ impl OfferingProcurementOwners for MongoOfferingProcurementOwners {
             .list_active_procurement_responsibility_rules(executor)
             .await?;
         let offerings = load_offerings(&self.db, &offering_ids, executor).await?;
-        let sku_ids: Vec<SkuId> = offerings.iter().map(|row| row.sku_id.clone()).collect();
+        let sku_ids: Vec<String> = offerings.iter().map(|row| row.sku_id.clone()).collect();
         let skus = load_skus(&self.db, &sku_ids, executor).await?;
         let products = load_products(&self.db, &skus, executor).await?;
         let revisions = load_revisions(&self.db, &products, executor).await?;
@@ -145,10 +148,10 @@ impl OfferingProcurementOwners for MapOfferingProcurementOwners {
 }
 
 struct OfferingMatchInput<'a> {
-    offerings: &'a [erp_supply::entity::supplier_offering::SupplierOffering],
-    skus: &'a [erp_catalog::entity::catalog::Sku],
-    products: &'a HashMap<String, Product>,
-    revisions: &'a HashMap<String, ProductRevision>,
+    offerings: &'a [ProcurementOfferingFact],
+    skus: &'a [ProcurementSkuFact],
+    products: &'a HashMap<String, ProcurementProductFact>,
+    revisions: &'a HashMap<String, ProcurementRevisionFact>,
     rules: &'a [erp_procurement::entity::procurement_responsibility::ProcurementResponsibilityRule],
     wanted: &'a HashSet<&'a str>,
 }
@@ -161,11 +164,13 @@ async fn match_authorized_offerings(
 ) -> Result<Vec<String>> {
     let rule_set = ProcurementResponsibilityRuleSet::new(input.rules);
     let mut categories = CategoryChainCache::new(db);
-    let sku_by_id: HashMap<&str, &erp_catalog::entity::catalog::Sku> =
-        input.skus.iter().map(|sku| (sku.base.id.as_str(), sku)).collect();
+    // Warm-up 仅缓存成功读取；失败时继续沿原逐 SKU 读取与跳过策略。
+    let _ = categories.prefetch(input.revisions.values().map(|row| row.category_id.as_str()), executor).await;
+    let sku_by_id: HashMap<&str, &ProcurementSkuFact> =
+        input.skus.iter().map(|sku| (sku.id.as_str(), sku)).collect();
     let mut matched = HashSet::new();
     for offering in input.offerings {
-        let Some(sku) = sku_by_id.get(offering.sku_id.as_ref()) else {
+        let Some(sku) = sku_by_id.get(offering.sku_id.as_str()) else {
             continue;
         };
         if match_sku_owner(
@@ -180,7 +185,7 @@ async fn match_authorized_offerings(
         .await?
         .is_some()
         {
-            matched.insert(offering.base.id.clone());
+            matched.insert(offering.id.clone());
         }
     }
     Ok(matched.into_iter().collect())
@@ -189,17 +194,17 @@ async fn match_authorized_offerings(
 /// 判定单个 SKU；规则缺失或分类读取失败时保持跳过该 SKU 的策略。
 async fn match_sku_owner(
     categories: &mut CategoryChainCache<'_>,
-    products: &HashMap<String, Product>,
-    revisions: &HashMap<String, ProductRevision>,
+    products: &HashMap<String, ProcurementProductFact>,
+    revisions: &HashMap<String, ProcurementRevisionFact>,
     rule_set: &ProcurementResponsibilityRuleSet<'_>,
-    sku: &erp_catalog::entity::catalog::Sku,
+    sku: &ProcurementSkuFact,
     wanted: &HashSet<&str>,
     executor: &mut dyn Executor,
 ) -> Result<Option<String>> {
-    let Some(product) = products.get(sku.product_id.as_ref()) else {
+    let Some(product) = products.get(sku.product_id.as_str()) else {
         return Ok(None);
     };
-    let Some(revision_id) = product.stable.current_revision_id.as_deref() else {
+    let Some(revision_id) = product.current_revision_id.as_deref() else {
         return Ok(None);
     };
     let Some(revision) = revisions.get(revision_id) else {
@@ -208,59 +213,49 @@ async fn match_sku_owner(
     let Ok(chain) = categories.ids(&revision.category_id, executor).await else {
         return Ok(None);
     };
-    Ok(matches_procurement_owner(product.product_kind, &sku.base.id, chain, rule_set, wanted)
-        .then(|| product.base.id.clone()))
+    Ok(matches_procurement_owner(product.product_kind, &sku.id, chain, rule_set, wanted)
+        .then(|| product.id.clone()))
 }
 
+/// 只加载候选供给的稳定身份与 SKU 引用。
 async fn load_offerings(
     db: &Database,
     ids: &[String],
     executor: &mut dyn Executor,
-) -> Result<Vec<erp_supply::entity::supplier_offering::SupplierOffering>> {
-    let keys: Vec<SupplierOfferingId> = ids.iter().cloned().map(SupplierOfferingId::new).collect();
-    db.supplier_offerings().list_by_ids(&keys, executor).await.map_err(Into::into)
+) -> Result<Vec<ProcurementOfferingFact>> {
+    db.supplier_offerings().procurement_facts(ids, executor).await.map_err(Into::into)
 }
 
+/// 批量读取供给所引 SKU 的稳定身份与所属商品。
 async fn load_skus(
     db: &Database,
-    sku_ids: &[SkuId],
+    sku_ids: &[String],
     executor: &mut dyn Executor,
-) -> Result<Vec<erp_catalog::entity::catalog::Sku>> {
-    if sku_ids.is_empty() {
-        return Ok(Vec::new());
-    }
-    db.skus().find_by_ids(sku_ids, executor).await.map_err(Into::into)
+) -> Result<Vec<ProcurementSkuFact>> {
+    db.catalog().procurement_skus(sku_ids, executor).await.map_err(Into::into)
 }
 
+/// 商品去重后读取类型和当前修订指针。
 async fn load_products(
     db: &Database,
-    skus: &[erp_catalog::entity::catalog::Sku],
+    skus: &[ProcurementSkuFact],
     executor: &mut dyn Executor,
-) -> Result<HashMap<String, Product>> {
-    let ids: Vec<erp_core::ids::ProductId> =
-        skus.iter().map(|sku| sku.product_id.clone()).collect::<HashSet<_>>().into_iter().collect();
-    if ids.is_empty() {
-        return Ok(HashMap::new());
-    }
-    let products = db.products().find_by_ids(&ids, executor).await?;
-    Ok(products.into_iter().map(|product| (product.base.id.clone(), product)).collect())
+) -> Result<HashMap<String, ProcurementProductFact>> {
+    let ids =
+        skus.iter().map(|sku| sku.product_id.clone()).collect::<HashSet<_>>().into_iter().collect::<Vec<_>>();
+    let products = db.catalog().procurement_products(&ids, executor).await?;
+    Ok(products.into_iter().map(|product| (product.id.clone(), product)).collect())
 }
 
+/// 当前修订只读取分类引用，保留稳定商品当前指针的唯一来源。
 async fn load_revisions(
     db: &Database,
-    products: &HashMap<String, Product>,
+    products: &HashMap<String, ProcurementProductFact>,
     executor: &mut dyn Executor,
-) -> Result<HashMap<String, ProductRevision>> {
-    let ids: Vec<erp_core::ids::ProductRevisionId> = products
-        .values()
-        .filter_map(|product| product.stable.current_revision_id.clone())
-        .map(erp_core::ids::ProductRevisionId::new)
-        .collect();
-    if ids.is_empty() {
-        return Ok(HashMap::new());
-    }
-    let revisions = db.product_revisions().find_by_ids(&ids, executor).await?;
-    Ok(revisions.into_iter().map(|revision| (revision.base.id.clone(), revision)).collect())
+) -> Result<HashMap<String, ProcurementRevisionFact>> {
+    let ids = products.values().filter_map(|product| product.current_revision_id.clone()).collect::<Vec<_>>();
+    let revisions = db.catalog().procurement_revisions(&ids, executor).await?;
+    Ok(revisions.into_iter().map(|revision| (revision.id.clone(), revision)).collect())
 }
 
 /// 授权集合超限时整体拒绝，不得截断后继续解析。

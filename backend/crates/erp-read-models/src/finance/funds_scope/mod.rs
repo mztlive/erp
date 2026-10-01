@@ -11,6 +11,7 @@ mod payment;
 mod receipt;
 mod receivable;
 mod receivable_display;
+mod repository;
 mod request;
 mod rows;
 mod source_authorization;

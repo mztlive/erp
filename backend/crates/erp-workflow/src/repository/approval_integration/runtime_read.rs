@@ -7,6 +7,7 @@ use mongodb::bson::{Bson, Document, doc};
 use mongodb::{Collection, Database};
 use persistence_core::{Executor, Result};
 use serde::Deserialize;
+use serde::de::DeserializeOwned;
 
 use super::super::bpm::{
     ApprovalInstanceListFilter, ApprovalInstanceListView, ApprovalInstanceSummary, instance_cursor_or,
@@ -88,6 +89,14 @@ struct ApprovalRuntimeReadCount {
     count: i64,
 }
 
+#[derive(Debug, Deserialize)]
+struct ApprovalRuntimeReadScanFacet {
+    #[serde(default)]
+    items: Vec<ApprovalRuntimeReadRow>,
+    #[serde(default)]
+    last: Vec<ApprovalInstanceSummary>,
+}
+
 impl<'a> ApprovalRuntimeReadRepository<'a> {
     /// 创建审批运行联合只读仓储。
     ///
@@ -125,7 +134,7 @@ impl<'a> ApprovalRuntimeReadRepository<'a> {
         if runtime_read_scope_empty(filter, scope) {
             return Ok(ApprovalRuntimeReadPage { items: Vec::new(), total: 0 });
         }
-        let rows = aggregate_runtime_read(
+        let rows = aggregate_runtime_read::<ApprovalRuntimeReadFacet>(
             &self.db.collection::<Document>(INSTANCES),
             runtime_read_pipeline(filter, scope),
             executor,
@@ -133,31 +142,61 @@ impl<'a> ApprovalRuntimeReadRepository<'a> {
         .await?;
         runtime_read_page(rows.into_iter().next())
     }
+
+    /// 读取有界候选批次，不重复计算完整候选总数。
+    ///
+    /// # 参数
+    /// * `filter` - 当前候选游标、批大小及完整检索条件
+    /// * `scope` - Service 已证明的类型范围
+    /// * `executor` - 与最终来源授权相同的事务执行器
+    ///
+    /// # 返回
+    /// 返回匹配行及最后一个原始候选；整批无快照或无检索匹配时仍可继续扫描。
+    ///
+    /// # 错误
+    /// MongoDB 查询或有界投影反序列化失败时返回错误。
+    pub async fn scan(
+        &self,
+        filter: &ApprovalInstanceListFilter,
+        scope: &ApprovalRuntimeReadScope,
+        executor: &mut dyn Executor,
+    ) -> Result<(Vec<ApprovalRuntimeReadRow>, Option<ApprovalInstanceSummary>)> {
+        if runtime_read_scope_empty(filter, scope) {
+            return Ok((Vec::new(), None));
+        }
+        let rows = aggregate_runtime_read::<ApprovalRuntimeReadScanFacet>(
+            &self.db.collection::<Document>(INSTANCES),
+            runtime_scan_pipeline(filter, scope),
+            executor,
+        )
+        .await?;
+        let Some(facet) = rows.into_iter().next() else {
+            return Ok((Vec::new(), None));
+        };
+        Ok((facet.items, facet.last.into_iter().next()))
+    }
 }
 
-async fn aggregate_runtime_read(
+/// 用调用方执行器执行联合读取，返回指定的有界聚合投影。
+async fn aggregate_runtime_read<T: DeserializeOwned + Send + Sync>(
     collection: &Collection<Document>,
     pipeline: Vec<Document>,
     executor: &mut dyn Executor,
-) -> Result<Vec<ApprovalRuntimeReadFacet>> {
+) -> Result<Vec<T>> {
     match executor.session() {
         Some(session) => Ok(collection
             .aggregate(pipeline)
-            .with_type::<ApprovalRuntimeReadFacet>()
+            .with_type::<T>()
             .session(&mut *session)
             .await?
             .stream(session)
             .try_collect::<Vec<_>>()
             .await?),
-        None => Ok(collection
-            .aggregate(pipeline)
-            .with_type::<ApprovalRuntimeReadFacet>()
-            .await?
-            .try_collect::<Vec<_>>()
-            .await?),
+        None => Ok(collection.aggregate(pipeline).with_type::<T>().await?.try_collect::<Vec<_>>().await?),
     }
 }
 
+/// 从联合分页分支恢复完整总数与当前页。
 fn runtime_read_page(facet: Option<ApprovalRuntimeReadFacet>) -> Result<ApprovalRuntimeReadPage> {
     let Some(facet) = facet else {
         return Ok(ApprovalRuntimeReadPage { items: Vec::new(), total: 0 });
@@ -166,6 +205,7 @@ fn runtime_read_page(facet: Option<ApprovalRuntimeReadFacet>) -> Result<Approval
     Ok(ApprovalRuntimeReadPage { items: facet.items, total })
 }
 
+/// 拒绝空范围、错接视图和不在已证明范围内的请求类型。
 fn runtime_read_scope_empty(filter: &ApprovalInstanceListFilter, scope: &ApprovalRuntimeReadScope) -> bool {
     let process_kinds = runtime_read_process_kinds(scope);
     instance_list_scope_empty(filter)
@@ -190,6 +230,42 @@ fn runtime_read_pipeline(
 ) -> Vec<Document> {
     let mut base_filter = filter.clone();
     base_filter.cursor = None;
+    let mut pipeline = vec![
+        doc! { "$match": runtime_instance_match(&base_filter, scope) },
+        doc! { "$sort": instance_list_sort(filter) },
+    ];
+    pipeline.extend(runtime_snapshot_stages(filter, scope));
+    pipeline.push(doc! { "$facet": runtime_read_facets(filter) });
+    pipeline
+}
+
+/// 游标和批大小先收窄实例，冻结快照只关联本批候选。
+fn runtime_scan_pipeline(
+    filter: &ApprovalInstanceListFilter,
+    scope: &ApprovalRuntimeReadScope,
+) -> Vec<Document> {
+    let mut items = runtime_snapshot_stages(filter, scope);
+    items.push(doc! { "$project": runtime_read_projection() });
+    let mut cursor_projection = instance_summary_projection();
+    cursor_projection.insert("_id", 0);
+    vec![
+        doc! { "$match": runtime_instance_match(filter, scope) },
+        doc! { "$sort": instance_list_sort(filter) },
+        doc! { "$limit": instance_list_limit(filter.limit) },
+        doc! { "$facet": {
+            "items": items,
+            "last": [
+                { "$group": { "_id": Bson::Null, "last": { "$last": "$$ROOT" } } },
+                { "$replaceWith": "$last" },
+                { "$project": cursor_projection },
+            ],
+        } },
+    ]
+}
+
+/// 编译类型、状态及实例游标；快照字段检索由关联分支处理。
+fn runtime_instance_match(filter: &ApprovalInstanceListFilter, scope: &ApprovalRuntimeReadScope) -> Document {
+    let mut base_filter = filter.clone();
     base_filter.text_query = None;
     let mut instance_match = instance_list_filter_doc(&base_filter);
     if base_filter.process_kind.is_none() {
@@ -204,15 +280,27 @@ fn runtime_read_pipeline(
         );
     }
     instance_match.insert("$expr", doc! { "$eq": ["$process_kind", "$subject.subject_kind"] });
+    instance_match
+}
+
+/// 仅保留列表和检索所需冻结事实，排除提交材料及展示明细。
+fn runtime_snapshot_stages(
+    filter: &ApprovalInstanceListFilter,
+    scope: &ApprovalRuntimeReadScope,
+) -> Vec<Document> {
     let mut pipeline = vec![
-        doc! { "$match": instance_match },
-        doc! { "$sort": instance_list_sort(filter) },
         doc! {
             "$lookup": {
                 "from": SNAPSHOTS,
                 "localField": "id",
                 "foreignField": "approval_process_instance_id",
                 "as": "_runtime_snapshots",
+                "pipeline": [{ "$project": {
+                    "id": 1, "version": 1, "created_at": 1, "updated_at": 1, "deleted_at": 1,
+                    "approval_process_instance_id": 1, "document_type": 1,
+                    "business_object_id": 1, "subject_version": 1, "payload": 1,
+                    "display.counterparty_label": 1, "display.source.customer": 1,
+                } }],
             }
         },
         doc! {
@@ -232,6 +320,7 @@ fn runtime_read_pipeline(
             }
         },
         doc! { "$set": { "_runtime_snapshot_exact": runtime_snapshot_exact_expr() } },
+        doc! { "$match": { "_runtime_snapshot_exact": true } },
     ];
     if let Some(scope_match) = runtime_snapshot_scope_match(scope) {
         pipeline.push(doc! { "$match": scope_match });
@@ -239,10 +328,11 @@ fn runtime_read_pipeline(
     if let Some(text_query) = &filter.text_query {
         pipeline.push(doc! { "$match": runtime_text_match(&text_query.query) });
     }
-    pipeline.push(doc! { "$facet": runtime_read_facets(filter) });
+    pipeline.push(doc! { "$unset": "_runtime_snapshot.display" });
     pipeline
 }
 
+/// 证明仅一个未删除快照与实例、类型、对象及提交版本精确一致。
 fn runtime_snapshot_exact_expr() -> Document {
     doc! {
         "$and": [
@@ -258,8 +348,7 @@ fn runtime_snapshot_exact_expr() -> Document {
 
 /// 组织范围不是公司级时，必须由精确快照证明责任组织。
 ///
-/// 缺失或漂移快照不得被用于组织授权；本人发起或公司级范围无需从快照推断
-/// 组织，因而可保留实例并把快照投影为空。
+/// 缺失或漂移快照不得被用于组织授权；本人发起或公司级范围不额外按组织筛选。
 fn runtime_snapshot_scope_match(scope: &ApprovalRuntimeReadScope) -> Option<Document> {
     let ApprovalRuntimeReadScope::Managed { type_scopes } = scope else {
         return None;
@@ -288,6 +377,7 @@ fn runtime_snapshot_scope_match(scope: &ApprovalRuntimeReadScope) -> Option<Docu
     (!branches.is_empty()).then(|| doc! { "$or": branches })
 }
 
+/// 返回去重并稳定排序的已证明流程种类。
 fn runtime_read_process_kinds(scope: &ApprovalRuntimeReadScope) -> Vec<ProcessKind> {
     let mut process_kinds = match scope {
         ApprovalRuntimeReadScope::Started { process_kinds, .. } => process_kinds.clone(),
@@ -302,6 +392,7 @@ fn runtime_read_process_kinds(scope: &ApprovalRuntimeReadScope) -> Vec<ProcessKi
     process_kinds
 }
 
+/// 在实例和精确快照中执行同一字面量检索。
 fn runtime_text_match(query: &str) -> Document {
     let literal = regex::escape(query.trim());
     let regex = doc! { "$regex": literal, "$options": "i" };
@@ -324,12 +415,22 @@ fn runtime_text_match(query: &str) -> Document {
     }
 }
 
+/// 当前页应用游标；总数保持完整的精确快照匹配范围。
 fn runtime_read_facets(filter: &ApprovalInstanceListFilter) -> Document {
     let mut items = Vec::new();
     if let Some(cursor) = &filter.cursor {
         items.push(doc! { "$match": { "$or": instance_cursor_or(filter.view, cursor) } });
     }
     items.push(doc! { "$limit": instance_list_limit(filter.limit) });
+    items.push(doc! { "$project": runtime_read_projection() });
+    doc! {
+        "items": items,
+        "total": [{ "$count": "count" }],
+    }
+}
+
+/// 返回列表摘要与已证明的精确冻结载荷，不带提交材料和展示明细。
+fn runtime_read_projection() -> Document {
     let mut projection = instance_summary_projection();
     projection.insert(
         "snapshot",
@@ -338,11 +439,7 @@ fn runtime_read_facets(filter: &ApprovalInstanceListFilter) -> Document {
         },
     );
     projection.insert("_id", 0);
-    items.push(doc! { "$project": projection });
-    doc! {
-        "items": items,
-        "total": [{ "$count": "count" }],
-    }
+    projection
 }
 
 #[cfg(test)]
@@ -353,7 +450,7 @@ mod tests {
 
     use super::{
         ApprovalRuntimeReadScope, ApprovalRuntimeReadTypeScope, runtime_read_pipeline,
-        runtime_read_scope_empty, runtime_snapshot_scope_match,
+        runtime_read_scope_empty, runtime_scan_pipeline, runtime_snapshot_scope_match,
     };
     use crate::repository::bpm::{
         ApprovalInstanceListCursor, ApprovalInstanceListFilter, ApprovalInstanceListView,
@@ -421,16 +518,17 @@ mod tests {
         {
             assert!(exact.contains(field));
         }
-        let scope_match = pipeline[6].get_document("$match").unwrap().to_string();
+        assert_eq!(pipeline[6], doc! { "$match": { "_runtime_snapshot_exact": true } });
+        let scope_match = pipeline[7].get_document("$match").unwrap().to_string();
         assert!(scope_match.contains("_runtime_snapshot_exact"));
         assert!(scope_match.contains("responsible_org_id"));
         assert!(scope_match.contains("org-1"));
 
-        let text = pipeline[7].get_document("$match").unwrap().to_string();
+        let text = pipeline[8].get_document("$match").unwrap().to_string();
         assert!(text.contains("_runtime_snapshot.payload.document_no"));
         assert!(text.contains("_runtime_snapshot_exact"));
         assert!(text.contains(r"ADJ\.\[1\]"));
-        let facet = pipeline[8].get_document("$facet").unwrap();
+        let facet = pipeline[10].get_document("$facet").unwrap();
         let items = facet.get_array("items").unwrap();
         assert!(items[0].as_document().unwrap().contains_key("$match"));
         assert!(
@@ -443,7 +541,7 @@ mod tests {
     }
 
     #[test]
-    fn runtime_company_scope_keeps_missing_snapshot_before_facet() {
+    fn runtime_company_scope_requires_exact_snapshot_without_organization_filter() {
         let scope = ApprovalRuntimeReadScope::Managed {
             type_scopes: runtime_type_scopes()
                 .into_iter()
@@ -451,6 +549,7 @@ mod tests {
                 .collect(),
         };
         let pipeline = runtime_read_pipeline(&runtime_filter(), &scope);
+        assert_eq!(pipeline[6], doc! { "$match": { "_runtime_snapshot_exact": true } });
         assert!(pipeline.iter().all(|stage| {
             stage
                 .get_document("$match")
@@ -470,6 +569,33 @@ mod tests {
             .get_document("$project")
             .unwrap();
         assert!(projection.get_document("snapshot").unwrap().contains_key("$cond"));
+    }
+
+    /// 批次的游标和上限先进入候选集合；零匹配批次仍返回原始末行用于继续扫描。
+    #[test]
+    fn runtime_scan_bounds_snapshot_reads_and_keeps_raw_last_candidate() {
+        let filter = runtime_filter();
+        let pipeline = runtime_scan_pipeline(&filter, &runtime_scope());
+        let instance_match = pipeline[0].get_document("$match").unwrap();
+        assert_eq!(
+            instance_match.get_array("$or").unwrap(),
+            &vec![
+                Bson::Document(doc! { "blocked_at": { "$lt": 20_i64 } }),
+                Bson::Document(doc! { "blocked_at": 20_i64, "id": { "$lt": "inst-2" } }),
+            ]
+        );
+        assert_eq!(pipeline[2], doc! { "$limit": 21_i64 });
+        let facet = pipeline[3].get_document("$facet").unwrap();
+        assert_eq!(facet.len(), 2);
+        assert!(!facet.contains_key("total"));
+        assert!(facet.get_array("items").unwrap()[0].as_document().unwrap().contains_key("$lookup"));
+        assert_eq!(
+            facet.get_array("last").unwrap()[0],
+            Bson::Document(doc! {
+                "$group": { "_id": Bson::Null, "last": { "$last": "$$ROOT" } },
+            })
+        );
+        assert_eq!(facet.get_array("last").unwrap().len(), 3);
     }
 
     #[test]
@@ -504,6 +630,8 @@ mod tests {
         };
         assert!(!runtime_read_scope_empty(&filter, &matching));
         assert!(runtime_snapshot_scope_match(&matching).is_none());
+        let pipeline = runtime_read_pipeline(&filter, &matching);
+        assert_eq!(pipeline[6], doc! { "$match": { "_runtime_snapshot_exact": true } });
         assert!(runtime_read_scope_empty(
             &filter,
             &ApprovalRuntimeReadScope::Started {

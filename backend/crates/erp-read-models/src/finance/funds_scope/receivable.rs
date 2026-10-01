@@ -123,7 +123,12 @@ impl FundsAccess {
         actor: &AuditActor,
         expected: Option<&str>,
     ) -> Result<FundsScopedPage<ScopedReceivableAccountRow>> {
-        checked_twice(expected, || self.snapshot_receivable_accounts(params, query, actor)).await
+        checked_revalidated(
+            expected,
+            || self.snapshot_receivable_accounts(params, query, actor),
+            || self.revalidate_receivable_accounts(query, actor),
+        )
+        .await
     }
 
     /// 身份和业务事实均使用调用方同一事务，不缓存权限解析结果。
@@ -148,7 +153,7 @@ impl FundsAccess {
             .await
     }
 
-    /// 隐藏来源条件拒绝，空范围保持空集；完整装载并裁剪后才允许分页。
+    /// 来源授权和业务条件进入数据库，再按最终匹配结果分页与计数。
     pub(super) async fn load_receivable_accounts(
         &self,
         params: &erp_finance::dto::receivable::ReceivableAccountListParams,
@@ -156,35 +161,28 @@ impl FundsAccess {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<FundsScopedPage<ScopedReceivableAccountRow>> {
-        let (access, authorization) = self.resolve(actor, "receivable_account", "list", executor).await?;
+        let (_access, authorization) = self.resolve(actor, "receivable_account", "list", executor).await?;
         if authorization.empty() {
             return Ok(empty_page(&authorization, "no_scope", "应收子账无可见范围"));
         }
-        let scope = self.receivable_scope_rows(query, &access, &authorization, executor).await?;
-        let total = scope.rows.len() as u64;
-        let page = query.paging.page.max(1);
-        let page_size = query.paging.page_size.max(1);
-        let start = ((page - 1) as usize).saturating_mul(page_size as usize);
-        let end = start.saturating_add(page_size as usize).min(scope.rows.len());
-        let page_rows = scope.rows.get(start..end).unwrap_or_default();
-        let ids = page_rows.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
-        let display_ids = page_rows.iter().map(|row| row.id.clone()).collect();
+        let condition = self.receivable_condition(query, executor).await?;
+        let snapshot =
+            self.receivable_database_snapshot(query, &authorization, &condition, true, executor).await?;
+        let version = snapshot.version(&authorization)?;
+        ensure_version(params.scope_version.as_deref(), &version)?;
+        let ids = snapshot.summary.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
+        let display_ids = snapshot.items.iter().map(|item| item.row.id.clone()).collect();
         let mut facts = self.receivable_facts(&ids, &display_ids, executor).await?;
-        let mut items = receivable_page_rows(page_rows, &scope.orders, &mut facts);
+        let mut items = receivable_page_rows(&snapshot.items, &mut facts);
         self.finish_receivable_names(&mut items, executor).await?;
-        let version = scope.version();
-        ensure_version(params.scope_version.as_deref(), &version).map_err(|_| changed())?;
-        let remaining = scope.rows.iter().filter(|row| !display_ids.contains(&row.id));
-        let ids = remaining.map(|row| row.id.clone()).collect::<Vec<_>>();
-        facts.extend(self.receivable_facts(&ids, &Default::default(), executor).await?);
-        let summary = receivable_summary(&scope.rows, &scope.orders, &facts, &version)?;
+        let summary = receivable_summary(&snapshot.summary, &facts, &version)?;
         Ok(FundsScopedPage {
             items,
-            total,
+            total: snapshot.total(),
             summary,
-            page,
-            page_size,
-            scope_version: version.clone(),
+            page: query.paging.page,
+            page_size: query.paging.page_size,
+            scope_version: version,
             policy_version: authorization.context.policy_version,
             organization_version: authorization.context.organizations.version,
             as_of: authorization.context.as_of.as_utc().to_rfc3339(),
@@ -192,6 +190,34 @@ impl FundsAccess {
             scope_summary: "应收子账继承所属销售来源边界",
             ownership_basis: "current_sales_owner_and_register_operator",
         })
+    }
+
+    /// 独立新事务重读动作、授权和完整匹配版本，不再生成页面或金额汇总。
+    async fn revalidate_receivable_accounts(
+        &self,
+        query: &erp_finance::dto::receivable::ReceivableAccountListQuery,
+        actor: &AuditActor,
+    ) -> Result<String> {
+        let this = self.clone();
+        let query = query.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let (_, authorization) =
+                        this.resolve(&actor, "receivable_account", "list", executor).await?;
+                    if authorization.empty() {
+                        return Ok(authorization.context.scope_version);
+                    }
+                    let condition = this.receivable_condition(&query, executor).await?;
+                    this.receivable_database_snapshot(&query, &authorization, &condition, false, executor)
+                        .await?
+                        .version(&authorization)
+                })
+            })
+            .await
     }
 
     /// 计算子账获授权核销份额；未分配与未授权份额不计入，禁止差额推导。

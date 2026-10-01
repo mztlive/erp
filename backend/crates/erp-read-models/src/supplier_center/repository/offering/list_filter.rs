@@ -224,7 +224,27 @@ impl<'a> SupplierOfferingReadRepository<'a> {
         query: &SupplierOfferingListQuery,
         executor: &mut dyn Executor,
     ) -> Result<SupplierOfferingListBundle> {
-        let page = self.search_offering_list(query, executor).await?;
+        let filter = self.resolve_list_filter(query, executor).await?;
+        self.load_offering_list_page_by_filter(&filter, executor).await
+    }
+
+    /// 装载已经解析关联条件的供给页面，采购筛选复用同一批关键词和状态事实。
+    ///
+    /// # 参数
+    /// * `filter` - 完整列表条件及最终采购责任命中身份
+    /// * `executor` - 授权快照中的相同执行器
+    ///
+    /// # 返回
+    /// 返回当前页及其展示事实；过滤、总数与排序由本域仓储统一执行。
+    ///
+    /// # 错误
+    /// 任一分页或展示事实读取失败时整体返回错误。
+    pub async fn load_offering_list_page_by_filter(
+        &self,
+        filter: &SupplierOfferingFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<SupplierOfferingListBundle> {
+        let page = self.db.supplier_offerings().search_supplier_offerings(filter, executor).await?;
         let revisions =
             self.db.supplier_offering_repository().load_current_revisions(&page.items, executor).await?;
         let offering_ids =

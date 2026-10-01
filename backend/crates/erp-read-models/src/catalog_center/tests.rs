@@ -57,10 +57,25 @@ fn sample_row() -> ProductRow {
 struct RecordingQuery {
     calls: Mutex<Vec<&'static str>>,
     fail: bool,
+    candidates: Option<Vec<String>>,
+    candidate_filter: Mutex<Option<ProductFilter>>,
 }
 
 #[async_trait]
 impl CatalogSupplyQueryPort for RecordingQuery {
+    /// 记录生产责任筛选传入的完整条件，返回预设的候选身份。
+    async fn product_candidate_ids(
+        &self,
+        filter: &ProductFilter,
+        _: &mut dyn Executor,
+    ) -> persistence_core::Result<Vec<String>> {
+        self.calls.lock().unwrap().push("candidates");
+        *self.candidate_filter.lock().unwrap() = Some(filter.clone());
+        if self.fail {
+            return Err(persistence_core::Error::OptimisticLockingError);
+        }
+        Ok(self.candidates.clone().expect("ordinary product query must not read procurement candidates"))
+    }
     async fn product_page(
         &self,
         filter: &ProductFilter,
@@ -175,4 +190,58 @@ async fn procurement_owner_filter_does_not_expand_maintainer_authorization() {
 #[tokio::test]
 async fn product_list_rejects_unknown_owner_alias() {
     assert!(serde_json::from_value::<erp_catalog::ProductListParams>(json!({"owner": "张三"})).is_err());
+}
+
+#[tokio::test]
+/// 实际编排先传入完整筛选，再在全部候选内按采购负责人收窄，不依赖目标页。
+async fn procurement_candidates_receive_complete_filters_and_preserve_paging() {
+    let query =
+        RecordingQuery { candidates: Some(vec!["prod-a".into(), "prod-b".into()]), ..Default::default() };
+    let port = MapProductProcurementOwners {
+        owners: [
+            ("prod-a".into(), "buyer-2".into()),
+            ("prod-b".into(), "buyer-1".into()),
+            ("outside".into(), "buyer-1".into()),
+        ]
+        .into(),
+    };
+    let params: erp_catalog::ProductListParams = serde_json::from_value(json!({
+        "product_no": " P-1 ", "keyword": " 礼盒.* ", "owner_user_ids": "maintainer",
+        "org_unit_ids": "org", "procurement_owner_user_ids": "buyer-1", "page": 7,
+        "page_size": 1
+    }))
+    .unwrap();
+    let mut filter = prepare_product_list(&params).unwrap();
+    scope::apply_procurement_filter(&query, &mut filter, &port, &params, &mut NoTransaction).await.unwrap();
+    assert_eq!(filter.ids, Some(vec!["prod-b".to_string()]));
+    assert_eq!((filter.page, filter.page_size), (7, 1));
+    let recorded = query.candidate_filter.lock().unwrap();
+    let recorded = recorded.as_ref().unwrap();
+    assert_eq!(recorded.keyword.as_deref(), Some("礼盒.*"));
+    assert_eq!(recorded.product_no.as_deref(), Some("P-1"));
+    assert_eq!(recorded.maintainer_user_ids.as_deref(), Some(["maintainer".to_string()].as_slice()));
+    assert_eq!(recorded.business_org_unit_ids.as_deref(), Some(["org".to_string()].as_slice()));
+    assert_eq!(*query.calls.lock().unwrap(), vec!["candidates"]);
+}
+
+#[tokio::test]
+/// 空候选保持显式零结果；候选超限与读取失败在责任解析前整体拒绝。
+async fn procurement_candidates_keep_empty_results_and_reject_invalid_snapshots() {
+    let params = serde_json::from_value(json!({"procurement_owner_user_ids": "buyer"})).unwrap();
+    let port = MapProductProcurementOwners { owners: [("outside".into(), "buyer".into())].into() };
+    let mut filter = prepare_product_list(&params).unwrap();
+    let empty = RecordingQuery { candidates: Some(Vec::new()), ..Default::default() };
+    scope::apply_procurement_filter(&empty, &mut filter, &port, &params, &mut NoTransaction).await.unwrap();
+    assert_eq!(filter.ids, Some(Vec::new()));
+    let large = RecordingQuery { candidates: Some(vec!["id".into(); 10001]), ..Default::default() };
+    assert!(matches!(
+        scope::apply_procurement_filter(&large, &mut filter, &port, &params, &mut NoTransaction).await,
+        Err(crate::Error::ValidationError(_))
+    ));
+    let failing = RecordingQuery { fail: true, ..Default::default() };
+    assert!(
+        scope::apply_procurement_filter(&failing, &mut filter, &port, &params, &mut NoTransaction)
+            .await
+            .is_err()
+    );
 }

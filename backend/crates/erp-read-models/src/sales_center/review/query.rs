@@ -1,10 +1,6 @@
 //! 读取销售变更事实并组合创建时冻结的审批绑定。
 
-use std::hash::{Hash, Hasher};
-
-use application_core::{
-    AuditActor, PageView, SortDir, normalize_sort, page_or_default, page_size_or_default,
-};
+use application_core::{AuditActor, PageView};
 use erp_sales::dto::sales_review::{SalesChangeOrderListParams, SalesChangeOrderView};
 use erp_sales::entity::sales_review::SalesChangeOrder;
 use erp_sales::repository::prelude::*;
@@ -69,8 +65,8 @@ impl SalesChangeReadService {
         if expected.is_some_and(|value| value != snapshot.scope_version) {
             return Err(crate::support::data_scope_changed("数据范围已变化，请从第一页刷新"));
         }
-        let current = self.change_list_snapshot(params, actor).await?;
-        if current.scope_version != snapshot.scope_version {
+        let current = self.change_scope_fingerprint(params, actor).await?;
+        if current != snapshot.scope_version {
             return Err(crate::support::data_scope_changed("数据范围或业务单据已变化，请刷新"));
         }
         Ok(snapshot)
@@ -101,91 +97,6 @@ impl SalesChangeReadService {
             return Err(crate::support::data_scope_changed("数据范围或销售变更单已变化，请刷新"));
         }
         Ok(first.0)
-    }
-
-    /// 授权、总数与变更单版本全部在同一个事务读取。
-    ///
-    /// # 参数
-    /// * `params` - 原始查询
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回带范围版本的列表快照。
-    ///
-    /// # 错误
-    /// 范围变化、筛选非法或仓储失败时拒绝。
-    ///
-    /// # 关键业务约束
-    /// 筛选只能收窄授权结果；缺范围保持空集。
-    async fn change_list_snapshot(
-        &self,
-        params: &SalesChangeOrderListParams,
-        actor: &AuditActor,
-    ) -> Result<SalesChangeListView> {
-        let db = self.db.clone();
-        let rbac = self.require_rbac()?.clone();
-        let params = params.clone();
-        let actor = actor.clone();
-        self.db
-            .client()
-            .clone()
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let access = SalesAccess::new(db.clone(), rbac);
-                    let (mut context, scope) = access.resolve(&actor, "list", &[], executor).await?;
-                    let no_scope = scope.is_empty();
-                    let authorized = access.authorized_source_ids(&scope, executor).await?;
-                    let (_, sort_dir) = normalize_sort(&params.sort_by, &params.sort_dir, &["created_at"])?;
-                    let filter = erp_sales::repository::sales_review::SalesChangeOrderFilter {
-                        sales_order_id: params.sales_order_id.clone(),
-                        authorized_sales_order_ids: authorized,
-                        status: params.status,
-                        page: page_or_default(params.page),
-                        page_size: page_size_or_default(params.page_size),
-                        sort_by: Some("created_at".to_string()),
-                        sort_ascending: matches!(sort_dir, SortDir::Asc),
-                    };
-                    let page = db.sales_change_orders().search_sales_change_orders(&filter, executor).await?;
-                    let versions = db.sales_change_orders().query_change_versions(&filter, executor).await?;
-                    if versions.len() > 10_000 {
-                        return Err(Error::ValidationError(
-                            "销售变更查询超过上限，请收窄原销售单条件".into(),
-                        ));
-                    }
-                    let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
-                    versions.hash(&mut fingerprint);
-                    context.scope_version = format!("{}:{:x}", context.scope_version, fingerprint.finish());
-                    let items = page
-                        .items
-                        .into_iter()
-                        .map(|row| SalesChangeOrderView {
-                            id: row.id,
-                            sales_order_id: row.sales_order_id,
-                            base_revision_id: row.base_revision_id,
-                            change_type: row.change_type,
-                            status: row.status,
-                            current_submission_id: row.current_submission_id,
-                            version: row.version,
-                            created_at: row.created_at,
-                        })
-                        .collect();
-                    Ok(SalesChangeListView {
-                        page: PageView {
-                            items,
-                            total: page.total,
-                            page: filter.page,
-                            page_size: filter.page_size,
-                        },
-                        scope_version: context.scope_version,
-                        policy_version: context.policy_version,
-                        organization_version: context.organizations.version,
-                        as_of: context.as_of.as_utc().to_rfc3339(),
-                        empty_reason: no_scope.then_some("no_scope"),
-                        scope_summary: "销售变更单沿来源销售单当前负责人及单据业务组织范围",
-                    })
-                })
-            })
-            .await
     }
 }
 

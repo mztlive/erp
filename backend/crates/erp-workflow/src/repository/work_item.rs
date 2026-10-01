@@ -123,6 +123,27 @@ pub struct WorkItemFilter {
     pub sort_ascending: bool,
 }
 
+impl WorkItemFilter {
+    /// 把当前处理人筛选与既有责任范围求交，保留历史参与和管理条件。
+    ///
+    /// # 参数
+    /// * `handler_ids` - 已规范化的当前处理人筛选；空集合表示不过滤。
+    /// # 返回
+    /// 原地写入仓储独立 AND 条件；交集为空时保持空查询。
+    /// # 错误
+    /// 无。
+    pub fn narrow_current_handlers(&mut self, handler_ids: &[String]) {
+        if handler_ids.is_empty() {
+            return;
+        }
+        let owners = match &self.managed_owner_ids {
+            Some(owners) => owners.iter().filter(|owner| handler_ids.contains(owner)).cloned().collect(),
+            None => handler_ids.to_vec(),
+        };
+        self.managed_owner_ids = Some(owners);
+    }
+}
+
 impl QueryFilter for WorkItemFilter {
     /// 构造与责任队列索引一致的 MongoDB 查询条件。
     ///
@@ -310,6 +331,42 @@ mod tests {
 
     use super::WorkItemFilter;
     use crate::entity::work_item::{WorkItemPriority, WorkItemStatus, WorkItemType};
+
+    /// 处理人条件与个人、管理和历史责任求交，空交集失败关闭而空筛选保持原范围。
+    #[test]
+    fn handler_candidates_intersect_without_widening_scope() {
+        let handlers = vec!["handler-a".to_string(), "handler-b".to_string()];
+        let mut personal = WorkItemFilter { owner_user_id: Some("actor".into()), ..Default::default() };
+        personal.narrow_current_handlers(&handlers);
+        let document = personal.to_doc();
+        assert_eq!(document.get_str("owner_user_id").unwrap(), "actor");
+        assert!(
+            document
+                .get_array("$and")
+                .unwrap()
+                .contains(&Bson::Document(doc! { "owner_user_id": { "$in": &handlers } }))
+        );
+        let mut managed = WorkItemFilter {
+            managed_owner_ids: Some(vec!["handler-b".into(), "other".into()]),
+            ..Default::default()
+        };
+        managed.narrow_current_handlers(&handlers);
+        assert_eq!(managed.managed_owner_ids, Some(vec!["handler-b".into()]));
+        managed.narrow_current_handlers(&["outside".into()]);
+        assert_eq!(managed.managed_owner_ids, Some(Vec::new()));
+        let before = managed.to_doc();
+        managed.narrow_current_handlers(&[]);
+        assert_eq!(managed.to_doc(), before);
+        let mut history = WorkItemFilter {
+            history_actor_id: Some("actor".into()),
+            history_managed_owner_ids: Some(Some(vec!["managed".into()])),
+            ..Default::default()
+        };
+        history.narrow_current_handlers(&handlers);
+        assert_eq!(history.history_actor_id.as_deref(), Some("actor"));
+        assert_eq!(history.history_managed_owner_ids, Some(Some(vec!["managed".into()])));
+        assert_eq!(history.managed_owner_ids, Some(handlers));
+    }
 
     #[test]
     fn managed_scope_uses_current_owner_and_empty_remains_denied() {

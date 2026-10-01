@@ -2,8 +2,6 @@
 
 use std::collections::HashMap;
 
-use erp_audit::AuditExt;
-use erp_audit::repository::prelude::*;
 use erp_core::money::Amount;
 use erp_finance::repository::prelude::*;
 use erp_finance::repository::{PayableExt, ReceivableExt};
@@ -12,8 +10,6 @@ use erp_sales::repository::SalesOrderExt;
 use erp_sales::repository::prelude::*;
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::WorkItem;
-use erp_workflow::repository::ApprovalIntegrationExt;
-use erp_workflow::repository::prelude::*;
 use persistence_core::Executor;
 use serde::Serialize;
 
@@ -375,8 +371,6 @@ pub(super) struct ReceiptLink {
 
 /// 销项发票分配的授权裁剪单元。
 pub(super) struct SalesInvoiceLink {
-    /// 分配主键。
-    pub(super) id: String,
     /// 正反动作后的含税方向金额。
     pub(super) signed: Amount,
     /// 归属销售单；缺失时计入未分配。
@@ -387,8 +381,6 @@ pub(super) struct SalesInvoiceLink {
 
 /// 付款核销的授权裁剪单元。
 pub(super) struct PaymentLink {
-    /// 分配主键。
-    pub(super) id: String,
     /// 正反动作后的记账方向金额。
     pub(super) signed: Amount,
     /// 归属采购单；结算来源使用带类型关联键；缺失来源拒绝。
@@ -553,9 +545,8 @@ impl FundsAccess {
             };
             let order = account_order.get(&item.receivable_account_id.to_string()).cloned();
             let view = sales_invoice_allocation_view(&item);
-            let id = item.base.id.clone();
             let invoice = item.invoice_id.to_string();
-            links.entry(invoice).or_default().push(SalesInvoiceLink { id, signed, order, view });
+            links.entry(invoice).or_default().push(SalesInvoiceLink { signed, order, view });
         }
         Ok(links)
     }
@@ -599,62 +590,10 @@ impl FundsAccess {
                 .and_then(|account| account_order.get(account).cloned())
                 .flatten();
             let view = erp_finance::dto::payable::PaymentAllocationView::from(&item);
-            let id = item.base.id.clone();
             let payment = item.supplier_payment_id.to_string();
-            links.entry(payment).or_default().push(PaymentLink { id, signed, order, view });
+            links.entry(payment).or_default().push(PaymentLink { signed, order, view });
         }
         Ok(links)
-    }
-
-    /// 审计事实按资源批量取回经办人；动作前缀不匹配的审计不计入。
-    pub(super) async fn audit_operators(
-        &self,
-        resource: &str,
-        ids: &[String],
-        keep: impl Fn(&str) -> bool,
-        executor: &mut dyn Executor,
-    ) -> Result<HashMap<String, Vec<String>>> {
-        let pairs = ids.iter().map(|id| (resource.to_string(), id.clone())).collect::<Vec<_>>();
-        let facts = self.db.audit_logs().list_separation_facts_by_resources(&pairs, executor).await?;
-        let mut operators: HashMap<String, Vec<String>> = HashMap::new();
-        for fact in facts {
-            if fact.resource_type == resource
-                && keep(&fact.action)
-                && let Some(id) = fact.resource_id
-            {
-                operators.entry(id).or_default().push(fact.actor_id);
-            }
-        }
-        for list in operators.values_mut() {
-            list.sort();
-            list.dedup();
-        }
-        Ok(operators)
-    }
-
-    /// 回款核销经办人取审批提交快照的提交人；未提交的草稿无核销经办人。
-    pub(super) async fn receipt_settle_operators(
-        &self,
-        receipt_ids: &[String],
-        executor: &mut dyn Executor,
-    ) -> Result<HashMap<String, Vec<String>>> {
-        use erp_workflow::entity::document_registry::DocumentType;
-        let objects =
-            receipt_ids.iter().map(|id| (DocumentType::CustomerReceipt, id.clone())).collect::<Vec<_>>();
-        let snapshots =
-            self.db.approval_subject_snapshots().list_by_business_objects(&objects, executor).await?;
-        let mut operators: HashMap<String, Vec<String>> = HashMap::new();
-        for snapshot in snapshots {
-            operators
-                .entry(snapshot.business_object_id.clone())
-                .or_default()
-                .push(snapshot.payload.submitted_by.clone());
-        }
-        for list in operators.values_mut() {
-            list.sort();
-            list.dedup();
-        }
-        Ok(operators)
     }
 
     /// 工作项当前处理人；已关闭任务回退完成人，缺失任务按无处理人。

@@ -5,6 +5,8 @@ use mongodb::bson::{Document, doc};
 pub mod cost;
 pub mod extensions;
 mod fulfillment_facts;
+mod funds_summary;
+mod invoice_summary_facts;
 pub mod owned;
 pub mod payable;
 pub mod prelude;
@@ -13,6 +15,8 @@ pub mod receivable;
 
 pub use cost::{CostAllocationFilter, CostAllocationRow, CostEntryFilter, CostEntryRow, CostRepository};
 pub use extensions::{CostExt, PayableExt, ReceivableExt};
+pub use funds_summary::{FinancialSummaryLink, FundsSummaryRepository};
+pub use invoice_summary_facts::{InvoiceSummaryLink, InvoiceSummaryRepository};
 pub use owned::{
     CostAllocationRepository, CostEntryRepository, CustomerReceiptRepository, InvoiceRepository,
     PayableAccountRepository, PayableEntryOffsetRepository, PayableEntryRepository,

@@ -1,12 +1,12 @@
 //! 供应商付款范围查询与金额裁剪。
 
 use std::collections::{BTreeSet, HashMap};
-use std::hash::{Hash, Hasher};
 
 use application_core::AuditActor;
 use erp_core::money::Amount;
+use erp_finance::dto::payable::SupplierPaymentListQuery;
 use erp_finance::entity::read_coverage::whole_document_readable;
-use erp_finance::ports::funds_scope::FundsResolvedScope;
+use erp_finance::repository::keyword::FinanceSearchTarget;
 use erp_finance::repository::prelude::*;
 use erp_finance::repository::{PayableExt, SupplierPaymentFilter, SupplierPaymentRow};
 use erp_procurement::PurchaseAccess;
@@ -14,8 +14,10 @@ use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::authorization::*;
-use super::receipt::{filter_matched_orders, matched_orders};
+use super::receipt::matched_orders;
+use super::repository::{flow, payment as payment_repository};
 use super::rows::*;
+use crate::finance::search::keyword_ids;
 use crate::{Error, Result};
 
 impl FundsAccess {
@@ -72,8 +74,12 @@ impl FundsAccess {
         purchase_access: &PurchaseAccess,
         expected: Option<&str>,
     ) -> Result<FundsScopedPage<ScopedSupplierPaymentRow>> {
-        checked_twice(expected, || self.snapshot_supplier_payments(params, query, actor, purchase_access))
-            .await
+        checked_revalidated(
+            expected,
+            || self.snapshot_supplier_payments(params, query, actor, purchase_access),
+            || self.revalidate_supplier_payments(query, actor, purchase_access),
+        )
+        .await
     }
 
     /// 身份和业务事实均使用调用方同一事务，不缓存权限解析结果。
@@ -100,95 +106,123 @@ impl FundsAccess {
             .await
     }
 
-    /// 分页查询付款范围行：核销关联采购当前负责人与付款经办人分别查询。
+    /// 最终来源份额授权与业务条件在数据库形成后分页，页外只返回窄摘要和版本。
     pub(super) async fn load_supplier_payments(
         &self,
         params: &erp_finance::dto::payable::SupplierPaymentListParams,
-        query: &erp_finance::dto::payable::SupplierPaymentListQuery,
+        query: &SupplierPaymentListQuery,
         actor: &AuditActor,
         purchase_access: &PurchaseAccess,
         executor: &mut dyn Executor,
     ) -> Result<FundsScopedPage<ScopedSupplierPaymentRow>> {
-        let (access, authorization) =
+        let (_, authorization) =
             self.resolve_with_purchase(actor, "supplier_payment", "list", purchase_access, executor).await?;
         if authorization.empty() {
             return Ok(empty_page(&authorization, "no_scope", "供应商付款无可见范围"));
         }
-        let keyword_ids = crate::finance::search::keyword_ids(
-            &self.db,
-            query.q.as_deref(),
-            erp_finance::repository::keyword::FinanceSearchTarget::Payment,
-        )
-        .await?;
-        let filter = SupplierPaymentFilter {
-            keyword_ids,
-            keyword: None,
-            keyword_supplier_ids: Vec::new(),
+        let condition = self.payment_condition(query, executor).await?;
+        let filter = self.payment_filter(query).await?;
+        let snapshot =
+            payment_repository::page(&self.db, query, &filter, &authorization, &condition, executor).await?;
+        let total = snapshot.count()?;
+        let version = flow::version(&authorization.context.scope_version, &snapshot.versions);
+        ensure_version(params.scope_version.as_deref(), &version).map_err(|_| changed())?;
+        let summary = flow::summary(&snapshot.summary, &version)?;
+        let items = self
+            .payment_page(snapshot.items, &snapshot.versions, authorization.ledger_read, executor)
+            .await?;
+        Ok(FundsScopedPage {
+            items,
+            total,
+            summary,
+            page: query.paging.page,
+            page_size: query.paging.page_size,
+            scope_version: version,
+            policy_version: authorization.context.policy_version,
+            organization_version: authorization.context.organizations.version,
+            as_of: authorization.context.as_of.as_utc().to_rfc3339(),
+            empty_reason: None,
+            scope_summary: "付款按核销关联采购或结算来源授权；整单另需财务整账职责及全部来源可见",
+            ownership_basis: "linked_purchase_owner_and_payment_operator",
+        })
+    }
+
+    /// 关键词与主表条件保持既有合同，关联负责人和组织在最终聚合筛选。
+    async fn payment_filter(&self, query: &SupplierPaymentListQuery) -> Result<SupplierPaymentFilter> {
+        Ok(SupplierPaymentFilter {
+            keyword_ids: keyword_ids(&self.db, query.q.as_deref(), FinanceSearchTarget::Payment).await?,
             payment_no: query.payment_no.clone(),
             supplier_id: query.supplier_id.clone(),
             status: query.status,
-            page: 1,
-            page_size: 10_000,
-            sort_by: Some(query.paging.sort_by.to_string()),
-            sort_ascending: matches!(query.paging.sort_dir, application_core::SortDir::Asc),
-        };
-        let candidates = self.db.supplier_payments().search_supplier_payments(&filter, executor).await?;
-        if candidates.items.len() >= 10_000 {
-            return Err(Error::ValidationError("付款查询超过上限，请收窄组织或负责人条件".into()));
-        }
-        let decided = self
-            .assemble_supplier_payments(
-                query,
-                candidates.items,
-                &access,
-                &authorization,
-                purchase_access,
-                executor,
-            )
-            .await?;
-        let ids = decided.iter().map(|(row, _)| row.id.clone()).collect::<Vec<_>>();
-        let links = self.payment_matched_links(&ids, executor).await?;
-        let order_ids = links.values().flatten().filter_map(|link| link.order.clone()).collect::<Vec<_>>();
-        let facts = self.purchase_fact_map(&order_ids, executor).await?;
-        let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
-        authorization.context.scope_version.hash(&mut fingerprint);
-        for (row, matched) in decided.iter() {
-            row.id.hash(&mut fingerprint);
-            row.version.hash(&mut fingerprint);
-            for order in matched.iter().filter_map(|id| facts.get(id)) {
-                order.version.hash(&mut fingerprint);
-            }
-        }
-        self.finish_supplier_payments(
-            params,
-            query,
-            decided,
-            links,
-            facts,
-            authorization,
-            fingerprint,
-            executor,
-        )
-        .await
+            ..Default::default()
+        })
     }
 
-    /// 付款经办人事实：创建与提交审计均计入；无过滤条件时不读审计。
-    pub(super) async fn payment_operators(
+    /// 新事务只返回完整候选责任版本，不复算第二份金额汇总和页面。
+    async fn revalidate_supplier_payments(
         &self,
-        ids: &[String],
-        want: bool,
+        query: &SupplierPaymentListQuery,
+        actor: &AuditActor,
+        purchase_access: &PurchaseAccess,
+    ) -> Result<String> {
+        let this = self.clone();
+        let query = query.clone();
+        let actor = actor.clone();
+        let purchase_access = purchase_access.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let (_, authorization) = this
+                        .resolve_with_purchase(&actor, "supplier_payment", "list", &purchase_access, executor)
+                        .await?;
+                    if authorization.empty() {
+                        return Ok(authorization.context.scope_version);
+                    }
+                    let condition = this.payment_condition(&query, executor).await?;
+                    let filter = this.payment_filter(&query).await?;
+                    let versions = payment_repository::versions(
+                        &this.db,
+                        &query,
+                        &filter,
+                        &authorization,
+                        &condition,
+                        executor,
+                    )
+                    .await?;
+                    if u64::try_from(versions.len()).unwrap_or(u64::MAX) >= flow::FLOW_LIMIT {
+                        return Err(Error::ValidationError(
+                            "付款查询超过上限，请收窄组织或负责人条件".into(),
+                        ));
+                    }
+                    Ok(flow::version(&authorization.context.scope_version, &versions))
+                })
+            })
+            .await
+    }
+
+    /// 仅当前页读取完整分配，复用正式金额裁剪规则和同拍匹配来源。
+    async fn payment_page(
+        &self,
+        rows: Vec<SupplierPaymentRow>,
+        versions: &[flow::FlowVersion],
+        ledger_read: bool,
         executor: &mut dyn Executor,
-    ) -> Result<HashMap<String, Vec<String>>> {
-        if !want {
-            return Ok(HashMap::new());
+    ) -> Result<Vec<ScopedSupplierPaymentRow>> {
+        let ids = rows.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
+        let links = self.payment_matched_links(&ids, executor).await?;
+        let source_ids = links.values().flatten().filter_map(|link| link.order.clone()).collect::<Vec<_>>();
+        let facts = self.purchase_fact_map(&source_ids, executor).await?;
+        let allowed = Some(
+            versions.iter().flat_map(|row| row.sources.iter().map(|source| source.id.clone())).collect(),
+        );
+        let expected = rows.len();
+        let decided = decide_payment_rows(rows, &links, &facts, &allowed, ledger_read);
+        if decided.len() != expected {
+            return Err(Error::Internal("付款来源聚合与正式裁剪规则不一致".into()));
         }
-        self.audit_operators(
-            "supplier_payment",
-            ids,
-            |action| action == "supplier_payment.create" || action == "supplier_payment.commit",
-            executor,
-        )
-        .await
+        Ok(payment_page_items(&decided, &links, ledger_read))
     }
 
     /// 付款关联筛选条件：采购负责人、付款经办人与组织分别精确匹配。
@@ -215,121 +249,14 @@ impl FundsAccess {
         })
     }
 
-    /// 付款候选逐行判定可见性与筛选；授权集合外的关联份额不进入行与汇总。
-    pub(super) async fn assemble_supplier_payments(
-        &self,
-        query: &erp_finance::dto::payable::SupplierPaymentListQuery,
-        rows: Vec<SupplierPaymentRow>,
-        _access: &FundsResolvedScope,
-        authorization: &FundsAuthorization,
-        _purchase_access: &PurchaseAccess,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<(SupplierPaymentRow, Vec<String>)>> {
-        let ids = rows.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
-        let links = self.payment_matched_links(&ids, executor).await?;
-        let order_ids = links.values().flatten().filter_map(|link| link.order.clone()).collect::<Vec<_>>();
-        let facts = self.purchase_fact_map(&order_ids, executor).await?;
-        let allowed = authorization.payable_ids(&facts);
-        let operators = self.payment_operators(&ids, query.operator_user_ids.is_some(), executor).await?;
-        let condition = self.payment_condition(query, executor).await?;
-        let mut decided = Vec::new();
-        for row in rows {
-            let row_links = links.get(&row.id).map(Vec::as_slice).unwrap_or_default();
-            if !linked_sources_exist(row_links.iter().map(|link| link.order.as_deref()), &facts) {
-                continue;
-            }
-            let tuples = payment_tuples(&row, row_links, &facts);
-            let matched = matched_orders(&tuples, &allowed);
-            let matched = filter_matched_orders(
-                &tuples,
-                matched,
-                condition.owner_user_ids.as_deref(),
-                condition.org_unit_ids.as_deref(),
-            );
-            if (condition.owner_user_ids.is_some() || condition.org_unit_ids.is_some()) && matched.is_empty()
-            {
-                continue;
-            }
-            let doc_operators = operators.get(&row.id).cloned().unwrap_or_default();
-            let whole = whole_document_readable(
-                authorization.ledger_read,
-                row_links.iter().map(|link| link.order.as_deref()),
-                &matched,
-            );
-            if !whole && matched.is_empty() {
-                continue;
-            }
-            if !matches_multi_condition(&tuples, &doc_operators, &[], &condition) {
-                continue;
-            }
-            decided.push((row, matched));
-        }
-        Ok(decided)
-    }
-
-    /// 付款候选分页裁剪与汇总装配；明细、汇总与导出复用同一已决集合。
-    // 查询+分页+执行器参数为既有签名，保持调用方一致不拆。
-    #[allow(clippy::too_many_arguments)]
-    pub(super) async fn finish_supplier_payments(
-        &self,
-        params: &erp_finance::dto::payable::SupplierPaymentListParams,
-        query: &erp_finance::dto::payable::SupplierPaymentListQuery,
-        decided: Vec<(SupplierPaymentRow, Vec<String>)>,
-        links: HashMap<String, Vec<PaymentLink>>,
-        facts: HashMap<String, LinkedPurchaseFact>,
-        authorization: FundsAuthorization,
-        fingerprint: std::collections::hash_map::DefaultHasher,
-        _executor: &mut dyn Executor,
-    ) -> Result<FundsScopedPage<ScopedSupplierPaymentRow>> {
-        let total = decided.len() as u64;
-        let page = query.paging.page.max(1);
-        let page_size = u64::from(query.paging.page_size).max(1);
-        let start = ((page - 1) as usize).saturating_mul(page_size as usize);
-        let end = start.saturating_add(page_size as usize).min(decided.len());
-        let items = payment_page_items(
-            decided.get(start..end).unwrap_or_default(),
-            &links,
-            authorization.ledger_read,
-        );
-        let mut triples = Vec::new();
-        let mut whole = true;
-        let mut whole_sum = zero_amount();
-        for (row, matched) in decided.iter() {
-            let row_links = links.get(&row.id).map(Vec::as_slice).unwrap_or_default();
-            triples.extend(payment_summary_inputs(row_links, matched));
-            whole &= whole_document_readable(
-                authorization.ledger_read,
-                row_links.iter().map(|link| link.order.as_deref()),
-                matched,
-            );
-            whole_sum = whole_sum.checked_add(row.amount);
-        }
-        let mut owner_of = HashMap::new();
-        for (id, fact) in facts.iter() {
-            if let Some(owner) = fact.owner_user_id.clone() {
-                owner_of.insert(id.clone(), owner);
-            }
-        }
-        let version = format!("{:x}", fingerprint.finish());
-        ensure_version(params.scope_version.as_deref(), &version).map_err(|_| changed())?;
-        let summary = build_summary(&triples, &owner_of, whole_amount(whole, whole_sum), &version, !whole)?;
-        Ok(FundsScopedPage {
-            items,
-            total,
-            summary,
-            page,
-            page_size: page_size as u32,
-            scope_version: version.clone(),
-            policy_version: authorization.context.policy_version,
-            organization_version: authorization.context.organizations.version,
-            as_of: authorization.context.as_of.as_utc().to_rfc3339(),
-            empty_reason: None,
-            scope_summary: "付款按核销关联采购或结算来源授权；整单另需财务整账职责及全部来源可见",
-            ownership_basis: "linked_purchase_owner_and_payment_operator",
-        })
-    }
-
     /// 付款详情同一事务内解析、取数与裁剪；版本绑定关联采购单。
+    ///
+    /// # 参数
+    /// 付款身份、操作人、采购读取访问器与调用方事务执行器。
+    /// # 返回
+    /// 返回当前获授权付款份额及来源版本凭据。
+    /// # 错误
+    /// 不存在或不可见统一为 NotFound；授权和持久化失败时拒绝。
     pub(super) async fn load_supplier_payment_detail(
         &self,
         id: &str,
@@ -342,15 +269,8 @@ impl FundsAccess {
             .await?;
         let filter = SupplierPaymentFilter {
             keyword_ids: Some(vec![id.to_string()]),
-            keyword: None,
-            keyword_supplier_ids: Vec::new(),
-            payment_no: None,
-            supplier_id: None,
-            status: None,
-            page: 1,
             page_size: 1,
-            sort_by: None,
-            sort_ascending: false,
+            ..Default::default()
         };
         let page = self.db.supplier_payments().search_supplier_payments(&filter, executor).await?;
         let row =
@@ -389,6 +309,31 @@ impl FundsAccess {
             ownership_basis: "linked_purchase_owner_and_payment_operator",
         })
     }
+}
+
+/// 当前页复用完整来源存在及整单覆盖，来源集合由数据库最终条件提供。
+fn decide_payment_rows(
+    rows: Vec<SupplierPaymentRow>,
+    links: &HashMap<String, Vec<PaymentLink>>,
+    facts: &HashMap<String, LinkedPurchaseFact>,
+    allowed: &Option<BTreeSet<String>>,
+    ledger_read: bool,
+) -> Vec<(SupplierPaymentRow, Vec<String>)> {
+    rows.into_iter()
+        .filter_map(|row| {
+            let lines = links.get(&row.id).map(Vec::as_slice).unwrap_or_default();
+            if !linked_sources_exist(lines.iter().map(|link| link.order.as_deref()), facts) {
+                return None;
+            }
+            let matched = matched_orders(&payment_tuples(&row, lines, facts), allowed);
+            let whole = whole_document_readable(
+                ledger_read,
+                lines.iter().map(|link| link.order.as_deref()),
+                &matched,
+            );
+            (whole || !matched.is_empty()).then_some((row, matched))
+        })
+        .collect()
 }
 
 /// 付款行关联元组；结算单来源与缺失订单的分配保留未分配归属，不丢份额。
@@ -436,18 +381,6 @@ pub(super) fn payment_sum_signed(links: &[PaymentLink], matched: &[String]) -> A
         }
     }
     total
-}
-
-/// 付款汇总输入：匹配份额与未分配份额进入汇总，未授权采购单份额不得进入。
-pub(super) fn payment_summary_inputs(
-    links: &[PaymentLink],
-    matched: &[String],
-) -> Vec<(String, Amount, LinkedOrderId)> {
-    links
-        .iter()
-        .filter(|link| link.order.as_ref().is_none_or(|order| matched.iter().any(|id| id == order)))
-        .map(|link| (link.id.clone(), link.signed, link.order.clone()))
-        .collect()
 }
 
 /// 付款单行裁剪；整单金额与完整分配仅整单资格返回，否则为 null。
@@ -511,10 +444,23 @@ mod tests {
 
     use super::*;
 
+    fn row(id: &str, amount: &str) -> SupplierPaymentRow {
+        SupplierPaymentRow {
+            id: id.into(),
+            payment_no: "P".into(),
+            status: SupplierPaymentStatus::Draft,
+            supplier_id: "supplier".into(),
+            paid_at: 1,
+            amount: amount.parse().unwrap(),
+            bank_reference: None,
+            version: 1,
+            created_at: 1,
+        }
+    }
+
     fn link(id: &str, order: Option<&str>, amount: &str) -> PaymentLink {
         let amount = amount.parse().unwrap();
         PaymentLink {
-            id: id.into(),
             order: order.map(str::to_string),
             signed: amount,
             view: PaymentAllocationView {
@@ -535,17 +481,7 @@ mod tests {
 
     #[test]
     fn partial_payment_hides_other_and_unknown_allocations_and_all_whole_amounts() {
-        let row = SupplierPaymentRow {
-            id: "p".into(),
-            payment_no: "P".into(),
-            status: SupplierPaymentStatus::Draft,
-            supplier_id: "supplier".into(),
-            paid_at: 1,
-            amount: "120".parse().unwrap(),
-            bank_reference: None,
-            version: 1,
-            created_at: 1,
-        };
+        let row = row("p", "120");
         let links =
             vec![link("a", Some("po-a"), "60"), link("b", Some("po-b"), "40"), link("unknown", None, "10")];
         let matched = vec!["po-a".into()];
@@ -563,5 +499,65 @@ mod tests {
         assert_eq!(whole.amount, Some("120".parse().unwrap()));
         assert_eq!(whole.allocations.unwrap().len(), 3);
         assert_eq!(whole.unallocated_amount, Some("10".parse().unwrap()));
+    }
+
+    #[test]
+    fn page_decision_distinguishes_dangling_sources_from_true_zero_allocations() {
+        let allowed = Some(BTreeSet::new());
+        assert!(
+            decide_payment_rows(vec![row("empty", "10")], &HashMap::new(), &HashMap::new(), &allowed, false)
+                .is_empty()
+        );
+        let readable =
+            decide_payment_rows(vec![row("empty", "10")], &HashMap::new(), &HashMap::new(), &allowed, true);
+        assert_eq!(readable.len(), 1);
+        let dangling = HashMap::from([("p".into(), vec![link("a", Some("missing"), "10")])]);
+        assert!(
+            decide_payment_rows(vec![row("p", "10")], &dangling, &HashMap::new(), &allowed, true).is_empty()
+        );
+        let missing_reference = HashMap::from([("p".into(), vec![link("a", None, "10")])]);
+        assert!(
+            decide_payment_rows(vec![row("p", "10")], &missing_reference, &HashMap::new(), &allowed, true)
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn database_matched_sources_keep_partial_page_amount_and_original_reverse_sequence() {
+        let mut reverse = link("reverse", Some("po-a"), "1");
+        reverse.view.allocation_action = AllocationAction::Reverse;
+        reverse.signed = zero_amount().checked_sub(reverse.signed);
+        let max = "79228162514264337593543950335";
+        let links = HashMap::from([(
+            "p".into(),
+            vec![
+                link("max", Some("po-a"), max),
+                reverse,
+                link("one", Some("po-a"), "1"),
+                link("hidden", Some("po-b"), "0"),
+            ],
+        )]);
+        let facts = ["po-a", "po-b"]
+            .into_iter()
+            .map(|id| {
+                (
+                    id.into(),
+                    LinkedPurchaseFact {
+                        owner_user_id: Some(id.into()),
+                        business_org_unit_id: "org".into(),
+                        version: 1,
+                        document_no: id.into(),
+                    },
+                )
+            })
+            .collect();
+        let allowed = Some(BTreeSet::from(["po-a".into()]));
+        let decided = decide_payment_rows(vec![row("p", max)], &links, &facts, &allowed, true);
+        assert_eq!(decided[0].1, ["po-a"]);
+        let items = payment_page_items(&decided, &links, true);
+        assert_eq!(items[0].visible_allocated_share, max.parse().unwrap());
+        assert!(items[0].amount.is_none());
+        assert!(items[0].permission_limited);
+        assert_eq!(items[0].allocations.as_ref().unwrap().len(), 3);
     }
 }

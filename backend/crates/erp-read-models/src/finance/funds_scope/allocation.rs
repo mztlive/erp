@@ -1,37 +1,49 @@
 //! 进项发票分配与采购关联范围查询。
 
 use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
 use application_core::AuditActor;
 use erp_core::money::Amount;
+use erp_finance::dto::payable::{
+    PurchaseInvoiceAllocationListParams, PurchaseInvoiceAllocationListQuery, PurchaseInvoiceAllocationView,
+};
 use erp_finance::entity::payable::AllocationAction as PayableAllocationAction;
 use erp_finance::ports::funds_scope::FundsResolvedScope;
+use erp_finance::repository::PayableExt;
 use erp_finance::repository::prelude::*;
-use erp_finance::repository::{PayableExt, ReceivableExt};
 use erp_procurement::PurchaseAccess;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::authorization::*;
 use super::payable_source::source_key;
+use super::repository::allocation::{
+    AllocationPageRow, AllocationSnapshot, AllocationVersion, allocation_snapshot,
+};
 use super::rows::*;
 use crate::{Error, Result};
 
 /// 进项发票分配的授权裁剪单元。
 pub(super) struct PurchaseInvoiceLink {
-    /// 分配主键。
-    pub(super) id: String,
     /// 正反动作后的含税方向金额。
     pub(super) signed: Amount,
     /// 归属采购单；结算来源使用带类型关联键；缺失来源拒绝。
     pub(super) order: LinkedOrderId,
     /// 响应视图。
-    pub(super) view: erp_finance::dto::payable::PurchaseInvoiceAllocationView,
+    pub(super) view: PurchaseInvoiceAllocationView,
 }
 
 impl FundsAccess {
     /// 销售与采购双关联同时证明；发票双方向查询使用，单方向复用 resolve 即可。
+    ///
+    /// # 参数
+    /// 调用人、具体资源动作、采购范围服务和原执行器。
+    /// # 返回
+    /// 销售、采购及结算双方向已解析授权。
+    /// # 错误
+    /// 授权解析或持久化失败时拒绝。
     pub async fn resolve_dual(
         &self,
         actor: &AuditActor,
@@ -45,6 +57,13 @@ impl FundsAccess {
     }
 
     /// 进项发票分配按应付子账反查采购单；结算来源保留自身责任边界。
+    ///
+    /// # 参数
+    /// 发票 ID 集合和原执行器。
+    /// # 返回
+    /// 保持原分配流、实际采购或结算来源类型的关联集合。
+    /// # 错误
+    /// 分配或子账读取失败时返回错误。
     pub(super) async fn purchase_invoice_matched_links(
         &self,
         invoice_ids: &[String],
@@ -73,7 +92,7 @@ impl FundsAccess {
                 PayableAllocationAction::Reverse => zero_amount().checked_sub(item.allocated_gross_amount),
             };
             let order = account_order.get(&item.payable_account_id.to_string()).cloned().flatten();
-            let view = erp_finance::dto::payable::PurchaseInvoiceAllocationView {
+            let view = PurchaseInvoiceAllocationView {
                 id: item.base.id.clone(),
                 invoice_id: item.invoice_id.to_string(),
                 allocation_seq: item.allocation_seq,
@@ -84,39 +103,24 @@ impl FundsAccess {
                 allocated_tax_amount: item.allocated_tax_amount,
                 reverses_allocation_id: item.reverses_allocation_id.as_ref().map(|id| id.to_string()),
             };
-            let id = item.base.id.clone();
             let invoice = item.invoice_id.to_string();
-            links.entry(invoice).or_default().push(PurchaseInvoiceLink { id, signed, order, view });
+            links.entry(invoice).or_default().push(PurchaseInvoiceLink { signed, order, view });
         }
         Ok(links)
     }
 }
-use erp_finance::entity::payable::PurchaseInvoiceAllocation;
-use erp_finance::repository::PurchaseInvoiceAllocationFilter;
-
-/// 进项发票分配的范围装配行：归属采购单、收票经办人与整单资格。
-pub(super) struct ScopedPurchaseAllocation {
-    /// 分配实体。
-    pub(super) item: PurchaseInvoiceAllocation,
-    /// 归属采购单；结算来源使用带类型关联键；缺失来源拒绝。
-    pub(super) order: LinkedOrderId,
-    /// 方向金额（正反动作已记符号）。
-    pub(super) signed: Amount,
-    /// 进项发票号码。
-    pub(super) invoice_no: Option<String>,
-    /// 装载时授权快照决定的本行整单读取资格。
-    pub(super) whole_flag: bool,
-    /// 归属采购单当前负责人；无归属时为空，份额计入未分配。
-    pub(super) owner_name: Option<String>,
-    /// 当前真实来源版本，责任交接须使分页凭据失效。
-    pub(super) source_version: u64,
-}
-
 impl FundsAccess {
     /// 分页查询进项发票分配范围行：采购负责人与收票经办人分别查询（仅列表）。
+    ///
+    /// # 参数
+    /// 请求参数、当前调用人和采购范围服务。
+    /// # 返回
+    /// 最终授权进项分配页面与同口径汇总。
+    /// # 错误
+    /// 参数、范围版本、授权、读取或上限检查失败时拒绝。
     pub async fn purchase_invoice_allocation_list_scoped(
         &self,
-        params: &erp_finance::dto::payable::PurchaseInvoiceAllocationListParams,
+        params: &PurchaseInvoiceAllocationListParams,
         actor: &AuditActor,
         purchase_access: &PurchaseAccess,
     ) -> Result<FundsScopedPage<ScopedPurchaseInvoiceAllocationRow>> {
@@ -136,25 +140,41 @@ impl FundsAccess {
     }
 
     /// 返回前重读授权及候选事实版本；变化时拒绝交付原结果。
+    ///
+    /// # 参数
+    /// 请求与规范化查询、调用人、采购范围服务和预期版本。
+    /// # 返回
+    /// 独立轻量完整复核通过后的首拍分配页面。
+    /// # 错误
+    /// 首拍预期版本或二拍完整范围版本不一致时拒绝。
     pub(super) async fn checked_purchase_invoice_allocations(
         &self,
-        params: &erp_finance::dto::payable::PurchaseInvoiceAllocationListParams,
-        query: &erp_finance::dto::payable::PurchaseInvoiceAllocationListQuery,
+        params: &PurchaseInvoiceAllocationListParams,
+        query: &PurchaseInvoiceAllocationListQuery,
         actor: &AuditActor,
         purchase_access: &PurchaseAccess,
         expected: Option<&str>,
     ) -> Result<FundsScopedPage<ScopedPurchaseInvoiceAllocationRow>> {
-        checked_twice(expected, || {
-            self.snapshot_purchase_invoice_allocations(params, query, actor, purchase_access)
-        })
+        checked_revalidated(
+            expected,
+            || self.snapshot_purchase_invoice_allocations(params, query, actor, purchase_access),
+            || self.allocation_fingerprint_snapshot(query, actor, purchase_access),
+        )
         .await
     }
 
     /// 身份和业务事实均使用调用方同一事务，不缓存权限解析结果。
+    ///
+    /// # 参数
+    /// 请求与规范化查询、调用人和采购范围服务。
+    /// # 返回
+    /// 同事务形成的最终授权进项分配页面。
+    /// # 错误
+    /// 授权解析或持久化读取失败时拒绝。
     pub(super) async fn snapshot_purchase_invoice_allocations(
         &self,
-        params: &erp_finance::dto::payable::PurchaseInvoiceAllocationListParams,
-        query: &erp_finance::dto::payable::PurchaseInvoiceAllocationListQuery,
+        params: &PurchaseInvoiceAllocationListParams,
+        query: &PurchaseInvoiceAllocationListQuery,
         actor: &AuditActor,
         purchase_access: &PurchaseAccess,
     ) -> Result<FundsScopedPage<ScopedPurchaseInvoiceAllocationRow>> {
@@ -181,100 +201,38 @@ impl FundsAccess {
             .await
     }
 
-    /// 分页查询进项发票分配范围行：分配按应付子账反查采购单，收票经办取发票登记人。
+    /// 最终授权与人员条件先于数据库分页，总数、金额和指纹采用同一集合。
+    ///
+    /// # 参数
+    /// 请求与规范化查询、调用人、采购范围服务和原执行器。
+    /// # 返回
+    /// 数据库分页、同口径计数及完整份额汇总。
+    /// # 错误
+    /// 读取、范围版本或查询上限检查失败时拒绝。
     pub(super) async fn load_purchase_invoice_allocations(
         &self,
-        params: &erp_finance::dto::payable::PurchaseInvoiceAllocationListParams,
-        query: &erp_finance::dto::payable::PurchaseInvoiceAllocationListQuery,
+        params: &PurchaseInvoiceAllocationListParams,
+        query: &PurchaseInvoiceAllocationListQuery,
         actor: &AuditActor,
         purchase_access: &PurchaseAccess,
         executor: &mut dyn Executor,
     ) -> Result<FundsScopedPage<ScopedPurchaseInvoiceAllocationRow>> {
-        let (access, authorization) = self
-            .resolve_with_purchase(actor, "purchase_invoice_allocation", "list", purchase_access, executor)
-            .await?;
+        let (authorization, snapshot) =
+            self.allocation_projection(query, actor, purchase_access, true, executor).await?;
         if authorization.empty() {
             return Ok(empty_page(&authorization, "no_scope", "进项发票分配无可见范围"));
         }
-        let filter = PurchaseInvoiceAllocationFilter {
-            payable_account_id: query.payable_account_id.clone(),
-            invoice_id: None,
-            page: 1,
-            page_size: 10_000,
-            sort_ascending: false,
-        };
-        let candidates = self
-            .db
-            .purchase_invoice_allocations()
-            .search_purchase_invoice_allocations(&filter, executor)
-            .await?;
-        if candidates.items.len() >= 10_000 {
-            return Err(Error::ValidationError("收票查询超过上限，请收窄组织或负责人条件".into()));
-        }
-        let assembled = self
-            .assemble_purchase_invoice_allocations(
-                query,
-                candidates.items,
-                &access,
-                &authorization,
-                purchase_access,
-                executor,
-            )
-            .await?;
-        let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
-        authorization.context.scope_version.hash(&mut fingerprint);
-        let mut triples = Vec::new();
-        let mut whole_sum = zero_amount();
-        let mut all_whole = true;
-        let mut owner_of = HashMap::new();
-        for scoped in assembled.iter() {
-            scoped.hash_source(&mut fingerprint);
-            triples.push((scoped.item.base.id.clone(), scoped.signed, scoped.order.clone()));
-            if scoped.whole() {
-                whole_sum = whole_sum.checked_add(scoped.signed);
-            } else {
-                all_whole = false;
-            }
-        }
-        for (order, owner) in
-            assembled.iter().filter_map(|scoped| scoped.order.clone().map(|id| (id, scoped.owner())))
-        {
-            if let Some(owner) = owner {
-                owner_of.insert(order, owner);
-            }
-        }
-        let total = assembled.len() as u64;
-        let page = query.paging.page.max(1);
-        let page_size = u64::from(query.paging.page_size).max(1);
-        let start = ((page - 1) as usize).saturating_mul(page_size as usize);
-        let end = start.saturating_add(page_size as usize).min(assembled.len());
-        let mut items = Vec::new();
-        if start < assembled.len() {
-            for scoped in assembled[start..end].iter() {
-                let whole = scoped.whole();
-                items.push(ScopedPurchaseInvoiceAllocationRow {
-                    id: scoped.item.base.id.clone(),
-                    invoice_id: scoped.item.invoice_id.to_string(),
-                    invoice_no: scoped.invoice_no.clone(),
-                    payable_account_id: scoped.item.payable_account_id.to_string(),
-                    created_at: scoped.item.base.created_at,
-                    visible_allocated_amount: scoped.signed,
-                    allocated_gross_amount: whole_amount(whole, scoped.signed),
-                    permission_limited: !whole,
-                });
-            }
-        }
-        let version = format!("{:x}", fingerprint.finish());
+        let version = allocation_scope_version(&authorization, &snapshot.versions);
         ensure_version(params.scope_version.as_deref(), &version).map_err(|_| changed())?;
-        let summary =
-            build_summary(&triples, &owner_of, whole_amount(all_whole, whole_sum), &version, !all_whole)?;
+        let summary = snapshot.summary(&version)?;
+        let items = snapshot.items.iter().map(allocation_page_row).collect();
         Ok(FundsScopedPage {
             items,
-            total,
+            total: snapshot.total(),
             summary,
-            page,
-            page_size: page_size as u32,
-            scope_version: version.clone(),
+            page: query.paging.page,
+            page_size: query.paging.page_size,
+            scope_version: version,
             policy_version: authorization.context.policy_version,
             organization_version: authorization.context.organizations.version,
             as_of: authorization.context.as_of.as_utc().to_rfc3339(),
@@ -284,93 +242,65 @@ impl FundsAccess {
         })
     }
 
-    /// 进项发票分配候选逐行判定可见性与筛选；授权集合外的份额不进入行与汇总。
-    pub(super) async fn assemble_purchase_invoice_allocations(
+    /// 每拍独立解析真实来源授权与组织筛选，只读取本拍必要的聚合分支。
+    async fn allocation_projection(
         &self,
-        query: &erp_finance::dto::payable::PurchaseInvoiceAllocationListQuery,
-        rows: Vec<PurchaseInvoiceAllocation>,
-        _access: &FundsResolvedScope,
-        authorization: &FundsAuthorization,
-        _purchase_access: &PurchaseAccess,
+        query: &PurchaseInvoiceAllocationListQuery,
+        actor: &AuditActor,
+        purchase_access: &PurchaseAccess,
+        materialize: bool,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<ScopedPurchaseAllocation>> {
-        use erp_core::ids::{InvoiceId, PayableAccountId};
-        let account_keys = rows
-            .iter()
-            .map(|item| PayableAccountId::new(item.payable_account_id.to_string()))
-            .collect::<Vec<_>>();
-        let accounts = self.db.payable_accounts().find_accounts_by_ids(&account_keys, executor).await?;
-        let account_order = accounts
-            .into_iter()
-            .map(|account| {
-                let order = Some(source_key(account.source_type, &account.source_document_id));
-                (account.base.id.clone(), order)
-            })
-            .collect::<HashMap<_, _>>();
-        let invoice_keys =
-            rows.iter().map(|item| InvoiceId::new(item.invoice_id.to_string())).collect::<Vec<_>>();
-        let invoice_ids = invoice_keys.iter().map(|id| id.to_string()).collect::<Vec<_>>();
-        let invoices = self.db.invoices().find_invoices_by_ids(&invoice_ids, executor).await?;
-        let invoice_operator = invoices
-            .into_iter()
-            .map(|invoice| {
-                (invoice.base.id.clone(), (invoice.stable.created_by.clone(), invoice.invoice_no.clone()))
-            })
-            .collect::<HashMap<_, _>>();
-        let po_ids = account_order.values().filter_map(|order| order.clone()).collect::<Vec<_>>();
-        let purchase_facts = self.purchase_fact_map(&po_ids, executor).await?;
-        let allowed = authorization.payable_ids(&purchase_facts);
-        let condition = self.purchase_invoice_condition(query, executor).await?;
-        let mut decided = Vec::new();
-        for item in rows {
-            let order = account_order.get(&item.payable_account_id.to_string()).cloned().flatten();
-            let (operator, invoice_no) = invoice_operator
-                .get(&item.invoice_id.to_string())
-                .cloned()
-                .map(|(operator, no)| (Some(operator), Some(no)))
-                .unwrap_or((None, None));
-            if let (Some(order), Some(allowed)) = (order.as_ref(), allowed.as_ref())
-                && !allowed.contains(order)
-            {
-                continue;
-            }
-            let fact = order.as_ref().and_then(|id| purchase_facts.get(id));
-            let row_facts = FundsLinkedFacts {
-                owner_user_id: fact.and_then(|order| order.owner_user_id.clone()),
-                business_org_unit_id: fact.map(|order| order.business_org_unit_id.clone()),
-                operator_user_ids: operator.clone().into_iter().collect(),
-                secondary_operator_user_ids: Vec::new(),
-                linked_document_id: item.payable_account_id.to_string(),
-                linked_document_version: item.base.version,
-            };
-            if fact.is_none() {
-                continue;
-            }
-            if !matches_linked_condition(&row_facts, &condition) {
-                continue;
-            }
-            let signed = match item.allocation_action {
-                PayableAllocationAction::Apply => item.allocated_gross_amount,
-                PayableAllocationAction::Reverse => zero_amount().checked_sub(item.allocated_gross_amount),
-            };
-            let whole = true;
-            decided.push(ScopedPurchaseAllocation {
-                item,
-                order,
-                signed,
-                invoice_no,
-                whole_flag: whole,
-                owner_name: fact.and_then(|order| order.owner_user_id.clone()),
-                source_version: fact.map(|source| source.version).unwrap_or(0),
-            });
+    ) -> Result<(FundsAuthorization, AllocationSnapshot)> {
+        let (_, authorization) = self
+            .resolve_with_purchase(actor, "purchase_invoice_allocation", "list", purchase_access, executor)
+            .await?;
+        if authorization.empty() {
+            return Ok((authorization, AllocationSnapshot::default()));
         }
-        Ok(decided)
+        let condition = self.purchase_invoice_condition(query, executor).await?;
+        let snapshot =
+            allocation_snapshot(&self.db, query, &authorization, &condition, materialize, executor).await?;
+        Ok((authorization, snapshot))
+    }
+
+    /// 返回前独立事务只重验完整匹配身份及来源版本，不重建当前页与金额汇总。
+    async fn allocation_fingerprint_snapshot(
+        &self,
+        query: &PurchaseInvoiceAllocationListQuery,
+        actor: &AuditActor,
+        purchase_access: &PurchaseAccess,
+    ) -> Result<String> {
+        let this = self.clone();
+        let query = query.clone();
+        let actor = actor.clone();
+        let purchase_access = purchase_access.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let (authorization, snapshot) =
+                        this.allocation_projection(&query, &actor, &purchase_access, false, executor).await?;
+                    if authorization.empty() {
+                        return Ok(authorization.context.scope_version);
+                    }
+                    Ok(allocation_scope_version(&authorization, &snapshot.versions))
+                })
+            })
+            .await
     }
 
     /// 收票分配关联筛选条件：采购负责人、收票经办人与组织分别精确匹配。
+    ///
+    /// # 参数
+    /// 规范化查询和原执行器。
+    /// # 返回
+    /// 采购或结算负责人、经办人与展开组织的精确条件。
+    /// # 错误
+    /// 组织展开读取失败时返回错误。
     pub(super) async fn purchase_invoice_condition(
         &self,
-        query: &erp_finance::dto::payable::PurchaseInvoiceAllocationListQuery,
+        query: &PurchaseInvoiceAllocationListQuery,
         executor: &mut dyn Executor,
     ) -> Result<FundsLinkedCondition> {
         let org_unit_ids = match &query.org_unit_ids {
@@ -392,22 +322,65 @@ impl FundsAccess {
     }
 }
 
-impl ScopedPurchaseAllocation {
-    /// 分配和来源版本共同绑定分页凭据，责任交接会使旧快照失效。
-    fn hash_source(&self, fingerprint: &mut impl Hasher) {
-        self.item.base.id.hash(fingerprint);
-        self.item.base.version.hash(fingerprint);
-        self.order.hash(fingerprint);
-        self.source_version.hash(fingerprint);
+/// 分配与来源版本按原完整匹配顺序形成跨页凭据。
+fn allocation_scope_version(authorization: &FundsAuthorization, versions: &[AllocationVersion]) -> String {
+    let mut fingerprint = DefaultHasher::new();
+    authorization.context.scope_version.hash(&mut fingerprint);
+    for row in versions {
+        row.hash_into(&mut fingerprint);
     }
+    format!("{:x}", fingerprint.finish())
+}
 
-    /// 本行整单读取资格由调用时授权快照决定，装载后不再重算。
-    pub(super) fn whole(&self) -> bool {
-        self.whole_flag
+/// 当前页由来源范围完整授权的分配，沿正反动作返回方向金额。
+fn allocation_page_row(row: &AllocationPageRow) -> ScopedPurchaseInvoiceAllocationRow {
+    let item = &row.item;
+    let signed = match item.allocation_action {
+        PayableAllocationAction::Apply => item.allocated_gross_amount,
+        PayableAllocationAction::Reverse => zero_amount().checked_sub(item.allocated_gross_amount),
+    };
+    ScopedPurchaseInvoiceAllocationRow {
+        id: item.base.id.clone(),
+        invoice_id: item.invoice_id.to_string(),
+        invoice_no: row.invoice_no.clone(),
+        payable_account_id: item.payable_account_id.to_string(),
+        created_at: item.base.created_at,
+        visible_allocated_amount: signed,
+        allocated_gross_amount: Some(signed),
+        permission_limited: false,
     }
+}
 
-    /// 归属采购单当前负责人；结算单来源与缺失时为空，份额计入未分配。
-    pub(super) fn owner(&self) -> Option<String> {
-        self.owner_name.clone()
+#[cfg(test)]
+mod tests {
+    use entity_core::BaseModel;
+    use erp_core::ids::{InvoiceId, PayableAccountId};
+    use erp_finance::entity::payable::PurchaseInvoiceAllocation;
+
+    use super::*;
+
+    /// 实际页面映射保留冲正方向和缺失票号，来源已授权份额完整可读。
+    #[test]
+    fn allocation_page_preserves_reverse_direction_and_missing_invoice_number() {
+        let row = AllocationPageRow {
+            item: PurchaseInvoiceAllocation {
+                base: BaseModel::fake(),
+                invoice_id: InvoiceId::new("invoice"),
+                payable_account_id: PayableAccountId::new("account"),
+                allocation_seq: 2,
+                allocation_action: PayableAllocationAction::Reverse,
+                allocated_gross_amount: "30".parse().unwrap(),
+                allocated_net_amount: "30".parse().unwrap(),
+                allocated_tax_amount: Amount::zero(),
+                reverses_allocation_id: None,
+            },
+            invoice_no: None,
+        };
+        let item = allocation_page_row(&row);
+        assert_eq!(item.visible_allocated_amount, "-30".parse().unwrap());
+        assert_eq!(item.allocated_gross_amount, Some("-30".parse().unwrap()));
+        assert_eq!(item.invoice_no, None);
+        assert!(!item.permission_limited);
+        assert_eq!(item.payable_account_id, "account");
     }
 }

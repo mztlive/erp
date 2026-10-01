@@ -1,7 +1,9 @@
 //! 销售单当前责任范围查询；输入必须由应用层完成资源动作授权。
 
+use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{Document, doc};
-use persistence_core::Repository;
+use mongodb::options::FindOptions;
+use persistence_core::{Executor, Repository, Result, mongo_ops};
 
 /// 一个已经通过同角色权限证明的销售责任范围。
 #[derive(Debug, Clone, Default)]
@@ -127,6 +129,25 @@ pub trait SalesOrderRepositoryScopeExt {
         executor: &mut dyn persistence_core::Executor,
     ) -> persistence_core::Result<Vec<crate::entity::sales_order::SalesOrder>>;
 
+    /// 只读取关联销售范围内的身份与版本，避免授权重验装载完整订单。
+    ///
+    /// # 参数
+    /// * `ids` - 关联销售身份，调用方按批次限制大小。
+    /// * `sales` - 已证明的销售范围。
+    /// * `resource` - 已证明的消费资源范围。
+    /// * `executor` - 调用方事务执行器。
+    /// # 返回
+    /// 返回同时满足两组范围的身份和版本，按身份稳定排序。
+    /// # 错误
+    /// 数据库查询或反序列化失败时返回仓储错误。
+    async fn scope_order_versions(
+        &self,
+        ids: &[String],
+        sales: &SalesReadScope,
+        resource: &SalesReadScope,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesVersion>>;
+
     /// 按独立授权条件读取销售单，ID 条件不能替换范围交集。
     ///
     /// # 参数
@@ -185,6 +206,27 @@ impl SalesOrderRepositoryScopeExt for Repository<'_, crate::entity::sales_order:
             doc! { "$and": [
                 { "id": { "$in": ids } }, sales.document(), resource.document()
             ] },
+            executor,
+        )
+        .await
+    }
+
+    async fn scope_order_versions(
+        &self,
+        ids: &[String],
+        sales: &SalesReadScope,
+        resource: &SalesReadScope,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesVersion>> {
+        if ids.is_empty() {
+            return Ok(vec![]);
+        }
+        mongo_ops::find_many(
+            &self.collection().clone_with_type::<SalesVersion>(),
+            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$and": [
+                { "id": { "$in": ids } }, sales.document(), resource.document()
+            ] },
+            FindOptions::builder().projection(doc! { "id": 1, "version": 1 }).sort(doc! { "id": 1 }).build(),
             executor,
         )
         .await
