@@ -13,6 +13,25 @@ use persistence_core::Executor;
 use super::invoice_task::{self, SalesInvoiceTaskChange};
 use crate::Result;
 
+/// 扇出分片大小：同事务内按片顺序推进，首错短路。
+pub(crate) const FANOUT_SHARD: usize = 50;
+
+/// 扇出分片大小的对外别名，供红冲路径复用同一分片口径。
+pub(crate) const FANOUT_CHUNK: usize = FANOUT_SHARD;
+
+/// 去重并稳定排序，保持原失败短路顺序。
+///
+/// # 参数
+/// * `ids` - 待分组的身份集合
+///
+/// # 返回
+/// 返回排序去重后的身份集合。
+fn dedup_sorted(mut ids: Vec<String>) -> Vec<String> {
+    ids.sort();
+    ids.dedup();
+    ids
+}
+
 /// Immutable posting intent validated by the root invoice command.
 pub(super) struct InvoicePostingInput<'a> {
     pub work_item_id: &'a WorkItemId,
@@ -122,35 +141,36 @@ impl InvoicePostingSteps for MongoInvoicePosting<'_> {
     }
 
     async fn synchronize_tasks(&mut self, executor: &mut dyn Executor) -> Result<()> {
-        let mut account_ids = self.account_ids.clone();
-        account_ids.sort();
-        account_ids.dedup();
-        for account_id in account_ids {
-            invoice_task::sync_sales_invoice_task(
-                self.db,
-                &ReceivableAccountId::new(account_id),
-                SalesInvoiceTaskChange::InvoicePosted,
-                executor,
-            )
-            .await?;
+        // 同一事务执行器不可并发共享（`&mut Executor` 与会话排他），
+        // 按片顺序短路即分组后的可靠形态，保持原失败语义。
+        for chunk in dedup_sorted(self.account_ids.clone()).chunks(FANOUT_SHARD) {
+            for account_id in chunk {
+                invoice_task::sync_sales_invoice_task(
+                    self.db,
+                    &ReceivableAccountId::new(account_id.clone()),
+                    SalesInvoiceTaskChange::InvoicePosted,
+                    executor,
+                )
+                .await?;
+            }
         }
         Ok(())
     }
 
     async fn update_sales_progress(&mut self, executor: &mut dyn Executor) -> Result<()> {
-        let mut sales_order_ids =
-            self.accounts.iter().map(|account| account.sales_order_id.to_string()).collect::<Vec<_>>();
-        sales_order_ids.sort();
-        sales_order_ids.dedup();
-        for id in sales_order_ids {
-            crate::order_to_cash::progress::update_sales_order_money_progress(
-                self.db,
-                executor,
-                &SalesOrderId::new(id),
-                self.input.actor.id().to_string(),
-                None,
-            )
-            .await?;
+        let ids =
+            dedup_sorted(self.accounts.iter().map(|account| account.sales_order_id.to_string()).collect());
+        for chunk in ids.chunks(FANOUT_SHARD) {
+            for id in chunk {
+                crate::order_to_cash::progress::update_sales_order_money_progress(
+                    self.db,
+                    executor,
+                    &SalesOrderId::new(id.clone()),
+                    self.input.actor.id().to_string(),
+                    None,
+                )
+                .await?;
+            }
         }
         Ok(())
     }

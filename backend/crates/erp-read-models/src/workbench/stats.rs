@@ -52,52 +52,91 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         executor: &mut dyn Executor,
     ) -> Result<WorkItemStatsView> {
         let access = self.actor_access_for(actor.kind(), actor.id(), executor).await?;
-
-        let selected = self.stats_fields_for_scope(&query, &actor, &access, executor).await?;
-        let selected =
-            self.processable_stats_fields(selected, query.scope, &actor, &access, executor).await?;
-        let assigned =
-            self.stats_fields_for_open_scope(&query, WorkItemScope::Mine, &actor, &access, executor).await?;
-        let assigned =
-            self.processable_stats_fields(assigned, WorkItemScope::Mine, &actor, &access, executor).await?;
-        let family_items = if all_families {
-            assigned.clone()
-        } else {
-            let mut family_query = query.clone();
-            family_query.work_item_types = registered_work_item_types();
-            let family_items = self
-                .stats_fields_for_open_scope(&family_query, WorkItemScope::Mine, &actor, &access, executor)
-                .await?;
-            self.processable_stats_fields(family_items, WorkItemScope::Mine, &actor, &access, executor)
-                .await?
-        };
+        let (selected, assigned) = self.load_selected_and_assigned(&query, &actor, &access, executor).await?;
+        let family_items =
+            self.load_family_items(&query, &actor, &access, &assigned, all_families, executor).await?;
         let as_of = Instant::now();
         let (today_start, tomorrow_start) = business_day_bounds()?;
+        let (due_today, overdue, exception) =
+            count_selected_stats(&selected, today_start, tomorrow_start, as_of);
         Ok(WorkItemStatsView {
             assigned: count_u64(assigned.len()),
-            due_today: count_u64(
-                selected
-                    .iter()
-                    .filter(|item| item.due_at.is_some_and(|due| due >= today_start && due < tomorrow_start))
-                    .count(),
-            ),
-            overdue: count_u64(
-                selected.iter().filter(|item| item.due_at.is_some_and(|due| due < as_of)).count(),
-            ),
-            exception: count_u64(
-                selected
-                    .iter()
-                    .filter(|item| {
-                        matches!(
-                            item.work_item_type,
-                            WorkItemType::IntegrationResultUnknown | WorkItemType::BusinessException
-                        )
-                    })
-                    .count(),
-            ),
+            due_today,
+            overdue,
+            exception,
             family_counts: family_counts_for_types(family_items.iter().map(|item| item.work_item_type)),
             as_of,
         })
+    }
+
+    /// 加载选中范围与个人快照，个人范围时复用同一快照避免双遍扫描。
+    ///
+    /// # 参数
+    /// * `query` - 规范化统计查询
+    /// * `actor` - 已认证操作人
+    /// * `access` - 责任队列授权快照
+    /// * `executor` - 调用方事务执行器，统计与列表复用同一授权时点
+    ///
+    /// # 返回
+    /// 返回选中可处理项与个人可处理项；个人范围时两者内容一致。
+    ///
+    /// # 错误
+    /// 授权事实或对象事实读取失败时返回错误。
+    async fn load_selected_and_assigned(
+        &self,
+        query: &dto::WorkItemListQuery,
+        actor: &AuditActor,
+        access: &ActorAccess,
+        executor: &mut dyn Executor,
+    ) -> Result<(Vec<dto::WorkItemFields>, Vec<dto::WorkItemFields>)> {
+        if query.scope == WorkItemScope::Mine {
+            let assigned = self.stats_fields_for_scope(query, actor, access, executor).await?;
+            let assigned =
+                self.processable_stats_fields(assigned, WorkItemScope::Mine, actor, access, executor).await?;
+            return Ok((assigned.clone(), assigned));
+        }
+        let selected = self.stats_fields_for_scope(query, actor, access, executor).await?;
+        let selected = self.processable_stats_fields(selected, query.scope, actor, access, executor).await?;
+        let assigned =
+            self.stats_fields_for_open_scope(query, WorkItemScope::Mine, actor, access, executor).await?;
+        let assigned =
+            self.processable_stats_fields(assigned, WorkItemScope::Mine, actor, access, executor).await?;
+        Ok((selected, assigned))
+    }
+
+    /// 加载任务族口径快照，全族时直接复用个人快照。
+    ///
+    /// # 参数
+    /// * `query` - 规范化统计查询
+    /// * `actor` - 已认证操作人
+    /// * `access` - 责任队列授权快照
+    /// * `assigned` - 已计算的个人可处理快照
+    /// * `all_families` - 是否已覆盖全部任务族
+    /// * `executor` - 调用方事务执行器
+    ///
+    /// # 返回
+    /// 返回任务族计数所用的可处理项。
+    ///
+    /// # 错误
+    /// 授权事实或对象事实读取失败时返回错误。
+    async fn load_family_items(
+        &self,
+        query: &dto::WorkItemListQuery,
+        actor: &AuditActor,
+        access: &ActorAccess,
+        assigned: &[dto::WorkItemFields],
+        all_families: bool,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<dto::WorkItemFields>> {
+        if all_families {
+            return Ok(assigned.to_vec());
+        }
+        let mut family_query = query.clone();
+        family_query.work_item_types = registered_work_item_types();
+        let family_items = self
+            .stats_fields_for_open_scope(&family_query, WorkItemScope::Mine, actor, access, executor)
+            .await?;
+        self.processable_stats_fields(family_items, WorkItemScope::Mine, actor, access, executor).await
     }
 
     async fn stats_fields_for_scope(
@@ -236,6 +275,45 @@ pub(super) fn business_day_bounds_at(now_unix_secs: i64) -> Result<(Instant, Ins
 
 fn count_u64(value: usize) -> u64 {
     u64::try_from(value).unwrap_or(u64::MAX)
+}
+
+/// 单遍统计选中项的今日到期、超期与异常数量，避免三遍扫描。
+///
+/// # 参数
+/// * `selected` - 选中范围的可处理项快照
+/// * `today_start` - 工作时区今日下界
+/// * `tomorrow_start` - 工作时区明日下界
+/// * `as_of` - 服务端统计时点
+///
+/// # 返回
+/// 返回今日到期、超期与异常计数；空快照返回全零.
+///
+/// # 错误
+/// 无.
+fn count_selected_stats(
+    selected: &[dto::WorkItemFields],
+    today_start: Instant,
+    tomorrow_start: Instant,
+    as_of: Instant,
+) -> (u64, u64, u64) {
+    let mut due_today = 0_usize;
+    let mut overdue = 0_usize;
+    let mut exception = 0_usize;
+    for item in selected {
+        if item.due_at.is_some_and(|due| due >= today_start && due < tomorrow_start) {
+            due_today = due_today.saturating_add(1);
+        }
+        if item.due_at.is_some_and(|due| due < as_of) {
+            overdue = overdue.saturating_add(1);
+        }
+        if matches!(
+            item.work_item_type,
+            WorkItemType::IntegrationResultUnknown | WorkItemType::BusinessException
+        ) {
+            exception = exception.saturating_add(1);
+        }
+    }
+    (count_u64(due_today), count_u64(overdue), count_u64(exception))
 }
 
 /// 返回服务端正式注册的全部任务类型，用于形成不受当前分组限制的统计口径。

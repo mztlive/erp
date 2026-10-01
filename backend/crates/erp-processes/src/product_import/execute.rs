@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 
 use application_core::AuditActor;
+use async_trait::async_trait;
 use erp_core::AccountKind;
 use erp_core::common::time::Instant;
 use erp_core::ids::BackgroundJobId;
@@ -21,6 +22,9 @@ use super::row_manifest::{
     RowManifest, RowManifestRow, read_row_manifest, row_entries_by_number, row_media_from_entry,
 };
 use crate::{Error, Result};
+
+mod rows;
+use rows::{ImportRowExecution, execute_rows};
 
 impl ProductImportProcess {
     /// 领取待处理的商品导入任务并逐行执行。
@@ -107,11 +111,36 @@ impl ProductImportProcess {
             return Ok(());
         }
         let row_source = self.load_row_source(&job).await?;
+        self.execute_pending_items(&mut job, items, &actor, &mut cache, &row_source).await
+    }
+
+    /// 按行执行并立即保存结果；上一行保存完成后才允许执行下一行。
+    ///
+    /// # 参数
+    /// * `job` - 本轮持有并持续推进的任务实体
+    /// * `items` - 任务全部明细
+    /// * `actor` - 审计操作人
+    /// * `cache` - 字典缓存
+    /// * `row_source` - 行来源
+    ///
+    /// # 返回
+    /// 无；被其他执行器认领时直接返回。
+    ///
+    /// # 错误
+    /// 行状态迁移或结果保存失败时返回错误。
+    async fn execute_pending_items(
+        &self,
+        job: &mut BackgroundJob,
+        items: Vec<BackgroundJobItem>,
+        actor: &AuditActor,
+        cache: &mut ImportDictionaryCache,
+        row_source: &JobRowSource,
+    ) -> Result<()> {
         let manifest_entries;
         let legacy_workbook;
-        let (entries, workbook) = match &row_source {
-            JobRowSource::Manifest(manifest) => {
-                manifest_entries = row_entries_by_number(manifest);
+        let (entries, workbook) = match row_source {
+            JobRowSource::Manifest(m) => {
+                manifest_entries = row_entries_by_number(m);
                 (Some(&manifest_entries), None)
             },
             JobRowSource::Legacy { bytes, parsed } => {
@@ -119,48 +148,44 @@ impl ProductImportProcess {
                 (None, Some(&legacy_workbook))
             },
         };
-        let mut done = 0usize;
-        for mut item in items {
-            if item.status.is_some() {
-                continue;
-            }
-            let row_number = item.source_row_no.unwrap_or(item.item_no);
-            let recorded = match (entries, workbook) {
-                (Some(entries), _) => self.import_manifest_row(row_number, entries, &actor, &mut cache).await,
-                (_, Some((bytes, parsed))) => {
-                    let cells = parsed
-                        .rows
-                        .iter()
-                        .find(|row| row.row_number == row_number)
-                        .map(|row| row.cells.as_slice())
-                        .unwrap_or(&[]);
-                    let media_source = RowMediaSource::Workbook { xlsx: bytes, sheet: parsed };
-                    record_row_outcome(
-                        self.import_row(row_number, cells, &media_source, &actor, &mut cache).await,
-                    )
-                },
-                (None, None) => unreachable!("行来源必为清单或源文件之一"),
-            };
-            item.record_result(
-                recorded.status,
-                recorded.code,
-                recorded.summary,
-                recorded.object_type,
-                recorded.object_id,
-            )?;
-            done += 1;
-            let success = u64::from(recorded.status == ItemStatus::Success);
-            let skipped = u64::from(recorded.status == ItemStatus::Skipped);
-            let failed = u64::from(recorded.status == ItemStatus::Failed);
-            job.record_import_result_batch(success, skipped, failed, done == remaining, Instant::now())?;
-            if let Err(error) = self.persist_progress(&mut job, item).await {
-                if is_concurrent_claim(&error) {
-                    return Ok(());
-                }
-                return Err(error);
-            }
+        let legacy_cells = workbook.map(|(_, p)| {
+            p.rows.iter().map(|r| (r.row_number, r.cells.as_slice())).collect::<HashMap<u32, &[String]>>()
+        });
+        let mut execution =
+            ProductImportRows { process: self, actor, cache, entries, workbook, legacy_cells };
+        execute_rows(&mut execution, job, items).await
+    }
+
+    /// 执行单行的业务写入并转为可持久化结果。
+    ///
+    /// # 参数
+    /// * `row_number` - Excel 行号
+    /// * `entries` - 清单行映射
+    /// * `workbook` - 源文件字节与解析结果
+    /// * `legacy_cells` - 源文件行号到单元格的预建映射
+    /// * `actor` - 审计操作人
+    /// * `cache` - 字典缓存
+    ///
+    /// # 返回
+    /// 返回明细状态、原因码与结果对象。
+    async fn import_single_row(
+        &self,
+        row_number: u32,
+        entries: Option<&HashMap<u32, &RowManifestRow>>,
+        workbook: Option<&(&Vec<u8>, &ParsedProductSheet)>,
+        legacy_cells: &Option<HashMap<u32, &[String]>>,
+        actor: &AuditActor,
+        cache: &mut ImportDictionaryCache,
+    ) -> RecordedOutcome {
+        match (entries, workbook) {
+            (Some(map), _) => self.import_manifest_row(row_number, map, actor, cache).await,
+            (_, Some((bytes, parsed))) => {
+                let cells = legacy_cells.as_ref().and_then(|m| m.get(&row_number).copied()).unwrap_or(&[]);
+                let media = RowMediaSource::Workbook { xlsx: bytes, sheet: parsed };
+                record_row_outcome(self.import_row(row_number, cells, &media, actor, cache).await)
+            },
+            (None, None) => unreachable!("行来源必为清单或源文件之一"),
         }
-        Ok(())
     }
 
     /// 行来源：清单优先，老任务回退到源文件。
@@ -264,37 +289,30 @@ impl ProductImportProcess {
         Ok((bytes, parsed))
     }
 
-    /// 在同一事务内保存明细与任务进度，成功后回读最新任务版本。
+    /// 在同一事务内保存单行结果和任务进度，返回已推进版本的任务。
     ///
     /// # 参数
-    /// * `job` - 本轮持有并持续推进的任务实体
-    /// * `item` - 已记录结果的明细实体
+    /// * `job` - 本轮持有的任务版本及累计结果
+    /// * `item` - 刚完成的单行结果
     ///
     /// # 返回
-    /// 无。
+    /// 成功后沿用仓储已更新的任务版本，无需额外回读。
     ///
     /// # 错误
-    /// 并发写入冲突或底层写入失败时返回错误；并发冲突由调用方转为跳过。
+    /// 取消或并发执行造成的版本冲突、结果写入或提交失败时返回错误。
     async fn persist_progress(&self, job: &mut BackgroundJob, mut item: BackgroundJobItem) -> Result<()> {
         let db = self.db.clone();
         let client = db.client().clone();
-        let mut job_for_tx = job.clone();
-        client
+        let mut updated = job.clone();
+        *job = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     db.background_job_items().update(&mut item, executor).await?;
-                    db.background_jobs().update(&mut job_for_tx, executor).await?;
-                    Ok::<(), crate::Error>(())
+                    db.background_jobs().update(&mut updated, executor).await?;
+                    Ok::<_, Error>(updated)
                 })
             })
             .await?;
-        let latest = self
-            .db
-            .background_jobs()
-            .find_by_id(&job.base.id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("导入任务不存在".into()))?;
-        *job = latest;
         Ok(())
     }
 }
@@ -372,4 +390,36 @@ fn recorded(
         None => (None, None),
     };
     RecordedOutcome { status, code: code.map(str::to_string), summary: Some(summary), object_type, object_id }
+}
+
+/// 本轮导入的行来源与字典缓存；执行和保存由逐行编排统一控制。
+struct ProductImportRows<'a> {
+    process: &'a ProductImportProcess,
+    actor: &'a AuditActor,
+    cache: &'a mut ImportDictionaryCache,
+    entries: Option<&'a HashMap<u32, &'a RowManifestRow>>,
+    workbook: Option<&'a (&'a Vec<u8>, &'a ParsedProductSheet)>,
+    legacy_cells: Option<HashMap<u32, &'a [String]>>,
+}
+
+#[async_trait]
+impl ImportRowExecution for ProductImportRows<'_> {
+    /// 使用本轮行来源与字典缓存执行单行导入。
+    async fn import(&mut self, row_number: u32) -> RecordedOutcome {
+        self.process
+            .import_single_row(
+                row_number,
+                self.entries,
+                self.workbook,
+                &self.legacy_cells,
+                self.actor,
+                self.cache,
+            )
+            .await
+    }
+
+    /// 将当前行结果与累计任务进度交给原事务边界保存。
+    async fn persist(&mut self, job: &mut BackgroundJob, item: BackgroundJobItem) -> Result<()> {
+        self.process.persist_progress(job, item).await
+    }
 }

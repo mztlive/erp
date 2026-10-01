@@ -1,12 +1,14 @@
 //! 销售列表的一致授权快照；范围与业务版本跨页携带。
 //! 负责销售候选由销售人员目录提供，不从销售单集合生成。
+use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
 use application_core::{AuditActor, PageView};
 use erp_identity::service::access_control::resolve::AuthorizedDataScope;
 use erp_sales::dto::sales_order::SalesOrderListParams;
 use erp_sales::repository::sales_order::{SalesOrderRow, SalesOrderSearch};
-use persistence_core::Transactional;
+use erp_sales::service::sales_order::SalesOrderService;
+use persistence_core::{Executor, Transactional};
 use serde::Serialize;
 
 use super::SalesOrderReadService;
@@ -45,6 +47,47 @@ pub(super) struct SalesSnapshot {
     pub no_scope: bool,
 }
 impl SalesOrderReadService {
+    /// 在独立授权快照中只重验匹配版本，组织展开与首次列表读取共用同一入口。
+    ///
+    /// # 参数
+    /// * `params` - 与首次读取相同的列表参数
+    /// * `search` - 与首次读取相同的关键词关联事实
+    /// * `actor` - 已认证操作人
+    ///
+    /// # 返回
+    /// 当前授权范围与全部匹配销售单版本组成的指纹。
+    ///
+    /// # 错误
+    /// 无动作权限、组织筛选非法、查询超限或仓储失败时拒绝。
+    pub(super) async fn scope_fingerprint(
+        &self,
+        params: &SalesListParams,
+        search: SalesOrderSearch,
+        actor: &AuditActor,
+    ) -> Result<String> {
+        let db = self.db.clone();
+        let rbac = self.require_rbac()?.clone();
+        let params = params.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let access = SalesAccess::new(db.clone(), rbac);
+                    let (context, scope) = access.resolve(&actor, "list", &[], executor).await?;
+                    let org_ids = requested_business_org_units(&access, &params, executor).await?;
+                    let versions = SalesOrderService::new(db)
+                        .list_versions(&params, search, &scope, org_ids, executor)
+                        .await?;
+                    let mut fingerprint = DefaultHasher::new();
+                    versions.hash(&mut fingerprint);
+                    Ok(format!("{}:{:x}", context.scope_version, fingerprint.finish()))
+                })
+            })
+            .await
+    }
+
     /// 授权、总数与业务身份版本全部在同一个事务读取。
     ///
     /// # 参数
@@ -79,11 +122,10 @@ impl SalesOrderReadService {
                     let access = SalesAccess::new(db.clone(), rbac);
                     let (mut context, scope) = access.resolve(&actor, "list", &[], executor).await?;
                     let org_ids = requested_business_org_units(&access, &params, executor).await?;
-                    let (page, versions) =
-                        erp_sales::service::sales_order::SalesOrderService::new(db.clone())
-                            .list_rows(&params, search, &scope, org_ids, executor)
-                            .await?;
-                    let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
+                    let (page, versions) = SalesOrderService::new(db)
+                        .list_rows(&params, search, &scope, org_ids, executor)
+                        .await?;
+                    let mut fingerprint = DefaultHasher::new();
                     versions.hash(&mut fingerprint);
                     context.scope_version = format!("{}:{:x}", context.scope_version, fingerprint.finish());
                     let no_scope = scope.is_empty();
@@ -112,7 +154,7 @@ impl SalesOrderReadService {
 async fn requested_business_org_units(
     access: &SalesAccess,
     params: &SalesOrderListParams,
-    executor: &mut dyn persistence_core::Executor,
+    executor: &mut dyn Executor,
 ) -> Result<Option<Vec<String>>> {
     let Some(org_ids) = &params.org_unit_ids else {
         if params.include_descendants == Some(true) {
