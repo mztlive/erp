@@ -81,6 +81,27 @@ pub struct OrgMembership {
     pub reason: String,
 }
 
+impl OrgMembership {
+    /// 从成员事实中解析指定时点的唯一主属组织。
+    ///
+    /// # 参数
+    /// `memberships` 为完整或已按账号及时点限定的成员事实；`at` 为授权时点。
+    /// # 返回
+    /// 返回唯一有效关系的组织 ID；没有有效关系时返回 `None`。
+    /// # 错误
+    /// 同一账号有多条有效关系时拒绝，软删除及半开区间外的关系不参与判定。
+    pub fn primary_org<'a>(memberships: &'a [Self], user_id: &str, at: Instant) -> Result<Option<&'a str>> {
+        let mut current = memberships.iter().filter(|membership| {
+            membership.user_id == user_id && !membership.base.is_deleted() && membership.validity.contains(at)
+        });
+        let first = current.next();
+        if current.next().is_some() {
+            return Err(Error::ConflictError("用户存在重叠主属组织关系".into()));
+        }
+        Ok(first.map(|membership| membership.org_unit_id.as_str()))
+    }
+}
+
 /// 管理范围仅由当前持有且有完整动作权限的指定角色激活。
 #[derive(Debug, Clone, Serialize, Deserialize, Entity, PartialEq, Eq)]
 pub struct OrgManagementAssignment {
@@ -214,6 +235,47 @@ mod tests {
     use std::time::Instant as Stopwatch;
 
     use super::*;
+
+    /// 构造指定账号和半开区间的主属事实。
+    fn membership(user: &str, org: &str, from: i64, to: Option<i64>) -> OrgMembership {
+        OrgMembership {
+            base: BaseModel::fake(),
+            user_id: user.into(),
+            org_unit_id: org.into(),
+            validity: OrgValidity {
+                valid_from: Instant::from_unix_secs(from),
+                valid_to: to.map(Instant::from_unix_secs),
+            },
+            changed_by: "admin".into(),
+            reason: "测试主属".into(),
+        }
+    }
+
+    /// 窄事实查询与完整状态解析共用有效期、软删除及重叠冲突规则。
+    #[test]
+    fn primary_org_preserves_validity_deletion_and_overlap_rules() {
+        let mut rows = vec![
+            membership("user", "old", 10, Some(20)),
+            membership("other", "ignored", 0, None),
+            membership("user", "new", 20, None),
+        ];
+        assert_eq!(OrgMembership::primary_org(&rows, "user", Instant::from_unix_secs(9)).unwrap(), None);
+        assert_eq!(
+            OrgMembership::primary_org(&rows, "user", Instant::from_unix_secs(10)).unwrap(),
+            Some("old")
+        );
+        assert_eq!(
+            OrgMembership::primary_org(&rows, "user", Instant::from_unix_secs(20)).unwrap(),
+            Some("new")
+        );
+        rows[2].base.deleted_at = 21;
+        assert_eq!(OrgMembership::primary_org(&rows, "user", Instant::from_unix_secs(20)).unwrap(), None);
+        rows.push(membership("user", "overlap", 10, Some(20)));
+        assert!(matches!(
+            OrgMembership::primary_org(&rows, "user", Instant::from_unix_secs(10)),
+            Err(Error::ConflictError(message)) if message == "用户存在重叠主属组织关系"
+        ));
+    }
 
     fn unit(id: &str, parent: Option<&str>) -> OrgUnit {
         OrgUnit::new(

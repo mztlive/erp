@@ -4,16 +4,20 @@ use std::collections::{BTreeSet, HashMap};
 use std::hash::{Hash, Hasher};
 
 use application_core::AuditActor;
+use erp_core::ids::CustomerReceiptId;
 use erp_core::money::Amount;
+use erp_finance::dto::receivable::{CustomerReceiptListQuery, SortDir};
 use erp_finance::entity::read_coverage::whole_document_readable;
-use erp_finance::ports::funds_scope::FundsResolvedScope;
-use erp_finance::repository::ReceivableExt;
+use erp_finance::entity::receivable::{AllocationAction, ReceiptAllocation};
+use erp_finance::repository::keyword::FinanceSearchTarget;
 use erp_finance::repository::prelude::*;
+use erp_finance::repository::{ReceivableExt, ReceivableListScope, ScopedCustomerReceiptQuery};
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::authorization::*;
 use super::rows::*;
+use crate::finance::search::keyword_ids;
 use crate::{Error, Result};
 
 /// 回款分配实体转响应视图；与现有回款投影保持同一字段口径。
@@ -186,31 +190,19 @@ impl FundsAccess {
             .await
     }
 
-    /// 业务筛选复用现有仓储查询，授权过滤与金额裁剪在同一事务内完成。
-    pub(super) async fn load_customer_receipts(
+    /// 保持完整关键词、来源、排序和候选上限，授权裁剪仍发生在分页之前。
+    async fn receipt_candidates(
         &self,
-        params: &erp_finance::dto::receivable::CustomerReceiptListParams,
-        query: &erp_finance::dto::receivable::CustomerReceiptListQuery,
-        actor: &AuditActor,
+        query: &CustomerReceiptListQuery,
         executor: &mut dyn Executor,
-    ) -> Result<FundsScopedPage<ScopedCustomerReceiptRow>> {
-        use erp_finance::dto::receivable::SortDir;
-        let (access, authorization) = self.resolve(actor, "customer_receipt", "list", executor).await?;
-        if authorization.empty() {
-            return Ok(empty_page(&authorization, "no_scope", "回款无可见范围"));
-        }
-        let keyword_ids = crate::finance::search::keyword_ids(
-            &self.db,
-            query.q.as_deref(),
-            erp_finance::repository::keyword::FinanceSearchTarget::Receipt,
-        )
-        .await?;
-        let scope_query = erp_finance::repository::ScopedCustomerReceiptQuery {
+    ) -> Result<Vec<CustomerReceiptRow>> {
+        let keyword_ids = keyword_ids(&self.db, query.q.as_deref(), FinanceSearchTarget::Receipt).await?;
+        let scope_query = ScopedCustomerReceiptQuery {
             keyword_ids,
             receipt_no: query.receipt_no.clone(),
             counterparty_party_id: query.counterparty_party_id.clone(),
             status: query.status,
-            scope: erp_finance::repository::ReceivableListScope {
+            scope: ReceivableListScope {
                 sales_order_id: query.sales_order_id.clone(),
                 receivable_account_id: query.receivable_account_id.clone(),
             },
@@ -224,13 +216,26 @@ impl FundsAccess {
         if candidates.items.len() >= 10_000 {
             return Err(Error::ValidationError("回款查询超过上限，请收窄组织或负责人条件".into()));
         }
-        let decided = self
-            .assemble_customer_receipts(query, candidates.items, access, &authorization, executor)
-            .await?;
+        Ok(candidates.items)
+    }
+
+    /// 业务筛选复用现有仓储查询，授权过滤与金额裁剪在同一事务内完成。
+    pub(super) async fn load_customer_receipts(
+        &self,
+        params: &erp_finance::dto::receivable::CustomerReceiptListParams,
+        query: &erp_finance::dto::receivable::CustomerReceiptListQuery,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<FundsScopedPage<ScopedCustomerReceiptRow>> {
+        let (_access, authorization) = self.resolve(actor, "customer_receipt", "list", executor).await?;
+        if authorization.empty() {
+            return Ok(empty_page(&authorization, "no_scope", "回款无可见范围"));
+        }
+        let candidates = self.receipt_candidates(query, executor).await?;
+        let ReceiptSnapshot { decided, links, facts } =
+            self.assemble_customer_receipts(query, candidates, &authorization, executor).await?;
         let ids = decided.iter().map(|(row, _)| row.id.clone()).collect::<Vec<_>>();
-        let links = self.receipt_matched_links(&ids, executor).await?;
-        let order_ids = links.values().flatten().filter_map(|link| link.order.clone()).collect::<Vec<_>>();
-        let facts = self.sales_fact_map(&order_ids, executor).await?;
+        let links = self.receipt_decided_links(&ids, &links, executor).await?;
         let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
         authorization.context.scope_version.hash(&mut fingerprint);
         for (row, matched) in decided.iter() {
@@ -257,6 +262,20 @@ impl FundsAccess {
 use erp_finance::repository::CustomerReceiptRow;
 
 impl FundsAccess {
+    /// 核销金额保留原已决回款集合的查询边界和返回顺序，来源映射复用同拍事实。
+    async fn receipt_decided_links(
+        &self,
+        ids: &[String],
+        candidate_links: &HashMap<String, Vec<ReceiptLink>>,
+        executor: &mut dyn Executor,
+    ) -> Result<HashMap<String, Vec<ReceiptLink>>> {
+        let keys = ids.iter().map(CustomerReceiptId::new).collect::<Vec<_>>();
+        let allocations = self.db.receipt_allocations().find_allocations_by_receipts(&keys, executor).await?;
+        let orders =
+            candidate_links.values().flatten().map(|link| (link.id.clone(), link.order.clone())).collect();
+        Ok(receipt_links_from_allocations(allocations, &orders))
+    }
+
     /// 回款经办人事实：登记取创建审计，核销取审批提交人；无过滤条件时不读审计。
     pub(super) async fn receipt_operators(
         &self,
@@ -313,10 +332,9 @@ impl FundsAccess {
         &self,
         query: &erp_finance::dto::receivable::CustomerReceiptListQuery,
         rows: Vec<CustomerReceiptRow>,
-        _access: FundsResolvedScope,
         authorization: &FundsAuthorization,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<(CustomerReceiptRow, Vec<String>)>> {
+    ) -> Result<ReceiptSnapshot> {
         let ids = rows.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
         let links = self.receipt_matched_links(&ids, executor).await?;
         let order_ids = links.values().flatten().filter_map(|link| link.order.clone()).collect::<Vec<_>>();
@@ -327,40 +345,88 @@ impl FundsAccess {
             .receipt_operators(&ids, query.operator_kind, query.operator_user_ids.is_some(), executor)
             .await?;
         let condition = self.receipt_condition(query, executor).await?;
-        let mut decided = Vec::new();
-        for row in rows {
-            let row_links = links.get(&row.id).map(Vec::as_slice).unwrap_or_default();
-            if !linked_sources_exist(row_links.iter().map(|link| link.order.as_deref()), &facts) {
-                continue;
-            }
-            let tuples = receipt_tuples(&row, row_links, &facts);
-            let matched = matched_orders(&tuples, &allowed);
-            let matched = filter_matched_orders(
-                &tuples,
-                matched,
-                condition.owner_user_ids.as_deref(),
-                condition.org_unit_ids.as_deref(),
-            );
-            if (condition.owner_user_ids.is_some() || condition.org_unit_ids.is_some()) && matched.is_empty()
-            {
-                continue;
-            }
-            let whole = whole_document_readable(
-                authorization.ledger_read,
-                row_links.iter().map(|link| link.order.as_deref()),
-                &matched,
-            );
-            if !whole && matched.is_empty() {
-                continue;
-            }
-            let doc_operators = operators.get(&row.id).cloned().unwrap_or_default();
-            if !matches_multi_condition(&tuples, &doc_operators, &[], &condition) {
-                continue;
-            }
-            decided.push((row, matched));
-        }
-        Ok(decided)
+        let decided = decide_receipt_rows(
+            rows,
+            &links,
+            &facts,
+            &allowed,
+            &operators,
+            &condition,
+            authorization.ledger_read,
+        );
+        Ok(ReceiptSnapshot { decided, links, facts })
     }
+}
+
+/// 同一回款快照的已决行和来源事实；金额另按原已决集合重新装载核销以保持返回顺序。
+pub(super) struct ReceiptSnapshot {
+    decided: Vec<(CustomerReceiptRow, Vec<String>)>,
+    links: HashMap<String, Vec<ReceiptLink>>,
+    facts: HashMap<String, LinkedSalesFact>,
+}
+
+/// 核销按本次查询返回流生成金额和展示视图，缺失来源仍保留 None。
+fn receipt_links_from_allocations(
+    allocations: Vec<ReceiptAllocation>,
+    orders: &HashMap<String, LinkedOrderId>,
+) -> HashMap<String, Vec<ReceiptLink>> {
+    let mut links: HashMap<String, Vec<ReceiptLink>> = HashMap::new();
+    for item in allocations {
+        let signed = match item.allocation_action {
+            AllocationAction::Apply => item.allocated_amount,
+            AllocationAction::Reverse => zero_amount().checked_sub(item.allocated_amount),
+        };
+        let order = orders.get(&item.base.id).cloned().flatten();
+        let view = receipt_allocation_view(&item);
+        let id = item.base.id;
+        let receipt = item.customer_receipt_id.to_string();
+        links.entry(receipt).or_default().push(ReceiptLink { id, signed, order, view });
+    }
+    links
+}
+
+/// 按原候选顺序判定行和份额，缺失来源拒绝，未分配仍沿用整账覆盖判定。
+fn decide_receipt_rows(
+    rows: Vec<CustomerReceiptRow>,
+    links: &HashMap<String, Vec<ReceiptLink>>,
+    facts: &HashMap<String, LinkedSalesFact>,
+    allowed: &Option<BTreeSet<String>>,
+    operators: &HashMap<String, Vec<String>>,
+    condition: &FundsLinkedCondition,
+    ledger_read: bool,
+) -> Vec<(CustomerReceiptRow, Vec<String>)> {
+    let mut decided = Vec::new();
+    for row in rows {
+        let row_links = links.get(&row.id).map(Vec::as_slice).unwrap_or_default();
+        if !linked_sources_exist(row_links.iter().map(|link| link.order.as_deref()), facts) {
+            continue;
+        }
+        let tuples = receipt_tuples(&row, row_links, facts);
+        let matched = matched_orders(&tuples, allowed);
+        let matched = filter_matched_orders(
+            &tuples,
+            matched,
+            condition.owner_user_ids.as_deref(),
+            condition.org_unit_ids.as_deref(),
+        );
+        if (condition.owner_user_ids.is_some() || condition.org_unit_ids.is_some()) && matched.is_empty() {
+            continue;
+        }
+        let whole = whole_document_readable(
+            ledger_read,
+            row_links.iter().map(|link| link.order.as_deref()),
+            &matched,
+        );
+        if !whole && matched.is_empty() {
+            continue;
+        }
+        let doc_operators = operators.get(&row.id).map(Vec::as_slice).unwrap_or_default();
+        if !matches_multi_condition(&tuples, doc_operators, &[], condition) {
+            continue;
+        }
+        decided.push((row, matched));
+    }
+    decided
 }
 
 impl FundsAccess {
@@ -543,11 +609,13 @@ impl FundsAccess {
 #[cfg(test)]
 mod tests {
     use erp_core::common::time::Instant;
+    use erp_core::ids::{ReceiptAllocationId, ReceivableEntryId};
     use erp_finance::dto::receivable::ReceiptAllocationView;
-    use erp_finance::entity::receivable::AllocationAction;
+    use erp_finance::entity::receivable::{AllocationAction, CustomerReceiptStatus, ReceiptAllocationData};
 
     use super::*;
 
+    /// 构造已有核销链事实，供真实筛选与金额投影使用。
     fn link(id: &str, order: Option<&str>, signed: &str) -> ReceiptLink {
         let amount: Amount = signed.parse().unwrap();
         ReceiptLink {
@@ -564,6 +632,216 @@ mod tests {
                 reverses_allocation_id: None,
             },
         }
+    }
+
+    /// 构造仓储回款候选行。
+    fn receipt(id: &str) -> CustomerReceiptRow {
+        CustomerReceiptRow {
+            id: id.into(),
+            status: CustomerReceiptStatus::Posted,
+            receipt_no: id.into(),
+            counterparty_party_id: "party".into(),
+            customer_id: None,
+            received_at: Instant::from_unix_secs(1),
+            amount: "100".parse().unwrap(),
+            bank_reference: None,
+            version: 2,
+            created_at: 1,
+            pending_allocations: Vec::new(),
+        }
+    }
+
+    /// 构造不附加业务条件的筛选口径。
+    fn empty_condition() -> FundsLinkedCondition {
+        FundsLinkedCondition {
+            owner_user_ids: None,
+            operator_user_ids: None,
+            secondary_operator_user_ids: None,
+            org_unit_ids: None,
+        }
+    }
+
+    /// 构造同一事务内的来源责任事实。
+    fn sales_fact(owner: &str, org: &str, version: u64) -> LinkedSalesFact {
+        LinkedSalesFact { owner_user_id: owner.into(), business_org_unit_id: org.into(), version }
+    }
+
+    /// 构造已决回款核销查询返回的真实正向或反向分配。
+    fn persisted_allocation(
+        id: &str,
+        sequence: u32,
+        action: AllocationAction,
+        amount: &str,
+    ) -> ReceiptAllocation {
+        ReceiptAllocation::new(
+            ReceiptAllocationId::new(id),
+            ReceiptAllocationData {
+                customer_receipt_id: CustomerReceiptId::new("receipt"),
+                receivable_entry_id: ReceivableEntryId::new(format!("entry-{id}")),
+                allocation_seq: sequence,
+                allocation_action: action,
+                allocated_amount: amount.parse().unwrap(),
+                allocated_at: Instant::from_unix_secs(10),
+                reverses_allocation_id: (action == AllocationAction::Reverse)
+                    .then(|| ReceiptAllocationId::new("original")),
+            },
+        )
+        .unwrap()
+    }
+
+    /// 金额链接沿用已决集合查询返回顺序，来源映射的键序及多余候选不参与排序。
+    #[test]
+    fn receipt_decided_links_keep_allocation_stream_order_source_mapping_and_extreme_amount_fold() {
+        let max = "79228162514264337593543950335";
+        let orders = HashMap::from([
+            ("apply-max".into(), Some("so".into())),
+            ("apply-one".into(), Some("so".into())),
+            ("reverse-one".into(), Some("so".into())),
+            ("candidate-only".into(), Some("other".into())),
+        ]);
+        let found = receipt_links_from_allocations(
+            vec![
+                persisted_allocation("apply-max", 1, AllocationAction::Apply, max),
+                persisted_allocation("reverse-one", 3, AllocationAction::Reverse, "1"),
+                persisted_allocation("apply-one", 2, AllocationAction::Apply, "1"),
+            ],
+            &orders,
+        );
+        let links = &found["receipt"];
+        assert_eq!(
+            links.iter().map(|link| link.id.as_str()).collect::<Vec<_>>(),
+            ["apply-max", "reverse-one", "apply-one"]
+        );
+        assert_eq!(links.iter().map(|link| link.view.allocation_seq).collect::<Vec<_>>(), [1, 3, 2]);
+        assert_eq!(sum_all(links), max.parse().unwrap());
+        assert_eq!(sum_signed(links, &["so".into()]), max.parse().unwrap());
+        assert_eq!(links[1].signed, "-1".parse().unwrap());
+        assert_eq!(links[1].view.allocated_amount, "1".parse().unwrap());
+        assert_eq!(links[1].view.reverses_allocation_id.as_deref(), Some("original"));
+    }
+
+    /// 缺失或断裂来源仍为 None，使用回读分配的金额与元数据，不补造来源。
+    #[test]
+    fn receipt_decided_links_keep_missing_source_and_empty_query_behavior() {
+        let orders = HashMap::from([("dangling".into(), None)]);
+        let found = receipt_links_from_allocations(
+            vec![
+                persisted_allocation("missing", 2, AllocationAction::Apply, "5.01"),
+                persisted_allocation("dangling", 1, AllocationAction::Reverse, "2.01"),
+            ],
+            &orders,
+        );
+        let links = &found["receipt"];
+        assert_eq!(links.len(), 2);
+        assert!(links.iter().all(|link| link.order.is_none()));
+        assert_eq!(sum_all(links), "3".parse().unwrap());
+        assert_eq!(sum_signed(links, &[]), Amount::zero());
+        assert_eq!(links[0].view.receivable_entry_id, "entry-missing");
+        assert_eq!(links[0].view.allocated_at, Instant::from_unix_secs(10));
+        assert!(receipt_links_from_allocations(Vec::new(), &orders).is_empty());
+    }
+
+    /// 已决行保留候选顺序，金额和版本复用同拍来源事实。
+    #[test]
+    fn receipt_snapshot_decision_keeps_order_and_uses_same_facts_for_filtered_shares() {
+        let links = HashMap::from([
+            (
+                "second".into(),
+                vec![
+                    link("a1", Some("so-a"), "60"),
+                    link("b1", Some("so-b"), "40"),
+                    link("a2", Some("so-a"), "-10"),
+                ],
+            ),
+            ("first".into(), vec![link("a3", Some("so-a"), "7.01")]),
+        ]);
+        let facts = HashMap::from([
+            ("so-a".into(), sales_fact("a", "org-a", 3)),
+            ("so-b".into(), sales_fact("b", "org-b", 9)),
+            ("irrelevant".into(), sales_fact("c", "org-c", 100)),
+        ]);
+        let decided = decide_receipt_rows(
+            vec![receipt("second"), receipt("first")],
+            &links,
+            &facts,
+            &Some(BTreeSet::from(["so-a".into()])),
+            &HashMap::new(),
+            &empty_condition(),
+            true,
+        );
+        assert_eq!(decided.iter().map(|(row, _)| row.id.as_str()).collect::<Vec<_>>(), ["second", "first"]);
+        assert_eq!(decided[0].1, ["so-a"]);
+        assert_eq!(sum_signed(&links["second"], &decided[0].1), "50".parse().unwrap());
+        assert_eq!(sum_signed(&links["first"], &decided[1].1), "7.01".parse().unwrap());
+        assert_eq!(facts[&decided[0].1[0]].version, 3);
+        assert!(!whole_document_readable(
+            true,
+            links["second"].iter().map(|link| link.order.as_deref()),
+            &decided[0].1,
+        ));
+    }
+
+    /// 关联缺失失败关闭，零分配沿用整账职责边界。
+    #[test]
+    fn receipt_snapshot_decision_rejects_missing_sources_and_preserves_empty_ledger_boundary() {
+        let links = HashMap::from([
+            ("missing".into(), vec![link("bad", Some("deleted"), "10")]),
+            ("dangling".into(), vec![link("bad2", None, "10")]),
+        ]);
+        let rows = vec![receipt("missing"), receipt("empty"), receipt("dangling")];
+        let decided = decide_receipt_rows(
+            rows.clone(),
+            &links,
+            &HashMap::new(),
+            &None,
+            &HashMap::new(),
+            &empty_condition(),
+            true,
+        );
+        assert_eq!(decided.len(), 1);
+        assert_eq!(decided[0].0.id, "empty");
+        assert!(decided[0].1.is_empty());
+        assert!(
+            decide_receipt_rows(
+                rows,
+                &links,
+                &HashMap::new(),
+                &None,
+                &HashMap::new(),
+                &empty_condition(),
+                false,
+            )
+            .is_empty()
+        );
+    }
+
+    /// 业务筛选条件保持同来源份额和经办人的交集约束。
+    #[test]
+    fn receipt_snapshot_decision_keeps_owner_org_and_operator_conditions_conjunctive() {
+        let links =
+            HashMap::from([("r".into(), vec![link("a", Some("so-a"), "60"), link("b", Some("so-b"), "40")])]);
+        let facts = HashMap::from([
+            ("so-a".into(), sales_fact("a", "org-a", 1)),
+            ("so-b".into(), sales_fact("b", "org-b", 2)),
+        ]);
+        let operators = HashMap::from([("r".into(), vec!["operator".into()])]);
+        let mut condition = empty_condition();
+        condition.owner_user_ids = Some(vec!["a".into()]);
+        condition.org_unit_ids = Some(vec!["org-b".into()]);
+        condition.operator_user_ids = Some(vec!["operator".into()]);
+        assert!(
+            decide_receipt_rows(vec![receipt("r")], &links, &facts, &None, &operators, &condition, true)
+                .is_empty()
+        );
+        condition.org_unit_ids = Some(vec!["org-a".into()]);
+        let decided =
+            decide_receipt_rows(vec![receipt("r")], &links, &facts, &None, &operators, &condition, true);
+        assert_eq!(decided[0].1, ["so-a"]);
+        condition.operator_user_ids = Some(vec!["someone_else".into()]);
+        assert!(
+            decide_receipt_rows(vec![receipt("r")], &links, &facts, &None, &operators, &condition, true)
+                .is_empty()
+        );
     }
 
     #[test]

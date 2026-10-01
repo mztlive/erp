@@ -5,13 +5,10 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use erp_catalog::CatalogExt;
-use erp_catalog::entity::catalog::{Product, ProductKind, ProductRevision};
+use erp_catalog::entity::catalog::{Product, ProductRevision};
 use erp_catalog::repository::prelude::*;
-use erp_core::ids::{ProductCategoryId, SkuId, SupplierOfferingId};
-use erp_procurement::entity::facts::ProductKind as ProcurementProductKind;
-use erp_procurement::entity::procurement_responsibility::{
-    ProcurementResponsibilityContext, ProcurementResponsibilityRuleSet,
-};
+use erp_core::ids::{SkuId, SupplierOfferingId};
+use erp_procurement::entity::procurement_responsibility::ProcurementResponsibilityRuleSet;
 use erp_procurement::repository::ProcurementResponsibilityExt;
 use erp_procurement::repository::prelude::*;
 use erp_supply::SupplierOfferingExt;
@@ -19,6 +16,7 @@ use erp_supply::repository::prelude::*;
 use mongodb::Database;
 use persistence_core::Executor;
 
+use crate::catalog_center::{CategoryChainCache, matches_procurement_owner};
 use crate::{Error, Result};
 
 const AUTHORIZED_ID_LIMIT: usize = 10_000;
@@ -155,12 +153,14 @@ struct OfferingMatchInput<'a> {
     wanted: &'a HashSet<&'a str>,
 }
 
+/// 在授权供给内逐 SKU 解析负责人，并复用本次读取成功的分类事实。
 async fn match_authorized_offerings(
     db: &Database,
     input: OfferingMatchInput<'_>,
     executor: &mut dyn Executor,
 ) -> Result<Vec<String>> {
     let rule_set = ProcurementResponsibilityRuleSet::new(input.rules);
+    let mut categories = CategoryChainCache::new(db);
     let sku_by_id: HashMap<&str, &erp_catalog::entity::catalog::Sku> =
         input.skus.iter().map(|sku| (sku.base.id.as_str(), sku)).collect();
     let mut matched = HashSet::new();
@@ -168,9 +168,17 @@ async fn match_authorized_offerings(
         let Some(sku) = sku_by_id.get(offering.sku_id.as_ref()) else {
             continue;
         };
-        if match_sku_owner(db, input.products, input.revisions, &rule_set, sku, input.wanted, executor)
-            .await?
-            .is_some()
+        if match_sku_owner(
+            &mut categories,
+            input.products,
+            input.revisions,
+            &rule_set,
+            sku,
+            input.wanted,
+            executor,
+        )
+        .await?
+        .is_some()
         {
             matched.insert(offering.base.id.clone());
         }
@@ -178,8 +186,9 @@ async fn match_authorized_offerings(
     Ok(matched.into_iter().collect())
 }
 
+/// 判定单个 SKU；规则缺失或分类读取失败时保持跳过该 SKU 的策略。
 async fn match_sku_owner(
-    db: &Database,
+    categories: &mut CategoryChainCache<'_>,
     products: &HashMap<String, Product>,
     revisions: &HashMap<String, ProductRevision>,
     rule_set: &ProcurementResponsibilityRuleSet<'_>,
@@ -196,21 +205,11 @@ async fn match_sku_owner(
     let Some(revision) = revisions.get(revision_id) else {
         return Ok(None);
     };
-    let Ok(chain) = category_ids(db, &revision.category_id, executor).await else {
+    let Ok(chain) = categories.ids(&revision.category_id, executor).await else {
         return Ok(None);
     };
-    let Ok(kind) = map_kind(product.product_kind) else {
-        return Ok(None);
-    };
-    let Ok(context) =
-        ProcurementResponsibilityContext::new(SkuId::new(sku.base.id.clone()), chain, None, kind)
-    else {
-        return Ok(None);
-    };
-    let Ok(rule) = rule_set.resolve(&context) else {
-        return Ok(None);
-    };
-    Ok(wanted.contains(rule.owner_user_id.as_str()).then(|| product.base.id.clone()))
+    Ok(matches_procurement_owner(product.product_kind, &sku.base.id, chain, rule_set, wanted)
+        .then(|| product.base.id.clone()))
 }
 
 async fn load_offerings(
@@ -262,40 +261,6 @@ async fn load_revisions(
     }
     let revisions = db.product_revisions().find_by_ids(&ids, executor).await?;
     Ok(revisions.into_iter().map(|revision| (revision.base.id.clone(), revision)).collect())
-}
-
-async fn category_ids(
-    db: &Database,
-    category_id: &str,
-    executor: &mut dyn Executor,
-) -> Result<Vec<ProductCategoryId>> {
-    let mut chain = Vec::new();
-    let mut current = Some(category_id.to_string());
-    let mut seen = HashSet::new();
-    while let Some(id) = current {
-        if !seen.insert(id.clone()) || chain.len() >= 32 {
-            return Err(Error::ValidationError("商品分类链非法".into()));
-        }
-        chain.push(ProductCategoryId::new(id.clone()));
-        current = db
-            .product_categories()
-            .find_by_id(&id, executor)
-            .await?
-            .and_then(|category| category.parent_category_id.map(|parent| parent.to_string()));
-    }
-    if chain.is_empty() {
-        return Err(Error::ValidationError("商品分类链为空".into()));
-    }
-    Ok(chain)
-}
-
-fn map_kind(kind: ProductKind) -> Result<ProcurementProductKind> {
-    match kind {
-        ProductKind::Physical => Ok(ProcurementProductKind::Physical),
-        ProductKind::Virtual => Ok(ProcurementProductKind::Virtual),
-        ProductKind::OfflineService => Ok(ProcurementProductKind::OfflineService),
-        ProductKind::Voucher => Ok(ProcurementProductKind::Voucher),
-    }
 }
 
 /// 授权集合超限时整体拒绝，不得截断后继续解析。

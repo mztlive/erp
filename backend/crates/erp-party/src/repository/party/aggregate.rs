@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
 use erp_core::ids::PartyId;
-use mongodb::Database;
 use mongodb::bson::doc;
 use persistence_core::{Executor, Result, mongo_ops};
 
 use super::super::extensions::PartyExt;
+use super::current_name_search::current_name_ids;
 use super::{
     PARTIES, PARTY_REVISIONS, PartyAddressRepositoryExt, PartyBankAccountRepositoryExt,
     PartyContactRepositoryExt, PartyDomainRepository, PartyRepositoryExt, PartyRevisionRepositoryExt,
@@ -202,24 +202,7 @@ impl<'a> PartyDomainRepository<'a> {
         keyword: &str,
         executor: &mut dyn Executor,
     ) -> Result<Vec<PartyId>> {
-        let escaped = regex::escape(keyword);
-        let revisions = PartyRevisionRepository::new(self.db, PARTY_REVISIONS)
-            .find_many(
-                doc! {
-                    "$or": [
-                        { "legal_name": { "$regex": &escaped, "$options": "i" } },
-                        { "short_name": { "$regex": &escaped, "$options": "i" } },
-                    ]
-                },
-                executor,
-            )
-            .await?;
-        current_party_ids_for_revisions(
-            self.db,
-            revisions.into_iter().map(|revision| revision.base.id),
-            executor,
-        )
-        .await
+        current_name_ids(self.db, keyword, executor).await
     }
 
     /// 精确匹配当前法定名称，兼容空白及全半角括号。
@@ -378,36 +361,4 @@ fn exact_name_pattern(name: &str) -> Option<String> {
         return None;
     }
     Some(format!(r"^\s*{}\s*$", parts.join(r"\s*")))
-}
-
-/// 修订命中映射到当前主体并排序去重（erp-party-005）。
-///
-/// “修订→主体（按 `current_revision_id` 回指）→排序去重”两步查询组装的
-/// 唯一入口；查询语义与排序去重保持不变。
-///
-/// # 参数
-/// * `revision_ids` - 命中的修订 ID
-/// * `executor` - 数据访问执行器，由调用方决定是否位于事务中
-///
-/// # 返回
-/// 返回去重并按稳定 ID 排序的当前主体 ID。
-///
-/// # 错误
-/// 当 MongoDB 查询失败时返回错误。
-async fn current_party_ids_for_revisions(
-    db: &Database,
-    revision_ids: impl IntoIterator<Item = String>,
-    executor: &mut dyn Executor,
-) -> Result<Vec<PartyId>> {
-    let revision_ids = revision_ids.into_iter().collect::<Vec<_>>();
-    if revision_ids.is_empty() {
-        return Ok(Vec::new());
-    }
-    let parties = PartyRepository::new(db, PARTIES)
-        .find_many(doc! { "current_revision_id": { "$in": revision_ids } }, executor)
-        .await?;
-    let mut party_ids: Vec<PartyId> = parties.into_iter().map(|party| PartyId::new(party.base.id)).collect();
-    party_ids.sort_by_key(ToString::to_string);
-    party_ids.dedup();
-    Ok(party_ids)
 }

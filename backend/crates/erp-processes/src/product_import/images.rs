@@ -1,16 +1,17 @@
 //! 从报价表提取图片并登记为待写入文件资产。
 
-use erp_catalog::entity::catalog::product_import::dispimg_id;
+use std::sync::Arc;
+
 use erp_core::ids::FileAssetId;
 use erp_support::{
     PENDING_FILE_REFERENCE_PREFIX, PendingFileAssetRequest, RegisterFileAssetRequest, RetentionClass,
     SensitivityClass, content_fingerprint,
 };
 use id_generator::next_id;
-use sha2::{Digest, Sha256};
 use storage::S3Storage;
 
-use super::parse::{ParsedProductSheet, read_xlsx_media};
+use super::media::{PreparedImage, WorkbookMedia, row_media_targets};
+use super::parse::ParsedProductSheet;
 use crate::{Error, Result};
 
 /// 一行已上传的媒体引用。
@@ -32,7 +33,7 @@ pub(super) enum RowMediaSource<'a> {
     /// 源文件提取（老任务回退链路）。
     Workbook {
         /// 源文件字节。
-        xlsx: &'a [u8],
+        xlsx: &'a Arc<Vec<u8>>,
         /// 解析结果。
         sheet: &'a ParsedProductSheet,
     },
@@ -82,86 +83,57 @@ pub(super) async fn resolve_row_media(
 pub async fn upload_row_images(
     storage: &S3Storage,
     secret: &[u8],
-    xlsx: &[u8],
+    xlsx: &Arc<Vec<u8>>,
     sheet: &ParsedProductSheet,
     cells: &[String],
 ) -> Result<RowMedia> {
+    let mut reader = WorkbookMedia::open(xlsx.clone()).await?;
     let mut media = RowMedia::default();
     let mut sort_order = 0;
-    for (index, cell) in cells.iter().enumerate().take(5).skip(2) {
-        let Some(image_id) = dispimg_id(cell) else {
+    for (column, path) in row_media_targets(cells, sheet) {
+        let (next_reader, image) = reader.read(path).await?;
+        reader = next_reader;
+        let Some(image) = image else {
             continue;
         };
-        let Some(path) = sheet.image_targets.get(image_id) else {
-            continue;
-        };
-        let Ok(bytes) = read_xlsx_media(xlsx, path) else {
-            continue;
-        };
-        let Some((content_type, ext)) = detect_image(&bytes) else {
-            continue;
-        };
-        if index == 2 {
-            let carousel_pending = store_image(storage, secret, bytes.clone(), content_type, ext).await?;
-            let carousel_reference = FileAssetId::new(carousel_pending.reference.clone());
-            media.carousel.push((carousel_reference, sort_order));
-            sort_order += 1;
-            media.pending.push(carousel_pending);
-            let sku_pending = store_image(storage, secret, bytes, content_type, ext).await?;
-            media.main_image = Some(FileAssetId::new(sku_pending.reference.clone()));
-            media.pending.push(sku_pending);
-            continue;
-        }
-        let pending = store_image(storage, secret, bytes, content_type, ext).await?;
-        let reference = FileAssetId::new(pending.reference.clone());
+        let carousel_pending = store_image(storage, secret, &image).await?;
+        let reference = FileAssetId::new(carousel_pending.reference.clone());
         media.carousel.push((reference, sort_order));
         sort_order += 1;
-        media.pending.push(pending);
+        media.pending.push(carousel_pending);
+        if column == 2 {
+            let sku_pending = store_image(storage, secret, &image).await?;
+            media.main_image = Some(FileAssetId::new(sku_pending.reference.clone()));
+            media.pending.push(sku_pending);
+        }
     }
     Ok(media)
 }
 
+/// 上传一个独立图片对象，复用阻塞任务生成的摘要构造待登记事实。
 async fn store_image(
     storage: &S3Storage,
     secret: &[u8],
-    bytes: Vec<u8>,
-    content_type: &'static str,
-    ext: &str,
+    image: &PreparedImage,
 ) -> Result<PendingFileAssetRequest> {
     let token = next_id();
+    let ext = image.extension;
     let object_key = format!("{token}.{ext}");
     storage
-        .save_with_content_type(&object_key, &bytes, Some(content_type))
+        .save_with_content_type(&object_key, &image.bytes, Some(image.content_type))
         .await
         .map_err(|error| Error::Internal(format!("保存商品图片失败: {error}")))?;
-    let digest = hex::encode(Sha256::digest(&bytes));
     Ok(PendingFileAssetRequest {
         reference: format!("{PENDING_FILE_REFERENCE_PREFIX}{token}"),
         registration: RegisterFileAssetRequest {
             storage_object_key: object_key,
             file_name: format!("product-import.{ext}"),
-            content_type: content_type.to_string(),
-            byte_size: bytes.len() as u64,
-            content_hmac: content_fingerprint(&digest, secret),
+            content_type: image.content_type.to_string(),
+            byte_size: u64::try_from(image.bytes.len()).expect("图片字节数不超过 u64 范围"),
+            content_hmac: content_fingerprint(&image.digest, secret),
             sensitivity_class: SensitivityClass::General,
             retention_class: RetentionClass::LongTerm,
             expires_at: None,
         },
     })
-}
-
-pub(super) fn detect_image(content: &[u8]) -> Option<(&'static str, &'static str)> {
-    if content.starts_with(b"\x89PNG\r\n\x1a\n") {
-        return Some(("image/png", "png"));
-    }
-    if content.starts_with(&[0xff, 0xd8, 0xff]) {
-        return Some(("image/jpeg", "jpg"));
-    }
-    if content.starts_with(b"GIF87a") || content.starts_with(b"GIF89a") {
-        return Some(("image/gif", "gif"));
-    }
-    if content.len() >= 12 && content.starts_with(b"RIFF") && &content[8..12] == b"WEBP" {
-        return Some(("image/webp", "webp"));
-    }
-    None
 }

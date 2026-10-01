@@ -59,8 +59,8 @@ impl PurchaseOrderReadService {
             return Err(crate::support::data_scope_changed("数据范围已变化，请从第一页刷新"));
         }
         let items = map_list_items(&snapshot.page.items, &snapshot.facts)?;
-        let current = self.list_snapshot(params, actor).await?;
-        if current.context.scope_version != snapshot.context.scope_version {
+        let current = self.scope_fingerprint(params, actor).await?;
+        if current != snapshot.context.scope_version {
             return Err(crate::support::data_scope_changed("数据范围或业务单据已变化，请刷新"));
         }
         Ok(PurchaseListView {

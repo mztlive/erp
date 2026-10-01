@@ -5,18 +5,20 @@ use bpm::model::types::ApprovalNodeExecutionStatus;
 use mongodb::Database;
 use persistence_core::Executor;
 
-use super::load_exact_runtime_snapshot;
 use super::read_auth::{RuntimeReadSubject, task_proves_current_responsibility};
 use crate::entity::work_item::{AssignmentSource, WorkItem, WorkItemStatus, WorkItemType};
 use crate::error::{Error, Result};
 use crate::ports::WorkflowAuthorizationPort;
-use crate::repository::prelude::*;
-use crate::repository::{BpmExt, WorkItemExt};
 use crate::service::approval::business_adapter::adapter_spec_of;
 use crate::service::approval::{
     approval_action_roles_with_executor, approval_participant_permissions_with_executor,
     require_approval_management_with_executor,
 };
+
+mod batch;
+pub use batch::approval_tasks_readable_with_executor;
+#[cfg(test)]
+mod tests;
 
 /// 验证任务、执行、实例及冻结主体，形成仅该审批任务的读取资格。
 ///
@@ -36,6 +38,28 @@ pub async fn approval_task_readable_with_executor(
     item: &WorkItem,
     executor: &mut dyn Executor,
 ) -> Result<bool> {
+    let readable = approval_tasks_readable_with_executor(db, auth, actor, &[item], executor).await?;
+    Ok(readable.first().copied().unwrap_or(false))
+}
+
+/// 在加载具体运行事实之前逐任务证明静态读取资格。
+///
+/// # 参数
+/// * `auth` / `actor` - 当前权限端口与认证身份
+/// * `item` - 服务端任务事实
+/// * `executor` - 调用方执行器
+///
+/// # 返回
+/// 仅正式运行审批任务、仍启用的读取角色与执行引用都存在时返回 true。
+///
+/// # 错误
+/// 保持每任务原有账号、角色和策略版本失败语义。
+async fn task_read_candidate(
+    auth: &impl WorkflowAuthorizationPort,
+    actor: &AuditActor,
+    item: &WorkItem,
+    executor: &mut dyn Executor,
+) -> Result<bool> {
     if item.work_item_type != WorkItemType::DocumentApproval
         || item.assignment_source != AssignmentSource::ApprovalRuntime
         || approval_action_roles_with_executor(auth, actor, "approval_instance:read", executor)
@@ -44,31 +68,35 @@ pub async fn approval_task_readable_with_executor(
     {
         return Ok(false);
     }
-    let Some(execution_id) = &item.approval_node_execution_id else {
+    Ok(item.approval_node_execution_id.is_some())
+}
+
+/// 在已装载的精确运行主体上执行原责任链与逐任务动态权限分支。
+///
+/// # 参数
+/// * `auth` / `actor` - 当前权限事实与认证身份
+/// * `item` / `subject` - 本次快照下的任务和冻结主体
+/// * `open_tasks` - 同一执行关联的全部开放任务
+/// * `executor` - 调用方执行器
+///
+/// # 返回
+/// 当前负责人、实际完成人或原管理范围满足时返回 true。
+///
+/// # 错误
+/// 决定能力、管理来源或策略重验失败时保持原错误。
+async fn task_subject_readable(
+    auth: &impl WorkflowAuthorizationPort,
+    actor: &AuditActor,
+    item: &WorkItem,
+    subject: &RuntimeReadSubject,
+    open_tasks: &[WorkItem],
+    executor: &mut dyn Executor,
+) -> Result<bool> {
+    let Some(execution) = &subject.current_execution else {
         return Ok(false);
     };
-    let Some(execution) = db.bpm_workflow().find_execution_by_id(execution_id, executor).await? else {
-        return Ok(false);
-    };
-    let Some(instance) =
-        db.bpm_workflow().find_instance_by_id(&execution.process_instance_id, executor).await?
-    else {
-        return Ok(false);
-    };
-    let (document_type, snapshot) = load_exact_runtime_snapshot(db, &instance, executor, false).await?;
-    let subject =
-        RuntimeReadSubject { instance, current_execution: Some(execution.clone()), snapshot, document_type };
-    let owner_role = adapter_spec_of(document_type)?.owner_role;
     let owner = execution.assignee_participant_id.as_str();
-    let exact_chain = if item.status == WorkItemStatus::Open {
-        let tasks = db.work_items().open_approval_tasks_for_execution(execution_id, executor).await?;
-        tasks.len() == 1
-            && tasks[0].base.id == item.base.id
-            && task_proves_current_responsibility(item, &execution, &subject, owner, owner_role.as_str())
-    } else {
-        terminal_task_matches_subject(item, &subject, owner, owner_role.as_str())
-    };
-    if !exact_chain {
+    if !task_chain_matches_subject(item, subject, open_tasks)? {
         return Ok(false);
     }
     if owner == actor.id()
@@ -77,10 +105,51 @@ pub async fn approval_task_readable_with_executor(
     {
         return Ok(true);
     }
-    manager_can_read(auth, actor, &subject, executor).await
+    manager_can_read(auth, actor, subject, executor).await
+}
+
+/// 对单任务和批量任务共用同一开放唯一链及实际完成链规则。
+///
+/// # 参数
+/// * `item` / `subject` - 精确任务和冻结主体
+/// * `open_tasks` - 当前执行的全部开放任务，终态时不使用
+///
+/// # 返回
+/// 同一任务责任、岗位、组织、节点与冻结提交主体成立时返回 true。
+///
+/// # 错误
+/// 业务审批适配器未登记时保持原错误。
+fn task_chain_matches_subject(
+    item: &WorkItem,
+    subject: &RuntimeReadSubject,
+    open_tasks: &[WorkItem],
+) -> Result<bool> {
+    let Some(execution) = &subject.current_execution else {
+        return Ok(false);
+    };
+    let owner_role = adapter_spec_of(subject.document_type)?.owner_role;
+    let owner = execution.assignee_participant_id.as_str();
+    Ok(if item.status == WorkItemStatus::Open {
+        open_tasks.len() == 1
+            && open_tasks[0].base.id == item.base.id
+            && task_proves_current_responsibility(item, execution, subject, owner, owner_role.as_str())
+    } else {
+        terminal_task_matches_subject(item, subject, owner, owner_role.as_str())
+    })
 }
 
 /// 管理员在真实业务来源边界内读取已验证的审批任务。
+///
+/// # 参数
+/// * `auth` / `actor` - 当前权限端口与身份
+/// * `subject` - 已验证冻结主体
+/// * `executor` - 原事务执行器
+///
+/// # 返回
+/// 原管理资格和真实来源都成立时返回 true，权限拒绝返回 false。
+///
+/// # 错误
+/// 除 Forbidden 之外的策略及来源错误原样传播。
 async fn manager_can_read(
     auth: &impl WorkflowAuthorizationPort,
     actor: &AuditActor,
@@ -104,6 +173,16 @@ async fn manager_can_read(
 }
 
 /// 已完成任务只承认同一次实际决定与冻结提交主体。
+///
+/// # 参数
+/// * `item` / `subject` - 完成任务与冻结运行事实
+/// * `owner` / `owner_role` - 实际执行人及业务规定岗位
+///
+/// # 返回
+/// 原终态、完成人、决定事实与主体均相同时返回 true。
+///
+/// # 错误
+/// 无。
 fn terminal_task_matches_subject(
     item: &WorkItem,
     subject: &RuntimeReadSubject,

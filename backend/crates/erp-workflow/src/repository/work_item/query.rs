@@ -4,12 +4,27 @@ use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{Executor, QueryFilter, Repository, Result, mongo_ops};
 
-use super::{WorkItemFilter, WorkItemRow};
+use super::{WorkItemFilter, WorkItemRow, WorkItemScan};
 use crate::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 
 /// 工作项集合仓储扩展。
 #[allow(async_fn_in_trait)]
 pub trait WorkItemRepositoryExt {
+    /// 在调用方执行上下文中打开一次稳定排序的候选扫描。
+    ///
+    /// # 参数
+    /// `filter` 为原队列候选条件；`batch_size` 控制每次取数；不另开会话。
+    /// # 返回
+    /// 返回可逐批消费的游标；调用方仍负责完整授权、总数与版本计算。
+    /// # 错误
+    /// 数据库查询失败时返回仓储错误。
+    async fn open_work_item_scan(
+        &self,
+        filter: &WorkItemFilter,
+        batch_size: NonZeroU32,
+        executor: &mut dyn Executor,
+    ) -> Result<WorkItemScan>;
+
     /// 按固定批次读取队列候选任务投影。
     ///
     /// 本方法不执行未授权候选总数统计；Service 必须逐批加载权威
@@ -155,6 +170,16 @@ pub trait WorkItemRepositoryExt {
 }
 
 impl WorkItemRepositoryExt for Repository<'_, WorkItem> {
+    /// 打开原筛选和排序的单个查询游标，沿用调用方执行器。
+    async fn open_work_item_scan(
+        &self,
+        filter: &WorkItemFilter,
+        batch_size: NonZeroU32,
+        executor: &mut dyn Executor,
+    ) -> Result<WorkItemScan> {
+        WorkItemScan::open(self.collection(), filter, batch_size, executor).await
+    }
+
     async fn scan_work_item_batch(
         &self,
         filter: &WorkItemFilter,
@@ -273,7 +298,8 @@ impl WorkItemRepositoryExt for Repository<'_, WorkItem> {
     }
 }
 
-fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
+/// 将白名单排序编译为包含稳定 ID 次序的数据库条件。
+pub(super) fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
     let field = match sort_by {
         Some("updated_at") => "updated_at",
@@ -288,7 +314,8 @@ fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     doc! { field: direction, "id": 1 }
 }
 
-fn work_item_projection() -> Document {
+/// 工作台扫描与原分页读取复用同一组任务事实字段。
+pub(super) fn work_item_projection() -> Document {
     doc! {
         "id": 1,
         "work_item_type": 1,

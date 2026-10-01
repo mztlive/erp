@@ -1,6 +1,7 @@
 //! 开票申请查询与额度占用读取。并发申请必须由调用方先写锁应收子账。
 use mongodb::bson::{Document, doc};
-use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result};
+use mongodb::options::FindOptions;
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
 
 use crate::dto::receivable::invoice_request::InvoiceRequestQuery;
 use crate::entity::receivable::SalesInvoiceRequest;
@@ -43,6 +44,23 @@ impl Pagination for RequestFilter<'_> {
 
 #[allow(async_fn_in_trait)]
 pub trait SalesInvoiceRequestRepositoryExt {
+    /// 有界装载范围查询的完整候选，不执行分页 skip 或重复 count。
+    ///
+    /// # 参数
+    /// * `query` - 与普通列表相同的来源、状态和字面量关键词条件
+    /// * `executor` - 调用方本次快照事务
+    ///
+    /// # 返回
+    /// 按创建时间及主键倒序返回最多 10001 条；调用方必须拒绝超过 10000 条。
+    ///
+    /// # 错误
+    /// 查询或反序列化失败时返回仓储错误。
+    async fn scope_candidates(
+        &self,
+        query: &InvoiceRequestQuery,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesInvoiceRequest>>;
+
     /// 查找与财务任务一一关联的申请；缺失表示任务没有申请授权。
     /// # 错误
     /// 仓储读取或反序列化失败时返回错误。
@@ -72,6 +90,16 @@ pub trait SalesInvoiceRequestRepositoryExt {
 }
 
 impl SalesInvoiceRequestRepositoryExt for persistence_core::Repository<'_, SalesInvoiceRequest> {
+    /// 使用普通列表的过滤合同，仅装载有界候选并保留稳定排序。
+    async fn scope_candidates(
+        &self,
+        query: &InvoiceRequestQuery,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesInvoiceRequest>> {
+        mongo_ops::find_many(&self.collection(), RequestFilter(query).to_doc(), candidate_options(), executor)
+            .await
+    }
+
     async fn find_for_task(
         &self,
         task_id: &str,
@@ -113,10 +141,46 @@ impl SalesInvoiceRequestRepositoryExt for persistence_core::Repository<'_, Sales
     }
 }
 
+/// 候选上限额外装载一条哨兵，不受最终展示页码影响。
+fn candidate_options() -> FindOptions {
+    FindOptions::builder().sort(doc! {"created_at": -1, "id": -1}).limit(10_001).build()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::entity::receivable::InvoiceRequestStatus;
+
+    /// 完整候选入口保留稳定排序，额外一条哨兵可判定既有拒绝上限。
+    #[test]
+    fn scope_candidates_options_are_bounded_sorted_and_do_not_skip() {
+        let options = candidate_options();
+        assert_eq!(options.limit, Some(10_001));
+        assert_eq!(options.skip, None);
+        assert_eq!(options.sort, Some(doc! { "created_at": -1, "id": -1 }));
+    }
+
+    /// 业务条件及软删除沿用普通列表，最终分页不参与候选过滤。
+    #[test]
+    fn scope_candidates_filters_keep_business_constraints_independent_of_paging() {
+        let mut query = InvoiceRequestQuery {
+            sales_order_id: Some("so".into()),
+            receivable_account_id: Some("account".into()),
+            work_item_id: Some("work".into()),
+            status: Some(InvoiceRequestStatus::Approved),
+            q: Some("a.b".into()),
+            ..Default::default()
+        };
+        let expected = RequestFilter(&query).to_doc();
+        query.page = Some(50);
+        query.page_size = Some(1);
+        assert_eq!(RequestFilter(&query).to_doc(), expected);
+        assert_eq!(expected.get_str("sales_order_id").unwrap(), "so");
+        assert_eq!(expected.get_str("receivable_account_id").unwrap(), "account");
+        assert_eq!(expected.get_str("work_item_id").unwrap(), "work");
+        assert_eq!(expected.get_str("status").unwrap(), "approved");
+        assert!(expected.contains_key("deleted_at"));
+    }
 
     #[test]
     fn text_search_is_literal_or_and_preserves_source_and_status_filters() {

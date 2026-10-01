@@ -3,6 +3,7 @@
 //! 大文件不再经过网关内存：初始化接口在对象存储创建分片上传，
 //! 浏览器逐片 PUT 到预签名地址，合并接口完成分片后复用既有解析与落库链路。
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use application_core::AuditActor;
@@ -20,7 +21,7 @@ use storage::UploadedPart;
 use validator::Validate;
 
 use super::ProductImportProcess;
-use super::parse::parse_product_quote_xlsx;
+use super::parse::{ParsedProductSheet, parse_product_quote_xlsx};
 use crate::{Error, Result};
 
 /// 直传对象键前缀（与表单上传的随机键区分，便于排查与生命周期管理）。
@@ -162,43 +163,15 @@ impl ProductImportProcess {
         }
     }
 
+    /// 读取合并对象并沿用共享源字节完成解析、媒体预提与任务登记。
     async fn register_merged_object(
         &self,
         req: &ProductImportDirectUploadCompleteRequest,
         actor: &AuditActor,
     ) -> Result<ProductImportJobView> {
-        let bytes = match self.storage.read(&req.object_key).await {
-            Ok(bytes) => bytes,
-            Err(storage::Error::NotFound) => {
-                return Err(Error::ValidationError("直传文件不存在或已过期，请重新上传".to_string()));
-            },
-            Err(error) => {
-                return Err(Error::Internal(format!("读取直传文件失败: {error}")));
-            },
-        };
-        if bytes.len() as u64 != req.byte_size || bytes.len() as u64 > MAX_PRODUCT_IMPORT_FILE_BYTES {
-            let _ = self.storage.delete(&req.object_key).await;
-            return Err(Error::ValidationError("文件大小与申报不一致，请重新上传".to_string()));
-        }
-        if bytes.len() < 4 || &bytes[..2] != b"PK" {
-            let _ = self.storage.delete(&req.object_key).await;
-            return Err(Error::ValidationError("文件不是有效的 Excel 工作簿".to_string()));
-        }
-        let byte_len = bytes.len() as u64;
-        let digest = hex::encode(Sha256::digest(&bytes));
-        let shared_bytes = std::sync::Arc::new(bytes);
-        let for_parse = shared_bytes.clone();
-        let parsed = match tokio::task::spawn_blocking(move || parse_product_quote_xlsx(&for_parse))
-            .await
-            .map_err(|_| Error::Internal("解析导入文件失败".to_string()))
-        {
-            Ok(Ok(parsed)) => parsed,
-            Ok(Err(error)) => {
-                let _ = self.storage.delete(&req.object_key).await;
-                return Err(error);
-            },
-            Err(error) => return Err(error),
-        };
+        let shared_bytes = self.read_merged_workbook(req).await?;
+        let byte_len = u64::try_from(shared_bytes.len()).expect("上传文件不超过 700 MB");
+        let (parsed, digest) = self.parse_merged_workbook(req, shared_bytes.clone()).await?;
         let registration = RegisterFileAssetRequest {
             storage_object_key: req.object_key.clone(),
             file_name: req.file_name.trim().to_string(),
@@ -216,9 +189,58 @@ impl ProductImportProcess {
             req.file_name.clone(),
             req.request_id.clone(),
             actor,
-            &shared_bytes,
+            shared_bytes,
         )
         .await
+    }
+
+    /// 校验合并对象的大小与 ZIP 标记，共享源字节且不复制工作簿。
+    async fn read_merged_workbook(
+        &self,
+        req: &ProductImportDirectUploadCompleteRequest,
+    ) -> Result<Arc<Vec<u8>>> {
+        let bytes = match self.storage.read(&req.object_key).await {
+            Ok(bytes) => bytes,
+            Err(storage::Error::NotFound) => {
+                return Err(Error::ValidationError("直传文件不存在或已过期，请重新上传".to_string()));
+            },
+            Err(error) => {
+                return Err(Error::Internal(format!("读取直传文件失败: {error}")));
+            },
+        };
+        if bytes.len() as u64 != req.byte_size || bytes.len() as u64 > MAX_PRODUCT_IMPORT_FILE_BYTES {
+            let _ = self.storage.delete(&req.object_key).await;
+            return Err(Error::ValidationError("文件大小与申报不一致，请重新上传".to_string()));
+        }
+        if bytes.len() < 4 || &bytes[..2] != b"PK" {
+            let _ = self.storage.delete(&req.object_key).await;
+            return Err(Error::ValidationError("文件不是有效的 Excel 工作簿".to_string()));
+        }
+        Ok(Arc::new(bytes))
+    }
+
+    /// 将模板解析与源文件摘要放在同一阻塞任务，保留解析失败清理合同。
+    async fn parse_merged_workbook(
+        &self,
+        req: &ProductImportDirectUploadCompleteRequest,
+        for_parse: Arc<Vec<u8>>,
+    ) -> Result<(ParsedProductSheet, String)> {
+        let parsed = match tokio::task::spawn_blocking(move || {
+            let parsed = parse_product_quote_xlsx(&for_parse)?;
+            let digest = hex::encode(Sha256::digest(for_parse.as_slice()));
+            Ok::<_, Error>((parsed, digest))
+        })
+        .await
+        .map_err(|_| Error::Internal("解析导入文件失败".to_string()))
+        {
+            Ok(Ok(parsed)) => parsed,
+            Ok(Err(error)) => {
+                let _ = self.storage.delete(&req.object_key).await;
+                return Err(error);
+            },
+            Err(error) => return Err(error),
+        };
+        Ok(parsed)
     }
 }
 

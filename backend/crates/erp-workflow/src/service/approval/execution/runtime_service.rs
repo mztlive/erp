@@ -13,7 +13,7 @@ mod read_auth;
 mod resume_apply;
 mod task_read;
 mod tasks;
-pub use task_read::approval_task_readable_with_executor;
+pub use task_read::{approval_task_readable_with_executor, approval_tasks_readable_with_executor};
 mod upgrade;
 
 use std::future::Future;
@@ -34,7 +34,7 @@ pub use upgrade::UpgradeBindingCommand;
 
 use super::idempotency::{PreparedCommandIdentity, command_may_have_committed, command_recovery_delay};
 use super::view::{ApprovalCommandView, OpenTaskSummary, map_command_view};
-use crate::entity::approval_integration::ApprovalSubjectSnapshot;
+use crate::entity::approval_integration::{ApprovalSubjectSnapshot, resolve_runtime_document_type};
 use crate::entity::document_registry::DocumentType;
 use crate::error::{Error, Result};
 use crate::ports::{
@@ -118,37 +118,94 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
 }
 
 /// 加载并校验实例、process_kind 与冻结快照的不可变主体三元组。
+///
+/// # 参数
+/// * `db` - 工作流数据库
+/// * `instance` - 本次读取的实例事实
+/// * `executor` - 调用方执行器
+/// * `hide_mismatch` - 是否将主体不一致映射为隐藏资源的 NotFound
+///
+/// # 返回
+/// 返回已证明与实例完全对应的单据类型和冻结快照。
+///
+/// # 错误
+/// 主体损坏时返回原有冲突或 NotFound；仓储错误原样传播。
 async fn load_exact_runtime_snapshot(
     db: &Database,
     instance: &ApprovalProcessInstance,
     executor: &mut dyn Executor,
     hide_mismatch: bool,
 ) -> Result<(DocumentType, ApprovalSubjectSnapshot)> {
-    let mismatch = || {
-        if hide_mismatch {
-            hidden_not_found()
-        } else {
-            Error::ConflictError("审批实例与冻结业务快照不一致".to_string())
-        }
-    };
-    let document_type = crate::entity::approval_integration::resolve_runtime_document_type(
-        instance.subject.subject_kind(),
-        instance.process_kind,
-    )
-    .map_err(|_| mismatch())?;
+    let document_type = runtime_document_type(instance, hide_mismatch)?;
     let snapshot = db
         .approval_subject_snapshots()
         .find_by_process_instance_id(&instance.base.id, executor)
         .await?
-        .ok_or_else(mismatch)?;
+        .ok_or_else(|| runtime_snapshot_mismatch(hide_mismatch))?;
+    ensure_exact_runtime_snapshot(instance, &snapshot, document_type, hide_mismatch)?;
+    Ok((document_type, snapshot))
+}
+
+/// 证明实例的主体类型与流程种类仍是一一对应的正式审批类型。
+///
+/// # 参数
+/// * `instance` - 本次读取的审批实例
+/// * `hide_mismatch` - 是否隐藏资源存在性
+///
+/// # 返回
+/// 返回唯一对应的业务单据类型。
+///
+/// # 错误
+/// 类型或流程种类不一致时返回原有主体冲突或 NotFound。
+fn runtime_document_type(instance: &ApprovalProcessInstance, hide_mismatch: bool) -> Result<DocumentType> {
+    resolve_runtime_document_type(instance.subject.subject_kind(), instance.process_kind)
+        .map_err(|_| runtime_snapshot_mismatch(hide_mismatch))
+}
+
+/// 校验冻结快照的主体类型、身份和提交版本与本次实例完全一致。
+///
+/// # 参数
+/// * `instance` - 当前实例事实
+/// * `snapshot` - 按实例身份读取的冻结快照
+/// * `document_type` - 已证明的正式业务类型
+/// * `hide_mismatch` - 是否隐藏资源存在性
+///
+/// # 返回
+/// 三元组一致时成功。
+///
+/// # 错误
+/// 不一致时返回原有主体冲突或 NotFound。
+fn ensure_exact_runtime_snapshot(
+    instance: &ApprovalProcessInstance,
+    snapshot: &ApprovalSubjectSnapshot,
+    document_type: DocumentType,
+    hide_mismatch: bool,
+) -> Result<()> {
     snapshot
         .ensure_matches_runtime_subject(
             document_type,
             instance.subject.subject_id(),
             instance.subject_version,
         )
-        .map_err(|_| mismatch())?;
-    Ok((document_type, snapshot))
+        .map_err(|_| runtime_snapshot_mismatch(hide_mismatch))
+}
+
+/// 按既有隐藏策略生成冻结主体不一致错误。
+///
+/// # 参数
+/// * `hide_mismatch` - 是否隐藏资源存在性
+///
+/// # 返回
+/// 返回原有稳定错误类型与文案。
+///
+/// # 错误
+/// 无。
+fn runtime_snapshot_mismatch(hide_mismatch: bool) -> Error {
+    if hide_mismatch {
+        hidden_not_found()
+    } else {
+        Error::ConflictError("审批实例与冻结业务快照不一致".to_string())
+    }
 }
 
 /// 以调用方事务执行器读取最新运行视图；回放不依赖原任务仍为 OPEN。

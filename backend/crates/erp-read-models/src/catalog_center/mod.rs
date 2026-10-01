@@ -10,6 +10,7 @@ use crate::Result;
 mod procurement;
 mod scope;
 
+pub(crate) use procurement::{CategoryChainCache, matches_procurement_owner};
 pub use procurement::{MapProductProcurementOwners, MongoProductProcurementOwners, ProductProcurementOwners};
 
 /// 商品列表与可售商品列表的组合入口。

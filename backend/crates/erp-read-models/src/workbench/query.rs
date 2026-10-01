@@ -7,6 +7,7 @@ use application_core::AuditActor;
 use erp_workflow::entity::work_item::{QueueContextField, QueueContextIdentity, WorkItem};
 use erp_workflow::ports::OrderTaskSource;
 use erp_workflow::repository::prelude::*;
+use erp_workflow::repository::work_item::WorkItemScan;
 use erp_workflow::{BpmExt, WorkItemExt};
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
@@ -203,9 +204,9 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         candidates.query = None;
         let mut collector = AuthorizedPageCollector::new(query.page, query.page_size)?;
         let mut result_version = String::new();
-        let mut candidate_offset = 0_u64;
+        let mut scan = self.candidate_scan(&candidates, executor).await?;
         loop {
-            let rows = self.candidate_batch(&candidates, candidate_offset, executor).await?;
+            let rows = scan.next_batch(AUTHORIZED_SCAN_BATCH_SIZE, executor).await?;
             let candidate_count = rows.len();
             if candidate_count == 0 {
                 break;
@@ -226,7 +227,6 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
                     queue_scope_version(&result_version, &fields.id, &fields.task_version.to_string());
                 collector.extend([fields]);
             }
-            candidate_offset = next_candidate_offset(candidate_offset, candidate_count)?;
             if candidate_count < AUTHORIZED_SCAN_BATCH_SIZE.get() as usize {
                 break;
             }
@@ -234,16 +234,22 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         Ok((collector.finish(), result_version))
     }
 
-    /// 读取一个固定大小候选批次，不执行候选总数计数。
-    pub(super) async fn candidate_batch(
+    /// 打开一次候选游标，排序和完整授权计数仍沿用队列合同。
+    ///
+    /// # 参数
+    /// `filter` 为候选筛选；`executor` 在整个扫描及授权过程中保持不变。
+    /// # 返回
+    /// 返回可逐批消费的排序游标，授权、计数和分页由调用方执行。
+    /// # 错误
+    /// 仓储查询失败时返回原领域错误。
+    pub(super) async fn candidate_scan(
         &self,
         filter: &WorkItemFilter,
-        offset: u64,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<erp_workflow::WorkItemRow>> {
+    ) -> Result<WorkItemScan> {
         self.db
             .work_items()
-            .scan_work_item_batch(filter, offset, AUTHORIZED_SCAN_BATCH_SIZE, executor)
+            .open_work_item_scan(filter, AUTHORIZED_SCAN_BATCH_SIZE, executor)
             .await
             .map_err(Error::from)
     }
@@ -587,12 +593,6 @@ impl<T> AuthorizedPageCollector<T> {
     }
 }
 
-pub(super) fn next_candidate_offset(current: u64, batch_len: usize) -> Result<u64> {
-    let batch_len = u64::try_from(batch_len)
-        .map_err(|_| Error::Internal("责任队列候选批次大小超出支持范围".to_string()))?;
-    current.checked_add(batch_len).ok_or_else(|| Error::Internal("责任队列候选偏移溢出".to_string()))
-}
-
 /// 对已授权并装配业务显示事实的任务执行字面量 OR 搜索；必须先于总数和分页。
 pub(super) fn matches_keyword(fields: &dto::WorkItemFields, q: Option<&str>) -> bool {
     let Some(q) = application_core::normalized_text(q) else {
@@ -660,7 +660,7 @@ fn current_order_keys(fields: &dto::WorkItemFields) -> HashSet<(super::ObjectKin
 mod tests {
     use super::{
         AUTHORIZED_SCAN_BATCH_SIZE, AuthorizedPage, AuthorizedPageCollector, WorkItemAllowedAction,
-        ensure_queue_context, next_candidate_offset, remove_approval_decision_actions,
+        ensure_queue_context, remove_approval_decision_actions,
     };
 
     #[test]
@@ -767,12 +767,6 @@ mod tests {
         assert!(remove_approval_decision_actions(&mut actions));
         assert_eq!(actions, vec![WorkItemAllowedAction::View, WorkItemAllowedAction::Process]);
         assert!(!remove_approval_decision_actions(&mut actions));
-    }
-
-    #[test]
-    fn candidate_offset_advances_by_batch_len() {
-        assert_eq!(next_candidate_offset(0, 100).unwrap(), 100);
-        assert!(next_candidate_offset(u64::MAX, 1).is_err());
     }
 
     #[test]

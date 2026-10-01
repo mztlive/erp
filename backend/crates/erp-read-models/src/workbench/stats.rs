@@ -7,7 +7,7 @@ use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::access::{ActorAccess, ViewAccess};
-use super::query::{AUTHORIZED_SCAN_BATCH_SIZE, next_candidate_offset};
+use super::query::AUTHORIZED_SCAN_BATCH_SIZE;
 use super::{
     ProcessingState, WorkItemAllowedAction, WorkItemDueFilter, WorkItemFamily, WorkItemFamilyCountsView,
     WorkItemFilter, WorkItemScope, WorkItemStatsParams, WorkItemStatsView, WorkbenchReadService, dto,
@@ -203,11 +203,11 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         executor: &mut dyn Executor,
     ) -> Result<Vec<dto::WorkItemFields>> {
         let mut fields = Vec::new();
-        let mut candidate_offset = 0_u64;
         let mut candidates = filter.clone();
         candidates.query = None;
+        let mut scan = self.candidate_scan(&candidates, executor).await?;
         loop {
-            let rows = self.candidate_batch(&candidates, candidate_offset, executor).await?;
+            let rows = scan.next_batch(AUTHORIZED_SCAN_BATCH_SIZE, executor).await?;
             let candidate_count = rows.len();
             if candidate_count == 0 {
                 break;
@@ -224,7 +224,6 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
                         &query.purchase_order_ids,
                     )
             }));
-            candidate_offset = next_candidate_offset(candidate_offset, candidate_count)?;
             if candidate_count < AUTHORIZED_SCAN_BATCH_SIZE.get() as usize {
                 break;
             }

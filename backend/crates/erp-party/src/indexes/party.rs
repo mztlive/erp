@@ -87,6 +87,10 @@ fn party_indexes() -> Vec<IndexModel> {
             doc! { "unified_credit_code": { "$type": "string" } },
         ),
         named_index("idx_parties_kind_status", doc! { "party_kind": 1, "status": 1 }),
+        named_index(
+            "idx_parties_current_revision_active_id",
+            doc! { "current_revision_id": 1, "deleted_at": 1, "id": 1 },
+        ),
     ]
 }
 
@@ -215,6 +219,19 @@ mod tests {
             .unwrap();
         assert_eq!(index.keys, doc! { "id": 1 });
         assert_eq!(index.options.as_ref().and_then(|options| options.unique), Some(true));
+    }
+
+    /// 当前修订分批关联使用非唯一覆盖索引，不改变主体身份约束。
+    #[test]
+    fn party_current_revision_index_covers_active_id_projection() {
+        let indexes = party_indexes();
+        let index = indexes.last().unwrap();
+        assert_eq!(index.keys, doc! { "current_revision_id": 1, "deleted_at": 1, "id": 1 });
+        let options = index.options.as_ref().unwrap();
+        assert_eq!(options.name.as_deref(), Some("idx_parties_current_revision_active_id"));
+        assert_eq!(options.unique, None);
+        assert_eq!(options.partial_filter_expression, None);
+        assert_eq!(options.sparse, None);
     }
 
     #[test]

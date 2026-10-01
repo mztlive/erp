@@ -7,6 +7,8 @@ use persistence_core::{Executor, NoTransaction};
 use serde::Serialize;
 
 use super::{SETTLEMENT_REVIEW_OWNER_ROLE, SupplierSettlementProcess};
+use crate::adapters::identity::shared_rbac_service;
+use crate::adapters::workflow::workflow_auth;
 use crate::{Error, Result};
 
 /// 可执行当前结算复核的人员，协议只暴露选择所需信息。
@@ -58,6 +60,13 @@ async fn reviewer_scopes(
 
 impl SupplierSettlementProcess {
     /// 列出当前经办人可选的结算复核人；不可编辑或非本人经办的单据拒绝查询。
+    ///
+    /// # 参数
+    /// `id` 为结算单身份，`actor` 为当前经办人；复用已注入的 RBAC 服务。
+    /// # 返回
+    /// 返回按姓名及账号排序的合格候选；提交仍独立重新验证资格。
+    /// # 错误
+    /// 单据不可编辑、岗位分离或事实读取失败时返回原领域错误。
     pub async fn reviewer_options(
         &self,
         id: &str,
@@ -68,10 +77,8 @@ impl SupplierSettlementProcess {
         if !statement.is_prepared_by(actor.id()) || !statement.is_editable() {
             return Err(Error::Forbidden("仅当前经办人可为待提交的结算单选择复核人".into()));
         }
-        let auth = crate::adapters::workflow::workflow_auth(
-            self.db.clone(),
-            crate::adapters::identity::shared_rbac_service(self.db.clone()),
-        );
+        let rbac = self.rbac.clone().unwrap_or_else(|| shared_rbac_service(self.db.clone()));
+        let auth = workflow_auth(self.db.clone(), rbac);
         let accounts = auth.list_accounts_by_kind(AccountKind::Admin, &mut NoTransaction).await?;
         let mut options = Vec::new();
         for account in accounts {

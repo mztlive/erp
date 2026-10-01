@@ -9,7 +9,7 @@ use std::collections::BTreeSet;
 
 use erp_core::common::time::Instant;
 use erp_identity::access_control::{ResolvedScope, ScopeClause, ScopedObject};
-use erp_identity::entity::organization::OrgTree;
+use erp_identity::entity::organization::{OrgMembership, OrgTree};
 use erp_identity::entity::organization_change::OrganizationState;
 use erp_identity::repository::OrganizationRepository;
 use erp_identity::service::access_control::consumers::registration;
@@ -217,7 +217,7 @@ pub(crate) async fn org_member_ids<E>(
 /// 存在唯一主属组织时返回其 ID；没有主属组织时返回 `None`。
 ///
 /// # 错误
-/// 快照读取失败或同一时点多条主属关系时返回调用方映射后的领域错误。
+/// 成员事实读取失败或同一时点多条主属关系时返回调用方映射后的领域错误。
 ///
 /// # 关键业务约束
 /// 不得默认放入根组织或公司范围。资金 Port 无此方法。
@@ -229,8 +229,9 @@ pub(crate) async fn own_org<E>(
     map_load: impl FnOnce(persistence_core::Error) -> E,
     map_identity: impl FnOnce(erp_identity::Error) -> E,
 ) -> Result<Option<String>, E> {
-    let state = load_organization_state(db, executor).await.map_err(map_load)?;
-    Ok(state.own_org(user_id, at).map_err(map_identity)?.map(str::to_string))
+    let memberships =
+        OrganizationRepository::new(db).primary_memberships(user_id, at, executor).await.map_err(map_load)?;
+    Ok(OrgMembership::primary_org(&memberships, user_id, at).map_err(map_identity)?.map(str::to_string))
 }
 
 /// 用已登记资源动作和本域填好的对象字段做公共判定。

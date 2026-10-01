@@ -11,6 +11,7 @@ use erp_procurement::repository::PurchaseOrderExt;
 use erp_sales::repository::SalesOrderExt;
 use erp_sales::repository::prelude::*;
 use erp_workflow::WorkItemExt;
+use erp_workflow::entity::work_item::WorkItem;
 use erp_workflow::repository::ApprovalIntegrationExt;
 use erp_workflow::repository::prelude::*;
 use persistence_core::Executor;
@@ -663,19 +664,26 @@ impl FundsAccess {
         executor: &mut dyn Executor,
     ) -> Result<HashMap<String, String>> {
         let mut handlers = HashMap::new();
-        let unique = crate::support::dedup_sorted(work_item_ids.iter().cloned());
-        for id in unique {
-            if id.is_empty() {
-                continue;
-            }
-            if let Some(item) = self.db.work_items().find_work_item(&id, executor).await?
-                && let Some(handler) = item.owner_user_id.clone().or(item.completed_by.clone())
-            {
-                handlers.insert(id.clone(), handler);
-            }
+        let unique = handler_work_item_ids(work_item_ids);
+        for chunk in unique.chunks(500) {
+            let items = self.db.work_items().list_active_by_ids(chunk, executor).await?;
+            handlers.extend(handlers_from_work_items(items));
         }
         Ok(handlers)
     }
+}
+
+/// 工作项读取键去重并去掉空 ID，空结果不会产生批次或数据库读取。
+fn handler_work_item_ids(ids: &[String]) -> Vec<String> {
+    crate::support::dedup_sorted(ids.iter().filter(|id| !id.is_empty()).cloned())
+}
+
+/// 已装载工作项映射为处理人；负责人优先，缺负责人时使用完成人，不按状态裁剪。
+fn handlers_from_work_items(items: Vec<WorkItem>) -> HashMap<String, String> {
+    items
+        .into_iter()
+        .filter_map(|item| item.owner_user_id.or(item.completed_by).map(|handler| (item.base.id, handler)))
+        .collect()
 }
 
 /// 分配金额求和的零值；与应收映射保持同一零金额口径。
@@ -925,5 +933,71 @@ mod source_integrity_tests {
         assert!(linked_sources_exist([Some("known")].into_iter(), &facts));
         assert!(!linked_sources_exist([Some("missing")].into_iter(), &facts));
         assert!(!linked_sources_exist([Some("known"), None].into_iter(), &facts));
+    }
+}
+
+#[cfg(test)]
+mod work_item_handler_tests {
+    use erp_core::ids::WorkItemId;
+    use erp_workflow::entity::work_item::{
+        AssignmentSource, WorkItemData, WorkItemPriority, WorkItemStatus, WorkItemType,
+    };
+
+    use super::*;
+
+    /// 构造已装载的工作项事实，终态仅调整与映射有关的公共字段。
+    fn item(id: &str, owner: Option<&str>, completed: Option<&str>, status: WorkItemStatus) -> WorkItem {
+        let mut item = WorkItem::new_with_responsibility_key(
+            WorkItemId::new(id),
+            WorkItemData {
+                work_item_type: WorkItemType::SalesInvoiceExecution,
+                business_object_type: "receivable_account".into(),
+                business_object_id: "account".into(),
+                subject_version: "1".into(),
+                owner_role: "invoice".into(),
+                owner_organization_id: "finance".into(),
+                owner_user_id: "initial".into(),
+                assignment_source: AssignmentSource::SystemRule,
+                priority: WorkItemPriority::Normal,
+                due_at: None,
+                reason_code: None,
+                impact_summary: None,
+            },
+            "receivable_account:account",
+        )
+        .unwrap();
+        item.owner_user_id = owner.map(str::to_string);
+        item.completed_by = completed.map(str::to_string);
+        item.status = status;
+        item
+    }
+
+    /// 读取键过滤保持空 ID 不查、重复去重及稳定批次边界。
+    #[test]
+    fn work_item_handler_ids_remove_empty_and_deduplicate_before_batching() {
+        assert!(handler_work_item_ids(&[String::new(), String::new()]).is_empty());
+        assert_eq!(handler_work_item_ids(&["b".into(), "".into(), "a".into(), "b".into()]), ["a", "b"]);
+        let mut ids = (0..501).map(|index| format!("task-{index:03}")).collect::<Vec<_>>();
+        ids.push(ids[0].clone());
+        ids.push(String::new());
+        let unique = handler_work_item_ids(&ids);
+        assert_eq!(unique.chunks(500).map(<[String]>::len).collect::<Vec<_>>(), [500, 1]);
+    }
+
+    /// 终态不改变负责人优先规则，缺失任务或无责任事实保持无处理人。
+    #[test]
+    fn work_item_handlers_keep_owner_priority_completed_fallback_and_missing_absence() {
+        let handlers = handlers_from_work_items(vec![
+            item("owner", Some("current"), Some("previous"), WorkItemStatus::Completed),
+            item("fallback", None, Some("finisher"), WorkItemStatus::Closed),
+            item("empty-owner", Some(""), Some("finisher"), WorkItemStatus::Closed),
+            item("no-handler", None, None, WorkItemStatus::Open),
+        ]);
+        assert_eq!(handlers["owner"], "current");
+        assert_eq!(handlers["fallback"], "finisher");
+        assert_eq!(handlers["empty-owner"], "");
+        assert!(!handlers.contains_key("no-handler"));
+        assert!(!handlers.contains_key("missing-task"));
+        assert!(handlers_from_work_items(Vec::new()).is_empty());
     }
 }

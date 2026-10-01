@@ -1,6 +1,7 @@
 //! 领取并执行商品导入后台任务。
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use application_core::AuditActor;
 use async_trait::async_trait;
@@ -172,7 +173,7 @@ impl ProductImportProcess {
         &self,
         row_number: u32,
         entries: Option<&HashMap<u32, &RowManifestRow>>,
-        workbook: Option<&(&Vec<u8>, &ParsedProductSheet)>,
+        workbook: Option<&(&Arc<Vec<u8>>, &ParsedProductSheet)>,
         legacy_cells: &Option<HashMap<u32, &[String]>>,
         actor: &AuditActor,
         cache: &mut ImportDictionaryCache,
@@ -266,7 +267,7 @@ impl ProductImportProcess {
     ///
     /// # 错误
     /// 源文件缺失、读取失败或解析失败时返回错误。
-    async fn load_source(&self, job: &BackgroundJob) -> Result<(Vec<u8>, ParsedProductSheet)> {
+    async fn load_source(&self, job: &BackgroundJob) -> Result<(Arc<Vec<u8>>, ParsedProductSheet)> {
         let file_id = job
             .input_file_asset_id
             .as_ref()
@@ -282,6 +283,7 @@ impl ProductImportProcess {
             .read(&asset.storage_object_key)
             .await
             .map_err(|error| Error::Internal(format!("读取导入文件失败: {error}")))?;
+        let bytes = Arc::new(bytes);
         let parse_bytes = bytes.clone();
         let parsed = tokio::task::spawn_blocking(move || parse_product_quote_xlsx(&parse_bytes))
             .await
@@ -332,7 +334,7 @@ enum JobRowSource {
     /// 源文件字节与解析结果（老任务回退）。
     Legacy {
         /// 源文件字节。
-        bytes: Vec<u8>,
+        bytes: Arc<Vec<u8>>,
         /// 解析后的工作表。
         parsed: ParsedProductSheet,
     },
@@ -398,7 +400,7 @@ struct ProductImportRows<'a> {
     actor: &'a AuditActor,
     cache: &'a mut ImportDictionaryCache,
     entries: Option<&'a HashMap<u32, &'a RowManifestRow>>,
-    workbook: Option<&'a (&'a Vec<u8>, &'a ParsedProductSheet)>,
+    workbook: Option<&'a (&'a Arc<Vec<u8>>, &'a ParsedProductSheet)>,
     legacy_cells: Option<HashMap<u32, &'a [String]>>,
 }
 

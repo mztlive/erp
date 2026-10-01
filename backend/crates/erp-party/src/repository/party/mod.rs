@@ -14,6 +14,7 @@ mod address;
 mod aggregate;
 mod bank_account;
 mod contact;
+mod current_name_search;
 mod record;
 mod revision;
 mod shared;

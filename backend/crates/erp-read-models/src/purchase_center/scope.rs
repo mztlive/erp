@@ -1,20 +1,26 @@
 //! 采购列表的一致授权快照；范围与业务版本跨页携带。
 //! 采购负责人候选由采购人员目录提供，不从采购单集合生成。
 
+use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
 use application_core::{AuditActor, PageView};
+use erp_core::ids::{SalesOrderId, SupplierAccountId};
 use erp_procurement::PurchaseResolvedScope;
 use erp_procurement::dto::purchase_order::{PurchaseOrderListParams, SortDir};
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_procurement::repository::prelude::*;
+use erp_procurement::repository::purchase_order::scope::{PurchaseReadScope, PurchaseVersion};
 use erp_procurement::repository::purchase_order::{PurchaseOrderFilter, PurchaseOrderRow};
-use persistence_core::Transactional;
+use mongodb::Database;
+use persistence_core::{Executor, Transactional};
 use serde::Serialize;
 use validator::Validate;
 
 use super::PurchaseOrderReadService;
+use super::access::PurchaseAccess;
 use super::dto::PurchaseOrderListItemView;
+use super::repository::list_facts::keyword_reference_ids;
 use super::repository::{PurchaseOrderListFacts, load_purchase_order_list_page};
 use crate::{Error, Result};
 
@@ -88,39 +94,11 @@ impl PurchaseOrderReadService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let (mut context, scope) = access.resolve(&actor, "list", executor).await?;
-                    params.validate()?;
-                    let query = params.normalized()?;
-                    let (keyword_sales_order_ids, keyword_supplier_ids) =
-                        super::repository::list_facts::keyword_reference_ids(
-                            &db,
-                            query.q.as_deref(),
-                            executor,
-                        )
-                        .await?;
-                    let filter = PurchaseOrderFilter {
-                        owner_user_ids: query.owner_user_ids,
-                        keyword_sales_order_ids,
-                        keyword_supplier_ids,
-                        purchase_no: query.q,
-                        sales_order_id: query.sales_order_id.map(erp_core::ids::SalesOrderId::new),
-                        supplier_id: query.supplier_id.map(erp_core::ids::SupplierAccountId::new),
-                        status: query.status,
-                        page: query.paging.page,
-                        page_size: query.paging.page_size,
-                        sort_by: Some(query.paging.sort_by.to_string()),
-                        sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
-                    };
+                    let (mut context, scope, filter) =
+                        list_query(&db, &access, &params, &actor, executor).await?;
                     let (page, facts) = load_purchase_order_list_page(&db, &filter, &scope, executor).await?;
                     let versions = db.purchase_orders().query_versions(&filter, &scope, executor).await?;
-                    if versions.len() > 10_000 {
-                        return Err(Error::ValidationError(
-                            "采购单查询超过上限，请收窄供应商或负责人条件".into(),
-                        ));
-                    }
-                    let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
-                    versions.hash(&mut fingerprint);
-                    context.scope_version = format!("{}:{:x}", context.scope_version, fingerprint.finish());
+                    context.scope_version = list_scope_version(&context.scope_version, &versions)?;
                     let no_scope = scope.is_empty();
                     Ok(PurchaseSnapshot {
                         no_scope,
@@ -134,11 +112,156 @@ impl PurchaseOrderReadService {
             })
             .await
     }
+
+    /// 在独立快照中重新解析授权和关键词，只读取完整匹配版本。
+    ///
+    /// # 参数
+    /// * `params` - 与首次列表相同的查询参数
+    /// * `actor` - 已认证操作人
+    ///
+    /// # 返回
+    /// 返回当前授权与全部匹配采购单版本组成的范围版本。
+    ///
+    /// # 错误
+    /// 动作权限、筛选、历史参与或版本集合超限时拒绝；仓储失败向上传播。
+    ///
+    /// # 关键业务约束
+    /// 关键词关联事实必须重新读取；不得复用首拍授权、历史参与或匹配 ID。
+    pub(super) async fn scope_fingerprint(
+        &self,
+        params: &PurchaseOrderListParams,
+        actor: &AuditActor,
+    ) -> Result<String> {
+        let db = self.db.clone();
+        let access = self.access();
+        let params = params.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let (context, scope, filter) =
+                        list_query(&db, &access, &params, &actor, executor).await?;
+                    let versions = db.purchase_orders().query_versions(&filter, &scope, executor).await?;
+                    list_scope_version(&context.scope_version, &versions)
+                })
+            })
+            .await
+    }
+}
+
+/// 在同一事务重新解析列表授权、历史参与、关键词与筛选。
+///
+/// # 参数
+/// * `db` - 关联事实所在数据库
+/// * `access` - 采购范围访问器
+/// * `params` - 原始筛选参数
+/// * `actor` - 已认证操作人
+/// * `executor` - 当前快照执行器
+///
+/// # 返回
+/// 返回授权上下文、对象范围与规范化列表筛选。
+///
+/// # 错误
+/// 授权、筛选或关联关键词读取失败时拒绝。
+async fn list_query(
+    db: &Database,
+    access: &PurchaseAccess,
+    params: &PurchaseOrderListParams,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<(PurchaseResolvedScope, PurchaseReadScope, PurchaseOrderFilter)> {
+    let (context, scope) = access.resolve(actor, "list", executor).await?;
+    params.validate()?;
+    let query = params.normalized()?;
+    let (keyword_sales_order_ids, keyword_supplier_ids) =
+        keyword_reference_ids(db, query.q.as_deref(), executor).await?;
+    let filter = PurchaseOrderFilter {
+        owner_user_ids: query.owner_user_ids,
+        keyword_sales_order_ids,
+        keyword_supplier_ids,
+        purchase_no: query.q,
+        sales_order_id: query.sales_order_id.map(SalesOrderId::new),
+        supplier_id: query.supplier_id.map(SupplierAccountId::new),
+        status: query.status,
+        page: query.paging.page,
+        page_size: query.paging.page_size,
+        sort_by: Some(query.paging.sort_by.to_string()),
+        sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
+    };
+    Ok((context, scope, filter))
+}
+
+/// 沿用完整身份版本集合的哈希绑定，并整体拒绝超限。
+///
+/// # 参数
+/// * `scope_version` - 本次独立解析的授权版本
+/// * `versions` - 仓储按稳定 ID 排序的全部匹配采购单版本
+///
+/// # 返回
+/// 返回原授权版本与业务指纹组成的版本字符串。
+///
+/// # 错误
+/// 超过 10000 行时返回原有查询上限错误。
+fn list_scope_version(scope_version: &str, versions: &[PurchaseVersion]) -> Result<String> {
+    if versions.len() > 10_000 {
+        return Err(Error::ValidationError("采购单查询超过上限，请收窄供应商或负责人条件".into()));
+    }
+    let mut fingerprint = DefaultHasher::new();
+    versions.hash(&mut fingerprint);
+    Ok(format!("{scope_version}:{:x}", fingerprint.finish()))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 指纹保持原先对完整 Vec 哈希的协议，空集合也必须绑定授权版本。
+    #[test]
+    fn purchase_fingerprint_preserves_full_version_hash_and_empty_scope() {
+        let versions = vec![
+            PurchaseVersion { id: "po-1".into(), version: 2 },
+            PurchaseVersion { id: "po-2".into(), version: 4 },
+        ];
+        let mut legacy = DefaultHasher::new();
+        versions.hash(&mut legacy);
+        assert_eq!(
+            list_scope_version("policy:org", &versions).unwrap(),
+            format!("policy:org:{:x}", legacy.finish())
+        );
+        let empty = list_scope_version("policy:org", &[]).unwrap();
+        assert_ne!(empty, list_scope_version("new-policy:org", &[]).unwrap());
+        assert_ne!(empty, list_scope_version("policy:org", &versions).unwrap());
+    }
+
+    /// 非当前页的匹配单据版本和身份变化也必须改变跨页指纹。
+    #[test]
+    fn purchase_fingerprint_detects_business_versions_and_membership_changes() {
+        let mut versions = vec![
+            PurchaseVersion { id: "po-1".into(), version: 2 },
+            PurchaseVersion { id: "po-2".into(), version: 4 },
+        ];
+        let first = list_scope_version("scope", &versions).unwrap();
+        versions[1].version += 1;
+        assert_ne!(first, list_scope_version("scope", &versions).unwrap());
+        versions[1].version -= 1;
+        versions[1].id = "po-3".into();
+        assert_ne!(first, list_scope_version("scope", &versions).unwrap());
+    }
+
+    /// 恰好上限允许完整哈希，超限保持原错误并不得截断成功。
+    #[test]
+    fn purchase_fingerprint_rejects_over_limit() {
+        let mut versions: Vec<_> =
+            (0..10_000).map(|index| PurchaseVersion { id: format!("po-{index:05}"), version: 1 }).collect();
+        assert!(list_scope_version("scope", &versions).is_ok());
+        versions.push(PurchaseVersion { id: "po-over-limit".into(), version: 1 });
+        assert!(matches!(
+            list_scope_version("scope", &versions),
+            Err(Error::ValidationError(message)) if message == "采购单查询超过上限，请收窄供应商或负责人条件"
+        ));
+    }
 
     #[test]
     fn scope_version_is_consumed_and_unsupported_owner_alias_is_rejected() {

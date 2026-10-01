@@ -151,15 +151,7 @@ impl OrganizationState {
     /// # 错误
     /// 同一时点存在多条主属关系时返回冲突错误。
     pub fn own_org(&self, user_id: &str, at: Instant) -> Result<Option<&str>> {
-        let values = self
-            .memberships
-            .iter()
-            .filter(|m| m.user_id == user_id && !m.base.is_deleted() && m.validity.contains(at))
-            .collect::<Vec<_>>();
-        if values.len() > 1 {
-            return Err(Error::ConflictError("用户存在重叠主属组织关系".into()));
-        }
-        Ok(values.first().map(|m| m.org_unit_id.as_str()))
+        OrgMembership::primary_org(&self.memberships, user_id, at)
     }
 
     /// 校验单用户全部有效期不重叠，含未来关系。

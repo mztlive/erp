@@ -1,6 +1,6 @@
 use bpm::ApprovalNodeExecutionId;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::bson::doc;
+use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{Error, Executor, Repository, Result, mongo_ops};
 
@@ -179,6 +179,27 @@ pub trait WorkItemRepositoryApprovalExt {
     async fn open_approval_tasks_for_execution(
         &self,
         execution_id: &ApprovalNodeExecutionId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItem>>;
+
+    /// 批量读取多个节点执行关联的全部开放审批任务。
+    ///
+    /// # 参数
+    /// * `execution_ids` - 已授权工作项引用的审批节点执行 ID
+    /// * `executor` - 调用方提供的数据访问执行器
+    ///
+    /// # 返回
+    /// 返回按 `created_at asc, id asc` 排列的未删除开放单据审批任务；
+    /// 同一执行的多条任务全部保留，空输入不访问数据库。
+    ///
+    /// # 错误
+    /// MongoDB 查询、游标读取或反序列化失败时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 不截断或去重命中任务，供调用方识别重复开放任务的不一致事实。
+    async fn open_approval_tasks_for_executions(
+        &self,
+        execution_ids: &[ApprovalNodeExecutionId],
         executor: &mut dyn Executor,
     ) -> Result<Vec<WorkItem>>;
 
@@ -392,6 +413,18 @@ impl WorkItemRepositoryApprovalExt for Repository<'_, WorkItem> {
         .await
     }
 
+    /// 按 trait 合同批量读取全部开放审批任务，保留同执行的每条命中记录。
+    async fn open_approval_tasks_for_executions(
+        &self,
+        execution_ids: &[ApprovalNodeExecutionId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItem>> {
+        let Some(filter) = open_approval_executions_filter(execution_ids) else {
+            return Ok(Vec::new());
+        };
+        self.find_many_sorted(filter, doc! { "created_at": 1, "id": 1 }, executor).await
+    }
+
     async fn approval_tasks_for_execution(
         &self,
         execution_id: &ApprovalNodeExecutionId,
@@ -449,5 +482,49 @@ impl WorkItemRepositoryApprovalExt for Repository<'_, WorkItem> {
             executor,
         )
         .await
+    }
+}
+
+/// 构造节点执行批量开放审批任务条件；空输入阻止数据库查询。
+fn open_approval_executions_filter(execution_ids: &[ApprovalNodeExecutionId]) -> Option<Document> {
+    if execution_ids.is_empty() {
+        return None;
+    }
+    let ids = execution_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
+    Some(doc! {
+        "approval_node_execution_id": { "$in": ids },
+        "work_item_type": WorkItemType::DocumentApproval.as_str(),
+        "status": WorkItemStatus::Open.as_str(),
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+    })
+}
+
+#[cfg(test)]
+mod batch_tests {
+    use bpm::ApprovalNodeExecutionId;
+    use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+    use mongodb::bson::doc;
+
+    use super::open_approval_executions_filter;
+
+    /// 批量开放任务查询固定审批类型、开放状态、未删除及全部执行身份。
+    #[test]
+    fn open_approval_executions_filter_keeps_all_execution_ids() {
+        let ids = [ApprovalNodeExecutionId::new("exec-a"), ApprovalNodeExecutionId::new("exec-b")];
+        assert_eq!(
+            open_approval_executions_filter(&ids),
+            Some(doc! {
+                "approval_node_execution_id": { "$in": ["exec-a", "exec-b"] },
+                "work_item_type": "DOCUMENT_APPROVAL",
+                "status": "OPEN",
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            })
+        );
+    }
+
+    /// 空执行集合返回无查询条件，不得读取全部开放任务。
+    #[test]
+    fn open_approval_executions_filter_skips_empty_input() {
+        assert!(open_approval_executions_filter(&[]).is_none());
     }
 }

@@ -5,19 +5,20 @@
 //! 清单键由请求身份推导；老任务没有清单时执行阶段回退到源文件链路。
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
-use erp_catalog::entity::catalog::product_import::dispimg_id;
+use async_trait::async_trait;
 use erp_core::ids::FileAssetId;
 use erp_support::{
     PENDING_FILE_REFERENCE_PREFIX, PendingFileAssetRequest, RegisterFileAssetRequest, RetentionClass,
     SensitivityClass, content_fingerprint,
 };
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use storage::S3Storage;
 
-use super::images::{RowMedia, detect_image};
-use super::parse::{ParsedProductSheet, read_xlsx_media};
+use super::images::RowMedia;
+use super::media::{PreparedImage, WorkbookMedia, row_media_targets};
+use super::parse::ParsedProductSheet;
 use crate::{Error, Result};
 
 /// 行级清单版本号；版本不一致时执行阶段回退到源文件链路。
@@ -106,98 +107,31 @@ pub(super) async fn build_row_manifest(
     secret: &[u8],
     request_id: &str,
     parsed: &ParsedProductSheet,
-    xlsx: &[u8],
+    xlsx: Arc<Vec<u8>>,
 ) -> Result<BuiltRowManifest> {
     validate_manifest_request_id(request_id)?;
+    let mut reader = WorkbookMedia::open(xlsx).await?;
+    let writer = StoredManifestImages { storage, secret, request_id };
     let mut rows = Vec::with_capacity(parsed.rows.len());
     let mut uploaded_object_keys = Vec::new();
     for row in &parsed.rows {
         let mut entry =
             RowManifestRow { row_number: row.row_number, cells: row.cells.clone(), ..Default::default() };
-        let mut sort_order = 0;
-        for (index, cell) in row.cells.iter().enumerate().take(5).skip(2) {
-            let Some(image_id) = dispimg_id(cell) else {
-                continue;
-            };
-            let Some(path) = parsed.image_targets.get(image_id) else {
-                continue;
-            };
-            let Ok(bytes) = read_xlsx_media(xlsx, path) else {
-                continue;
-            };
-            let Some((content_type, ext)) = detect_image(&bytes) else {
-                continue;
-            };
-            if index == 2 {
-                match put_manifest_image(
-                    storage,
-                    secret,
-                    request_id,
-                    row.row_number,
-                    "carousel-0",
-                    bytes.clone(),
-                    content_type,
-                    ext,
-                )
-                .await
-                {
-                    Ok((reference, registration, object_key)) => {
-                        uploaded_object_keys.push(object_key);
-                        entry.carousel.push(ManifestCarouselImage { reference, sort_order, registration });
-                        sort_order += 1;
-                    },
-                    Err(error) => {
-                        entry.media_error = Some(format!("第{}行图片预提失败: {error}", row.row_number));
-                        break;
-                    },
-                }
-                match put_manifest_image(
-                    storage,
-                    secret,
-                    request_id,
-                    row.row_number,
-                    "main",
-                    bytes,
-                    content_type,
-                    ext,
-                )
-                .await
-                {
-                    Ok((reference, registration, object_key)) => {
-                        uploaded_object_keys.push(object_key);
-                        entry.main_image = Some(ManifestImage { reference, registration });
-                    },
-                    Err(error) => {
-                        entry.media_error = Some(format!("第{}行图片预提失败: {error}", row.row_number));
-                        break;
-                    },
-                }
-                continue;
-            }
-            let slot = format!("carousel-{sort_order}");
-            match put_manifest_image(
-                storage,
-                secret,
-                request_id,
-                row.row_number,
-                &slot,
-                bytes,
-                content_type,
-                ext,
-            )
-            .await
-            {
-                Ok((reference, registration, object_key)) => {
-                    uploaded_object_keys.push(object_key);
-                    entry.carousel.push(ManifestCarouselImage { reference, sort_order, registration });
-                    sort_order += 1;
-                },
-                Err(error) => {
-                    entry.media_error = Some(format!("第{}行图片预提失败: {error}", row.row_number));
-                    break;
-                },
-            }
-        }
+        reader = match upload_manifest_row(
+            &writer,
+            &mut entry,
+            reader,
+            row_media_targets(&row.cells, parsed),
+            &mut uploaded_object_keys,
+        )
+        .await
+        {
+            Ok(reader) => reader,
+            Err(error) => {
+                delete_manifest_objects(storage, &uploaded_object_keys).await;
+                return Err(error);
+            },
+        };
         rows.push(entry);
     }
     Ok(BuiltRowManifest {
@@ -311,46 +245,126 @@ fn validate_manifest_request_id(request_id: &str) -> Result<()> {
     Ok(())
 }
 
-/// 上传单张预提图片并构造登记命令。
-#[allow(clippy::too_many_arguments)]
-async fn put_manifest_image(
-    storage: &S3Storage,
-    secret: &[u8],
-    request_id: &str,
-    row_number: u32,
-    slot: &str,
-    bytes: Vec<u8>,
-    content_type: &'static str,
-    ext: &str,
-) -> Result<(String, RegisterFileAssetRequest, String)> {
-    let object_key = format!("{ROW_IMAGE_KEY_PREFIX}/{request_id}/{row_number}/{slot}.{ext}");
-    storage
-        .save_with_content_type(&object_key, &bytes, Some(content_type))
-        .await
-        .map_err(|error| Error::Internal(format!("保存预提图片失败: {error}")))?;
-    let digest = hex::encode(Sha256::digest(&bytes));
-    let registration = RegisterFileAssetRequest {
-        storage_object_key: object_key.clone(),
-        file_name: format!("product-import.{ext}"),
-        content_type: content_type.to_string(),
-        byte_size: bytes.len() as u64,
-        content_hmac: content_fingerprint(&digest, secret),
-        sensitivity_class: SensitivityClass::General,
-        retention_class: RetentionClass::LongTerm,
-        expires_at: None,
-    };
-    let reference = format!("{PENDING_FILE_REFERENCE_PREFIX}{request_id}-{row_number}-{slot}");
-    Ok((reference, registration, object_key))
+/// 行媒体上传边界；提交编排按单元格与对象槽位串行调用。
+#[async_trait]
+trait ManifestImageWriter: Sync {
+    /// 上传一个槽位并返回引用、登记命令和补偿对象键。
+    async fn put(
+        &self,
+        row_number: u32,
+        slot: &str,
+        image: &PreparedImage,
+    ) -> Result<(String, RegisterFileAssetRequest, String)>;
+}
+
+/// 当前提交共享的对象存储与请求身份。
+struct StoredManifestImages<'a> {
+    storage: &'a S3Storage,
+    secret: &'a [u8],
+    request_id: &'a str,
+}
+
+#[async_trait]
+impl ManifestImageWriter for StoredManifestImages<'_> {
+    /// 上传独立对象；主图和轮播首图保留各自对象键和登记命令。
+    async fn put(
+        &self,
+        row_number: u32,
+        slot: &str,
+        image: &PreparedImage,
+    ) -> Result<(String, RegisterFileAssetRequest, String)> {
+        let ext = image.extension;
+        let object_key = format!("{ROW_IMAGE_KEY_PREFIX}/{}/{row_number}/{slot}.{ext}", self.request_id);
+        self.storage
+            .save_with_content_type(&object_key, &image.bytes, Some(image.content_type))
+            .await
+            .map_err(|error| Error::Internal(format!("保存预提图片失败: {error}")))?;
+        let registration = RegisterFileAssetRequest {
+            storage_object_key: object_key.clone(),
+            file_name: format!("product-import.{ext}"),
+            content_type: image.content_type.to_string(),
+            byte_size: u64::try_from(image.bytes.len()).expect("图片字节数不超过 u64 范围"),
+            content_hmac: content_fingerprint(&image.digest, self.secret),
+            sensitivity_class: SensitivityClass::General,
+            retention_class: RetentionClass::LongTerm,
+            expires_at: None,
+        };
+        let reference = format!("{PENDING_FILE_REFERENCE_PREFIX}{}-{row_number}-{slot}", self.request_id);
+        Ok((reference, registration, object_key))
+    }
+}
+
+/// 保留轮播、主图和后续图片的写入顺序；首个上传失败后停止当前行。
+async fn upload_manifest_row(
+    writer: &impl ManifestImageWriter,
+    entry: &mut RowManifestRow,
+    mut reader: WorkbookMedia,
+    targets: Vec<(usize, String)>,
+    uploaded_keys: &mut Vec<String>,
+) -> Result<WorkbookMedia> {
+    let mut sort_order = 0;
+    for (column, path) in targets {
+        let (next_reader, image) = reader.read(path).await?;
+        reader = next_reader;
+        let Some(image) = image else {
+            continue;
+        };
+        let slot = format!("carousel-{sort_order}");
+        let result = writer.put(entry.row_number, &slot, &image).await;
+        if !record_manifest_upload(entry, result, Some(sort_order), uploaded_keys) {
+            break;
+        }
+        sort_order += 1;
+        if column == 2 {
+            let result = writer.put(entry.row_number, "main", &image).await;
+            if !record_manifest_upload(entry, result, None, uploaded_keys) {
+                break;
+            }
+        }
+    }
+    Ok(reader)
+}
+
+/// 记录成功对象以供失败补偿；失败时写入原行级错误文案。
+fn record_manifest_upload(
+    entry: &mut RowManifestRow,
+    result: Result<(String, RegisterFileAssetRequest, String)>,
+    sort_order: Option<i32>,
+    uploaded_keys: &mut Vec<String>,
+) -> bool {
+    match result {
+        Ok((reference, registration, object_key)) => {
+            uploaded_keys.push(object_key);
+            if let Some(sort_order) = sort_order {
+                entry.carousel.push(ManifestCarouselImage { reference, sort_order, registration });
+            } else {
+                entry.main_image = Some(ManifestImage { reference, registration });
+            }
+            true
+        },
+        Err(error) => {
+            entry.media_error = Some(format!("第{}行图片预提失败: {error}", entry.row_number));
+            false
+        },
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use erp_support::{RetentionClass, SensitivityClass};
+    use std::io::{Cursor, Write};
+    use std::sync::{Arc, Mutex};
+
+    use async_trait::async_trait;
+    use erp_support::{RegisterFileAssetRequest, RetentionClass, SensitivityClass};
+    use zip::ZipWriter;
+    use zip::write::SimpleFileOptions;
 
     use super::{
-        ManifestCarouselImage, ManifestImage, ROW_MANIFEST_VERSION, RowManifest, RowManifestRow,
-        manifest_object_key, row_media_from_entry,
+        ManifestCarouselImage, ManifestImage, ManifestImageWriter, PreparedImage, ROW_MANIFEST_VERSION,
+        RowManifest, RowManifestRow, WorkbookMedia, manifest_object_key, row_media_from_entry,
+        upload_manifest_row,
     };
+    use crate::{Error, Result};
 
     fn sample_registration() -> erp_support::RegisterFileAssetRequest {
         erp_support::RegisterFileAssetRequest {
@@ -429,5 +443,108 @@ mod tests {
             media.pending[0].registration.storage_object_key,
             "product-import-images/req-1/2/main.png"
         );
+    }
+
+    /// 内存上传替身执行真实行编排，不访问 S3。
+    struct RecordingImages {
+        calls: Mutex<Vec<String>>,
+        failure: Option<String>,
+    }
+
+    #[async_trait]
+    impl ManifestImageWriter for RecordingImages {
+        /// 记录槽位并按指定对象注入上传失败。
+        async fn put(
+            &self,
+            row_number: u32,
+            slot: &str,
+            _image: &PreparedImage,
+        ) -> Result<(String, RegisterFileAssetRequest, String)> {
+            let key = format!("{row_number}-{slot}");
+            self.calls.lock().unwrap().push(key.clone());
+            if self.failure.as_deref() == Some(key.as_str()) {
+                return Err(Error::Internal("upload failed".into()));
+            }
+            let mut registration = sample_registration();
+            registration.storage_object_key = key.clone();
+            Ok((format!("pending-file:{key}"), registration, key))
+        }
+    }
+
+    /// 构造真实内存 ZIP，测试实际媒体读取与上传交替编排。
+    async fn prepared_reader() -> WorkbookMedia {
+        let mut archive = ZipWriter::new(Cursor::new(Vec::new()));
+        for (_, path) in prepared_targets() {
+            archive.start_file(&path, SimpleFileOptions::default()).unwrap();
+            archive.write_all(b"GIF89apayload").unwrap();
+        }
+        let bytes = Arc::new(archive.finish().unwrap().into_inner());
+        WorkbookMedia::open(bytes).await.unwrap()
+    }
+
+    /// 按模板三列构造独立媒体路径，以检测是否提前提取后续图片。
+    fn prepared_targets() -> Vec<(usize, String)> {
+        (2..5).map(|column| (column, format!("image-{column}"))).collect()
+    }
+
+    /// 主图与轮播首图独立登记，全部上传顺序和轮播排序保持原合同。
+    #[tokio::test]
+    async fn manifest_upload_preserves_slot_order_and_distinct_registrations() {
+        let writer = RecordingImages { calls: Mutex::new(Vec::new()), failure: None };
+        let mut entry = RowManifestRow { row_number: 2, ..Default::default() };
+        let mut keys = Vec::new();
+        let reader = prepared_reader().await;
+        let reader =
+            upload_manifest_row(&writer, &mut entry, reader, prepared_targets(), &mut keys).await.unwrap();
+        assert!(reader.has_cached("image-4"));
+        assert_eq!(keys, ["2-carousel-0", "2-main", "2-carousel-1", "2-carousel-2"]);
+        assert_eq!(*writer.calls.lock().unwrap(), keys);
+        assert_eq!(entry.carousel.iter().map(|image| image.sort_order).collect::<Vec<_>>(), [0, 1, 2]);
+        let main = entry.main_image.unwrap();
+        assert_ne!(main.reference, entry.carousel[0].reference);
+        assert_ne!(main.registration.storage_object_key, entry.carousel[0].registration.storage_object_key);
+        assert!(entry.media_error.is_none());
+    }
+
+    /// 首错停止当前行并保留成功对象用于补偿，随后行仍继续执行。
+    #[tokio::test]
+    async fn manifest_upload_stops_on_first_error_and_retains_compensation_keys() {
+        let writer = RecordingImages { calls: Mutex::new(Vec::new()), failure: Some("2-main".into()) };
+        let mut entry = RowManifestRow { row_number: 2, ..Default::default() };
+        let mut keys = Vec::new();
+        let reader = prepared_reader().await;
+        let reader =
+            upload_manifest_row(&writer, &mut entry, reader, prepared_targets(), &mut keys).await.unwrap();
+        assert_eq!(*writer.calls.lock().unwrap(), ["2-carousel-0", "2-main"]);
+        assert!(reader.has_cached("image-2"));
+        assert!(!reader.has_cached("image-3"));
+        assert!(!reader.has_cached("image-4"));
+        assert_eq!(keys, ["2-carousel-0"]);
+        assert_eq!(entry.carousel.len(), 1);
+        assert!(entry.main_image.is_none());
+        assert!(entry.media_error.as_ref().unwrap().contains("第2行图片预提失败"));
+        let mut next = RowManifestRow { row_number: 3, ..Default::default() };
+        let _ = upload_manifest_row(&writer, &mut next, reader, prepared_targets(), &mut keys).await.unwrap();
+        assert!(next.media_error.is_none());
+        assert_eq!(next.carousel.len(), 3);
+        assert_eq!(keys.len(), 5);
+    }
+
+    /// 轮播首图上传失败时既不尝试主图也不登记成功对象。
+    #[tokio::test]
+    async fn manifest_upload_first_carousel_failure_has_no_followup_uploads() {
+        let writer = RecordingImages { calls: Mutex::new(Vec::new()), failure: Some("2-carousel-0".into()) };
+        let mut entry = RowManifestRow { row_number: 2, ..Default::default() };
+        let mut keys = Vec::new();
+        let reader = prepared_reader().await;
+        let reader =
+            upload_manifest_row(&writer, &mut entry, reader, prepared_targets(), &mut keys).await.unwrap();
+        assert_eq!(*writer.calls.lock().unwrap(), ["2-carousel-0"]);
+        assert!(reader.has_cached("image-2"));
+        assert!(!reader.has_cached("image-3"));
+        assert!(!reader.has_cached("image-4"));
+        assert!(keys.is_empty());
+        assert!(entry.carousel.is_empty());
+        assert!(entry.main_image.is_none());
     }
 }

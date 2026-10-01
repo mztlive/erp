@@ -87,6 +87,30 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
         Self { db }
     }
 
+    /// 按输入顺序批量写入已构造的采购草稿提交行。
+    ///
+    /// # 参数
+    /// * `lines` - 已校验的提交明细；空切片不执行写入
+    /// * `executor` - 调用方执行器，采购聚合创建时必须沿用根事务
+    ///
+    /// # 返回
+    /// 全部写入成功或输入为空时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 有序插入在首个写入错误处停止，唯一键冲突与数据库错误保持通用仓储分类。
+    pub async fn create_draft_submission_lines(
+        &self,
+        lines: &[PurchaseOrderSubmissionLine],
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        mongo_ops::insert_many(
+            &self.db.collection::<PurchaseOrderSubmissionLine>(PURCHASE_ORDER_SUBMISSION_LINES),
+            lines,
+            executor,
+        )
+        .await
+    }
+
     /// 提交采购草稿并形成不可变提交（跨集合多步骤写入）。
     ///
     /// 依次写入 `purchase_order_submission`、`purchase_order_submission_line`（批量）
@@ -205,5 +229,67 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
             .update(change_order, executor)
             .await?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod draft_line_tests {
+    use mongodb::Client;
+    use mongodb::bson::{deserialize_from_document, doc};
+    use mongodb::error::{Error as MongoError, ErrorKind, InsertManyError};
+    use mongodb::options::{ClientOptions, ServerAddress};
+    use persistence_core::Error as RepositoryError;
+
+    use super::*;
+
+    /// 空明细写入不得访问事务会话。
+    struct UnusedExecutor;
+
+    impl Executor for UnusedExecutor {
+        /// 任何会话访问都代表空输入行为发生了变化。
+        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
+            panic!("empty submission lines must not access the executor")
+        }
+    }
+
+    /// 领域批量入口的空输入直接成功，不执行数据库操作。
+    #[tokio::test]
+    async fn draft_submission_lines_empty_input_performs_no_write() {
+        let options = ClientOptions::builder()
+            .hosts(vec![ServerAddress::Tcp { host: "127.0.0.1".into(), port: Some(1) }])
+            .build();
+        let db = Client::with_options(options).unwrap().database("unit_test");
+        PurchaseOrderDomainRepository::new(&db)
+            .create_draft_submission_lines(&[], &mut UnusedExecutor)
+            .await
+            .unwrap();
+    }
+
+    /// 构造有序插入在首个失败明细处停止时的真实驱动错误类型。
+    fn ordered_insert_failure(code: i32, message: &str) -> MongoError {
+        let error: InsertManyError = deserialize_from_document(doc! {
+            "writeErrors": [{ "index": 1, "code": code, "errmsg": message }],
+            "writeConcernError": null,
+        })
+        .unwrap();
+        ErrorKind::InsertMany(error).into()
+    }
+
+    /// 批量唯一键冲突保持通用仓储分类与原索引名。
+    #[test]
+    fn draft_submission_lines_duplicate_error_keeps_index_classification() {
+        let error = RepositoryError::from(ordered_insert_failure(
+            11000,
+            "E11000 duplicate key error index: uk_purchase_submission_line_no dup key: {}",
+        ));
+        assert!(matches!(error, RepositoryError::DuplicateKey(_)));
+        assert_eq!(error.duplicate_index_name(), Some("uk_purchase_submission_line_no"));
+    }
+
+    /// 非唯一键的首个插入错误继续归数据库错误。
+    #[test]
+    fn draft_submission_lines_other_write_error_remains_database_error() {
+        let error = RepositoryError::from(ordered_insert_failure(121, "document validation failed"));
+        assert!(matches!(error, RepositoryError::DatabaseError(_)));
     }
 }

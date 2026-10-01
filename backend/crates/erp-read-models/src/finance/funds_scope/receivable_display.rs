@@ -29,12 +29,35 @@ impl FundsAccess {
         if rows.is_empty() {
             return Ok(());
         }
+        self.finish_receivable_names(rows, executor).await?;
+        self.attach_receivable_entries(rows, executor).await
+    }
+
+    /// 补齐已授权行的主体名称，分录由调用方本次快照装载。
+    ///
+    /// # 参数
+    /// * `rows` - 当前页或详情行；空切片不访问数据库
+    /// * `executor` - 调用方事务
+    ///
+    /// # 返回
+    /// 名称补齐后返回空值。
+    ///
+    /// # 错误
+    /// 主体名称读取失败时返回错误。
+    pub(super) async fn finish_receivable_names(
+        &self,
+        rows: &mut [ScopedReceivableAccountRow],
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        if rows.is_empty() {
+            return Ok(());
+        }
         let party_ids = rows.iter().map(|row| row.counterparty_party_id.clone()).collect::<Vec<_>>();
         let names = self.party_legal_names(&party_ids, executor).await?;
         for row in rows.iter_mut() {
             row.counterparty_party_name = names.get(&row.counterparty_party_id).cloned();
         }
-        self.attach_receivable_entries(rows, executor).await
+        Ok(())
     }
 
     /// 批量挂上应收分录。没有分录时回款核销池是空的。
@@ -72,7 +95,7 @@ impl FundsAccess {
 }
 
 /// 把分录实体收成范围响应。冲减合计不在这条读取里重算，核销池使用分录金额。
-fn entry_view(entry: erp_finance::entity::receivable::ReceivableEntry) -> ReceivableEntryView {
+pub(super) fn entry_view(entry: erp_finance::entity::receivable::ReceivableEntry) -> ReceivableEntryView {
     ReceivableEntryView {
         id: entry.base.id,
         entry_type: entry.entry_type,

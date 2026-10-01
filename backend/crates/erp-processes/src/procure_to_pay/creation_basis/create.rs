@@ -422,9 +422,7 @@ async fn write_prepared_draft(
     db.purchase_orders().create(write.order, executor).await?;
     db.business_documents().create(&document, executor).await?;
     db.purchase_order_submissions().create(write.submission, executor).await?;
-    for line in write.lines {
-        db.purchase_order_submission_lines().create(line, executor).await?;
-    }
+    db.purchase_order().create_draft_submission_lines(write.lines, executor).await?;
     sync_procurement_tasks_for_sales_order(db, &write.order.sales_order_id, executor).await?;
     Ok(())
 }

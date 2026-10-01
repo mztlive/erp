@@ -29,7 +29,7 @@ pub use snapshot::{ReceivableAccountSnapshotExt, ReceivableEntrySnapshotExt};
 mod sales_order_summary;
 pub use account::{
     ReceivableAccountFilter, ReceivableAccountInvoicingExt, ReceivableAccountRepositoryExt,
-    ReceivableAccountSettlementExt, SettlementBatchResult,
+    ReceivableAccountRow, ReceivableAccountSettlementExt, SettlementBatchResult,
 };
 pub use command::{ReceivableListScope, ScopedCustomerReceiptQuery, ScopedInvoiceQuery};
 pub use customer_center::ReceivableAccountCustomerCenterExt;

@@ -5,7 +5,7 @@ use erp_core::common::time::Instant;
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, mongo_ops};
+use persistence_core::{Executor, Result as RepositoryResult, mongo_ops};
 use serde::de::DeserializeOwned;
 
 use super::{ORG_MEMBERSHIPS, ORG_UNITS, OrganizationRepository};
@@ -15,6 +15,32 @@ use crate::repository::person_directory_query::DIRECTORY_LIMIT;
 use crate::{Error, Result};
 
 impl OrganizationRepository<'_> {
+    /// 只读取一个账号在授权时点的有效主属关系。
+    ///
+    /// # 参数
+    /// `user_id` 为明确账号；`at` 与调用方授权时点一致；沿用调用方执行器。
+    /// # 返回
+    /// 返回至多两条未删除关系；两条已足以证明主属关系冲突，不读取其他组织集合。
+    /// # 错误
+    /// 数据库查询或成员事实反序列化失败时返回仓储错误。
+    pub async fn primary_memberships(
+        &self,
+        user_id: &str,
+        at: Instant,
+        executor: &mut dyn Executor,
+    ) -> RepositoryResult<Vec<OrgMembership>> {
+        let mut filter = current_filter(at);
+        filter.insert("user_id", user_id);
+        filter.insert("deleted_at", NOT_DELETED_TIMESTAMP_BSON);
+        mongo_ops::find_many(
+            &self.db.collection::<OrgMembership>(ORG_MEMBERSHIPS),
+            filter,
+            FindOptions::builder().limit(2).build(),
+            executor,
+        )
+        .await
+    }
+
     /// 读取目录授权所需的组织树和操作人当前关系。
     /// # 参数
     /// `actor_id` 为操作人，`at` 为同一授权时点，`executor` 为调用方事务。

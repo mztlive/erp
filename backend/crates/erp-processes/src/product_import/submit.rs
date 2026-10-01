@@ -1,5 +1,7 @@
 //! 登记导入文件资产并创建后台任务。
 
+use std::sync::Arc;
+
 use application_core::AuditActor;
 use erp_catalog::entity::catalog::product_import::{collapse_import_text, truncate_import_text};
 use erp_catalog::{PRODUCT_IMPORT_SHEET_NAME, ProductImportJobView};
@@ -42,13 +44,13 @@ impl ProductImportProcess {
         request_id: String,
         actor: &AuditActor,
     ) -> Result<ProductImportJobView> {
-        let shared_bytes = std::sync::Arc::new(bytes);
+        let shared_bytes = Arc::new(bytes);
         let for_parse = shared_bytes.clone();
         let parsed = tokio::task::spawn_blocking(move || parse_product_quote_xlsx(&for_parse))
             .await
             .map_err(|_| Error::Internal("解析导入文件失败".into()))??;
         let file_asset = FileAsset::new(FileAssetId::new(next_id()), registration.into_data(actor.id())?)?;
-        self.create_job_from_parsed(file_asset, parsed, file_name, request_id, actor, &shared_bytes).await
+        self.create_job_from_parsed(file_asset, parsed, file_name, request_id, actor, shared_bytes).await
     }
 
     /// 由已解析工作表创建导入任务（表单上传与浏览器直传共用）。
@@ -73,47 +75,9 @@ impl ProductImportProcess {
         file_name: String,
         request_id: String,
         actor: &AuditActor,
-        xlsx: &[u8],
+        xlsx: Arc<Vec<u8>>,
     ) -> Result<ProductImportJobView> {
-        let job_id = BackgroundJobId::new(next_id());
-        let drafts = parsed
-            .rows
-            .iter()
-            .map(|row| {
-                let name = row.cells.get(8).and_then(|value| {
-                    let text = collapse_import_text(value);
-                    if text.is_empty() { None } else { Some(truncate_import_text(&text, 128)) }
-                });
-                BackgroundJobItemDraft {
-                    id: BackgroundJobItemId::new(next_id()),
-                    object_type: name.as_ref().map(|_| "product_import_row".to_string()),
-                    object_id: name,
-                    expected_version: None,
-                    expected_hash: None,
-                    worksheet_name: Some(PRODUCT_IMPORT_SHEET_NAME.to_string()),
-                    source_row_no: Some(row.row_number),
-                    source_column_name: None,
-                }
-            })
-            .collect::<Vec<_>>();
-        let total_rows = drafts.len() as u64;
-        let aggregate = BackgroundJobAggregate::new(
-            job_id,
-            BackgroundJobAggregateData {
-                job_no: product_import_job_no(&request_id),
-                job_type: JobType::Import,
-                domain_job_type: Some(PRODUCT_IMPORT_DOMAIN_JOB_TYPE.to_string()),
-                domain_job_id: Some(file_asset.base.id.clone()),
-                selection_snapshot_id: None,
-                requested_by: actor.id().to_string(),
-                request_id: request_id.clone(),
-                input_file_asset_id: Some(FileAssetId::new(file_asset.base.id.clone())),
-                result_file_asset_id: None,
-                declared_total_count: total_rows,
-            },
-            drafts,
-        )?;
-        let (job, items) = aggregate.into_parts();
+        let (job, items) = import_job(&parsed, &file_asset, &request_id, actor)?;
         let built = build_row_manifest(&self.storage, &self.secret, &request_id, &parsed, xlsx).await?;
         let manifest_key = match write_row_manifest(&self.storage, &built.manifest).await {
             Ok(key) => key,
@@ -174,4 +138,57 @@ impl ProductImportProcess {
             .ok_or_else(|| Error::ConflictError("导入任务唯一竞争结果已变化，请刷新后重试".into()))?;
         Ok(job_view(&existing, None))
     }
+}
+
+/// 用原模板行顺序构造任务明细，保留行号、名称与独立明细身份。
+fn import_item_drafts(parsed: &ParsedProductSheet) -> Vec<BackgroundJobItemDraft> {
+    parsed
+        .rows
+        .iter()
+        .map(|row| {
+            let name = row.cells.get(8).and_then(|value| {
+                let text = collapse_import_text(value);
+                if text.is_empty() { None } else { Some(truncate_import_text(&text, 128)) }
+            });
+            BackgroundJobItemDraft {
+                id: BackgroundJobItemId::new(next_id()),
+                object_type: name.as_ref().map(|_| "product_import_row".to_string()),
+                object_id: name,
+                expected_version: None,
+                expected_hash: None,
+                worksheet_name: Some(PRODUCT_IMPORT_SHEET_NAME.to_string()),
+                source_row_no: Some(row.row_number),
+                source_column_name: None,
+            }
+        })
+        .collect()
+}
+
+/// 由原领域聚合构造任务及明细，业务校验仍由后台任务实体执行。
+fn import_job(
+    parsed: &ParsedProductSheet,
+    file_asset: &FileAsset,
+    request_id: &str,
+    actor: &AuditActor,
+) -> Result<(BackgroundJob, Vec<BackgroundJobItem>)> {
+    let job_id = BackgroundJobId::new(next_id());
+    let drafts = import_item_drafts(parsed);
+    let total_rows = u64::try_from(drafts.len()).expect("导入行数不超过 1000");
+    let aggregate = BackgroundJobAggregate::new(
+        job_id,
+        BackgroundJobAggregateData {
+            job_no: product_import_job_no(request_id),
+            job_type: JobType::Import,
+            domain_job_type: Some(PRODUCT_IMPORT_DOMAIN_JOB_TYPE.to_string()),
+            domain_job_id: Some(file_asset.base.id.clone()),
+            selection_snapshot_id: None,
+            requested_by: actor.id().to_string(),
+            request_id: request_id.to_string(),
+            input_file_asset_id: Some(FileAssetId::new(file_asset.base.id.clone())),
+            result_file_asset_id: None,
+            declared_total_count: total_rows,
+        },
+        drafts,
+    )?;
+    Ok(aggregate.into_parts())
 }

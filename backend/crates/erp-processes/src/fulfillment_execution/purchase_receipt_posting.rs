@@ -6,17 +6,24 @@ use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
 use erp_core::ids::{
-    PurchaseReceiptId, PurchaseReceiptLineId, SalesOrderId, SalesOrderLineId, SalesOrderRevisionLineId,
-    WarehouseId,
+    PurchaseOrderRevisionLineId, PurchaseReceiptId, PurchaseReceiptLineId, SalesOrderId, SalesOrderLineId,
+    SalesOrderRevisionLineId, SkuId, WarehouseId,
 };
 use erp_core::money::Quantity;
 use erp_fulfillment::dto::{PostPurchaseReceiptRequest, PurchaseReceiptView};
+use erp_fulfillment::entity::facts::ReceiptFulfillmentProgress;
 use erp_fulfillment::entity::fulfillment::{PurchaseReceipt, PurchaseReceiptLine};
 use erp_fulfillment::repository::FulfillmentExt;
+use erp_fulfillment::service::FulfillmentService;
 use erp_inventory::repository::prelude::*;
+use erp_inventory::service::fulfillment::{
+    ReceiptReservationFact, ReceiptStockFact, establish_receipt_reservation, post_receipt_stock,
+};
 use erp_inventory::{InventoryExt, StockReservation};
+use erp_procurement::entity::purchase_order::{ProgressStatus, PurchaseOrder, PurchaseOrderRevisionLine};
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_procurement::repository::prelude::*;
+use erp_sales::entity::sales_order::SalesOrderRevisionLine;
 use erp_sales::repository::SalesOrderExt;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
@@ -60,65 +67,113 @@ impl FulfillmentProcess {
     ) -> Result<PurchaseReceiptView> {
         req.validate()?;
         let receipt_id = PurchaseReceiptId::new(id.to_string());
-        let expected_version = req.version;
-        let warehouse_id = req.warehouse_id;
         let actor = actor.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let posted = client
             .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let domain = erp_fulfillment::service::FulfillmentService::new(db.clone());
-                    let (mut receipt, lines) = domain
-                        .prepare_purchase_receipt_posting(
-                            &receipt_id,
-                            expected_version,
-                            warehouse_id,
-                            executor,
-                        )
-                        .await?;
-                    let mut po = db
-                        .purchase_orders()
-                        .find_by_id(receipt.purchase_order_id.as_ref(), executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("来源采购单不存在".to_string()))?;
-                    ensure_po_fulfillable(&po)?;
-                    ensure_prepay_gate(&db, executor, &po).await?;
-                    let revision = load_po_current_revision(&db, executor, &po).await?;
-                    let revision_lines = db
-                        .purchase_order_revision_lines()
-                        .find_lines_by_revision_ids(&[revision.base.id.clone().into()], executor)
-                        .await?;
-                    let mut received = db
-                        .fulfillment()
-                        .qualified_received_totals_by_purchase_revision_line(
-                            &receipt.purchase_order_id,
-                            executor,
-                        )
-                        .await?;
-                    let occurred_at = Instant::now();
-                    execute_posting(
-                        &mut MongoReceiptPosting {
-                            db: &db,
-                            receipt: &mut receipt,
-                            po: &mut po,
-                            lines: &lines,
-                            revision_lines: &revision_lines,
-                            received: &mut received,
-                            occurred_at,
-                            actor: &actor,
-                            receipt_id: &receipt_id,
-                        },
-                        lines.len(),
-                        executor,
-                    )
-                    .await?;
-                    Ok::<PurchaseReceipt, crate::Error>(receipt)
-                })
+                Box::pin(async move { post_receipt(&db, &receipt_id, req, &actor, executor).await })
             })
             .await?;
         Ok(posted.into())
     }
+}
+
+/// 按原查询顺序准备入库事实，并在根事务内执行过账。
+async fn post_receipt(
+    db: &Database,
+    receipt_id: &PurchaseReceiptId,
+    req: PostPurchaseReceiptRequest,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<PurchaseReceipt> {
+    let domain = FulfillmentService::new(db.clone());
+    let (mut receipt, lines) =
+        domain.prepare_purchase_receipt_posting(receipt_id, req.version, req.warehouse_id, executor).await?;
+    let PurchasePostingFacts { mut po, revision_lines, mut received } =
+        load_purchase_posting_facts(db, &receipt, executor).await?;
+    let occurred_at = Instant::now();
+    execute_posting(
+        &mut MongoReceiptPosting {
+            db,
+            receipt: &mut receipt,
+            po: &mut po,
+            lines: &lines,
+            revision_lines: &revision_lines,
+            revision_lines_by_id: first_by_id(&revision_lines, |line| line.base.id.as_str()),
+            received: &mut received,
+            occurred_at,
+            actor,
+            receipt_id,
+        },
+        lines.len(),
+        executor,
+    )
+    .await?;
+    Ok(receipt)
+}
+
+/// 按原查询位置读取的采购入库事实，仅用于当前根事务。
+struct PurchasePostingFacts {
+    po: PurchaseOrder,
+    revision_lines: Vec<PurchaseOrderRevisionLine>,
+    received: HashMap<PurchaseOrderRevisionLineId, Quantity>,
+}
+
+/// 沿原事务执行器依次读取采购主表、履约门槛、有效版本行和累计收货。
+async fn load_purchase_posting_facts(
+    db: &Database,
+    receipt: &PurchaseReceipt,
+    executor: &mut dyn Executor,
+) -> Result<PurchasePostingFacts> {
+    let po = db
+        .purchase_orders()
+        .find_by_id(receipt.purchase_order_id.as_ref(), executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("来源采购单不存在".to_string()))?;
+    ensure_po_fulfillable(&po)?;
+    ensure_prepay_gate(db, executor, &po).await?;
+    let revision = load_po_current_revision(db, executor, &po).await?;
+    let revision_lines = db
+        .purchase_order_revision_lines()
+        .find_lines_by_revision_ids(&[revision.base.id.clone().into()], executor)
+        .await?;
+    let received = db
+        .fulfillment()
+        .qualified_received_totals_by_purchase_revision_line(&receipt.purchase_order_id, executor)
+        .await?;
+    Ok(PurchasePostingFacts { po, revision_lines, received })
+}
+
+/// 建立借用 ID 索引；重复 ID 保留原线性查找的首个命中，不改变输入顺序。
+fn first_by_id<'a, T>(rows: &'a [T], id: impl Fn(&'a T) -> &'a str) -> HashMap<&'a str, &'a T> {
+    let mut rows_by_id = HashMap::with_capacity(rows.len());
+    for row in rows {
+        rows_by_id.entry(id(row)).or_insert(row);
+    }
+    rows_by_id
+}
+
+/// 读取索引中的首个采购版本行，缺失时保留原业务错误。
+fn purchase_line<'a>(
+    lines_by_id: &HashMap<&str, &'a PurchaseOrderRevisionLine>,
+    id: &PurchaseOrderRevisionLineId,
+) -> Result<&'a PurchaseOrderRevisionLine> {
+    lines_by_id
+        .get(id.as_ref())
+        .copied()
+        .ok_or_else(|| Error::BusinessLogicError("采购明细不存在".to_string()))
+}
+
+/// 从首个销售版本行读取稳定明细身份，缺失时保留原分配归属错误。
+fn sales_line_id(
+    lines_by_id: &HashMap<&str, &SalesOrderRevisionLine>,
+    id: &SalesOrderRevisionLineId,
+) -> Result<SalesOrderLineId> {
+    lines_by_id
+        .get(id.as_ref())
+        .map(|line| line.sales_order_line_id.clone())
+        .ok_or_else(|| Error::BusinessLogicError("采购销售分配缺少销售明细归属".to_string()))
 }
 
 /// 采购入库生产过账步骤；每一步接收根事务的同一执行器。
@@ -133,8 +188,10 @@ enum ReceiptPostingStep {
 }
 #[async_trait::async_trait]
 trait ReceiptPostingSteps: Send {
+    /// 沿根事务执行器执行指定步骤，失败时保留原错误。
     async fn apply(&mut self, step: ReceiptPostingStep, executor: &mut dyn Executor) -> Result<()>;
 }
+/// 按原入库行和后续领域步骤的顺序过账，任一步失败即停止。
 async fn execute_posting(
     steps: &mut impl ReceiptPostingSteps,
     line_count: usize,
@@ -157,61 +214,29 @@ async fn execute_posting(
 struct MongoReceiptPosting<'a> {
     db: &'a Database,
     receipt: &'a mut PurchaseReceipt,
-    po: &'a mut erp_procurement::entity::purchase_order::PurchaseOrder,
+    po: &'a mut PurchaseOrder,
     lines: &'a [PurchaseReceiptLine],
-    revision_lines: &'a [erp_procurement::entity::purchase_order::PurchaseOrderRevisionLine],
-    received: &'a mut HashMap<erp_core::ids::PurchaseOrderRevisionLineId, Quantity>,
+    revision_lines: &'a [PurchaseOrderRevisionLine],
+    revision_lines_by_id: HashMap<&'a str, &'a PurchaseOrderRevisionLine>,
+    received: &'a mut HashMap<PurchaseOrderRevisionLineId, Quantity>,
     occurred_at: Instant,
     actor: &'a AuditActor,
     receipt_id: &'a PurchaseReceiptId,
 }
 #[async_trait::async_trait]
 impl ReceiptPostingSteps for MongoReceiptPosting<'_> {
+    /// 执行指定过账步骤；所有数据库操作继续复用调用方事务。
     async fn apply(&mut self, step: ReceiptPostingStep, session: &mut dyn Executor) -> Result<()> {
         let db = self.db;
         let receipt = &mut *self.receipt;
-        let po = &mut *self.po;
         let lines = self.lines;
-        let revision_lines = self.revision_lines;
-        let received = &mut *self.received;
         let occurred_at = self.occurred_at;
         let actor = self.actor;
         let receipt_id = self.receipt_id;
         match step {
-            ReceiptPostingStep::Line(index) => {
-                let line = &lines[index];
-                let revision_line = revision_lines
-                    .iter()
-                    .find(|revision_line| {
-                        revision_line.base.id == line.purchase_order_revision_line_id.to_string()
-                    })
-                    .ok_or_else(|| Error::BusinessLogicError("采购明细不存在".to_string()))?;
-                let already_received = received
-                    .get(&line.purchase_order_revision_line_id)
-                    .copied()
-                    .unwrap_or_else(|| Quantity::from_str("0").unwrap());
-                line.ensure_within_revision(
-                    &super::purchase_context::revision_line_fact(revision_line),
-                    already_received,
-                )
-                .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
-                post_receipt_line(db, session, receipt, line, revision_lines, &occurred_at, actor).await?;
-                match received.entry(line.purchase_order_revision_line_id.clone()) {
-                    Entry::Occupied(mut occupied) => {
-                        let next = occupied
-                            .get()
-                            .to_decimal()
-                            .checked_add(line.qualified_quantity.to_decimal())
-                            .ok_or_else(|| Error::BusinessLogicError("累计数量超出精度上限".to_string()))?;
-                        *occupied.get_mut() = Quantity::try_from(next).map_err(Error::Logic)?;
-                    },
-                    Entry::Vacant(vacant) => {
-                        vacant.insert(line.qualified_quantity);
-                    },
-                }
-            },
+            ReceiptPostingStep::Line(index) => self.post_line(index, session).await?,
             ReceiptPostingStep::Receipt => {
-                erp_fulfillment::service::FulfillmentService::new(db.clone())
+                FulfillmentService::new(db.clone())
                     .mark_purchase_receipt_posted(receipt, occurred_at, actor.id(), session)
                     .await?;
             },
@@ -224,22 +249,7 @@ impl ReceiptPostingSteps for MongoReceiptPosting<'_> {
                 )
                 .await?;
             },
-            ReceiptPostingStep::PurchaseProgress => {
-                let revision_facts = revision_lines
-                    .iter()
-                    .map(super::purchase_context::revision_line_fact)
-                    .collect::<Vec<_>>();
-                let progress = match PurchaseReceipt::fulfillment_progress(&revision_facts, received) {
-                    erp_fulfillment::entity::facts::ReceiptFulfillmentProgress::Partial => {
-                        erp_procurement::entity::purchase_order::ProgressStatus::Partial
-                    },
-                    erp_fulfillment::entity::facts::ReceiptFulfillmentProgress::Completed => {
-                        erp_procurement::entity::purchase_order::ProgressStatus::Completed
-                    },
-                };
-                po.set_fulfillment_progress(progress, actor.id().to_string());
-                db.purchase_orders().update(po, session).await?;
-            },
+            ReceiptPostingStep::PurchaseProgress => self.update_purchase_progress(session).await?,
             ReceiptPostingStep::WarehouseDrafts => {
                 // 入库过账后自动生成仓发草稿与 W01 指定到人的仓发任务，
                 // 行引用本次入库建立的销售预占。
@@ -257,6 +267,53 @@ impl ReceiptPostingSteps for MongoReceiptPosting<'_> {
         Ok(())
     }
 }
+
+impl MongoReceiptPosting<'_> {
+    /// 定位一次当前采购版本行，依次校验、过账并更新累计合格数量。
+    async fn post_line(&mut self, index: usize, session: &mut dyn Executor) -> Result<()> {
+        let line = &self.lines[index];
+        let revision_line = purchase_line(&self.revision_lines_by_id, &line.purchase_order_revision_line_id)?;
+        let already_received = self
+            .received
+            .get(&line.purchase_order_revision_line_id)
+            .copied()
+            .unwrap_or_else(|| Quantity::from_str("0").unwrap());
+        line.ensure_within_revision(
+            &super::purchase_context::revision_line_fact(revision_line),
+            already_received,
+        )
+        .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
+        post_receipt_line(self.db, session, self.receipt, line, revision_line, &self.occurred_at, self.actor)
+            .await?;
+        match self.received.entry(line.purchase_order_revision_line_id.clone()) {
+            Entry::Occupied(mut occupied) => {
+                let next = occupied
+                    .get()
+                    .to_decimal()
+                    .checked_add(line.qualified_quantity.to_decimal())
+                    .ok_or_else(|| Error::BusinessLogicError("累计数量超出精度上限".to_string()))?;
+                *occupied.get_mut() = Quantity::try_from(next).map_err(Error::Logic)?;
+            },
+            Entry::Vacant(vacant) => {
+                vacant.insert(line.qualified_quantity);
+            },
+        }
+        Ok(())
+    }
+
+    /// 从原版本行顺序计算采购履约进度，再沿原执行器更新主表。
+    async fn update_purchase_progress(&mut self, session: &mut dyn Executor) -> Result<()> {
+        let revision_facts =
+            self.revision_lines.iter().map(super::purchase_context::revision_line_fact).collect::<Vec<_>>();
+        let progress = match PurchaseReceipt::fulfillment_progress(&revision_facts, self.received) {
+            ReceiptFulfillmentProgress::Partial => ProgressStatus::Partial,
+            ReceiptFulfillmentProgress::Completed => ProgressStatus::Completed,
+        };
+        self.po.set_fulfillment_progress(progress, self.actor.id().to_string());
+        self.db.purchase_orders().update(self.po, session).await?;
+        Ok(())
+    }
+}
 /// 过账单条入库行（流水 + 余额 + 预占，位于调用方事务内）。
 ///
 /// 仅合格数量形成库存入账和销售预占（§6.7）；预占沿采购销售分配按比例
@@ -267,7 +324,7 @@ impl ReceiptPostingSteps for MongoReceiptPosting<'_> {
 /// * `session` - 事务会话执行器
 /// * `receipt` - 入库单表头
 /// * `line` - 入库行
-/// * `revision_lines` - 采购生效版本行
+/// * `revision_line` - 已定位并校验的采购生效版本行
 /// * `occurred_at` - 过账业务时间
 /// * `actor` - 审计操作人（记录人身份）
 ///
@@ -281,7 +338,7 @@ async fn post_receipt_line(
     session: &mut dyn Executor,
     receipt: &PurchaseReceipt,
     line: &PurchaseReceiptLine,
-    revision_lines: &[erp_procurement::entity::purchase_order::PurchaseOrderRevisionLine],
+    revision_line: &PurchaseOrderRevisionLine,
     occurred_at: &Instant,
     actor: &AuditActor,
 ) -> Result<()> {
@@ -289,18 +346,14 @@ async fn post_receipt_line(
     if qualified <= Quantity::from_str("0").unwrap().to_decimal() {
         return Ok(());
     }
-    let revision_line = revision_lines
-        .iter()
-        .find(|revision_line| revision_line.base.id == line.purchase_order_revision_line_id.to_string())
-        .ok_or_else(|| Error::BusinessLogicError("采购明细不存在".to_string()))?;
     let sku_id = revision_line
         .sku_id
         .clone()
         .ok_or_else(|| Error::BusinessLogicError("物流费用行不能入库".to_string()))?;
-    let balance_id = erp_inventory::service::fulfillment::post_receipt_stock(
+    let balance_id = post_receipt_stock(
         db,
         session,
-        erp_inventory::service::fulfillment::ReceiptStockFact {
+        ReceiptStockFact {
             warehouse_id: &receipt.warehouse_id,
             sku_id: &sku_id,
             quantity: line.qualified_quantity,
@@ -327,7 +380,6 @@ async fn post_receipt_line(
 /// * `revision_line` - 采购生效版本行
 /// * `sku_id` - SKU
 /// * `balance_id` - 余额主键
-/// * `occurred_at` - 过账业务时间
 ///
 /// # 返回
 /// 无返回值；写入失败时返回错误。
@@ -339,8 +391,8 @@ async fn establish_reservations(
     session: &mut dyn Executor,
     receipt: &PurchaseReceipt,
     line: &PurchaseReceiptLine,
-    revision_line: &erp_procurement::entity::purchase_order::PurchaseOrderRevisionLine,
-    sku_id: &erp_core::ids::SkuId,
+    revision_line: &PurchaseOrderRevisionLine,
+    sku_id: &SkuId,
     balance_id: &str,
 ) -> Result<()> {
     let allocations = db
@@ -360,26 +412,24 @@ async fn establish_reservations(
     let shares = line
         .reservation_shares(&allocation_quantities, total)
         .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
-    let sales_revision_line_ids: Vec<SalesOrderRevisionLineId> =
-        allocations.iter().map(|allocation| allocation.sales_order_revision_line_id.clone()).collect();
     let sales_revision_lines = db
         .sales_order_revision_lines()
         .list_active_by_ids(
-            &sales_revision_line_ids.iter().map(ToString::to_string).collect::<Vec<_>>(),
+            &allocations
+                .iter()
+                .map(|allocation| allocation.sales_order_revision_line_id.to_string())
+                .collect::<Vec<_>>(),
             session,
         )
         .await?;
+    let sales_lines_by_id = first_by_id(&sales_revision_lines, |line| line.base.id.as_str());
     for (index, quantity) in shares.into_iter().enumerate() {
         let allocation = &allocations[index];
-        let sales_line_id = sales_revision_lines
-            .iter()
-            .find(|sales_line| sales_line.base.id == allocation.sales_order_revision_line_id.to_string())
-            .map(|sales_line| sales_line.sales_order_line_id.clone())
-            .ok_or_else(|| Error::BusinessLogicError("采购销售分配缺少销售明细归属".to_string()))?;
-        erp_inventory::service::fulfillment::establish_receipt_reservation(
+        let sales_line_id = sales_line_id(&sales_lines_by_id, &allocation.sales_order_revision_line_id)?;
+        establish_receipt_reservation(
             db,
             session,
-            erp_inventory::service::fulfillment::ReceiptReservationFact {
+            ReceiptReservationFact {
                 warehouse_id: &receipt.warehouse_id,
                 sku_id,
                 sales_order_line_id: sales_line_id,
@@ -517,7 +567,115 @@ fn reservation_line_facts(
 
 #[cfg(test)]
 mod posting_contract_tests {
+    use entity_core::BaseModel;
+    use erp_core::ids::{
+        ProcurementConfirmationLineId, PurchaseOrderRevisionId, SalesOrderRevisionId, SkuRevisionId,
+    };
+    use erp_core::money::{Amount, Rate};
+    use erp_procurement::entity::purchase_order::PurchaseLineType;
+    use erp_sales::entity::sales_order::LineType;
+
     use super::*;
+
+    /// 构造可区分首个与重复命中内容的真实采购版本行。
+    fn purchase_revision(id: &str, quantity: &str) -> PurchaseOrderRevisionLine {
+        PurchaseOrderRevisionLine {
+            base: BaseModel { id: id.into(), ..BaseModel::fake() },
+            purchase_order_revision_id: PurchaseOrderRevisionId::new("purchase-revision"),
+            line_no: 1,
+            line_type: PurchaseLineType::ItemService,
+            procurement_confirmation_line_id: Some(ProcurementConfirmationLineId::new("confirmation-line")),
+            sku_id: Some(SkuId::new("sku")),
+            sku_revision_id: Some(SkuRevisionId::new("sku-revision")),
+            product_name_snapshot: Some("商品".into()),
+            specification_snapshot: None,
+            quantity: Some(quantity.parse().unwrap()),
+            base_unit_code: Some("件".into()),
+            unit_cost_gross: Some("1".parse().unwrap()),
+            gross_amount: quantity.parse().unwrap(),
+            net_amount: quantity.parse().unwrap(),
+            tax_amount: Amount::zero(),
+            input_tax_rate: Some("0".parse().unwrap()),
+            expected_delivery_date: None,
+            sales_order_line_id: Some(SalesOrderLineId::new("sales-line")),
+            sales_order_revision_line_id: Some(SalesOrderRevisionLineId::new("sales-revision-line")),
+            allocated_quantity: Some(quantity.parse().unwrap()),
+        }
+    }
+
+    /// 构造真实销售版本行，使用不同稳定行身份识别重复主键的首个命中。
+    fn sales_revision(id: &str, stable_id: &str) -> SalesOrderRevisionLine {
+        SalesOrderRevisionLine {
+            base: BaseModel { id: id.into(), ..BaseModel::fake() },
+            sales_order_revision_id: SalesOrderRevisionId::new("sales-revision"),
+            sales_order_line_id: SalesOrderLineId::new(stable_id),
+            line_no: 1,
+            line_type: LineType::GoodsService,
+            gross_amount: Amount::zero(),
+            net_amount: Amount::zero(),
+            tax_amount: Amount::zero(),
+            sales_tax_rate: Rate::from_str("0").unwrap(),
+            item_name_snapshot: "商品".into(),
+            spec_snapshot: None,
+            unit_snapshot: None,
+        }
+    }
+
+    /// 采购索引与原首命中查找一致，且不移动或克隆版本行。
+    #[test]
+    fn receipt_purchase_index_preserves_first_match_and_requested_order() {
+        let rows = [purchase_revision("b", "2"), purchase_revision("a", "3"), purchase_revision("b", "99")];
+        let index = first_by_id(&rows, |line| line.base.id.as_str());
+        for id in ["a", "b", "a"] {
+            let found = purchase_line(&index, &PurchaseOrderRevisionLineId::new(id)).unwrap();
+            let original = rows.iter().find(|line| line.base.id == id).unwrap();
+            assert!(std::ptr::eq(found, original));
+        }
+        assert_eq!(
+            purchase_line(&index, &PurchaseOrderRevisionLineId::new("b")).unwrap().quantity,
+            Some("2".parse().unwrap())
+        );
+        assert!(matches!(
+            purchase_line(&index, &PurchaseOrderRevisionLineId::new("missing")),
+            Err(Error::BusinessLogicError(message)) if message == "采购明细不存在"
+        ));
+    }
+
+    /// 销售身份映射仍沿调用方分配顺序执行，并保留重复版本行的首个稳定身份。
+    #[test]
+    fn receipt_sales_index_preserves_allocation_order_first_match_and_error() {
+        let rows = [
+            sales_revision("a", "stable-a"),
+            sales_revision("b", "stable-b"),
+            sales_revision("b", "later-b"),
+        ];
+        let index = first_by_id(&rows, |line| line.base.id.as_str());
+        let stable_ids = ["b", "a", "b"]
+            .into_iter()
+            .map(|id| sales_line_id(&index, &SalesOrderRevisionLineId::new(id)).unwrap().to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(stable_ids, ["stable-b", "stable-a", "stable-b"]);
+        assert!(matches!(
+            sales_line_id(&index, &SalesOrderRevisionLineId::new("missing")),
+            Err(Error::BusinessLogicError(message)) if message == "采购销售分配缺少销售明细归属"
+        ));
+    }
+
+    /// 空索引保持两种缺失关联的既有业务错误。
+    #[test]
+    fn receipt_empty_indexes_keep_missing_reference_errors() {
+        let purchase_index = first_by_id(&[], |line: &PurchaseOrderRevisionLine| line.base.id.as_str());
+        let sales_index = first_by_id(&[], |line: &SalesOrderRevisionLine| line.base.id.as_str());
+        assert!(matches!(
+            purchase_line(&purchase_index, &PurchaseOrderRevisionLineId::new("missing")),
+            Err(Error::BusinessLogicError(_))
+        ));
+        assert!(matches!(
+            sales_line_id(&sales_index, &SalesOrderRevisionLineId::new("missing")),
+            Err(Error::BusinessLogicError(_))
+        ));
+    }
+
     struct TestExecutor {
         _identity: u8,
     }

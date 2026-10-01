@@ -1,6 +1,7 @@
 //! `background_jobs` 列表筛选、投影行与仓储查询。
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::ids::BackgroundJobId;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter};
@@ -147,6 +148,23 @@ impl Pagination for BackgroundJobFilter {
 /// 后台任务集合仓储的域查询。
 #[allow(async_fn_in_trait)]
 pub trait BackgroundJobRepositoryExt {
+    /// 批量回读指定任务的当前未删除事实。
+    ///
+    /// # 参数
+    /// * `ids` - 当前页任务 ID；空集合不访问数据库
+    /// * `executor` - 调用方的数据访问执行器
+    ///
+    /// # 返回
+    /// 返回匹配任务，顺序由调用方按原分页结果恢复。
+    ///
+    /// # 错误
+    /// 数据库读取或游标读取失败时返回错误。
+    async fn find_by_ids(
+        &self,
+        ids: &[BackgroundJobId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<BackgroundJob>>;
+
     /// 分页检索后台任务列表（投影查询，任务中心）。
     ///
     /// 只返回 [`BackgroundJobRow`] 所需的进度字段，不加载整文档；
@@ -209,6 +227,19 @@ pub trait BackgroundJobRepositoryExt {
 }
 
 impl BackgroundJobRepositoryExt for persistence_core::Repository<'_, BackgroundJob> {
+    /// 使用任务 ID 索引批量读取，沿用通用仓储的未删除过滤。
+    async fn find_by_ids(
+        &self,
+        ids: &[BackgroundJobId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<BackgroundJob>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ids = ids.iter().map(|id| id.as_ref()).collect::<Vec<_>>();
+        self.find_many(doc! { "id": { "$in": ids } }, executor).await
+    }
+
     async fn search_background_jobs(
         &self,
         filter: &BackgroundJobFilter,

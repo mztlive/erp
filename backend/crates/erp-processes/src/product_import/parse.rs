@@ -67,23 +67,6 @@ pub fn parse_product_quote_xlsx(bytes: &[u8]) -> Result<ParsedProductSheet> {
     })
 }
 
-/// 从 xlsx 中读取指定媒体文件。
-///
-/// # 参数
-/// * `bytes` - xlsx 文件内容
-/// * `target` - zip 内相对路径，如 `xl/media/image1.jpeg`
-///
-/// # 返回
-/// 返回文件字节。
-///
-/// # 错误
-/// 压缩包损坏或条目不存在时返回错误。
-pub fn read_xlsx_media(bytes: &[u8], target: &str) -> Result<Vec<u8>> {
-    let mut archive = ZipArchive::new(Cursor::new(bytes))
-        .map_err(|_| Error::ValidationError("源文件已损坏，无法读取图片".into()))?;
-    read_zip_bytes(&mut archive, target)
-}
-
 fn row_has_content(cells: &[String]) -> bool {
     cells.iter().any(|cell| !cell.trim().is_empty())
 }

@@ -36,6 +36,31 @@ impl<'a> BpmWorkflowRepository<'a> {
         self.instances().find_by_id(instance_id.as_ref(), executor).await
     }
 
+    /// 按主键批量读取审批流程实例。
+    ///
+    /// # 参数
+    /// * `instance_ids` - 已授权工作项引用的审批流程实例 ID
+    /// * `executor` - 调用方提供的数据访问执行器
+    ///
+    /// # 返回
+    /// 返回匹配且未软删除的全部实例；缺失 ID 不补行，空输入不访问数据库。
+    ///
+    /// # 错误
+    /// MongoDB 查询、游标读取或反序列化失败时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 只解析工作项引用的实例，不附加状态条件或推断当前审批人资格。
+    pub async fn list_instances_by_ids(
+        &self,
+        instance_ids: &[ApprovalProcessInstanceId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ApprovalProcessInstance>> {
+        let Some(filter) = instance_ids_filter(instance_ids) else {
+            return Ok(Vec::new());
+        };
+        self.instances().find_many(filter, executor).await
+    }
+
     /// 判断业务主体是否已经启动过审批实例。
     ///
     /// # 参数
@@ -465,4 +490,42 @@ pub(crate) fn instance_summary_projection() -> Document {
 /// 返回实例列表统一页大小上限。
 pub(crate) fn instance_list_limit(limit: u32) -> i64 {
     clamp_limit(limit, MAX_INSTANCE_PAGE)
+}
+
+/// 构造工作项所引用实例的批量过滤条件；空输入阻止数据库查询。
+fn instance_ids_filter(instance_ids: &[ApprovalProcessInstanceId]) -> Option<Document> {
+    if instance_ids.is_empty() {
+        return None;
+    }
+    let ids = instance_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
+    Some(doc! { "id": { "$in": ids }, "deleted_at": NOT_DELETED_TIMESTAMP_BSON })
+}
+
+#[cfg(test)]
+mod batch_tests {
+    use bpm::ids::ApprovalProcessInstanceId;
+    use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+    use mongodb::bson::doc;
+
+    use super::instance_ids_filter;
+
+    /// 批量实例过滤保留全部请求身份，且只读取未删除实例。
+    #[test]
+    fn instance_ids_filter_keeps_requested_instances_without_status_filter() {
+        let ids =
+            [ApprovalProcessInstanceId::new("instance-a"), ApprovalProcessInstanceId::new("instance-b")];
+        assert_eq!(
+            instance_ids_filter(&ids),
+            Some(doc! {
+                "id": { "$in": ["instance-a", "instance-b"] },
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            })
+        );
+    }
+
+    /// 空实例集合返回无查询条件，不得退化为无范围查询。
+    #[test]
+    fn instance_ids_filter_skips_empty_input() {
+        assert!(instance_ids_filter(&[]).is_none());
+    }
 }
