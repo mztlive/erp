@@ -519,15 +519,38 @@ pub(crate) fn normalize_required(
     max_len: usize,
     too_long: &'static str,
 ) -> ModelResult<String> {
-    let trimmed = value.into();
-    let trimmed = trimmed.trim();
+    let value = value.into();
+    let trimmed = trim_required(&value, empty, max_len, too_long)?;
+    if trimmed.len() == value.len() { Ok(value) } else { Ok(trimmed.to_string()) }
+}
+
+/// 借用规范化后的必填短文本并校验字节长度。
+///
+/// # 参数
+/// * `value` - 原始文本
+/// * `empty` - 空文本错误说明
+/// * `max_len` - UTF-8 字节长度上限
+/// * `too_long` - 超长错误说明
+///
+/// # 返回
+/// 返回移除首尾空白后的文本切片。
+///
+/// # 错误
+/// 空值或超长返回 [`ModelError::InvalidField`]。
+pub(crate) fn trim_required<'a>(
+    value: &'a str,
+    empty: &'static str,
+    max_len: usize,
+    too_long: &'static str,
+) -> ModelResult<&'a str> {
+    let trimmed = value.trim();
     if trimmed.is_empty() {
         return Err(ModelError::InvalidField(empty));
     }
     if trimmed.len() > max_len {
         return Err(ModelError::InvalidField(too_long));
     }
-    Ok(trimmed.to_string())
+    Ok(trimmed)
 }
 
 /// 规范化可选短文本。
@@ -549,7 +572,7 @@ pub(crate) fn normalize_optional(
     if trimmed.len() > max_len {
         return Err(ModelError::InvalidField(too_long));
     }
-    Ok(Some(trimmed.to_string()))
+    if trimmed.len() == value.len() { Ok(Some(value)) } else { Ok(Some(trimmed.to_string())) }
 }
 
 #[cfg(test)]

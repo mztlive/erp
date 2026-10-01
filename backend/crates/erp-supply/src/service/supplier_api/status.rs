@@ -39,8 +39,8 @@ impl SupplierApiService {
         };
         let blockers =
             governance.blockers(action, context.owned_impact.with_active_sync_jobs(active_sync_jobs), true);
-        if let Some(blocker) = blockers.first() {
-            return Err(Error::BusinessLogicError(blocker.message.clone()));
+        if let Some(blocker) = blockers.into_iter().next() {
+            return Err(Error::BusinessLogicError(blocker.message));
         }
         match action {
             SupplierConnectionAction::Enable => connection.enable(actor_id),

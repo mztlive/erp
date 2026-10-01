@@ -153,22 +153,21 @@ impl PartyTaxProfileService {
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
-        let profile_for_tx = profile.clone();
-        let party_id_for_tx = profile.party_id.clone();
-        client
+        let profile_for_tx = profile;
+        let created = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     if profile_for_tx.is_default {
-                        clear_default_marks!(db, party_tax_profiles, party_id_for_tx, None, executor);
+                        clear_default_marks!(db, party_tax_profiles, profile_for_tx.party_id, None, executor);
                     }
                     db.party_tax_profiles().create(&profile_for_tx, executor).await?;
                     audit_port.persist(&audit, executor).await?;
-                    Ok::<(), crate::error::Error>(())
+                    Ok::<PartyTaxProfile, crate::error::Error>(profile_for_tx)
                 })
             })
             .await?;
 
-        Ok(profile.into())
+        Ok(created.into())
     }
 
     /// 更新税务资料（仅生命周期字段；默认标记跨行事务）。
@@ -217,9 +216,7 @@ impl PartyTaxProfileService {
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
-        let mut profile_for_tx = profile.clone();
-        let party_id_for_tx = profile.party_id.clone();
-        let exclude_id = profile.base.id.clone();
+        let mut profile_for_tx = profile;
         let updated = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
@@ -227,8 +224,8 @@ impl PartyTaxProfileService {
                         clear_default_marks!(
                             db,
                             party_tax_profiles,
-                            party_id_for_tx,
-                            Some(&exclude_id),
+                            profile_for_tx.party_id,
+                            Some(&profile_for_tx.base.id),
                             executor
                         );
                     }

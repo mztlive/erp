@@ -57,7 +57,8 @@ impl IntegrationAccess {
         executor: &mut dyn Executor,
     ) -> Result<(IntegrationResolvedScope, IntegrationReadScope)> {
         let access = self.scope.resolve(actor, resource, action, executor).await?;
-        Ok((access.clone(), integration_scope(&access, actor.id())))
+        let scope = integration_scope(&access, actor.id());
+        Ok((access, scope))
     }
 
     /// 经生产 adapter 复用公共单对象判定。

@@ -140,7 +140,7 @@ fn freeze_assignees(
         if binding.participant != node.assignee_participant_id {
             return Err(EngineError::InvalidCommand("实例审批人绑定必须匹配定义审批人"));
         }
-        if binding.eligibility.participant() != binding.participant {
+        if binding.eligibility.participant_ref() != &binding.participant {
             return Err(EngineError::InvalidCommand("资格结果必须属于定义审批人"));
         }
         if binding.eligibility.blocked_code().is_some() {

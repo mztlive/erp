@@ -49,7 +49,7 @@ impl SupplierApiService {
         let confirmation = BusinessCapabilityConfirmation::new(
             format!("w20-confirm-{}", digest(&[&id, &operation_id])),
             BusinessCapabilityConfirmationData {
-                connection_id: SupplierApiConnectionId::new(id.clone()),
+                connection_id: SupplierApiConnectionId::new(id),
                 capability_id: SupplierApiCapabilityId::new(capability.base.id.clone()),
                 capability_code: command.capability_code,
                 requirement: command.requirement,
@@ -58,9 +58,9 @@ impl SupplierApiService {
                 reason_code: command.reason_code,
                 connection_version: connection.base.version,
                 capability_version: capability.base.version,
-                operation_id: operation_id.clone(),
+                operation_id,
                 idempotency_key_hash: idempotency_hash,
-                request_fingerprint: fingerprint.clone(),
+                request_fingerprint: fingerprint,
                 confirmed_by: actor_id.to_string(),
                 confirmed_at: Instant::now(),
             },

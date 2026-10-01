@@ -247,7 +247,7 @@ impl PurchaseChangeOrder {
     /// # 错误
     /// 状态不是草稿，或更新字段校验失败时返回错误。
     pub fn update(&mut self, update: PurchaseChangeOrderUpdate, updated_by: impl Into<String>) -> Result<()> {
-        self.apply_content(&update, updated_by)
+        self.apply_content(update, updated_by)
     }
 
     /// 应用内容更新（草稿门禁）。
@@ -260,20 +260,20 @@ impl PurchaseChangeOrder {
     /// 状态不是草稿，或原因/内容指纹校验失败时返回错误。
     fn apply_content(
         &mut self,
-        update: &PurchaseChangeOrderUpdate,
+        update: PurchaseChangeOrderUpdate,
         updated_by: impl Into<String>,
     ) -> Result<()> {
-        if update_has_content(update) && self.stable.status != PurchaseChangeOrderStatus::Draft {
+        if update_has_content(&update) && self.stable.status != PurchaseChangeOrderStatus::Draft {
             return Err(Error::from("只有草稿状态的采购变更单可以编辑内容"));
         }
-        if let Some(reason) = update.reason.clone() {
+        if let Some(reason) = update.reason {
             self.reason =
                 normalize_required_text(reason, "采购变化原因不能为空", REASON_MAX_LEN, "采购变化原因过长")?;
         }
-        if let Some(submission_id) = update.current_submission_id.clone() {
+        if let Some(submission_id) = update.current_submission_id {
             self.current_submission_id = Some(submission_id);
         }
-        if let Some(hash) = update.target_content_hash.clone() {
+        if let Some(hash) = update.target_content_hash {
             self.target_content_hash = Some(normalize_required_text(
                 hash,
                 "目标内容指纹不能为空",
@@ -281,7 +281,7 @@ impl PurchaseChangeOrder {
                 "目标内容指纹过长",
             )?);
         }
-        if let Some(revision_id) = update.effective_revision_id.clone() {
+        if let Some(revision_id) = update.effective_revision_id {
             self.effective_revision_id = Some(revision_id);
         }
         self.stable.touch(updated_by);

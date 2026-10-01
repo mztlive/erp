@@ -509,7 +509,7 @@ pub fn source_request_hash(req: &RecordSettlementSourceEvidenceRequest) -> Strin
             line.supplier_billed_net.to_string(),
             line.supplier_billed_tax.to_string(),
         ]);
-        let mut references = line.evidence_reference_ids.clone();
+        let mut references = line.evidence_reference_ids.iter().map(String::as_str).collect::<Vec<_>>();
         references.sort();
         parts.push(references.join(","));
     }

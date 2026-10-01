@@ -164,14 +164,23 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         let subject = self.load_runtime_read_subject(instance_id).await?;
         self.ensure_ordinary_runtime_read(actor, &subject).await?;
         let instance = subject.instance;
-        let execution = subject.current_execution;
+        let (node_key, node_name, assignee_id) = subject
+            .current_execution
+            .map(|execution| {
+                (
+                    Some(execution.node_key),
+                    Some(execution.node_name),
+                    Some(execution.assignee_participant_id.as_str().to_string()),
+                )
+            })
+            .unwrap_or_default();
         Ok(item_from_instance_id(
             instance_id,
             instance.status.as_str(),
             instance.current_round_no,
-            execution.as_ref().map(|item| item.node_key.clone()),
-            execution.as_ref().map(|item| item.node_name.clone()),
-            execution.as_ref().map(|item| item.assignee_participant_id.as_str().to_string()),
+            node_key,
+            node_name,
+            assignee_id,
         ))
     }
 

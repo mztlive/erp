@@ -130,11 +130,11 @@ pub fn prepare_purchase_invoice(
 ) -> Result<Invoice> {
     let invoice_id = InvoiceId::new(next_id());
     let invoice = Invoice::new(
-        invoice_id.clone(),
+        invoice_id,
         InvoiceData {
             invoice_direction: InvoiceDirection::Purchase,
             invoice_kind: InvoiceKind::Blue,
-            party_id: party_id.clone(),
+            party_id,
             invoice_code: req.invoice_code.clone(),
             invoice_no: req.invoice_no.clone(),
             invoice_date: req.invoice_date,

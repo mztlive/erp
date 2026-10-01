@@ -128,8 +128,8 @@ impl SalesSelectionService {
     async fn load_batch_pool(&self, booklet: &SalesSelectionBooklet) -> Result<Vec<SkuSnapshot>> {
         let mut executor = NoTransaction;
         let domain = crate::repository::sales_selection::SalesSelectionDomainRepository::new(&self.db);
-        let batch = booklet.current_batch_id.clone().unwrap_or_default();
-        let members = domain.list_pool_members(&booklet.base.id, &batch, &mut executor).await?;
+        let batch = booklet.current_batch_id.as_deref().unwrap_or_default();
+        let members = domain.list_pool_members(&booklet.base.id, batch, &mut executor).await?;
         let mut snapshots: Vec<SkuSnapshot> = members.into_iter().map(|item| item.sku).collect();
         sort_by_sku_id(&mut snapshots);
         Ok(snapshots)
@@ -156,8 +156,9 @@ impl SalesSelectionService {
         if booklet.pool_source.kind == PoolSourceKind::Selection {
             return self.collect_picked(booklet, catalog, as_of).await;
         }
-        let filter = booklet.pool_source.filter.clone().unwrap_or_default();
-        catalog.collect_by_filter(&filter, as_of).await
+        let default_filter = Default::default();
+        let filter = booklet.pool_source.filter.as_ref().unwrap_or(&default_filter);
+        catalog.collect_by_filter(filter, as_of).await
     }
 
     /// 按勾选取出并复验资格。
@@ -500,9 +501,9 @@ async fn package_items(
                 SalesSelectionDisplayItemId::new(next_id()),
                 booklet_id.clone(),
                 batch_id.to_string(),
-                package.tier_id.clone(),
-                package.members.clone(),
-                package.cover.clone(),
+                package.tier_id,
+                package.members,
+                package.cover,
             )
             .map_err(|error| Error::selection_prepare_failed(error.to_string()))?,
         );

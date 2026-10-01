@@ -151,7 +151,7 @@ pub fn normalize_requested_lines(lines: &[RequestedLine]) -> Result<Vec<Requeste
     let mut seen = HashSet::new();
     let mut normalized = Vec::with_capacity(lines.len());
     for line in lines {
-        if !seen.insert(line.sales_order_line_id.clone()) {
+        if !seen.insert(line.sales_order_line_id.as_str()) {
             return Err(Error::from("本次采购明细包含重复销售行"));
         }
         normalized.push(line.clone());

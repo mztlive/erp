@@ -192,20 +192,18 @@ fn search_one_tier(
         }
     }
     let ranked = rerank_accepted(accepted, pool, tier.target_amount, tier.expected_count);
-    Ok((
-        ranked.clone(),
-        TierSearchReport {
-            tier_id: tier.tier_id.clone(),
-            expected_count: tier.expected_count,
-            actual_count: u32::try_from(ranked.len()).unwrap_or(0),
-            stop_reason: stopped,
-            expanded_states: expanded,
-            elapsed_ms: u64::try_from(scope.started.elapsed().as_millis()).unwrap_or(u64::MAX),
-            image_failures,
-            algorithm_version: COMBINATION_ALGORITHM_VERSION.to_string(),
-            seed,
-        },
-    ))
+    let report = TierSearchReport {
+        tier_id: tier.tier_id.clone(),
+        expected_count: tier.expected_count,
+        actual_count: u32::try_from(ranked.len()).unwrap_or(0),
+        stop_reason: stopped,
+        expanded_states: expanded,
+        elapsed_ms: u64::try_from(scope.started.elapsed().as_millis()).unwrap_or(u64::MAX),
+        image_failures,
+        algorithm_version: COMBINATION_ALGORITHM_VERSION.to_string(),
+        seed,
+    };
+    Ok((ranked, report))
 }
 
 /// 深度优先搜索共享只读上下文。

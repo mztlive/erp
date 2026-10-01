@@ -138,22 +138,23 @@ pub(crate) fn normalize_and_validate_line<D: PurchaseLineDataRef>(
     let specification =
         normalize_optional_text(data.specification_snapshot().clone(), "规格快照", SPECIFICATION_MAX_LEN)?;
     let base_unit_code = normalize_optional_text(data.base_unit_code().clone(), "单位", BASE_UNIT_MAX_LEN)?;
-    validate_purchase_line(&PurchaseLineFields {
+    let fields = PurchaseLineFields {
         line_type: data.line_type(),
         procurement_confirmation_line_id: data.procurement_confirmation_line_id().clone(),
         sku_id: data.sku_id().clone(),
-        product_name_snapshot: product_name.clone(),
-        specification_snapshot: specification.clone(),
+        product_name_snapshot: product_name,
+        specification_snapshot: specification,
         quantity: data.quantity(),
-        base_unit_code: base_unit_code.clone(),
+        base_unit_code,
         unit_cost_gross: data.unit_cost_gross(),
         gross_amount: data.gross_amount(),
         net_amount: data.net_amount(),
         tax_amount: data.tax_amount(),
         input_tax_rate: data.input_tax_rate(),
-    })?;
+    };
+    validate_purchase_line(&fields)?;
     data.ensure_allocation()?;
-    Ok((product_name, specification, base_unit_code))
+    Ok((fields.product_name_snapshot, fields.specification_snapshot, fields.base_unit_code))
 }
 
 /// 校验商品/服务成本行。

@@ -658,18 +658,19 @@ impl<'a> SupplierOfferingDomainRepository<'a> {
     ) -> Result<HashMap<String, SupplierOfferingRevision>> {
         let current_by_revision = rows
             .iter()
-            .filter_map(|row| {
-                row.current_revision_id.as_ref().map(|revision_id| (revision_id.clone(), row.id.clone()))
-            })
+            .filter_map(|row| row.current_revision_id.as_ref().map(|revision_id| (revision_id, &row.id)))
             .collect::<HashMap<_, _>>();
-        let revision_ids = current_by_revision.keys().cloned().collect::<Vec<_>>();
+        let revision_ids =
+            current_by_revision.keys().map(|revision_id| (*revision_id).clone()).collect::<Vec<_>>();
         let revisions = SupplierOfferingRevisionRepository::new(self.db, OFFERING_REVISIONS)
             .list_by_ids(&revision_ids, executor)
             .await?;
         Ok(revisions
             .into_iter()
             .filter_map(|revision| {
-                current_by_revision.get(&revision.base.id).cloned().map(|offering_id| (offering_id, revision))
+                current_by_revision
+                    .get(&revision.base.id)
+                    .map(|offering_id| ((*offering_id).clone(), revision))
             })
             .collect())
     }

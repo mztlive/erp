@@ -321,7 +321,7 @@ fn normalize_ref_field(value: impl Into<String>, empty_message: &'static str) ->
     if trimmed.len() > SUBJECT_REF_FIELD_MAX_LEN {
         return Err(Error::InvalidSubjectRef("业务对象引用字段过长"));
     }
-    Ok(trimmed.to_string())
+    if trimmed.len() == value.len() { Ok(value) } else { Ok(trimmed.to_string()) }
 }
 
 #[cfg(test)]

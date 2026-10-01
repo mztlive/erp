@@ -41,9 +41,10 @@ impl Pagination for AdjustmentSnapshotReadFilter {
     }
 }
 
+/// 将可选身份列表直接写入 BSON 条件，空列表保持无命中语义。
 fn insert_ids(filter: &mut Document, field: &str, ids: Option<&Vec<String>>) {
     if let Some(ids) = ids {
-        filter.insert(field, doc! { "$in": ids.clone() });
+        filter.insert(field, doc! { "$in": ids.as_slice() });
     }
 }
 

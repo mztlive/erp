@@ -200,13 +200,15 @@ fn plan_qualification_updates(
                         .ok_or_else(|| erp_core::Error::from("资质适用能力不存在"))
                 })
                 .collect::<erp_core::Result<_>>()?;
-            let current_links = linked_capabilities.get(&qual.base.id).cloned().unwrap_or_default();
+            let links_match = linked_capabilities
+                .get(&qual.base.id)
+                .map_or_else(|| desired_links.is_empty(), |current_links| current_links == &desired_links);
             if qual.matches_profile_fields(
                 input.issuer.as_deref(),
                 input.valid_from,
                 input.valid_to,
                 input.attachment_id.as_ref(),
-            ) && current_links == desired_links
+            ) && links_match
             {
                 continue;
             }

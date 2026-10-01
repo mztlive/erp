@@ -263,8 +263,8 @@ impl TryFrom<ProcurementResponsibilityRuleData> for NormalizedRuleData {
     ///
     /// # 错误
     /// 选择器字段组合与规则类型不一致时返回错误。
-    fn try_from(data: ProcurementResponsibilityRuleData) -> Result<Self> {
-        let service_region = normalize_service_region(data.service_region.clone())?;
+    fn try_from(mut data: ProcurementResponsibilityRuleData) -> Result<Self> {
+        let service_region = normalize_service_region(data.service_region.take())?;
         ensure_selector_shape(&data, service_region.as_deref())?;
         let selector_key = selector_key(&data, service_region.as_deref());
         let owner_user_id = normalize_required_text(

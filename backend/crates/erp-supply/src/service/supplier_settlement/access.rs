@@ -54,7 +54,8 @@ impl SettlementAccess {
         executor: &mut dyn Executor,
     ) -> Result<(SettlementResolvedScope, SettlementReadScope)> {
         let access = self.scope.resolve(actor, action, executor).await?;
-        Ok((access.clone(), settlement_scope(&access, actor.id())))
+        let scope = settlement_scope(&access, actor.id());
+        Ok((access, scope))
     }
 
     /// 在调用方事务内重验结算对象资格。

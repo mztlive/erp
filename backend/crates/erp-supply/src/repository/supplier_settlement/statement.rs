@@ -444,8 +444,8 @@ impl SupplierSettlementStatementRepositoryExt for SupplierSettlementStatementRep
         let mut seen = HashSet::new();
         let mut deduped = Vec::new();
         for id in statement_ids {
-            if !id.trim().is_empty() && seen.insert(id.clone()) {
-                deduped.push(id.clone());
+            if !id.trim().is_empty() && seen.insert(id.as_str()) {
+                deduped.push(id.as_str());
             }
         }
         if deduped.is_empty() {

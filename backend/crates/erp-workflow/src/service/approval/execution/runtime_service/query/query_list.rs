@@ -98,7 +98,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         let instance_ids = mine_instance_ids(&execution_ids, &execution_by_id)?;
         let summaries =
             self.db.bpm_workflow().list_instance_summaries_by_ids(&instance_ids, &mut NoTransaction).await?;
-        let summary_by_id = unique_by_id(summaries, |summary| summary.id.clone())?;
+        let mut summary_by_id = unique_by_id(summaries, |summary| summary.id.clone())?;
         let instance_id_strings = instance_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
         let snapshots = self
             .db
@@ -113,13 +113,14 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             .map(|task| {
                 let execution_id = task.approval_node_execution_id.as_ref().ok_or_else(hidden_not_found)?;
                 let execution = execution_by_id.get(execution_id.as_ref()).ok_or_else(hidden_not_found)?;
-                let summary =
-                    summary_by_id.get(execution.process_instance_id.as_ref()).ok_or_else(hidden_not_found)?;
+                let summary = summary_by_id
+                    .remove(execution.process_instance_id.as_ref())
+                    .ok_or_else(hidden_not_found)?;
                 let snapshot = snapshot_by_instance.get(summary.id.as_str());
-                if !mine_runtime_chain_matches(&task, execution, summary, snapshot, actor.id())? {
+                if !mine_runtime_chain_matches(&task, execution, &summary, snapshot, actor.id())? {
                     return Err(hidden_not_found());
                 }
-                item_from_summary(summary.clone(), snapshot)
+                item_from_summary(summary, snapshot)
             })
             .collect()
     }

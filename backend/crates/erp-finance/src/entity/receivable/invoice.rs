@@ -327,6 +327,7 @@ impl Invoice {
         let invoice_no =
             normalize_required_text(data.invoice_no, "发票号码不能为空", INVOICE_NO_MAX_LEN, "发票号码过长")?;
         let normalized_code = invoice_code.as_ref().map(|code| code.to_uppercase());
+        let normalized_no = invoice_no.to_uppercase();
         let rounding_reason =
             normalize_optional_text(data.rounding_reason, "尾差原因", ROUNDING_REASON_MAX_LEN)?;
 
@@ -337,10 +338,10 @@ impl Invoice {
             invoice_kind: data.invoice_kind,
             accounting_direction: derive_accounting_direction(data.invoice_kind),
             party_id: data.party_id,
-            invoice_code: invoice_code.clone(),
-            invoice_no: invoice_no.clone(),
+            invoice_code,
+            invoice_no,
             normalized_code,
-            normalized_no: invoice_no.to_uppercase(),
+            normalized_no,
             invoice_date: data.invoice_date,
             gross_amount: data.gross_amount,
             net_amount: data.net_amount,

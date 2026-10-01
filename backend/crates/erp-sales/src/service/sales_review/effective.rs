@@ -43,10 +43,10 @@ async fn prepare_effective_change_write(
     change_order: SalesChangeOrder,
     actor: &AuditActor,
 ) -> Result<EffectiveChangeWrite> {
-    let submission_id = change_order.required_current_submission_id()?.clone();
+    let submission_id = change_order.required_current_submission_id()?;
     let submission = db
         .sales_change_submissions()
-        .find_by_id(&submission_id, &mut NoTransaction)
+        .find_by_id(submission_id, &mut NoTransaction)
         .await?
         .ok_or_else(|| Error::NotFound("变更提交不存在".to_string()))?;
     let submission_lines = db
@@ -95,9 +95,9 @@ async fn prepare_effective_revision_write(
         .find_by_id(current_revision_id, &mut NoTransaction)
         .await?
         .ok_or_else(|| Error::NotFound("销售单当前版本不存在".to_string()))?;
-    let mut order_for_tx = order.clone();
+    let mut order_for_tx = order;
     order_for_tx.attach_revision(&revision.revision.base.id, actor.id());
-    let mut change_for_tx = change_order.clone();
+    let mut change_for_tx = change_order;
     change_for_tx.apply_effective(revision.revision.base.id.clone().into(), actor.id())?;
     Ok(EffectiveChangeWrite {
         order: order_for_tx,

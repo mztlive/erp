@@ -29,9 +29,9 @@ pub async fn settle_customer_receipt(
         .receipt_allocations()
         .find_allocations_by_receipts(&[receipt.base.id.clone().into()], executor)
         .await?;
-    let pending = receipt.pending_allocations.clone();
+    let pending = &receipt.pending_allocations;
     let mut ledger =
-        ReceivableFundsLedger::new(receipt.base.id.clone().into(), receipt.amount, &existing, &pending)
+        ReceivableFundsLedger::new(receipt.base.id.clone().into(), receipt.amount, &existing, pending)
             .map_err(map_ledger_error)?;
 
     let mut entry_ids: Vec<ReceivableEntryId> =
@@ -51,16 +51,16 @@ pub async fn settle_customer_receipt(
         .await?;
     let accounts_by_id: HashMap<&str, &ReceivableAccount> =
         accounts.iter().map(|account| (account.base.id.as_str(), account)).collect();
-    let mut checked_accounts: HashSet<ReceivableAccountId> = HashSet::new();
+    let mut checked_accounts = HashSet::new();
     let mut sales_order_ids = Vec::new();
     let allocation_ids: Vec<ReceiptAllocationId> =
         (0..pending.len()).map(|_| ReceiptAllocationId::new(next_id())).collect();
     let allocated_at = Instant::now();
-    for (index, line) in pending.iter().enumerate() {
+    for (line, allocation_id) in pending.iter().zip(allocation_ids) {
         let entry = entries_by_id
             .get(line.receivable_entry_id.as_ref())
             .ok_or_else(|| Error::NotFound("应收分录不存在".to_string()))?;
-        if checked_accounts.insert(entry.receivable_account_id.clone()) {
+        if checked_accounts.insert(&entry.receivable_account_id) {
             let account = accounts_by_id
                 .get(entry.receivable_account_id.as_ref())
                 .ok_or_else(|| Error::NotFound("应收往来子账不存在".to_string()))?;
@@ -69,7 +69,7 @@ pub async fn settle_customer_receipt(
             }
             sales_order_ids.push(account.sales_order_id.to_string());
         }
-        ledger.apply(line, entry, allocation_ids[index].clone(), allocated_at).map_err(map_ledger_error)?;
+        ledger.apply(line, entry, allocation_id, allocated_at).map_err(map_ledger_error)?;
     }
     let settlement_deltas = ledger.account_settlement_deltas();
     let settlement =

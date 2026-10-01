@@ -385,7 +385,7 @@ fn display_item_view(item: &SalesSelectionDisplayItem, booklet: &SalesSelectionB
     let tier_name = tier_id.as_ref().and_then(|tier_id| {
         booklet.tiers.iter().find(|tier| &tier.tier_id == tier_id).map(|tier| tier.name.clone())
     });
-    let cover = item.cover_asset_id().map(ToOwned::to_owned);
+    let cover = item.cover_asset_id();
     DisplayItemView {
         id: item.base.id.clone(),
         item_id: item.base.id.clone(),
@@ -399,9 +399,9 @@ fn display_item_view(item: &SalesSelectionDisplayItem, booklet: &SalesSelectionB
         price: item.price(),
         price_gross: item.price(),
         target_delta,
-        cover_asset_id: cover.clone(),
         cover_image: cover
             .map(|id| format!("/admin/sales-selection-books/{}/images?ref={id}", booklet.base.id)),
+        cover_asset_id: cover.map(ToOwned::to_owned),
         unit,
         members,
         missing_image: item.cover_asset_id().is_none(),

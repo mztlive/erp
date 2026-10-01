@@ -121,16 +121,16 @@ fn group_revision_quantities(
         .map(|goods| (goods.revision_line_id.as_ref(), goods.quantity))
         .collect();
     let zero = Quantity::from_str("0").expect("字面量 0 必然合法");
-    let mut line_index: HashMap<String, usize> = HashMap::new();
+    let mut line_index: HashMap<&str, usize> = HashMap::new();
     let mut line_inputs: Vec<(String, Quantity, Vec<AcceptanceFactEligibility>)> = Vec::new();
     for revision_line in sources.revision_lines {
-        let key = revision_line.sales_order_line_id.to_string();
+        let key = revision_line.sales_order_line_id.as_ref();
         let required_quantity = quantity_by_revision.get(revision_line.id.as_str()).copied().unwrap_or(zero);
-        if let Some(&index) = line_index.get(&key) {
+        if let Some(&index) = line_index.get(key) {
             line_inputs[index].1 = required_quantity;
         } else {
-            line_index.insert(key.clone(), line_inputs.len());
-            line_inputs.push((key, required_quantity, Vec::new()));
+            line_index.insert(key, line_inputs.len());
+            line_inputs.push((key.to_string(), required_quantity, Vec::new()));
         }
     }
     line_inputs

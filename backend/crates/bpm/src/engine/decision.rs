@@ -75,9 +75,9 @@ fn apply_approve(
     mut current: ApprovalNodeExecution,
     graph: &DefinitionGraph,
     approve_edge: &ApprovalTransitionDefinition,
-    command: DecideCommand,
+    mut command: DecideCommand,
 ) -> EngineResult<TransitionPlan> {
-    current.record_approve(command.actor.clone(), command.reason.clone(), command.now)?;
+    current.record_approve(command.actor.clone(), command.reason.take(), command.now)?;
     let mut plan =
         completed_current_plan(instance, current, command.actor.clone(), BpmEventKind::NodeApproved);
     if approve_edge.terminal_result == Some(ApprovalTerminalResult::Approved) {

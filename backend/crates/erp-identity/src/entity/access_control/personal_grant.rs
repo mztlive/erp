@@ -1,7 +1,7 @@
 //! 个人业务扩展授权，与个人 DataScope 上限独立持久化。
 use entity_core::BaseModel;
 use entity_macros::{Entity, id_type};
-use erp_core::validation::normalize_required_text;
+use erp_core::validation::normalize_required_text_ref;
 use serde::{Deserialize, Serialize};
 
 use super::{
@@ -50,7 +50,7 @@ impl PersonalBusinessGrant {
     pub fn new(id: PersonalBusinessGrantId, user_id: &str, data: PersonalBusinessGrantData) -> Result<Self> {
         let mut grant = Self {
             base: BaseModel::new(id.to_string()),
-            user_id: normalize_required_text(user_id.to_string(), "请选择人员", 128, "人员身份过长")?,
+            user_id: normalize_required_text_ref(user_id, "请选择人员", 128, "人员身份过长")?,
             role_id: RoleId::parse(data.role_id)?.to_string(),
             resource: data.resource,
             actions: data.actions,

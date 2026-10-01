@@ -138,10 +138,11 @@ fn snapshot_by_process_instance_filter(approval_process_instance_id: &str) -> Do
     doc! { "approval_process_instance_id": approval_process_instance_id }
 }
 
+/// 按审批实例 ID 集合构造冻结主体快照筛选。
 fn snapshot_by_process_instances_filter(approval_process_instance_ids: &[String]) -> Document {
     doc! {
         "approval_process_instance_id": {
-            "$in": approval_process_instance_ids.to_vec(),
+            "$in": approval_process_instance_ids,
         }
     }
 }

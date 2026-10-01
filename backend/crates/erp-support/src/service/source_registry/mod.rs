@@ -191,17 +191,13 @@ impl SourceRegistryService {
         // 「必须收到事务执行器」，此处由 Service 开启事务会话传入。
         let db = self.db.clone();
         let client = db.client().clone();
-        let map_for_tx = map.clone();
-        let target_for_tx = target.clone();
         let audit_port = self.audit.clone();
-        client
+        let map = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.source_registry()
-                        .create_external_identity_link(&map_for_tx, &target_for_tx, executor)
-                        .await?;
+                    db.source_registry().create_external_identity_link(&map, &target, executor).await?;
                     audit_port.persist(&audit, executor).await?;
-                    Ok::<(), crate::error::Error>(())
+                    Ok::<_, crate::error::Error>(map)
                 })
             })
             .await?;

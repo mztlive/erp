@@ -54,8 +54,9 @@ pub fn new_capability(
         },
         actor_id,
     )?;
-    let revision = capability.snapshot_revision(revision_id.clone(), 1)?;
-    capability.stable.current_revision_id = Some(revision_id.to_string());
+    let revision_key = revision_id.to_string();
+    let revision = capability.snapshot_revision(revision_id, 1)?;
+    capability.stable.current_revision_id = Some(revision_key);
     Ok((capability, revision))
 }
 
@@ -170,11 +171,11 @@ pub fn new_qualification(
         SupplierQualificationData {
             supplier_id: supplier_id.clone(),
             qualification_type,
-            certificate_no: certificate_no.clone(),
-            issuer: issuer.clone(),
+            certificate_no,
+            issuer,
             valid_from,
             valid_to,
-            attachment_id: attachment_id.clone(),
+            attachment_id,
             status: QualificationStatus::Active,
         },
         actor_id,

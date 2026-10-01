@@ -82,7 +82,7 @@ pub fn build_working_copy(
     // 此前传空 Vec 会导致「销售单明细不能为空」——头校验与行集合分离的契约要求
     // 创建数据必须携带完整行摘要（即使行最终分集合存储）。
     let line_datas = build_working_copy_line_datas(stable_lines, &draft.lines)?;
-    let lines = materialize_working_copy_lines(&working_copy_id, &line_datas)?;
+    let lines = materialize_working_copy_lines(&working_copy_id, line_datas.iter().cloned())?;
     let (gross, net, tax) = SalesOrderWorkingCopyLine::amount_totals(&lines);
     let snapshot = header_snapshot(draft)?;
     let working_copy = SalesOrderWorkingCopy::new(
@@ -169,14 +169,15 @@ fn build_working_copy_line_datas(
 /// 行字段组与行类型不一致、金额非法时返回错误。
 fn materialize_working_copy_lines(
     working_copy_id: &SalesOrderWorkingCopyId,
-    line_datas: &[SalesOrderWorkingCopyLineData],
+    line_datas: impl IntoIterator<Item = SalesOrderWorkingCopyLineData>,
 ) -> Result<Vec<SalesOrderWorkingCopyLine>> {
-    let mut built = Vec::with_capacity(line_datas.len());
+    let line_datas = line_datas.into_iter();
+    let mut built = Vec::with_capacity(line_datas.size_hint().0);
     for data in line_datas {
         built.push(SalesOrderWorkingCopyLine::new(
             SalesOrderWorkingCopyLineId::new(next_id()),
             working_copy_id.clone(),
-            data.clone(),
+            data,
         )?);
     }
     Ok(built)
@@ -202,7 +203,7 @@ pub fn build_working_copy_lines(
     lines: &[SalesOrderDraftLineRequest],
 ) -> Result<Vec<SalesOrderWorkingCopyLine>> {
     let line_datas = build_working_copy_line_datas(stable_lines, lines)?;
-    materialize_working_copy_lines(working_copy_id, &line_datas)
+    materialize_working_copy_lines(working_copy_id, line_datas)
 }
 
 /// 构建表头快照入参。
@@ -302,19 +303,16 @@ pub fn submission_view(
         submission_no: submission.submission_no,
         status: submission.stable.status,
         business_type: submission.business_type,
-        customer_name: submission.customer_snapshot.customer_name.clone(),
-        contract_no: submission.contract_snapshot.as_ref().map(|s| s.contract_no.clone()),
+        customer_name: submission.customer_snapshot.customer_name,
+        contract_no: submission.contract_snapshot.map(|s| s.contract_no),
         contract_revision_id: submission.contract_revision_id.as_ref().map(ToString::to_string),
-        settlement_party_name: submission
-            .settlement_party_snapshot
-            .as_ref()
-            .map(|s| s.settlement_party_name.clone()),
-        payment_term_code: submission.payment_term_snapshot.payment_term_code.clone(),
-        payment_term_name: submission.payment_term_snapshot.payment_term_name.clone(),
-        invoice_type: submission.invoice_requirement_snapshot.invoice_type.clone(),
-        tax_point: submission.invoice_requirement_snapshot.tax_point.clone(),
-        project_name: submission.project_name.clone(),
-        business_remark: submission.business_remark.clone(),
+        settlement_party_name: submission.settlement_party_snapshot.map(|s| s.settlement_party_name),
+        payment_term_code: submission.payment_term_snapshot.payment_term_code,
+        payment_term_name: submission.payment_term_snapshot.payment_term_name,
+        invoice_type: submission.invoice_requirement_snapshot.invoice_type,
+        tax_point: submission.invoice_requirement_snapshot.tax_point,
+        project_name: submission.project_name,
+        business_remark: submission.business_remark,
         voucher_category_sku_id: submission.voucher_category_sku_id.as_ref().map(ToString::to_string),
         voucher_expiry_at: submission.voucher_expiry_at.map(|instant| instant.unix_secs() as u64),
         receivable_due_date: submission.receivable_due_date,

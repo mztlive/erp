@@ -62,8 +62,8 @@ pub fn new_supplier_refund_commit(
         SupplierRefundData {
             refund_no: return_command_no(SUPPLIER_REFUND_COMMAND_PREFIX, actor_id, &req.idempotency_key),
             purchase_return_order_id: None,
-            supplier_id: source.supplier_id.clone(),
-            original_payment_id: Some(source.payment_id.clone()),
+            supplier_id: source.supplier_id,
+            original_payment_id: Some(source.payment_id),
             original_payable_entry_id: None,
             reason_code: None,
             reason_text: req.reason.clone(),

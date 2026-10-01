@@ -25,6 +25,7 @@ pub async fn sync_role_grants(rbac: &SharedRbacService) -> Result<()> {
     Ok(())
 }
 
+/// 将一个目录类别的现有角色成员资格写入同一事务。
 async fn sync_category(rbac: &SharedRbacService, category: PersonDirectoryCategory) -> Result<()> {
     let Some(role_id) = category.grant_role_id() else {
         return Ok(());
@@ -41,8 +42,6 @@ async fn sync_category(rbac: &SharedRbacService, category: PersonDirectoryCatego
     db.client()
         .clone()
         .with_transaction(move |executor| {
-            let account_ids = account_ids.clone();
-            let db = db.clone();
             Box::pin(async move {
                 for account_id in &account_ids {
                     ensure_grant(&db, account_id, category, executor).await?;

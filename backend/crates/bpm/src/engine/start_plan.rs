@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use super::{Eligibility, EngineError, EngineResult, StartAssigneeBinding};
 use crate::graph::DefinitionGraph;
 use crate::ids::ApprovalInstanceAssigneeId;
+use crate::model::ApprovalNodeDefinition;
 
 /// 单个节点的启动绑定输入：调用方已收敛授权资格并注入绑定主键。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -71,29 +72,14 @@ pub fn plan_start(input: StartPlanInput<'_>) -> EngineResult<StartPlan> {
         return Err(EngineError::InvalidCommand("启动绑定必须与定义节点一一对应"));
     }
     let mut by_node = HashMap::with_capacity(bindings.len());
-    for binding in &bindings {
-        if by_node.insert(binding.node_key.as_str(), binding).is_some() {
+    for binding in bindings {
+        if by_node.insert(binding.node_key, (binding.assignee_id, binding.eligibility)).is_some() {
             return Err(EngineError::InvalidCommand("节点审批人绑定缺失或重复"));
         }
     }
     let mut frozen = Vec::with_capacity(graph.nodes.len());
     for node in &graph.nodes {
-        let binding = by_node
-            .get(node.node_key.as_str())
-            .copied()
-            .ok_or(EngineError::InvalidCommand("节点审批人绑定缺失或重复"))?;
-        if binding.eligibility.participant() != node.assignee_participant_id {
-            return Err(EngineError::InvalidCommand("资格结果必须属于定义审批人"));
-        }
-        if frozen.iter().any(|prior: &StartAssigneeBinding| prior.id == binding.assignee_id) {
-            return Err(EngineError::InvalidCommand("实例审批人绑定主键不得重复"));
-        }
-        frozen.push(StartAssigneeBinding {
-            id: binding.assignee_id.clone(),
-            node_key: node.node_key.clone(),
-            participant: node.assignee_participant_id.clone(),
-            eligibility: binding.eligibility.clone(),
-        });
+        frozen.push(freeze_binding(node, &mut by_node, &frozen)?);
     }
     let entry = graph.entry_node().map_err(|_| EngineError::InvalidCommand("审批定义缺少入口节点"))?;
     let entry_eligibility = frozen
@@ -102,6 +88,47 @@ pub fn plan_start(input: StartPlanInput<'_>) -> EngineResult<StartPlan> {
         .map(|item| item.eligibility.clone())
         .ok_or(EngineError::InvalidCommand("入口节点缺少审批人绑定"))?;
     Ok(StartPlan { bindings: frozen, entry_node_key: entry.node_key.clone(), entry_eligibility })
+}
+
+/// 移动节点绑定，保持缺失、资格归属与重复主键的原校验顺序。
+///
+/// # 参数
+/// * `node` - 定义节点
+/// * `by_node` - 尚未冻结的拥有型绑定索引
+/// * `frozen` - 已冻结绑定，供重复定义节点校验复用
+///
+/// # 返回
+/// 返回已移动身份与资格的绑定。
+///
+/// # 错误
+/// 绑定缺失、资格不属于定义审批人或主键重复时返回命令错误。
+fn freeze_binding(
+    node: &ApprovalNodeDefinition,
+    by_node: &mut HashMap<String, (ApprovalInstanceAssigneeId, Eligibility)>,
+    frozen: &[StartAssigneeBinding],
+) -> EngineResult<StartAssigneeBinding> {
+    let Some((node_key, (assignee_id, eligibility))) = by_node.remove_entry(node.node_key.as_str()) else {
+        let prior = frozen
+            .iter()
+            .find(|prior| prior.node_key == node.node_key)
+            .ok_or(EngineError::InvalidCommand("节点审批人绑定缺失或重复"))?;
+        if prior.eligibility.participant_ref() != &node.assignee_participant_id {
+            return Err(EngineError::InvalidCommand("资格结果必须属于定义审批人"));
+        }
+        return Err(EngineError::InvalidCommand("实例审批人绑定主键不得重复"));
+    };
+    if eligibility.participant_ref() != &node.assignee_participant_id {
+        return Err(EngineError::InvalidCommand("资格结果必须属于定义审批人"));
+    }
+    if frozen.iter().any(|prior| prior.id == assignee_id) {
+        return Err(EngineError::InvalidCommand("实例审批人绑定主键不得重复"));
+    }
+    Ok(StartAssigneeBinding {
+        id: assignee_id,
+        node_key,
+        participant: node.assignee_participant_id.clone(),
+        eligibility,
+    })
 }
 
 #[cfg(test)]
@@ -315,6 +342,33 @@ mod tests {
         })
         .unwrap_err();
         assert_eq!(error, EngineError::InvalidCommand("实例审批人绑定主键不得重复"));
+    }
+
+    /// 图中重复节点仍先检查资格归属，再报告重复绑定主键。
+    #[test]
+    fn start_plan_preserves_validation_order_for_duplicate_definition_nodes() {
+        let mut graph = two_node_graph();
+        graph.nodes[1] = graph.nodes[0].clone();
+        for changed_participant in [false, true] {
+            if changed_participant {
+                graph.nodes[1].assignee_participant_id = participant("u9");
+            }
+            let error = plan_start(StartPlanInput {
+                graph: &graph,
+                expected_definition_version: 1,
+                bindings: vec![
+                    binding("n1", "a1", eligible("u1", "张三")),
+                    binding("n2", "a2", eligible("u2", "李四")),
+                ],
+            })
+            .unwrap_err();
+            let expected = if changed_participant {
+                "资格结果必须属于定义审批人"
+            } else {
+                "实例审批人绑定主键不得重复"
+            };
+            assert_eq!(error, EngineError::InvalidCommand(expected));
+        }
     }
 
     /// 入口键缺失时失败关闭，禁止无入口启动。

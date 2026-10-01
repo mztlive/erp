@@ -33,7 +33,7 @@ use crate::repository::owned::SupplierApiCapabilityRepository;
 /// 不开事务、不提交事务；有序写入显式声明，不依赖驱动默认。
 async fn insert_many_ordered<T>(
     collection: &mongodb::Collection<T>,
-    documents: Vec<T>,
+    documents: &[T],
     executor: &mut dyn Executor,
 ) -> Result<()>
 where
@@ -92,7 +92,7 @@ impl<'a> SupplierApiRepository<'a> {
         }
         insert_many_ordered(
             &self.db.collection::<SupplierApiCapability>(SUPPLIER_API_CAPABILITIES),
-            creates.to_vec(),
+            creates,
             executor,
         )
         .await

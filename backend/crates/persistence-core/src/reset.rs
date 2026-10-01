@@ -27,13 +27,13 @@ impl ResetRetention {
         filter: Document,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let document = mongo_ops::find_one(&db.collection::<Document>(collection), filter, executor)
+        let mut document = mongo_ops::find_one(&db.collection::<Document>(collection), filter, executor)
             .await?
             .ok_or(Error::EntityMetadataOutOfRange("reset retention document missing"))?;
         let id = document
-            .get("_id")
+            .remove("_id")
             .ok_or(Error::EntityMetadataOutOfRange("reset retention document has no _id"))?;
-        self.0.entry(collection.into()).or_default().push(id.clone());
+        self.0.entry(collection.into()).or_default().push(id);
         Ok(())
     }
 }

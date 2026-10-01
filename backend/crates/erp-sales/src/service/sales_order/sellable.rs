@@ -93,14 +93,11 @@ impl SalesOrderService {
         if refs.is_empty() {
             return Ok(());
         }
-        let expected = refs.iter().cloned().collect::<HashSet<_>>();
-        let qualified = port
-            .qualified_refs(refs, BusinessDate::today(), executor)
-            .await?
-            .into_iter()
-            .collect::<HashSet<_>>();
+        let expected = refs.iter().collect::<HashSet<_>>();
+        let qualified = port.qualified_refs(refs, BusinessDate::today(), executor).await?;
+        let qualified = qualified.iter().collect::<HashSet<_>>();
         let mut invalid =
-            expected.difference(&qualified).map(|(sku_id, _)| sku_id.clone()).collect::<Vec<_>>();
+            expected.difference(&qualified).map(|(sku_id, _)| sku_id.as_str()).collect::<Vec<_>>();
         invalid.sort();
         if invalid.is_empty() {
             Ok(())

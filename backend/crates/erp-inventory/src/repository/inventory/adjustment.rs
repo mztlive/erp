@@ -107,10 +107,10 @@ impl QueryFilter for StockAdjustmentFilter {
             filter.insert("status", status.as_str());
         }
         if let Some(prepared_by_ids) = &self.prepared_by_ids {
-            filter.insert("prepared_by", doc! { "$in": prepared_by_ids.clone() });
+            filter.insert("prepared_by", doc! { "$in": prepared_by_ids.as_slice() });
         }
         if let Some(id_in) = &self.id_in {
-            filter.insert("id", doc! { "$in": id_in.clone() });
+            filter.insert("id", doc! { "$in": id_in.as_slice() });
         }
         self.search.apply(&mut filter);
         filter

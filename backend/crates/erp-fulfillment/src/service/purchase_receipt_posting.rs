@@ -35,7 +35,7 @@ impl FulfillmentService {
             return Err(Error::ValidationError("采购入库单的目标仓库已冻结，不能在过账时变更".to_string()));
         }
         receipt.update(crate::entity::fulfillment::PurchaseReceiptUpdate {
-            warehouse_id: warehouse_id.or(Some(receipt.warehouse_id.clone())),
+            warehouse_id: warehouse_id.or_else(|| Some(receipt.warehouse_id.clone())),
         })?;
         let lines = self
             .db
@@ -90,7 +90,7 @@ impl FulfillmentService {
             },
         )?;
         let lines = DeliveryLineBatch::build(
-            delivery_id.clone(),
+            delivery_id,
             DeliveryType::WarehouseShip,
             1,
             super::delivery_lines::receipt_reservation_specs(reservations),
@@ -123,7 +123,7 @@ impl FulfillmentService {
             .collect::<Vec<_>>();
         let next_line_no = existing.iter().map(|line| line.line_no).max().unwrap_or(0) + 1;
         for line in DeliveryLineBatch::build(
-            delivery_id.clone(),
+            delivery_id,
             DeliveryType::WarehouseShip,
             next_line_no,
             super::delivery_lines::receipt_reservation_specs(&pending),

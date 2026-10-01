@@ -155,7 +155,7 @@ fn ensure_binding_eligibility_affinity(
     if assignee.definition_assignee_participant_id != current.assignee_participant_id {
         return Err(EngineError::InvalidCommand("原审批人与旧受阻执行不一致"));
     }
-    if eligibility.participant() != assignee.definition_assignee_participant_id {
+    if eligibility.participant_ref() != &assignee.definition_assignee_participant_id {
         return Err(EngineError::InvalidCommand("资格结果必须属于原审批人"));
     }
     let node = graph.node(&assignee.node_key).ok_or(EngineError::GraphCorrupted)?;

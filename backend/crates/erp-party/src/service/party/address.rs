@@ -163,22 +163,21 @@ impl PartyAddressService {
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
-        let address_for_tx = address.clone();
-        let party_id_for_tx = address.party_id.clone();
-        client
+        let address_for_tx = address;
+        let created = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     if address_for_tx.is_default {
-                        clear_default_marks!(db, party_addresses, party_id_for_tx, None, executor);
+                        clear_default_marks!(db, party_addresses, address_for_tx.party_id, None, executor);
                     }
                     db.party_addresses().create(&address_for_tx, executor).await?;
                     audit_port.persist(&audit, executor).await?;
-                    Ok::<(), crate::error::Error>(())
+                    Ok::<PartyAddress, crate::error::Error>(address_for_tx)
                 })
             })
             .await?;
 
-        Ok(address.into())
+        Ok(created.into())
     }
 
     /// 更新地址（仅生命周期字段；默认标记跨行事务）。
@@ -227,9 +226,7 @@ impl PartyAddressService {
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
-        let mut address_for_tx = address.clone();
-        let party_id_for_tx = address.party_id.clone();
-        let exclude_id = address.base.id.clone();
+        let mut address_for_tx = address;
         let updated = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
@@ -237,8 +234,8 @@ impl PartyAddressService {
                         clear_default_marks!(
                             db,
                             party_addresses,
-                            party_id_for_tx,
-                            Some(&exclude_id),
+                            address_for_tx.party_id,
+                            Some(&address_for_tx.base.id),
                             executor
                         );
                     }

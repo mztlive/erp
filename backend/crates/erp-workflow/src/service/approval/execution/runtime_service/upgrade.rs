@@ -67,9 +67,10 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             action_id: WorkflowActionId::new(next_id()),
             receipt_id: ApprovalCommandReceiptId::new(next_id()),
         };
+        let commit_command = prepared.clone();
         commit_or_recover(
-            || self.commit_upgrade_binding(actor, prepared.clone()),
-            |error| self.recover_upgrade_binding(actor, prepared.clone(), error),
+            || self.commit_upgrade_binding(actor, commit_command),
+            |error| self.recover_upgrade_binding(actor, prepared, error),
         )
         .await
     }

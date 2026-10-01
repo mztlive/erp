@@ -9,7 +9,7 @@
 use std::collections::HashSet;
 use std::fmt;
 
-use erp_core::validation::normalize_required_text;
+use erp_core::validation::normalize_required_text_ref;
 use erp_core::{Error, Result};
 
 /// 无规格 SKU 的固定空规格签名（数据模型 §6.3）。
@@ -121,14 +121,10 @@ pub fn compute_specification_signature(entries: &[SpecSignatureEntry]) -> Result
 
     let mut normalized: Vec<(String, String)> = Vec::with_capacity(entries.len());
     for entry in entries {
-        let attribute_code = normalize_required_text(
-            entry.attribute_code.clone(),
-            "规格名不能为空",
-            CODE_MAX_LEN,
-            "规格名过长",
-        )?;
+        let attribute_code =
+            normalize_required_text_ref(&entry.attribute_code, "规格名不能为空", CODE_MAX_LEN, "规格名过长")?;
         let value_code =
-            normalize_required_text(entry.value_code.clone(), "规格值不能为空", CODE_MAX_LEN, "规格值过长")?;
+            normalize_required_text_ref(&entry.value_code, "规格值不能为空", CODE_MAX_LEN, "规格值过长")?;
         normalized.push((attribute_code, value_code));
     }
     normalized.sort();

@@ -10,7 +10,7 @@ use erp_core::ids::{LegacyImportBatchId, LegacyImportRowId};
 use mongodb::bson::doc;
 use persistence_core::{Executor, Result, mongo_ops};
 
-use crate::entity::legacy_import::{ImportStatus, LegacyImportRow, dedupe_by_key};
+use crate::entity::legacy_import::{ImportStatus, LegacyImportRow};
 
 /// 一次应用请求对应的导入行持久化范围。
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -157,7 +157,8 @@ fn pending_outside_filter(
 /// # 返回
 /// 返回去重后的行 ID 列表。
 fn unique_row_ids(row_ids: &[LegacyImportRowId]) -> Vec<LegacyImportRowId> {
-    dedupe_by_key(row_ids, |id| id.clone()).into_iter().cloned().collect()
+    let mut seen = HashSet::new();
+    row_ids.iter().filter(|id| seen.insert(*id)).cloned().collect()
 }
 
 /// 按请求顺序报告未命中的行 ID。

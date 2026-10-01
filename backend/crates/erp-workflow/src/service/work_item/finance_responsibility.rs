@@ -205,7 +205,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             let rule =
                 FinanceResponsibilityRule::new(next_id(), data.clone(), actor.id()).map_err(Error::Logic)?;
             let audit = PreparedWorkflowAudit::resource(
-                actor.clone(),
+                actor,
                 "finance_responsibility_rule.create",
                 "finance_responsibility_rule",
                 rule.base.id.clone(),
@@ -216,11 +216,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             let rule = rbac
                 .clone()
                 .run_authorized_policy_transaction(policy_revision, move |executor| {
-                    let service = WorkItemService::new(db.clone(), rbac.clone());
-                    let data = data.clone();
-                    let rule = rule.clone();
-                    let audit = audit.clone();
-                    let audit_port = Arc::clone(&audit_port);
+                    let service = WorkItemService::new(db.clone(), rbac);
                     Box::pin(async move {
                         service.validate_finance_rule_data(&data, true, true, executor).await?;
                         db.finance_responsibility_rules().create(&rule, executor).await?;
@@ -258,8 +254,9 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         async move {
             let (version, data) = request.into_parts();
             let policy_revision = self.finance_rule_update_revision(&id, version, &data).await?;
+            let updated_by = actor.id().to_string();
             let audit = PreparedWorkflowAudit::resource(
-                actor.clone(),
+                actor,
                 "finance_responsibility_rule.update",
                 "finance_responsibility_rule",
                 id.to_string(),
@@ -267,17 +264,10 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             let db = self.db.clone();
             let rbac = self.auth.clone();
             let audit_port = Arc::clone(&self.audit);
-            let id = id.to_string();
-            let updated_by = actor.id().to_string();
             let rule = rbac
                 .clone()
                 .run_authorized_policy_transaction(policy_revision, move |executor| {
-                    let service = WorkItemService::new(db.clone(), rbac.clone());
-                    let data = data.clone();
-                    let id = id.clone();
-                    let updated_by = updated_by.clone();
-                    let audit = audit.clone();
-                    let audit_port = Arc::clone(&audit_port);
+                    let service = WorkItemService::new(db, rbac);
                     Box::pin(async move {
                         let rule =
                             service.update_finance_rule(&id, version, data, updated_by, executor).await?;

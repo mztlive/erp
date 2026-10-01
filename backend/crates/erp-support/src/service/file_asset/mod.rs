@@ -223,19 +223,18 @@ impl FileAssetService {
         };
         let db = self.db.clone();
         let client = db.client().clone();
-        let asset_for_tx = asset.clone();
         let audit_port = self.audit.clone();
-        client
+        let asset = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.file_assets().create(&asset_for_tx, executor).await?;
+                    db.file_assets().create(&asset, executor).await?;
                     audit_port.persist(&asset_audit, executor).await?;
                     if let (Some(attachment), Some(audit)) = (attachment.as_ref(), attachment_audit.as_ref())
                     {
                         db.document_attachments().create(attachment, executor).await?;
                         audit_port.persist(audit, executor).await?;
                     }
-                    Ok::<(), crate::error::Error>(())
+                    Ok::<_, crate::error::Error>(asset)
                 })
             })
             .await?;
@@ -279,14 +278,13 @@ impl FileAssetService {
         )?;
         let db = self.db.clone();
         let client = db.client().clone();
-        let attachment_for_tx = attachment.clone();
         let audit_port = self.audit.clone();
-        client
+        let attachment = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.document_attachments().create(&attachment_for_tx, executor).await?;
+                    db.document_attachments().create(&attachment, executor).await?;
                     audit_port.persist(&audit, executor).await?;
-                    Ok::<(), crate::error::Error>(())
+                    Ok::<_, crate::error::Error>(attachment)
                 })
             })
             .await?;

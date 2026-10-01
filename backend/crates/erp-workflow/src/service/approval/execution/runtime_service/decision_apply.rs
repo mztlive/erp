@@ -108,13 +108,14 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         let command = RuntimeDecisionCommand {
             work_item_id: work_item_id.to_string(),
             decision,
-            reason: reason.clone(),
+            reason,
             expected_task_version,
             idempotency_key: key,
         };
+        let commit_command = command.clone();
         let outcome = commit_or_recover(
-            || self.commit_decision(actor, command.clone()),
-            |error| self.recover_decision_after_competing_commit(actor, command.clone(), error),
+            || self.commit_decision(actor, commit_command),
+            |error| self.recover_decision_after_competing_commit(actor, command, error),
         )
         .await?;
         if outcome.blocked {
@@ -412,9 +413,7 @@ pub(super) fn decision_terminal_actor<'a>(
     item: &'a WorkItem,
     execution: &'a ApprovalNodeExecution,
 ) -> Option<&'a str> {
-    if item.approval_node_execution_id.as_ref()
-        != Some(&ApprovalNodeExecutionId::new(execution.base.id.clone()))
-    {
+    if item.approval_node_execution_id.as_ref().map(AsRef::as_ref) != Some(execution.base.id.as_str()) {
         return None;
     }
     match item.status {
@@ -461,8 +460,7 @@ pub(super) fn legacy_decision_terminal_facts_match(
         ApprovalDecision::Reject => ApprovalNodeExecutionStatus::Rejected,
     };
     item.base.id == command.work_item_id
-        && item.approval_node_execution_id.as_ref()
-            == Some(&ApprovalNodeExecutionId::new(execution.base.id.clone()))
+        && item.approval_node_execution_id.as_ref().map(AsRef::as_ref) == Some(execution.base.id.as_str())
         && item.status == WorkItemStatus::Completed
         && item.completed_by.as_deref() == Some(actor_id)
         && item.base.version == persisted_task_version

@@ -238,7 +238,8 @@ impl ServiceFulfillmentConfirmation {
             COMPLETION_NOTE_MAX_LEN,
             "完成说明过长",
         )?;
-        let evidence_attachment_id = require_evidence_attachment_id(params.evidence_attachment_id)?;
+        let evidence_attachment_id = params.evidence_attachment_id;
+        require_evidence_attachment_id(&evidence_attachment_id)?;
         let service_location_encrypted = normalize_required_text(
             params.service_location_encrypted,
             "服务地点加密值不能为空",
@@ -552,7 +553,7 @@ impl ServiceFulfillment {
     /// # 错误
     /// 未上传图片凭证时返回错误。
     pub fn ensure_evidence_present(&self) -> Result<()> {
-        let Some(evidence_attachment_id) = self.evidence_attachment_id.clone() else {
+        let Some(evidence_attachment_id) = self.evidence_attachment_id.as_ref() else {
             return Err(Error::from("线下服务履约必须上传图片凭证"));
         };
         require_evidence_attachment_id(evidence_attachment_id)?;
@@ -757,15 +758,15 @@ fn ensure_binary_service_result(result: FulfillmentResult) -> Result<Fulfillment
 /// * `evidence_attachment_id` - 文件资产主键
 ///
 /// # 返回
-/// 主键非空时原样返回。
+/// 主键非空时返回 `Ok(())`。
 ///
 /// # 错误
 /// 主键空白时返回错误。
-fn require_evidence_attachment_id(evidence_attachment_id: FileAssetId) -> Result<FileAssetId> {
+fn require_evidence_attachment_id(evidence_attachment_id: &FileAssetId) -> Result<()> {
     if evidence_attachment_id.as_ref().trim().is_empty() {
         return Err(Error::from("线下服务履约必须上传图片凭证"));
     }
-    Ok(evidence_attachment_id)
+    Ok(())
 }
 
 #[cfg(test)]

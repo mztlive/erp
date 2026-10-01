@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::{ProductId, SkuId};
-use mongodb::bson::{Document, doc};
+use mongodb::bson::{Bson, Document, doc};
 use persistence_core::{Executor, PageResult, Result, insert_literal_regex_filter, mongo_ops};
 
 use super::CatalogRepository;
@@ -445,9 +445,10 @@ impl CatalogRepository<'_> {
         if let Some(session) = executor.session() {
             query = query.session(session);
         }
-        ids.extend(
-            query.await?.into_iter().filter_map(|id| id.as_str().map(|value| SkuId::new(value.to_owned()))),
-        );
+        ids.extend(query.await?.into_iter().filter_map(|id| match id {
+            Bson::String(value) => Some(SkuId::new(value)),
+            _ => None,
+        }));
         ids.sort_by_key(ToString::to_string);
         ids.dedup();
         Ok(ids)

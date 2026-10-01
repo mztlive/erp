@@ -184,7 +184,8 @@ impl S3Storage {
     /// # 错误
     /// bucket、region、凭证为空，endpoint 格式无效，或对象键前缀不安全时返回错误。
     pub fn new(config: S3StorageConfig) -> Result<Self> {
-        let (public_base_url, key_prefix) = validate_config(&config)?;
+        let public_base_url = validate_config(&config)?;
+        let key_prefix = normalize_prefix(config.key_prefix)?;
 
         let credentials = Credentials::new(
             config.access_key_id,
@@ -489,11 +490,11 @@ impl S3Storage {
 /// * `config` - 待校验的启动配置
 ///
 /// # 返回
-/// 返回规范化后的公开基础 URL 与对象键前缀。
+/// 返回规范化后的公开基础 URL。
 ///
 /// # 错误
 /// 配置非法时返回 `InvalidConfig`。
-fn validate_config(config: &S3StorageConfig) -> Result<(Url, Option<String>)> {
+fn validate_config(config: &S3StorageConfig) -> Result<Url> {
     for (name, value) in [
         ("bucket", config.bucket.as_str()),
         ("region", config.region.as_str()),
@@ -512,10 +513,7 @@ fn validate_config(config: &S3StorageConfig) -> Result<(Url, Option<String>)> {
         return Err(Error::InvalidConfig("S3 session_token 不能为空或包含首尾空白".to_string()));
     }
 
-    let base_url = public_base_url(&config.public_base_url)?;
-    let prefix = normalize_prefix(config.key_prefix.clone())?;
-
-    Ok((base_url, prefix))
+    public_base_url(&config.public_base_url)
 }
 
 /// 校验合并分片的前置条件，与预签名同口径。

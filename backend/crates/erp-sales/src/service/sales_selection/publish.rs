@@ -56,7 +56,7 @@ impl SalesSelectionService {
             .ensure_version(req.expected_version)
             .map_err(|error| Error::selection_conflict(error.to_string()))?;
         let batch_id =
-            req.batch_id.clone().ok_or_else(|| Error::ValidationError("请重新预览并确认准备批次".into()))?;
+            req.batch_id.ok_or_else(|| Error::ValidationError("请重新预览并确认准备批次".into()))?;
         self.ensure_batch_current(&booklet, &batch_id)?;
         let domain = crate::repository::sales_selection::SalesSelectionDomainRepository::new(&self.db);
         let items = domain.list_effective_items(&booklet.base.id, &batch_id, &mut executor).await?;
@@ -121,7 +121,7 @@ impl SalesSelectionService {
                         hash: &hash,
                         result: &view,
                         token_version: Some(token_version),
-                        booklet_id: Some(booklet_id.clone()),
+                        booklet_id: Some(booklet_id),
                     })?;
                     db.sales_selection_idempotency().create(&record, executor).await?;
                     Ok::<_, Error>(view)
@@ -329,9 +329,9 @@ impl SalesSelectionService {
         if booklet.link_revoked || booklet.link_token_ciphertext.is_none() {
             return Err(Error::ValidationError("当前没有可复制的选品链接".into()));
         }
-        let cipher = booklet.link_token_ciphertext.clone().unwrap_or_default();
+        let cipher = booklet.link_token_ciphertext.as_deref().unwrap_or_default();
         tracing::info!(booklet_id, "复制选品链接");
-        crypto.decrypt(&cipher).map_err(|error| Error::Internal(error.to_string()))
+        crypto.decrypt(cipher).map_err(|error| Error::Internal(error.to_string()))
     }
 
     /// 关闭未提交选品册。
@@ -413,8 +413,8 @@ fn ensure_refs_qualified(refs: &[(String, String)], qualified: &[(String, String
     if refs.iter().all(|item| qualified.contains(item)) {
         return Ok(());
     }
-    let missing: Vec<String> =
-        refs.iter().filter(|item| !qualified.contains(item)).map(|item| item.0.clone()).collect();
+    let missing: Vec<&str> =
+        refs.iter().filter(|item| !qualified.contains(item)).map(|item| item.0.as_str()).collect();
     Err(Error::ValidationError(format!("以下陈列已失效: {}", missing.join("、"))))
 }
 

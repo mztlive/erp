@@ -72,8 +72,8 @@ impl ReturnsService {
             CustomerRefundData {
                 refund_no: return_command_no(CUSTOMER_REFUND_COMMAND_PREFIX, actor_id, &req.idempotency_key),
                 sales_return_case_id: None,
-                customer_id: customer_id.clone(),
-                original_receipt_id: Some(source_fact_id.clone()),
+                customer_id,
+                original_receipt_id: Some(source_fact_id),
                 original_receivable_entry_id: None,
                 reason_code: None,
                 reason_text: req.reason.clone(),

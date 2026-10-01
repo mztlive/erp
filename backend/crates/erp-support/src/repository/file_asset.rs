@@ -219,7 +219,7 @@ impl FileAssetRepositoryExt for persistence_core::Repository<'_, FileAsset> {
         if ids.is_empty() {
             return Ok(Vec::new());
         }
-        let ids = ids.iter().map(ToString::to_string).collect::<Vec<_>>();
+        let ids = ids.iter().map(|id| id.as_ref()).collect::<Vec<_>>();
         self.find_many(doc! { "id": { "$in": ids } }, executor).await
     }
 
@@ -236,7 +236,7 @@ impl FileAssetRepositoryExt for persistence_core::Repository<'_, FileAsset> {
         let mut missing = Vec::new();
         let mut seen = HashSet::new();
         for id in ids {
-            if !existing.contains(id.as_ref()) && seen.insert(id.to_string()) {
+            if !existing.contains(id.as_ref()) && seen.insert(id.as_ref()) {
                 missing.push(id.clone());
             }
         }

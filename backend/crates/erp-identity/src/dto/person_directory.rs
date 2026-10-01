@@ -34,12 +34,12 @@ impl PersonDirectoryQuery {
     /// # 错误
     /// 搜索、分页、组织筛选或版本不合法时返回校验错误。
     pub fn into_request(self) -> Result<DirectoryListRequest> {
-        let org_unit_ids = self.org_unit_ids.map(|ids| ids.as_slice().to_vec()).unwrap_or_default();
+        let org_unit_ids = self.org_unit_ids.as_ref().map_or(&[][..], QueryIds::as_slice);
         DirectoryListRequest::parse(
             self.q.as_deref(),
             self.page,
             self.page_size,
-            &org_unit_ids,
+            org_unit_ids,
             self.include_descendants.unwrap_or(false),
             self.scope_version.as_deref(),
         )

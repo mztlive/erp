@@ -9,7 +9,7 @@ use super::RbacService;
 use super::policy::{permission_pairs, permissions_for_actor, role_key};
 use crate::dto::{BuiltinRoleCatalog, BuiltinRoleOption, GenerateBuiltinRolesRequest, GeneratedBuiltinRole};
 use crate::entity::role_template::{BuiltinRoleState, BuiltinRoleTemplate};
-use crate::entity::{Permission, PermissionSet, Role, RoleData};
+use crate::entity::{Permission, Role, RoleData};
 use crate::service::iam::builtin_role_templates;
 use crate::{AccessControlExt, Error, Result};
 
@@ -37,7 +37,7 @@ impl RbacService {
             templates.push(BuiltinRoleOption {
                 can_generate: can_create
                     && state == BuiltinRoleState::Missing
-                    && permissions.covers(&PermissionSet::new(template.permissions.clone())),
+                    && template.permissions.iter().all(|required| permissions.covers_one(required)),
                 template,
                 state,
                 existing_name: role.map(|role| role.name),

@@ -112,15 +112,14 @@ impl AccessControlService {
         req: &SavePersonScopeRequest,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let existing =
+        let mut existing =
             self.db.person_data_scopes().for_person(user, Some(&req.resource), None, executor).await?;
         req.ensure_legacy_conversion(&existing)?;
         for action in &req.actions {
             let expression = req.expression(action);
-            if let Some(old) = existing.iter().find(|s| s.action == *action) {
-                let mut scope = old.clone();
+            if let Some(scope) = existing.iter_mut().find(|s| s.action == *action) {
                 scope.expression = expression;
-                self.db.person_data_scopes().update(&mut scope, executor).await?;
+                self.db.person_data_scopes().update(scope, executor).await?;
             } else {
                 let scope = PersonDataScope {
                     base: BaseModel::new(id_generator::next_id()),

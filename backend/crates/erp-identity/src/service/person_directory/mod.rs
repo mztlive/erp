@@ -81,6 +81,7 @@ impl PersonDirectoryService {
         self.read(actor, category, Read::Selected(ids)).await
     }
 
+    /// 在同一事务内读取目录列表或已选人员，消费本次查询输入。
     async fn read(
         &self,
         actor: AuditActor,
@@ -93,10 +94,6 @@ impl PersonDirectoryService {
             .client()
             .clone()
             .with_transaction(move |executor| {
-                let db = db.clone();
-                let rbac = rbac.clone();
-                let actor = actor.clone();
-                let read = read.clone();
                 Box::pin(async move {
                     match read {
                         Read::List(request) => {
@@ -112,7 +109,6 @@ impl PersonDirectoryService {
     }
 }
 
-#[derive(Clone)]
 enum Read {
     List(DirectoryListRequest),
     Selected(Vec<String>),

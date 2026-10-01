@@ -138,36 +138,32 @@ impl SalesReviewService {
         let working_copy = crate::entity::sales_order::SalesOrderWorkingCopy::new(
             working_copy_id,
             crate::entity::sales_order::SalesOrderWorkingCopyData {
-                sales_order_id: req.sales_order_id.clone(),
+                sales_order_id: req.sales_order_id,
                 working_purpose: WorkingPurpose::SalesChange,
                 sales_change_order_id: Some(change_order.base.id.clone().into()),
-                base_revision_id: Some(base_revision_id.clone()),
+                base_revision_id: Some(base_revision_id),
                 draft_version: 1,
                 content_hash: SalesContentHash::change(&change_order.base.id, 1)?.into_wire(),
                 editor_user_id: actor.id().to_string(),
                 business_type: order.business_type,
-                customer_id: order.customer_id.clone(),
-                contract_id: order.contract_id.clone(),
-                contract_revision_id: base_revision.contract_revision_id.clone(),
-                settlement_party_id: order.settlement_party_id.clone(),
+                customer_id: order.customer_id,
+                contract_id: order.contract_id,
+                contract_revision_id: base_revision.contract_revision_id,
+                settlement_party_id: order.settlement_party_id,
                 snapshot: crate::entity::sales_order::HeaderSnapshotData {
-                    customer_name: base_revision.customer_snapshot.customer_name.clone(),
-                    contract_no: base_revision
-                        .contract_snapshot
-                        .as_ref()
-                        .map(|snapshot| snapshot.contract_no.clone()),
+                    customer_name: base_revision.customer_snapshot.customer_name,
+                    contract_no: base_revision.contract_snapshot.map(|snapshot| snapshot.contract_no),
                     settlement_party_name: base_revision
                         .settlement_party_snapshot
-                        .as_ref()
-                        .map(|snapshot| snapshot.settlement_party_name.clone()),
-                    payment_term_code: base_revision.payment_term_snapshot.payment_term_code.clone(),
-                    payment_term_name: base_revision.payment_term_snapshot.payment_term_name.clone(),
-                    invoice_type: base_revision.invoice_requirement_snapshot.invoice_type.clone(),
-                    tax_point: base_revision.invoice_requirement_snapshot.tax_point.clone(),
+                        .map(|snapshot| snapshot.settlement_party_name),
+                    payment_term_code: base_revision.payment_term_snapshot.payment_term_code,
+                    payment_term_name: base_revision.payment_term_snapshot.payment_term_name,
+                    invoice_type: base_revision.invoice_requirement_snapshot.invoice_type,
+                    tax_point: base_revision.invoice_requirement_snapshot.tax_point,
                 },
-                project_name: base_revision.project_name.clone(),
-                business_remark: base_revision.business_remark.clone(),
-                voucher_category_sku_id: base_revision.voucher_category_sku_id.clone(),
+                project_name: base_revision.project_name,
+                business_remark: base_revision.business_remark,
+                voucher_category_sku_id: base_revision.voucher_category_sku_id,
                 voucher_expiry_at: base_revision.voucher_expiry_at,
                 receivable_due_date: None,
                 gross_amount: gross,

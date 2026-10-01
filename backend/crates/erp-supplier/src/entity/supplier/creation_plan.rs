@@ -230,10 +230,16 @@ pub fn plan_supplier_creation(
 ) -> erp_core::Result<SupplierCreationPlan> {
     validate_creation_cardinality(&ids, &inputs)?;
     let (party_seed, supplier, commercial_profile) = build_creation_head(&ids, &inputs)?;
-    let (capabilities, capability_revisions, capability_ids) = build_creation_capabilities(&ids, &inputs)?;
-    let (qualifications, qualification_revisions, qualification_links) =
-        build_creation_qualifications(&ids, inputs.qualifications, &inputs.actor_id, &capability_ids)?;
-    let rating = build_creation_rating(&ids, inputs.rating, inputs.change_reason)?;
+    let (capabilities, capability_revisions, capability_ids) =
+        build_creation_capabilities(&ids.supplier_id, ids.capability_ids, &inputs)?;
+    let (qualifications, qualification_revisions, qualification_links) = build_creation_qualifications(
+        &ids.supplier_id,
+        ids.qualification_ids,
+        inputs.qualifications,
+        &inputs.actor_id,
+        &capability_ids,
+    )?;
+    let rating = build_creation_rating(ids.supplier_id, ids.rating_id, inputs.rating, inputs.change_reason)?;
 
     Ok(SupplierCreationPlan {
         party_seed,
@@ -343,10 +349,15 @@ fn build_creation_head(
     Ok((party_seed, supplier, commercial_profile))
 }
 
+/// 新能力三元组：能力、首版修订、代码到稳定 ID 映射。
+type NewCapabilities =
+    (Vec<SupplierCapability>, Vec<SupplierCapabilityRevision>, HashMap<String, SupplierCapabilityId>);
+
 /// 逐能力构造新能力、首版修订与代码到稳定 ID 的映射。
 ///
 /// # 参数
-/// * `ids` - Service 已分配的全部主键，能力 ID 与输入顺序对应
+/// * `supplier_id` - 新供应商稳定主键
+/// * `allocated_ids` - 按输入顺序消费的能力与首版修订主键
 /// * `inputs` - Service 已校验的根资料业务值
 ///
 /// # 返回
@@ -354,22 +365,19 @@ fn build_creation_head(
 ///
 /// # 错误
 /// 能力负责人缺失或任一实体字段校验失败时返回错误。
-/// 新能力三元组：能力、首版修订、代码到稳定 ID 映射。
-type NewCapabilities =
-    (Vec<SupplierCapability>, Vec<SupplierCapabilityRevision>, HashMap<String, SupplierCapabilityId>);
-
 fn build_creation_capabilities(
-    ids: &SupplierCreationIds,
+    supplier_id: &SupplierAccountId,
+    allocated_ids: Vec<(CapabilityCode, SupplierCapabilityId, SupplierCapabilityRevisionId)>,
     inputs: &SupplierCreationInputs,
 ) -> erp_core::Result<NewCapabilities> {
     let mut capabilities = Vec::with_capacity(inputs.capability_codes.len());
     let mut capability_revisions = Vec::with_capacity(inputs.capability_codes.len());
     let mut capability_ids = HashMap::new();
-    for (code, allocated) in inputs.capability_codes.iter().copied().zip(ids.capability_ids.clone()) {
+    for (code, allocated) in inputs.capability_codes.iter().copied().zip(allocated_ids) {
         let (_, capability_id, revision_id) = allocated;
         let owner = capability_owner(&inputs.capability_owners, code)?;
         let (capability, revision) = profile_change::new_capability(
-            &ids.supplier_id,
+            supplier_id,
             code,
             inputs.effective_from,
             owner,
@@ -387,7 +395,8 @@ fn build_creation_capabilities(
 /// 逐资质构造新资质、首版快照及适用能力关联。
 ///
 /// # 参数
-/// * `ids` - Service 已分配的全部主键
+/// * `supplier_id` - 新供应商稳定主键
+/// * `allocated_ids` - 与资质输入一一对应的已分配主键
 /// * `qualifications` - 待创建的资质输入（按输入顺序消费）
 /// * `actor_id` - 操作人 ID
 /// * `capability_ids` - 能力代码到稳定 ID 的映射
@@ -398,7 +407,8 @@ fn build_creation_capabilities(
 /// # 错误
 /// 资质身份重复、引用未勾选能力或任一实体字段校验失败时返回错误。
 fn build_creation_qualifications(
-    ids: &SupplierCreationIds,
+    supplier_id: &SupplierAccountId,
+    allocated_ids: Vec<SupplierCreationQualificationIds>,
     qualifications: Vec<SupplierCreationQualificationInput>,
     actor_id: &str,
     capability_ids: &HashMap<String, SupplierCapabilityId>,
@@ -410,10 +420,10 @@ fn build_creation_qualifications(
     let mut out = Vec::with_capacity(qualifications.len());
     let mut revisions = Vec::with_capacity(qualifications.len());
     let mut links = Vec::new();
-    for (input, allocated) in qualifications.into_iter().zip(ids.qualification_ids.clone()) {
+    for (input, allocated) in qualifications.into_iter().zip(allocated_ids) {
         let (qualification, revision, qualification_links) =
             profile_change::new_qualification(profile_change::NewQualificationParams {
-                supplier_id: &ids.supplier_id,
+                supplier_id,
                 qualification_type: input.qualification_type,
                 certificate_no: input.certificate_no,
                 issuer: input.issuer,
@@ -437,7 +447,8 @@ fn build_creation_qualifications(
 /// 构造首版评级；输入与 ID 必须同时存在或同时缺失。
 ///
 /// # 参数
-/// * `ids` - Service 已分配的全部主键（含可选评级 ID）
+/// * `supplier_id` - 新供应商稳定主键
+/// * `rating_id` - 可选首版评级主键
 /// * `rating` - 首版评级输入；`None` 表示不写评级
 /// * `change_reason` - 变更原因
 ///
@@ -447,15 +458,16 @@ fn build_creation_qualifications(
 /// # 错误
 /// 评级输入与 ID 一有一无，或评级校验失败时返回错误。
 fn build_creation_rating(
-    ids: &SupplierCreationIds,
+    supplier_id: SupplierAccountId,
+    rating_id: Option<SupplierRatingRevisionId>,
     rating: Option<SupplierCreationRatingInput>,
     change_reason: String,
 ) -> erp_core::Result<Option<SupplierRatingRevision>> {
-    match (rating, ids.rating_id.clone()) {
+    match (rating, rating_id) {
         (Some(input), Some(rating_id)) => Ok(Some(SupplierRatingRevision::new(
             rating_id,
             SupplierRatingRevisionData {
-                supplier_id: ids.supplier_id.clone(),
+                supplier_id,
                 revision_no: 1,
                 initial_score: input.initial_score,
                 rating: input.rating,

@@ -82,14 +82,13 @@ struct SkuLineContext<'a> {
 /// # 错误
 /// 停用迁移非法时返回状态机错误。
 fn sweep_removed_signatures(
-    current_by_signature: &HashMap<String, Sku>,
+    current_by_signature: &mut HashMap<String, Sku>,
     signatures: &SpecificationSignatureSet,
     actor_id: &str,
 ) -> Result<Vec<Sku>> {
     let mut disable = Vec::new();
-    for (signature, sku) in current_by_signature {
-        if sku.is_active() && !signatures.contains(signature) {
-            let mut sku = sku.clone();
+    for (signature, mut sku) in current_by_signature.drain() {
+        if sku.is_active() && !signatures.contains(&signature) {
             sku.disable(actor_id)?;
             disable.push(sku);
         }
@@ -113,7 +112,7 @@ fn sweep_removed_signatures(
 fn assemble_spec_product_revision(
     product: &mut Product,
     base: &SpecEditBase,
-    req: &UpdateProductRequest,
+    req: UpdateProductRequest,
     actor_id: &str,
 ) -> Result<ProductRevision> {
     let revision = ProductRevision::new(
@@ -121,11 +120,11 @@ fn assemble_spec_product_revision(
         ProductRevisionData {
             product_id: base.product_id.clone(),
             revision_no: base.next_product_revision_no,
-            name: req.name.clone(),
-            description: req.description.clone(),
-            specification: req.specification.clone(),
-            category_id: req.category_id.clone(),
-            brand_id: req.brand_id.clone(),
+            name: req.name,
+            description: req.description,
+            specification: req.specification,
+            category_id: req.category_id,
+            brand_id: req.brand_id,
             status: req.status,
             effective_from: req.effective_from,
             effective_to: req.effective_to,
@@ -192,10 +191,10 @@ impl CatalogService {
             &pending_assets,
         )?;
         pending_assets.ensure_all_used(&used)?;
-        let mut product = self.access().require_product(actor, "update", id, &mut NoTransaction).await?;
+        let product = self.access().require_product(actor, "update", id, &mut NoTransaction).await?;
         product.ensure_has_responsibility()?;
         ensure_version(product.base.version, req.version)?;
-        let plan = self.build_spec_edit_plan(&mut product, req, actor, &pending_assets).await?;
+        let plan = self.build_spec_edit_plan(product, req, actor, &pending_assets).await?;
         let product = self.write_spec_edit_plan(plan, actor, pending_assets).await?;
         self.product_view(product).await
     }
@@ -203,7 +202,7 @@ impl CatalogService {
     /// 构造规格编辑计划（分类保留/新增/重新启用/移除 + 新商品修订与媒体）。
     ///
     /// # 参数
-    /// * `product` - 已加载并完成版本校验的 SPU（可变，计划构建中更新状态）
+    /// * `product` - 已加载并完成版本校验的 SPU，所有权转入编辑计划
     /// * `req` - 规格编辑请求
     /// * `actor` - 审计操作人
     ///
@@ -214,12 +213,12 @@ impl CatalogService {
     /// 字典/媒体/规格/条码校验失败时返回对应错误。
     async fn build_spec_edit_plan(
         &self,
-        product: &mut Product,
+        mut product: Product,
         mut req: UpdateProductRequest,
         actor: &AuditActor,
         pending_assets: &dyn PendingAttachmentBatch,
     ) -> Result<SpecEditPlan> {
-        let base = self.prepare_spec_edit_base(product, &req, pending_assets).await?;
+        let mut base = self.prepare_spec_edit_base(&product, &req, pending_assets).await?;
         let change_reason = req.change_reason.as_deref().map(str::trim);
         let audit_message = change_reason.filter(|reason| !reason.is_empty()).map(str::to_string);
         let line_ctx = SkuLineContext {
@@ -233,15 +232,20 @@ impl CatalogService {
         let mut sku_items = Vec::with_capacity(req.skus.len());
         for sku_input in std::mem::take(&mut req.skus) {
             sku_items.push(
-                self.build_sku_edit_item(&base.current_by_signature, &mut signatures, &line_ctx, sku_input)
-                    .await?,
+                self.build_sku_edit_item(
+                    &mut base.current_by_signature,
+                    &mut signatures,
+                    &line_ctx,
+                    sku_input,
+                )
+                .await?,
             );
         }
-        let disable = sweep_removed_signatures(&base.current_by_signature, &signatures, actor.id())?;
-        let revision = assemble_spec_product_revision(product, &base, &req, actor.id())?;
+        let disable = sweep_removed_signatures(&mut base.current_by_signature, &signatures, actor.id())?;
+        let revision = assemble_spec_product_revision(&mut product, &base, req, actor.id())?;
         Ok(SpecEditPlan {
             change_reason: audit_message,
-            product: product.clone(),
+            product,
             revision,
             media: base.media,
             sku_items,
@@ -310,14 +314,14 @@ impl CatalogService {
     /// 签名/规格/条码校验失败时返回对应错误。
     async fn build_sku_edit_item(
         &self,
-        current_by_signature: &HashMap<String, Sku>,
+        current_by_signature: &mut HashMap<String, Sku>,
         signatures: &mut SpecificationSignatureSet,
         line_ctx: &SkuLineContext<'_>,
         sku_input: ProductSkuInput,
     ) -> Result<SkuEditItem> {
         let signature = specification_signature_for(&sku_input.spec_entries)?;
         signatures.register_signature(signature.clone())?;
-        if let Some(mut existing_sku) = current_by_signature.get(&signature).cloned() {
+        if let Some(mut existing_sku) = current_by_signature.remove(&signature) {
             let identity = sku_edit_identity(&sku_input, line_ctx.change_reason);
             let action = existing_sku.classify_edit(&identity).map_err(map_sku_edit_error)?;
             self.ensure_barcode_available(&sku_input.barcode, Some(existing_sku.base.id.as_str())).await?;
@@ -366,7 +370,7 @@ impl CatalogService {
         actor: &AuditActor,
         pending_assets: Arc<dyn PendingAttachmentBatch>,
     ) -> Result<Product> {
-        let SpecEditPlan { change_reason, mut product, revision, media, sku_items, mut disable } = plan;
+        let SpecEditPlan { change_reason, mut product, revision, media, mut sku_items, mut disable } = plan;
         let audit = self.audit.resource_log_with_message(
             actor.clone(),
             "product.update",
@@ -394,7 +398,7 @@ impl CatalogService {
                     pending_assets.persist(&db, executor).await?;
                     db.products().update(&mut product, executor).await?;
                     db.catalog().create_product_revision_with_media(&revision, &media, executor).await?;
-                    for item in &sku_items {
+                    for item in &mut sku_items {
                         match item.action {
                             SkuEditAction::Create => {
                                 db.catalog()
@@ -403,8 +407,7 @@ impl CatalogService {
                             },
                             SkuEditAction::Keep | SkuEditAction::Reactivate => {
                                 db.sku_revisions().create(&item.revision, executor).await?;
-                                let mut sku = item.sku.clone();
-                                db.skus().update(&mut sku, executor).await?;
+                                db.skus().update(&mut item.sku, executor).await?;
                             },
                         }
                     }

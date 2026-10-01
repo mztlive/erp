@@ -178,7 +178,7 @@ impl From<SupplierCommercialProfileRevision> for CommercialProfileView {
             business_category,
             invoice_type: revision.invoice_type,
             invoice_tax_rate: revision.invoice_tax_rate,
-            invoice_tax_rates: revision.invoice_tax_rates.clone(),
+            invoice_tax_rates: revision.invoice_tax_rates,
             signing_entity_party_id: Some(revision.signing_entity_party_id.to_string()),
             signing_entity_name: None,
             payment_entity_party_id: Some(revision.payment_entity_party_id.to_string()),

@@ -385,7 +385,7 @@ impl PurchaseOrderRevisionLine {
             line_no: data.line_no,
             line_type: data.line_type,
             procurement_confirmation_line_id: data.procurement_confirmation_line_id,
-            sku_id: data.sku_id.clone(),
+            sku_id: data.sku_id,
             sku_revision_id: data.sku_revision_id,
             product_name_snapshot: product_name,
             specification_snapshot: specification,

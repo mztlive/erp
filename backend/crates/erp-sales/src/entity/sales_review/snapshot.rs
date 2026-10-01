@@ -29,6 +29,6 @@ mod tests {
 
         assert_eq!(snapshots.customer_snapshot.customer_name, "东方企业");
         assert_eq!(snapshots.contract_snapshot.unwrap().contract_no, "HT-2026-0088");
-        assert!(CustomerSnapshot::new("   ".to_string()).is_err());
+        assert!(CustomerSnapshot::new("   ").is_err());
     }
 }

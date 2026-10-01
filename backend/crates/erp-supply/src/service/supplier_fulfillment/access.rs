@@ -56,7 +56,8 @@ impl FulfillmentOrderAccess {
         executor: &mut dyn Executor,
     ) -> Result<(FulfillmentOrderResolvedScope, FulfillmentOrderReadScope)> {
         let access = self.scope.resolve(actor, action, executor).await?;
-        Ok((access.clone(), fulfillment_order_scope(&access, actor.id())))
+        let scope = fulfillment_order_scope(&access, actor.id());
+        Ok((access, scope))
     }
 
     /// 在调用方事务内重验订单对象资格。

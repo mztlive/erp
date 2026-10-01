@@ -50,7 +50,7 @@ pub struct ResumeExecutionInput {
 /// 当前运行事实不允许原审批人恢复、异载荷冲突或引擎失败时返回错误。
 pub fn prepare_resume(input: ResumeExecutionInput) -> Result<PreparedExecution> {
     let identity = resume_identity(
-        input.command.idempotency_key.clone(),
+        input.command.idempotency_key,
         &input.instance.base.id,
         input.expected_instance_version,
         input.expected_execution_version,

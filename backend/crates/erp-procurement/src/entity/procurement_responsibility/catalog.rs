@@ -141,16 +141,16 @@ pub fn category_chain(
 ) -> Result<Vec<ProductCategoryId>> {
     let mut chain = Vec::new();
     let mut seen = HashSet::new();
-    let mut current = Some(first.clone());
+    let mut current = Some(first);
     while let Some(category_id) = current {
-        if !seen.insert(category_id.to_string()) {
+        if !seen.insert(category_id.as_ref()) {
             return Err(Error::from("商品分类父级关系存在环"));
         }
         let category = categories
             .get(category_id.as_ref())
             .ok_or_else(|| Error::from(format!("商品分类不存在：{category_id}")))?;
-        chain.push(category_id);
-        current = category.parent_category_id.clone();
+        chain.push(category_id.clone());
+        current = category.parent_category_id.as_ref();
     }
     Ok(chain)
 }

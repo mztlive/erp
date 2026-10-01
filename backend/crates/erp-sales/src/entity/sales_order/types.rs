@@ -42,10 +42,10 @@ impl ExternalIdentityResolution {
     ///
     /// # 返回
     /// 零条返回 `Missing`，一条返回 `Resolved`，多条返回 `Ambiguous`。
-    pub fn from_matches(matches: Vec<String>) -> Self {
-        match matches.as_slice() {
-            [] => Self::Missing,
-            [external_id] => Self::Resolved(external_id.clone()),
+    pub fn from_matches(mut matches: Vec<String>) -> Self {
+        match matches.len() {
+            0 => Self::Missing,
+            1 => Self::Resolved(matches.pop().expect("匹配数量已经确认恰好为一条")),
             _ => Self::Ambiguous,
         }
     }
@@ -554,7 +554,7 @@ pub(crate) fn validate_line_list(business_type: BusinessType, lines: &[LineSumma
         if !line_nos.insert(line.line_no) {
             return Err(Error::from("行号不能重复"));
         }
-        if !line_ids.insert(line.line_id.clone()) {
+        if !line_ids.insert(&line.line_id) {
             return Err(Error::from("稳定明细身份不能重复"));
         }
     }

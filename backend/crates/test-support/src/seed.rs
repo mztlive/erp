@@ -88,10 +88,10 @@ async fn insert_account(db: &Database, account_id: &str, login: &str) -> Result<
 /// 版本文档，首次加载的 Enforcer 快照即包含这些规则。
 async fn insert_role_and_policies(db: &Database, account_id: &str) -> Result<()> {
     let role_id = format!("p0-test-{}", uuid_hex_n(UUID_ROLE_SUFFIX_LEN));
-    let role = Role::new(role_id.clone(), RoleData::new("P0 测试管理员").with_system(false))?;
+    let role_key = format!("{ROLE_PREFIX}{role_id}");
+    let role = Role::new(role_id, RoleData::new("P0 测试管理员").with_system(false))?;
     db.collection::<Role>(ROLES).insert_one(role).await?;
 
-    let role_key = format!("{ROLE_PREFIX}{role_id}");
     let mut rules: Vec<Document> = SEED_PERMISSIONS
         .iter()
         .map(|(resource, action)| casbin_rule("p", "p", &[&role_key, resource, action]))

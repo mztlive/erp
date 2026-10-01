@@ -240,7 +240,7 @@ impl AuditLogRepositoryExt for Repository<'_, AuditLog> {
         if ids.is_empty() {
             return Ok(Vec::new());
         }
-        let ids = sorted_dedup(ids.to_vec());
+        let ids = sorted_dedup(ids.iter().map(String::as_str).collect());
         let collection = self.collection().clone_with_type::<CommandReceiptRow>();
         let rows = mongo_ops::find_many(
             &collection,
@@ -306,7 +306,7 @@ impl AuditLogRepositoryExt for Repository<'_, AuditLog> {
         if pairs.is_empty() {
             return Ok(Vec::new());
         }
-        let sorted = sorted_dedup(pairs.to_vec());
+        let sorted = sorted_dedup(pairs.iter().map(|(kind, id)| (kind.as_str(), id.as_str())).collect());
         let alternatives = sorted
             .into_iter()
             .map(|(resource_type, resource_id)| {

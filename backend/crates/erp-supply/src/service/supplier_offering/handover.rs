@@ -36,7 +36,6 @@ impl SupplierOfferingService {
         let db = self.db.clone();
         let access = self.access();
         let actor = actor.clone();
-        let req = req.clone();
         let id = id.to_string();
         db.client()
             .clone()

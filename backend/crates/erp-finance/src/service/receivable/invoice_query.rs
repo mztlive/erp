@@ -89,10 +89,10 @@ impl ReceivableService {
         for row in page.items {
             let (allocated_total, allocations) = match row.invoice_direction {
                 InvoiceDirection::Sales => {
-                    sales_allocation_view(&sales_allocations_by_invoice.remove(&row.id).unwrap_or_default())
+                    sales_allocation_view(sales_allocations_by_invoice.remove(&row.id).unwrap_or_default())
                 },
                 InvoiceDirection::Purchase => purchase_allocation_view(
-                    &purchase_allocations_by_invoice.remove(&row.id).unwrap_or_default(),
+                    purchase_allocations_by_invoice.remove(&row.id).unwrap_or_default(),
                 ),
             };
             views.push(InvoiceView {
@@ -165,7 +165,7 @@ impl ReceivableService {
                     .purchase_invoice_allocations()
                     .find_allocations_by_invoices(&[invoice.base.id.clone().into()], &mut NoTransaction)
                     .await?;
-                purchase_allocation_view(&rows)
+                purchase_allocation_view(rows)
             },
             InvoiceDirection::Sales => {
                 let allocations = self
@@ -173,12 +173,12 @@ impl ReceivableService {
                     .sales_invoice_allocations()
                     .find_allocations_by_invoices(&[invoice.base.id.clone().into()], &mut NoTransaction)
                     .await?;
-                sales_allocation_view(&allocations)
+                sales_allocation_view(allocations)
             },
         };
         Ok(InvoiceView {
-            sales_invoice_request_id: invoice.sales_invoice_request_id.clone(),
-            id: invoice.base.id.clone(),
+            sales_invoice_request_id: invoice.sales_invoice_request_id,
+            id: invoice.base.id,
             invoice_direction: invoice.invoice_direction,
             invoice_kind: invoice.invoice_kind,
             party_id: invoice.party_id.to_string(),
@@ -212,15 +212,15 @@ impl ReceivableService {
 /// # 返回
 /// 返回 `(净已分配含税合计, 分配视图列表)`。
 fn sales_allocation_view(
-    allocations: &[SalesInvoiceAllocation],
+    allocations: Vec<SalesInvoiceAllocation>,
 ) -> (Amount, Vec<crate::dto::receivable::SalesInvoiceAllocationView>) {
     let mut net = zero_amount();
     let views = allocations
-        .iter()
+        .into_iter()
         .map(|allocation| {
             net = allocation.allocation_action.apply_to_net(net, allocation.allocated_gross_amount);
             crate::dto::receivable::SalesInvoiceAllocationView {
-                id: allocation.base.id.clone(),
+                id: allocation.base.id,
                 allocation_seq: allocation.allocation_seq,
                 allocation_action: allocation.allocation_action,
                 receivable_account_id: allocation.receivable_account_id.to_string(),
@@ -241,16 +241,16 @@ fn sales_allocation_view(
 /// # 返回
 /// 返回 `(净已分配含税合计, 分配视图列表)`。
 fn purchase_allocation_view(
-    allocations: &[PurchaseInvoiceAllocation],
+    allocations: Vec<PurchaseInvoiceAllocation>,
 ) -> (Amount, Vec<crate::dto::receivable::SalesInvoiceAllocationView>) {
     let mut net = zero_amount();
     let views = allocations
-        .iter()
+        .into_iter()
         .map(|allocation| {
             let action = AllocationAction::from(allocation.allocation_action);
             net = action.apply_to_net(net, allocation.allocated_gross_amount);
             crate::dto::receivable::SalesInvoiceAllocationView {
-                id: allocation.base.id.clone(),
+                id: allocation.base.id,
                 allocation_seq: allocation.allocation_seq,
                 allocation_action: action,
                 receivable_account_id: allocation.payable_account_id.to_string(),

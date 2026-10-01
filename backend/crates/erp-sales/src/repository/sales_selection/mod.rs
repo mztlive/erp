@@ -276,7 +276,7 @@ impl<'a> SalesSelectionDomainRepository<'a> {
         filter: &SelectionBookFilter,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<SalesSelectionBooklet>> {
-        let sort_field = filter.sort_by.clone().unwrap_or_else(|| "created_at".to_string());
+        let sort_field = filter.sort_by.as_deref().unwrap_or("created_at");
         let direction = if filter.sort_ascending { 1 } else { -1 };
         let options = FindOptions::builder()
             .sort(doc! { sort_field: direction, "id": direction })

@@ -472,13 +472,14 @@ impl ExternalIdentityMap {
             mapped_by.is_some(),
             "映射时间与映射责任人必须同时提供或同时省略",
         )?;
+        let external_id_key = Self::external_id_key(&external_id);
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             source_system_id: data.source_system_id,
             object_type: data.object_type,
-            external_id: external_id.clone(),
-            external_id_key: Self::external_id_key(&external_id),
+            external_id,
+            external_id_key,
             mapping_status: data.mapping_status,
             mapped_at: data.mapped_at,
             mapped_by,

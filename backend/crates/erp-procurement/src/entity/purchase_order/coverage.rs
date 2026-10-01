@@ -253,17 +253,16 @@ fn accumulate_revision_coverage(
 ) -> Result<()> {
     let targets = target_stable_ids(targets);
     current_revision_ids(orders)?;
-    let lines =
-        purchase_lines.iter().map(|line| (line.base.id.clone(), line.clone())).collect::<HashMap<_, _>>();
+    let lines = purchase_lines.iter().map(|line| (line.base.id.as_str(), line)).collect::<HashMap<_, _>>();
     let expected = lines
         .iter()
         .filter(|(_, line)| line.line_type == PurchaseLineType::ItemService)
-        .map(|(id, _)| id.clone())
+        .map(|(id, _)| *id)
         .collect::<HashSet<_>>();
     let mut allocated = HashSet::new();
     for allocation in allocations {
-        allocated.insert(allocation.purchase_order_revision_line_id.to_string());
-        add_current_allocation(&targets, &lines, allocation.clone(), covered)?;
+        allocated.insert(allocation.purchase_order_revision_line_id.as_ref());
+        add_current_allocation(&targets, &lines, allocation, covered)?;
     }
     if allocated != expected {
         return Err(Error::from("采购当前版本商品行缺少唯一销售分配"));
@@ -286,12 +285,12 @@ fn accumulate_revision_coverage(
 /// 分配对应采购行缺失，或采购行/分配未绑定销售当前版本行时返回一致性错误。
 fn add_current_allocation(
     targets: &HashMap<String, String>,
-    purchase_lines: &HashMap<String, PurchaseOrderRevisionLine>,
-    allocation: PurchaseLineSalesAllocation,
+    purchase_lines: &HashMap<&str, &PurchaseOrderRevisionLine>,
+    allocation: &PurchaseLineSalesAllocation,
     covered: &mut HashMap<String, Quantity>,
 ) -> Result<()> {
     let purchase_line = purchase_lines
-        .get(&allocation.purchase_order_revision_line_id.to_string())
+        .get(allocation.purchase_order_revision_line_id.as_ref())
         .ok_or_else(|| Error::from("采购正式分配缺少当前采购版本行"))?;
     let stable_id = purchase_line
         .sales_order_line_id

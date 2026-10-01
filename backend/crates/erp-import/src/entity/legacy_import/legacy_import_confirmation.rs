@@ -531,15 +531,7 @@ impl LegacyImportConfirmation {
         confirmations: &[Self],
         required_scopes: &BTreeSet<ConfirmationScope>,
     ) -> bool {
-        if confirmations.iter().any(|item| item.status == ConfirmationStatus::Rejected) {
-            return false;
-        }
-        let confirmed = confirmations
-            .iter()
-            .filter(|item| item.status == ConfirmationStatus::Confirmed)
-            .filter_map(|item| ConfirmationScope::parse(&item.confirmation_scope).ok())
-            .collect::<BTreeSet<_>>();
-        required_scopes.iter().all(|scope| confirmed.contains(scope))
+        Self::matrix_confirmed(confirmations.iter(), required_scopes)
     }
 
     /// 判断指定规则和试算版本是否完成全部必要确认。
@@ -561,16 +553,43 @@ impl LegacyImportConfirmation {
         rule_version: &str,
         required_scopes: &BTreeSet<ConfirmationScope>,
     ) -> bool {
-        let current = confirmations
-            .iter()
-            .filter(|item| {
+        Self::matrix_confirmed(
+            confirmations.iter().filter(|item| {
                 item.trial_version == trial_version
                     && item.import_rule_version == rule_version.trim()
                     && item.status != ConfirmationStatus::Invalidated
-            })
-            .cloned()
-            .collect::<Vec<_>>();
-        Self::is_matrix_confirmed(&current, required_scopes)
+            }),
+            required_scopes,
+        )
+    }
+
+    /// 从确认事实引用中判定必要范围是否全部已确认。
+    ///
+    /// # 参数
+    /// * `confirmations` - 已按调用场景筛选的确认事实
+    /// * `required_scopes` - 必须完成的责任范围
+    ///
+    /// # 返回
+    /// 任一退回时返回 `false`；否则按已确认范围判定完整性。
+    ///
+    /// # 错误
+    /// 无；未注册范围不会计入确认集合。
+    fn matrix_confirmed<'a>(
+        confirmations: impl Iterator<Item = &'a Self>,
+        required_scopes: &BTreeSet<ConfirmationScope>,
+    ) -> bool {
+        let mut confirmed = BTreeSet::new();
+        for item in confirmations {
+            if item.status == ConfirmationStatus::Rejected {
+                return false;
+            }
+            if item.status == ConfirmationStatus::Confirmed
+                && let Ok(scope) = ConfirmationScope::parse(&item.confirmation_scope)
+            {
+                confirmed.insert(scope);
+            }
+        }
+        required_scopes.iter().all(|scope| confirmed.contains(scope))
     }
 
     /// 生成不含个人身份的确认矩阵摘要。

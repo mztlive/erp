@@ -121,14 +121,13 @@ impl CatalogService {
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
-        let brand_for_tx = brand.clone();
-        client
+        let brand = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     pending_assets.persist(&db, executor).await?;
-                    db.product_brands().create(&brand_for_tx, executor).await?;
+                    db.product_brands().create(&brand, executor).await?;
                     audit_port.persist(&audit, executor).await?;
-                    Ok::<(), crate::error::Error>(())
+                    Ok::<_, crate::error::Error>(brand)
                 })
             })
             .await?;

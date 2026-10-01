@@ -20,7 +20,7 @@ pub fn prepare_payable_account(
         account_id.clone(),
         PayableAccountData {
             source_document_id: req.source_document_id.clone(),
-            supplier_id: req.supplier_id.clone(),
+            supplier_id: req.supplier_id,
             source_type: req.source_type,
             gross_total: req.gross_total,
             settled_total: Amount::zero(),
@@ -32,7 +32,7 @@ pub fn prepare_payable_account(
     let entry = PayableEntry::new(
         entry_id,
         PayableEntryData {
-            payable_account_id: account_id.clone(),
+            payable_account_id: account_id,
             entry_type: PayableEntryType::Original,
             direction: EntryDirection::Increase,
             amount: account.gross_total,

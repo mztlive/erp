@@ -158,9 +158,10 @@ impl MongoCasbinAdapter {
         }
     }
 
+    /// 消费策略行中的角色键，排序去重后返回已有字符串所有权。
     fn subject_role_keys(rules: Vec<CasbinRule>) -> Vec<String> {
         let mut role_keys =
-            rules.into_iter().filter_map(|rule| rule.values.get(1).cloned()).collect::<Vec<_>>();
+            rules.into_iter().filter_map(|rule| rule.values.into_iter().nth(1)).collect::<Vec<_>>();
         role_keys.sort();
         role_keys.dedup();
         role_keys

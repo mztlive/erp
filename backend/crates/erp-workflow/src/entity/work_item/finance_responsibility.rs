@@ -6,7 +6,7 @@
 use entity_core::BaseModel;
 use entity_macros::Entity;
 use erp_core::common::state::DocumentState;
-use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::validation::{normalize_optional_text, normalize_required_text, normalize_required_text_ref};
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
@@ -261,8 +261,8 @@ impl<'a> FinanceResponsibilityRuleSet<'a> {
         operation: FinanceResponsibilityOperation,
         counterparty_id: &str,
     ) -> Result<&'a FinanceResponsibilityRule> {
-        let counterparty_id = normalize_required_text(
-            counterparty_id.to_string(),
+        let counterparty_id = normalize_required_text_ref(
+            counterparty_id,
             "财务责任往来方不能为空",
             COUNTERPARTY_ID_MAX_LEN,
             "财务责任往来方过长",

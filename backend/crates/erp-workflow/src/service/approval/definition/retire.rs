@@ -178,13 +178,12 @@ async fn retire_tx(
     };
     let expected = retired.definition_lock_version();
     retired.retire(participant(actor)?, now()?).map_err(map_model_error)?;
-    let graph =
-        DefinitionGraph { definition: retired.clone(), nodes: graph.nodes, transitions: graph.transitions };
+    let mut graph =
+        DefinitionGraph { definition: retired, nodes: graph.nodes, transitions: graph.transitions };
     let result_ref = DefinitionCommandResultRef::from_graph(&graph).encode();
     write_receipt(db, &identity.current, &result_ref, executor).await?;
-    retired.base.version = expected;
-    db.approval_process_definitions().update(&mut retired, executor).await?;
-    let graph = DefinitionGraph { definition: retired, nodes: graph.nodes, transitions: graph.transitions };
+    graph.definition.base.version = expected;
+    db.approval_process_definitions().update(&mut graph.definition, executor).await?;
     write_definition_audit(
         audit,
         actor,

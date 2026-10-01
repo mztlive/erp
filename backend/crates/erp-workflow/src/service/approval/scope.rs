@@ -197,11 +197,10 @@ pub async fn definition_management_visibility_with_executor(
             Err(error) => Some(Err(error)),
         })
         .collect::<Result<Vec<_>>>()?;
-    let required_codes = policies
+    let required = policies
         .iter()
-        .flat_map(|(_, define, runtime)| [define.clone(), runtime.clone()])
+        .flat_map(|(_, define, runtime)| [define.as_str(), runtime.as_str()])
         .collect::<Vec<_>>();
-    let required = required_codes.iter().map(String::as_str).collect::<Vec<_>>();
     let policy_snapshot = rbac.role_permission_snapshot(actor.kind(), actor.id(), &required).await?;
     let role_ids = rbac.enabled_role_ids(policy_snapshot.role_ids(), executor).await?;
     let mut enforced = Vec::new();

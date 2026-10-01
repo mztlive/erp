@@ -575,7 +575,7 @@ fn classify_approval_binding(row: Option<ApprovalBindingRow>) -> ApprovalBinding
 /// 对批量单据 ID 去重并转换为稳定字符串集合。
 fn distinct_document_ids(document_ids: &[BusinessDocumentId]) -> Vec<String> {
     let mut seen = HashSet::with_capacity(document_ids.len());
-    document_ids.iter().map(ToString::to_string).filter(|id| seen.insert(id.clone())).collect()
+    document_ids.iter().filter(|&id| seen.insert(id.as_ref())).map(ToString::to_string).collect()
 }
 
 /// 一次性编号赋值更新管道。

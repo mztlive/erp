@@ -1,3 +1,5 @@
+use std::slice::from_ref;
+
 use erp_core::common::time::Instant;
 use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
@@ -105,7 +107,7 @@ impl SupplierSettlementService {
             let stored_evidence = self
                 .db
                 .supplier_settlement_difference_evidence()
-                .find_by_difference_ids(&[difference.base.id.clone()], executor)
+                .find_by_difference_ids(from_ref(&difference.base.id), executor)
                 .await?;
             let stored_references = stored_evidence
                 .iter()

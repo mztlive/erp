@@ -128,6 +128,17 @@ pub fn map_capability_change_rejection(rejection: CapabilityChangeSetRejection) 
     }
 }
 
+/// 校验幂等指纹并返回已持久化的业务能力确认结果。
+///
+/// # 参数
+/// * `confirmation` - 已持久化的业务能力确认
+/// * `fingerprint` - 本次请求的指纹
+///
+/// # 返回
+/// 返回原确认身份、版本及审计事件身份。
+///
+/// # 错误
+/// 同一幂等键用于不同请求参数时返回冲突。
 pub fn replay_confirmation(
     confirmation: BusinessCapabilityConfirmation,
     fingerprint: &str,
@@ -135,14 +146,15 @@ pub fn replay_confirmation(
     if confirmation.request_fingerprint != fingerprint {
         return Err(Error::ConflictError("同一幂等键不能提交不同参数".to_string()));
     }
+    let audit_event_id = format!("w20-audit-{}", digest(&[&confirmation.base.id]));
     Ok(ConfirmBusinessCapabilityRequirementResult {
         outcome: SupplierCommandOutcome::Succeeded,
         operation_id: confirmation.operation_id,
-        confirmation_id: confirmation.base.id.clone(),
+        confirmation_id: confirmation.base.id,
         confirmation_version: confirmation.base.version,
         connection_version: confirmation.connection_version.saturating_add(1),
         capability_version: confirmation.capability_version,
-        audit_event_id: format!("w20-audit-{}", digest(&[&confirmation.base.id])),
+        audit_event_id,
     })
 }
 
@@ -164,8 +176,19 @@ fn command_fingerprint(id: &str, command: &SupplierConnectionCommand) -> String 
     ])
 }
 
+/// 计算证据引用顺序无关的业务能力确认指纹。
+///
+/// # 参数
+/// * `id` - 供应商连接主键
+/// * `command` - 待确认的业务能力命令
+///
+/// # 返回
+/// 返回规范字段的稳定摘要。
+///
+/// # 错误
+/// 无。
 pub fn confirmation_fingerprint(id: &str, command: &ConfirmBusinessCapabilityRequirementCommand) -> String {
-    let mut evidence = command.evidence_references.clone();
+    let mut evidence = command.evidence_references.iter().map(String::as_str).collect::<Vec<_>>();
     evidence.sort();
     digest(&[
         id,

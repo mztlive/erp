@@ -123,7 +123,7 @@ impl SourcingAssignmentSet {
         let mut seen = HashSet::new();
         let mut normalized = Vec::with_capacity(assignments.len());
         for assignment in assignments {
-            if !seen.insert((assignment.sales_order_line_id.clone(), assignment.basis_id.clone())) {
+            if !seen.insert((assignment.sales_order_line_id.as_str(), assignment.basis_id.as_str())) {
                 return Err(Error::from("同一销售行不能重复使用同一履约方案"));
             }
             normalized.push(assignment.clone());

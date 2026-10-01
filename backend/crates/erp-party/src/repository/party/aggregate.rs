@@ -286,18 +286,18 @@ impl<'a> PartyDomainRepository<'a> {
         let revisions = PartyRevisionRepository::new(self.db, PARTY_REVISIONS)
             .list_by_ids(&revision_ids, executor)
             .await?;
-        let revision_names: HashMap<(String, String), &str> = revisions
+        let revision_names: HashMap<(&str, &str), &str> = revisions
             .iter()
             .map(|revision| {
-                ((revision.party_id.to_string(), revision.base.id.clone()), revision.legal_name.as_str())
+                ((revision.party_id.as_ref(), revision.base.id.as_str()), revision.legal_name.as_str())
             })
             .collect();
         Ok(parties
-            .iter()
+            .into_iter()
             .filter_map(|party| {
                 let revision_id = party.stable.current_revision_id.as_deref()?;
-                let legal_name = revision_names.get(&(party.base.id.clone(), revision_id.to_string()))?;
-                Some((party.base.id.clone(), (*legal_name).to_string()))
+                let legal_name = revision_names.get(&(party.base.id.as_str(), revision_id))?.to_string();
+                Some((party.base.id, legal_name))
             })
             .collect())
     }

@@ -277,7 +277,7 @@ fn runtime_snapshot_scope_match(scope: &ApprovalRuntimeReadScope) -> Option<Docu
                         {
                             "$in": [
                                 "$_runtime_snapshot.payload.responsible_org_id",
-                                organization_ids.clone(),
+                                organization_ids.as_slice(),
                             ]
                         },
                     ]

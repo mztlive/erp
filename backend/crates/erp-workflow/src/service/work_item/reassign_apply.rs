@@ -292,7 +292,7 @@ async fn reassign_purchase_order_fulfillment_responsibility<A: crate::ports::Wor
     input: ReassignPurchaseOrderFulfillmentInput<'_>,
     executor: &mut dyn Executor,
 ) -> Result<WorkItem> {
-    let (_, mut tasks) = service
+    let (_, tasks) = service
         .facts
         .purchase_order_fulfillment_scope(&input.selected, input.purchase_order_id, executor)
         .await?;
@@ -318,16 +318,16 @@ async fn reassign_purchase_order_fulfillment_responsibility<A: crate::ports::Wor
 
     let reassigned_at = Instant::now();
     let mut selected_after = None;
-    for task in &mut tasks {
+    for mut task in tasks {
         task.reassign(input.target_user_id.to_string(), reassigned_at)?;
-        service.db.work_items().update(task, executor).await.map_err(|error| match error {
+        service.db.work_items().update(&mut task, executor).await.map_err(|error| match error {
             persistence_core::Error::OptimisticLockingError => {
                 Error::ConflictError(REASSIGN_VERSION_CONFLICT.to_string())
             },
             error => Error::from(error),
         })?;
         if task.base.id == input.selected.base.id {
-            selected_after = Some(task.clone());
+            selected_after = Some(task);
         }
     }
     selected_after.ok_or_else(|| Error::ConflictError("采购单开放履约任务已变化，请刷新后重试".to_string()))

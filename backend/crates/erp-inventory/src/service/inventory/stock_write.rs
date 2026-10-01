@@ -191,7 +191,7 @@ async fn release_applicable_reservations(
                 &StockReservationEntry::new(
                     StockReservationEntryId::new(next_id()),
                     StockReservationEntryData {
-                        reservation_id: reservation.base.id.clone().into(),
+                        reservation_id: reservation.base.id.into(),
                         entry_type: ReservationEntryType::Release,
                         quantity: reservation.reserved_quantity,
                         source_document_id: line.stock_adjustment_id.to_string(),

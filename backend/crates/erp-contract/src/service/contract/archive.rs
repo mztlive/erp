@@ -241,25 +241,25 @@ pub fn plan_upload_archive(
 /// * `current_revision_no` - 当前历史最大修订序号
 ///
 /// # 返回
-/// 返回携带新修订的规划结果（合同克隆自入参）。
+/// 返回携带新修订与原合同身份的规划结果。
 ///
 /// # 错误
 /// 序号溢出、快照非法或有效期倒挂时返回错误。
 pub(crate) fn plan_next_revision(
-    contract: &Contract,
+    contract: Contract,
     req: ArchiveContractRevisionRequest,
     current_revision_no: u32,
 ) -> Result<PlannedContractArchive> {
     let next_no = ContractRevision::next_revision_no(current_revision_no)?;
     let revision = build_revision(
-        contract,
+        &contract,
         req.contract_pdf_file_id.clone(),
         req.archive_source.unwrap_or(ArchiveSource::ContractCenter),
         contract.settlement_party_id.clone(),
         req.into(),
         next_no,
     )?;
-    Ok(PlannedContractArchive { contract: contract.clone(), revision })
+    Ok(PlannedContractArchive { contract, revision })
 }
 
 /// 将客户事实映射为归档资格；缺失或停用保持原错误文案。
@@ -402,11 +402,11 @@ mod tests {
             "signed_at": "2025-12-20",
         }))
         .unwrap();
-        let planned = plan_next_revision(&contract, req, 1).unwrap();
+        let planned = plan_next_revision(contract, req, 1).unwrap();
         assert_eq!(planned.revision.revision.revision_no, 2);
         assert!(
             plan_next_revision(
-                &contract,
+                planned.contract,
                 serde_json::from_value(json!({
                     "version": 2,
                     "contract_pdf_file_id": "file-2",

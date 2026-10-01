@@ -5,7 +5,7 @@ use entity_macros::Entity;
 use erp_core::common::state::ensure_transition;
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{CustomerAccountId, SalesSelectionBookletId, SalesSelectionProposalId};
-use erp_core::validation::normalize_required_text;
+use erp_core::validation::{normalize_required_text, normalize_required_text_ref};
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
@@ -626,7 +626,7 @@ fn normalize_form_tiers(form: SelectionForm, tiers: Vec<TierRule>) -> Result<Vec
 /// # 错误
 /// 为空时拒绝。
 fn normalize_actor(actor_id: &str, empty_message: &str) -> Result<String> {
-    normalize_required_text(actor_id.to_string(), empty_message, 64, "操作人身份过长")
+    normalize_required_text_ref(actor_id, empty_message, 64, "操作人身份过长")
 }
 
 /// 为发布时间加上整天数。

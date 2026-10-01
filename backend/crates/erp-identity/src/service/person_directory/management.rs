@@ -45,11 +45,6 @@ impl PersonDirectoryService {
         db.client()
             .clone()
             .with_transaction(move |executor| {
-                let db = db.clone();
-                let access = access.clone();
-                let actor = actor.clone();
-                let account_id = account_id.clone();
-                let change = change.clone();
                 Box::pin(async move {
                     manage_target(&db, &access, &actor, category, &account_id, change, executor).await
                 })
@@ -88,8 +83,9 @@ async fn manage_target(
     let Some(change) = change else {
         return Ok(current);
     };
-    let mut updated = apply_change(current.clone(), account_id, category, &change, actor)?;
-    if current.is_some() {
+    let exists = current.is_some();
+    let mut updated = apply_change(current, account_id, category, &change, actor)?;
+    if exists {
         db.person_query_qualifications().update(&mut updated, executor).await?;
     } else {
         db.person_query_qualifications().create(&updated, executor).await?;

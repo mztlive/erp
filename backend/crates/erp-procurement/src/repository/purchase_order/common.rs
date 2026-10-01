@@ -31,8 +31,8 @@ pub(super) fn sort_doc(sort_by: Option<&str>, whitelist: &[&str], sort_ascending
 ///
 /// # 返回
 /// 返回批量查询条件文档。
-pub(super) fn in_filter(field: &str, values: impl IntoIterator<Item = String>) -> Document {
-    let values: Vec<Bson> = values.into_iter().map(Bson::String).collect();
+pub(super) fn in_filter<T: Into<String>>(field: &str, values: impl IntoIterator<Item = T>) -> Document {
+    let values: Vec<Bson> = values.into_iter().map(|value| Bson::String(value.into())).collect();
     doc! { field: { "$in": values } }
 }
 
@@ -64,9 +64,11 @@ mod tests {
         );
     }
 
+    /// 拥有型与借用型 ID 构造相同 BSON 字符串数组。
     #[test]
     fn in_filter_builds_bson_string_list() {
         let filter = in_filter("purchase_order_id", ["po-1".to_string(), "po-2".to_string()]);
         assert_eq!(filter, doc! { "purchase_order_id": { "$in": ["po-1", "po-2"] } });
+        assert_eq!(in_filter("purchase_order_id", ["po-1", "po-2"]), filter);
     }
 }

@@ -156,20 +156,20 @@ impl PartyService {
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
-        let party_for_tx = party.clone();
-        let revision_for_tx = revision.clone();
-        client
+        let party_for_tx = party;
+        let revision_for_tx = revision;
+        let created = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     db.party_revisions().create(&revision_for_tx, executor).await?;
                     db.parties().create(&party_for_tx, executor).await?;
                     audit_port.persist(&audit, executor).await?;
-                    Ok::<(), crate::error::Error>(())
+                    Ok::<Party, crate::error::Error>(party_for_tx)
                 })
             })
             .await?;
 
-        Ok(party.into())
+        Ok(created.into())
     }
 
     /// 分页查询主体列表。
@@ -242,7 +242,8 @@ impl PartyService {
             .await?
             .ok_or_else(|| Error::NotFound("主体不存在".to_string()))?;
         let current_revision = revision.and_then(|revision| {
-            party.current_revision(std::slice::from_ref(&revision)).ok().cloned().map(Into::into)
+            party.current_revision(std::slice::from_ref(&revision)).ok()?;
+            Some(revision.into())
         });
         Ok(PartyDetailView { party: party.into(), current_revision })
     }

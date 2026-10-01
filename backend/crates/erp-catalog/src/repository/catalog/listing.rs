@@ -127,7 +127,6 @@ pub fn sku_is_listed_expr() -> Document {
 /// 无。
 fn listing_summary_pipeline(product_ids: &[String]) -> Vec<Document> {
     let listed = sku_is_listed_expr();
-    let product_ids: Vec<String> = product_ids.to_vec();
     vec![
         doc! {
             "$match": {
@@ -211,9 +210,8 @@ fn unique_product_ids(product_ids: &[ProductId]) -> Vec<String> {
     let mut seen = HashSet::new();
     let mut unique = Vec::with_capacity(product_ids.len());
     for product_id in product_ids {
-        let key = product_id.to_string();
-        if seen.insert(key.clone()) {
-            unique.push(key);
+        if seen.insert(product_id.as_ref()) {
+            unique.push(product_id.to_string());
         }
     }
     unique
@@ -236,15 +234,13 @@ fn fill_listing_summaries(
 ) -> Vec<ProductListingSummary> {
     let mut counts = HashMap::with_capacity(rows.len());
     for row in rows {
-        counts.insert(row.product_id.clone(), row);
+        counts.insert(row.product_id, (row.listed_sku_count, row.sku_count));
     }
     product_ids
         .iter()
         .map(|product_id| {
-            counts
-                .get(product_id)
-                .cloned()
-                .unwrap_or_else(|| ProductListingSummary::new(product_id.clone(), 0, 0))
+            let (listed_sku_count, sku_count) = counts.get(product_id).copied().unwrap_or_default();
+            ProductListingSummary::new(product_id.clone(), listed_sku_count, sku_count)
         })
         .collect()
 }

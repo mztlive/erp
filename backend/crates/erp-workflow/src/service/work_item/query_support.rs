@@ -22,23 +22,24 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
     ) -> Result<Vec<dto::WorkItemFields>> {
         let mut ordinary = Vec::new();
         let mut approval_fields = Vec::new();
-        let account = self.auth.load_account(&access.actor_id, &mut NoTransaction).await?;
+        let actor = self
+            .auth
+            .load_account(&access.actor_id, &mut NoTransaction)
+            .await?
+            .map(|account| AuditActor::new(account.id, account.login_account, account.kind));
         for item in items {
             if item.work_item_type.is_document_approval() {
-                if let Some(account) = &account {
-                    let actor =
-                        AuditActor::new(account.id.clone(), account.login_account.clone(), account.kind);
-                    if approval_task_readable_with_executor(
+                if let Some(actor) = &actor
+                    && approval_task_readable_with_executor(
                         &self.db,
                         &self.auth,
-                        &actor,
+                        actor,
                         &item,
                         &mut NoTransaction,
                     )
                     .await?
-                    {
-                        approval_fields.push(dto::WorkItemFields::from(item));
-                    }
+                {
+                    approval_fields.push(dto::WorkItemFields::from(item));
                 }
             } else {
                 ordinary.push(item);

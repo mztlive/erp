@@ -257,8 +257,8 @@ impl SalesOrderWorkingCopy {
             normalize_optional_text(data.business_remark, "业务备注", BUSINESS_REMARK_MAX_LEN)?;
         Self::validate_associations(
             data.working_purpose,
-            data.sales_change_order_id.clone(),
-            data.voucher_category_sku_id.clone(),
+            data.sales_change_order_id.as_ref(),
+            data.voucher_category_sku_id.as_ref(),
             data.voucher_expiry_at,
             data.receivable_due_date,
         )?;
@@ -268,10 +268,10 @@ impl SalesOrderWorkingCopy {
         }
         let lines = data
             .lines
-            .iter()
+            .into_iter()
             .map(|line| LineSummary {
                 line_no: line.line_no,
-                line_id: line.sales_order_line_id.clone(),
+                line_id: line.sales_order_line_id,
                 line_type: line.line_type,
             })
             .collect::<Vec<_>>();
@@ -388,8 +388,8 @@ impl SalesOrderWorkingCopy {
         }
         Self::validate_associations(
             self.working_purpose,
-            self.sales_change_order_id.clone(),
-            self.voucher_category_sku_id.clone(),
+            self.sales_change_order_id.as_ref(),
+            self.voucher_category_sku_id.as_ref(),
             self.voucher_expiry_at,
             self.receivable_due_date,
         )?;
@@ -501,8 +501,9 @@ impl SalesOrderWorkingCopy {
             CONTENT_HASH_MAX_LEN,
             "内容指纹过长",
         )?;
+        let editor_user_id: String = editor_user_id.into();
         self.editor_user_id =
-            normalize_required_text(editor_user_id.into(), "编辑人不能为空", EDITOR_MAX_LEN, "编辑人过长")?;
+            normalize_required_text(editor_user_id, "编辑人不能为空", EDITOR_MAX_LEN, "编辑人过长")?;
         self.draft_version += 1;
         self.stable.touch(self.editor_user_id.clone());
         Ok(())
@@ -577,8 +578,8 @@ impl SalesOrderWorkingCopy {
     /// 返回错误。
     fn validate_associations(
         working_purpose: WorkingPurpose,
-        sales_change_order_id: Option<SalesChangeOrderId>,
-        voucher_category_sku_id: Option<SkuId>,
+        sales_change_order_id: Option<&SalesChangeOrderId>,
+        voucher_category_sku_id: Option<&SkuId>,
         voucher_expiry_at: Option<Instant>,
         _receivable_due_date: Option<BusinessDate>,
     ) -> Result<()> {

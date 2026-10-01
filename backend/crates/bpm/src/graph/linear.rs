@@ -6,8 +6,7 @@ use std::collections::HashSet;
 
 use crate::ids::{ApprovalProcessDefinitionId, ApprovalTransitionDefinitionId};
 use crate::model::types::{
-    ApprovalTerminalResult, ApprovalTransitionEvent, ModelError, ModelResult, NODE_KEY_MAX_LEN,
-    normalize_required,
+    ApprovalTerminalResult, ApprovalTransitionEvent, ModelError, ModelResult, NODE_KEY_MAX_LEN, trim_required,
 };
 use crate::model::{ApprovalNodeDefinition, ApprovalTransitionDefinition, Timestamp};
 
@@ -38,29 +37,29 @@ pub struct LinearTransitionDraft {
 /// 节点为空、键非法或存在重复时返回错误。
 pub fn generate_linear_transitions(node_keys: &[String]) -> ModelResult<Vec<LinearTransitionDraft>> {
     let keys = normalize_keys(node_keys)?;
-    let entry = keys[0].clone();
+    let entry = keys[0];
     let last = keys.len() - 1;
     let mut drafts = Vec::with_capacity(keys.len() * 2);
     for (index, from) in keys.iter().enumerate() {
         if index == last {
             drafts.push(LinearTransitionDraft {
-                from_node_key: from.clone(),
+                from_node_key: (*from).to_string(),
                 event: ApprovalTransitionEvent::Approve,
                 to_node_key: None,
                 terminal_result: Some(ApprovalTerminalResult::Approved),
             });
         } else {
             drafts.push(LinearTransitionDraft {
-                from_node_key: from.clone(),
+                from_node_key: (*from).to_string(),
                 event: ApprovalTransitionEvent::Approve,
-                to_node_key: Some(keys[index + 1].clone()),
+                to_node_key: Some(keys[index + 1].to_string()),
                 terminal_result: None,
             });
         }
         drafts.push(LinearTransitionDraft {
-            from_node_key: from.clone(),
+            from_node_key: (*from).to_string(),
             event: ApprovalTransitionEvent::Reject,
-            to_node_key: Some(entry.clone()),
+            to_node_key: Some(entry.to_string()),
             terminal_result: None,
         });
     }
@@ -123,15 +122,15 @@ pub fn build_linear_transitions(
 ///
 /// # 错误
 /// 节点集合不合法时返回 [`ModelError::InvalidField`]。
-fn normalize_keys(node_keys: &[String]) -> ModelResult<Vec<String>> {
+fn normalize_keys(node_keys: &[String]) -> ModelResult<Vec<&str>> {
     if node_keys.is_empty() {
         return Err(ModelError::InvalidField("线性流程至少需要一个节点"));
     }
     let mut seen = HashSet::with_capacity(node_keys.len());
     let mut keys = Vec::with_capacity(node_keys.len());
     for key in node_keys {
-        let normalized = normalize_required(key.clone(), "节点键不能为空", NODE_KEY_MAX_LEN, "节点键过长")?;
-        if !seen.insert(normalized.clone()) {
+        let normalized = trim_required(key, "节点键不能为空", NODE_KEY_MAX_LEN, "节点键过长")?;
+        if !seen.insert(normalized) {
             return Err(ModelError::InvalidField("节点键不能重复"));
         }
         keys.push(normalized);
@@ -142,7 +141,9 @@ fn normalize_keys(node_keys: &[String]) -> ModelResult<Vec<String>> {
 #[cfg(test)]
 mod tests {
     use super::generate_linear_transitions;
-    use crate::model::types::{ApprovalTerminalResult, ApprovalTransitionEvent};
+    use crate::model::types::{
+        ApprovalTerminalResult, ApprovalTransitionEvent, ModelError, NODE_KEY_MAX_LEN,
+    };
 
     /// 单节点：通过进终态，驳回回自身。
     #[test]
@@ -176,5 +177,20 @@ mod tests {
         assert!(generate_linear_transitions(&[]).is_err());
         assert!(generate_linear_transitions(&["n1".into(), "n1".into()]).is_err());
         assert!(generate_linear_transitions(&["  ".into()]).is_err());
+    }
+
+    /// 规范化按 UTF-8 字节校验上限，并在 trim 后识别重复键。
+    #[test]
+    fn normalized_keys_preserve_utf8_byte_boundary_and_duplicate_detection() {
+        let longest = "界".repeat(NODE_KEY_MAX_LEN / 3);
+        assert!(generate_linear_transitions(&[format!(" {longest} ")]).is_ok());
+        assert_eq!(
+            generate_linear_transitions(&["界".repeat(NODE_KEY_MAX_LEN / 3 + 1)]),
+            Err(ModelError::InvalidField("节点键过长"))
+        );
+        assert_eq!(
+            generate_linear_transitions(&["\t 节点 \n".into(), "节点".into()]),
+            Err(ModelError::InvalidField("节点键不能重复"))
+        );
     }
 }

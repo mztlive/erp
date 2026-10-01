@@ -145,10 +145,10 @@ impl SalesSelectionService {
         batch_id: Option<String>,
         executor: &mut dyn Executor,
     ) -> Result<SalesSelectionBookletView> {
-        let batch = batch_id.or_else(|| booklet.current_batch_id.clone());
+        let batch = batch_id.as_deref().or(booklet.current_batch_id.as_deref());
         let domain = crate::repository::sales_selection::SalesSelectionDomainRepository::new(&self.db);
         let items = if let Some(batch) = batch {
-            domain.list_effective_items(&booklet.base.id, &batch, executor).await?
+            domain.list_effective_items(&booklet.base.id, batch, executor).await?
         } else {
             Vec::new()
         };
@@ -312,11 +312,11 @@ impl SalesSelectionService {
         proposal: &SalesSelectionProposal,
         executor: &mut dyn Executor,
     ) -> Result<SalesSelectionProposalView> {
-        let proposal_id = proposal.base.id.clone();
+        let proposal_id = proposal.base.id.as_str();
         let display_lines =
-            self.db.sales_selection_proposal_display_lines().list_by_proposal(&proposal_id, executor).await?;
+            self.db.sales_selection_proposal_display_lines().list_by_proposal(proposal_id, executor).await?;
         let sku_lines =
-            self.db.sales_selection_proposal_sku_lines().list_by_proposal(&proposal_id, executor).await?;
+            self.db.sales_selection_proposal_sku_lines().list_by_proposal(proposal_id, executor).await?;
         Ok(Self::proposal_view(proposal, &display_lines, &sku_lines))
     }
 
@@ -388,9 +388,9 @@ impl SalesSelectionService {
         booklet: &SalesSelectionBooklet,
         executor: &mut dyn Executor,
     ) -> Result<PublicSelectionPageView> {
-        let batch = booklet.current_batch_id.clone().unwrap_or_default();
+        let batch = booklet.current_batch_id.as_deref().unwrap_or_default();
         let domain = crate::repository::sales_selection::SalesSelectionDomainRepository::new(&self.db);
-        let items = domain.list_effective_items(&booklet.base.id, &batch, executor).await?;
+        let items = domain.list_effective_items(&booklet.base.id, batch, executor).await?;
         let session = domain.find_session_by_booklet(&booklet.base.id, executor).await?;
         Ok(Self::public_page(PublicSelectionPageKind::Selecting, booklet, &items, session.as_ref(), None))
     }
@@ -417,17 +417,17 @@ impl SalesSelectionService {
             Some(item) => {
                 let choices = self.receipt_items(&item.base.id, executor).await?;
                 Some(PublicReceiptView {
-                    proposal_no: item.proposal_no.clone(),
+                    proposal_no: item.proposal_no,
                     submitted_at: item.submitted_at,
-                    customer_name: item.customer_name.clone(),
+                    customer_name: item.customer_name,
                     items: choices,
                     total_amount: item.total_amount,
                 })
             },
             None => None,
         };
-        let batch = booklet.current_batch_id.clone().unwrap_or_default();
-        let items = domain.list_effective_items(&booklet.base.id, &batch, executor).await?;
+        let batch = booklet.current_batch_id.as_deref().unwrap_or_default();
+        let items = domain.list_effective_items(&booklet.base.id, batch, executor).await?;
         let session = domain.find_session_by_booklet(&booklet.base.id, executor).await?;
         Ok(Self::public_page(PublicSelectionPageKind::Receipt, booklet, &items, session.as_ref(), receipt))
     }
@@ -538,11 +538,12 @@ fn merge_task_reports(
     mut tasks: Vec<crate::entity::sales_selection::SalesSelectionPrepareTask>,
 ) -> Option<crate::entity::sales_selection::SalesSelectionPrepareTask> {
     tasks.sort_by(|a, b| b.finished_at.cmp(&a.finished_at).then_with(|| b.base.id.cmp(&a.base.id)));
-    let mut latest = tasks.first()?.clone();
+    let mut tasks = tasks.into_iter();
+    let mut latest = tasks.next()?;
     let mut seen = std::collections::BTreeSet::new();
-    latest.tier_reports = tasks
+    latest.tier_reports = std::mem::take(&mut latest.tier_reports)
         .into_iter()
-        .flat_map(|task| task.tier_reports)
+        .chain(tasks.flat_map(|task| task.tier_reports))
         .filter(|report| seen.insert(report.tier_id.clone()))
         .collect();
     Some(latest)

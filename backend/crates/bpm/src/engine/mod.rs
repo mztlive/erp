@@ -102,11 +102,31 @@ impl Eligibility {
 
     /// 返回资格对应的责任人。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回构造时写入的处理人。
+    ///
+    /// # 错误
+    /// 无。
     pub fn participant(&self) -> ParticipantId {
+        self.participant_ref().clone()
+    }
+
+    /// 借用资格对应的责任人，供 crate 内校验而不复制身份。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回构造时写入的处理人引用。
+    ///
+    /// # 错误
+    /// 无。
+    pub(crate) fn participant_ref(&self) -> &ParticipantId {
         match self {
-            Self::Eligible { participant, .. } | Self::Blocked { participant, .. } => participant.clone(),
+            Self::Eligible { participant, .. } | Self::Blocked { participant, .. } => participant,
         }
     }
 }

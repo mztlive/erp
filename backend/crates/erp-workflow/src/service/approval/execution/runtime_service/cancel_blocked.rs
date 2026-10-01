@@ -74,15 +74,12 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         }
         let idempotency_key = normalize_idempotency_key(&command.idempotency_key)?;
         command.idempotency_key = idempotency_key.as_str().to_string();
+        let commit_command = command.clone();
+        let commit_key = idempotency_key.clone();
         commit_or_recover(
-            || self.commit_cancel_blocked(actor, command.clone(), idempotency_key.clone()),
+            || self.commit_cancel_blocked(actor, commit_command, commit_key),
             |error| {
-                self.recover_cancel_blocked_after_competing_commit(
-                    actor,
-                    command.clone(),
-                    idempotency_key.clone(),
-                    error,
-                )
+                self.recover_cancel_blocked_after_competing_commit(actor, command, idempotency_key, error)
             },
         )
         .await

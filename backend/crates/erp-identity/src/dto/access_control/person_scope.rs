@@ -196,7 +196,7 @@ impl PersonScopeGrant {
             return Err(Error::ValidationError("附加授权必须选择本次保存的操作和完整范围".into()));
         }
         let mut keyed = Vec::new();
-        for term in &mut self.terms {
+        for mut term in self.terms.drain(..) {
             if matches!(term.scope_type, DataScopeType::SelfOwned | DataScopeType::Collaborative)
                 && term.target_dimension != ScopeDimension::InternalOrg
             {
@@ -208,8 +208,8 @@ impl PersonScopeGrant {
                 term.rule(resource, action, "validation", true)?;
             }
             keyed.push((
-                serde_json::to_string(term).map_err(|error| Error::Internal(error.to_string()))?,
-                term.clone(),
+                serde_json::to_string(&term).map_err(|error| Error::Internal(error.to_string()))?,
+                term,
             ));
         }
         keyed.sort_by(|left, right| left.0.cmp(&right.0));

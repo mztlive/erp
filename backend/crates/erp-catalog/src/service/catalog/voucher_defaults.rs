@@ -66,14 +66,13 @@ impl CatalogService {
             "product_category",
             category_id.to_string(),
         )?;
-        let category_for_tx = category.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         let created = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.product_categories().create(&category_for_tx, executor).await?;
+                    db.product_categories().create(&category, executor).await?;
                     audit_port.persist(&audit, executor).await?;
                     Ok::<(), crate::error::Error>(())
                 })
@@ -131,14 +130,13 @@ impl CatalogService {
             "product_brand",
             brand_id.to_string(),
         )?;
-        let brand_for_tx = brand.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         let created = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.product_brands().create(&brand_for_tx, executor).await?;
+                    db.product_brands().create(&brand, executor).await?;
                     audit_port.persist(&audit, executor).await?;
                     Ok::<(), crate::error::Error>(())
                 })
@@ -196,14 +194,13 @@ impl CatalogService {
             "unit_of_measure",
             unit_id.to_string(),
         )?;
-        let unit_for_tx = unit.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         let created = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.unit_of_measures().create(&unit_for_tx, executor).await?;
+                    db.unit_of_measures().create(&unit, executor).await?;
                     audit_port.persist(&audit, executor).await?;
                     Ok::<(), crate::error::Error>(())
                 })

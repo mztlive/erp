@@ -22,7 +22,7 @@ use crate::{Error, Result};
 /// # 返回
 /// 返回响应视图；策略身份、资金影响与类型要求来自领域策略。
 pub fn error_evidence_policy(task: &IntegrationErrorTask) -> ResolutionEvidencePolicyView {
-    policy_view(&error_terminal_policy(task))
+    policy_view(error_terminal_policy(task))
 }
 
 /// 返回对账差异当前固定证据策略视图（规则归领域，此处只做 view 映射）。
@@ -33,7 +33,7 @@ pub fn error_evidence_policy(task: &IntegrationErrorTask) -> ResolutionEvidenceP
 /// # 返回
 /// 返回响应视图；策略身份、资金影响与类型要求来自领域策略。
 pub fn difference_evidence_policy(difference: &ReconciliationDifference) -> ResolutionEvidencePolicyView {
-    policy_view(&difference_terminal_policy(difference))
+    policy_view(difference_terminal_policy(difference))
 }
 
 /// 返回无任务直接对账固定原因注册表视图（注册表归领域，此处只做 view 映射）。
@@ -73,12 +73,12 @@ pub fn reconciliation_reason_registry() -> ReconciliationReasonRegistryView {
 ///
 /// # 约束
 /// 只做词汇映射，不维护第二份类型要求。
-fn policy_view(policy: &TerminalEvidencePolicy) -> ResolutionEvidencePolicyView {
+fn policy_view(policy: TerminalEvidencePolicy) -> ResolutionEvidencePolicyView {
     ResolutionEvidencePolicyView {
         evidence_policy_id: policy.policy_id.to_string(),
         evidence_policy_version: policy.version,
         key: EvidencePolicyKey {
-            error_type: policy.error_type.clone(),
+            error_type: policy.error_type,
             funds_impact: policy.funds_impact.as_str().to_string(),
         },
         required_evidence_kinds: policy

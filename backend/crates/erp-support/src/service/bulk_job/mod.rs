@@ -145,7 +145,7 @@ impl BulkJobService {
             })
             .collect();
         let aggregate = BulkSelectionSnapshotAggregate::new(
-            snapshot_id.clone(),
+            snapshot_id,
             BulkSelectionSnapshotAggregateData {
                 selection_type: req.selection_type,
                 data_cutoff_at: erp_core::common::time::Instant::from_unix_secs(req.data_cutoff_at as i64),
@@ -163,14 +163,13 @@ impl BulkJobService {
         )?;
         let db = self.db.clone();
         let client = db.client().clone();
-        let snapshot_for_tx = snapshot.clone();
         let audit_port = self.audit.clone();
-        client
+        let snapshot = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.bulk_job().create_snapshot_with_items(&snapshot_for_tx, items, executor).await?;
+                    db.bulk_job().create_snapshot_with_items(&snapshot, items, executor).await?;
                     audit_port.persist(&audit, executor).await?;
-                    Ok::<(), crate::error::Error>(())
+                    Ok::<_, crate::error::Error>(snapshot)
                 })
             })
             .await?;
@@ -526,7 +525,7 @@ impl BulkJobService {
             .filter(|item| is_business_document_type(&item.object_type))
             .map(|item| item.object_id.clone())
             .collect::<Vec<_>>();
-        let unique_ids = dedup_preserving_order(document_ids.iter().cloned());
+        let unique_ids = dedup_preserving_order(&document_ids);
         let registered_ids = self
             .documents
             .find_registered_ids(&unique_ids, &mut NoTransaction)
@@ -712,16 +711,16 @@ fn build_job_parts(
     Ok(aggregate.into_parts())
 }
 
-/// 单次遍历完成保序去重（替代“map→filter+clone→collect”三遍克隆遍历）。
+/// 借用去重键，只复制首次出现的 ID。
 ///
 /// # 参数
 /// * `ids` - 待去重的 ID 序列
 ///
 /// # 返回
 /// 返回保序去重后的 ID 集合；去重语义与 `NotFound` 行为不变。
-fn dedup_preserving_order(ids: impl IntoIterator<Item = String>) -> Vec<String> {
+fn dedup_preserving_order(ids: &[String]) -> Vec<String> {
     let mut seen = HashSet::new();
-    ids.into_iter().filter(|id| seen.insert(id.clone())).collect()
+    ids.iter().filter(|id| seen.insert(id.as_str())).cloned().collect()
 }
 
 /// 按请求顺序定位首个尚未注册的业务单据 ID。

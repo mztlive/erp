@@ -29,7 +29,7 @@ pub fn prepare(input: InitialPurchasePayable<'_>, actor_id: &str) -> Result<(Pay
         erp_core::ids::PayableAccountId::new(next_id()),
         crate::entity::payable::PayableAccountData {
             source_document_id: input.order_id.to_string(),
-            supplier_id: input.supplier_id.clone(),
+            supplier_id: input.supplier_id,
             source_type: crate::entity::payable::PayableSourceType::PurchaseOrder,
             gross_total: input.gross_amount,
             settled_total: zero_amount(),

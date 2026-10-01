@@ -59,7 +59,8 @@ impl CatalogAccess {
         executor: &mut dyn Executor,
     ) -> Result<(CatalogResolvedScope, CatalogReadScope)> {
         let access = self.scope.resolve(actor, action, executor).await?;
-        Ok((access.clone(), catalog_scope(&access, actor.id())))
+        let scope = catalog_scope(&access, actor.id());
+        Ok((access, scope))
     }
 
     /// 在调用方事务内重验商品对象资格。

@@ -43,6 +43,20 @@ impl QueryIds {
     pub fn as_slice(&self) -> &[String] {
         &self.0
     }
+
+    /// 消费筛选条件并返回已规范化的身份集合。
+    ///
+    /// # 参数
+    /// * `self` - 已完成校验、去重和排序的筛选条件
+    ///
+    /// # 返回
+    /// 返回原有身份集合，不复制身份或重新分配集合。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn into_vec(self) -> Vec<String> {
+        self.0
+    }
 }
 
 impl<'de> Deserialize<'de> for QueryIds {
@@ -63,7 +77,7 @@ mod tests {
     }
     #[test]
     fn identities_are_deduplicated_and_names_are_rejected() {
-        assert_eq!(parse(" user-2,user-1,user-2 ").unwrap().as_slice(), &["user-1", "user-2"]);
+        assert_eq!(parse(" user-2,user-1,user-2 ").unwrap().into_vec(), ["user-1", "user-2"]);
         for raw in ["", " ", "张三", "user-1,", "user-1,,user-2"] {
             assert!(parse(raw).is_err());
         }

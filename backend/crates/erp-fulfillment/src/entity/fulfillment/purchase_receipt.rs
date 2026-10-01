@@ -374,8 +374,7 @@ impl PurchaseReceipt {
         if lines.is_empty() {
             return Err(Error::from("采购入库单没有行，无法过账"));
         }
-        let receipt_id = PurchaseReceiptId::new(self.base.id.clone());
-        if lines.iter().any(|line| line.purchase_receipt_id != receipt_id) {
+        if lines.iter().any(|line| line.purchase_receipt_id.as_ref() != self.base.id) {
             return Err(Error::from("采购入库行与入库单关联不一致"));
         }
         Ok(())

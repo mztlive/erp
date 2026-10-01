@@ -125,9 +125,9 @@ fn ensure_transitions_match(
         .iter()
         .map(|draft| {
             (
-                draft.from_node_key.clone(),
+                draft.from_node_key.as_str(),
                 draft.event.as_str(),
-                draft.to_node_key.clone(),
+                draft.to_node_key.as_deref(),
                 draft.terminal_result.map(|result| result.as_str()),
             )
         })
@@ -152,11 +152,11 @@ fn ensure_transitions_match(
 /// 无。
 fn transition_key(
     transition: &ApprovalTransitionDefinition,
-) -> (String, &'static str, Option<String>, Option<&'static str>) {
+) -> (&str, &'static str, Option<&str>, Option<&'static str>) {
     (
-        transition.from_node_key.clone(),
+        transition.from_node_key.as_str(),
         transition.event.as_str(),
-        transition.to_node_key.clone(),
+        transition.to_node_key.as_deref(),
         transition.terminal_result.map(|result| result.as_str()),
     )
 }

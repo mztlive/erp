@@ -89,7 +89,7 @@ impl InventoryService {
                         executor,
                     )
                     .await?;
-                    let filter = movement_filter(&query, &authorization, search);
+                    let filter = movement_filter(query, &authorization, search);
                     let page = db.stock_movements().search_stock_movements(&filter, executor).await?;
                     Ok::<_, Error>((page, authorization))
                 })
@@ -98,23 +98,22 @@ impl InventoryService {
     }
 }
 
+/// 将已规范化的查询字段移动到库存流水筛选条件。
 fn movement_filter(
-    query: &StockMovementListQuery,
+    query: StockMovementListQuery,
     authorization: &InventoryAuthorization,
     search: crate::repository::InventorySearch,
 ) -> StockMovementFilter {
     let (sort_by, sort_ascending) = query.paging.sort_selection();
     StockMovementFilter {
         search,
-        warehouse_ids: authorization
-            .movement_list_scope()
-            .repository_warehouse_ids(query.warehouse_id.clone()),
-        sku_id: query.sku_id.clone(),
+        warehouse_ids: authorization.movement_list_scope().repository_warehouse_ids(query.warehouse_id),
+        sku_id: query.sku_id,
         movement_type: query.movement_type,
         direction: query.direction,
         occurred_from: query.occurred_from.map(Instant::from_unix_secs),
         occurred_to: query.occurred_to.map(Instant::from_unix_secs),
-        recorded_by_ids: query.operator_user_ids.clone(),
+        recorded_by_ids: query.operator_user_ids,
         page: query.paging.page,
         page_size: query.paging.page_size,
         sort_by,
@@ -174,7 +173,7 @@ pub(super) async fn load_movement_source_document_nos(
         let adjustments =
             db.inventory().stock_adjustments_by_ids(&adjustment_ids, &mut NoTransaction).await?;
         for adjustment in adjustments {
-            document_nos.insert(adjustment.base.id.clone(), adjustment.adjustment_no.clone());
+            document_nos.insert(adjustment.base.id, adjustment.adjustment_no);
         }
     }
     let receipt_ids: Vec<String> = movements

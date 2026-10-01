@@ -332,7 +332,7 @@ pub(crate) fn instance_list_filter_doc(filter: &ApprovalInstanceListFilter) -> D
         document.insert("subject.subject_kind", subject_kind);
     }
     if let Some(subject_ids) = &filter.subject_ids {
-        document.insert("subject.subject_id", doc! { "$in": subject_ids.clone() });
+        document.insert("subject.subject_id", doc! { "$in": subject_ids.as_slice() });
     }
     if let Some(ids) = &filter.authorized_instance_ids {
         document.insert("id", doc! { "$in": ids });
@@ -366,7 +366,7 @@ fn insert_list_disjunctions(document: &mut Document, filter: &ApprovalInstanceLi
     match groups.len() {
         0 => {},
         1 => {
-            if let Some(or) = groups[0].get("$or").cloned() {
+            if let Some(or) = groups.pop().and_then(|mut group| group.remove("$or")) {
                 document.insert("$or", or);
             }
         },

@@ -32,7 +32,7 @@ fn dedupe_difference_ids(ids: &[String]) -> Vec<String> {
     let mut seen = HashSet::new();
     let mut unique = Vec::new();
     for id in ids {
-        if seen.insert(id.clone()) {
+        if seen.insert(id.as_str()) {
             unique.push(id.clone());
         }
     }

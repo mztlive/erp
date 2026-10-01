@@ -4,6 +4,7 @@ mod access;
 mod bootstrap;
 mod profile;
 
+use std::mem::take;
 use std::sync::Arc;
 
 use application_core::AuditActor;
@@ -54,13 +55,14 @@ impl OrganizationService {
     /// 缺范围返回空集并标记 `no_scope`；所属部门不代替 `org_unit:list`。
     pub async fn state(&self, actor: &AuditActor) -> Result<OrganizationStateView> {
         let mut no_tx = NoTransaction;
-        let access = self.access(actor, "list", &mut no_tx).await?;
-        let visible = visible_state(access.organizations.clone(), &access);
+        let mut access = self.access(actor, "list", &mut no_tx).await?;
+        let organizations = take(&mut access.organizations);
+        let visible = visible_state(organizations, &access);
         let people = people_for(&self.db, &visible, access.as_of, &mut no_tx).await?;
         let roles = roles_for(&self.db, &mut no_tx).await?;
         Ok(OrganizationStateView::compose(
             visible,
-            access.scope_version.clone(),
+            access.scope_version,
             access.policy_version,
             access.as_of.as_utc().to_rfc3339(),
             !access.scope.has_role_scope(),
@@ -227,7 +229,7 @@ impl OrganizationService {
     }
 }
 
-/// 读取组织页面人员展示与分派候选（借用可见状态，只克隆可见子集）。
+/// 读取组织页面人员展示与分派候选，消费账号的展示字段。
 ///
 /// # 参数
 /// * `db` - 数据库句柄（只借用，不克隆 client/actor）
@@ -248,13 +250,15 @@ async fn people_for(
 ) -> Result<Vec<OrgPersonView>> {
     let accounts = db.accounts().list_by_kind(AccountKind::Admin, executor).await?;
     let mut people = Vec::with_capacity(accounts.len());
-    for account in &accounts {
+    for account in accounts {
+        let active = account.is_active_backoffice();
+        let own_org_unit_id = visible.own_org(&account.base.id, as_of)?.map(str::to_owned);
         people.push(OrgPersonView {
-            id: account.base.id.clone(),
-            label: account.name.clone(),
+            id: account.base.id,
+            label: account.name,
             account: account.secret.account().to_string(),
-            active: account.is_active_backoffice(),
-            own_org_unit_id: visible.own_org(&account.base.id, as_of)?.map(str::to_owned),
+            active,
+            own_org_unit_id,
         });
     }
     people.sort_by(|left, right| (&left.label, &left.id).cmp(&(&right.label, &right.id)));

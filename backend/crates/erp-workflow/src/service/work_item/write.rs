@@ -86,7 +86,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         actor: &AuditActor,
     ) -> Result<WorkItemMutationOutcome> {
         let _ = actor;
-        Ok(WorkItemMutationOutcome::Applied { work_item_id: item.base.id.clone() })
+        Ok(WorkItemMutationOutcome::Applied { work_item_id: item.base.id })
     }
 
     /// 冲突后返回任务 ID，供 HTTP 向 read-models 投影。

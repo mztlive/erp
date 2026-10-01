@@ -77,7 +77,6 @@ macro_rules! transact_with_audit {
         let client = $service.db.client().clone();
         client
             .with_transaction(move |$session| {
-                let $db = $db.clone();
                 Box::pin(async move {
                     let result = $body;
                     let result = result?;
@@ -731,20 +730,18 @@ fn build_warehouse_revision(
     fingerprint: &dyn AttachmentFingerprintPort,
     fingerprint_key: &[u8],
 ) -> Result<WarehouseRevision> {
+    let address_fingerprint = fingerprint.content_fingerprint(&input.address, fingerprint_key);
+    let address = SensitiveText::new(input.address, address_fingerprint)?;
+    let contact_fingerprint = fingerprint.content_fingerprint(&input.contact, fingerprint_key);
+    let contact = SensitiveText::new(input.contact, contact_fingerprint)?;
     Ok(WarehouseRevision::new(
         revision_id,
         WarehouseRevisionData {
             warehouse_id,
             revision_no,
             name: input.name,
-            address: SensitiveText::new(
-                input.address.clone(),
-                fingerprint.content_fingerprint(&input.address, fingerprint_key),
-            )?,
-            contact: SensitiveText::new(
-                input.contact.clone(),
-                fingerprint.content_fingerprint(&input.contact, fingerprint_key),
-            )?,
+            address,
+            contact,
             effective_from: input.effective_from,
             effective_to: input.effective_to,
             change_reason: input.change_reason,

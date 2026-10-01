@@ -102,7 +102,7 @@ impl PreparedSupportAudit {
         }
         let (actor_id, actor_account, actor_type) = actor.into_parts();
         let id = id_generator::next_id();
-        let base = BaseModel::new(id.clone());
+        let base = BaseModel::new(id);
         Ok(Self::from_validated(
             &base,
             actor_id,

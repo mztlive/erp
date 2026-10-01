@@ -180,10 +180,8 @@ impl SupplierFulfillmentService {
         match outcome {
             DispatchOutcome::Succeeded { external_request_id, external_order_no } => {
                 if action.action_type == SupplierOrderActionType::Place {
-                    if let Some(order_no) = &external_order_no {
-                        order.update(SupplierFulfillmentOrderUpdate {
-                            external_order_no: Some(order_no.clone()),
-                        })?;
+                    if let Some(order_no) = external_order_no {
+                        order.update(SupplierFulfillmentOrderUpdate { external_order_no: Some(order_no) })?;
                     }
                     order.advance_fulfillment(FulfillmentStatus::Accepted)?;
                 }

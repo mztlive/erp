@@ -96,6 +96,28 @@ pub fn normalize_required_text(
     max_len: usize,
     too_long_message: &str,
 ) -> Result<String> {
+    normalize_required_text_ref(&value, empty_message, max_len, too_long_message)
+}
+
+/// 借用必填文本并执行与拥有型入口相同的规范化。
+///
+/// # 参数
+/// * `value` - 借用的原始文本
+/// * `empty_message` - 为空时错误信息
+/// * `max_len` - 最大字符数
+/// * `too_long_message` - 超长时错误信息
+///
+/// # 返回
+/// 返回移除首尾空白后的拥有型文本。
+///
+/// # 错误
+/// trim 后为空或字符数超过上限时返回原有校验错误。
+pub fn normalize_required_text_ref(
+    value: &str,
+    empty_message: &str,
+    max_len: usize,
+    too_long_message: &str,
+) -> Result<String> {
     let value = non_empty_trimmed(value, empty_message)?;
     ensure_max_len(value.as_str(), max_len, too_long_message)?;
     Ok(value)
@@ -277,6 +299,30 @@ mod tests {
     fn non_empty_trimmed_returns_trimmed_value() {
         let result = non_empty_trimmed("  hello ", "should not be empty").unwrap();
         assert_eq!(result, "hello");
+    }
+
+    /// 必填文本的拥有型与借用型输入使用相同的规范化及错误规则。
+    #[test]
+    fn required_text_accepts_owned_and_borrowed_inputs() {
+        let input = "  商品  ".to_string();
+        assert_eq!(normalize_required_text_ref(&input, "不能为空", 2, "过长").unwrap(), "商品");
+        assert_eq!(normalize_required_text(input, "不能为空", 2, "过长").unwrap(), "商品");
+        assert_eq!(
+            normalize_required_text_ref("  ", "不能为空", 2, "过长").unwrap_err().to_string(),
+            "不能为空"
+        );
+        assert_eq!(
+            normalize_required_text_ref(" 商品名 ", "不能为空", 2, "过长").unwrap_err().to_string(),
+            "过长"
+        );
+        assert_eq!(
+            normalize_required_text("  ".into(), "不能为空", 2, "过长").unwrap_err().to_string(),
+            "不能为空"
+        );
+        assert_eq!(
+            normalize_required_text(" 商品名 ".into(), "不能为空", 2, "过长").unwrap_err().to_string(),
+            "过长"
+        );
     }
 
     /// 校验可选邮箱规范化规则。

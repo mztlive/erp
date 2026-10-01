@@ -12,6 +12,7 @@ use super::{
 };
 
 impl<'a> BpmWorkflowRepository<'a> {
+    /// 按定义版本和允许状态写入，并使用当前状态分类 CAS 未命中。
     pub(super) async fn cas_write_definition(
         &self,
         definition: &ApprovalProcessDefinition,
@@ -20,7 +21,6 @@ impl<'a> BpmWorkflowRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<CasWriteOutcome<ApprovalProcessDefinition>> {
         let filter = draft_or_status_filter(&definition.base.id, expected_lock_version, required_status)?;
-        let required = required_status.to_vec();
         self.cas_replace(
             CasReplaceSpec {
                 collection: DEFINITIONS,
@@ -29,7 +29,7 @@ impl<'a> BpmWorkflowRepository<'a> {
                 expected_version: expected_lock_version,
                 extra_set: None,
             },
-            move |current| required.contains(&current.status),
+            |current| required_status.contains(&current.status),
             executor,
         )
         .await

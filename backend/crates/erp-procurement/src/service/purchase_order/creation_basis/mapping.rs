@@ -76,7 +76,7 @@ pub fn basis_groups_from_facts(
             continue;
         }
         let supplies = qualified_supplies_for_line(facts, line)?;
-        append_line_supplies(&coverage.revision, line.clone(), supplies, facts, &mut groups)?;
+        append_line_supplies(&coverage.revision, line, supplies, facts, &mut groups)?;
     }
     for group in &mut groups {
         group.lines.sort_by(|left, right| stable_line_id(left).cmp(stable_line_id(right)));
@@ -105,14 +105,14 @@ pub fn basis_groups_from_facts(
 /// 条件与经营类目只从批量事实解释，不再逐供应商读取。
 fn append_line_supplies(
     revision: &SalesRevisionFact,
-    line: SalesProcurementCoverageLine,
+    line: &SalesProcurementCoverageLine,
     supplies: Vec<LineSupply>,
     facts: &CreationBasisFacts,
     groups: &mut Vec<BasisGroup>,
 ) -> Result<()> {
     for supply in supplies {
-        let supplier_id = supply.offering.supplier_id.clone();
-        let terms = settlement_terms_for(facts, &supplier_id);
+        let supplier_id = &supply.offering.supplier_id;
+        let terms = settlement_terms_for(facts, supplier_id);
         let purchase_type = purchase_type_from_product_kind(line.product_kind)?;
         let max_create_quantity =
             maximum_create_quantity(line.summary.remaining_quantity, supply.availability.available_quantity)?;
@@ -165,7 +165,7 @@ fn settlement_terms_for(
     let Some(supplier) = facts.suppliers.get(&supplier_id.to_string()) else {
         return SupplierSettlementTerms::net30();
     };
-    let Some(revision_id) = supplier.current_commercial_profile_revision_id.clone() else {
+    let Some(revision_id) = supplier.current_commercial_profile_revision_id.as_ref() else {
         return SupplierSettlementTerms::net30();
     };
     let Some(revision) = facts.commercial_profiles.get(&revision_id.to_string()) else {
@@ -232,10 +232,10 @@ fn qualified_supplies_for_line(
 /// 可供数量为空表示供应商未给出上限，不等于不可供；条款有效期按当前业务日期
 /// 判定，业务日期由 Service 注入。
 fn qualified_supply(facts: &CreationBasisFacts, offering: &OfferingFact) -> Result<Option<LineSupply>> {
-    let Some(revision_id) = offering.stable.current_revision_id.clone() else {
+    let Some(revision_id) = offering.stable.current_revision_id.as_ref() else {
         return Ok(None);
     };
-    let Some(revision) = facts.revisions.get(&revision_id) else {
+    let Some(revision) = facts.revisions.get(revision_id) else {
         return Ok(None);
     };
     let today = BusinessDate::today();

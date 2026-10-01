@@ -59,7 +59,8 @@ impl SupplierAccess {
         executor: &mut dyn Executor,
     ) -> Result<(SupplierResolvedScope, SupplierReadScope)> {
         let access = self.scope.resolve(actor, action, executor).await?;
-        Ok((access.clone(), supplier_scope(&access, actor.id())))
+        let scope = supplier_scope(&access, actor.id());
+        Ok((access, scope))
     }
 
     /// 在独立事务中重验对象资格。
@@ -121,7 +122,7 @@ impl SupplierAccess {
         let object = SupplierScopeObject {
             owned: account.maintainer_user_id == access.user_id,
             historical_read_participant: false,
-            org_unit_id: Some(account.business_org_unit_id.clone()).filter(|value| !value.is_empty()),
+            org_unit_id: Some(account.business_org_unit_id).filter(|value| !value.is_empty()),
         };
         if !self.scope.allows(&access, &object)? {
             return Err(deny_object(action));

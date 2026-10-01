@@ -116,8 +116,18 @@ pub(super) fn ensure_difference_version(actual: u64, expected: u64) -> Result<()
     Ok(())
 }
 
+/// 计算证据引用去重、排序后的补证命令指纹。
+///
+/// # 参数
+/// * `req` - 原始结算差异补证请求
+///
+/// # 返回
+/// 返回与证据引用输入顺序无关的稳定摘要。
+///
+/// # 错误
+/// 无。
 pub fn evidence_command_hash(req: &SettlementDifferenceEvidenceRequest) -> String {
-    let mut references = req.evidence_reference_ids.clone();
+    let mut references = req.evidence_reference_ids.iter().map(String::as_str).collect::<Vec<_>>();
     references.sort();
     references.dedup();
     digest_parts(&[

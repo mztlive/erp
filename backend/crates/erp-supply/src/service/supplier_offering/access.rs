@@ -61,7 +61,8 @@ impl OfferingAccess {
         executor: &mut dyn Executor,
     ) -> Result<(OfferingResolvedScope, OfferingReadScope)> {
         let access = self.scope.resolve(actor, action, executor).await?;
-        Ok((access.clone(), offering_scope(&access, actor.id())))
+        let scope = offering_scope(&access, actor.id());
+        Ok((access, scope))
     }
 
     /// 在调用方事务内重验供给对象资格。

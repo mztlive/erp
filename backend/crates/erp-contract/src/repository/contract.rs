@@ -5,6 +5,8 @@
 //! 本文件只补充域特有查询与跨集合多步骤写入入口；集合名常量统一取
 //! `ContractExt` 关联常量（单一权威来源，conventions §4.3）。
 
+use std::mem;
+
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
@@ -490,7 +492,7 @@ fn insert_authorization_filter(
         return;
     }
     if auth.get("$expr").is_some() || auth.get("$or").is_some() {
-        let existing = filter.clone();
+        let existing = mem::take(filter);
         *filter = doc! { "$and": [existing, auth] };
         return;
     }

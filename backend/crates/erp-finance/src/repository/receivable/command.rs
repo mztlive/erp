@@ -353,7 +353,7 @@ impl<'a> ReceivableRepository<'a> {
         if entries.is_empty() {
             return Ok(Vec::new());
         }
-        let mut entry_ids = entries.iter().map(|entry| entry.base.id.clone()).collect::<Vec<_>>();
+        let mut entry_ids = entries.into_iter().map(|entry| entry.base.id).collect::<Vec<_>>();
         entry_ids.sort();
         entry_ids.dedup();
         Ok(entry_ids)

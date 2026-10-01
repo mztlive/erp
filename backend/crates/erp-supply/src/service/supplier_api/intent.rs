@@ -29,8 +29,8 @@ impl SupplierApiService {
             confirmations: &[],
             health_runs: &[],
         };
-        if let Some(blocker) = governance.blockers(action, Default::default(), true).first() {
-            return Err(Error::BusinessLogicError(blocker.message.clone()));
+        if let Some(blocker) = governance.blockers(action, Default::default(), true).into_iter().next() {
+            return Err(Error::BusinessLogicError(blocker.message));
         }
         Ok((connection, capabilities))
     }

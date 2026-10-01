@@ -46,13 +46,13 @@ impl PersonProfileChange {
         let Some(roles) = &self.role_ids else {
             return Ok(());
         };
-        RoleIdSet::parse_non_empty(roles.clone())?;
+        RoleIdSet::parse_non_empty(roles)?;
         let expected = self
             .expected_role_ids
             .as_ref()
             .ok_or_else(|| Error::ValidationError("修改角色必须提供原角色集合".into()))?;
-        if RoleIdSet::parse(expected.clone())?.to_strings().into_iter().collect::<BTreeSet<_>>()
-            != RoleIdSet::parse(current.to_vec())?.to_strings().into_iter().collect::<BTreeSet<_>>()
+        if RoleIdSet::parse(expected)?.to_strings().into_iter().collect::<BTreeSet<_>>()
+            != RoleIdSet::parse(current)?.to_strings().into_iter().collect::<BTreeSet<_>>()
         {
             return Err(Error::ConflictError("人员角色已变化，请刷新后重新编辑".into()));
         }

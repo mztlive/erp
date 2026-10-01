@@ -56,7 +56,7 @@ pub fn new_payment_reversal_commit(
         PaymentReversalId::new(next_id()),
         PaymentReversalData {
             reversal_no: return_command_no(PAYMENT_REVERSAL_COMMAND_PREFIX, actor_id, &req.idempotency_key),
-            original_supplier_payment_id: source.payment_id.clone(),
+            original_supplier_payment_id: source.payment_id,
             reason_code: None,
             reason_text: req.reason.clone(),
             amount: req.amount.unwrap_or(source.amount),
@@ -119,11 +119,10 @@ impl ReturnsService {
         original_amount: Amount,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let original_id = record.original_supplier_payment_id.clone();
         let before = self
             .db
             .payment_reversals()
-            .posted_reversal_total_by_payment(&original_id, &record.base.id, executor)
+            .posted_reversal_total_by_payment(&record.original_supplier_payment_id, &record.base.id, executor)
             .await?;
         ensure_cumulative_within(original_amount, before, record.amount, "累计冲正金额不得超过原付款金额")
     }

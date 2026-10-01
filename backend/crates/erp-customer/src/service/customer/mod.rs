@@ -134,22 +134,22 @@ impl CustomerService {
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
-        let account_for_tx = account.clone();
-        let assignment_for_tx = assignment.clone();
+        let account_for_tx = account;
+        let assignment_for_tx = assignment;
         let access = self.access();
         let actor_for_tx = actor.clone();
-        client
+        let created = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     access.require_create(&actor_for_tx, executor).await?;
                     persist_new_account(&db, &account_for_tx, &assignment_for_tx, executor).await?;
                     audit_port.persist(&audit, executor).await?;
-                    Ok::<(), crate::error::Error>(())
+                    Ok::<CustomerAccount, crate::error::Error>(account_for_tx)
                 })
             })
             .await?;
 
-        Ok(account.into())
+        Ok(created.into())
     }
 
     /// 在调用方 Executor 上写入客户角色与首条 OWNER 归属。
@@ -261,7 +261,7 @@ impl CustomerService {
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
-        let mut account_for_tx = account.clone();
+        let mut account_for_tx = account;
         let access = self.access();
         let actor_for_tx = actor.clone();
         let customer_id = id.to_string();

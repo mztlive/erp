@@ -403,7 +403,7 @@ impl SalesOrderRevisionAggregate {
     ) -> Result<Self> {
         identities.ensure_matches_lines(&lines)?;
         validate_line_list(context.business_type, &line_summaries(&lines))?;
-        let revision = build_revision_header(&identities.revision_id, &context, header)?;
+        let revision = build_revision_header(&identities.revision_id, context, header)?;
         let (revision_lines, goods_lines, voucher_lines) =
             build_revision_children(&identities.revision_id, &identities.lines, lines)?;
         Ok(Self { revision, lines: revision_lines, goods_lines, voucher_lines })
@@ -433,7 +433,7 @@ fn line_summaries(lines: &[PreparedRevisionLine]) -> Vec<LineSummary> {
 /// 构造正式版本头（`customer_revision_id` 与商城快照保持空值，与现行首次/变更生效路径一致）。
 fn build_revision_header(
     revision_id: &SalesOrderRevisionId,
-    context: &FormalRevisionContext,
+    context: FormalRevisionContext,
     header: FormalRevisionHeader,
 ) -> Result<SalesOrderRevision> {
     SalesOrderRevision::new(
@@ -442,7 +442,7 @@ fn build_revision_header(
             sales_order_id: header.sales_order_id,
             revision_no: context.revision_no,
             revision_source: context.revision_source,
-            previous_revision_id: context.previous_revision_id.clone(),
+            previous_revision_id: context.previous_revision_id,
             content_hash: header.content_hash,
             customer_revision_id: None,
             contract_revision_id: header.contract_revision_id,

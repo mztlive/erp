@@ -349,14 +349,7 @@ impl ReceivableFundsLedger {
         reverses_allocation_id: Option<ReceiptAllocationId>,
     ) -> Result<()> {
         let seq = self.expected_seq(line)?;
-        if self.pending_actions.get(self.applied_count).copied() != Some(action) {
-            return Err(Error::from("核销行与待过账顺序不一致"));
-        }
-        if action == AllocationAction::Reverse
-            && self.pending_reverses.get(self.applied_count).cloned().flatten() != reverses_allocation_id
-        {
-            return Err(Error::from("核销行与待过账顺序不一致"));
-        }
+        self.ensure_action_order(action, reverses_allocation_id.as_ref())?;
         if entry.base.id != line.receivable_entry_id.to_string() {
             return Err(Error::from("核销分录事实与回款行不一致"));
         }
@@ -412,6 +405,34 @@ impl ReceivableFundsLedger {
         }
         self.allocations.push(allocation);
         self.applied_count += 1;
+        Ok(())
+    }
+
+    /// 校验当前核销动作与反向引用匹配冻结计划。
+    ///
+    /// # 参数
+    /// * `action` - 本行核销动作
+    /// * `reverses_allocation_id` - 反向核销引用的原分配身份
+    ///
+    /// # 返回
+    /// 动作与反向引用均匹配时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 先检查动作，再检查反向引用；不匹配时返回原顺序错误。
+    fn ensure_action_order(
+        &self,
+        action: AllocationAction,
+        reverses_allocation_id: Option<&ReceiptAllocationId>,
+    ) -> Result<()> {
+        if self.pending_actions.get(self.applied_count).copied() != Some(action) {
+            return Err(Error::from("核销行与待过账顺序不一致"));
+        }
+        if action == AllocationAction::Reverse
+            && self.pending_reverses.get(self.applied_count).and_then(Option::as_ref)
+                != reverses_allocation_id
+        {
+            return Err(Error::from("核销行与待过账顺序不一致"));
+        }
         Ok(())
     }
 

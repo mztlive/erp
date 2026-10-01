@@ -167,7 +167,7 @@ impl ContractService {
         let access = self.access();
         let actor_for_tx = actor.clone();
         let mut contract_for_tx = planned.contract.clone();
-        let revision = planned.revision.clone();
+        let revision = planned.revision;
         execute_authorized_transaction(
             &db,
             &audit_port,
@@ -340,7 +340,7 @@ impl ContractService {
             .contract_revisions()
             .latest_revision_no(&contract.base.id.clone().into(), &mut NoTransaction)
             .await?;
-        let planned = plan_next_revision(&contract, req, current_revision_no.unwrap_or(0))?;
+        let planned = plan_next_revision(contract, req, current_revision_no.unwrap_or(0))?;
         let audit = self.audit.resource_log(
             actor.clone(),
             "contract.archive_revision",
@@ -353,7 +353,7 @@ impl ContractService {
         let access = self.access();
         let actor_for_tx = actor.clone();
         let contract_id = id.to_string();
-        let mut contract_for_tx = planned.contract.clone();
+        let mut contract_for_tx = planned.contract;
         let revision = planned.revision;
         execute_authorized_transaction(
             &db,
@@ -614,12 +614,8 @@ async fn execute_authorized_transaction(
     let db = db.clone();
     client
         .with_transaction(move |executor| {
-            let db = db.clone();
             let audit_port = audit_port.clone();
             let audit = audit.clone();
-            let access = access.clone();
-            let actor = actor.clone();
-            let action = action;
             Box::pin(async move {
                 match authorization {
                     TxAuthorization::Create(customer_id) => {

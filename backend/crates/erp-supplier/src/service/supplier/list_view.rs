@@ -99,8 +99,10 @@ fn assemble_one_supplier_view(row: SupplierAccountRow, context: &SupplierRowCont
         .cloned()
         .map(|profile| named_profile(profile, &context.entity_names));
     let quals = context.qualifications.get(&row.id).map(|items| items.as_slice()).unwrap_or(&[]);
+    let maintainer_user_name = context.maintainer_names.get(&row.maintainer_user_id).cloned();
+    let capability_codes = context.capabilities.get(&row.id).cloned().unwrap_or_default();
     SupplierView {
-        id: row.id.clone(),
+        id: row.id,
         party_id: row.party_id,
         party_no: party.map(|party| party.party_no.clone()),
         legal_name: revision.map(|revision| revision.legal_name.clone()),
@@ -112,11 +114,11 @@ fn assemble_one_supplier_view(row: SupplierAccountRow, context: &SupplierRowCont
         status: row.status,
         version: row.version,
         created_at: row.created_at,
-        maintainer_user_id: row.maintainer_user_id.clone(),
-        maintainer_user_name: context.maintainer_names.get(&row.maintainer_user_id).cloned(),
+        maintainer_user_id: row.maintainer_user_id,
+        maintainer_user_name,
         business_org_unit_id: row.business_org_unit_id,
         current_profile,
-        capability_codes: context.capabilities.get(&row.id).cloned().unwrap_or_default(),
+        capability_codes,
         qualification_health: Some(SupplierQualificationHealth::from(SupplierQualification::rollup_health(
             quals.iter().copied(),
             context.as_of,

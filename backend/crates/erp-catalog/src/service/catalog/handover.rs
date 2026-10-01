@@ -37,7 +37,6 @@ impl CatalogService {
         let access = self.access();
         let audit = self.audit.clone();
         let actor = actor.clone();
-        let req = req.clone();
         let id = id.to_string();
         db.client()
             .clone()

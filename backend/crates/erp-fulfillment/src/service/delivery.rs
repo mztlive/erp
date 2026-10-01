@@ -100,7 +100,7 @@ impl FulfillmentService {
             .delivery_lines_by_delivery_ids(&[delivery.base.id.clone().into()], &mut NoTransaction)
             .await?;
         Ok(DeliveryDetailView {
-            delivery: delivery.clone().into(),
+            delivery: delivery.into(),
             lines: lines.into_iter().map(Into::into).collect(),
         })
     }
@@ -126,9 +126,8 @@ impl FulfillmentService {
                 address_snapshot_fingerprint: None,
             },
         )?;
-        let lines =
-            DeliveryLineBatch::build(id.clone(), delivery.delivery_type, 1, delivery_line_specs(&req.lines)?)
-                .map_err(Error::Logic)?;
+        let lines = DeliveryLineBatch::build(id, delivery.delivery_type, 1, delivery_line_specs(&req.lines)?)
+            .map_err(Error::Logic)?;
         Ok((delivery, lines))
     }
 

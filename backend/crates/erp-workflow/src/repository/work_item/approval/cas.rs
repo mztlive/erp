@@ -8,6 +8,7 @@ use persistence_core::{Error, Executor, Repository, Result, mongo_ops};
 use super::super::super::bpm::{CasWriteOutcome, approval_task_cas_filter, classify_cas_miss};
 use crate::entity::work_item::{WorkItem, WorkItemStatus};
 
+/// 按开放任务版本与执行身份写入，未命中时分类当前责任状态。
 pub(super) async fn persist_open_approval_task(
     repo: &Repository<'_, WorkItem>,
     item: &WorkItem,
@@ -33,9 +34,8 @@ pub(super) async fn persist_open_approval_task(
         return Ok(CasWriteOutcome::Applied(applied));
     }
     let current = repo.find_by_id(&item.base.id, executor).await?;
-    let expected_execution = approval_node_execution_id.clone();
-    Ok(classify_cas_miss(current, expected_task_version, move |row| {
-        approval_task_still_open(row, &expected_execution)
+    Ok(classify_cas_miss(current, expected_task_version, |row| {
+        approval_task_still_open(row, approval_node_execution_id)
     }))
 }
 /// 计算审批任务 CAS 的下一持久化版本。

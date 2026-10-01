@@ -33,7 +33,7 @@ impl LegacyImportService {
     ) -> Result<PageView<LegacyImportBatchListItem>> {
         params.validate()?;
         let query = params.normalized()?;
-        let filter = self.batch_filter_of(&query);
+        let filter = self.batch_filter_of(query);
         let page =
             self.db.legacy_import_batches().search_legacy_import_batches(&filter, &mut NoTransaction).await?;
         let items = page.items.into_iter().map(LegacyImportBatchListItem::from).collect();
@@ -108,10 +108,10 @@ impl LegacyImportService {
     ///
     /// # 返回
     /// 返回仓储筛选条件。
-    fn batch_filter_of(&self, query: &LegacyImportBatchListQuery) -> LegacyImportBatchFilter {
+    fn batch_filter_of(&self, query: LegacyImportBatchListQuery) -> LegacyImportBatchFilter {
         LegacyImportBatchFilter {
-            batch_no: query.batch_no.clone(),
-            source_system_id: query.source_system_id.clone(),
+            batch_no: query.batch_no,
+            source_system_id: query.source_system_id,
             status: query.status,
             baseline_date_from: query.baseline_date_from,
             baseline_date_to: query.baseline_date_to,

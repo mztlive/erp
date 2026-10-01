@@ -89,9 +89,9 @@ fn parse_permission_args(args: Punctuated<MetaNameValue, Token![,]>) -> Result<P
 
     for arg in args {
         if arg.path.is_ident("resource") {
-            resource = Some(require_string_value(&arg.value)?);
+            resource = Some(require_string_value(arg.value)?);
         } else if arg.path.is_ident("action") {
-            action = Some(require_string_value(&arg.value)?);
+            action = Some(require_string_value(arg.value)?);
         } else {
             // group/group_desc/desc 仅透传给权限收集，未知键保持接受不变。
         }
@@ -113,9 +113,9 @@ fn parse_permission_args(args: Punctuated<MetaNameValue, Token![,]>) -> Result<P
 ///
 /// # 错误
 /// 非字符串字面量时在表达式位置报错。
-fn require_string_value(value: &Expr) -> Result<LitStr> {
+fn require_string_value(value: Expr) -> Result<LitStr> {
     match value {
-        Expr::Lit(ExprLit { lit: Lit::Str(lit), .. }) => Ok(lit.clone()),
+        Expr::Lit(ExprLit { lit: Lit::Str(lit), .. }) => Ok(lit),
         _ => Err(Error::new_spanned(value, "resource/action 必须为字符串字面量")),
     }
 }

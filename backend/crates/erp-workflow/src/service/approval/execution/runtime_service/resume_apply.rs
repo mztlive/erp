@@ -343,8 +343,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             |error| {
                 self.recover_resume_after_competing_commit(
                     actor,
-                    recovery_instance_id.clone(),
-                    recovery_identity.clone(),
+                    recovery_instance_id,
+                    recovery_identity,
                     error,
                 )
             },

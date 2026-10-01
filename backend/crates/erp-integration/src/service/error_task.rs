@@ -55,7 +55,7 @@ impl IntegrationOpsService {
             executor,
         )
         .await?;
-        let filter = error_task_filter(&query, &scope.read_scope, scope.owner_org_unit_ids);
+        let filter = error_task_filter(query, &scope.read_scope, scope.owner_org_unit_ids);
         if scope.meta.empty_reason == Some("no_scope") {
             return Ok(empty_error_task_page(&filter, scope.meta));
         }
@@ -91,19 +91,19 @@ pub fn prepare_error_task(
 
 /// 把已规范化查询与授权条件装配为仓储筛选。
 fn error_task_filter(
-    query: &dto::ErrorTaskListQuery,
+    query: dto::ErrorTaskListQuery,
     read_scope: &crate::repository::IntegrationReadScope,
     owner_org_unit_ids: Vec<String>,
 ) -> ErrorTaskFilter {
     ErrorTaskFilter {
-        q: query.q.clone(),
-        message_id: query.message_id.clone(),
-        business_object_id: query.business_object_id.clone(),
+        q: query.q,
+        message_id: query.message_id,
+        business_object_id: query.business_object_id,
         error_class: query.error_class,
         status: query.status,
-        owner_role: query.owner_role.clone(),
-        handler_user_ids: query.handler_user_ids.clone(),
-        operator_user_ids: query.operator_user_ids.clone(),
+        owner_role: query.owner_role,
+        handler_user_ids: query.handler_user_ids,
+        operator_user_ids: query.operator_user_ids,
         owner_org_unit_ids,
         scope_document: Some(read_scope.document()),
         page: query.paging.page,

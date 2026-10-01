@@ -297,8 +297,7 @@ impl CustomerAcceptance {
         if lines.is_empty() {
             return Err(Error::from("客户验收单没有行，无法过账"));
         }
-        let acceptance_id = CustomerAcceptanceId::new(self.base.id.clone());
-        if lines.iter().any(|line| line.customer_acceptance_id != acceptance_id) {
+        if lines.iter().any(|line| line.customer_acceptance_id.as_ref() != self.base.id) {
             return Err(Error::from("客户验收行与验收单关联不一致"));
         }
         Ok(())
@@ -355,7 +354,7 @@ impl CustomerAcceptance {
     /// 当前状态不允许迁移，或反向验收引用与自身相同/为空时返回错误。
     pub fn reverse(&mut self, reversal_of_acceptance_id: CustomerAcceptanceId) -> Result<()> {
         ensure_transition(self.status, CustomerAcceptanceState::Reversed)?;
-        if reversal_of_acceptance_id == CustomerAcceptanceId::new(self.base.id.clone()) {
+        if reversal_of_acceptance_id.as_ref() == self.base.id {
             return Err(Error::from("反向验收不能引用自身"));
         }
         self.reversal_of_acceptance_id = Some(reversal_of_acceptance_id);

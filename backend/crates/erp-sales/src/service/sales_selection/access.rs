@@ -65,7 +65,8 @@ impl SelectionAccess {
         executor: &mut dyn Executor,
     ) -> Result<(SelectionResolvedScope, SelectionReadScope)> {
         let access = self.scope.resolve(actor, resource, action, executor).await?;
-        Ok((access.clone(), selection_scope(&access, actor.id())))
+        let scope = selection_scope(&access, actor.id());
+        Ok((access, scope))
     }
 
     /// 在调用方事务内重验册对象资格。

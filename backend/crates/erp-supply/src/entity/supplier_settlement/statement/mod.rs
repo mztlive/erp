@@ -11,7 +11,7 @@ use entity_macros::Entity;
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{PayableAccountId, SupplierAccountId, SupplierSettlementStatementId};
 use erp_core::money::Amount;
-use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::validation::{normalize_optional_text, normalize_required_text, normalize_required_text_ref};
 use erp_core::{Error, Result};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -449,15 +449,16 @@ impl SupplierSettlementStatement {
     }
 }
 
+/// 规范化结算单责任字段，未指定差异处理人时采用对账负责人。
 fn normalize_ownership(data: &SupplierSettlementStatementData) -> Result<(String, String, String)> {
-    let prepared_by = normalize_required_text(
-        data.prepared_by.clone(),
+    let prepared_by = normalize_required_text_ref(
+        &data.prepared_by,
         "对账负责人不能为空",
         ACTOR_MAX_LEN,
         "对账负责人过长",
     )?;
-    let business_org_unit_id = normalize_required_text(
-        data.business_org_unit_id.clone(),
+    let business_org_unit_id = normalize_required_text_ref(
+        &data.business_org_unit_id,
         "业务组织不能为空",
         ACTOR_MAX_LEN,
         "业务组织过长",
@@ -468,8 +469,8 @@ fn normalize_ownership(data: &SupplierSettlementStatementData) -> Result<(String
     let difference_handler_user_id = if data.difference_handler_user_id.trim().is_empty() {
         prepared_by.clone()
     } else {
-        normalize_required_text(
-            data.difference_handler_user_id.clone(),
+        normalize_required_text_ref(
+            &data.difference_handler_user_id,
             "差异处理人不能为空",
             ACTOR_MAX_LEN,
             "差异处理人过长",

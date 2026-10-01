@@ -190,10 +190,7 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
         if purchase_order_ids.is_empty() {
             return Ok(Vec::new());
         }
-        self.db
-            .purchase_orders()
-            .find_many(in_filter("id", purchase_order_ids.iter().cloned()), executor)
-            .await
+        self.db.purchase_orders().find_many(in_filter("id", purchase_order_ids), executor).await
     }
 
     /// 按采购单 ID 集合一次批量返回来源 ID 到采购单号的事实映射（FIN-R03）。
@@ -220,8 +217,8 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
         let mut seen = HashSet::new();
         let mut deduped = Vec::new();
         for id in purchase_order_ids {
-            if !id.trim().is_empty() && seen.insert(id.clone()) {
-                deduped.push(id.clone());
+            if !id.trim().is_empty() && seen.insert(id.as_str()) {
+                deduped.push(id.as_str());
             }
         }
         if deduped.is_empty() {

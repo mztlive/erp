@@ -214,17 +214,22 @@ fn scope_ids(
     {
         return Ok(None);
     }
-    let candidates = selected.map(|ids| ids.iter().cloned().collect::<BTreeSet<_>>()).unwrap_or_else(|| {
-        let mut ids =
-            authorized.organizations.memberships.iter().map(|m| m.user_id.clone()).collect::<BTreeSet<_>>();
-        ids.insert(authorized.actor_id.clone());
-        ids
-    });
+    let candidates =
+        selected.map(|ids| ids.iter().map(String::as_str).collect::<BTreeSet<_>>()).unwrap_or_else(|| {
+            let mut ids = authorized
+                .organizations
+                .memberships
+                .iter()
+                .map(|m| m.user_id.as_str())
+                .collect::<BTreeSet<_>>();
+            ids.insert(authorized.actor_id.as_str());
+            ids
+        });
     let mut ids = Vec::new();
     for id in candidates {
-        let org = authorized.organizations.own_org(&id, authorized.as_of)?;
-        if candidate_in_directory(scope, &authorized.actor_id, &id, org, org_filter) {
-            ids.push(id);
+        let org = authorized.organizations.own_org(id, authorized.as_of)?;
+        if candidate_in_directory(scope, &authorized.actor_id, id, org, org_filter) {
+            ids.push(id.to_owned());
         }
         if ids.len() > DIRECTORY_LIMIT {
             return Err(Error::ValidationError("人员范围超过上限，请收窄组织条件".into()));

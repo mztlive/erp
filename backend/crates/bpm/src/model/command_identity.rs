@@ -27,6 +27,12 @@ impl IdempotencyKey {
     /// 首尾空白会被移除；规范结果必须包含 1..=128 个 UTF-8 字节。字符数不
     /// 代替字节数，以保持 HTTP、领域模型和 MongoDB 索引键使用同一边界。
     ///
+    /// # 参数
+    /// * `raw` - 外部幂等键，已拥有且无需 trim 时复用原字符串
+    ///
+    /// # 返回
+    /// 返回包含规范幂等键的值对象。
+    ///
     /// # 错误
     /// trim 后为空或超过 128 个 UTF-8 字节时返回 [`ModelError::InvalidField`]。
     pub fn parse(raw: impl Into<String>) -> ModelResult<Self> {
@@ -38,7 +44,7 @@ impl IdempotencyKey {
         if canonical.len() > SCOPE_MAX_LEN {
             return Err(ModelError::InvalidField("幂等键过长"));
         }
-        Ok(Self(canonical.to_string()))
+        if canonical.len() == raw.len() { Ok(Self(raw)) } else { Ok(Self(canonical.to_string())) }
     }
 
     /// 返回可直接持久化和精确查询的规范键。
@@ -84,8 +90,9 @@ impl<'de> Deserialize<'de> for IdempotencyKey {
         D: Deserializer<'de>,
     {
         let persisted = String::deserialize(deserializer)?;
-        let parsed = Self::parse(persisted.clone()).map_err(D::Error::custom)?;
-        if parsed.as_str() != persisted {
+        let was_canonical = persisted.trim() == persisted;
+        let parsed = Self::parse(persisted).map_err(D::Error::custom)?;
+        if !was_canonical {
             return Err(D::Error::custom("持久化幂等键不是规范形态"));
         }
         Ok(parsed)
@@ -306,49 +313,49 @@ fn update_length_prefixed(hasher: &mut Sha256, value: &[u8]) {
     hasher.update(value);
 }
 
+/// 直接追加字段编码并回填长度，保持类型标记、字段边界与序列顺序。
 fn encode_field(field: &CommandPayloadField<'_>, target: &mut Vec<u8>) {
-    let (tag, value) = match field {
-        CommandPayloadField::Text(value) => (1_u8, value.as_bytes().to_vec()),
-        CommandPayloadField::U32(value) => (2, value.to_be_bytes().to_vec()),
-        CommandPayloadField::U64(value) => (3, value.to_be_bytes().to_vec()),
+    target.push(match field {
+        CommandPayloadField::Text(_) => 1,
+        CommandPayloadField::U32(_) => 2,
+        CommandPayloadField::U64(_) => 3,
+        CommandPayloadField::OptionalText(_) => 4,
+        CommandPayloadField::OptionalU64(_) => 5,
+        CommandPayloadField::Sequence(_) => 6,
+    });
+    let length_offset = target.len();
+    target.extend_from_slice(&[0; 8]);
+    let value_start = target.len();
+    match field {
+        CommandPayloadField::Text(value) => target.extend_from_slice(value.as_bytes()),
+        CommandPayloadField::U32(value) => target.extend_from_slice(&value.to_be_bytes()),
+        CommandPayloadField::U64(value) => target.extend_from_slice(&value.to_be_bytes()),
         CommandPayloadField::OptionalText(value) => {
-            let mut encoded = Vec::new();
-            match value {
-                Some(value) => {
-                    encoded.push(1);
-                    encoded.extend_from_slice(value.as_bytes());
-                },
-                None => encoded.push(0),
+            target.push(u8::from(value.is_some()));
+            if let Some(value) = value {
+                target.extend_from_slice(value.as_bytes());
             }
-            (4, encoded)
         },
         CommandPayloadField::OptionalU64(value) => {
-            let mut encoded = Vec::new();
-            match value {
-                Some(value) => {
-                    encoded.push(1);
-                    encoded.extend_from_slice(&value.to_be_bytes());
-                },
-                None => encoded.push(0),
+            target.push(u8::from(value.is_some()));
+            if let Some(value) = value {
+                target.extend_from_slice(&value.to_be_bytes());
             }
-            (5, encoded)
         },
         CommandPayloadField::Sequence(fields) => {
-            let mut encoded = Vec::new();
-            encoded.extend_from_slice(&(fields.len() as u64).to_be_bytes());
+            target.extend_from_slice(&(fields.len() as u64).to_be_bytes());
             for field in fields {
-                encode_field(field, &mut encoded);
+                encode_field(field, target);
             }
-            (6, encoded)
         },
-    };
-    target.push(tag);
-    target.extend_from_slice(&(value.len() as u64).to_be_bytes());
-    target.extend_from_slice(&value);
+    }
+    let value_len = u64::try_from(target.len() - value_start).expect("载荷字节长度不超过 u64");
+    target[length_offset..value_start].copy_from_slice(&value_len.to_be_bytes());
 }
 
 #[cfg(test)]
 mod tests {
+    use hex::encode;
     use serde_json::json;
 
     use super::{ApprovalCommandIdentity, CanonicalCommandPayload, CommandPayloadField, IdempotencyKey};
@@ -369,6 +376,45 @@ mod tests {
         let key: IdempotencyKey = serde_json::from_value(json!("key-1")).unwrap();
         assert_eq!(key.as_str(), "key-1");
         assert!(serde_json::from_value::<IdempotencyKey>(json!(" key-1 ")).is_err());
+    }
+
+    /// 固定字节向量覆盖全部字段类型与嵌套序列，保护既有命令身份编码。
+    #[test]
+    fn canonical_payload_all_field_types_match_stable_bytes() {
+        let payload = CanonicalCommandPayload::new()
+            .field(CommandPayloadField::Text("界"))
+            .field(CommandPayloadField::U32(0x01020304))
+            .field(CommandPayloadField::U64(0x0102030405060708))
+            .field(CommandPayloadField::OptionalText(None))
+            .field(CommandPayloadField::OptionalText(Some("")))
+            .field(CommandPayloadField::OptionalText(Some("é")))
+            .field(CommandPayloadField::OptionalU64(None))
+            .field(CommandPayloadField::OptionalU64(Some(0)))
+            .field(CommandPayloadField::Sequence(vec![
+                CommandPayloadField::Text("nested"),
+                CommandPayloadField::Sequence(vec![
+                    CommandPayloadField::U32(9),
+                    CommandPayloadField::OptionalText(None),
+                ]),
+            ]));
+        assert_eq!(
+            encode(payload.as_bytes()),
+            concat!(
+                "010000000000000003e7958c",
+                "02000000000000000401020304",
+                "0300000000000000080102030405060708",
+                "04000000000000000100",
+                "04000000000000000101",
+                "04000000000000000301c3a9",
+                "05000000000000000100",
+                "050000000000000009010000000000000000",
+                "06000000000000003f0000000000000002",
+                "0100000000000000066e6573746564",
+                "06000000000000001f0000000000000002",
+                "02000000000000000400000009",
+                "04000000000000000100",
+            )
+        );
     }
 
     #[test]

@@ -148,7 +148,7 @@ fn requirement_view(requirement: ApprovalRequirement) -> ApprovalRequirementView
 /// 构造详情视图。
 pub(super) fn detail_view(graph: &DefinitionGraph) -> DefinitionDetailView {
     let document_type = document_type_of(graph.definition.process_kind);
-    let mut nodes = graph.nodes.clone();
+    let mut nodes = graph.nodes.iter().collect::<Vec<_>>();
     nodes.sort_by_key(|node| node.display_order);
     DefinitionDetailView {
         definition_id: graph.definition.base.id.clone(),
@@ -159,7 +159,7 @@ pub(super) fn detail_view(graph: &DefinitionGraph) -> DefinitionDetailView {
         status: graph.definition.status.as_str().to_string(),
         entry_node_key: graph.definition.entry_node_key.clone(),
         definition_lock_version: graph.definition.definition_lock_version(),
-        nodes: nodes.iter().map(node_view).collect(),
+        nodes: nodes.into_iter().map(node_view).collect(),
         created_by: graph.definition.created_by.as_str().to_string(),
         published_by: graph.definition.published_by.as_ref().map(|item| item.as_str().to_string()),
         published_at: graph.definition.published_at.map(|item| item.unix_secs()),

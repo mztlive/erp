@@ -1,3 +1,4 @@
+use application_core::QueryIds;
 use persistence_core::NoTransaction;
 use validator::Validate;
 
@@ -117,8 +118,8 @@ pub fn prepare_product_list(params: &ProductListParams) -> Result<ProductFilter>
     Ok(ProductFilter {
         ids: None,
         scope: None,
-        maintainer_user_ids: query.owner_user_ids.map(|ids| ids.as_slice().to_vec()),
-        business_org_unit_ids: query.org_unit_ids.map(|ids| ids.as_slice().to_vec()),
+        maintainer_user_ids: query.owner_user_ids.map(QueryIds::into_vec),
+        business_org_unit_ids: query.org_unit_ids.map(QueryIds::into_vec),
         product_no: query.product_no,
         keyword: query.keyword,
         product_kind: query.product_kind,

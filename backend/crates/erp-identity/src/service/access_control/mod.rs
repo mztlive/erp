@@ -161,14 +161,14 @@ impl AccessControlService {
             )
             .await?;
         let db = self.db.clone();
-        let permission_for_tx = permission.clone();
-        self.with_audited_write(event, move |executor| {
-            Box::pin(async move {
-                db.permissions().create(&permission_for_tx, executor).await?;
-                Ok(())
+        let permission = self
+            .with_audited_write(event, move |executor| {
+                Box::pin(async move {
+                    db.permissions().create(&permission, executor).await?;
+                    Ok(permission)
+                })
             })
-        })
-        .await?;
+            .await?;
 
         Ok(permission.into())
     }
@@ -290,33 +290,28 @@ impl AccessControlService {
             )
             .await?;
         let db = self.db.clone();
-        let scope_for_tx = scope.clone();
         let targets = self.targets.clone();
         let rbac = self.rbac.clone().ok_or_else(|| Error::Forbidden("未装配范围配置授权".into()))?;
         let actor_for_tx = actor.clone();
-        self.with_audited_write(event, move |executor| {
-            Box::pin(async move {
-                ensure_scope_configuration(&db, rbac, &actor_for_tx, &scope_for_tx, "create", executor)
-                    .await?;
-                if scope_for_tx.binding.target_mode == Some(ScopeTargetMode::Explicit)
-                    && scope_for_tx.binding.target_dimension != ScopeDimension::InternalOrg
-                {
-                    targets
-                        .as_ref()
-                        .ok_or_else(|| Error::ValidationError("外部范围目标校验未装配".into()))?
-                        .validate_targets(
-                            scope_for_tx.binding.target_dimension,
-                            &scope_for_tx.scope_targets,
-                            executor,
-                        )
-                        .await?;
-                }
-                db.data_scopes().create(&scope_for_tx, executor).await?;
-                crate::MongoCasbinAdapter::new(db.clone()).bump_policy_revision(executor).await?;
-                Ok(())
+        let scope = self
+            .with_audited_write(event, move |executor| {
+                Box::pin(async move {
+                    ensure_scope_configuration(&db, rbac, &actor_for_tx, &scope, "create", executor).await?;
+                    if scope.binding.target_mode == Some(ScopeTargetMode::Explicit)
+                        && scope.binding.target_dimension != ScopeDimension::InternalOrg
+                    {
+                        targets
+                            .as_ref()
+                            .ok_or_else(|| Error::ValidationError("外部范围目标校验未装配".into()))?
+                            .validate_targets(scope.binding.target_dimension, &scope.scope_targets, executor)
+                            .await?;
+                    }
+                    db.data_scopes().create(&scope, executor).await?;
+                    crate::MongoCasbinAdapter::new(db).bump_policy_revision(executor).await?;
+                    Ok(scope)
+                })
             })
-        })
-        .await?;
+            .await?;
 
         Ok(scope.into())
     }
@@ -412,14 +407,14 @@ impl AccessControlService {
             )
             .await?;
         let db = self.db.clone();
-        let binding_for_tx = binding.clone();
-        self.with_audited_write(event, move |executor| {
-            Box::pin(async move {
-                db.user_roles().create(&binding_for_tx, executor).await?;
-                Ok(())
+        let binding = self
+            .with_audited_write(event, move |executor| {
+                Box::pin(async move {
+                    db.user_roles().create(&binding, executor).await?;
+                    Ok(binding)
+                })
             })
-        })
-        .await?;
+            .await?;
 
         Ok(binding.into())
     }

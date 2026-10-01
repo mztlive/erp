@@ -54,14 +54,14 @@ pub async fn settle_supplier_payment(
     let accounts = db.payable_accounts().find_accounts_by_ids(&account_ids, session).await?;
     let accounts_by_id: HashMap<&str, &PayableAccount> =
         accounts.iter().map(|account| (account.base.id.as_str(), account)).collect();
-    let mut checked_accounts: HashSet<PayableAccountId> = HashSet::new();
+    let mut checked_accounts = HashSet::new();
     let allocation_ids: Vec<PaymentAllocationId> =
         (0..pending.len()).map(|_| PaymentAllocationId::new(next_id())).collect();
-    for (index, line) in pending.iter().enumerate() {
+    for (line, allocation_id) in pending.iter().zip(allocation_ids) {
         let entry = entries_by_id
             .get(line.payable_entry_id.as_ref())
             .ok_or_else(|| Error::NotFound("应付分录不存在".to_string()))?;
-        if checked_accounts.insert(entry.payable_account_id.clone()) {
+        if checked_accounts.insert(&entry.payable_account_id) {
             let account = accounts_by_id
                 .get(entry.payable_account_id.as_ref())
                 .ok_or_else(|| Error::NotFound("应付往来子账不存在".to_string()))?;
@@ -69,7 +69,7 @@ pub async fn settle_supplier_payment(
                 return Err(Error::BusinessLogicError("禁止跨供应商核销".to_string()));
             }
         }
-        ledger.apply(line, entry, allocation_ids[index].clone(), Instant::now())?;
+        ledger.apply(line, entry, allocation_id, Instant::now())?;
     }
 
     let settlement = db

@@ -271,12 +271,12 @@ async fn resolve_scope(
 }
 
 /// 有效期边界没有写入也会改变授权，必须纳入跨页版本。
-fn active_relations(state: &OrganizationState, at: Instant) -> Vec<String> {
+fn active_relations(state: &OrganizationState, at: Instant) -> Vec<&str> {
     let mut members = state
         .memberships
         .iter()
         .filter(|item| !item.base.is_deleted() && item.validity.contains(at))
-        .map(|item| item.base.id.clone())
+        .map(|item| item.base.id.as_str())
         .collect::<Vec<_>>();
     members.sort();
     members

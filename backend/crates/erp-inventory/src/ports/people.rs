@@ -136,7 +136,7 @@ pub fn latest_snapshot_submitters(
 /// # 返回
 /// 返回命中的调整单 ID。
 pub fn applicant_object_ids(latest: &HashMap<String, String>, wanted: &[String]) -> Vec<String> {
-    let wanted = wanted.iter().cloned().collect::<BTreeSet<_>>();
+    let wanted = wanted.iter().collect::<BTreeSet<_>>();
     let mut ids = latest
         .iter()
         .filter(|(_, submitted_by)| wanted.contains(*submitted_by))

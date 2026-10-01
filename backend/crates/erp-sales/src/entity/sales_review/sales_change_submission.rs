@@ -353,10 +353,10 @@ impl SalesChangeSubmission {
         validate_amount_triple(data.gross_amount, data.net_amount, data.tax_amount)?;
         let lines = data
             .lines
-            .iter()
+            .into_iter()
             .map(|line| LineSummary {
                 line_no: line.line_no,
-                line_id: line.sales_order_line_id.clone(),
+                line_id: line.sales_order_line_id,
                 line_type: line.line_type,
             })
             .collect::<Vec<_>>();

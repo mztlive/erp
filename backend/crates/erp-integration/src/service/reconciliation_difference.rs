@@ -58,7 +58,7 @@ impl IntegrationOpsService {
         let operator_difference_ids =
             self.operator_difference_ids(&query.operator_user_ids, executor).await?;
         let filter =
-            difference_filter(&query, &scope.read_scope, scope.owner_org_unit_ids, operator_difference_ids);
+            difference_filter(query, &scope.read_scope, scope.owner_org_unit_ids, operator_difference_ids);
         if scope.meta.empty_reason == Some("no_scope") {
             return Ok(empty_difference_page(&filter, scope.meta));
         }
@@ -121,19 +121,19 @@ pub fn prepare_difference(
 
 /// 把已规范化查询与授权条件装配为差异仓储筛选。
 fn difference_filter(
-    query: &dto::DifferenceListQuery,
+    query: dto::DifferenceListQuery,
     read_scope: &crate::repository::IntegrationReadScope,
     owner_org_unit_ids: Vec<String>,
     operator_difference_ids: Option<Vec<String>>,
 ) -> DifferenceFilter {
     DifferenceFilter {
-        q: query.q.clone(),
-        business_object_type: query.business_object_type.clone(),
-        business_object_id: query.business_object_id.clone(),
-        difference_type: query.difference_type.clone(),
+        q: query.q,
+        business_object_type: query.business_object_type,
+        business_object_id: query.business_object_id,
+        difference_type: query.difference_type,
         created_at_from: query.created_at_from,
         created_at_to: query.created_at_to,
-        handler_user_ids: query.handler_user_ids.clone(),
+        handler_user_ids: query.handler_user_ids,
         operator_difference_ids,
         owner_org_unit_ids,
         scope_document: Some(read_scope.document()),

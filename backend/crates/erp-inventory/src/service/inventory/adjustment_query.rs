@@ -95,7 +95,7 @@ impl InventoryService {
                         executor,
                     )
                     .await?;
-                    let filter = adjustment_filter(&query, &authorization, search, id_in);
+                    let filter = adjustment_filter(query, &authorization, search, id_in);
                     let page = db.stock_adjustments().search_stock_adjustments(&filter, executor).await?;
                     let ids = page.items.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
                     let people = people_facts.people_by_adjustment_ids(&ids, executor).await?;
@@ -211,8 +211,9 @@ async fn people_object_ids(
     Ok(intersect_object_ids(applicants, handlers))
 }
 
+/// 将已规范化的查询字段移动到库存调整筛选条件。
 fn adjustment_filter(
-    query: &StockAdjustmentListQuery,
+    query: StockAdjustmentListQuery,
     authorization: &InventoryAuthorization,
     search: crate::repository::InventorySearch,
     id_in: Option<Vec<String>>,
@@ -220,11 +221,9 @@ fn adjustment_filter(
     let (sort_by, sort_ascending) = query.paging.sort_selection();
     StockAdjustmentFilter {
         search,
-        warehouse_ids: authorization
-            .adjustment_list_scope()
-            .repository_warehouse_ids(query.warehouse_id.clone()),
+        warehouse_ids: authorization.adjustment_list_scope().repository_warehouse_ids(query.warehouse_id),
         status: query.status,
-        prepared_by_ids: query.operator_user_ids.clone(),
+        prepared_by_ids: query.operator_user_ids,
         id_in,
         page: query.paging.page,
         page_size: query.paging.page_size,

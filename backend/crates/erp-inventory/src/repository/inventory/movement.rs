@@ -125,7 +125,7 @@ impl QueryFilter for StockMovementFilter {
             filter.insert("occurred_at", range);
         }
         if let Some(recorded_by_ids) = &self.recorded_by_ids {
-            filter.insert("recorded_by", doc! { "$in": recorded_by_ids.clone() });
+            filter.insert("recorded_by", doc! { "$in": recorded_by_ids.as_slice() });
         }
         self.search.apply(&mut filter);
         filter

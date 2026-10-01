@@ -44,10 +44,6 @@ impl WarehouseDirectoryService {
         db.client()
             .clone()
             .with_transaction(move |executor| {
-                let db = db.clone();
-                let access = access.clone();
-                let actor = actor.clone();
-                let query = query.clone();
                 Box::pin(async move {
                     let scope = access.resolve(&actor, executor).await?;
                     let rows = snapshot(&db, &scope, &query, executor).await?;
@@ -87,10 +83,6 @@ impl WarehouseDirectoryService {
         db.client()
             .clone()
             .with_transaction(move |executor| {
-                let db = db.clone();
-                let access = access.clone();
-                let actor = actor.clone();
-                let params = params.clone();
                 Box::pin(async move {
                     let scope = access.resolve(&actor, executor).await?;
                     if params.scope_version.as_ref().is_some_and(|v| v != &scope.scope_version) {

@@ -56,7 +56,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
             .await?;
         let mut items = Vec::new();
         for account in accounts {
-            let candidate = AuditActor::new(account.id.clone(), account.login_account.clone(), account.kind);
+            let candidate = AuditActor::new(account.id.clone(), account.login_account, account.kind);
             if approval_participant_permissions_with_executor(&self.auth, &candidate, &mut NoTransaction)
                 .await?
             {

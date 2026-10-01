@@ -225,6 +225,7 @@ fn insert_enum_filter<T: Copy>(
     }
 }
 
+/// 将非空字符串筛选写入等值或集合条件。
 fn insert_string_filter(filter: &mut Document, field: &str, values: &[String]) {
     match values {
         [] => {},
@@ -232,7 +233,7 @@ fn insert_string_filter(filter: &mut Document, field: &str, values: &[String]) {
             filter.insert(field, value);
         },
         values => {
-            filter.insert(field, doc! { "$in": values.to_vec() });
+            filter.insert(field, doc! { "$in": values });
         },
     }
 }
@@ -279,6 +280,7 @@ fn object_access_shape_filter(shapes: &[(WorkItemType, String)]) -> Document {
     doc! { "$or": alternatives }
 }
 
+/// 组合本人参与和组织范围的历史任务查询条件。
 fn history_scope_filter(actor_id: Option<&str>, managed_organization_ids: Option<&[String]>) -> Document {
     let mut alternatives = Vec::new();
     if let Some(actor_id) = actor_id {
@@ -292,7 +294,7 @@ fn history_scope_filter(actor_id: Option<&str>, managed_organization_ids: Option
         if organization_ids.is_empty() {
             alternatives.push(Document::new());
         } else {
-            alternatives.push(doc! { "owner_organization_id": { "$in": organization_ids.to_vec() } });
+            alternatives.push(doc! { "owner_organization_id": { "$in": organization_ids } });
         }
     }
     doc! { "$or": alternatives }

@@ -398,7 +398,7 @@ fn prepare_cancel_with_document_version(
             return Err(Error::ValidationError("原审批人可恢复时不得走受阻取消".to_string()));
         }
         cancel_blocked_identity(CancelBlockedIdentityParams {
-            idempotency_key: input.command.idempotency_key.clone(),
+            idempotency_key: input.command.idempotency_key,
             instance_id: &input.instance.base.id,
             blocker: blocker.as_str(),
             expected_instance_version: input.expected_instance_version,
@@ -413,7 +413,7 @@ fn prepare_cancel_with_document_version(
         }
         match expected_document_version {
             Some(version) => document_cancel_identity(DocumentCancelIdentityParams {
-                idempotency_key: input.command.idempotency_key.clone(),
+                idempotency_key: input.command.idempotency_key,
                 instance_id: &input.instance.base.id,
                 subject_version: input.subject_version,
                 expected_document_version: version,
@@ -424,7 +424,7 @@ fn prepare_cancel_with_document_version(
                 actor_id: input.actor.as_str(),
             }),
             None => cancel_identity(CancelIdentityParams {
-                idempotency_key: input.command.idempotency_key.clone(),
+                idempotency_key: input.command.idempotency_key,
                 instance_id: &input.instance.base.id,
                 subject_version: input.subject_version,
                 expected_instance_version: input.expected_instance_version,

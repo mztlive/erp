@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 
 use erp_core::ids::{ProductCategoryId, SkuId};
-use erp_core::validation::normalize_required_text;
+use erp_core::validation::{normalize_required_text, normalize_required_text_ref};
 use erp_core::{Error, Result};
 
 use super::rule::{
@@ -75,8 +75,8 @@ impl<'a> ProcurementResponsibilityResolutionBatch<'a> {
         }
         let mut keys = HashSet::with_capacity(lines.len());
         for line in lines {
-            let normalized = normalize_required_text(
-                line.line_key.clone(),
+            let normalized = normalize_required_text_ref(
+                &line.line_key,
                 "采购责任解析行键不能为空",
                 LINE_KEY_MAX_LEN,
                 "采购责任解析行键过长",

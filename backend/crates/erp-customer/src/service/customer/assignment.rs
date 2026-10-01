@@ -233,7 +233,7 @@ impl CustomerAssignmentService {
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         let customer_id_for_tx = customer_id.to_string();
-        let new_for_tx = new_assignment.clone();
+        let new_for_tx = new_assignment;
         let access = self.access();
         let actor_for_tx = actor.clone();
         let changed = client
@@ -282,7 +282,7 @@ impl CustomerAssignmentService {
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
-        let mut assignment_for_tx = assignment.clone();
+        let mut assignment_for_tx = assignment;
         let access = self.access();
         let actor_for_tx = actor.clone();
         let customer_id_for_tx = customer_id.to_string();

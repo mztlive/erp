@@ -348,11 +348,9 @@ fn plan_stock_allocations(
         };
         plans
             .entry(group.balance.base.id.clone())
-            .and_modify(|plan| plan.requested_lines.push(requested.clone()))
-            .or_insert_with(|| StockAllocationPlan {
-                group: group.clone(),
-                requested_lines: vec![requested],
-            });
+            .or_insert_with(|| StockAllocationPlan { group: group.clone(), requested_lines: Vec::new() })
+            .requested_lines
+            .push(requested);
     }
     Ok(plans.into_values().collect())
 }

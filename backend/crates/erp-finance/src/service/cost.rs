@@ -162,7 +162,7 @@ impl CostService {
             .map(cost_allocation_entity_view)
             .collect();
         Ok(CostEntryView {
-            id: entry.base.id.clone(),
+            id: entry.base.id,
             cost_type: entry.cost_type,
             cost_stage: entry.cost_stage,
             cost_scope: entry.cost_scope,
@@ -303,7 +303,7 @@ fn cost_allocation_entity_view(allocation: CostAllocation) -> CostAllocationView
 /// 无。
 pub fn dedupe_order_ids(ids: &[SalesOrderId]) -> Vec<SalesOrderId> {
     let mut seen = HashSet::with_capacity(ids.len());
-    ids.iter().filter(|&id| seen.insert(id.clone())).cloned().collect()
+    ids.iter().filter(|&id| seen.insert(id)).cloned().collect()
 }
 
 /// 按输入顺序返回第一个缺失的销售单 ID。
@@ -351,10 +351,10 @@ pub fn prepare_cost_entry(req: CreateCostEntryRequest) -> Result<PreparedCostEnt
         req.gross_amount,
         req.net_amount,
         req.allocations
-            .iter()
+            .into_iter()
             .map(|line| CostAllocationLineInput {
-                sales_order_id: line.sales_order_id.clone(),
-                sales_order_line_id: line.sales_order_line_id.clone(),
+                sales_order_id: line.sales_order_id,
+                sales_order_line_id: line.sales_order_line_id,
                 allocated_gross_amount: line.allocated_gross_amount,
                 allocated_net_amount: line.allocated_net_amount,
                 rounding_residual_flag: line.rounding_residual_flag,

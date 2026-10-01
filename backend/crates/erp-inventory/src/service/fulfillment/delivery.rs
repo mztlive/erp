@@ -69,7 +69,7 @@ async fn post_with_store(
 ) -> Result<()> {
     let reservation_id = input
         .stock_reservation_id
-        .clone()
+        .as_ref()
         .ok_or_else(|| Error::BusinessLogicError("仓发必须消耗有效预占".to_string()))?;
     let reservation = store
         .find_reservation(reservation_id.as_ref(), executor)

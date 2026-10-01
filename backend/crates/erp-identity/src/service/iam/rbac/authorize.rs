@@ -307,13 +307,17 @@ pub(super) fn ensure_all_roles_assignable(requested_count: usize, existing_count
     Ok(())
 }
 
+/// 确保每个请求角色均允许通过普通管理入口分配。
 pub(super) fn ensure_roles_delegable(roles: &[Role]) -> Result<()> {
-    roles.iter().try_for_each(|role| {
-        if !role_is_assignable(role) {
-            return Err(Error::Forbidden("系统角色或已停用角色不能通过普通接口分配".to_string()));
-        }
-        Ok(())
-    })
+    roles.iter().try_for_each(ensure_role_delegable)
+}
+
+/// 复用单个角色的可分配规则，拒绝系统或已停用角色。
+fn ensure_role_delegable(role: &Role) -> Result<()> {
+    if !role_is_assignable(role) {
+        return Err(Error::Forbidden("系统角色或已停用角色不能通过普通接口分配".to_string()));
+    }
+    Ok(())
 }
 
 pub(super) fn role_is_assignable(role: &Role) -> bool {
@@ -363,15 +367,15 @@ pub(super) fn ensure_target_roles_manageable(
     Ok(())
 }
 
+/// 在借用已加载角色的情况下冻结有效授予身份与策略版本。
 fn authorized_role_grant(
     role_ids: Vec<String>,
     policy_revision: u64,
     roles: &HashMap<String, Role>,
 ) -> Result<AuthorizedRoleGrant> {
-    let requested_roles =
-        role_ids.iter().filter_map(|role_id| roles.get(role_id)).cloned().collect::<Vec<_>>();
+    let requested_roles = role_ids.iter().filter_map(|role_id| roles.get(role_id)).collect::<Vec<_>>();
     ensure_all_roles_assignable(role_ids.len(), requested_roles.len())?;
-    ensure_roles_delegable(&requested_roles)?;
+    requested_roles.into_iter().try_for_each(ensure_role_delegable)?;
     Ok(AuthorizedRoleGrant { role_ids, policy_revision })
 }
 

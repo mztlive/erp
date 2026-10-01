@@ -78,9 +78,6 @@ impl SupplierSettlementService {
         let mut filter = statement_filter(&query);
         filter.keyword_supplier_ids = keyword_supplier_ids;
         filter.authorized_scope = Some(scope);
-        filter.owner_user_ids = query.owner_user_ids.as_ref().map(|ids| ids.as_slice().to_vec());
-        filter.operator_user_ids = query.operator_user_ids.as_ref().map(|ids| ids.as_slice().to_vec());
-        filter.handler_user_ids = query.handler_user_ids.as_ref().map(|ids| ids.as_slice().to_vec());
         filter.handler_open_statement_ids = handler_open_statement_ids;
         filter.business_org_unit_ids = org_ids.map(|ids| ids.into_iter().collect());
         let mut view = self.load_statement_page(&filter, Some(&context), executor).await?;
@@ -139,7 +136,13 @@ impl SupplierSettlementService {
     }
 }
 
+/// 消费列表投影构造视图，仅缺省差异处理人时复制对账负责人。
 fn statement_row_view(row: SupplierSettlementStatementRow) -> SupplierSettlementStatementView {
+    let difference_handler_user_id = if row.difference_handler_user_id.is_empty() {
+        row.prepared_by.clone()
+    } else {
+        row.difference_handler_user_id
+    };
     SupplierSettlementStatementView {
         id: row.id,
         statement_no: row.statement_no,
@@ -161,13 +164,9 @@ fn statement_row_view(row: SupplierSettlementStatementRow) -> SupplierSettlement
         source_snapshot_hash: row.source_snapshot_hash,
         refresh_cutoff_policy_id: row.refresh_cutoff_policy_id,
         refresh_cutoff_policy_version: row.refresh_cutoff_policy_version,
-        prepared_by: row.prepared_by.clone(),
+        prepared_by: row.prepared_by,
         business_org_unit_id: row.business_org_unit_id,
-        difference_handler_user_id: if row.difference_handler_user_id.is_empty() {
-            row.prepared_by
-        } else {
-            row.difference_handler_user_id
-        },
+        difference_handler_user_id,
         reviewed_by: row.reviewed_by,
         review_result: row.review_result,
         review_reason_code: row.review_reason_code,

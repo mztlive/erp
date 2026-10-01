@@ -126,7 +126,7 @@ fn receipt_from_plan(
 fn prepare_open_task_conflict(input: DecisionExecutionInput) -> Result<PreparedExecution> {
     let now = input.command.now;
     let identity = decision_identity(
-        input.command.idempotency_key.clone(),
+        input.command.idempotency_key,
         &input.current.base.id,
         &input.work_item_id,
         input.decision.as_str(),
