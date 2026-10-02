@@ -43,9 +43,18 @@ pub struct SkuRevisionRow {
     pub volume_m3: Option<Quantity>,
     /// 修订启停状态。
     pub status: EnableStatus,
-    /// 公司对销售可见的含税价格（Decimal128 定点金额）。
+    /// 公司出厂含税销售参考价（独立维护，非负）。
+    #[serde(default)]
+    pub factory_price_gross: Option<Amount>,
+    /// 公司一件代发含税销售参考价（Decimal128 定点金额）。
     pub sales_visible_price_gross: Option<Amount>,
-    /// 市场参考价。
+    /// 公司集采含税销售参考价（独立维护，非负）。
+    #[serde(default)]
+    pub bulk_price_gross: Option<Amount>,
+    /// 公司集采价起订数量；未维护时按一件代发价取价，有值必须大于零。
+    #[serde(default)]
+    pub bulk_min_quantity: Option<Quantity>,
+    /// 含税市场参考价。
     pub market_price: Option<Amount>,
     /// 生效开始日。
     pub effective_from: BusinessDate,
@@ -140,7 +149,7 @@ impl Pagination for SkuRevisionFilter {
 pub trait SkuRevisionRepositoryExt {
     /// 分页检索 SKU 修订列表（投影查询）。
     ///
-    /// 只返回 [`SkuRevisionRow`] 所需的列表字段（含 Decimal128 销售可见价，
+    /// 只返回 [`SkuRevisionRow`] 所需的列表字段（含 Decimal128 一件代发价，
     /// 不做舍入或换算）；排序字段白名单化（`created_at`/`revision_no`）。
     ///
     /// # 参数
@@ -348,7 +357,10 @@ pub(super) fn sku_revision_projection() -> Document {
         "weight_kg": 1,
         "volume_m3": 1,
         "status": 1,
+        "factory_price_gross": 1,
         "sales_visible_price_gross": 1,
+        "bulk_price_gross": 1,
+        "bulk_min_quantity": 1,
         "market_price": 1,
         "effective_from": 1,
         "effective_to": 1,

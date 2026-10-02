@@ -156,6 +156,7 @@ mod tests {
     use super::*;
     use crate::entity::sales_order::{
         FormalRevisionLineIdentity, FormalRevisionSubtypeIdentity, LineType as SalesLineType, RevisionSource,
+        SalesPricingMode,
     };
     use crate::entity::sales_review::{
         CardForm, GoodsLineFields, SalesChangeSubmissionData, SalesChangeSubmissionLineData,
@@ -184,6 +185,7 @@ mod tests {
 
     fn goods_fields() -> GoodsLineFields {
         GoodsLineFields {
+            pricing_mode: Default::default(),
             sku_id: SkuId::new("sku-1"),
             sku_revision_id: SkuRevisionId::new("skurev-1"),
             welfare_scenario: Some(WelfareScenario::MealSubsidy),
@@ -312,7 +314,9 @@ mod tests {
 
     #[test]
     fn change_goods_revision_reuses_shared_snapshot_and_hash_rules() {
-        let (submission, lines) = submission_and_lines(goods_header(vec![goods_line_data(1)]));
+        let mut first = goods_line_data(1);
+        first.goods.as_mut().unwrap().pricing_mode = SalesPricingMode::Auto;
+        let (submission, lines) = submission_and_lines(goods_header(vec![first]));
         let aggregate = SalesOrderRevisionAggregate::from_sales_change_submission(
             identities_for(&[SalesLineType::GoodsService]),
             FormalRevisionContext::new(
@@ -335,6 +339,7 @@ mod tests {
         assert_eq!(aggregate.revision.business_remark.as_deref(), Some("变更后执行"));
         assert_eq!(aggregate.lines.len(), 1);
         assert_eq!(aggregate.goods_lines.len(), 1);
+        assert_eq!(aggregate.goods_lines[0].pricing_mode, SalesPricingMode::Auto);
         assert!(aggregate.voucher_lines.is_empty());
         assert_eq!(
             aggregate.goods_lines[0].welfare_scenario,

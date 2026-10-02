@@ -173,7 +173,7 @@ export function mapProductRow(
                 value: `${dto.supplied_sku_count ?? 0}/${dto.sku_count}`,
             },
             {
-                label: "已填销售价 SKU",
+                label: "已填一件代发价 SKU",
                 value: `${dto.priced_sku_count ?? 0}/${dto.sku_count}`,
             },
         ],
@@ -223,8 +223,30 @@ export function mapSkuAsSellable(dto: SellableSkuDto): MasterDataListItem {
         keyFacts: [
             { label: "SKU", value: dto.sku_no },
             {
-                label: "销售价",
+                label: "出厂价",
+                value: dto.factory_price_gross
+                    ? `¥${dto.factory_price_gross}`
+                    : "—",
+            },
+            {
+                label: "一件代发价",
                 value: `¥${dto.sales_visible_price_gross}`,
+            },
+            {
+                label: "集采价",
+                value: dto.bulk_price_gross ? `¥${dto.bulk_price_gross}` : "—",
+            },
+            {
+                label: "市场价",
+                value: dto.market_price ? `¥${dto.market_price}` : "—",
+            },
+            {
+                label: "集采起订量",
+                value: dto.bulk_min_quantity ?? "—",
+            },
+            {
+                label: "供应商编号",
+                value: dto.supplier_codes?.join("、") || "—",
             },
             {
                 label: "商品编号",
@@ -257,8 +279,12 @@ export function mapSkuAsSellable(dto: SellableSkuDto): MasterDataListItem {
             barcode: dto.barcode ?? undefined,
             baseUnit,
             productKindLabel: kindLabel,
+            factoryPriceGross: dto.factory_price_gross ?? undefined,
             salesVisiblePriceGross: dto.sales_visible_price_gross,
+            bulkPriceGross: dto.bulk_price_gross ?? undefined,
+            bulkMinQuantity: dto.bulk_min_quantity ?? undefined,
             marketPrice: dto.market_price ?? undefined,
+            supplierCodes: dto.supplier_codes ?? [],
             supplierCount: dto.supplier_count,
             supplyRegions: dto.supply_regions,
             eligibilityAsOf: dto.eligibility_as_of,

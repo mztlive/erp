@@ -128,7 +128,9 @@
 
 1. 计量单位与来源系统设置当前以操作权限控制，不新增“本人／部门”范围。
 2. 角色维护保留只能授予自身权限子集、系统角色及账号保护；没有独立数据范围不等于没有授权委派约束。
-3. 公司商品池与商品维护后台采用不同目的：商品池按销售资格返回可售内容，不返回采购成本、供应商身份；维护后台仍有真实维护人边界。禁止将两者合并成同一“商品范围”。
+3. 公司商品池与商品维护后台采用不同目的：商品池按销售资格返回可售内容、出厂价、一件代发价、集采价、市场价四种含税销售参考价和 SKU 集采起订数量；维护后台仍有真实维护人边界。禁止将两者合并成同一“商品范围”。
+4. 公司商品池列表、轻预览及内部导出允许返回该 SKU 全部有效且当前可供供给所对应的供应商业务编号，编号按值去重并稳定排序。该字段属于最小销售投影，不授予供应商完整资料、资质、银行资料或供给条款读取权限；不得返回供应商采购成本、进项税率或供应商 MOQ。编号不得以供应商内部 ID、订货编码或统一社会信用代码替代；关联资料入口继续独立校验目标动作与数据范围。
+5. SKU 四价及数量门槛属于销售参考资料，不构成供应商成本读取资格；自动成交价按锁定的 SKU 修订和销售数量计算，不得扩大商品维护、供应商维护或供给维护范围。选品册及客户公开会话只展示发布时冻结的一件代发报价，不得暴露内部四价、SKU 集采起订数量或供应商编号。
 
 ## 5. 配置与访问检查入口
 
@@ -218,7 +220,7 @@
 
 1. [合同访问](../backend/crates/erp-contract/src/service/contract/access.rs)的 `object_facts` 采用客户当前主负责人及组织；[销售访问](../backend/crates/erp-read-models/src/sales_center/access.rs)与[采购访问](../backend/crates/erp-procurement/src/service/purchase_order/access.rs)分别采用订单自己的责任，不能统一沿客户或供应商继承。
 2. [选品方案创建](../backend/crates/erp-sales/src/service/sales_selection/session.rs)复制所属册的责任信息；[选品范围](../backend/crates/erp-processes/src/sales_selection/scope_checks.rs)和[选品访问](../backend/crates/erp-sales/src/service/sales_selection/access.rs)仍分别解析册与方案范围。
-3. [供应商访问](../backend/crates/erp-supplier/src/service/supplier/access.rs)、[商品维护范围](../backend/crates/erp-read-models/src/catalog_center/scope.rs)与[供给访问](../backend/crates/erp-supply/src/service/supplier_offering/access.rs)有各自维护责任；[公司商品池 Handler](../backend/apps/web-api/src/core/handler/catalog/product.rs)及[目录读取](../backend/crates/erp-read-models/src/catalog_center/mod.rs)采用不同的销售资格投影，不含采购成本与供应商身份。
+3. [供应商访问](../backend/crates/erp-supplier/src/service/supplier/access.rs)、[商品维护范围](../backend/crates/erp-read-models/src/catalog_center/scope.rs)与[供给访问](../backend/crates/erp-supply/src/service/supplier_offering/access.rs)有各自维护责任；[公司商品池 Handler](../backend/apps/web-api/src/core/handler/catalog/product.rs)及[目录读取](../backend/crates/erp-read-models/src/catalog_center/mod.rs)采用不同的销售资格投影。投影可返回四种含税销售参考价、SKU 集采起订数量和有效供给所对应的供应商业务编号，不含采购成本与完整供应商档案；编号可见不得扩大供应商及供给对象的访问范围。
 4. [供应商订单对象访问](../backend/crates/erp-supply/src/service/supplier_fulfillment/access.rs)使用跟进负责人和当前任务事实；[W26 完成命令](../backend/crates/erp-processes/src/supply_execution/complete.rs)先检查订单 complete 范围，再检查正式任务，须分入口处理。
 5. [库存适配](../backend/crates/erp-processes/src/adapters/inventory.rs)为多个动作分别解析范围；[余额](../backend/crates/erp-inventory/src/service/inventory/balance.rs)、[流水](../backend/crates/erp-inventory/src/service/inventory/movement.rs)、[预占](../backend/crates/erp-inventory/src/service/inventory/reservation.rs)均以仓库作为边界。
 

@@ -211,7 +211,10 @@ export async function centerProduct(
             mainImage: mainAsset?.file_name ?? "",
             mainImagePreviewUrl: mainAsset?.public_url ?? undefined,
             mainImageAssetId: mainAsset?.id ?? undefined,
+            factoryPriceGross: rev?.factory_price_gross ?? undefined,
             salePrice: rev?.sales_visible_price_gross ?? undefined,
+            bulkPriceGross: rev?.bulk_price_gross ?? undefined,
+            bulkMinQuantity: rev?.bulk_min_quantity ?? undefined,
             marketPrice: rev?.market_price ?? undefined,
             baseUnit: unit?.name ?? unit?.symbol,
             listingStatus:

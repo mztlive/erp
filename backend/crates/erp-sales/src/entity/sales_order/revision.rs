@@ -24,6 +24,7 @@ use super::amount_validation::validate_amount_triple;
 use super::snapshot::HeaderSnapshots;
 use super::types::{CardForm, GoodsLineFields, LineType, WelfareScenario};
 use super::working_copy::SalesOrderWorkingCopyLineData;
+use crate::entity::sales_order::SalesPricingMode;
 
 /// 内容指纹最大长度。
 const CONTENT_HASH_MAX_LEN: usize = 128;
@@ -419,6 +420,7 @@ impl SalesOrderRevisionLine {
             spec_snapshot: self.spec_snapshot.clone(),
             unit_snapshot: self.unit_snapshot.clone(),
             goods: Some(GoodsLineFields {
+                pricing_mode: goods.pricing_mode,
                 sku_id: goods.sku_id.clone(),
                 sku_revision_id: goods.sku_revision_id.clone(),
                 welfare_scenario: goods.welfare_scenario,
@@ -452,8 +454,11 @@ pub struct SalesOrderGoodsServiceLineRevisionData {
     pub quantity: Quantity,
     /// 基础单位代码。
     pub base_unit_code: String,
-    /// 含税成交单价快照；不随后续 `sku_revision.sales_visible_price_gross` 变化。
+    /// 含税成交单价快照；不随后续公司 SKU 参考价变化。
     pub unit_price_gross: UnitPrice,
+    /// 成交价编辑方式；历史缺省保留为手工价。
+    #[serde(default, skip_serializing_if = "SalesPricingMode::is_manual")]
+    pub pricing_mode: SalesPricingMode,
 }
 
 /// 实物及服务行版本实体（数据模型 §6.4，与公共行一对一）。
@@ -479,6 +484,9 @@ pub struct SalesOrderGoodsServiceLineRevision {
     pub base_unit_code: String,
     /// 含税成交单价快照。
     pub unit_price_gross: UnitPrice,
+    /// 成交价编辑方式；历史缺省保留为手工价。
+    #[serde(default, skip_serializing_if = "SalesPricingMode::is_manual")]
+    pub pricing_mode: SalesPricingMode,
 }
 
 impl SalesOrderGoodsServiceLineRevision {
@@ -516,6 +524,7 @@ impl SalesOrderGoodsServiceLineRevision {
             quantity: data.quantity,
             base_unit_code,
             unit_price_gross: data.unit_price_gross,
+            pricing_mode: data.pricing_mode,
         })
     }
 }
@@ -816,6 +825,7 @@ mod tests {
         let line = SalesOrderGoodsServiceLineRevision::new(
             SalesOrderGoodsServiceLineRevisionId::new("gs-1"),
             SalesOrderGoodsServiceLineRevisionData {
+                pricing_mode: Default::default(),
                 revision_line_id: SalesOrderRevisionLineId::new("rl-1"),
                 sku_id: SkuId::new("sku-1"),
                 sku_revision_id: SkuRevisionId::new("skurev-1"),
@@ -845,6 +855,7 @@ mod tests {
 
     fn data() -> SalesOrderGoodsServiceLineRevisionData {
         SalesOrderGoodsServiceLineRevisionData {
+            pricing_mode: Default::default(),
             revision_line_id: SalesOrderRevisionLineId::new("rl-1"),
             sku_id: SkuId::new("sku-1"),
             sku_revision_id: SkuRevisionId::new("skurev-1"),

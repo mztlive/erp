@@ -144,10 +144,10 @@ export async function fetchProductFilterOptions(
 }
 
 /**
- * 读取商品列表当前页的启用 SKU 与当前销售价。
+ * 读取商品列表当前页的启用 SKU 与当前一件代发价。
  *
  * 商品列表接口只返回 SKU 数量；这里按稳定商品 ID 补齐 SKU 当前修订，供列表展示
- * 销售价范围，并为新增供给 Dialog 提供固定 SKU 身份。
+ * 一件代发价范围，并为新增供给 Dialog 提供固定 SKU 身份。
  */
 export async function fetchProductListSkus(
     productIds: readonly string[],
@@ -190,8 +190,12 @@ export async function fetchProductListSkus(
                     sku.specification_signature ??
                     "默认规格",
                 baseUnit: unit?.name ?? unit?.symbol ?? unit?.unit_code ?? "—",
+                factoryPriceGross: revision?.factory_price_gross ?? undefined,
                 salesVisiblePriceGross:
                     revision?.sales_visible_price_gross ?? undefined,
+                bulkPriceGross: revision?.bulk_price_gross ?? undefined,
+                bulkMinQuantity: revision?.bulk_min_quantity ?? undefined,
+                marketPrice: revision?.market_price ?? undefined,
             }
         }),
     )

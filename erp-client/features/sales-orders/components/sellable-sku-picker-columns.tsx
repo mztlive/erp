@@ -4,10 +4,17 @@ import * as React from "react"
 import { CircleCheckIcon, TriangleAlertIcon } from "lucide-react"
 import type { ColumnDef } from "@tanstack/react-table"
 
-import { MoneyValue } from "@/components/business"
+import { MoneyValue, QuantityValue } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { SkuThumbnail } from "@/features/sales-orders/components/sku-thumbnail"
 import type { MasterDataListItem } from "@/features/master-data/types"
+
+const REFERENCE_PRICE_COLUMNS = [
+    { id: "factoryPriceGross", label: "出厂价（含税）" },
+    { id: "salesVisiblePriceGross", label: "一件代发价（含税）" },
+    { id: "bulkPriceGross", label: "集采价（含税）" },
+    { id: "marketPrice", label: "市场价（含税）" },
+] as const
 
 function SupplyRegions({ regions }: { regions: readonly string[] }) {
     if (regions.length === 0) {
@@ -60,31 +67,63 @@ export function useSellableSkuPickerColumns() {
                                         {row.original.stableNo}
                                     </span>
                                 </div>
+                                {sellable?.supplierCodes?.length ? (
+                                    <div
+                                        className="truncate text-xs text-muted-foreground"
+                                        title={sellable.supplierCodes.join(
+                                            "、",
+                                        )}
+                                    >
+                                        供应商编号：
+                                        <span className="num">
+                                            {sellable.supplierCodes.join("、")}
+                                        </span>
+                                    </div>
+                                ) : null}
                             </div>
                         </div>
                     )
                 },
             },
-            {
-                id: "price",
-                accessorFn: (row) =>
-                    row.sellableItem?.salesVisiblePriceGross ?? "",
-                header: "销售价（含税）",
-                meta: {
-                    label: "销售价（含税）",
-                    width: "amount",
-                    align: "end",
-                    numeric: true,
-                },
-                enableSorting: false,
-                cell: ({ row }) => (
-                    <MoneyValue
-                        value={
-                            row.original.sellableItem?.salesVisiblePriceGross
-                        }
-                    />
-                ),
-            },
+            ...REFERENCE_PRICE_COLUMNS.map(
+                ({ id, label }) =>
+                    ({
+                        id,
+                        accessorFn: (row: MasterDataListItem) =>
+                            row.sellableItem?.[id] ?? "",
+                        header: label,
+                        meta: {
+                            label,
+                            width: "amount" as const,
+                            align: "end" as const,
+                            numeric: true,
+                        },
+                        enableSorting: false,
+                        cell: ({ row }) => (
+                            <div className="space-y-1">
+                                <MoneyValue
+                                    value={row.original.sellableItem?.[id]}
+                                />
+                                {id === "bulkPriceGross" &&
+                                row.original.sellableItem?.bulkMinQuantity ? (
+                                    <div className="text-xs text-muted-foreground">
+                                        起订{" "}
+                                        <QuantityValue
+                                            value={
+                                                row.original.sellableItem
+                                                    .bulkMinQuantity
+                                            }
+                                            unit={
+                                                row.original.sellableItem
+                                                    .baseUnit
+                                            }
+                                        />
+                                    </div>
+                                ) : null}
+                            </div>
+                        ),
+                    }) satisfies ColumnDef<MasterDataListItem>,
+            ),
             {
                 id: "supplyRegions",
                 header: "可供区域",

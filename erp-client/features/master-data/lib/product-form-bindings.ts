@@ -135,30 +135,59 @@ export function createProductFormBindings(
     )
 
     const applyBatchReferencePrices = () => {
-        const hasAny =
-            values.batchSalePrice.trim() || values.batchMarketPrice.trim()
-        if (!hasAny) return
-        const sale = values.batchSalePrice.trim()
-        const market = values.batchMarketPrice.trim()
-        const overwritten = values.fields.skus.filter(
-            (sku) =>
-                (sale && sku.salePrice?.trim() && sku.salePrice !== sale) ||
-                (market &&
-                    sku.marketPrice?.trim() &&
-                    sku.marketPrice !== market),
+        const entries: Array<{
+            key:
+                | "factoryPriceGross"
+                | "salePrice"
+                | "bulkPriceGross"
+                | "bulkMinQuantity"
+                | "marketPrice"
+            label: string
+            value: string
+        }> = [
+            {
+                key: "factoryPriceGross",
+                label: "出厂价",
+                value: values.batchFactoryPrice.trim(),
+            },
+            {
+                key: "salePrice",
+                label: "一件代发价",
+                value: values.batchSalePrice.trim(),
+            },
+            {
+                key: "bulkPriceGross",
+                label: "集采价",
+                value: values.batchBulkPrice.trim(),
+            },
+            {
+                key: "bulkMinQuantity",
+                label: "集采起订量",
+                value: values.batchBulkMinQuantity.trim(),
+            },
+            {
+                key: "marketPrice",
+                label: "市场价",
+                value: values.batchMarketPrice.trim(),
+            },
+        ]
+        const applied = entries.filter((entry) => entry.value)
+        if (!applied.length) return
+        const overwritten = values.fields.skus.filter((sku) =>
+            applied.some(
+                ({ key, value }) => sku[key]?.trim() && sku[key] !== value,
+            ),
         )
-        const fieldsChanged = [sale && "销售价", market && "市场价"]
-            .filter(Boolean)
-            .join("、")
+        const fieldsChanged = applied.map((entry) => entry.label).join("、")
         const previous = fields.skus
         const apply = () => {
             setFields((current) => ({
                 ...current,
-                skus: current.skus.map((sku) => ({
-                    ...sku,
-                    salePrice: sale || sku.salePrice,
-                    marketPrice: market || sku.marketPrice,
-                })),
+                skus: current.skus.map((sku) => {
+                    const next = { ...sku }
+                    for (const { key, value } of applied) next[key] = value
+                    return next
+                }),
             }))
             offerUndo?.(() =>
                 setFields((current) => ({
@@ -171,24 +200,18 @@ export function createProductFormBindings(
                                 before.skuNo === sku.skuNo,
                         )
                         if (!old) return sku
-                        return {
-                            ...sku,
-                            salePrice:
-                                sale && sku.salePrice === sale
-                                    ? old.salePrice
-                                    : sku.salePrice,
-                            marketPrice:
-                                market && sku.marketPrice === market
-                                    ? old.marketPrice
-                                    : sku.marketPrice,
+                        const next = { ...sku }
+                        for (const { key, value } of applied) {
+                            if (sku[key] === value) next[key] = old[key]
                         }
+                        return next
                     }),
                 })),
             )
         }
         if (overwritten.length) {
             confirmChange({
-                title: `覆盖 ${overwritten.length} 个 SKU 的价格？`,
+                title: `覆盖 ${overwritten.length} 个 SKU 的价格或起订量？`,
                 description: `本次应用${fieldsChanged}，保存商品后生效。`,
                 details: overwritten.map(
                     (sku) => `${sku.skuNo || "未编码"} · ${sku.specLabel}`,

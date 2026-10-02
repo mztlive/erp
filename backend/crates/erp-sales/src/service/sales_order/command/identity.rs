@@ -128,6 +128,7 @@ mod compile_probe_equivalence_tests {
         sales_handover_audit_message, sales_handover_fingerprint, sales_handover_fingerprint_matches,
         sales_submission_fingerprint,
     };
+    use crate::entity::sales_order::SalesPricingMode;
 
     #[test]
     fn complete_submission_payload_and_hash_match_frozen_goods_and_voucher_bytes() {
@@ -145,7 +146,7 @@ mod compile_probe_equivalence_tests {
             ),
         ];
         for (label, golden_payload, golden_hash) in cases {
-            let (actor, order, request): (String, String, SubmitSalesOrderRequest) =
+            let (actor, order, mut request): (String, String, SubmitSalesOrderRequest) =
                 serde_json::from_str(golden_payload).unwrap();
             let serialized = serde_json::to_vec(&(actor.as_str(), order.as_str(), &request)).unwrap();
             assert_eq!(serialized, golden_payload.as_bytes(), "{label}: complete JSON");
@@ -159,6 +160,10 @@ mod compile_probe_equivalence_tests {
                 golden_hash,
                 "{label}: actual submission fingerprint"
             );
+            if let Some(goods) = request.draft.lines[0].goods.as_mut() {
+                goods.pricing_mode = SalesPricingMode::Auto;
+                assert_ne!(sales_submission_fingerprint(&actor, &order, &request).unwrap(), golden_hash);
+            }
         }
     }
 

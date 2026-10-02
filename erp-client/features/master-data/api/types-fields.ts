@@ -4,8 +4,12 @@ import type { ProductFields } from "@/features/master-data/api/types-product"
 
 export type SellableItemFields = Readonly<{
     sku: string
-    /** 采购发布给销售的公司商品池价格；不是任何一家供应商的成本。 */
+    /** 公司含税销售参考价；供应商成本独立维护。 */
+    factoryPriceGross?: string
     salesVisiblePriceGross: string
+    bulkPriceGross?: string
+    bulkMinQuantity?: string
+    marketPrice?: string
     /** 从 supplier_offering 聚合的可用供应商数量，只读投影。 */
     supplierCount?: string
     region?: string
@@ -38,7 +42,10 @@ export type VoucherCategoryFields = Readonly<{
     baseUnitCode?: string
     baseUnit?: string
     barcode?: string
+    factoryPriceGross?: string
     salesVisiblePriceGross?: string
+    bulkPriceGross?: string
+    bulkMinQuantity?: string
     marketPrice?: string
 }>
 

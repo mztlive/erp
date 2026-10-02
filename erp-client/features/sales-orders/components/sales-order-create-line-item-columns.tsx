@@ -17,6 +17,8 @@ import type {
     SalesOrderDraftLineInput,
 } from "@/features/sales-orders/types"
 import { SalesOrderCreateLineSkuEditor } from "@/features/sales-orders/components/sales-order-create-line-sku-editor"
+import { SalesOrderCreateLinePriceEditor } from "@/features/sales-orders/components/sales-order-create-line-price-editor"
+import { selectSalesReferencePrice } from "@/features/sales-orders/lib/sales-line-pricing"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 
 function ProcurementOwnerPreview({
@@ -95,6 +97,28 @@ export function buildSalesOrderCreateLineItemColumns(
                         <div className="w-20 shrink-0">
                             <form.AppField
                                 name={`lineItems[${rowIndex}].quantity`}
+                                listeners={{
+                                    onChange: ({ value }) => {
+                                        if (nature !== "physical_service")
+                                            return
+                                        const current =
+                                            form.getFieldValue("lineItems")[
+                                                rowIndex
+                                            ]
+                                        if (current?.pricingMode !== "AUTO")
+                                            return
+                                        const price = selectSalesReferencePrice(
+                                            value,
+                                            current.referencePrices,
+                                        )
+                                        if (price) {
+                                            form.setFieldValue(
+                                                `lineItems[${rowIndex}].unitPriceGross`,
+                                                price.unitPriceGross,
+                                            )
+                                        }
+                                    },
+                                }}
                             >
                                 {(field) => (
                                     <field.TextField
@@ -102,6 +126,7 @@ export function buildSalesOrderCreateLineItemColumns(
                                         label="数量"
                                         hideLabel
                                         type="number"
+                                        step="any"
                                         inputClassName="num"
                                     />
                                 )}
@@ -129,7 +154,7 @@ export function buildSalesOrderCreateLineItemColumns(
         },
         {
             id: "unitPrice",
-            header: "含税单价",
+            header: "含税成交单价",
             numeric: true,
             align: "end",
             renderValue: ({ item }) => item.unitPriceGross,
@@ -137,19 +162,10 @@ export function buildSalesOrderCreateLineItemColumns(
                 const lineKey = values.lineItems[rowIndex]?.rowKey
                 if (!lineKey) return null
                 return (
-                    <form.AppField
-                        name={`lineItems[${rowIndex}].unitPriceGross`}
-                    >
-                        {(field) => (
-                            <field.TextField
-                                id={`sales-orders-create-line-${toAutomationIdSegment(lineKey)}-unit-price`}
-                                label="含税单价"
-                                hideLabel
-                                type="number"
-                                inputClassName="num min-w-24 text-right"
-                            />
-                        )}
-                    </form.AppField>
+                    <SalesOrderCreateLinePriceEditor
+                        form={form}
+                        rowIndex={rowIndex}
+                    />
                 )
             },
         },

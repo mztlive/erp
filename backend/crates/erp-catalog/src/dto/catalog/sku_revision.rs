@@ -1,7 +1,7 @@
 use application_core::normalized_text;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::SkuId;
-use erp_core::money::Amount;
+use erp_core::money::{Amount, Quantity};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -38,9 +38,18 @@ pub struct SkuRevisionView {
     pub volume_m3: Option<erp_core::money::Quantity>,
     /// 修订启停状态。
     pub status: EnableStatus,
-    /// 公司对销售可见的含税价格（字符串形态）。
+    /// 公司出厂含税销售参考价（独立维护，非负）。
+    #[serde(default)]
+    pub factory_price_gross: Option<Amount>,
+    /// 公司一件代发含税销售参考价（字符串形态）。
     pub sales_visible_price_gross: Option<Amount>,
-    /// 市场参考价。
+    /// 公司集采含税销售参考价（独立维护，非负）。
+    #[serde(default)]
+    pub bulk_price_gross: Option<Amount>,
+    /// 公司集采价起订数量；未维护时按一件代发价取价，有值必须大于零。
+    #[serde(default)]
+    pub bulk_min_quantity: Option<Quantity>,
+    /// 含税市场参考价。
     pub market_price: Option<Amount>,
     /// 生效开始日。
     pub effective_from: BusinessDate,
@@ -73,7 +82,10 @@ impl From<SkuRevision> for SkuRevisionView {
             weight_kg: revision.weight_kg,
             volume_m3: revision.volume_m3,
             status: revision.status,
+            factory_price_gross: revision.factory_price_gross,
             sales_visible_price_gross: revision.sales_visible_price_gross,
+            bulk_price_gross: revision.bulk_price_gross,
+            bulk_min_quantity: revision.bulk_min_quantity,
             market_price: revision.market_price,
             effective_from: revision.effective_from,
             effective_to: revision.effective_to,
@@ -104,7 +116,10 @@ impl From<SkuRevisionRow> for SkuRevisionView {
             weight_kg: row.weight_kg,
             volume_m3: row.volume_m3,
             status: row.status,
+            factory_price_gross: row.factory_price_gross,
             sales_visible_price_gross: row.sales_visible_price_gross,
+            bulk_price_gross: row.bulk_price_gross,
+            bulk_min_quantity: row.bulk_min_quantity,
             market_price: row.market_price,
             effective_from: row.effective_from,
             effective_to: row.effective_to,

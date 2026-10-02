@@ -179,6 +179,7 @@ mod tests {
 
     fn goods_fields(quantity: &str) -> GoodsLineFields {
         GoodsLineFields {
+            pricing_mode: Default::default(),
             sku_id: SkuId::new("sku-1"),
             sku_revision_id: SkuRevisionId::new("skurev-1"),
             welfare_scenario: None,

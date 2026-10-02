@@ -18,7 +18,7 @@ use validator::Validate;
 use crate::Result;
 use crate::entity::sales_order::{
     BusinessType, CardForm, CommercialStatus, GoodsLineFields, LineStatus, LineType, OriginSystem,
-    VoucherLineDraft, WelfareScenario,
+    SalesPricingMode, VoucherLineDraft, WelfareScenario,
 };
 
 /// 销售单列表允许的排序字段白名单（api-contract §4：Service 层校验）。
@@ -503,6 +503,21 @@ pub struct WorkingCopyView {
     pub lines: Vec<SalesOrderWorkingCopyLineView>,
 }
 
+/// 草稿续编所需的精确 SKU 修订参考价；由跨域查询补齐，不参与成交金额。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct SalesReferencePricesView {
+    /// 出厂含税参考价。
+    pub factory_price_gross: Option<Amount>,
+    /// 一件代发含税参考价。
+    pub sales_visible_price_gross: Option<Amount>,
+    /// 集采含税参考价。
+    pub bulk_price_gross: Option<Amount>,
+    /// 集采价起订数量。
+    pub bulk_min_quantity: Option<Quantity>,
+    /// 市场含税参考价。
+    pub market_price: Option<Amount>,
+}
+
 /// 工作副本行视图。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct SalesOrderWorkingCopyLineView {
@@ -544,6 +559,11 @@ pub struct SalesOrderWorkingCopyLineView {
     pub base_unit_code: Option<String>,
     /// 含税成交单价快照。
     pub unit_price_gross: Option<UnitPrice>,
+    /// 成交价编辑方式；历史缺省保留为手工价。
+    pub pricing_mode: SalesPricingMode,
+    /// 精确 SKU 修订的只读参考价；单域映射不补齐此字段。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reference_prices: Option<SalesReferencePricesView>,
     /// 单卡面额。
     pub face_value: Option<Amount>,
     /// 卡张数。

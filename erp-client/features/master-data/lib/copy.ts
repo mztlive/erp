@@ -87,7 +87,7 @@ export const masterDataCopy = {
         "点击任一行查看价格、可供区域和供应保障。",
     searchAria: "搜索基础资料",
     sellableItemsHint:
-        "仅展示已上架、资料有效且存在有效供给的 SKU。销售价来自公司商品资料，采购成本不展示。",
+        "仅展示已上架、资料有效且存在有效供给的 SKU。出厂价、一件代发价、集采价和市场价均为公司含税销售参考价，供应商成本独立维护。",
     sellableLayoutAria: "商品展示方式",
     sellableLayoutTable: "表格",
     sellableLayoutGallery: "卡片",
@@ -194,7 +194,7 @@ export const masterDataCopy = {
     fCarouselImages: "轮播图",
     fDetailImages: "详情图",
     fCostPrice: "成本价",
-    fSalePrice: "销售价",
+    fSalePrice: "一件代发价",
     fMarketPrice: "市场价",
     fProductCode: "产品编码",
     fSkuName: "SKU 名称",
@@ -254,7 +254,7 @@ export const masterDataCopy = {
     unitListHint:
         "计量单位供公司商品等表单选择基础单位；停用后业务页默认不可选，历史引用保留。单位代码创建后不可修改。",
     fDescription: "类目描述",
-    fSalesVisiblePrice: "销售价",
+    fSalesVisiblePrice: "一件代发价",
     fSupplierCount: "可供供应商数",
     fRegion: "服务区域",
     fLeadTime: "交期",

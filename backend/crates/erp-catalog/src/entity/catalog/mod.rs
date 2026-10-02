@@ -29,6 +29,7 @@ pub mod sku_attribute;
 pub mod sku_attribute_value;
 pub mod sku_revision;
 pub mod sku_revision_attribute_value;
+pub mod sku_sales_prices;
 pub mod specification;
 pub mod status;
 pub mod unit_of_measure;
@@ -54,6 +55,7 @@ pub use sku_attribute::SkuAttribute;
 pub use sku_attribute_value::SkuAttributeValue;
 pub use sku_revision::SkuRevision;
 pub use sku_revision_attribute_value::SkuRevisionAttributeValue;
+pub use sku_sales_prices::SkuSalesPrices;
 pub use specification::{
     EMPTY_SPEC_SIGNATURE, SpecSignatureEntry, SpecificationSignatureRead, SpecificationSignatureSet,
     compute_specification_signature, parse_specification_signature, read_specification_signature,

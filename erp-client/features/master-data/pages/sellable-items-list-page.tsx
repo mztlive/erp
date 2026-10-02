@@ -168,7 +168,7 @@ export function SellableItemsListPage() {
             <ListWorkspaceHeader
                 eyebrow="基础资料"
                 title="公司商品池"
-                description="查看可售商品、销售价格与供货范围。"
+                description="查看可售商品、四档含税销售参考价、供应商编号与供货范围。"
             >
                 <Popover>
                     <PopoverTrigger
@@ -393,7 +393,7 @@ export function SellableItemsListPage() {
                             loading={state.listQuery.isFetching}
                             highlightedRowId={state.previewId ?? undefined}
                             layout="flush"
-                            caption="可售商品、销售价格与供应保障"
+                            caption="可售商品、销售参考价与供应保障"
                             defaultColumnVisibility={{ productNo: false }}
                             defaultColumnPinning={{
                                 left: ["name"],

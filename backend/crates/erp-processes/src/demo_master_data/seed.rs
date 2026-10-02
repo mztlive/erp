@@ -189,6 +189,9 @@ mod tests {
             panic!("商品必须最后生成")
         };
         assert_eq!(product.skus[0].sales_visible_price_gross.unwrap().to_string(), "100.00");
+        assert!(product.skus[0].factory_price_gross.is_none());
+        assert!(product.skus[0].bulk_price_gross.is_none());
+        assert!(product.skus[0].bulk_min_quantity.is_none());
         assert_eq!(product.skus[0].sku_no, "DEMO-MD-P-27");
         assert!(steps.iter().all(|step| !step.request.label().is_empty()));
     }

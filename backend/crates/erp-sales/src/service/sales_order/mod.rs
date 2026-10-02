@@ -6,10 +6,12 @@ pub mod formalize;
 pub mod lifecycle;
 mod list;
 pub mod mapper;
+mod pricing;
 pub mod procurement;
 pub mod progress;
 mod query;
 mod sellable;
+mod working_copy_persistence;
 
 /// Sales operations using only sales repositories and consumer-owned facts.
 #[derive(Clone)]

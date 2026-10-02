@@ -139,6 +139,12 @@ export function SalesOrderCreateLineItemsSection({
                                 ) : null}
                             </div>
                             {nature === "physical_service" &&
+                            lines.length > 0 ? (
+                                <p className="text-xs text-muted-foreground">
+                                    数量达到商品集采起订量时取集采参考价，其余取一件代发参考价。手动修改成交价后，数量变化保留该价格；可点击“按数量取价”恢复自动匹配。
+                                </p>
+                            ) : null}
+                            {nature === "physical_service" &&
                             lines.length === 0 ? (
                                 <div className="flex min-h-24 items-center justify-center gap-3 rounded-md border border-dashed border-border bg-muted/10 px-4 py-4">
                                     <PackageSearchIcon
@@ -150,7 +156,7 @@ export function SalesOrderCreateLineItemsSection({
                                             尚未添加商品
                                         </p>
                                         <p className="text-sm text-muted-foreground">
-                                            点击“添加商品”，选择后填写数量、含税单价和交付日。
+                                            点击“添加商品”，选择后设置数量和交付日，成交单价可手动调整。
                                         </p>
                                     </div>
                                 </div>

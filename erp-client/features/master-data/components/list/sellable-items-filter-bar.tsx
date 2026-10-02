@@ -249,7 +249,7 @@ export function SellableItemsFilterBar({
                     </fieldset>
                     <fieldset className="min-w-0">
                         <legend className="mb-3 text-xs font-medium">
-                            销售价格
+                            一件代发价格
                         </legend>
                         <ListWorkspaceFilterField label="含税售价 · 元">
                             <div className="flex min-w-0 items-center gap-2">
@@ -257,7 +257,7 @@ export function SellableItemsFilterBar({
                                     id={`${prefix}-price-min`}
                                     ref={priceInputRef}
                                     className="h-control w-0 min-w-0 flex-1"
-                                    aria-label="最低销售价"
+                                    aria-label="最低一件代发价"
                                     placeholder="最低价"
                                     inputMode="decimal"
                                     autoComplete="off"
@@ -283,7 +283,7 @@ export function SellableItemsFilterBar({
                                 <Input
                                     id={`${prefix}-price-max`}
                                     className="h-control w-0 min-w-0 flex-1"
-                                    aria-label="最高销售价"
+                                    aria-label="最高一件代发价"
                                     placeholder="最高价"
                                     inputMode="decimal"
                                     autoComplete="off"

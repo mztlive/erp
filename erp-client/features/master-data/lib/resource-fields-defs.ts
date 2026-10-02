@@ -90,12 +90,31 @@ export const RESOURCE_FIELDS: Readonly<
             listFact: true,
         },
         {
+            key: "factoryPriceGross",
+            label: "出厂价",
+            kind: "text",
+            listFact: true,
+        },
+        {
             key: "salesVisiblePriceGross",
             label: masterDataCopy.fSalesVisiblePrice,
             kind: "text",
             required: true,
             listFact: true,
         },
+        {
+            key: "bulkPriceGross",
+            label: "集采价",
+            kind: "text",
+            listFact: true,
+        },
+        {
+            key: "bulkMinQuantity",
+            label: "集采起订量",
+            kind: "text",
+            listFact: true,
+        },
+        { key: "marketPrice", label: "市场价", kind: "text", listFact: true },
         {
             key: "supplierCount",
             label: masterDataCopy.fSupplierCount,

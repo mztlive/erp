@@ -44,7 +44,10 @@ function mapProductSkus(fields: ProductFields) {
             main_image_asset_id: sku.mainImageAssetId || null,
             weight_kg: null,
             volume_m3: null,
+            factory_price_gross: sku.factoryPriceGross || null,
             sales_visible_price_gross: sku.salePrice || null,
+            bulk_price_gross: sku.bulkPriceGross || null,
+            bulk_min_quantity: sku.bulkMinQuantity || null,
             market_price: sku.marketPrice || null,
             spec_entries: fields.specs.flatMap((spec, index) => {
                 const attributeCode = spec.name.trim()

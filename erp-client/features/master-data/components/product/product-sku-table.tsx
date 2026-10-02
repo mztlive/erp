@@ -263,6 +263,19 @@ function SkuRow({
             </TableCell>
             <TableCell className={`${cellPad} px-2 [&_input]:min-w-24`}>
                 <MoneyInput
+                    id={`master-data-product-sku-${skuSegment}-factory-price`}
+                    value={sku.factoryPriceGross ?? ""}
+                    disabled={!canRevise}
+                    onChange={(next) =>
+                        updateSku(index, {
+                            factoryPriceGross: next || undefined,
+                        })
+                    }
+                    aria-label={`${sku.specLabel} 出厂价`}
+                />
+            </TableCell>
+            <TableCell className={`${cellPad} px-2 [&_input]:min-w-24`}>
+                <MoneyInput
                     id={`master-data-product-sku-${skuSegment}-sale-price`}
                     value={sku.salePrice ?? ""}
                     disabled={!canRevise}
@@ -271,7 +284,33 @@ function SkuRow({
                             salePrice: next || undefined,
                         })
                     }
-                    aria-label={`${sku.specLabel} 销售价`}
+                    aria-label={`${sku.specLabel} 一件代发价`}
+                />
+            </TableCell>
+            <TableCell className={`${cellPad} px-2 [&_input]:min-w-24`}>
+                <MoneyInput
+                    id={`master-data-product-sku-${skuSegment}-bulk-price`}
+                    value={sku.bulkPriceGross ?? ""}
+                    disabled={!canRevise}
+                    onChange={(next) =>
+                        updateSku(index, { bulkPriceGross: next || undefined })
+                    }
+                    aria-label={`${sku.specLabel} 集采价`}
+                />
+            </TableCell>
+            <TableCell className={`${cellPad} px-2 [&_input]:min-w-24`}>
+                <Input
+                    id={`master-data-product-sku-${skuSegment}-bulk-min-quantity`}
+                    className="h-control-sm num"
+                    inputMode="decimal"
+                    value={sku.bulkMinQuantity ?? ""}
+                    disabled={!canRevise}
+                    onChange={(event) =>
+                        updateSku(index, {
+                            bulkMinQuantity: event.target.value || undefined,
+                        })
+                    }
+                    aria-label={`${sku.specLabel} 集采起订量`}
                 />
             </TableCell>
             <TableCell className={`${cellPad} px-2 [&_input]:min-w-24`}>
@@ -425,15 +464,28 @@ function ProductSkuTable({
                 data-density="comfortable"
                 className={
                     fields.productKind === "PHYSICAL"
-                        ? "min-w-[52rem] [&_thead_th]:!static"
-                        : "min-w-[44rem] [&_thead_th]:!static"
+                        ? "min-w-[76rem] [&_thead_th]:!static"
+                        : "min-w-[68rem] [&_thead_th]:!static"
                 }
             >
                 <TableHeader>
                     <TableRow>
                         <TableHead className="min-w-64">SKU 信息</TableHead>
-                        <TableHead className="w-32 min-w-28">销售价</TableHead>
-                        <TableHead className="w-32 min-w-28">市场价</TableHead>
+                        <TableHead className="w-32 min-w-28">
+                            出厂价（含税）
+                        </TableHead>
+                        <TableHead className="w-32 min-w-28">
+                            一件代发价（含税）
+                        </TableHead>
+                        <TableHead className="w-32 min-w-28">
+                            集采价（含税）
+                        </TableHead>
+                        <TableHead className="w-32 min-w-28">
+                            集采起订量
+                        </TableHead>
+                        <TableHead className="w-32 min-w-28">
+                            市场价（含税）
+                        </TableHead>
                         <TableHead className="w-36 min-w-28">供给</TableHead>
                         {fields.productKind === "PHYSICAL" ? (
                             <TableHead className="w-28 min-w-24">

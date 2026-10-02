@@ -18,6 +18,8 @@ use rust_decimal::Decimal;
 use serde::de::Error as SerdeError;
 use serde::{Deserialize, Serialize};
 
+use crate::entity::sales_order::SalesPricingMode;
+
 /// 基础单位代码最大长度。
 const BASE_UNIT_CODE_MAX_LEN: usize = 32;
 /// 服务区域最大长度。
@@ -283,6 +285,9 @@ pub struct GoodsLineFields {
     pub base_unit_code: String,
     /// 含税成交单价快照。
     pub unit_price_gross: UnitPrice,
+    /// 成交价编辑方式；历史缺省保留为手工价。
+    #[serde(default, skip_serializing_if = "SalesPricingMode::is_manual")]
+    pub pricing_mode: SalesPricingMode,
 }
 
 /// 卡券行字段组创建入参（数据模型 §6.4：来源同时提供面额、单价与合计，逐项核对；
@@ -787,6 +792,7 @@ mod tests {
         let built = build_line_groups(
             LineType::GoodsService,
             Some(GoodsLineFields {
+                pricing_mode: Default::default(),
                 sku_id: SkuId::new("sku-1"),
                 sku_revision_id: SkuRevisionId::new("skurev-1"),
                 welfare_scenario: None,
@@ -811,6 +817,7 @@ mod tests {
     #[test]
     fn build_groups_rejects_mismatched_line_type_and_fields() {
         let goods = GoodsLineFields {
+            pricing_mode: Default::default(),
             sku_id: SkuId::new("sku-1"),
             sku_revision_id: SkuRevisionId::new("skurev-1"),
             welfare_scenario: None,

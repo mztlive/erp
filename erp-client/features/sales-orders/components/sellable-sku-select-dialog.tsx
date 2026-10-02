@@ -70,7 +70,7 @@ export function SellableSkuSelectDialog({
     multiple = true,
     excludeProductKind,
     title = "选择商品",
-    description = "用分类、品牌、供应商、区域和售价从公司商品池筛选，不必只靠关键字。",
+    description = "从公司商品池筛选，四档含税销售参考价随商品展示。销售单按数量默认取一件代发价或集采价，成交价可手动修改。",
     confirmLabel,
     onConfirm,
 }: SellableSkuSelectDialogProps) {

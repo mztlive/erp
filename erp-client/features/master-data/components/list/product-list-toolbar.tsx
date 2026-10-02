@@ -390,7 +390,7 @@ export function ProductListToolbar({
                                         inputMode="decimal"
                                         autoComplete="off"
                                         placeholder="最低价"
-                                        aria-label="最低销售价"
+                                        aria-label="最低一件代发价"
                                         aria-invalid={Boolean(
                                             f.productSalesPriceError,
                                         )}
@@ -416,7 +416,7 @@ export function ProductListToolbar({
                                         inputMode="decimal"
                                         autoComplete="off"
                                         placeholder="最高价"
-                                        aria-label="最高销售价"
+                                        aria-label="最高一件代发价"
                                         aria-invalid={Boolean(
                                             f.productSalesPriceError,
                                         )}

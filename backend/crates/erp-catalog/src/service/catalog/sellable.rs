@@ -6,7 +6,7 @@
 
 use application_core::normalized_text;
 use erp_core::common::time::BusinessDate;
-use erp_core::money::Amount;
+use erp_core::money::{Amount, Quantity};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -30,16 +30,16 @@ pub struct SellableSkuListParams {
     pub category_id: Option<String>,
     /// 当前商品品牌筛选。
     pub brand_id: Option<String>,
-    /// 当前有效供给中的供应商筛选；响应不返回供应商身份。
+    /// 当前有效供给中的供应商筛选；响应仅返回供应商业务编号。
     pub supplier_id: Option<String>,
     /// 当前有效供给可供区域筛选（精确匹配）。
     pub supply_region: Option<String>,
     /// 当前有效供给去重供应商数量上限（含）；用于「单一供应商」快捷视图。
     #[validate(range(min = 1, message = "供应商数量上限必须大于0"))]
     pub max_supplier_count: Option<u32>,
-    /// 销售可见含税价下限（含）。
+    /// 一件代发含税参考价下限（含）。
     pub sales_price_min: Option<Amount>,
-    /// 销售可见含税价上限（含）。
+    /// 一件代发含税参考价上限（含）。
     pub sales_price_max: Option<Amount>,
     /// 服务端解释的资格业务日期；空表示服务端今天。
     pub eligibility_as_of: Option<BusinessDate>,
@@ -84,9 +84,18 @@ pub struct SellableSkuView {
     pub base_unit_code: Option<String>,
     /// 基础单位名称。
     pub base_unit_name: Option<String>,
-    /// 公司销售可见含税价。
+    /// 公司出厂含税销售参考价（独立维护，非负）。
+    #[serde(default)]
+    pub factory_price_gross: Option<Amount>,
+    /// 公司一件代发含税参考价。
     pub sales_visible_price_gross: Amount,
-    /// 市场参考价。
+    /// 公司集采含税销售参考价（独立维护，非负）。
+    #[serde(default)]
+    pub bulk_price_gross: Option<Amount>,
+    /// 公司集采价起订数量；未维护时按一件代发价取价，有值必须大于零。
+    #[serde(default)]
+    pub bulk_min_quantity: Option<Quantity>,
+    /// 含税市场参考价。
     pub market_price: Option<Amount>,
     /// SKU 主图文件 ID。
     pub main_image_asset_id: Option<String>,
@@ -96,6 +105,8 @@ pub struct SellableSkuView {
     pub effective_to: Option<BusinessDate>,
     /// 当前有效供给对应的去重供应商数量。
     pub supplier_count: u32,
+    /// 当前有效供给对应的去重供应商业务编号，由跨域读取批量补齐。
+    pub supplier_codes: Vec<String>,
     /// 当前有效供给可供区域并集。
     pub supply_regions: Vec<String>,
     /// 本次资格判定的服务端业务日期。
@@ -203,12 +214,16 @@ pub fn sellable_sku_page_view(
             base_unit_id: row.base_unit_id,
             base_unit_code: row.base_unit_code,
             base_unit_name: row.base_unit_name,
+            factory_price_gross: row.factory_price_gross,
             sales_visible_price_gross: row.sales_visible_price_gross,
+            bulk_price_gross: row.bulk_price_gross,
+            bulk_min_quantity: row.bulk_min_quantity,
             market_price: row.market_price,
             main_image_asset_id: row.main_image_asset_id,
             effective_from: row.effective_from,
             effective_to: row.effective_to,
             supplier_count: row.supplier_count,
+            supplier_codes: Vec::new(),
             supply_regions: row.supply_regions,
             eligibility_as_of,
         });
@@ -218,9 +233,42 @@ pub fn sellable_sku_page_view(
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
+    use erp_core::common::time::BusinessDate;
+    use erp_core::money::{Amount, Quantity};
+    use persistence_core::PageResult;
+    use serde_json::json;
     use validator::Validate;
 
-    use super::{SellableSkuListParams, specification_attribute_views};
+    use super::{SellableSkuListParams, sellable_sku_page_view, specification_attribute_views};
+    use crate::repository::{SellableSkuFilter, SellableSkuRow};
+
+    /// 商品池投影保留四种独立参考价与起订量，供应商内部身份不对外序列化。
+    #[test]
+    fn sellable_view_preserves_reference_prices_without_internal_supplier_ids() {
+        let row: SellableSkuRow = serde_json::from_value(json!({
+            "sku_id": "sku-1", "sku_version": 1,
+            "sku_revision_id": "rev-1", "sku_revision_no": 1, "sku_no": "SKU-01",
+            "product_id": "product-1", "product_no": "P-01", "product_kind": "PHYSICAL",
+            "name": "礼盒", "specification_signature": "", "base_unit_id": "unit-1",
+            "factory_price_gross": "70.00", "sales_visible_price_gross": "99.90",
+            "bulk_price_gross": "80.00", "bulk_min_quantity": "10.000000", "market_price": "129.00",
+            "effective_from": "2026-01-01", "supplier_count": 1, "supplier_ids": ["supplier-1"]
+        }))
+        .unwrap();
+        let filter = SellableSkuFilter::as_of(BusinessDate::from_ymd(2026, 1, 1).unwrap());
+        let page = sellable_sku_page_view(PageResult { items: vec![row], total: 1 }, &filter).unwrap();
+        let item = &page.items[0];
+        assert_eq!(item.factory_price_gross, Some(Amount::from_str("70.00").unwrap()));
+        assert_eq!(item.sales_visible_price_gross, Amount::from_str("99.90").unwrap());
+        assert_eq!(item.bulk_price_gross, Some(Amount::from_str("80.00").unwrap()));
+        assert_eq!(item.bulk_min_quantity, Some(Quantity::from_str("10.000000").unwrap()));
+        assert_eq!(item.market_price, Some(Amount::from_str("129.00").unwrap()));
+        assert!(item.supplier_codes.is_empty());
+        let wire = serde_json::to_value(item).unwrap();
+        assert!(wire.get("supplier_ids").is_none());
+    }
 
     /// 公司商品池分页上限固定为一百，阻止无界销售查询。
     #[test]

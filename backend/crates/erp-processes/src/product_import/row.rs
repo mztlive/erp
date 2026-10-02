@@ -3,12 +3,13 @@
 use application_core::AuditActor;
 use erp_catalog::entity::catalog::{EnableStatus, ProductKind};
 use erp_catalog::repository::prelude::*;
-use erp_catalog::{CatalogExt, CreateProductRequest, ProductMediaInput, ProductSkuInput};
+use erp_catalog::{CatalogExt, CreateProductRequest, ProductMediaInput, ProductSkuInput, ProductView};
 use erp_core::common::time::BusinessDate;
+use erp_core::ids::{FileAssetId, ProductBrandId, ProductCategoryId, UnitOfMeasureId};
 use persistence_core::NoTransaction;
 
 use super::ProductImportProcess;
-use super::identity::normalize_import_row;
+use super::identity::{NormalizedImportRow, normalize_import_row};
 use super::images::{RowMediaSource, resolve_row_media};
 use super::resolve::ImportDictionaryCache;
 use crate::{Error, Result};
@@ -122,37 +123,8 @@ impl ProductImportProcess {
                 alt_text: Some(row.name.clone()),
             })
             .collect();
-        let request = CreateProductRequest {
-            change_reason: Some(format!("产品报价表导入 第{}行", row.row_number)),
-            product_no: row.product_no,
-            product_kind: ProductKind::Physical,
-            maintainer_user_id: None,
-            name: row.name.clone(),
-            description: None,
-            specification: row.specification,
-            category_id,
-            brand_id,
-            status: Some(EnableStatus::Active),
-            effective_from: BusinessDate::today(),
-            effective_to: None,
-            carousel_media,
-            detail_media: Vec::new(),
-            skus: vec![ProductSkuInput {
-                sku_id: None,
-                expected_sku_revision_id: None,
-                reenable: false,
-                sku_no: row.sku_no,
-                name: row.name,
-                base_unit_id: unit_id,
-                barcode: row.barcode,
-                main_image_asset_id: media.main_image,
-                weight_kg: None,
-                volume_m3: None,
-                sales_visible_price_gross: row.sales_price,
-                market_price: row.market_price,
-                spec_entries: row.spec_entries,
-            }],
-        };
+        let request =
+            imported_product_request(row, unit_id, brand_id, category_id, media.main_image, carousel_media);
         let created = crate::product_create_with_assets(
             self.db.clone(),
             self.rbac.clone(),
@@ -161,6 +133,16 @@ impl ProductImportProcess {
             actor.clone(),
         )
         .await;
+        self.import_create_outcome(created, row_number, cells).await
+    }
+
+    /// 保留创建冲突时按原单元格重新定位已存在商品的恢复规则。
+    async fn import_create_outcome(
+        &self,
+        created: Result<ProductView>,
+        row_number: u32,
+        cells: &[String],
+    ) -> Result<RowImportOutcome> {
         match created {
             Ok(view) => Ok(RowImportOutcome::new("商品已导入".into()).with_product_id(Some(view.id))),
             Err(Error::ConflictError(_)) => {
@@ -178,5 +160,50 @@ impl ProductImportProcess {
             },
             Err(error) => Err(error),
         }
+    }
+}
+
+/// 把已规范化行转换为商品与完整四价 SKU 输入，媒体上传及字典解析由调用方完成。
+fn imported_product_request(
+    row: NormalizedImportRow,
+    unit_id: UnitOfMeasureId,
+    brand_id: ProductBrandId,
+    category_id: ProductCategoryId,
+    main_image_asset_id: Option<FileAssetId>,
+    carousel_media: Vec<ProductMediaInput>,
+) -> CreateProductRequest {
+    CreateProductRequest {
+        change_reason: Some(format!("产品报价表导入 第{}行", row.row_number)),
+        product_no: row.product_no,
+        product_kind: ProductKind::Physical,
+        maintainer_user_id: None,
+        name: row.name.clone(),
+        description: None,
+        specification: row.specification,
+        category_id,
+        brand_id,
+        status: Some(EnableStatus::Active),
+        effective_from: BusinessDate::today(),
+        effective_to: None,
+        carousel_media,
+        detail_media: Vec::new(),
+        skus: vec![ProductSkuInput {
+            sku_id: None,
+            expected_sku_revision_id: None,
+            reenable: false,
+            sku_no: row.sku_no,
+            name: row.name,
+            base_unit_id: unit_id,
+            barcode: row.barcode,
+            main_image_asset_id,
+            weight_kg: None,
+            volume_m3: None,
+            factory_price_gross: row.factory_price,
+            sales_visible_price_gross: row.sales_price,
+            bulk_price_gross: row.bulk_price,
+            bulk_min_quantity: row.bulk_min_quantity,
+            market_price: row.market_price,
+            spec_entries: row.spec_entries,
+        }],
     }
 }

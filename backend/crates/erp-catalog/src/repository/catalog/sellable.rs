@@ -1,14 +1,14 @@
 //! 可售查询消费的筛选条件与稳定行合同。
 use erp_core::common::time::BusinessDate;
-use erp_core::money::Amount;
+use erp_core::money::{Amount, Quantity};
 use serde::{Deserialize, Serialize};
 
 use crate::entity::catalog::ProductKind;
 
 /// 公司商品池列表筛选条件。
 ///
-/// 资格硬条件（启用、销售可见价、有效供给等）由聚合管道固定施加；本结构只承载
-/// 调用方可选的业务筛选。供应商身份仅用于筛选匹配，不会写入投影行。
+/// 资格硬条件（启用、一件代发价、有效供给等）由聚合管道固定施加；本结构只承载
+/// 调用方可选的业务筛选。供应商身份仅在内部传递，用于筛选与批量补齐业务编号。
 #[derive(Debug, Clone)]
 pub struct SellableSkuFilter {
     /// 额外要求区域并集包含全国，不替代已有区域条件。
@@ -27,9 +27,9 @@ pub struct SellableSkuFilter {
     pub supply_region: Option<String>,
     /// 当前有效供给去重供应商数量上限（含）；`None` 表示不按供应保障筛选。
     pub max_supplier_count: Option<u32>,
-    /// 销售可见含税价下限（含）；`None` 表示无下限。
+    /// 一件代发含税参考价下限（含）；`None` 表示无下限。
     pub sales_price_min: Option<Amount>,
-    /// 销售可见含税价上限（含）；`None` 表示无上限。
+    /// 一件代发含税参考价上限（含）；`None` 表示无上限。
     pub sales_price_max: Option<Amount>,
     /// 服务端解释的销售资格业务日期。
     pub eligibility_as_of: BusinessDate,
@@ -102,9 +102,18 @@ pub struct SellableSkuRow {
     pub base_unit_code: Option<String>,
     /// 基础单位名称。
     pub base_unit_name: Option<String>,
-    /// 公司销售可见含税价。
+    /// 公司出厂含税销售参考价（独立维护，非负）。
+    #[serde(default)]
+    pub factory_price_gross: Option<Amount>,
+    /// 公司一件代发含税参考价。
     pub sales_visible_price_gross: Amount,
-    /// 市场参考价。
+    /// 公司集采含税销售参考价（独立维护，非负）。
+    #[serde(default)]
+    pub bulk_price_gross: Option<Amount>,
+    /// 公司集采价起订数量；未维护时按一件代发价取价，有值必须大于零。
+    #[serde(default)]
+    pub bulk_min_quantity: Option<Quantity>,
+    /// 含税市场参考价。
     pub market_price: Option<Amount>,
     /// SKU 主图文件 ID。
     pub main_image_asset_id: Option<String>,
@@ -117,6 +126,9 @@ pub struct SellableSkuRow {
     pub effective_to: Option<BusinessDate>,
     /// 当前有效供给对应的去重供应商数量。
     pub supplier_count: u32,
+    /// 当前有效供给对应的去重供应商稳定 ID，仅供跨域读取补齐业务编号。
+    #[serde(default)]
+    pub supplier_ids: Vec<String>,
     /// 当前有效供给的可供区域并集。
     #[serde(default)]
     pub supply_regions: Vec<String>,

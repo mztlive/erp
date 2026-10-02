@@ -12,7 +12,7 @@ export type ProductSpecDimension = Readonly<{
 }>
 
 /**
- * SKU 行：保存公司商品身份与媒体；`salePrice` 是商品池销售可见价的
+ * SKU 行：保存公司商品身份与媒体；`salePrice` 是商品池一件代发价的
  * 编辑投影，命令处理器必须写入商品池修订，不得把它当作供应商成本。
  * 规格取值由 SPU 规格维度组合得出。
  *
@@ -53,9 +53,15 @@ export type ProductSkuFields = Readonly<{
     mainImagePreviewUrl?: string
     /** SKU 主图已登记文件资产（D05）。 */
     mainImageAssetId?: string
-    /** 公司商品池销售可见价；销售可见，采购成本不可见。 */
+    /** 出厂价：公司含税销售参考价，独立于供应商成本。 */
+    factoryPriceGross?: string
+    /** 一件代发价：公司含税销售参考价，保留原字段映射。 */
     salePrice?: string
-    /** 市场价（参考展示，非正式发布价）。 */
+    /** 集采价：达到集采起订量后适用的公司含税销售参考价。 */
+    bulkPriceGross?: string
+    /** 集采起订量；未维护时不自动适用集采价。 */
+    bulkMinQuantity?: string
+    /** 市场价：公司含税销售参考价。 */
     marketPrice?: string
     baseUnit?: string
     /** 独立于启停状态的 SKU 上架状态。 */

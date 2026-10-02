@@ -185,7 +185,10 @@ pub(super) fn sku_inputs_with_main_image(
             main_image_asset_id,
             weight_kg: revision.weight_kg,
             volume_m3: revision.volume_m3,
+            factory_price_gross: revision.factory_price_gross,
             sales_visible_price_gross: revision.sales_visible_price_gross,
+            bulk_price_gross: revision.bulk_price_gross,
+            bulk_min_quantity: revision.bulk_min_quantity,
             market_price: revision.market_price,
             spec_entries,
         });
@@ -194,4 +197,66 @@ pub(super) fn sku_inputs_with_main_image(
         return Err(Error::BusinessLogicError("商品没有可补图的 SKU".into()));
     }
     Ok(inputs)
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_catalog::entity::catalog::ListingStatus;
+    use erp_catalog::entity::sku::SkuData;
+    use erp_catalog::entity::sku_revision::SkuRevisionData;
+    use erp_core::common::time::BusinessDate;
+    use erp_core::ids::{ProductId, UnitOfMeasureId};
+
+    use super::*;
+
+    /// 既有商品补图和新增同 SPU 的 SKU 必须保留现存 SKU 的四价与集采门槛。
+    #[test]
+    fn image_backfill_keeps_existing_company_price_facts() {
+        let sku = Sku::new(
+            SkuId::new("sku-1"),
+            SkuData {
+                sku_no: "SKU-1".into(),
+                product_id: ProductId::new("product-1"),
+                base_unit_id: UnitOfMeasureId::new("unit-1"),
+                specification_signature: String::new(),
+                status: EnableStatus::Active,
+                listing_status: ListingStatus::Listed,
+            },
+            "actor-1",
+        )
+        .unwrap();
+        let revision = SkuRevision::new(
+            SkuRevisionId::new("revision-1"),
+            SkuRevisionData {
+                sku_id: SkuId::new("sku-1"),
+                revision_no: 1,
+                name: "商品".into(),
+                description: None,
+                specification: None,
+                barcode: None,
+                source_main_image_asset_id: None,
+                weight_kg: None,
+                volume_m3: None,
+                factory_price_gross: Some("30.00".parse().unwrap()),
+                sales_visible_price_gross: Some("45.00".parse().unwrap()),
+                bulk_price_gross: Some("40.00".parse().unwrap()),
+                bulk_min_quantity: Some("12".parse().unwrap()),
+                market_price: Some("60.00".parse().unwrap()),
+                status: EnableStatus::Active,
+                effective_from: "2026-10-03".parse::<BusinessDate>().unwrap(),
+                effective_to: None,
+            },
+        )
+        .unwrap();
+        let revisions = HashMap::from([("sku-1".into(), revision.clone())]);
+        let inputs =
+            sku_inputs_with_main_image(&[sku], &revisions, Some(FileAssetId::new("image-1"))).unwrap();
+        let input = &inputs[0];
+        assert_eq!(input.main_image_asset_id.as_ref().unwrap().as_ref(), "image-1");
+        assert_eq!(input.factory_price_gross, revision.factory_price_gross);
+        assert_eq!(input.sales_visible_price_gross, revision.sales_visible_price_gross);
+        assert_eq!(input.bulk_price_gross, revision.bulk_price_gross);
+        assert_eq!(input.bulk_min_quantity, revision.bulk_min_quantity);
+        assert_eq!(input.market_price, revision.market_price);
+    }
 }

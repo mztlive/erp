@@ -2,7 +2,7 @@
 
 import { TriangleAlertIcon } from "lucide-react"
 
-import { MoneyValue } from "@/components/business"
+import { MoneyValue, QuantityValue } from "@/components/business"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { SellableItemThumbnail } from "@/features/master-data/components/list/sellable-item-thumbnail"
@@ -98,28 +98,30 @@ export function SellableGalleryCard({
                         className="flex flex-col gap-1.5 text-left"
                         onClick={onPreview}
                     >
-                        <div className="flex items-baseline gap-1.5">
-                            <MoneyValue
-                                className="text-lg font-semibold"
-                                value={item?.salesVisiblePriceGross}
-                            />
-                            <span className="text-xs text-muted-foreground">
-                                含税
-                            </span>
+                        <span className="text-xs text-muted-foreground">
+                            销售参考价（含税）
+                        </span>
+                        <div className="grid w-full grid-cols-2 gap-x-3 gap-y-1.5">
+                            {[
+                                ["出厂价", item?.factoryPriceGross],
+                                ["一件代发价", item?.salesVisiblePriceGross],
+                                ["集采价", item?.bulkPriceGross],
+                                ["市场价", item?.marketPrice],
+                            ].map(([label, value]) => (
+                                <div
+                                    key={label}
+                                    className="flex min-w-0 flex-col gap-0.5"
+                                >
+                                    <span className="text-xs text-muted-foreground">
+                                        {label}
+                                    </span>
+                                    <MoneyValue
+                                        className="text-sm font-semibold"
+                                        value={value}
+                                    />
+                                </div>
+                            ))}
                         </div>
-                        {item?.marketPrice ? (
-                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                <span>市场参考价</span>
-                                <MoneyValue
-                                    className="text-xs font-normal text-muted-foreground"
-                                    value={item.marketPrice}
-                                />
-                            </div>
-                        ) : (
-                            <span className="text-xs text-muted-foreground">
-                                市场参考价 —
-                            </span>
-                        )}
                         <CardTitle
                             className="line-clamp-2 text-sm leading-5 font-medium"
                             title={row.name}
@@ -143,6 +145,26 @@ export function SellableGalleryCard({
                                 <span className="num">{item.productNo}</span>
                             </>
                         ) : null}
+                    </p>
+                    <p>
+                        集采起订量{" "}
+                        {item?.bulkMinQuantity ? (
+                            <QuantityValue
+                                value={item.bulkMinQuantity}
+                                unit={item.baseUnit}
+                            />
+                        ) : (
+                            "—"
+                        )}
+                    </p>
+                    <p
+                        className="truncate"
+                        title={item?.supplierCodes?.join("、")}
+                    >
+                        供应商编号{" "}
+                        <span className="num">
+                            {item?.supplierCodes?.join("、") || "—"}
+                        </span>
                     </p>
                     <SupplyRegions regions={item?.supplyRegions ?? []} />
                     <p

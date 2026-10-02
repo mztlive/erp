@@ -34,9 +34,15 @@ type ProductSkuSectionProps = {
     applySpecDrafts: () => string | null
     resetSpecDrafts: () => void
     updateSku: (index: number, patch: Partial<ProductSkuFields>) => void
+    batchFactoryPrice: string
     batchSalePrice: string
+    batchBulkPrice: string
+    batchBulkMinQuantity: string
     batchMarketPrice: string
+    setBatchFactoryPrice: (next: string) => void
     setBatchSalePrice: (next: string) => void
+    setBatchBulkPrice: (next: string) => void
+    setBatchBulkMinQuantity: (next: string) => void
     setBatchMarketPrice: (next: string) => void
     onApplyBatchReferencePrices: () => void
     inventoryActionHint: string | undefined
@@ -65,9 +71,15 @@ function ProductSkuSection({
     applySpecDrafts,
     resetSpecDrafts,
     updateSku,
+    batchFactoryPrice,
     batchSalePrice,
+    batchBulkPrice,
+    batchBulkMinQuantity,
     batchMarketPrice,
+    setBatchFactoryPrice,
     setBatchSalePrice,
+    setBatchBulkPrice,
+    setBatchBulkMinQuantity,
     setBatchMarketPrice,
     onApplyBatchReferencePrices,
     inventoryActionHint,
@@ -228,9 +240,15 @@ function ProductSkuSection({
             {fields.skus.length > 1 && bulkOpen ? (
                 <SkuBulkPriceBar
                     canRevise={canRevise}
+                    batchFactoryPrice={batchFactoryPrice}
                     batchSalePrice={batchSalePrice}
+                    batchBulkPrice={batchBulkPrice}
+                    batchBulkMinQuantity={batchBulkMinQuantity}
                     batchMarketPrice={batchMarketPrice}
+                    setBatchFactoryPrice={setBatchFactoryPrice}
                     setBatchSalePrice={setBatchSalePrice}
+                    setBatchBulkPrice={setBatchBulkPrice}
+                    setBatchBulkMinQuantity={setBatchBulkMinQuantity}
                     setBatchMarketPrice={setBatchMarketPrice}
                     onApplyBatchReferencePrices={onApplyBatchReferencePrices}
                 />

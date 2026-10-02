@@ -533,6 +533,7 @@ fn build_goods_line(
     SalesOrderGoodsServiceLineRevision::new(
         id.clone(),
         SalesOrderGoodsServiceLineRevisionData {
+            pricing_mode: goods.pricing_mode,
             revision_line_id: revision_line_id.clone(),
             sku_id: goods.sku_id,
             sku_revision_id: goods.sku_revision_id,
@@ -574,6 +575,7 @@ mod tests {
     use erp_core::money::{Quantity, UnitPrice};
 
     use super::*;
+    use crate::entity::sales_order::SalesPricingMode;
     use crate::entity::sales_order::submission::SalesOrderSubmissionData;
     use crate::entity::sales_order::types::{CardForm, WelfareScenario};
 
@@ -599,6 +601,7 @@ mod tests {
 
     fn goods_fields() -> GoodsLineFields {
         GoodsLineFields {
+            pricing_mode: Default::default(),
             sku_id: SkuId::new("sku-1"),
             sku_revision_id: SkuRevisionId::new("skurev-1"),
             welfare_scenario: Some(WelfareScenario::AnnualGiftBag),
@@ -762,8 +765,9 @@ mod tests {
 
     #[test]
     fn goods_service_multi_line_revision_copies_snapshots_and_hashes() {
-        let (submission, lines) =
-            submission_and_lines(goods_header(vec![goods_line_data(1), goods_line_data(2)]));
+        let mut first = goods_line_data(1);
+        first.goods.as_mut().unwrap().pricing_mode = SalesPricingMode::Auto;
+        let (submission, lines) = submission_and_lines(goods_header(vec![first, goods_line_data(2)]));
         let aggregate = SalesOrderRevisionAggregate::from_sales_order_submission(
             identities_for(&[LineType::GoodsService, LineType::GoodsService]),
             FormalRevisionContext::new(
@@ -792,6 +796,8 @@ mod tests {
         assert_eq!(aggregate.lines[1].line_no, 2);
         assert_eq!(aggregate.goods_lines[0].welfare_scenario, Some(WelfareScenario::AnnualGiftBag));
         assert_eq!(aggregate.goods_lines[0].service_region.as_deref(), Some("EAST"));
+        assert_eq!(aggregate.goods_lines[0].pricing_mode, SalesPricingMode::Auto);
+        assert_eq!(aggregate.goods_lines[1].pricing_mode, SalesPricingMode::Manual);
     }
 
     #[test]

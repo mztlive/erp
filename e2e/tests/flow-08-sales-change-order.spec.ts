@@ -141,7 +141,7 @@ async function createPhysicalSalesOrder(page: Page, customerName: string, contra
         has: page.getByRole("button", { name: new RegExp(`^更换销售项目 ${SKU_NAME}`) }),
     })
     await expect(selectedLine).toHaveCount(1, { timeout: TIMEOUT })
-    await expect(selectedLine.getByLabel("含税单价", { exact: true })).toHaveValue(UNIT_PRICE_RE)
+    await expect(selectedLine.getByLabel("含税成交单价", { exact: true })).toHaveValue(UNIT_PRICE_RE)
 
     await page.getByLabel("数量").fill(LINE_QTY)
     await page.locator("#sales-orders-create-batch-due-date-open").click()

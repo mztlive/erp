@@ -1,5 +1,6 @@
 //! 销售详情编排：授权读取、业务投影、范围重验和返回映射。
 mod facts;
+mod reference_prices;
 
 use application_core::AuditActor;
 use erp_core::ids::{SalesOrderId, SalesOrderRevisionId, SalesOrderSubmissionId};

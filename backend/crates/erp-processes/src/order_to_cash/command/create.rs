@@ -116,7 +116,7 @@ impl SalesOrderCommandProcess {
         if !customer.is_active() {
             return Err(Error::BusinessLogicError("客户已停用，禁止创建新销售单".to_string()));
         }
-        let draft = SalesOrderDraftRequest {
+        let mut draft = SalesOrderDraftRequest {
             editor_user_id: editable.editor_user_id,
             customer_name: revision.customer_snapshot.customer_name,
             contract_no: Some(revision.contract_no),
@@ -134,6 +134,7 @@ impl SalesOrderCommandProcess {
             lines: editable.lines,
         };
         draft.validate()?;
+        self.sales().resolve_draft_reference_prices(&mut draft.lines, &self.catalog(), executor).await?;
         Ok((contract.customer_id, contract.settlement_party_id, draft))
     }
 

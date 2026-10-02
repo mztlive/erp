@@ -34,6 +34,14 @@ export function decimalAtMost(
     }
 }
 
+const salesReferencePriceSchema = z.object({
+    factoryPriceGross: z.string().optional(),
+    salesVisiblePriceGross: z.string().optional(),
+    bulkPriceGross: z.string().optional(),
+    bulkMinQuantity: z.string().optional(),
+    marketPrice: z.string().optional(),
+})
+
 const draftLineSchema = z.object({
     rowKey: z.string().min(1),
     name: z.string().trim().min(1, "请输入销售项目"),
@@ -44,6 +52,8 @@ const draftLineSchema = z.object({
     quantity: decimalInput("数量", 6, { positive: true }),
     unit: z.string().trim().min(1, "请输入单位"),
     unitPriceGross: decimalInput("含税单价", 4, { positive: true }),
+    pricingMode: z.enum(["AUTO", "MANUAL"]).optional(),
+    referencePrices: salesReferencePriceSchema.optional(),
     dueDate: z.string(),
     faceValue: z.string(),
     giftRate: z.string(),
@@ -60,6 +70,8 @@ const draftRowSchema = z.object({
     quantity: z.string(),
     unit: z.string(),
     unitPriceGross: z.string(),
+    pricingMode: z.enum(["AUTO", "MANUAL"]).optional(),
+    referencePrices: salesReferencePriceSchema.optional(),
     dueDate: z.string(),
     faceValue: z.string(),
     giftRate: z.string(),

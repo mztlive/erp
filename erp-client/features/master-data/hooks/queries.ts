@@ -87,7 +87,7 @@ export function useMasterDataListQuery(query: MasterDataListQuery) {
     })
 }
 
-/** 商品列表当前页的启用 SKU、销售价与新增供给所需固定身份。 */
+/** 商品列表当前页的启用 SKU、一件代发价与新增供给所需固定身份。 */
 export function useProductListSkusQuery(productIds: readonly string[]) {
     const normalized = [...new Set(productIds.filter(Boolean))].sort()
     return useQuery({

@@ -395,7 +395,7 @@ export function SellableListToolbar({
                     </fieldset>
                     <fieldset className="min-w-0 lg:border-l lg:pl-5">
                         <legend className="mb-3 text-xs font-medium">
-                            销售价格
+                            一件代发价格
                         </legend>
                         <ListWorkspaceFilterField label="含税售价 · 元">
                             <div className="flex min-w-0 items-center gap-2">
@@ -413,7 +413,7 @@ export function SellableListToolbar({
                                     inputMode="decimal"
                                     autoComplete="off"
                                     placeholder="最低价"
-                                    aria-label="最低销售价"
+                                    aria-label="最低一件代发价"
                                     aria-invalid={Boolean(
                                         productSalesPriceError,
                                     )}
@@ -439,7 +439,7 @@ export function SellableListToolbar({
                                     inputMode="decimal"
                                     autoComplete="off"
                                     placeholder="最高价"
-                                    aria-label="最高销售价"
+                                    aria-label="最高一件代发价"
                                     aria-invalid={Boolean(
                                         productSalesPriceError,
                                     )}

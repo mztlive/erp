@@ -130,7 +130,10 @@ export function rebuildSkusFromSpecs(input: {
             mainImage: matched?.mainImage ?? "",
             mainImagePreviewUrl: matched?.mainImagePreviewUrl,
             mainImageAssetId: matched?.mainImageAssetId,
+            factoryPriceGross: matched?.factoryPriceGross,
             salePrice: matched?.salePrice,
+            bulkPriceGross: matched?.bulkPriceGross,
+            bulkMinQuantity: matched?.bulkMinQuantity,
             marketPrice: matched?.marketPrice,
             baseUnit: matched?.baseUnit ?? input.baseUnit,
             listingStatus: matched?.listingStatus ?? "UNLISTED",
@@ -202,18 +205,30 @@ export function validateProductFields(fields: ProductFields): string | null {
             return `启用中的 SKU「${sku.skuNo}」必须上传主图`
         }
         const moneyFields: Array<[string, string | undefined]> = [
-            ["销售价", sku.salePrice],
+            ["出厂价", sku.factoryPriceGross],
+            ["一件代发价", sku.salePrice],
+            ["集采价", sku.bulkPriceGross],
             ["市场价", sku.marketPrice],
         ]
         try {
             for (const [label, value] of moneyFields) {
                 if (!value) continue
-                parseDecimal(value, { maxScale: 4 })
-                if (compareDecimal(value, "0", 4) < 0)
+                parseDecimal(value, { maxScale: 2 })
+                if (compareDecimal(value, "0", 2) < 0)
                     return `${label}不得为负数`
             }
         } catch {
             return `SKU「${sku.skuNo}」的参考价格格式不正确`
+        }
+        if (sku.bulkMinQuantity) {
+            try {
+                parseDecimal(sku.bulkMinQuantity, { maxScale: 6 })
+                if (compareDecimal(sku.bulkMinQuantity, "0", 6) <= 0) {
+                    return `SKU「${sku.skuNo}」的集采起订量必须大于零`
+                }
+            } catch {
+                return `SKU「${sku.skuNo}」的集采起订量格式不正确`
+            }
         }
     }
     const names = new Set<string>()

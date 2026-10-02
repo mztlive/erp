@@ -157,7 +157,7 @@ export function ProductSupplyDialog({
                                                 ) : null}
                                             </div>
                                             <p className="mt-1 text-xs text-muted-foreground">
-                                                {sku.skuNo} · 销售价{" "}
+                                                {sku.skuNo} · 一件代发价{" "}
                                                 {money(
                                                     sku.salesVisiblePriceGross,
                                                 )}

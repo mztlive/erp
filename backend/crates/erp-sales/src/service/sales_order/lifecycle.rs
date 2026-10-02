@@ -48,6 +48,7 @@ use persistence_core::{Executor, NoTransaction};
 
 use super::SalesOrderService;
 use super::mapper::{build_working_copy_lines, header_snapshot};
+use super::working_copy_persistence::replace_working_copy_lines;
 use crate::dto::sales_order::{CreateSalesOrderRequest, SalesOrderDraftRequest};
 use crate::entity::sales_order::{
     SalesContentHash, SalesOrderData, SalesOrderLine, SalesOrderSubmission, SalesOrderSubmissionLine,
@@ -61,7 +62,7 @@ use crate::repository::prelude::*;
 pub struct SalesOrderWorkingCopyPersistPlan {
     /// New stable line identities, persisted before working-copy rows.
     pub created_stable_lines: Vec<SalesOrderLine>,
-    /// Old editable rows to soft-delete before replacement.
+    /// Active editable rows whose versions must still match when replacement is persisted.
     pub old_working_copy_lines: Vec<SalesOrderWorkingCopyLine>,
     /// New editable rows in their original order.
     pub new_working_copy_lines: Vec<SalesOrderWorkingCopyLine>,
@@ -144,9 +145,23 @@ impl SalesOrderService {
         Ok(())
     }
 
-    /// Apply replacement draft rows before the working-copy optimistic-lock update.
+    /// 保存草稿行后更新工作副本，保留同一稳定明细的已持久化行身份。
     ///
-    /// Stable additions, soft deletions and new rows share the caller's executor and fail immediately.
+    /// # 参数
+    /// * `stable` - 尚未保存的新稳定明细
+    /// * `old_lines` - 准备阶段读取的活跃行与 CAS 版本
+    /// * `lines` - 已校验并重建的本次草稿内容
+    /// * `copy` - 已完成领域修改的工作副本
+    /// * `executor` - 调用方事务执行器，全部行和表头写入共用
+    ///
+    /// # 返回
+    /// 保存替换内容，并把仓储成功写入后的表头元数据回填到 `copy`。
+    ///
+    /// # 错误
+    /// 行或表头版本变化、唯一约束冲突、无效明细及仓储失败时立即返回。
+    ///
+    /// # 关键业务约束
+    /// 仅软删移除行；保留行更新、重新加入行恢复，不重建既有唯一键。
     pub async fn persist_saved_working_copy(
         &self,
         stable: &[SalesOrderLine],
@@ -158,19 +173,30 @@ impl SalesOrderService {
         for line in stable {
             self.db.sales_order_lines().create(line, executor).await?;
         }
-        for mut old in old_lines {
-            self.db.sales_order_working_copy_lines().soft_delete(&mut old, executor).await?;
-        }
-        for line in lines {
-            self.db.sales_order_working_copy_lines().create(line, executor).await?;
-        }
+        replace_working_copy_lines(&self.db, &copy.base.id.clone().into(), &old_lines, lines, executor)
+            .await?;
         self.db.sales_order_working_copies().update(copy, executor).await?;
         Ok(())
     }
 
-    /// Persist the sales portion of an approval start after the outer receipt/guard/catalog checks.
+    /// 在外层命令回执、资格与权限检查之后保存销售提交及工作副本。
     ///
-    /// No workflow or audit writes occur here; all sales writes preserve the original executor/order.
+    /// # 参数
+    /// * `order` - 已进入提交状态的销售单
+    /// * `copy` - 已锁定的工作副本
+    /// * `submission` - 本轮不可变提交快照
+    /// * `lines` - 本轮不可变提交明细
+    /// * `plan` - 新建或替换工作副本的行持久化计划
+    /// * `executor` - 调用方事务执行器
+    ///
+    /// # 返回
+    /// 销售单、工作副本与不可变提交在同一执行器中保存。
+    ///
+    /// # 错误
+    /// 工作副本行或表头版本变化、唯一约束冲突及仓储失败时立即停止。
+    ///
+    /// # 关键业务约束
+    /// 工作副本行复用既有身份；提交快照仅插入，不修改工作流或审计。
     pub async fn persist_submission_start(
         &self,
         order: &mut SalesOrder,
@@ -183,13 +209,15 @@ impl SalesOrderService {
         for line in &plan.created_stable_lines {
             self.db.sales_order_lines().create(line, executor).await?;
         }
-        for mut old in plan.old_working_copy_lines {
-            self.db.sales_order_working_copy_lines().soft_delete(&mut old, executor).await?;
-        }
         if plan.replace_working_copy_lines {
-            for line in &plan.new_working_copy_lines {
-                self.db.sales_order_working_copy_lines().create(line, executor).await?;
-            }
+            replace_working_copy_lines(
+                &self.db,
+                &copy.base.id.clone().into(),
+                &plan.old_working_copy_lines,
+                &plan.new_working_copy_lines,
+                executor,
+            )
+            .await?;
         }
         if plan.create_working_copy {
             self.db.sales_order_working_copies().create(copy, executor).await?;

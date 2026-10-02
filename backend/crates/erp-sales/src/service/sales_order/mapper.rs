@@ -335,6 +335,8 @@ pub fn submission_view(
 /// 返回视图。
 pub fn working_copy_line_view(line: SalesOrderWorkingCopyLine) -> SalesOrderWorkingCopyLineView {
     SalesOrderWorkingCopyLineView {
+        pricing_mode: line.pricing_mode,
+        reference_prices: None,
         id: line.base.id,
         sales_order_line_id: line.sales_order_line_id.to_string(),
         line_no: line.line_no,
@@ -466,6 +468,8 @@ fn revision_line_summary(lines: &[SalesOrderRevisionLine]) -> String {
 /// 无。
 fn submission_line_view(line: SalesOrderSubmissionLine) -> SalesOrderWorkingCopyLineView {
     SalesOrderWorkingCopyLineView {
+        pricing_mode: line.pricing_mode,
+        reference_prices: None,
         id: line.base.id,
         sales_order_line_id: line.sales_order_line_id.to_string(),
         line_no: line.line_no,

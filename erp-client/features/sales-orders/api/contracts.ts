@@ -159,6 +159,14 @@ export type BackendWorkingCopyLine = {
     quantity?: string | null
     base_unit_code?: string | null
     unit_price_gross?: string | null
+    pricing_mode?: "AUTO" | "MANUAL" | null
+    reference_prices?: {
+        factory_price_gross?: string | null
+        sales_visible_price_gross?: string | null
+        bulk_price_gross?: string | null
+        bulk_min_quantity?: string | null
+        market_price?: string | null
+    } | null
     face_value?: string | null
     card_count?: number | null
     transaction_amount?: string | null

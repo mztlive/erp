@@ -7,7 +7,7 @@ use erp_catalog::entity::catalog::product_revision_media::MediaRole;
 use erp_catalog::entity::catalog::{Product, Sku, SpecSignatureEntry, compute_specification_signature};
 use erp_catalog::repository::prelude::*;
 use erp_catalog::{CatalogExt, ProductMediaInput, ProductSkuInput, UpdateProductRequest};
-use erp_core::ids::ProductId;
+use erp_core::ids::{FileAssetId, ProductId};
 use persistence_core::NoTransaction;
 
 use super::ProductImportProcess;
@@ -86,6 +86,7 @@ impl ProductImportProcess {
         }
     }
 
+    /// 读取现有商品修订后追加导入 SKU，保留现存 SKU 价格与媒体顺序。
     async fn append_sku_request(
         &self,
         product: &Product,
@@ -104,25 +105,7 @@ impl ProductImportProcess {
             .ok_or_else(|| Error::BusinessLogicError("商品缺少当前资料，无法新增 SKU".into()))?;
         let revisions = self.db.catalog().current_sku_revisions(skus, &mut NoTransaction).await?;
         let mut sku_inputs = sku_inputs_with_main_image(skus, &revisions, None)?;
-        let taken = sku_inputs.iter().map(|sku| sku.sku_no.clone()).collect::<HashSet<_>>();
-        sku_inputs.push(ProductSkuInput {
-            sku_id: None,
-            expected_sku_revision_id: None,
-            reenable: false,
-            sku_no: next_sku_no(&row.product_no, &taken),
-            name: row.name.clone(),
-            base_unit_id: sku_inputs
-                .first()
-                .map(|sku| sku.base_unit_id.clone())
-                .ok_or_else(|| Error::BusinessLogicError("商品没有可继承的计量单位".into()))?,
-            barcode: row.barcode.clone(),
-            main_image_asset_id: media.main_image,
-            weight_kg: None,
-            volume_m3: None,
-            sales_visible_price_gross: row.sales_price,
-            market_price: row.market_price,
-            spec_entries: row.spec_entries.clone(),
-        });
+        sku_inputs.push(appended_sku_input(row, &sku_inputs, media.main_image)?);
         let mut carousel_media: Vec<ProductMediaInput> = snapshot
             .media
             .into_iter()
@@ -181,4 +164,34 @@ fn sku_signature(row: &NormalizedImportRow) -> Result<String> {
         })
         .collect::<Vec<_>>();
     compute_specification_signature(&entries).map_err(|error| Error::BusinessLogicError(error.to_string()))
+}
+
+/// 继承公司计量单位并维护新 SKU 的独立四价，不读取供应商成本。
+fn appended_sku_input(
+    row: &NormalizedImportRow,
+    sku_inputs: &[ProductSkuInput],
+    main_image_asset_id: Option<FileAssetId>,
+) -> Result<ProductSkuInput> {
+    let taken = sku_inputs.iter().map(|sku| sku.sku_no.clone()).collect::<HashSet<_>>();
+    Ok(ProductSkuInput {
+        sku_id: None,
+        expected_sku_revision_id: None,
+        reenable: false,
+        sku_no: next_sku_no(&row.product_no, &taken),
+        name: row.name.clone(),
+        base_unit_id: sku_inputs
+            .first()
+            .map(|sku| sku.base_unit_id.clone())
+            .ok_or_else(|| Error::BusinessLogicError("商品没有可继承的计量单位".into()))?,
+        barcode: row.barcode.clone(),
+        main_image_asset_id,
+        weight_kg: None,
+        volume_m3: None,
+        factory_price_gross: row.factory_price,
+        sales_visible_price_gross: row.sales_price,
+        bulk_price_gross: row.bulk_price,
+        bulk_min_quantity: row.bulk_min_quantity,
+        market_price: row.market_price,
+        spec_entries: row.spec_entries.clone(),
+    })
 }

@@ -6,6 +6,17 @@ export type SalesOrderOrigin = "erp" | "mall"
 
 export type SalesOrderCreateIntent = "SAVE_DRAFT" | "SUBMIT"
 
+export type SalesLinePricingMode = "AUTO" | "MANUAL"
+
+/** 精确 SKU 修订的含税销售参考价；供应商采购成本另行保存。 */
+export type SalesSkuReferencePrices = {
+    factoryPriceGross?: string
+    salesVisiblePriceGross?: string
+    bulkPriceGross?: string
+    bulkMinQuantity?: string
+    marketPrice?: string
+}
+
 export type SalesLineProcurementResponsibility = {
     rowKey: string
     resolved: boolean
@@ -27,6 +38,10 @@ export type SalesOrderDraftLineInput = {
     quantity: string
     unit: string
     unitPriceGross: string
+    /** 未标注模式的历史明细按手动成交价保留。 */
+    pricingMode?: SalesLinePricingMode
+    /** 编辑时按锁定 SKU 修订取价，不作为客户端可修改的销售单请求事实。 */
+    referencePrices?: SalesSkuReferencePrices
     dueDate: string
     faceValue: string
     giftRate: string

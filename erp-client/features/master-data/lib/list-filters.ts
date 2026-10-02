@@ -110,7 +110,7 @@ function selectedSupplierOptionLabels(
     })
 }
 
-/** 校验销售价输入，并使用分值整数比较上下界，避免浮点误差。 */
+/** 校验一件代发价输入，并使用分值整数比较上下界，避免浮点误差。 */
 function productSalesPriceRangeError(
     minimum: string,
     maximum: string,

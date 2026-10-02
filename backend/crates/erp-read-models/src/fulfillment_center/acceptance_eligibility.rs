@@ -405,6 +405,7 @@ mod acceptance_eligibility_rule_source_tests {
         SalesOrderGoodsServiceLineRevision::new(
             SalesOrderGoodsServiceLineRevisionId::new(format!("gs-{revision_line_id}")),
             SalesOrderGoodsServiceLineRevisionData {
+                pricing_mode: Default::default(),
                 revision_line_id: SalesOrderRevisionLineId::new(revision_line_id),
                 sku_id: SkuId::new("sku-1"),
                 sku_revision_id: SkuRevisionId::new("skurev-1"),

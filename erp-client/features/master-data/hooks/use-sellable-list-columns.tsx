@@ -4,23 +4,24 @@ import * as React from "react"
 import { TriangleAlertIcon } from "lucide-react"
 import type { ColumnDef, SortingFn } from "@tanstack/react-table"
 
-import { MoneyValue } from "@/components/business"
+import { MoneyValue, QuantityValue } from "@/components/business"
 import type { MasterDataListItem } from "@/features/master-data/types"
 import { compareDecimal } from "@/lib/fixed-decimal"
 
-/** 金额按精确十进制比较；缺值排在最后。 */
-const moneySortingFn: SortingFn<MasterDataListItem> = (
-    rowA,
-    rowB,
-    columnId,
-) => {
-    const left = String(rowA.getValue(columnId) ?? "")
-    const right = String(rowB.getValue(columnId) ?? "")
-    if (!left && !right) return 0
-    if (!left) return 1
-    if (!right) return -1
-    return compareDecimal(left, right, 2)
+/** 按金额或数量允许精度比较十进制值；缺值排在最后。 */
+function decimalSortingFn(maxScale: number): SortingFn<MasterDataListItem> {
+    return (rowA, rowB, columnId) => {
+        const left = String(rowA.getValue(columnId) ?? "")
+        const right = String(rowB.getValue(columnId) ?? "")
+        if (!left && !right) return 0
+        if (!left) return 1
+        if (!right) return -1
+        return compareDecimal(left, right, maxScale)
+    }
 }
+
+const moneySortingFn = decimalSortingFn(2)
+const quantitySortingFn = decimalSortingFn(6)
 
 /** 可供区域最多展开 2 个，其余折成「+N」；完整值进 title。 */
 function SupplyRegions({ regions }: { regions: readonly string[] }) {
@@ -92,55 +93,75 @@ export function useSellableListColumns() {
                     </span>
                 ),
             },
-            {
-                id: "price",
-                accessorFn: (row) =>
-                    row.sellableItem?.salesVisiblePriceGross ?? "",
-                // 口径写在列头，不在每一行重复「含税」
-                header: "销售价（含税）",
-                meta: {
-                    label: "销售价（含税）",
-                    width: "amount",
-                    align: "end",
-                    numeric: true,
-                },
+            ...(
+                [
+                    {
+                        id: "factoryPriceGross",
+                        key: "factoryPriceGross",
+                        label: "出厂价（含税）",
+                    },
+                    {
+                        id: "price",
+                        key: "salesVisiblePriceGross",
+                        label: "一件代发价（含税）",
+                    },
+                    {
+                        id: "bulkPriceGross",
+                        key: "bulkPriceGross",
+                        label: "集采价（含税）",
+                    },
+                    {
+                        id: "marketPrice",
+                        key: "marketPrice",
+                        label: "市场价（含税）",
+                    },
+                ] as const
+            ).map<ColumnDef<MasterDataListItem>>(({ id, key, label }) => ({
+                id,
+                accessorFn: (row) => row.sellableItem?.[key] ?? "",
+                header: label,
+                meta: { label, width: "amount", align: "end", numeric: true },
                 sortingFn: moneySortingFn,
                 cell: ({ row }) => (
-                    <MoneyValue
-                        className="font-semibold"
-                        value={
-                            row.original.sellableItem?.salesVisiblePriceGross
-                        }
-                    />
+                    <MoneyValue value={row.original.sellableItem?.[key]} />
                 ),
-            },
+            })),
             {
-                id: "marketPrice",
-                accessorFn: (row) => row.sellableItem?.marketPrice ?? "",
-                header: "市场参考价",
+                id: "bulkMinQuantity",
+                accessorFn: (row) => row.sellableItem?.bulkMinQuantity ?? "",
+                header: "集采起订量",
                 meta: {
-                    label: "市场参考价",
-                    width: "amount",
+                    label: "集采起订量",
+                    width: "quantity",
                     align: "end",
                     numeric: true,
                 },
-                sortingFn: moneySortingFn,
+                sortingFn: quantitySortingFn,
                 cell: ({ row }) => {
-                    const marketPrice = row.original.sellableItem?.marketPrice
-                    if (!marketPrice) {
-                        return (
-                            <span className="text-sm text-muted-foreground">
-                                —
-                            </span>
-                        )
-                    }
-                    return (
-                        <MoneyValue
-                            className="font-normal text-muted-foreground"
-                            value={marketPrice}
+                    const item = row.original.sellableItem
+                    return item?.bulkMinQuantity ? (
+                        <QuantityValue
+                            value={item.bulkMinQuantity}
+                            unit={item.baseUnit}
                         />
+                    ) : (
+                        <span className="text-sm text-muted-foreground">—</span>
                     )
                 },
+            },
+            {
+                id: "supplierCodes",
+                accessorFn: (row) =>
+                    row.sellableItem?.supplierCodes?.join("、") ?? "",
+                header: "供应商编号",
+                meta: { label: "供应商编号", width: "default" },
+                enableSorting: false,
+                cell: ({ row }) => (
+                    <span className="num break-all text-sm">
+                        {row.original.sellableItem?.supplierCodes?.join("、") ||
+                            "—"}
+                    </span>
+                ),
             },
             {
                 id: "supplyRegions",

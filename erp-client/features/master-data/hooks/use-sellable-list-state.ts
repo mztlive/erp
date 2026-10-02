@@ -137,7 +137,7 @@ export function useSellableListState(
             const maximum = filters.productSalesPriceMax ?? "不限"
             chips.push({
                 key: "salesPrice",
-                label: `销售价：${minimum} 至 ${maximum}`,
+                label: `一件代发价：${minimum} 至 ${maximum}`,
             })
         }
         return chips

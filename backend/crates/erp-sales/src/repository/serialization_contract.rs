@@ -156,6 +156,7 @@ mod sales_order_submission {
 
     fn goods_line() -> GoodsLineFields {
         GoodsLineFields {
+            pricing_mode: Default::default(),
             sku_id: SkuId::new("sku-1"),
             sku_revision_id: SkuRevisionId::new("skurev-1"),
             welfare_scenario: Some(WelfareScenario::AnnualGiftBag),
@@ -257,6 +258,7 @@ mod sales_change_submission {
 
     fn goods_line() -> GoodsLineFields {
         GoodsLineFields {
+            pricing_mode: Default::default(),
             sku_id: SkuId::new("sku-1"),
             sku_revision_id: SkuRevisionId::new("skurev-1"),
             welfare_scenario: Some(WelfareScenario::AnnualGiftBag),

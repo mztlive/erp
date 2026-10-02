@@ -4,7 +4,7 @@ import * as React from "react"
 import { TriangleAlertIcon } from "lucide-react"
 import type { ColumnDef } from "@tanstack/react-table"
 
-import { DataTable, MoneyValue } from "@/components/business"
+import { DataTable, MoneyValue, QuantityValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import {
@@ -71,38 +71,43 @@ function useConfirmColumns(onRemove: (id: string) => void, pending: boolean) {
                     )
                 },
             },
-            {
-                id: "price",
-                header: "销售价（含税）",
+            ...(
+                [
+                    { key: "factoryPriceGross", label: "出厂价（含税）" },
+                    {
+                        key: "salesVisiblePriceGross",
+                        label: "一件代发价（含税）",
+                    },
+                    { key: "bulkPriceGross", label: "集采价（含税）" },
+                    { key: "marketPrice", label: "市场价（含税）" },
+                ] as const
+            ).map<ColumnDef<MasterDataListItem>>(({ key, label }) => ({
+                id: key,
+                header: label,
                 meta: {
-                    label: "销售价（含税）",
+                    label,
                     width: "amount",
                     align: "end",
                     numeric: true,
                 },
                 enableSorting: false,
                 cell: ({ row }) => (
-                    <MoneyValue
-                        className="font-semibold"
-                        value={
-                            row.original.sellableItem?.salesVisiblePriceGross
-                        }
-                    />
+                    <MoneyValue value={row.original.sellableItem?.[key]} />
                 ),
-            },
+            })),
             {
-                id: "marketPrice",
-                header: "市场参考价",
+                id: "bulkMinQuantity",
+                header: "集采起订量",
                 meta: {
-                    label: "市场参考价",
-                    width: "amount",
+                    label: "集采起订量",
+                    width: "quantity",
                     align: "end",
                     numeric: true,
                 },
                 enableSorting: false,
                 cell: ({ row }) => {
-                    const marketPrice = row.original.sellableItem?.marketPrice
-                    if (!marketPrice) {
+                    const item = row.original.sellableItem
+                    if (!item?.bulkMinQuantity) {
                         return (
                             <span className="text-sm text-muted-foreground">
                                 —
@@ -110,12 +115,24 @@ function useConfirmColumns(onRemove: (id: string) => void, pending: boolean) {
                         )
                     }
                     return (
-                        <MoneyValue
-                            className="font-normal text-muted-foreground"
-                            value={marketPrice}
+                        <QuantityValue
+                            value={item.bulkMinQuantity}
+                            unit={item.baseUnit}
                         />
                     )
                 },
+            },
+            {
+                id: "supplierCodes",
+                header: "供应商编号",
+                meta: { label: "供应商编号", width: "default" },
+                enableSorting: false,
+                cell: ({ row }) => (
+                    <span className="num text-body-compact text-muted-foreground">
+                        {row.original.sellableItem?.supplierCodes?.join("、") ||
+                            "—"}
+                    </span>
+                ),
             },
             {
                 id: "supplyRegions",

@@ -100,8 +100,12 @@ export type MasterDataListItem = Readonly<{
         barcode?: string
         baseUnit: string
         productKindLabel: string
+        factoryPriceGross?: string
         salesVisiblePriceGross: string
+        bulkPriceGross?: string
+        bulkMinQuantity?: string
         marketPrice?: string
+        supplierCodes?: readonly string[]
         supplierCount: number
         supplyRegions: readonly string[]
         eligibilityAsOf: string
@@ -163,7 +167,7 @@ export type MasterDataListResult = Readonly<{
     }[]
 }>
 
-/** 商品列表的当前启用 SKU 摘要；销售价来自 SKU 当前修订。 */
+/** 商品列表的当前启用 SKU 摘要；一件代发价来自 SKU 当前修订。 */
 export type ProductListSkuSummary = Readonly<{
     productId: string
     skuId: string
@@ -171,7 +175,11 @@ export type ProductListSkuSummary = Readonly<{
     skuName: string
     specification: string
     baseUnit: string
+    factoryPriceGross?: string
     salesVisiblePriceGross?: string
+    bulkPriceGross?: string
+    bulkMinQuantity?: string
+    marketPrice?: string
 }>
 
 /** 商品 / 公司商品池筛选使用的分类树节点（供 `CategoryCombobox`）。 */

@@ -25,6 +25,7 @@ use super::types::{
     BusinessType, GoodsLineFields, LineSummary, LineType, VoucherLineDraft, WelfareScenario,
     build_line_groups, validate_line_list,
 };
+use crate::entity::sales_order::SalesPricingMode;
 
 /// 提交人标识最大长度。
 const SUBMITTER_MAX_LEN: usize = 128;
@@ -581,6 +582,9 @@ pub struct SalesOrderSubmissionLine {
     pub base_unit_code: Option<String>,
     /// 含税成交单价快照。
     pub unit_price_gross: Option<UnitPrice>,
+    /// 成交价编辑方式；历史缺省保留为手工价。
+    #[serde(default, skip_serializing_if = "SalesPricingMode::is_manual")]
+    pub pricing_mode: SalesPricingMode,
     /// 单卡面额。
     pub face_value: Option<Amount>,
     /// 卡张数。
@@ -652,6 +656,7 @@ impl SalesOrderSubmissionLine {
             fulfillment_due_at: built.goods.as_ref().map(|g| g.fulfillment_due_at),
             quantity: built.goods.as_ref().map(|g| g.quantity),
             base_unit_code: built.goods.as_ref().map(|g| g.base_unit_code.clone()),
+            pricing_mode: built.goods.as_ref().map(|goods| goods.pricing_mode).unwrap_or_default(),
             unit_price_gross: built
                 .goods
                 .as_ref()
@@ -679,6 +684,7 @@ impl SalesOrderSubmissionLine {
             return Err(Error::from(format!("第 {} 行不是实物及服务行", self.line_no)));
         }
         Ok(GoodsLineFields {
+            pricing_mode: self.pricing_mode,
             sku_id: self
                 .sku_id
                 .clone()
@@ -782,6 +788,7 @@ mod tests {
 
     fn goods_line() -> GoodsLineFields {
         GoodsLineFields {
+            pricing_mode: Default::default(),
             sku_id: SkuId::new("sku-1"),
             sku_revision_id: SkuRevisionId::new("skurev-1"),
             welfare_scenario: Some(WelfareScenario::AnnualGiftBag),

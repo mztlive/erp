@@ -128,8 +128,12 @@ export function buildResourceFields(
         case "sellable-items":
             return {
                 sku: pickField(values, "sku") ?? "",
+                factoryPriceGross: pickField(values, "factoryPriceGross"),
                 salesVisiblePriceGross:
                     pickField(values, "salesVisiblePriceGross") ?? "",
+                bulkPriceGross: pickField(values, "bulkPriceGross"),
+                bulkMinQuantity: pickField(values, "bulkMinQuantity"),
+                marketPrice: pickField(values, "marketPrice"),
                 supplierCount: pickField(values, "supplierCount"),
                 region: pickField(values, "region"),
                 leadTime: pickField(values, "leadTime"),

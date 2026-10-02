@@ -36,9 +36,18 @@ pub struct VoucherSkuInput {
     pub weight_kg: Option<Quantity>,
     /// 体积（立方米，非负定点数）。
     pub volume_m3: Option<Quantity>,
-    /// 公司对销售可见的含税价（非负定点金额）。
+    /// 公司出厂含税销售参考价（独立维护，非负）。
+    #[serde(default)]
+    pub factory_price_gross: Option<Amount>,
+    /// 公司一件代发含税销售参考价（非负定点金额）。
     pub sales_visible_price_gross: Option<Amount>,
-    /// 市场展示参考价（非负定点金额）。
+    /// 公司集采含税销售参考价（独立维护，非负）。
+    #[serde(default)]
+    pub bulk_price_gross: Option<Amount>,
+    /// 公司集采价起订数量；未维护时按一件代发价取价，有值必须大于零。
+    #[serde(default)]
+    pub bulk_min_quantity: Option<Quantity>,
+    /// 含税市场参考价（非负定点金额）。
     pub market_price: Option<Amount>,
 }
 
@@ -61,7 +70,10 @@ impl VoucherSkuInput {
             barcode: None,
             weight_kg: None,
             volume_m3: None,
+            factory_price_gross: None,
             sales_visible_price_gross: None,
+            bulk_price_gross: None,
+            bulk_min_quantity: None,
             market_price: None,
         }
     }
@@ -91,7 +103,10 @@ impl VoucherSkuInput {
             main_image_asset_id: None,
             weight_kg: self.weight_kg,
             volume_m3: self.volume_m3,
+            factory_price_gross: self.factory_price_gross,
             sales_visible_price_gross: self.sales_visible_price_gross,
+            bulk_price_gross: self.bulk_price_gross,
+            bulk_min_quantity: self.bulk_min_quantity,
             market_price: self.market_price,
             spec_entries: Vec::new(),
         }
@@ -356,7 +371,10 @@ mod tests {
         assert!(sku.barcode.is_none());
         assert!(sku.weight_kg.is_none());
         assert!(sku.volume_m3.is_none());
+        assert!(sku.factory_price_gross.is_none());
         assert!(sku.sales_visible_price_gross.is_none());
+        assert!(sku.bulk_price_gross.is_none());
+        assert!(sku.bulk_min_quantity.is_none());
         assert!(sku.market_price.is_none());
         assert!(sku.sku_id.is_none());
         assert!(sku.expected_sku_revision_id.is_none());
@@ -375,7 +393,10 @@ mod tests {
             barcode: Some("6901234567890".to_string()),
             weight_kg: Some(Quantity::from_str("0.010000").unwrap()),
             volume_m3: Some(Quantity::from_str("0.000100").unwrap()),
+            factory_price_gross: Some(Amount::from_str("70.00").unwrap()),
             sales_visible_price_gross: Some(Amount::from_str("99.00").unwrap()),
+            bulk_price_gross: Some(Amount::from_str("80.00").unwrap()),
+            bulk_min_quantity: Some(Quantity::from_str("10.000000").unwrap()),
             market_price: Some(Amount::from_str("129.00").unwrap()),
         };
         let sku = input.into_product_sku("V-002".to_string(), "礼品卡".to_string());
@@ -384,7 +405,10 @@ mod tests {
         assert_eq!(sku.base_unit_id.as_ref(), "unit-sheet");
         assert_eq!(sku.weight_kg, Some(Quantity::from_str("0.010000").unwrap()));
         assert_eq!(sku.volume_m3, Some(Quantity::from_str("0.000100").unwrap()));
+        assert_eq!(sku.factory_price_gross, Some(Amount::from_str("70.00").unwrap()));
         assert_eq!(sku.sales_visible_price_gross, Some(Amount::from_str("99.00").unwrap()));
+        assert_eq!(sku.bulk_price_gross, Some(Amount::from_str("80.00").unwrap()));
+        assert_eq!(sku.bulk_min_quantity, Some(Quantity::from_str("10.000000").unwrap()));
         assert_eq!(sku.market_price, Some(Amount::from_str("129.00").unwrap()));
         assert!(sku.sku_id.is_none());
         assert!(sku.expected_sku_revision_id.is_none());

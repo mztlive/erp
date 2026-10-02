@@ -2,35 +2,52 @@
 
 import { UsersIcon } from "lucide-react"
 
-import { MoneyValue } from "@/components/business"
+import { MoneyValue, QuantityValue } from "@/components/business"
 import { formatEffectiveRange } from "@/features/master-data/lib/filter"
 import type { MasterDataListItem } from "@/features/master-data/types"
 
-/** 公司商品池只读预览：突出销售价、规格与当前可供范围。 */
+/** 公司商品池只读预览：展示四档销售参考价、规格与当前可供范围。 */
 export function SellableItemPreviewPanel({ row }: { row: MasterDataListItem }) {
     const item = row.sellableItem
     if (!item) return null
 
     return (
         <div className="space-y-6 text-sm">
-            <section className="border-b border-border pb-6">
-                <div className="text-xs font-medium text-muted-foreground">
-                    销售价（含税）
-                </div>
-                <MoneyValue
-                    value={item.salesVisiblePriceGross}
-                    size="summary"
-                    className="mt-2"
-                />
-                {item.marketPrice ? (
-                    <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                        <span>市场参考价</span>
-                        <MoneyValue
-                            value={item.marketPrice}
-                            className="text-xs text-muted-foreground"
+            <section className="space-y-3 border-b border-border pb-6">
+                <h3 className="text-xs font-medium text-muted-foreground">
+                    销售参考价（含税）
+                </h3>
+                <dl className="grid grid-cols-2 gap-x-5 gap-y-4">
+                    {[
+                        { label: "出厂价", value: item.factoryPriceGross },
+                        {
+                            label: "一件代发价",
+                            value: item.salesVisiblePriceGross,
+                        },
+                        { label: "集采价", value: item.bulkPriceGross },
+                        { label: "市场价", value: item.marketPrice },
+                    ].map(({ label, value }) => (
+                        <div key={label}>
+                            <dt className="text-xs text-muted-foreground">
+                                {label}
+                            </dt>
+                            <dd className="mt-1">
+                                <MoneyValue value={value} />
+                            </dd>
+                        </div>
+                    ))}
+                </dl>
+                <div className="flex items-baseline justify-between gap-5 text-xs">
+                    <span className="text-muted-foreground">集采起订量</span>
+                    {item.bulkMinQuantity ? (
+                        <QuantityValue
+                            value={item.bulkMinQuantity}
+                            unit={item.baseUnit}
                         />
-                    </div>
-                ) : null}
+                    ) : (
+                        <span className="text-muted-foreground">—</span>
+                    )}
+                </div>
             </section>
 
             <section className="space-y-3 border-b border-border pb-6">
@@ -70,6 +87,7 @@ export function SellableItemPreviewPanel({ row }: { row: MasterDataListItem }) {
                     {[
                         ["SKU 编号", row.stableNo],
                         ["商品编号", item.productNo],
+                        ["供应商编号", item.supplierCodes?.join("、") || "—"],
                         ["商品类型", item.productKindLabel],
                         ["基础单位", item.baseUnit],
                         ["SKU 版本", `v${row.revisionNo}`],

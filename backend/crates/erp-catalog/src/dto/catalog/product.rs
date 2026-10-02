@@ -76,9 +76,18 @@ pub struct ProductSkuInput {
     pub weight_kg: Option<Quantity>,
     /// 体积（立方米，非负定点数）。
     pub volume_m3: Option<Quantity>,
-    /// 公司对销售可见的含税价（非负定点金额）。
+    /// 公司出厂含税销售参考价（独立维护，非负）。
+    #[serde(default)]
+    pub factory_price_gross: Option<Amount>,
+    /// 公司一件代发含税销售参考价（非负定点金额）。
     pub sales_visible_price_gross: Option<Amount>,
-    /// 市场展示参考价（非负定点金额）。
+    /// 公司集采含税销售参考价（独立维护，非负）。
+    #[serde(default)]
+    pub bulk_price_gross: Option<Amount>,
+    /// 公司集采价起订数量；未维护时按一件代发价取价，有值必须大于零。
+    #[serde(default)]
+    pub bulk_min_quantity: Option<Quantity>,
+    /// 含税市场参考价（非负定点金额）。
     pub market_price: Option<Amount>,
     /// 规格属性-值对（空表示无规格 SKU）。
     #[serde(default)]

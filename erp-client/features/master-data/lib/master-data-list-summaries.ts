@@ -73,7 +73,7 @@ export function buildSellableFilterSnapshotLabel(input: {
             : []),
         ...(input.productSalesPriceMin || input.productSalesPriceMax
             ? [
-                  `销售价=${input.productSalesPriceMin ? `¥${input.productSalesPriceMin}` : "不限"}–${input.productSalesPriceMax ? `¥${input.productSalesPriceMax}` : "不限"}`,
+                  `一件代发价=${input.productSalesPriceMin ? `¥${input.productSalesPriceMin}` : "不限"}–${input.productSalesPriceMax ? `¥${input.productSalesPriceMax}` : "不限"}`,
               ]
             : []),
         input.q.trim() ? `搜索=${input.q.trim()}` : "搜索=空",
@@ -121,7 +121,7 @@ export function buildProductFilterSnapshotLabel(input: {
             : []),
         ...(input.productSalesPriceMin || input.productSalesPriceMax
             ? [
-                  `销售价=${input.productSalesPriceMin ? `¥${input.productSalesPriceMin}` : "不限"}–${input.productSalesPriceMax ? `¥${input.productSalesPriceMax}` : "不限"}`,
+                  `一件代发价=${input.productSalesPriceMin ? `¥${input.productSalesPriceMin}` : "不限"}–${input.productSalesPriceMax ? `¥${input.productSalesPriceMax}` : "不限"}`,
               ]
             : []),
         input.q.trim() ? `搜索=${input.q.trim()}` : "搜索=空",
@@ -192,7 +192,7 @@ export function buildSellableTableDescription(input: {
     }
     if (input.productSalesPriceMin || input.productSalesPriceMax) {
         active.push(
-            `销售价 ${input.productSalesPriceMin ? `¥${input.productSalesPriceMin}` : "不限"}–${input.productSalesPriceMax ? `¥${input.productSalesPriceMax}` : "不限"}`,
+            `一件代发价 ${input.productSalesPriceMin ? `¥${input.productSalesPriceMin}` : "不限"}–${input.productSalesPriceMax ? `¥${input.productSalesPriceMax}` : "不限"}`,
         )
     }
     if (active.length === 0) {
@@ -273,7 +273,7 @@ export function buildProductTableDescription(input: {
     }
     if (input.productSalesPriceMin || input.productSalesPriceMax) {
         active.push(
-            `销售价 ${input.productSalesPriceMin ? `¥${input.productSalesPriceMin}` : "不限"}–${input.productSalesPriceMax ? `¥${input.productSalesPriceMax}` : "不限"}`,
+            `一件代发价 ${input.productSalesPriceMin ? `¥${input.productSalesPriceMin}` : "不限"}–${input.productSalesPriceMax ? `¥${input.productSalesPriceMax}` : "不限"}`,
         )
     }
     if (active.length === 0) {

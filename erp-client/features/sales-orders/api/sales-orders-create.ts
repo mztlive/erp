@@ -142,6 +142,7 @@ function buildDraftPayload(
                 quantity: line.quantity || "0",
                 base_unit_code: line.unit.trim() || "EA",
                 unit_price_gross: line.unitPriceGross || "0.0000",
+                pricing_mode: line.pricingMode ?? "MANUAL",
             }
         }
         return base
@@ -317,6 +318,23 @@ function mapDraftLines(
                 ? "张"
                 : (line.unit_snapshot ?? line.base_unit_code ?? ""),
             unitPriceGross: line.unit_price_gross ?? "0.00",
+            pricingMode: isVoucher ? "MANUAL" : (line.pricing_mode ?? "MANUAL"),
+            referencePrices: line.reference_prices
+                ? {
+                      factoryPriceGross:
+                          line.reference_prices.factory_price_gross ??
+                          undefined,
+                      salesVisiblePriceGross:
+                          line.reference_prices.sales_visible_price_gross ??
+                          undefined,
+                      bulkPriceGross:
+                          line.reference_prices.bulk_price_gross ?? undefined,
+                      bulkMinQuantity:
+                          line.reference_prices.bulk_min_quantity ?? undefined,
+                      marketPrice:
+                          line.reference_prices.market_price ?? undefined,
+                  }
+                : undefined,
             dueDate: formatEpochDate(line.fulfillment_due_at),
             faceValue: line.face_value ?? "",
             giftRate: "",

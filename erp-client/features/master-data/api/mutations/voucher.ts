@@ -47,7 +47,10 @@ export async function createVoucherCategory(
             barcode: fields.barcode || null,
             weight_kg: null,
             volume_m3: null,
+            factory_price_gross: fields.factoryPriceGross || null,
             sales_visible_price_gross: fields.salesVisiblePriceGross || null,
+            bulk_price_gross: fields.bulkPriceGross || null,
+            bulk_min_quantity: fields.bulkMinQuantity || null,
             market_price: fields.marketPrice || null,
         }
     }

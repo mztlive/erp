@@ -236,7 +236,7 @@ async function ensureVirtualProduct(page: Page) {
         mimeType: 'image/png',
         buffer: PNG_1X1,
     })
-    await page.getByLabel('默认规格 销售价').fill('100.00')
+    await page.getByLabel('默认规格 一件代发价').fill('100.00')
     await page.getByLabel('默认规格 市场价').fill('120.00')
     await page.locator('#master-data-product-detail-header-submit').click()
     // 保存改为两步确认：先在「创建商品」框填写变更原因，再确认保存。

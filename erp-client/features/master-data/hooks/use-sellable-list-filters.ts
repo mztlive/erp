@@ -196,7 +196,7 @@ export function useSellableListFilters(
         [patchUrl, resetPagination],
     )
 
-    /** 移除单个已生效条件；销售价按区间整体移除。 */
+    /** 移除单个已生效条件；一件代发价按区间整体移除。 */
     const removeFilter = React.useCallback(
         (key: SellableFilterKey) => {
             if (key === "q") setSearchDraft("")

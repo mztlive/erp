@@ -41,7 +41,7 @@ impl CatalogSupplyRepository<'_> {
     ///
     /// 资格固定为：稳定 SKU 启用、当前 SKU 修订启用且处于生效区间并已配置
     /// 销售可见价、至少一条启用且当前修订可供并处于有效区间的供给。结果不含
-    /// 供应商身份、采购成本、税率或起订量；`supplier_id` 仅参与筛选。
+    /// 采购成本、进项税率或供给起订量；供应商身份仅用于补齐业务编号。
     ///
     /// # 参数
     /// * `filter` - 关键字、类型、分类、品牌、供应商、区域、供应保障、销售价与分页
@@ -288,16 +288,64 @@ fn sellable_sku_pipeline(
 ) -> Vec<Document> {
     let as_of = filter.eligibility_as_of.to_string();
     let not_deleted = NOT_DELETED_TIMESTAMP_BSON;
-    let zero_quantity = Bson::Decimal128("0".parse().expect("零必须可转换为 MongoDB Decimal128"));
+    let mut pipeline = vec![
+        doc! { "$match": initial_match },
+        sellable_sku_revision_lookup(&as_of, not_deleted),
+        doc! { "$unwind": "$sku_revision" },
+        sellable_product_lookup(not_deleted),
+        doc! { "$unwind": "$product" },
+        sellable_product_revision_lookup(&as_of, not_deleted),
+        doc! { "$unwind": "$product_revision" },
+        sellable_unit_lookup(not_deleted),
+        doc! { "$unwind": { "path": "$unit", "preserveNullAndEmptyArrays": true } },
+        sellable_offering_lookup(&as_of, not_deleted),
+        doc! { "$match": { "offerings.0": { "$exists": true } } },
+        sellable_supply_summary(),
+    ];
+    append_sellable_optional_filters(&mut pipeline, filter);
+    pipeline.push(doc! {
+        "$facet": {
+            "items": sellable_sku_item_stages(paging),
+            "total": [{ "$count": "count" }],
+        }
+    });
+    pipeline
+}
 
+/// 构造商品池 facet 当前页的稳定排序、分页与四价投影阶段。
+///
+/// # 参数
+/// * `paging` - 页码与每页条数；缺省只保留原零偏移，不限制条数
+///
+/// # 返回
+/// 返回按原顺序排列的当前页聚合阶段。
+///
+/// # 错误
+/// 无。
+fn sellable_sku_item_stages(paging: Option<(u64, u32)>) -> Vec<Document> {
     let (skip, limit) = paging.map_or((0_i64, i64::MAX), |(page, page_size)| {
         (((page.saturating_sub(1)) * u64::from(page_size)) as i64, i64::from(page_size))
     });
-    let mut item_stages = vec![doc! { "$sort": { "sku_no": 1, "id": 1 } }, doc! { "$skip": skip }];
+    let mut stages = vec![doc! { "$sort": { "sku_no": 1, "id": 1 } }, doc! { "$skip": skip }];
     if paging.is_some() {
-        item_stages.push(doc! { "$limit": limit });
+        stages.push(doc! { "$limit": limit });
     }
-    item_stages.push(doc! {
+    stages.push(sellable_sku_projection());
+    stages
+}
+
+/// 投影公司 SKU 的四种含税参考价、集采起订量与内部供应商身份。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 返回保持既有字段与资格条件的聚合阶段。
+///
+/// # 错误
+/// 无。
+fn sellable_sku_projection() -> Document {
+    doc! {
         "$project": {
             "_id": 0,
             "sku_id": "$id",
@@ -315,168 +363,266 @@ fn sellable_sku_pipeline(
             "base_unit_id": 1,
             "base_unit_code": "$unit.unit_code",
             "base_unit_name": "$unit.name",
+            "factory_price_gross": "$sku_revision.factory_price_gross",
             "sales_visible_price_gross": "$sku_revision.sales_visible_price_gross",
+            "bulk_price_gross": "$sku_revision.bulk_price_gross",
+            "bulk_min_quantity": "$sku_revision.bulk_min_quantity",
             "market_price": "$sku_revision.market_price",
             "main_image_asset_id": "$sku_revision.source_main_image_asset_id",
             "category_id": "$product_revision.category_id",
             "effective_from": "$sku_revision.effective_from",
             "effective_to": "$sku_revision.effective_to",
             "supplier_count": { "$size": "$supplier_ids" },
+            "supplier_ids": 1,
             "supply_regions": 1,
         }
-    });
+    }
+}
 
-    let mut pipeline = vec![
-        doc! { "$match": initial_match },
-        doc! {
-            "$lookup": {
-                "from": SKU_REVISIONS,
-                "let": { "revision_id": "$current_revision_id" },
-                "pipeline": [{
+/// 关联已启用、已维护一件代发价且在业务日期生效的当前 SKU 修订。
+///
+/// # 参数
+/// * `as_of` - 资格业务日期
+/// * `not_deleted` - 未软删除标记
+///
+/// # 返回
+/// 返回保持既有字段与资格条件的聚合阶段。
+///
+/// # 错误
+/// 无。
+fn sellable_sku_revision_lookup(as_of: &str, not_deleted: i64) -> Document {
+    doc! {
+        "$lookup": {
+            "from": SKU_REVISIONS,
+            "let": { "revision_id": "$current_revision_id" },
+            "pipeline": [{
+                "$match": {
+                    "$expr": { "$eq": ["$id", "$$revision_id"] },
+                    "deleted_at": not_deleted,
+                    "status": EnableStatus::Active.as_str(),
+                    "sales_visible_price_gross": { "$ne": null },
+                    "effective_from": { "$lte": as_of },
+                    "$or": [
+                        { "effective_to": null },
+                        { "effective_to": { "$gt": as_of } },
+                    ]
+                }
+            }],
+            "as": "sku_revision"
+        }
+    }
+}
+
+/// 关联启用且具有当前修订的公司商品。
+///
+/// # 参数
+/// * `not_deleted` - 未软删除标记
+///
+/// # 返回
+/// 返回保持既有字段与资格条件的聚合阶段。
+///
+/// # 错误
+/// 无。
+fn sellable_product_lookup(not_deleted: i64) -> Document {
+    doc! {
+        "$lookup": {
+            "from": <mongodb::Database as CatalogExt>::PRODUCTS,
+            "let": { "product_id": "$product_id" },
+            "pipeline": [{
+                "$match": {
+                    "$expr": { "$eq": ["$id", "$$product_id"] },
+                    "deleted_at": not_deleted,
+                    "status": EnableStatus::Active.as_str(),
+                    "current_revision_id": { "$ne": null },
+                }
+            }],
+            "as": "product"
+        }
+    }
+}
+
+/// 关联业务日期有效且已启用的当前商品修订。
+///
+/// # 参数
+/// * `as_of` - 资格业务日期
+/// * `not_deleted` - 未软删除标记
+///
+/// # 返回
+/// 返回保持既有字段与资格条件的聚合阶段。
+///
+/// # 错误
+/// 无。
+fn sellable_product_revision_lookup(as_of: &str, not_deleted: i64) -> Document {
+    doc! {
+        "$lookup": {
+            "from": PRODUCT_REVISIONS,
+            "let": { "revision_id": "$product.current_revision_id" },
+            "pipeline": [{
+                "$match": {
+                    "$expr": { "$eq": ["$id", "$$revision_id"] },
+                    "deleted_at": not_deleted,
+                    "status": EnableStatus::Active.as_str(),
+                    "effective_from": { "$lte": as_of },
+                    "$or": [
+                        { "effective_to": null },
+                        { "effective_to": { "$gt": as_of } },
+                    ]
+                }
+            }],
+            "as": "product_revision"
+        }
+    }
+}
+
+/// 关联未软删除的基础计量单位。
+///
+/// # 参数
+/// * `not_deleted` - 未软删除标记
+///
+/// # 返回
+/// 返回保持既有字段与资格条件的聚合阶段。
+///
+/// # 错误
+/// 无。
+fn sellable_unit_lookup(not_deleted: i64) -> Document {
+    doc! {
+        "$lookup": {
+            "from": <mongodb::Database as CatalogExt>::UNIT_OF_MEASURES,
+            "let": { "unit_id": "$base_unit_id" },
+            "pipeline": [{
+                "$match": {
+                    "$expr": { "$eq": ["$id", "$$unit_id"] },
+                    "deleted_at": not_deleted,
+                }
+            }],
+            "as": "unit"
+        }
+    }
+}
+
+/// 关联业务日期有效的当前供应商供给条款修订。
+///
+/// # 参数
+/// * `as_of` - 资格业务日期
+/// * `not_deleted` - 未软删除标记
+///
+/// # 返回
+/// 返回保持既有字段与资格条件的聚合阶段。
+///
+/// # 错误
+/// 无。
+fn sellable_offering_revision_lookup(as_of: &str, not_deleted: i64) -> Document {
+    doc! {
+        "$lookup": {
+            "from": SUPPLIER_OFFERING_REVISIONS,
+            "let": { "revision_id": "$current_revision_id" },
+            "pipeline": [{
+                "$match": {
+                    "$expr": { "$eq": ["$id", "$$revision_id"] },
+                    "deleted_at": not_deleted,
+                    "valid_from": { "$lte": as_of },
+                    "$or": [
+                        { "valid_to": null },
+                        { "valid_to": { "$gt": as_of } },
+                    ]
+                }
+            }],
+            "as": "revision"
+        }
+    }
+}
+
+/// 关联当前可供且可供数量为空或大于零的供给状态。
+///
+/// # 参数
+/// * `not_deleted` - 未软删除标记
+///
+/// # 返回
+/// 返回保持既有字段与资格条件的聚合阶段。
+///
+/// # 错误
+/// 无。
+fn sellable_availability_lookup(not_deleted: i64) -> Document {
+    let zero_quantity = Bson::Decimal128("0".parse().expect("零必须可转换为 MongoDB Decimal128"));
+    doc! {
+        "$lookup": {
+            "from": SUPPLIER_OFFERING_AVAILABILITIES,
+            "let": { "offering_id": "$id" },
+            "pipeline": [{
+                "$match": {
+                    "$expr": { "$eq": ["$supplier_offering_id", "$$offering_id"] },
+                    "deleted_at": not_deleted,
+                    "availability_status": AvailabilityStatus::Available.as_str(),
+                    "$or": [
+                        { "available_quantity": null },
+                        { "available_quantity": { "$gt": &zero_quantity } },
+                    ],
+                }
+            }],
+            "as": "availability"
+        }
+    }
+}
+
+/// 按原顺序关联启用供给、有效条款与实时可供状态。
+///
+/// # 参数
+/// * `as_of` - 资格业务日期
+/// * `not_deleted` - 未软删除标记
+///
+/// # 返回
+/// 返回保持既有字段与资格条件的聚合阶段。
+///
+/// # 错误
+/// 无。
+fn sellable_offering_lookup(as_of: &str, not_deleted: i64) -> Document {
+    doc! {
+        "$lookup": {
+            "from": SUPPLIER_OFFERINGS,
+            "let": { "sku_id": "$id" },
+            "pipeline": [
+                doc! {
                     "$match": {
-                        "$expr": { "$eq": ["$id", "$$revision_id"] },
+                        "$expr": { "$eq": ["$sku_id", "$$sku_id"] },
                         "deleted_at": not_deleted,
-                        "status": EnableStatus::Active.as_str(),
-                        "sales_visible_price_gross": { "$ne": null },
-                        "effective_from": { "$lte": &as_of },
-                        "$or": [
-                            { "effective_to": null },
-                            { "effective_to": { "$gt": &as_of } },
-                        ]
-                    }
-                }],
-                "as": "sku_revision"
-            }
-        },
-        doc! { "$unwind": "$sku_revision" },
-        doc! {
-            "$lookup": {
-                "from": <mongodb::Database as CatalogExt>::PRODUCTS,
-                "let": { "product_id": "$product_id" },
-                "pipeline": [{
-                    "$match": {
-                        "$expr": { "$eq": ["$id", "$$product_id"] },
-                        "deleted_at": not_deleted,
-                        "status": EnableStatus::Active.as_str(),
+                        "status": OfferingStatus::Active.as_str(),
                         "current_revision_id": { "$ne": null },
                     }
-                }],
-                "as": "product"
-            }
-        },
-        doc! { "$unwind": "$product" },
-        doc! {
-            "$lookup": {
-                "from": PRODUCT_REVISIONS,
-                "let": { "revision_id": "$product.current_revision_id" },
-                "pipeline": [{
-                    "$match": {
-                        "$expr": { "$eq": ["$id", "$$revision_id"] },
-                        "deleted_at": not_deleted,
-                        "status": EnableStatus::Active.as_str(),
-                        "effective_from": { "$lte": &as_of },
-                        "$or": [
-                            { "effective_to": null },
-                            { "effective_to": { "$gt": &as_of } },
-                        ]
-                    }
-                }],
-                "as": "product_revision"
-            }
-        },
-        doc! { "$unwind": "$product_revision" },
-        doc! {
-            "$lookup": {
-                "from": <mongodb::Database as CatalogExt>::UNIT_OF_MEASURES,
-                "let": { "unit_id": "$base_unit_id" },
-                "pipeline": [{
-                    "$match": {
-                        "$expr": { "$eq": ["$id", "$$unit_id"] },
-                        "deleted_at": not_deleted,
-                    }
-                }],
-                "as": "unit"
-            }
-        },
-        doc! { "$unwind": { "path": "$unit", "preserveNullAndEmptyArrays": true } },
-        doc! {
-            "$lookup": {
-                "from": SUPPLIER_OFFERINGS,
-                "let": { "sku_id": "$id" },
-                "pipeline": [
-                    {
-                        "$match": {
-                            "$expr": { "$eq": ["$sku_id", "$$sku_id"] },
-                            "deleted_at": not_deleted,
-                            "status": OfferingStatus::Active.as_str(),
-                            "current_revision_id": { "$ne": null },
-                        }
-                    },
-                    {
-                        "$lookup": {
-                            "from": SUPPLIER_OFFERING_REVISIONS,
-                            "let": { "revision_id": "$current_revision_id" },
-                            "pipeline": [{
-                                "$match": {
-                                    "$expr": { "$eq": ["$id", "$$revision_id"] },
-                                    "deleted_at": not_deleted,
-                                    "valid_from": { "$lte": &as_of },
-                                    "$or": [
-                                        { "valid_to": null },
-                                        { "valid_to": { "$gt": &as_of } },
-                                    ]
-                                }
-                            }],
-                            "as": "revision"
-                        }
-                    },
-                    { "$unwind": "$revision" },
-                    {
-                        "$lookup": {
-                            "from": SUPPLIER_OFFERING_AVAILABILITIES,
-                            "let": { "offering_id": "$id" },
-                            "pipeline": [{
-                                "$match": {
-                                    "$expr": { "$eq": ["$supplier_offering_id", "$$offering_id"] },
-                                    "deleted_at": not_deleted,
-                                    "availability_status": AvailabilityStatus::Available.as_str(),
-                                    "$or": [
-                                        { "available_quantity": null },
-                                        { "available_quantity": { "$gt": &zero_quantity } },
-                                    ],
-                                }
-                            }],
-                            "as": "availability"
-                        }
-                    },
-                    { "$unwind": "$availability" },
-                    { "$project": { "_id": 0, "supplier_id": 1, "supply_region": "$revision.supply_region" } },
-                ],
-                "as": "offerings"
-            }
-        },
-        doc! { "$match": { "offerings.0": { "$exists": true } } },
-        doc! {
-            "$set": {
-                "supplier_ids": { "$setUnion": ["$offerings.supplier_id", []] },
-                "supply_regions": {
-                    "$reduce": {
-                        "input": "$offerings.supply_region",
-                        "initialValue": [],
-                        "in": { "$setUnion": ["$$value", "$$this"] }
-                    }
+                },
+                sellable_offering_revision_lookup(as_of, not_deleted),
+                doc! { "$unwind": "$revision" },
+                sellable_availability_lookup(not_deleted),
+                doc! { "$unwind": "$availability" },
+                doc! { "$project": { "_id": 0, "supplier_id": 1, "supply_region": "$revision.supply_region" } },
+            ],
+            "as": "offerings"
+        }
+    }
+}
+
+/// 从已符合资格的供给中汇总去重供应商与可供区域。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 返回保持既有字段与资格条件的聚合阶段。
+///
+/// # 错误
+/// 无。
+fn sellable_supply_summary() -> Document {
+    doc! {
+        "$set": {
+            "supplier_ids": { "$setUnion": ["$offerings.supplier_id", []] },
+            "supply_regions": {
+                "$reduce": {
+                    "input": "$offerings.supply_region",
+                    "initialValue": [],
+                    "in": { "$setUnion": ["$$value", "$$this"] }
                 }
             }
-        },
-    ];
-    append_sellable_optional_filters(&mut pipeline, filter);
-    pipeline.push(doc! {
-        "$facet": {
-            "items": item_stages,
-            "total": [{ "$count": "count" }],
         }
-    });
-    pipeline
+    }
 }
 
 #[cfg(test)]

@@ -115,7 +115,11 @@ impl SalesOrderReadService {
                     )
                     .await?;
                 match working_copy {
-                    Some(copy) => Ok(Some(working_sales.working_copy_view(&copy).await?)),
+                    Some(copy) => {
+                        let mut view = working_sales.working_copy_view(&copy).await?;
+                        self.enrich_working_copy_prices(&mut view).await?;
+                        Ok(Some(view))
+                    },
                     None => Ok(None),
                 }
             },

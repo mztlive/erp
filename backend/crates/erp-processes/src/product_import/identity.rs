@@ -7,13 +7,16 @@ use erp_catalog::entity::catalog::product_import::{
     import_brand_name, is_import_blank, truncate_import_text,
 };
 use erp_catalog::{PRODUCT_IMPORT_HEADERS, PRODUCT_IMPORT_NAME_COLUMN, SpecEntryInput};
-use erp_core::money::Amount;
+use erp_core::money::{Amount, Quantity};
+use rust_decimal::Decimal;
 use sha2::{Digest, Sha256};
 
 use crate::{Error, Result};
 
 /// SKU 规格维度名：同一产品编码下用规格值区分 SKU。
 pub const SKU_SPEC_NAME: &str = "规格";
+/// 原 24 列模板后允许追加的公司出厂含税参考价列。
+pub(super) const FACTORY_PRICE_HEADER: &str = "出厂价（含税）";
 /// 规格值最大字符数，与规格签名分量上限一致。
 const SKU_SPEC_VALUE_MAX_CHARS: usize = 64;
 
@@ -36,8 +39,14 @@ pub struct NormalizedImportRow {
     pub category_name: String,
     /// 条码。
     pub barcode: Option<String>,
-    /// 销售可见含税价。
+    /// 公司出厂含税参考价；原模板没有此列时为空。
+    pub factory_price: Option<Amount>,
+    /// 公司一件代发含税参考价。
     pub sales_price: Option<Amount>,
+    /// 公司集采含税参考价。
+    pub bulk_price: Option<Amount>,
+    /// 公司集采参考价起订量；空值不启用集采自动取价。
+    pub bulk_min_quantity: Option<Quantity>,
     /// 市场价。
     pub market_price: Option<Amount>,
     /// 是否来自模板「产品编码」列（相同编码归入同一 SPU）。
@@ -50,7 +59,7 @@ pub struct NormalizedImportRow {
 ///
 /// # 参数
 /// * `row_number` - Excel 行号
-/// * `cells` - 按表头顺序的单元格
+/// * `cells` - 已由模板解析校验的单元格；可选出厂价已按列标题确认
 ///
 /// # 返回
 /// 返回规范化后的导入行。
@@ -80,14 +89,7 @@ pub fn normalize_import_row(row_number: u32, cells: &[String]) -> Result<Normali
     let product_no = coded.unwrap_or_else(|| {
         stable_code("PRD", &[&name, specification.as_deref().unwrap_or(""), barcode.as_deref().unwrap_or("")])
     });
-    let spec_entries = if coded_spu {
-        vec![SpecEntryInput {
-            attribute_code: SKU_SPEC_NAME.to_string(),
-            attribute_value_code: sku_spec_value(specification.as_deref(), barcode.as_deref(), &name),
-        }]
-    } else {
-        Vec::new()
-    };
+    let spec_entries = import_spec_entries(coded_spu, specification.as_deref(), barcode.as_deref(), &name);
     Ok(NormalizedImportRow {
         row_number,
         sku_no: format!("{product_no}-01"),
@@ -97,11 +99,30 @@ pub fn normalize_import_row(row_number: u32, cells: &[String]) -> Result<Normali
         brand_name: import_brand_name(cell(5)),
         category_name,
         barcode,
+        factory_price: parse_optional_amount(cell(PRODUCT_IMPORT_HEADERS.len()), FACTORY_PRICE_HEADER)?,
         sales_price: parse_optional_amount(cell(12), PRODUCT_IMPORT_HEADERS[12])?,
+        bulk_price: parse_optional_amount(cell(13), PRODUCT_IMPORT_HEADERS[13])?,
+        bulk_min_quantity: parse_optional_quantity(cell(14), PRODUCT_IMPORT_HEADERS[14])?,
         market_price: parse_optional_amount(cell(16), PRODUCT_IMPORT_HEADERS[16])?,
         coded_spu,
         spec_entries,
     })
+}
+
+/// 有产品编码时冻结用于同一 SPU 区分 SKU 的规格维度。
+fn import_spec_entries(
+    coded_spu: bool,
+    specification: Option<&str>,
+    barcode: Option<&str>,
+    name: &str,
+) -> Vec<SpecEntryInput> {
+    if !coded_spu {
+        return Vec::new();
+    }
+    vec![SpecEntryInput {
+        attribute_code: SKU_SPEC_NAME.to_string(),
+        attribute_value_code: sku_spec_value(specification, barcode, name),
+    }]
 }
 
 /// 读取模板「产品编码」；空白或占位视为未提供。
@@ -187,12 +208,27 @@ pub fn stable_code(prefix: &str, parts: &[&str]) -> String {
     format!("{prefix}-{}", hex::encode(&digest[..6])).to_uppercase()
 }
 
+/// 解析可空公司参考价；供应商成本列不进入本入口。
 fn parse_optional_amount(value: &str, column: &str) -> Result<Option<Amount>> {
     if is_import_blank(value) {
         return Ok(None);
     }
     let text = collapse_import_text(value);
     text.parse::<Amount>().map(Some).map_err(|_| Error::ValidationError(format!("「{column}」不是有效金额")))
+}
+
+/// 解析可空集采起订量；显式零值或负值必须拒绝，不能降级成未维护。
+fn parse_optional_quantity(value: &str, column: &str) -> Result<Option<Quantity>> {
+    if is_import_blank(value) {
+        return Ok(None);
+    }
+    let quantity = collapse_import_text(value)
+        .parse::<Quantity>()
+        .map_err(|_| Error::ValidationError(format!("「{column}」不是有效数量")))?;
+    if quantity.to_decimal() <= Decimal::ZERO {
+        return Err(Error::ValidationError(format!("「{column}」必须大于 0")));
+    }
+    Ok(Some(quantity))
 }
 
 #[cfg(test)]
@@ -244,5 +280,42 @@ mod tests {
     fn next_sku_no_skips_taken_codes() {
         let taken = HashSet::from(["FSY-1-01".into()]);
         assert_eq!(next_sku_no("FSY-1", &taken), "FSY-1-02");
+    }
+
+    /// 原模板只导入公司代发/集采底价与市场价，供应商成本不能补成公司出厂价。
+    #[test]
+    fn original_template_prices_are_independent_from_supplier_costs() {
+        let mut cells = vec![String::new(); PRODUCT_IMPORT_HEADERS.len()];
+        cells[6] = "米".into();
+        cells[8] = "东北大米".into();
+        cells[10] = "31.00".into();
+        cells[11] = "29.00".into();
+        cells[12] = "40.00".into();
+        cells[13] = "38.00".into();
+        cells[14] = "12.5".into();
+        cells[16] = "50.00".into();
+        let row = normalize_import_row(2, &cells).unwrap();
+        assert!(row.factory_price.is_none());
+        assert_eq!(row.sales_price.unwrap().to_string(), "40.00");
+        assert_eq!(row.bulk_price.unwrap().to_string(), "38.00");
+        assert_eq!(row.bulk_min_quantity.unwrap().to_string(), "12.5");
+        assert_eq!(row.market_price.unwrap().to_string(), "50.00");
+        cells[13].clear();
+        cells[14].clear();
+        let unmaintained = normalize_import_row(2, &cells).unwrap();
+        assert!(unmaintained.bulk_price.is_none());
+        assert!(unmaintained.bulk_min_quantity.is_none());
+    }
+
+    /// 起订量保留未维护与非法值的差异；任意非正数不得启用集采参考价。
+    #[test]
+    fn bulk_minimum_rejects_invalid_and_non_positive_quantities() {
+        let mut cells = vec![String::new(); PRODUCT_IMPORT_HEADERS.len()];
+        cells[6] = "米".into();
+        cells[8] = "东北大米".into();
+        for value in ["0", "-1", "NaN", "invalid", "1.0000001"] {
+            cells[14] = value.into();
+            assert!(normalize_import_row(2, &cells).is_err(), "invalid quantity: {value}");
+        }
     }
 }

@@ -9,6 +9,7 @@ use crate::Result;
 
 mod procurement;
 mod scope;
+mod supplier_codes;
 
 pub(crate) use procurement::{CategoryChainCache, matches_procurement_owner};
 pub use procurement::{MapProductProcurementOwners, MongoProductProcurementOwners, ProductProcurementOwners};
@@ -75,7 +76,11 @@ impl CatalogCenterReadService {
             .search_sellable_skus(&filter, &mut persistence_core::NoTransaction)
             .await
             .map_err(erp_catalog::Error::from)?;
-        Ok(erp_catalog::service::catalog::sellable_sku_page_view(page, &filter)?)
+        let supplier_ids = page.items.iter().map(|row| row.supplier_ids.clone()).collect::<Vec<_>>();
+        let numbers = self.supplier_numbers(&supplier_ids).await?;
+        let mut view = erp_catalog::service::catalog::sellable_sku_page_view(page, &filter)?;
+        supplier_codes::apply_supplier_codes(&mut view.items, &supplier_ids, &numbers);
+        Ok(view)
     }
 }
 
