@@ -19,3 +19,4 @@
 /playwright/.cache
 
 *.xlsx
+/outputs
