@@ -12,7 +12,7 @@ pub use audit::{
 };
 pub use authorization::{
     FailClosedWorkflowAuthorizationPort, RolePermissionSnapshotFact, WorkflowAccountFact,
-    WorkflowAuthorizationPort, WorkflowPolicyWrite, permission_covers,
+    WorkflowAuthorizationPort, WorkflowPolicyWrite, WorkflowQueueAccessFact, permission_covers,
 };
 pub use data_scope::{WorkflowDataScope, WorkflowScopeObject, WorkflowScopeObjects, WorkflowScopePredicate};
 pub use object_facts::{

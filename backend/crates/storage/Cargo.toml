@@ -8,6 +8,7 @@ autotests = false
 aws-sdk-s3 = { workspace = true }
 thiserror = { workspace = true }
 url = { workspace = true }
+tracing = { workspace = true }
 
 [dev-dependencies]
 aws-smithy-http-client = { workspace = true, features = ["test-util"] }

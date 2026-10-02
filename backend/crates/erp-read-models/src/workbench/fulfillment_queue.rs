@@ -338,15 +338,14 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             .await
     }
 
-    /// 授权快照、聚合读取、指标和分页共享原事务快照。
+    /// 授权快照、聚合读取、指标和分页共享原事务快照，并在返回前复验身份版本。
     async fn fulfillment_queue_page(
         &self,
-        query: FulfillmentQueueQuery,
+        mut query: FulfillmentQueueQuery,
         actor: AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<FulfillmentQueuePageView> {
-        let identity_version = self.auth.queue_scope_version(&actor, executor).await?;
-        let access = self.actor_access_for(actor.kind(), actor.id(), executor).await?;
+        let (access, identity_version) = self.queue_access_with_version(&actor, executor).await?;
         let visible_types = visible_operation_types(&query.operation_types, &access);
         let context_id = fulfillment_queue_context_id(actor.id(), &query, &visible_types);
         ensure_queue_context(&query.queue_context_id, &context_id)?;
@@ -357,37 +356,9 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             return Ok(empty_page(query.page, query.page_size, context_id, scope_version));
         }
 
-        let offset = query
-            .page
-            .checked_sub(1)
-            .and_then(|page| page.checked_mul(u64::from(query.page_size)))
-            .ok_or_else(|| Error::ValidationError("履约队列分页偏移超出支持范围".to_string()))?;
-        let (due_from, due_before) = due_bounds(query.due)?;
-        let repository_page = FulfillmentQueueRepository::new(&self.db)
-            .search_fulfillment_queue(
-                &RepositoryFilter::new(actor.id().to_string())
-                    .with_operation_types(
-                        visible_types
-                            .iter()
-                            .map(|operation_type| operation_type.as_str().to_string())
-                            .collect(),
-                    )
-                    .with_scope(
-                        query.operation_id,
-                        query.sales_order_id,
-                        query.purchase_order_id,
-                        query.warehouse_id,
-                    )
-                    .with_conditions(
-                        query.query,
-                        due_from,
-                        due_before,
-                        query.gate.map(|gate| gate.as_repository_str().to_string()),
-                    )
-                    .with_paging(offset, query.page_size),
-                executor,
-            )
-            .await?;
+        let filter = fulfillment_repository_filter(&mut query, actor.id(), &visible_types)?;
+        let repository_page =
+            FulfillmentQueueRepository::new(&self.db).search_fulfillment_queue(&filter, executor).await?;
 
         let items = repository_page.items.into_iter().map(map_item).collect::<Result<Vec<_>>>()?;
         let result_version = items.iter().fold(String::new(), |version, item| {
@@ -420,6 +391,37 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             as_of: Instant::now(),
         })
     }
+}
+
+/// 按原首错顺序校验分页和日期，再移动仓储专用筛选字段；保留页面及版本字段供返回复验。
+fn fulfillment_repository_filter(
+    query: &mut FulfillmentQueueQuery,
+    actor_id: &str,
+    visible_types: &[FulfillmentQueueOperationType],
+) -> Result<RepositoryFilter> {
+    let offset = query
+        .page
+        .checked_sub(1)
+        .and_then(|page| page.checked_mul(u64::from(query.page_size)))
+        .ok_or_else(|| Error::ValidationError("履约队列分页偏移超出支持范围".to_string()))?;
+    let (due_from, due_before) = due_bounds(query.due)?;
+    Ok(RepositoryFilter::new(actor_id.to_string())
+        .with_operation_types(
+            visible_types.iter().map(|operation_type| operation_type.as_str().to_string()).collect(),
+        )
+        .with_scope(
+            query.operation_id.take(),
+            query.sales_order_id.take(),
+            query.purchase_order_id.take(),
+            query.warehouse_id.take(),
+        )
+        .with_conditions(
+            query.query.take(),
+            due_from,
+            due_before,
+            query.gate.map(|gate| gate.as_repository_str().to_string()),
+        )
+        .with_paging(offset, query.page_size))
 }
 
 fn parse_operation_types(value: Option<&str>) -> Result<Vec<FulfillmentQueueOperationType>> {

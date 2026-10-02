@@ -13,6 +13,10 @@ use erp_supply::entity::supplier_settlement::{
 use erp_supply::repository::SupplierSettlementExt;
 use erp_supply::repository::prelude::*;
 use erp_warehouse::WarehouseExt;
+use erp_workflow::WorkflowAuthorizationPort;
+use erp_workflow::entity::approval_integration::display_snapshot::ApprovalDisplaySnapshot;
+use erp_workflow::ports::FailClosedWorkflowAuthorizationPort;
+use mongodb::Database;
 use persistence_core::Executor;
 
 use super::authority::inventory::{
@@ -25,7 +29,7 @@ use super::brief::{
 };
 use super::presentation::format_yuan;
 use super::{ObjectKind, WorkbenchObjectFact, WorkbenchObjectFactMap, WorkbenchReadService, object_ids};
-use crate::errors::Result;
+use crate::errors::{Error, Result};
 
 #[derive(Default)]
 struct SettlementBriefContext {
@@ -36,7 +40,44 @@ struct SettlementBriefContext {
     source_evidence_by_hash: HashMap<String, SupplierSettlementSourceEvidence>,
 }
 
-impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
+/// 从提交事务已保存的调整单与明细捕获审批展示，只补读关联资料标签。
+///
+/// # 参数
+/// * `db` - 当前数据库
+/// * `adjustment` / `lines` - 已在当前提交事务写入并重验身份的最终事实
+/// * `executor` - 原提交事务执行器
+///
+/// # 返回
+/// 返回与工作台使用同一构造器生成的不可变展示，不授予业务读取权限。
+///
+/// # 错误
+/// 标签查询失败或冻结展示字段越界时中止提交。
+pub async fn capture_stock_adjustment_display(
+    db: &Database,
+    adjustment: &StockAdjustment,
+    lines: &[StockAdjustmentLine],
+    executor: &mut dyn Executor,
+) -> Result<ApprovalDisplaySnapshot> {
+    let reader = WorkbenchReadService::new(db.clone(), FailClosedWorkflowAuthorizationPort);
+    let mut warehouses =
+        reader.stock_adjustment_warehouse_labels(std::slice::from_ref(adjustment), executor).await?;
+    let mut grouped = reader.stock_adjustment_brief_lines_from_facts(lines, executor).await?;
+    let fact = stock_adjustment_workbench_fact(
+        adjustment,
+        warehouses.remove(adjustment.warehouse_id.as_ref()),
+        grouped.remove(&adjustment.base.id).unwrap_or_default(),
+    );
+    let snapshot = ApprovalDisplaySnapshot {
+        root_document_id: fact.display.root_document_id,
+        counterparty_label: fact.display.counterparty_label,
+        impact_summary: fact.display.impact_summary,
+        source: fact.display.brief_source.ok_or_else(|| Error::ValidationError("审批单据摘要缺失".into()))?,
+    };
+    snapshot.validate()?;
+    Ok(snapshot)
+}
+
+impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
     /// 库存调整审批任务的对象事实。
     ///
     /// # 参数
@@ -64,42 +105,11 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             return Ok(());
         }
         let warehouse_labels = self.stock_adjustment_warehouse_labels(&adjustments, executor).await?;
-        let lines_by_adjustment = self.stock_adjustment_brief_lines(&ids, executor).await?;
+        let mut lines_by_adjustment = self.stock_adjustment_brief_lines(&ids, executor).await?;
         for adjustment in adjustments {
-            let warehouse = warehouse_labels.get(&adjustment.warehouse_id.to_string()).cloned();
-            let lines = lines_by_adjustment.get(&adjustment.base.id).cloned().unwrap_or_default();
-            let more_count = lines.len().saturating_sub(BRIEF_LINE_LIMIT) as u32;
-            let mut visible = lines;
-            visible.truncate(BRIEF_LINE_LIMIT);
-            let mut fact = WorkbenchObjectFact::from_authority(stock_adjustment_fact(&adjustment));
-            let mut sections = Vec::new();
-            push_section(&mut sections, "仓库", warehouse.as_deref(), false);
-            push_section(&mut sections, "调整原因", Some(adjustment.reason_type.label()), false);
-            push_section(&mut sections, "说明", adjustment.note.as_deref(), false);
-            if !visible.is_empty() {
-                push_section(
-                    &mut sections,
-                    "明细",
-                    Some(format!("{} 行", visible.len() + more_count as usize)).as_deref(),
-                    false,
-                );
-            }
-            fact.display.brief_source = Some(ObjectBriefSource {
-                customer: None,
-                amount_label: None,
-                extra_sections: sections,
-                list_summary: join_list_summary([
-                    warehouse,
-                    Some(adjustment.reason_type.label().to_string()),
-                    adjustment.note.clone().and_then(|text| non_empty(&text)),
-                    visible.first().map(|line| line.title.clone()),
-                ]),
-                lines: visible,
-                more_count,
-                submitter_name: non_empty(&adjustment.prepared_by),
-            });
-            fact.display.approval_subject_version =
-                (!adjustment.status.is_editable()).then_some(adjustment.approval_subject_version);
+            let warehouse = warehouse_labels.get(adjustment.warehouse_id.as_ref()).cloned();
+            let lines = lines_by_adjustment.remove(&adjustment.base.id).unwrap_or_default();
+            let fact = stock_adjustment_workbench_fact(&adjustment, warehouse, lines);
             facts.insert((ObjectKind::StockAdjustment, adjustment.base.id.clone()), fact);
         }
         Ok(())
@@ -308,14 +318,33 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             .stock_adjustment_lines()
             .list_work_item_brief_lines_by_adjustments(adjustment_ids, executor)
             .await?;
-        let sku_labels = self.stock_adjustment_sku_labels(&lines, executor).await?;
+        self.stock_adjustment_brief_lines_from_facts(&lines, executor).await
+    }
+
+    /// 从本批已持有的明细构造简报行，只查询 SKU 标签。
+    ///
+    /// # 参数
+    /// * `lines` - 本批明细，保持调用方事实顺序
+    /// * `executor` - 同一读取阶段的执行器
+    ///
+    /// # 返回
+    /// 返回按调整单分组的简报行。
+    ///
+    /// # 错误
+    /// SKU 标签读取失败时返回错误。
+    async fn stock_adjustment_brief_lines_from_facts(
+        &self,
+        lines: &[StockAdjustmentLine],
+        executor: &mut dyn Executor,
+    ) -> Result<HashMap<String, Vec<BriefLine>>> {
+        let sku_labels = self.stock_adjustment_sku_labels(lines, executor).await?;
         let mut grouped: HashMap<String, Vec<BriefLine>> = HashMap::new();
         for line in lines {
             let sku_label = sku_labels.get(&line.sku_id.to_string()).map(String::as_str);
             grouped
                 .entry(line.stock_adjustment_id.to_string())
                 .or_default()
-                .push(stock_brief_line(&line, sku_label));
+                .push(stock_brief_line(line, sku_label));
         }
         Ok(grouped)
     }
@@ -408,6 +437,42 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             })
             .collect())
     }
+}
+
+/// 使用唯一构造器投影库存调整的权威字段、简报与审批主题版本。
+fn stock_adjustment_workbench_fact(
+    adjustment: &StockAdjustment,
+    warehouse: Option<String>,
+    mut lines: Vec<BriefLine>,
+) -> WorkbenchObjectFact {
+    let total_lines = lines.len();
+    let more_count = total_lines.saturating_sub(BRIEF_LINE_LIMIT) as u32;
+    lines.truncate(BRIEF_LINE_LIMIT);
+    let mut fact = WorkbenchObjectFact::from_authority(stock_adjustment_fact(adjustment));
+    let mut sections = Vec::new();
+    push_section(&mut sections, "仓库", warehouse.as_deref(), false);
+    push_section(&mut sections, "调整原因", Some(adjustment.reason_type.label()), false);
+    push_section(&mut sections, "说明", adjustment.note.as_deref(), false);
+    if !lines.is_empty() {
+        push_section(&mut sections, "明细", Some(format!("{total_lines} 行")).as_deref(), false);
+    }
+    fact.display.brief_source = Some(ObjectBriefSource {
+        customer: None,
+        amount_label: None,
+        extra_sections: sections,
+        list_summary: join_list_summary([
+            warehouse,
+            Some(adjustment.reason_type.label().to_string()),
+            adjustment.note.clone().and_then(|text| non_empty(&text)),
+            lines.first().map(|line| line.title.clone()),
+        ]),
+        lines,
+        more_count,
+        submitter_name: non_empty(&adjustment.prepared_by),
+    });
+    fact.display.approval_subject_version =
+        (!adjustment.status.is_editable()).then_some(adjustment.approval_subject_version);
+    fact
 }
 
 /// 按差异分组不可变补证。
@@ -553,13 +618,77 @@ fn sku_brief_title(sku_no: &str, name: Option<&str>, specification: Option<&str>
 
 #[cfg(test)]
 mod tests {
+    use erp_core::ids::{StockAdjustmentId, WarehouseId};
     use erp_core::money::Quantity;
-    use erp_inventory::MovementDirection;
+    use erp_inventory::{AdjustmentReasonType, MovementDirection, StockAdjustmentData, StockAdjustmentState};
 
     use super::*;
 
     fn qty(value: &str) -> Quantity {
         value.parse().expect("测试数量必须合法")
+    }
+
+    /// 构造审批中调整单以校验实时及冻结简报共用的投影。
+    fn adjustment() -> StockAdjustment {
+        let mut adjustment = StockAdjustment::new(
+            StockAdjustmentId::new("adjustment"),
+            StockAdjustmentData {
+                adjustment_no: "ADJ-1".into(),
+                warehouse_id: WarehouseId::new("warehouse"),
+                reason_type: AdjustmentReasonType::StockGain,
+                prepared_by: "actor".into(),
+                note: Some("盘点增加".into()),
+                occurred_at: None,
+            },
+            "actor",
+        )
+        .unwrap();
+        adjustment.status = StockAdjustmentState::InApproval;
+        adjustment.approval_subject_version = 2;
+        adjustment
+    }
+
+    /// 统一投影保留原明细顺序、完整行数、截断和本次审批主题版本。
+    #[test]
+    fn stock_projection_preserves_brief_contract_and_line_order() {
+        let adjustment = adjustment();
+        let lines = (0..BRIEF_LINE_LIMIT + 2)
+            .map(|index| BriefLine {
+                title: format!("SKU {index} · 增加"),
+                quantity: Some("×1".into()),
+                due_label: None,
+            })
+            .collect::<Vec<_>>();
+        let fact = stock_adjustment_workbench_fact(&adjustment, Some("中心仓（WH-1）".into()), lines);
+        assert_eq!(fact.display.root_document_id, "adjustment");
+        assert_eq!(fact.display.approval_subject_version, Some(2));
+        assert_eq!(fact.display.impact_summary.as_deref(), Some("不审批则库存调整不能入账"));
+        let source = fact.display.brief_source.unwrap();
+        assert_eq!(source.lines.len(), BRIEF_LINE_LIMIT);
+        assert_eq!(source.lines[0].title, "SKU 0 · 增加");
+        assert_eq!(source.more_count, 2);
+        assert_eq!(source.submitter_name.as_deref(), Some("actor"));
+        assert!(source.extra_sections.iter().any(
+            |section| section.label == "明细" && section.value == format!("{} 行", BRIEF_LINE_LIMIT + 2)
+        ));
+        assert!(source.list_summary.contains("中心仓（WH-1）"));
+        assert!(source.list_summary.contains("盘点增加"));
+    }
+
+    /// 草稿空明细和缺失仓库标签保持缺失；不以内部 ID 补展示。
+    #[test]
+    fn stock_projection_retains_empty_and_missing_label_behavior() {
+        let mut adjustment = adjustment();
+        adjustment.status = StockAdjustmentState::Draft;
+        let fact = stock_adjustment_workbench_fact(&adjustment, None, Vec::new());
+        assert_eq!(fact.display.approval_subject_version, None);
+        let source = fact.display.brief_source.unwrap();
+        assert!(source.lines.is_empty());
+        assert_eq!(source.more_count, 0);
+        assert!(
+            !source.extra_sections.iter().any(|section| section.label == "仓库" || section.label == "明细")
+        );
+        assert!(!source.list_summary.contains("warehouse"));
     }
 
     #[test]

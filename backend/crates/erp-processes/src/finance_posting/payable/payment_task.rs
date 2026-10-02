@@ -13,6 +13,7 @@ use erp_finance::entity::payable::{
 };
 use erp_finance::repository::PayableExt;
 use erp_finance::repository::prelude::*;
+use erp_identity::SharedRbacService;
 use erp_supplier::SupplierExt;
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{
@@ -163,30 +164,48 @@ pub(crate) struct PaymentExecutionCommand<'a> {
     pub allocations: &'a [PendingPaymentAllocation],
 }
 
+/// 本次付款执行在同一 Executor 中已授权并校验范围的财务事实。
+pub(super) struct PaymentExecutionFacts {
+    /// 已授权任务绑定的应付子账；付款余额写入前保持不变。
+    pub accounts: Vec<PayableAccount>,
+    /// 已勾选子账的完整分录集合，保留任务覆盖校验所需事实。
+    pub entries: Vec<PayableEntry>,
+}
+
+/// 已完成任务授权的合并集合与实际读取的任务、子账。
+struct AuthorizedPaymentMerge {
+    merge: PaymentExecutionMergeSet,
+    tasks: Vec<WorkItem>,
+    accounts: Vec<PayableAccount>,
+}
+
 /// 在付款正式提交事务内校验并记录当前付款执行任务活动。
 ///
 /// # 参数
 /// * `db` - MongoDB 数据库
+/// * `rbac` - 当前服务复用的授权读取实例
 /// * `command` - 当前任务、附加任务、供应商与核销范围
 /// * `actor` - 当前出纳
 /// * `executor` - 调用方事务执行器
 ///
 /// # 返回
-/// 全部已勾选任务授权通过且核销范围合法时返回成功。
+/// 返回同一 Executor 中已授权的子账和已完成覆盖校验的完整分录事实。
 ///
 /// # 错误
 /// 任务版本、当前责任人、应付子账、供应商或核销分录不属于已勾选任务时失败关闭。
 ///
 /// # 关键业务约束
 /// 一次打款必须覆盖每条已勾选任务，且不得核销未勾选应付。
-pub(crate) async fn record_payment_execution(
+pub(super) async fn record_payment_execution(
     db: &mongodb::Database,
+    rbac: &SharedRbacService,
     command: PaymentExecutionCommand<'_>,
     actor: &AuditActor,
     executor: &mut dyn Executor,
-) -> Result<()> {
-    let merge = load_authorized_merge_set(
+) -> Result<PaymentExecutionFacts> {
+    let authorized = load_authorized_merge_set(
         db,
+        rbac,
         command.work_item_id,
         command.expected_task_version,
         command.additional_tasks,
@@ -194,17 +213,20 @@ pub(crate) async fn record_payment_execution(
         executor,
     )
     .await?;
-    if merge.supplier_id() != command.supplier_id.as_ref() {
+    if authorized.merge.supplier_id() != command.supplier_id.as_ref() {
         return Err(Error::BusinessLogicError("付款供应商与当前任务的应付子账不一致".to_string()));
     }
-    ensure_allocations_match_merge_set(db, &merge, command.allocations, executor).await?;
-    record_merge_set_activity(db, &merge, actor, executor).await
+    let entries =
+        ensure_allocations_match_merge_set(db, &authorized.merge, command.allocations, executor).await?;
+    record_merge_set_activity(db, authorized.tasks, actor, executor).await?;
+    Ok(PaymentExecutionFacts { accounts: authorized.accounts, entries })
 }
 
 /// 授权当前任务与附加任务并构造合并集合。
 ///
 /// # 参数
 /// * `db` - MongoDB 数据库
+/// * `rbac` - 当前服务复用的授权读取实例
 /// * `work_item_id` - 当前付款执行任务
 /// * `expected_task_version` - 当前任务版本
 /// * `additional_tasks` - 附加任务身份与版本
@@ -212,28 +234,38 @@ pub(crate) async fn record_payment_execution(
 /// * `executor` - 调用方事务执行器
 ///
 /// # 返回
-/// 返回已通过身份校验的合并集合。
+/// 返回已通过身份校验的合并集合和实际读取的任务、子账。
 ///
 /// # 错误
 /// 任一任务未授权、版本冲突或成员集合不合法时失败关闭。
 async fn load_authorized_merge_set(
     db: &mongodb::Database,
+    rbac: &SharedRbacService,
     work_item_id: &WorkItemId,
     expected_task_version: u64,
     additional_tasks: &[(WorkItemId, u64)],
     actor: &AuditActor,
     executor: &mut dyn Executor,
-) -> Result<PaymentExecutionMergeSet> {
+) -> Result<AuthorizedPaymentMerge> {
     let mut members = Vec::with_capacity(additional_tasks.len() + 1);
-    let (_, account) =
-        authorize_payment_execution(db, work_item_id, expected_task_version, None, actor, executor).await?;
+    let mut tasks = Vec::with_capacity(additional_tasks.len() + 1);
+    let mut accounts = Vec::with_capacity(additional_tasks.len() + 1);
+    let (task, account) =
+        authorize_payment_execution(db, rbac, work_item_id, expected_task_version, None, actor, executor)
+            .await?;
     members.push(merge_member(work_item_id, &account));
+    tasks.push(task);
+    accounts.push(account);
     for (task_id, task_version) in additional_tasks {
-        let (_, account) =
-            authorize_payment_execution(db, task_id, *task_version, None, actor, executor).await?;
+        let (task, account) =
+            authorize_payment_execution(db, rbac, task_id, *task_version, None, actor, executor).await?;
         members.push(merge_member(task_id, &account));
+        tasks.push(task);
+        accounts.push(account);
     }
-    PaymentExecutionMergeSet::try_new(members).map_err(|error| Error::BusinessLogicError(error.to_string()))
+    let merge = PaymentExecutionMergeSet::try_new(members)
+        .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
+    Ok(AuthorizedPaymentMerge { merge, tasks, accounts })
 }
 
 /// 由已授权应付构造合并成员事实。
@@ -264,7 +296,7 @@ fn merge_member(work_item_id: &WorkItemId, account: &PayableAccount) -> PaymentE
 /// * `executor` - 调用方事务执行器
 ///
 /// # 返回
-/// 核销范围合法时返回成功。
+/// 核销范围合法时返回本阶段实际读取的完整分录集合。
 ///
 /// # 错误
 /// 分录不存在或不属于已勾选应付时失败关闭。
@@ -273,7 +305,7 @@ async fn ensure_allocations_match_merge_set(
     merge: &PaymentExecutionMergeSet,
     allocations: &[PendingPaymentAllocation],
     executor: &mut dyn Executor,
-) -> Result<()> {
+) -> Result<Vec<PayableEntry>> {
     let account_ids: Vec<PayableAccountId> =
         merge.payable_account_ids().into_iter().map(PayableAccountId::new).collect();
     let entries = db.payable_entries().find_entries_by_accounts(&account_ids, executor).await?;
@@ -292,14 +324,15 @@ async fn ensure_allocations_match_merge_set(
     }
     merge
         .ensure_allocations_in_scope(&allocation_accounts)
-        .map_err(|error| Error::BusinessLogicError(error.to_string()))
+        .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
+    Ok(entries)
 }
 
 /// 为合并集合内全部开放任务记录本次付款活动。
 ///
 /// # 参数
 /// * `db` - MongoDB 数据库
-/// * `merge` - 已授权合并集合
+/// * `tasks` - 同一 Executor 中按合并成员次序已读取且已授权的任务
 /// * `actor` - 当前出纳
 /// * `executor` - 调用方事务执行器
 ///
@@ -310,17 +343,12 @@ async fn ensure_allocations_match_merge_set(
 /// 任务读取、活动规则或仓储更新失败时返回错误。
 async fn record_merge_set_activity(
     db: &mongodb::Database,
-    merge: &PaymentExecutionMergeSet,
+    tasks: Vec<WorkItem>,
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let occurred_at = Instant::now();
-    for member in merge.members() {
-        let mut task = db
-            .work_items()
-            .find_by_id(&member.work_item_id, executor)
-            .await?
-            .ok_or_else(|| Error::NotFound("供应商付款执行任务不存在".to_string()))?;
+    for mut task in tasks {
         task.record_activity(actor.id(), occurred_at).map_err(Error::Logic)?;
         db.work_items().update(&mut task, executor).await?;
     }
@@ -333,6 +361,7 @@ async fn record_merge_set_activity(
 ///
 /// # 参数
 /// * `db` - MongoDB 数据库
+/// * `rbac` - 当前服务复用的授权读取实例
 /// * `work_item_id` - 当前付款执行任务
 /// * `expected_task_version` - 页面读取的任务版本
 /// * `expected_account_id` - 可选的页面应付子账身份
@@ -346,6 +375,7 @@ async fn record_merge_set_activity(
 /// 任务不存在、身份或版本漂移、非当前责任人或无处理权限时失败关闭。
 pub(crate) async fn authorize_payment_execution(
     db: &mongodb::Database,
+    rbac: &SharedRbacService,
     work_item_id: &WorkItemId,
     expected_task_version: u64,
     expected_account_id: Option<&PayableAccountId>,
@@ -378,9 +408,7 @@ pub(crate) async fn authorize_payment_execution(
     if !task.is_owned_by(actor.id()) {
         return Err(Error::Forbidden("当前账号不是开放付款任务的当前责任人".to_string()));
     }
-    work_item_service(db.clone(), crate::adapters::identity::shared_rbac_service(db.clone()))
-        .ensure_domain_decision_access(actor, &task, executor)
-        .await?;
+    work_item_service(db.clone(), rbac.clone()).ensure_domain_decision_access(actor, &task, executor).await?;
     Ok((task, account))
 }
 

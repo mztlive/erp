@@ -24,7 +24,7 @@ use erp_procurement::entity::purchase_order::{
     LegacyReceiptIdScheme, PurchaseCommandReceipt, PurchaseCommandReceiptError, SourcingAssignmentSet,
     SourcingPlan, SourcingPlanError, StockBasisGroup, basis_id_for,
 };
-use erp_read_models::purchase_center::repository::sales_order_basis_fact;
+use erp_read_models::purchase_center::repository::{sales_order_basis_fact, sourcing_groups_for_order};
 use erp_sales::repository::SalesOrderExt;
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{WorkItemStatus, WorkItemType};
@@ -36,16 +36,18 @@ use validator::Validate;
 use super::PurchaseOrderProcess;
 use super::authorization::{PurchaseOrderAuthorization, ensure_purchase_order_actor_account};
 use super::creation_basis::{
-    CreateBasisCommand, VerifiedBasisInput, basis_groups_and_facts, basis_groups_for_order,
-    load_effective_sales_order, persist_basis_draft, procurement_quantity_changed,
-    stock_basis_groups_for_order, validate_requested_quantities,
+    CreateBasisCommand, VerifiedBasisInput, basis_groups_and_facts, load_effective_sales_order,
+    persist_basis_draft, procurement_quantity_changed, stock_basis_groups_for_order,
+    validate_requested_quantities,
 };
 use super::procurement_task_sync::{
     load_owned_open_procurement_task, sync_procurement_tasks_for_sales_order,
 };
 use crate::{Error, Result};
 
+mod apply;
 mod stock_posting;
+use apply::create_from_sourcing_apply;
 use stock_posting::{PersistedStockAllocation, persist_stock_allocations};
 
 const CREATE_PERMISSION: &str = "purchase_order:create";
@@ -192,183 +194,6 @@ struct CreateFromSourcingApplyInput<'a> {
     request_fingerprint: &'a str,
     /// 审计操作人。
     actor: &'a AuditActor,
-}
-
-/// 在 MongoDB 事务内按供给计划写入库存预占、仓发草稿和采购单。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `input` - 选源请求、分配集合与命令收据上下文
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回本次创建或事务内命中的幂等结果。
-///
-/// # 错误
-/// 任务、依据、数量、并发 guard、审批绑定或持久化失败时返回错误。
-///
-/// # 关键业务约束
-/// guard CAS 成功后必须再次按统一供给覆盖计算剩余量，且本函数只推进一次 guard。
-async fn create_from_sourcing_apply(
-    db: &mongodb::Database,
-    input: CreateFromSourcingApplyInput<'_>,
-    executor: &mut dyn Executor,
-) -> Result<CreatePurchaseOrdersFromSourcingResult> {
-    if let Some(result) = replay_sourcing(
-        db,
-        input.audit_id,
-        input.request_fingerprint,
-        input.actor,
-        input.sales_order_id.as_ref(),
-        &input.req.work_item_id,
-        executor,
-    )
-    .await?
-    {
-        return Ok(result);
-    }
-    let task = load_owned_open_procurement_task(
-        db,
-        &input.req.work_item_id,
-        input.sales_order_id,
-        input.actor.id(),
-        executor,
-    )
-    .await?;
-    let mut order = load_effective_sales_order(db, input.sales_order_id, executor).await?;
-    let groups = basis_groups_for_order(db, &order, task.responsibility_scope_ids(), executor).await?;
-    let stock_groups =
-        stock_basis_groups_for_order(db, &order, task.responsibility_scope_ids(), executor).await?;
-    let plan = SourcingPlan::plan(
-        &sales_order_basis_fact(&order),
-        &groups,
-        &stock_groups,
-        &input.req.work_item_id,
-        input.assignments,
-    )
-    .map_err(map_sourcing_plan_error)?;
-    order.advance_procurement_guard(input.actor.id())?;
-    db.sales_orders().update(&mut order, executor).await?;
-    let latest_stock_groups =
-        stock_basis_groups_for_order(db, &order, task.responsibility_scope_ids(), executor).await?;
-    plan.validate_against_latest_stock(&latest_stock_groups).map_err(map_sourcing_plan_error)?;
-    let persisted_stock = persist_stock_allocations(
-        db,
-        plan.stock_plans(),
-        &latest_stock_groups,
-        input.sales_order_id,
-        input.audit_id,
-        input.request_fingerprint,
-        executor,
-    )
-    .await?;
-    create_stock_delivery_drafts(db, input.sales_order_id, &persisted_stock, executor).await?;
-    let stock_reservations =
-        persisted_stock.into_iter().map(|allocation| allocation.result).collect::<Vec<_>>();
-    let (latest_groups, latest_facts) =
-        basis_groups_and_facts(db, &order, task.responsibility_scope_ids(), executor).await?;
-    plan.validate_against_latest_sourcing(&latest_groups).map_err(map_sourcing_plan_error)?;
-    let mut orders = Vec::with_capacity(plan.purchase_plans().len());
-    for plan in plan.purchase_plans() {
-        let latest = latest_groups
-            .iter()
-            .find(|group| group.scope == plan.group.scope)
-            .ok_or_else(procurement_quantity_changed)?;
-        let selected_lines = validate_requested_quantities(&plan.requested_lines, latest)?;
-        let basis_id = basis_id_for(
-            &sales_order_basis_fact(&order),
-            latest,
-            &input.req.work_item_id,
-            plan.target_warehouse_id.as_ref(),
-        );
-        let item_req = CreatePurchaseOrderFromBasisRequest {
-            work_item_id: input.req.work_item_id.clone(),
-            basis_id: basis_id.clone(),
-            purchase_type: latest.scope.purchase_type,
-            payment_term_code: latest.scope.payment_term_code.clone(),
-            target_warehouse_id: plan.target_warehouse_id.as_ref().map(ToString::to_string),
-            lines: plan
-                .requested_lines
-                .iter()
-                .map(|line| CreatePurchaseOrderLineRequest {
-                    sales_order_line_id: line.sales_order_line_id.clone(),
-                    quantity: line.quantity.to_string(),
-                    expected_delivery_date: line.expected_delivery_date.to_string(),
-                })
-                .collect(),
-            idempotency_key: input.req.idempotency_key.clone(),
-        };
-        let item_receipt_identity = PurchaseCommandReceipt::<SourcingReceipt>::identity(
-            CREATE_SOURCING_ITEM_PREFIX,
-            input.actor.id(),
-            CREATE_SOURCING_ACTION,
-            Some(basis_id.as_str()),
-            &input.req.idempotency_key,
-            LegacyReceiptIdScheme::None,
-        )?;
-        let item_audit_id = item_receipt_identity.receipt_id().to_string();
-        let command = CreateBasisCommand {
-            sales_order_id: input.sales_order_id,
-            req: &item_req,
-            requested_lines: &plan.requested_lines,
-            audit_id: &item_audit_id,
-            request_fingerprint: input.request_fingerprint,
-            actor: input.actor,
-        };
-        orders.push(
-            persist_basis_draft(
-                db,
-                input.rbac,
-                input.object_read,
-                &VerifiedBasisInput {
-                    sales_order: &order,
-                    group: latest,
-                    selected_lines: &selected_lines,
-                    facts: &latest_facts,
-                },
-                &command,
-                executor,
-            )
-            .await?,
-        );
-    }
-    sync_procurement_tasks_for_sales_order(db, input.sales_order_id, executor).await?;
-    let work_item_status = db
-        .work_items()
-        .find_by_id(&input.req.work_item_id, executor)
-        .await?
-        .ok_or_else(|| Error::ConflictError("供给分配任务在同步后不存在".to_string()))?
-        .status;
-    let response_work_item_status = sourcing_work_item_status(work_item_status, false)?;
-    let receipt = SourcingReceipt {
-        orders: orders
-            .iter()
-            .map(|order| SourcingOrderReceipt {
-                purchase_order_id: order.purchase_order_id.clone(),
-                purchase_no: order.purchase_no.clone(),
-                lock_version: order.lock_version,
-            })
-            .collect(),
-        stock_reservations: stock_reservations.clone(),
-        work_item_status: Some(work_item_status),
-    };
-    write_sourcing_receipt(
-        db,
-        input.audit_id,
-        input.request_fingerprint,
-        input.sales_order_id.as_ref(),
-        &receipt,
-        input.actor,
-        executor,
-    )
-    .await?;
-    Ok(CreatePurchaseOrdersFromSourcingResult {
-        orders,
-        stock_reservations,
-        work_item_status: response_work_item_status,
-        replayed: false,
-        reference: input.sales_order_id.to_string(),
-    })
 }
 
 /// 已规范化的选源行。

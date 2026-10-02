@@ -5,6 +5,7 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use erp_catalog::entity::catalog::product_import::{collapse_import_text, truncate_import_text};
 use erp_catalog::{PRODUCT_IMPORT_SHEET_NAME, ProductImportJobView};
+use erp_support::repository::bulk_job::BackgroundJobInput;
 use erp_support::repository::prelude::*;
 use erp_support::{
     BackgroundJob, BackgroundJobAggregate, BackgroundJobAggregateData, BackgroundJobId, BackgroundJobItem,
@@ -13,11 +14,11 @@ use erp_support::{
     product_import_job_no,
 };
 use id_generator::next_id;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{Error as PersistenceError, NoTransaction, Transactional};
 
 use super::ProductImportProcess;
 use super::parse::{ParsedProductSheet, parse_product_quote_xlsx};
-use super::row_manifest::{build_row_manifest, delete_manifest_objects, write_row_manifest};
+use super::row_manifest::{build_row_manifest, delete_manifest_objects, prepare_row_manifest};
 use super::views::job_view;
 use crate::{Error, Result};
 
@@ -55,8 +56,7 @@ impl ProductImportProcess {
 
     /// 由已解析工作表创建导入任务（表单上传与浏览器直传共用）。
     ///
-    /// 提交时预提各行图片并写入行级清单，执行阶段只读清单，
-    /// 不再回源文件下载解析。
+    /// 提交时预提各行图片；小清单与任务一起原子提交，较大清单仍存对象存储。
     ///
     /// # 参数
     /// * `file_asset` - 已落对象存储的文件资产
@@ -79,16 +79,16 @@ impl ProductImportProcess {
     ) -> Result<ProductImportJobView> {
         let (job, items) = import_job(&parsed, &file_asset, &request_id, actor)?;
         let built = build_row_manifest(&self.storage, &self.secret, &request_id, &parsed, xlsx).await?;
-        let manifest_key = match write_row_manifest(&self.storage, &built.manifest).await {
-            Ok(key) => key,
+        let (input, manifest_key) = match prepare_row_manifest(&self.storage, &built.manifest).await {
+            Ok(prepared) => prepared,
             Err(error) => {
                 delete_manifest_objects(&self.storage, &built.uploaded_object_keys).await;
                 return Err(error);
             },
         };
         let mut manifest_keys = built.uploaded_object_keys;
-        manifest_keys.push(manifest_key);
-        match self.persist_job(file_asset, job, items, file_name).await {
+        manifest_keys.extend(manifest_key);
+        match self.persist_job(file_asset, job, items, file_name, input).await {
             Ok(view) => Ok(view),
             Err(error) => {
                 if !matches!(error, Error::OutcomeUnknown(_)) {
@@ -99,12 +99,21 @@ impl ProductImportProcess {
         }
     }
 
+    /// 原子登记源文件资产、任务、逐行结果表和可选私有清单。
+    ///
+    /// # 参数
+    /// 文件资产、任务及明细、原文件名和已通过容量校验的可选私有清单。
+    /// # 返回
+    /// 返回新任务或既有幂等回放任务。
+    /// # 错误
+    /// 事务、唯一键或异载荷冲突按原分类传播；未知提交不执行对象补偿。
     pub(super) async fn persist_job(
         &self,
         file_asset: FileAsset,
         job: BackgroundJob,
         items: Vec<BackgroundJobItem>,
         file_name: String,
+        input: Option<BackgroundJobInput>,
     ) -> Result<ProductImportJobView> {
         let db = self.db.clone();
         let client = db.client().clone();
@@ -114,7 +123,13 @@ impl ProductImportProcess {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     db.file_assets().create(&file_for_tx, executor).await?;
-                    db.bulk_job().create_job_with_items(&job_for_tx, items, executor).await
+                    let registration =
+                        db.bulk_job().create_job_with_items(&job_for_tx, items, executor).await?;
+                    if let Some(input) = input {
+                        let job_id = BackgroundJobId::new(job_for_tx.base.id.clone());
+                        db.bulk_job().create_job_input(&job_id, &input, executor).await?;
+                    }
+                    Ok::<_, PersistenceError>(registration)
                 })
             })
             .await;
@@ -124,7 +139,7 @@ impl ProductImportProcess {
             Ok(BackgroundJobRegistration::ConflictDifferentPayload(_)) => {
                 Err(Error::ConflictError("同一请求身份已用于不同导入任务".into()))
             },
-            Err(persistence_core::Error::DuplicateKey(_)) => self.replay_existing_job(&job.request_id).await,
+            Err(PersistenceError::DuplicateKey(_)) => self.replay_existing_job(&job.request_id).await,
             Err(error) => Err(error.into()),
         }
     }

@@ -3,6 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use application_core::AuditActor;
+use erp_core::AccountKind;
 use erp_workflow::WorkflowAuthorizationPort;
 use erp_workflow::entity::work_item::{WorkItemStatus, WorkItemType};
 use erp_workflow::ports::{
@@ -17,6 +18,55 @@ use super::{
     ProcessingBlockerView, ProcessingState, WorkItemAllowedAction, WorkItemView, WorkbenchReadService,
 };
 use crate::{Error, Result};
+
+/// 一个统计扫描阶段内最多复用 128 个负责人的角色事实，不保存对象授权结论。
+pub(super) struct QualificationCache {
+    enabled: bool,
+    owners: HashMap<String, OwnerPermissions>,
+}
+
+/// 权限集覆盖与 policy revision 同时匹配才可复用；启用角色沿用原事务快照。
+#[derive(Clone)]
+struct OwnerPermissions {
+    kind: AccountKind,
+    required: BTreeSet<&'static str>,
+    grants: RolePermissionSnapshotFact,
+    enabled_roles: Vec<String>,
+}
+
+impl QualificationCache {
+    /// 只在调用方事务执行器内启用；每个完整扫描创建独立缓存。
+    pub(super) fn new(executor: &mut dyn Executor) -> Self {
+        Self { enabled: executor.session().is_some(), owners: HashMap::new() }
+    }
+
+    /// 页面单批资格验证沿用逐次读取合同，不启用跨批复用。
+    fn disabled() -> Self {
+        Self { enabled: false, owners: HashMap::new() }
+    }
+
+    /// 返回与当前账号类型和权限需求一致的候选，版本仍由调用方实时校验。
+    fn candidate(
+        &self,
+        account: &WorkflowAccountFact,
+        required: &BTreeSet<&'static str>,
+    ) -> Option<&OwnerPermissions> {
+        self.owners
+            .get(&account.id)
+            .filter(|facts| facts.kind == account.kind && required.is_subset(&facts.required))
+    }
+
+    /// 达到固定上限后释放上一批缓存；不会累计所有任务、负责人或来源对象。
+    fn insert(&mut self, owner: &str, facts: OwnerPermissions) {
+        if !self.enabled {
+            return;
+        }
+        if self.owners.len() >= 128 && !self.owners.contains_key(owner) {
+            self.owners.clear();
+        }
+        self.owners.insert(owner.to_string(), facts);
+    }
+}
 
 impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
     /// 对当前页的订单关联任务按负责人分组重验；保留原责任和受控管理动作。
@@ -38,7 +88,8 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
         if !keys.is_empty() {
             let facts = self.facts_reader().load(&keys, executor).await?;
             let groups = owner_groups(&actions, &facts)?;
-            self.qualify_owner_groups(&mut actions, groups, executor).await?;
+            self.qualify_owner_groups(&mut actions, groups, &mut QualificationCache::disabled(), executor)
+                .await?;
         }
         for (action, item) in actions.into_iter().zip(items) {
             action.apply(item);
@@ -58,11 +109,12 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
         &self,
         items: &mut [ActionProjection],
         facts: &ObjectFactMap,
+        qualification: &mut QualificationCache,
         executor: &mut dyn Executor,
     ) -> Result<()> {
         self.qualify_approvals(items, executor).await?;
         let groups = owner_groups(items, facts)?;
-        self.qualify_owner_groups(items, groups, executor).await
+        self.qualify_owner_groups(items, groups, qualification, executor).await
     }
 
     /// 任务链已由工作流服务校验；投影仅复核当前审批人账号和静态资格。
@@ -111,6 +163,7 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
         &self,
         items: &mut [ActionProjection],
         groups: OwnerGroups,
+        qualification: &mut QualificationCache,
         executor: &mut dyn Executor,
     ) -> Result<()> {
         if groups.is_empty() {
@@ -131,7 +184,7 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
                 }
                 continue;
             };
-            self.qualify_owner(items, account, &tasks, executor).await?;
+            self.qualify_owner(items, account, &tasks, qualification, executor).await?;
         }
         Ok(())
     }
@@ -142,6 +195,7 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
         items: &mut [ActionProjection],
         account: &WorkflowAccountFact,
         tasks: &[(usize, OrderTaskSource)],
+        qualification: &mut QualificationCache,
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let actor = AuditActor::new(account.id.clone(), account.login_account.clone(), account.kind);
@@ -150,16 +204,12 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
             .filter_map(|(index, _)| execution_permissions(&items[*index]))
             .flatten()
             .collect::<BTreeSet<_>>();
-        let grants = self
-            .auth
-            .role_permission_snapshot(account.kind, &account.id, &required.into_iter().collect::<Vec<_>>())
-            .await?;
-        let enabled_roles = self.auth.enabled_role_ids(grants.role_ids(), executor).await?;
+        let permissions = owner_permissions(&self.auth, account, required, qualification, executor).await?;
         let sources = tasks.iter().map(|(_, source)| source.clone()).collect::<BTreeSet<_>>();
         let readable = self.auth.readable_order_sources(&actor, &sources, executor).await?;
         for (index, source) in tasks {
             let item = &mut items[*index];
-            let executable = can_execute(item, &grants, &enabled_roles);
+            let executable = can_execute(item, &permissions.grants, &permissions.enabled_roles);
             let fulfillment = item.work_item_type == WorkItemType::FulfillmentOperation;
             if !order_source_allows_execution(readable.contains(source), executable, fulfillment)
                 || !executable
@@ -169,6 +219,28 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
         }
         Ok(())
     }
+}
+
+/// 同拍同策略版本复用共同角色事实；来源资格仍由每批的精确订单授权独立证明。
+async fn owner_permissions(
+    auth: &impl WorkflowAuthorizationPort,
+    account: &WorkflowAccountFact,
+    required: BTreeSet<&'static str>,
+    qualification: &mut QualificationCache,
+    executor: &mut dyn Executor,
+) -> Result<OwnerPermissions> {
+    if let Some(facts) = qualification.candidate(account, &required)
+        && auth.current_policy_revision().await? == facts.grants.policy_revision()
+    {
+        return Ok(facts.clone());
+    }
+    let grants = auth
+        .role_permission_snapshot(account.kind, &account.id, &required.iter().copied().collect::<Vec<_>>())
+        .await?;
+    let enabled_roles = auth.enabled_role_ids(grants.role_ids(), executor).await?;
+    let facts = OwnerPermissions { kind: account.kind, required, grants, enabled_roles };
+    qualification.insert(&account.id, facts.clone());
+    Ok(facts)
 }
 
 /// 本人履约任务在仍有执行权时，不因缺少销售单详情而失效。
@@ -263,6 +335,8 @@ fn qualification_keys(items: &[ActionProjection]) -> HashSet<(ObjectKind, String
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::Ordering;
+
     use erp_core::ids::WorkItemId;
     use erp_workflow::entity::work_item::{
         AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
@@ -270,6 +344,94 @@ mod tests {
 
     use super::*;
     use crate::workbench::dto::WorkItemFields;
+    use crate::workbench::test_auth::TestAuth;
+
+    /// 同扫描阶段命中只复用共同角色事实，policy 变化或权限扩展仍重新读取。
+    #[tokio::test]
+    async fn owner_permissions_reuse_requires_matching_revision_and_permission_coverage() {
+        let auth = TestAuth::default();
+        auth.revision.store(1, Ordering::SeqCst);
+        let account = WorkflowAccountFact::new("owner", AccountKind::Admin, true);
+        let action = ActionProjection::from_view(&view());
+        let required = execution_permissions(&action).unwrap().into_iter().collect::<BTreeSet<_>>();
+        let mut cache = QualificationCache { enabled: true, owners: HashMap::new() };
+        let mut executor = persistence_core::NoTransaction;
+        let first =
+            owner_permissions(&auth, &account, required.clone(), &mut cache, &mut executor).await.unwrap();
+        let repeated = owner_permissions(
+            &auth,
+            &account,
+            BTreeSet::from([*required.first().unwrap()]),
+            &mut cache,
+            &mut executor,
+        )
+        .await
+        .unwrap();
+        assert_eq!(first.grants.policy_revision(), repeated.grants.policy_revision());
+        assert!(can_execute(&action, &first.grants, &first.enabled_roles));
+        assert!(can_execute(&action, &repeated.grants, &repeated.enabled_roles));
+        assert_eq!(*auth.trace.lock().unwrap(), vec!["snapshot:owner", "enabled_roles", "revision"]);
+        auth.revision.store(2, Ordering::SeqCst);
+        let refreshed =
+            owner_permissions(&auth, &account, required, &mut cache, &mut executor).await.unwrap();
+        assert_eq!(refreshed.grants.policy_revision(), 2);
+        assert_eq!(&auth.trace.lock().unwrap()[3..], &["revision", "snapshot:owner", "enabled_roles"]);
+        let expanded = owner_permissions(
+            &auth,
+            &account,
+            BTreeSet::from(["electronic_delivery:confirm"]),
+            &mut cache,
+            &mut executor,
+        )
+        .await
+        .unwrap();
+        assert_eq!(expanded.grants.granting_role_ids("electronic_delivery:confirm"), vec!["executor"]);
+        assert_eq!(&auth.trace.lock().unwrap()[6..], &["snapshot:owner", "enabled_roles"]);
+    }
+
+    /// revision 读取失败不得回退到缓存授权，也不得进入后续资格步骤。
+    #[tokio::test]
+    async fn owner_permission_cache_fails_closed_on_revision_failure() {
+        let auth = TestAuth::default();
+        let account = WorkflowAccountFact::new("owner", AccountKind::Admin, true);
+        let mut cache = QualificationCache { enabled: true, owners: HashMap::new() };
+        let mut executor = persistence_core::NoTransaction;
+        owner_permissions(&auth, &account, BTreeSet::new(), &mut cache, &mut executor).await.unwrap();
+        auth.fail_revision.store(true, Ordering::SeqCst);
+        let result = owner_permissions(&auth, &account, BTreeSet::new(), &mut cache, &mut executor).await;
+        assert!(matches!(result, Err(Error::Rbac(message)) if message == "revision failed"));
+        assert_eq!(*auth.trace.lock().unwrap(), vec!["snapshot:owner", "enabled_roles", "revision"]);
+    }
+
+    /// 非事务执行器不复用，事务阶段缓存最多保留固定数量的负责人事实。
+    #[tokio::test]
+    async fn owner_permission_cache_is_bounded_and_disabled_without_transaction() {
+        let auth = TestAuth::default();
+        let account = WorkflowAccountFact::new("owner", AccountKind::Admin, true);
+        let mut executor = persistence_core::NoTransaction;
+        let mut cache = QualificationCache::new(&mut executor);
+        for _ in 0..2 {
+            owner_permissions(&auth, &account, BTreeSet::new(), &mut cache, &mut executor).await.unwrap();
+        }
+        assert!(cache.owners.is_empty());
+        assert_eq!(
+            *auth.trace.lock().unwrap(),
+            vec!["snapshot:owner", "enabled_roles", "snapshot:owner", "enabled_roles"]
+        );
+        let mut cache = QualificationCache { enabled: true, owners: HashMap::new() };
+        let facts = OwnerPermissions {
+            kind: AccountKind::Admin,
+            required: BTreeSet::new(),
+            grants: RolePermissionSnapshotFact::new(Vec::new(), HashMap::new(), 1),
+            enabled_roles: Vec::new(),
+        };
+        for index in 0..128 {
+            cache.insert(&format!("owner-{index}"), facts.clone());
+        }
+        assert_eq!(cache.owners.len(), 128);
+        cache.insert("owner-new", facts);
+        assert_eq!(cache.owners.len(), 1);
+    }
 
     /// 与正式页面相同，资格重验只回填动作和状态。
     fn block_owner_view(item: &mut WorkItemView) {

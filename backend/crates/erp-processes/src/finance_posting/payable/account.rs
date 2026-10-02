@@ -47,6 +47,7 @@ impl PayableService {
         let account_id = PayableAccountId::new(id);
         let (_, account) = payment_task::authorize_payment_execution(
             &self.db,
+            &self.authorization_rbac,
             &req.work_item_id,
             expected_task_version,
             Some(&account_id),

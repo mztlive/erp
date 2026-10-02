@@ -9,7 +9,8 @@ pub(crate) mod mapping;
 pub mod supplier_names;
 
 pub use basis_sources::{
-    basis_groups_and_facts, basis_groups_for_order, load_effective_sales_order, stock_basis_groups_for_order,
+    basis_groups_and_facts, basis_groups_for_order, load_effective_sales_order, sourcing_groups_for_order,
+    stock_basis_groups_for_order,
 };
 pub use center_facts::{PurchaseOrderCenterFacts, PurchasePayableFact, load_purchase_order_center_facts};
 pub use coverage::load_procurement_coverage_facts;

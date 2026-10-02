@@ -7,7 +7,10 @@ pub mod purchase_initial;
 pub use invoice::{persist_purchase_invoice, prepare_purchase_invoice, prepare_purchase_invoice_allocations};
 mod payment;
 pub use account::prepare_payable_account;
-pub use payment::{PaymentSettlement, finish_supplier_payment, settle_supplier_payment};
+pub use payment::{
+    PaymentSettlement, PaymentSettlementFacts, finish_supplier_payment, settle_supplier_payment,
+    settle_supplier_payment_with_facts,
+};
 /// 应付领域服务，仅读取与写入财务事实。
 pub struct PayableService {
     db: Database,

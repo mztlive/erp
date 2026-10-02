@@ -1,14 +1,12 @@
-//! 提交时预提行图片并写入行级清单。
-//!
-//! 执行阶段只读清单（单元格与已上传图片引用），不再回源文件下载解析：
-//! 提交与执行之间只隔一次对象存储小文件读取，彻底消除第二次全量拉取。
-//! 清单键由请求身份推导；老任务没有清单时执行阶段回退到源文件链路。
+//! 提交时预提行图片并构建行级清单；小清单随任务事务保存，较大清单沿用对象存储。
+//! 执行优先读取私有输入，旧任务或损坏清单按对象清单、源文件顺序回退。
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use erp_core::ids::FileAssetId;
+use erp_support::repository::bulk_job::{BACKGROUND_JOB_INPUT_LIMIT, BackgroundJobInput};
 use erp_support::{
     PENDING_FILE_REFERENCE_PREFIX, PendingFileAssetRequest, RegisterFileAssetRequest, RetentionClass,
     SensitivityClass, content_fingerprint,
@@ -23,12 +21,14 @@ use crate::{Error, Result};
 
 /// 行级清单版本号；版本不一致时执行阶段回退到源文件链路。
 const ROW_MANIFEST_VERSION: u32 = 1;
+/// 私有后台输入的格式标识；仍须验证清单自身版本及请求身份。
+pub(super) const ROW_MANIFEST_INPUT_FORMAT: &str = "product_import_rows_v1";
 /// 行级清单对象键前缀。
 const ROW_MANIFEST_KEY_PREFIX: &str = "product-import-rows";
 /// 预提图片对象键前缀。
 const ROW_IMAGE_KEY_PREFIX: &str = "product-import-images";
 
-/// 行级清单（与任务请求身份绑定，存对象存储）。
+/// 行级清单；与任务请求身份绑定，私有输入及对象存储共用相同 JSON 格式。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(super) struct RowManifest {
     /// 清单版本。
@@ -140,25 +140,49 @@ pub(super) async fn build_row_manifest(
     })
 }
 
-/// 把行级清单写入对象存储。
+/// 准备行级清单；小清单返回私有输入，达到独立容量边界时写入原对象存储。
 ///
 /// # 参数
 /// * `storage` - 对象存储
 /// * `manifest` - 行级清单
 ///
 /// # 返回
-/// 返回清单对象键（调用方可纳入失败补偿）。
+/// 返回私有输入及对象键，两者恰一项有值；对象键由调用方纳入原失败补偿。
 ///
 /// # 错误
 /// 请求身份非法或写入失败时返回错误。
-pub(super) async fn write_row_manifest(storage: &S3Storage, manifest: &RowManifest) -> Result<String> {
-    let key = manifest_object_key(&manifest.request_id)?;
-    let bytes = serde_json::to_vec(manifest).map_err(|_| Error::Internal("行清单序列化失败".to_string()))?;
-    storage
-        .save_with_content_type(&key, &bytes, Some("application/json"))
-        .await
-        .map_err(|error| Error::Internal(format!("写入行清单失败: {error}")))?;
-    Ok(key)
+pub(super) async fn prepare_row_manifest(
+    storage: &S3Storage,
+    manifest: &RowManifest,
+) -> Result<(Option<BackgroundJobInput>, Option<String>)> {
+    match manifest_payload(manifest)? {
+        ManifestPayload::Input(input) => Ok((Some(input), None)),
+        ManifestPayload::Object(bytes) => {
+            let key = manifest_object_key(&manifest.request_id)?;
+            storage
+                .save_with_content_type(&key, &bytes, Some("application/json"))
+                .await
+                .map_err(|error| Error::Internal(format!("写入行清单失败: {error}")))?;
+            Ok((None, Some(key)))
+        },
+    }
+}
+
+/// 序列化后决定私有输入或对象字节，不能截断清单以满足容量界限。
+enum ManifestPayload {
+    Input(BackgroundJobInput),
+    Object(Vec<u8>),
+}
+
+/// 小清单仍经过拥有领域的私有容量校验，大清单保留相同完整 JSON 字节。
+fn manifest_payload(manifest: &RowManifest) -> Result<ManifestPayload> {
+    validate_manifest_request_id(&manifest.request_id)?;
+    let bytes = serde_json::to_vec(manifest).map_err(|_| Error::Internal("行清单序列化失败".into()))?;
+    if bytes.len() < BACKGROUND_JOB_INPUT_LIMIT {
+        Ok(ManifestPayload::Input(BackgroundJobInput::new(ROW_MANIFEST_INPUT_FORMAT, bytes)?))
+    } else {
+        Ok(ManifestPayload::Object(bytes))
+    }
 }
 
 /// 读取行级清单；缺失或版本不一致时由调用方回退到源文件链路。
@@ -176,8 +200,20 @@ pub(super) async fn read_row_manifest(storage: &S3Storage, request_id: &str) -> 
     let key = manifest_object_key(request_id)?;
     let bytes =
         storage.read(&key).await.map_err(|error| Error::Internal(format!("读取行清单失败: {error}")))?;
+    decode_row_manifest(&bytes, request_id)
+}
+
+/// 私有输入和旧对象清单采用相同解析及绑定校验，错误由执行器回退到下一来源。
+///
+/// # 参数
+/// 已读取清单字节与任务当前的请求身份。
+/// # 返回
+/// 返回绑定同一请求及清单版本的全部原始行。
+/// # 错误
+/// JSON 损坏、请求身份不符或版本不一致时拒绝该来源。
+pub(super) fn decode_row_manifest(bytes: &[u8], request_id: &str) -> Result<RowManifest> {
     let manifest: RowManifest =
-        serde_json::from_slice(&bytes).map_err(|_| Error::Internal("行清单损坏".to_string()))?;
+        serde_json::from_slice(bytes).map_err(|_| Error::Internal("行清单损坏".to_string()))?;
     if manifest.version != ROW_MANIFEST_VERSION || manifest.request_id != request_id {
         return Err(Error::Internal("行清单版本不一致".to_string()));
     }
@@ -360,11 +396,76 @@ mod tests {
     use zip::write::SimpleFileOptions;
 
     use super::{
-        ManifestCarouselImage, ManifestImage, ManifestImageWriter, PreparedImage, ROW_MANIFEST_VERSION,
-        RowManifest, RowManifestRow, WorkbookMedia, manifest_object_key, row_media_from_entry,
+        BACKGROUND_JOB_INPUT_LIMIT, ManifestCarouselImage, ManifestImage, ManifestImageWriter,
+        ManifestPayload, PreparedImage, ROW_MANIFEST_VERSION, RowManifest, RowManifestRow, WorkbookMedia,
+        decode_row_manifest, manifest_object_key, manifest_payload, row_media_from_entry,
         upload_manifest_row,
     };
     use crate::{Error, Result};
+
+    /// 构造真实 JSON 序列化达到指定字节数的清单，容量测试不截断合法 JSON。
+    fn manifest_with_size(size: usize) -> RowManifest {
+        let mut manifest = RowManifest {
+            version: ROW_MANIFEST_VERSION,
+            request_id: "req-1".into(),
+            rows: vec![RowManifestRow { row_number: 2, cells: vec![String::new()], ..Default::default() }],
+        };
+        let overhead = serde_json::to_vec(&manifest).unwrap().len();
+        manifest.rows[0].cells[0] = "a".repeat(size.checked_sub(overhead).unwrap());
+        assert_eq!(serde_json::to_vec(&manifest).unwrap().len(), size);
+        manifest
+    }
+
+    /// 小清单在容量界限前一字节使用私有输入，达到界限和超限保留完整对象 JSON。
+    #[test]
+    fn manifest_payload_routes_exact_capacity_without_truncation() {
+        let manifest = manifest_with_size(BACKGROUND_JOB_INPUT_LIMIT - 1);
+        assert!(matches!(manifest_payload(&manifest).unwrap(), ManifestPayload::Input(_)));
+        for size in [BACKGROUND_JOB_INPUT_LIMIT, BACKGROUND_JOB_INPUT_LIMIT + 1] {
+            let manifest = manifest_with_size(size);
+            let ManifestPayload::Object(bytes) = manifest_payload(&manifest).unwrap() else {
+                panic!("达到容量界限应走对象存储");
+            };
+            assert_eq!(bytes.len(), size);
+            let parsed = decode_row_manifest(&bytes, "req-1").unwrap();
+            assert_eq!(parsed.rows[0].cells[0], manifest.rows[0].cells[0]);
+        }
+    }
+
+    /// 私有输入和旧对象使用同一解析器；请求或版本不符及损坏 JSON 必须回退。
+    #[test]
+    fn manifest_decode_rejects_mismatched_bindings_and_corruption() {
+        let original = serde_json::json!({"version":1,"request_id":"req-1","rows":[]});
+        let bytes = serde_json::to_vec(&original).unwrap();
+        assert!(decode_row_manifest(&bytes, "req-1").is_ok());
+        assert!(matches!(decode_row_manifest(&bytes, "req-2"), Err(Error::Internal(message))
+            if message == "行清单版本不一致"));
+        let newer = serde_json::json!({"version":2,"request_id":"req-1","rows":[]});
+        assert!(
+            matches!(decode_row_manifest(&serde_json::to_vec(&newer).unwrap(), "req-1"), Err(Error::Internal(message))
+            if message == "行清单版本不一致")
+        );
+        for damaged in [&b"{"[..], &b"{}"[..], &b""[..]] {
+            assert!(matches!(decode_row_manifest(damaged, "req-1"), Err(Error::Internal(message))
+                if message == "行清单损坏"));
+        }
+    }
+
+    /// 旧版对象清单和已登记媒体不要求新增任务输入字段，额外历史字段继续兼容。
+    #[test]
+    fn legacy_manifest_remains_readable_without_private_metadata() {
+        let bytes = serde_json::to_vec(&serde_json::json!({
+            "version":1,"request_id":"req-1","legacy_extra":true,"rows":[{
+                "row_number":2,"cells":["product"],"main_image":null,"carousel":[],"media_error":null
+            }]
+        }))
+        .unwrap();
+        let parsed = decode_row_manifest(&bytes, "req-1").unwrap();
+        assert_eq!(parsed.rows.len(), 1);
+        assert_eq!(parsed.rows[0].cells, ["product"]);
+        assert!(parsed.rows[0].main_image.is_none());
+        assert!(parsed.rows[0].carousel.is_empty());
+    }
 
     fn sample_registration() -> erp_support::RegisterFileAssetRequest {
         erp_support::RegisterFileAssetRequest {

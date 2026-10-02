@@ -112,8 +112,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         actor: AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<WorkItemPageView> {
-        let identity_version = self.auth.queue_scope_version(&actor, executor).await?;
-        let access = self.actor_access_for(actor.kind(), actor.id(), executor).await?;
+        let (access, identity_version) = self.queue_access_with_version(&actor, executor).await?;
         let queue_context_id = queue_context_id(actor.id(), &query, &access);
         ensure_queue_context(&query.queue_context_id, &queue_context_id)?;
         let mut filter = self.scope_filter(&query, &actor, &access)?;

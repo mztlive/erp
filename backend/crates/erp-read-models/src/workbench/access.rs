@@ -4,9 +4,10 @@ use std::collections::HashSet;
 
 use application_core::AuditActor;
 use erp_identity::{Permission, PermissionSet};
-use erp_workflow::DocumentRegistryExt;
 use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
+use erp_workflow::ports::WorkflowQueueAccessFact;
 use erp_workflow::repository::prelude::*;
+use erp_workflow::{DocumentRegistryExt, WorkflowAuthorizationPort};
 use persistence_core::Executor;
 
 use super::facts::{WorkbenchObjectFact, WorkbenchObjectFactMap, apply_object_display, object_policy};
@@ -119,6 +120,34 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         actor_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<ActorAccess> {
+        let actor = AuditActor::new(actor_id.to_string(), actor_id.to_string(), account_kind);
+        if let Some((access, _)) = optimized_access(&self.auth, &actor, false, executor).await? {
+            return Ok(access);
+        }
+        self.legacy_actor_access_for(account_kind, actor_id, executor).await
+    }
+
+    /// 首拍身份版本与访问事实可共用只读阶段，末拍重验必须另行调用原版本端口。
+    pub(super) async fn queue_access_with_version(
+        &self,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<(ActorAccess, String)> {
+        if let Some((access, version)) = optimized_access(&self.auth, actor, true, executor).await? {
+            return Ok((access, version.expect("首拍授权版本已校验")));
+        }
+        let version = self.auth.queue_scope_version(actor, executor).await?;
+        let access = self.legacy_actor_access_for(actor.kind(), actor.id(), executor).await?;
+        Ok((access, version))
+    }
+
+    /// 未装配批量身份端口时沿原角色、权限、参与和管理范围的查询顺序读取。
+    async fn legacy_actor_access_for(
+        &self,
+        account_kind: erp_core::AccountKind,
+        actor_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<ActorAccess> {
         let role_ids = self.auth.role_ids_with_executor(account_kind, actor_id, executor).await?;
         let permissions = self
             .auth
@@ -225,6 +254,36 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
     fn processing_blocker(&self, _step_id: Option<&str>) -> Result<Option<ProcessingBlockerView>> {
         Ok(None)
     }
+}
+
+/// 从兼容端口请求身份事实；缺失首拍版本失败关闭，未装配时保留原授权路径。
+async fn optimized_access(
+    auth: &impl WorkflowAuthorizationPort,
+    actor: &AuditActor,
+    include_version: bool,
+    executor: &mut dyn Executor,
+) -> Result<Option<(ActorAccess, Option<String>)>> {
+    let Some(mut facts) = auth.queue_access_facts(actor, include_version, executor).await? else {
+        return Ok(None);
+    };
+    let version = facts.identity_version.take();
+    if include_version && version.is_none() {
+        return Err(Error::Internal("工作台首拍授权版本缺失".into()));
+    }
+    Ok(Some((access_from_facts(actor.id(), facts), version)))
+}
+
+/// 按原投影合同转移同阶段身份事实；对象范围和精确任务资格仍由后续路径验证。
+fn access_from_facts(actor_id: &str, facts: WorkflowQueueAccessFact) -> ActorAccess {
+    let permissions = facts
+        .permission_codes
+        .into_iter()
+        .map(|code| Permission::parse(&code).expect("granted permission must be valid"))
+        .collect();
+    ActorAccess::new(actor_id.to_string())
+        .with_permissions(permissions)
+        .with_participant_document_ids(facts.participant_document_ids.into_iter().collect())
+        .with_managed_scope(facts.managed_owner_ids, facts.can_manage)
 }
 
 /// 根据实体注册关系和当前权限形成仓储候选对象形状。
@@ -550,6 +609,70 @@ pub(super) fn covers_owner(access: &ActorAccess, owner: Option<&str>) -> bool {
 /// 无。
 fn is_w29_fields_closable(item: &dto::WorkItemFields) -> bool {
     item.work_item_type.is_w29_closable(&item.business_object_type, item.approval_node_execution_id.is_some())
+}
+
+#[cfg(test)]
+mod queue_access_tests {
+    use std::sync::atomic::Ordering;
+
+    use erp_core::AccountKind;
+    use erp_workflow::FailClosedWorkflowAuthorizationPort;
+    use persistence_core::NoTransaction;
+
+    use super::*;
+    use crate::workbench::test_auth::TestAuth;
+
+    /// 构造动作权、参与关系和管理负责人分别存在的只读身份事实。
+    fn queue_facts(version: Option<&str>) -> WorkflowQueueAccessFact {
+        WorkflowQueueAccessFact {
+            permission_codes: vec!["work_item:read".into(), "work_item:manage".into()],
+            participant_document_ids: vec!["document".into(), "document".into()],
+            managed_owner_ids: Some(vec!["owner".into()]),
+            can_manage: true,
+            identity_version: version.map(str::to_string),
+        }
+    }
+
+    /// 批量端口直接透传认证身份与首拍要求，成功事实不触发逐角色或独立范围读取。
+    #[tokio::test]
+    async fn optimized_access_transfers_identity_and_keeps_authorization_dimensions_separate() {
+        let auth = TestAuth::default();
+        *auth.queue.lock().unwrap() = Some(queue_facts(Some("identity-v1")));
+        let actor = AuditActor::new("actor".to_string(), "login".to_string(), AccountKind::Admin);
+        let mut executor = NoTransaction;
+        let (access, version) = optimized_access(&auth, &actor, true, &mut executor).await.unwrap().unwrap();
+        assert_eq!(access.actor_id, "actor");
+        assert_eq!(version.as_deref(), Some("identity-v1"));
+        assert_eq!(access.participant_document_ids, HashSet::from(["document".into()]));
+        assert_eq!(access.managed_owner_ids, Some(vec!["owner".into()]));
+        assert!(access.can_manage);
+        assert!(has_permission(&access, "work_item:read"));
+        assert!(!has_permission(&access, "sales_order:detail"));
+        assert_eq!(*auth.trace.lock().unwrap(), vec!["queue:actor:true"]);
+    }
+
+    /// 未装配优化端口保留原路径；首拍缺失和端口错误不得回退成成功。
+    #[tokio::test]
+    async fn optimized_access_fallback_and_failures_preserve_explicit_boundaries() {
+        let actor = AuditActor::new("actor".to_string(), "login".to_string(), AccountKind::Admin);
+        let mut executor = NoTransaction;
+        assert!(
+            optimized_access(&FailClosedWorkflowAuthorizationPort, &actor, true, &mut executor)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        let auth = TestAuth::default();
+        *auth.queue.lock().unwrap() = Some(queue_facts(None));
+        assert!(
+            matches!(optimized_access(&auth, &actor, true, &mut executor).await, Err(Error::Internal(message)) if message == "工作台首拍授权版本缺失")
+        );
+        assert!(optimized_access(&auth, &actor, false, &mut executor).await.unwrap().is_some());
+        auth.fail_queue.store(true, Ordering::SeqCst);
+        assert!(
+            matches!(optimized_access(&auth, &actor, true, &mut executor).await, Err(Error::Rbac(message)) if message == "queue failed")
+        );
+    }
 }
 
 #[cfg(test)]

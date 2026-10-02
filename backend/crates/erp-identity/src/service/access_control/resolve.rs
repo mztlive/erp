@@ -1,13 +1,16 @@
 //! DataScope v2 唯一应用解析入口，复用现有 RBAC 版本和同角色权限证明。
 
+mod batch;
 use std::collections::BTreeMap;
 use std::future::Future;
 
 use application_core::AuditActor;
+pub use batch::DataScopeBatch;
 use erp_core::common::time::Instant;
 use mongodb::Database;
 use persistence_core::Executor;
 
+use self::batch::scope_version;
 use super::consumers::configurable_registration;
 use crate::access_control::{ResolvedScope, ScopeClause};
 use crate::entity::access_control::authorization_policy::AuthorizationPolicy;
@@ -42,6 +45,25 @@ pub struct DataScopeService {
 }
 
 impl DataScopeService {
+    /// 在一次调用方事务中复用身份和组织事实，各动作分别解析真实范围。
+    ///
+    /// # 参数
+    /// `actor` 为当前身份，`permissions` 声明本批所有目标及额外动作，`executor` 为原执行器。
+    /// # 返回
+    /// 借用原执行器的解析批次；非事务执行器保持逐次重新取证。
+    /// # 错误
+    /// 构造不执行 I/O；各解析方法分别报告资格、版本及持久化错误。
+    ///
+    /// 批次只能用于同一读取阶段；释放批次后才允许原执行器执行业务写入。
+    /// 最终授权重验和下一读取阶段必须创建新的批次。
+    pub fn batch<'a>(
+        &'a self,
+        actor: &'a AuditActor,
+        permissions: &[Permission],
+        executor: &'a mut dyn Executor,
+    ) -> DataScopeBatch<'a> {
+        DataScopeBatch::new(self, actor, permissions, executor)
+    }
     /// 读取混合任务队列的身份授权版本，不授予任何资源访问权。
     ///
     /// # 参数
@@ -179,15 +201,14 @@ impl DataScopeService {
         let as_of = Instant::now();
         let state = self.scope_organizations(actor.id(), source.0, as_of, executor).await?;
         let (scope, role_scopes) = self.resolved(actor.id(), &roles, source, &state, as_of, executor).await?;
-        let fingerprint = format!(
-            "{}:{}:{}:{}:{}:{source:?}:{:?}:{:?}",
-            account.base.version,
-            snapshot.policy_revision(),
-            state.version,
-            resource,
-            action,
-            roles.iter().map(|r| (&r.base.id, r.base.version)).collect::<Vec<_>>(),
-            scope
+        let scope_version = scope_version(
+            actor.id(),
+            target,
+            source,
+            (account.base.version, snapshot.policy_revision()),
+            &roles,
+            &state,
+            &scope,
         );
         Ok(AuthorizedDataScope {
             user_id: actor.id().into(),
@@ -197,7 +218,7 @@ impl DataScopeService {
             role_scopes,
             organizations: state,
             policy_version: snapshot.policy_revision(),
-            scope_version: format!("{:x}", md5::compute(format!("{}:{fingerprint}", actor.id()).as_bytes())),
+            scope_version,
             as_of,
         })
     }

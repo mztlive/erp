@@ -15,7 +15,7 @@ use erp_read_models::sales_center::access::SalesAccess;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::ports::{
     OrderTaskSource, RolePermissionSnapshotFact, WorkflowAccountFact, WorkflowAuthorizationPort,
-    WorkflowDataScope, WorkflowScopeObject, WorkflowScopeObjects,
+    WorkflowDataScope, WorkflowQueueAccessFact, WorkflowScopeObject, WorkflowScopeObjects,
 };
 use erp_workflow::{Error as WorkflowError, Result as WorkflowResult};
 use mongodb::Database;
@@ -57,6 +57,18 @@ impl WorkflowAuth {
 }
 
 impl WorkflowAuthorizationPort for WorkflowAuth {
+    /// 同阶段复用首次身份范围事实；末尾版本校验仍由原队列入口独立执行。
+    async fn queue_access_facts(
+        &self,
+        actor: &AuditActor,
+        include_version: bool,
+        executor: &mut dyn Executor,
+    ) -> WorkflowResult<Option<WorkflowQueueAccessFact>> {
+        super::task_scope::queue_access(&self.db, &self.rbac, self, actor, include_version, executor)
+            .await
+            .map(Some)
+    }
+
     async fn approval_source_readable(
         &self,
         actor: &AuditActor,

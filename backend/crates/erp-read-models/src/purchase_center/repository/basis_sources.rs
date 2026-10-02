@@ -101,10 +101,47 @@ pub async fn basis_groups_and_facts(
         return Ok((Vec::new(), CreationBasisFacts::default()));
     }
     let coverage = load_sales_procurement_coverage(db, order, executor).await?;
-    let facts = creation_basis_facts_for_order(db, &coverage, responsibility_scope_ids, executor).await?;
+    basis_groups_and_facts_from_coverage(db, order, responsibility_scope_ids, &coverage, executor).await
+}
+
+/// 已读取的同阶段覆盖只用于当前依据组装，不能替代 guard 后或库存写入后的重验。
+async fn basis_groups_and_facts_from_coverage(
+    db: &mongodb::Database,
+    order: &SalesOrder,
+    responsibility_scope_ids: &[String],
+    coverage: &SalesProcurementCoverage,
+    executor: &mut dyn Executor,
+) -> Result<(Vec<BasisGroup>, CreationBasisFacts)> {
+    let facts = creation_basis_facts_for_order(db, coverage, responsibility_scope_ids, executor).await?;
     let groups =
-        basis_groups_from_facts(&sales_order_basis_fact(order), &coverage, responsibility_scope_ids, &facts)?;
+        basis_groups_from_facts(&sales_order_basis_fact(order), coverage, responsibility_scope_ids, &facts)?;
     Ok((groups, facts))
+}
+
+/// 同一读取阶段按原顺序形成采购与现有库存依据，共用一次完整覆盖读取。
+/// # 参数
+/// 数据库、已生效销售单、任务责任行及调用方事务执行器。
+/// # 返回
+/// 精确采购依据和库存依据；非生效销售单返回两份空集合。
+/// # 错误
+/// 覆盖、采购供给、库存或仓库读取失败时按采购先于库存的顺序返回错误。
+///
+/// 只适用于两份依据之间没有业务写入的读取阶段；guard 后及库存写入后须重新读取。
+pub async fn sourcing_groups_for_order(
+    db: &mongodb::Database,
+    order: &SalesOrder,
+    responsibility_scope_ids: &[String],
+    executor: &mut dyn Executor,
+) -> Result<(Vec<BasisGroup>, Vec<StockBasisGroup>)> {
+    if order.commercial_status != CommercialStatus::Effective {
+        return Ok((Vec::new(), Vec::new()));
+    }
+    let coverage = load_sales_procurement_coverage(db, order, executor).await?;
+    let (groups, _) =
+        basis_groups_and_facts_from_coverage(db, order, responsibility_scope_ids, &coverage, executor)
+            .await?;
+    let stock = stock_groups_from_coverage(db, responsibility_scope_ids, &coverage, executor).await?;
+    Ok((groups, stock))
 }
 
 /// 批量加载任务责任范围内销售目标行的供给与供应商结算事实。
@@ -154,7 +191,17 @@ pub async fn stock_basis_groups_for_order(
         return Ok(Vec::new());
     }
     let coverage = load_sales_procurement_coverage(db, order, executor).await?;
-    let physical_lines = physical_stock_lines(&coverage, responsibility_scope_ids);
+    stock_groups_from_coverage(db, responsibility_scope_ids, &coverage, executor).await
+}
+
+/// 仅从原阶段覆盖补充库存和仓库事实，不重新装载销售与采购覆盖。
+async fn stock_groups_from_coverage(
+    db: &mongodb::Database,
+    responsibility_scope_ids: &[String],
+    coverage: &SalesProcurementCoverage,
+    executor: &mut dyn Executor,
+) -> Result<Vec<StockBasisGroup>> {
+    let physical_lines = physical_stock_lines(coverage, responsibility_scope_ids);
     let sku_ids = physical_lines.iter().map(|line| line.goods_line.sku_id.clone()).collect::<Vec<_>>();
     let balances = db.inventory().available_balances_for_skus(&sku_ids, executor).await?;
     let warehouse_ids = balances
@@ -187,7 +234,7 @@ pub async fn stock_basis_groups_for_order(
         })
         .collect::<HashMap<_, _>>();
     Ok(stock_groups_from_facts(
-        &coverage,
+        coverage,
         &physical_lines,
         balances.into_iter().map(stock_balance_fact).collect(),
         &active_warehouse_ids,

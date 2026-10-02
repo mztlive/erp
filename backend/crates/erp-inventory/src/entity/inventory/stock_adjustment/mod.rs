@@ -20,6 +20,9 @@ use serde::{Deserialize, Serialize};
 
 use super::stock_movement::{MovementDirection, MovementType};
 
+mod balance_versions;
+pub use balance_versions::StockAdjustmentBalanceVersions;
+
 /// 调整单号最大长度。
 const ADJUSTMENT_NO_MAX_LEN: usize = 64;
 /// 经办人/复核人标识最大长度。

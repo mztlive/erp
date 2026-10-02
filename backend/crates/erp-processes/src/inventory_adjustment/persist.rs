@@ -10,10 +10,12 @@ use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
 use erp_core::ids::{ApprovalNotificationOutboxId, ApprovalSubjectSnapshotId, WorkItemId};
 use erp_identity::SharedRbacService;
+use erp_inventory::entity::inventory::stock_adjustment::StockAdjustmentBalanceVersions;
 use erp_inventory::{
     ExpectedStockBalanceVersion, InventoryExt, StockAdjustment, StockAdjustmentLine, StockAdjustmentState,
     StockAdjustmentView,
 };
+use erp_read_models::workbench::capture_stock_adjustment_display;
 use erp_workflow::entity::approval_integration::{
     ApprovalNotificationEventKind, ApprovalNotificationOutbox, ApprovalNotificationTemplateParams,
     ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload,
@@ -108,114 +110,127 @@ pub async fn persist_stock_adjustment_start(
     db: &Database,
     input: StockAdjustmentStartPersistInput,
 ) -> Result<StockAdjustmentView> {
-    let StockAdjustmentStartPersistInput {
-        rbac,
-        adjustment,
-        actor,
-        id,
-        snapshot_payload,
-        writes,
-        binding,
-        owner_role,
-        organization_id,
-        now,
-        lines,
-        balances,
-        expected_document_version,
-        expected_subject_version,
-    } = input;
-    let audit = actor.clone().resource_log("stock_adjustment.submit", "stock_adjustment", id.clone())?;
+    let audit =
+        input.actor.clone().resource_log("stock_adjustment.submit", "stock_adjustment", input.id.clone())?;
     let db = db.clone();
     let client = db.client().clone();
     let updated = client
         .with_transaction(move |executor| {
             Box::pin(async move {
-                let current = db
-                    .inventory()
-                    .stock_adjustment(&id, executor)
-                    .await?
-                    .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
-                ensure_fresh_start_document(
-                    &current,
-                    &adjustment,
-                    expected_document_version,
-                    expected_subject_version,
-                )?;
-                ensure_stock_adjustment_submit_authorized_with_executor(
-                    &db, &rbac, &current, &actor, executor,
-                )
-                .await?;
-                let persisted_binding = load_approval_binding(&db, &id, executor).await?;
-                let persisted_binding = require_frozen_binding(persisted_binding.as_ref())?;
-                if persisted_binding != &binding {
-                    return Err(Error::ConflictError("库存调整审批定义绑定已变化，请刷新后重试".to_string()));
-                }
-                let graph =
-                    load_bound_definition_graph_with_executor(&db, persisted_binding, executor).await?;
-                revalidate_stock_adjustment_start_candidates(
-                    &db,
-                    &rbac,
-                    &graph,
-                    actor.id(),
-                    &organization_id,
-                    executor,
-                )
-                .await?;
-                revalidate_start_lines(&db, &current, &lines, executor).await?;
-                validate_balance_versions(&db, &adjustment, &lines, &balances, executor).await?;
-                validate_start_writes(&writes, &graph, &binding, &id, actor.id(), expected_subject_version)?;
-                // 命令收据是事务内第一笔写入。并发 loser 退出失败事务后只允许
-                // 使用新会话回读 winner，不得先留下任何业务或 BPM 写入。
-                db.bpm_workflow()
-                    .insert_command_receipt(&writes.receipt, executor)
-                    .await
-                    .map_err(map_receipt_first_write_error)?;
-                let guarded = db
-                    .business_documents()
-                    .mark_approval_started(
-                        &id,
-                        DocumentType::StockAdjustment,
-                        &writes.instance.process_definition_id,
-                        writes.instance.definition_version,
-                        now,
-                        executor,
-                    )
-                    .await?;
-                if guarded.is_none() {
-                    return Err(Error::ConflictError("库存调整单审批启动守卫冲突，请刷新后重试".to_string()));
-                }
-                // 同一事务先写本次提交的数量与状态，随后冻结完整展示。
-                for line in &lines {
-                    if !db
-                        .inventory()
-                        .update_adjustment_line(&line.base.id, line.quantity, Some(line.direction), executor)
-                        .await?
-                    {
-                        return Err(Error::NotFound("调整明细不存在".to_string()));
-                    }
-                }
-                let mut adjustment = adjustment;
-                db.stock_adjustments().update(&mut adjustment, executor).await?;
+                validate_stock_adjustment_start(&db, &input, executor).await?;
+                let mut input = input;
+                persist_start_document(&db, &mut input, executor).await?;
                 persist_runtime_writes(
                     &db,
-                    &writes,
-                    &snapshot_payload,
+                    &input.writes,
+                    &input.snapshot_payload,
                     StartRuntimeContext {
-                        owner_role,
-                        organization_id: &organization_id,
-                        document_no: &adjustment.adjustment_no,
-                        submitted_by: actor.id(),
-                        now,
+                        owner_role: input.owner_role,
+                        organization_id: &input.organization_id,
+                        adjustment: &input.adjustment,
+                        lines: &input.lines,
+                        submitted_by: input.actor.id(),
+                        now: input.now,
                     },
                     executor,
                 )
                 .await?;
                 db.audit_logs().create(&audit, executor).await?;
-                Ok::<StockAdjustment, crate::Error>(adjustment)
+                Ok::<StockAdjustment, Error>(input.adjustment)
             })
         })
         .await?;
     Ok(updated.into())
+}
+
+/// 在原启动事务内按既有顺序重验单据、提交资格、绑定、候选人、明细和余额。
+async fn validate_stock_adjustment_start(
+    db: &Database,
+    input: &StockAdjustmentStartPersistInput,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let current = db
+        .inventory()
+        .stock_adjustment(&input.id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
+    ensure_fresh_start_document(
+        &current,
+        &input.adjustment,
+        input.expected_document_version,
+        input.expected_subject_version,
+    )?;
+    ensure_stock_adjustment_submit_authorized_with_executor(
+        db,
+        &input.rbac,
+        &current,
+        &input.actor,
+        executor,
+    )
+    .await?;
+    let persisted_binding = load_approval_binding(db, &input.id, executor).await?;
+    let persisted_binding = require_frozen_binding(persisted_binding.as_ref())?;
+    if persisted_binding != &input.binding {
+        return Err(Error::ConflictError("库存调整审批定义绑定已变化，请刷新后重试".to_string()));
+    }
+    let graph = load_bound_definition_graph_with_executor(db, persisted_binding, executor).await?;
+    revalidate_stock_adjustment_start_candidates(
+        db,
+        &input.rbac,
+        &graph,
+        input.actor.id(),
+        &input.organization_id,
+        executor,
+    )
+    .await?;
+    revalidate_start_lines(db, &current, &input.lines, executor).await?;
+    validate_balance_versions(db, &input.adjustment, &input.lines, &input.balances, executor).await?;
+    validate_start_writes(
+        &input.writes,
+        &graph,
+        &input.binding,
+        &input.id,
+        input.actor.id(),
+        input.expected_subject_version,
+    )
+}
+
+/// 以命令收据为首写，随后写启动守卫、最终明细与表头；保持原事务边界。
+async fn persist_start_document(
+    db: &Database,
+    input: &mut StockAdjustmentStartPersistInput,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    // 并发 loser 退出失败事务后只允许新会话回读 winner，不得先留下业务或 BPM 写入。
+    db.bpm_workflow()
+        .insert_command_receipt(&input.writes.receipt, executor)
+        .await
+        .map_err(map_receipt_first_write_error)?;
+    let guarded = db
+        .business_documents()
+        .mark_approval_started(
+            &input.id,
+            DocumentType::StockAdjustment,
+            &input.writes.instance.process_definition_id,
+            input.writes.instance.definition_version,
+            input.now,
+            executor,
+        )
+        .await?;
+    if guarded.is_none() {
+        return Err(Error::ConflictError("库存调整单审批启动守卫冲突，请刷新后重试".to_string()));
+    }
+    for line in &input.lines {
+        if !db
+            .inventory()
+            .update_adjustment_line(&line.base.id, line.quantity, Some(line.direction), executor)
+            .await?
+        {
+            return Err(Error::NotFound("调整明细不存在".to_string()));
+        }
+    }
+    db.stock_adjustments().update(&mut input.adjustment, executor).await?;
+    Ok(())
 }
 
 /// 校验事务内草稿与预先构造的启动后单据仍为同一条原子迁移。
@@ -378,33 +393,11 @@ async fn validate_balance_versions(
     expected: &[ExpectedStockBalanceVersion],
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let mut balance_ids = std::collections::HashSet::with_capacity(expected.len());
-    let mut covered_dimensions = std::collections::HashSet::with_capacity(expected.len());
-    for item in expected {
-        if !balance_ids.insert(item.balance_id.as_str()) {
-            return Err(Error::ValidationError("库存余额版本行不得重复".to_string()));
-        }
-        let balance = db
-            .stock_balances()
-            .find_by_id(&item.balance_id, executor)
-            .await?
-            .ok_or_else(|| Error::NotFound("库存余额不存在".to_string()))?;
-        if balance.base.version != item.expected_version {
-            return Err(Error::ConflictError("库存余额已变化，请刷新后重试".to_string()));
-        }
-        if balance.warehouse_id != adjustment.warehouse_id
-            || !lines.iter().any(|line| line.sku_id == balance.sku_id)
-        {
-            return Err(Error::ValidationError("库存余额与调整单维度不一致".to_string()));
-        }
-        covered_dimensions.insert((balance.warehouse_id.to_string(), balance.sku_id.to_string()));
-    }
-    if lines.iter().any(|line| {
-        !covered_dimensions.contains(&(adjustment.warehouse_id.to_string(), line.sku_id.to_string()))
-    }) {
-        return Err(Error::ValidationError("提交缺少调整明细对应的库存余额版本".to_string()));
-    }
-    Ok(())
+    let ids = expected.iter().map(|item| item.balance_id.clone()).collect::<Vec<_>>();
+    let balances = db.inventory().stock_balances_by_ids(&ids, executor).await?;
+    let expected =
+        expected.iter().map(|item| (item.balance_id.as_str(), item.expected_version)).collect::<Vec<_>>();
+    StockAdjustmentBalanceVersions::new(&balances).validate(adjustment, lines, &expected).map_err(Error::from)
 }
 
 /// 将启动计划写入 BPM 集合、不可变快照和入口 WorkItem。
@@ -426,11 +419,13 @@ async fn validate_balance_versions(
 struct StartRuntimeContext<'a> {
     owner_role: &'a str,
     organization_id: &'a str,
-    document_no: &'a str,
+    adjustment: &'a StockAdjustment,
+    lines: &'a [StockAdjustmentLine],
     submitted_by: &'a str,
     now: Instant,
 }
 
+/// 使用已写入的业务事实冻结审批展示，并沿原事务写入运行事实与入口任务。
 async fn persist_runtime_writes(
     db: &Database,
     writes: &PlannedWrites,
@@ -460,15 +455,8 @@ async fn persist_runtime_writes(
         snapshot_payload.clone(),
     )
     .map_err(|error| Error::ValidationError(error.to_string()))?;
-    snapshot.display = Some(
-        erp_read_models::workbench::capture_approval_display(
-            db,
-            snapshot.document_type,
-            &snapshot.business_object_id,
-            executor,
-        )
-        .await?,
-    );
+    snapshot.display =
+        Some(capture_stock_adjustment_display(db, context.adjustment, context.lines, executor).await?);
     let snapshot = freeze_approval_materials(db, snapshot, executor).await?;
     db.approval_subject_snapshots().create_immutable_snapshot(&snapshot, executor).await?;
     persist_open_tasks(db, writes, context.owner_role, context.organization_id, context.now, executor)
@@ -477,7 +465,7 @@ async fn persist_runtime_writes(
         db,
         writes,
         first,
-        context.document_no,
+        &context.adjustment.adjustment_no,
         context.submitted_by,
         context.now,
         executor,

@@ -21,25 +21,30 @@ use erp_read_models::purchase_center::repository::{
 use erp_sales::entity::sales_order::SalesOrder;
 use erp_sales::repository::SalesOrderExt;
 use erp_warehouse::{WarehouseExt, WarehouseFulfillmentOperation};
-use erp_workflow::DocumentRegistryExt;
-use erp_workflow::entity::document_registry::DocumentType;
+use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
 use erp_workflow::ports::OrderTaskSource;
 use erp_workflow::service::approval::binding::{BindPublishedDefinitionCommand, attach_published_binding};
 use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
 use erp_workflow::service::document_registry::new_registered_document;
+use erp_workflow::{ApprovalObjectReadPort, DocumentRegistryExt};
 use id_generator::next_id;
+use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use super::super::PurchaseOrderProcess;
 use super::super::adapter::{purchase_order_object_readable, purchase_order_responsible_org_id};
+use super::super::adapters::payment_term::parse;
 use super::super::authorization::{PurchaseOrderAuthorization, ensure_purchase_order_actor_account};
-use super::super::create_submit::submit_created_draft;
+use super::super::create_submit::{CreatedDraftBundle, submit_created_draft};
 use super::super::procurement_task_sync::{
     load_owned_open_procurement_task, sync_procurement_tasks_for_sales_order,
 };
+use super::supplier::CreationBasisSupplierAdapter;
 use super::{procurement_quantity_changed, validate_requested_quantities};
+use crate::adapters::purchase_access;
+use crate::business_ownership::required_business_org;
 use crate::{Error, Result};
 
 const CREATE_PERMISSION: &str = "purchase_order:create";
@@ -84,6 +89,13 @@ struct PreparedDraftWrite<'a> {
     lines: &'a [PurchaseOrderSubmissionLine],
     /// 审计操作人。
     actor: &'a AuditActor,
+}
+
+/// 完成事务内资格和快照构造、尚未登记的采购草稿聚合。
+struct PreparedBasisDraft {
+    order: PurchaseOrder,
+    submission: PurchaseOrderSubmission,
+    lines: Vec<PurchaseOrderSubmissionLine>,
 }
 
 impl PurchaseOrderProcess {
@@ -266,17 +278,54 @@ pub struct VerifiedBasisInput<'a> {
 /// 供应商名称快照只从同一事务内批量加载的事实读取，不得再次逐段查询。
 /// 创建并提交必须在同一事务证明采购对象范围，不得由创建人审计字段兜底。
 pub async fn persist_basis_draft(
-    db: &mongodb::Database,
+    db: &Database,
     rbac: &SharedRbacService,
-    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
+    object_read: &dyn ApprovalObjectReadPort,
     input: &VerifiedBasisInput<'_>,
     command: &CreateBasisCommand<'_>,
     executor: &mut dyn Executor,
 ) -> Result<CreatePurchaseOrderResult> {
-    let sales_order = input.sales_order;
+    let PreparedBasisDraft { order, submission, lines } =
+        prepare_basis_draft(db, rbac, input, command, executor).await?;
+    let write = PreparedDraftWrite {
+        sales_order: input.sales_order,
+        order: &order,
+        submission: &submission,
+        lines: &lines,
+        actor: command.actor,
+    };
+    let document = write_prepared_draft(db, rbac, object_read, &write, executor).await?;
+    let purchase_order_id = order.base.id.clone();
+    let bundle = CreatedDraftBundle { order, draft: submission, draft_lines: lines, document };
+    let submitted = submit_created_draft(
+        db,
+        input.sales_order,
+        bundle,
+        command.actor,
+        command.req.idempotency_key.as_str(),
+        executor,
+    )
+    .await?;
+    write_creation_receipt(
+        db,
+        command,
+        &purchase_order_id,
+        submitted.purchase_no,
+        submitted.lock_version,
+        executor,
+    )
+    .await
+}
+
+/// 按原顺序校验目标仓库、初始责任人和对象范围，再构造完整草稿事实。
+async fn prepare_basis_draft(
+    db: &Database,
+    rbac: &SharedRbacService,
+    input: &VerifiedBasisInput<'_>,
+    command: &CreateBasisCommand<'_>,
+    executor: &mut dyn Executor,
+) -> Result<PreparedBasisDraft> {
     let group = input.group;
-    let selected_lines = input.selected_lines;
-    let facts = input.facts;
     let target_warehouse_id = resolve_target_warehouse(
         db,
         rbac,
@@ -293,17 +342,34 @@ pub async fn persist_basis_draft(
         executor,
     )
     .await?;
+    let mut order = new_basis_order(db, input, command, target_warehouse_id, executor).await?;
+    let (submission, lines) = prepare_basis_submission(db, &order, input, executor).await?;
+    order.attach_draft_submission(submission.base.id.clone().into())?;
+    purchase_access(db.clone(), rbac.clone())
+        .ensure_create_and_submit(command.actor, &order, executor)
+        .await?;
+    Ok(PreparedBasisDraft { order, submission, lines })
+}
+
+/// 从同阶段依据和当前主属组织构造采购主表，沿用领域的唯一规范化与状态规则。
+async fn new_basis_order(
+    db: &Database,
+    input: &VerifiedBasisInput<'_>,
+    command: &CreateBasisCommand<'_>,
+    target_warehouse_id: Option<WarehouseId>,
+    executor: &mut dyn Executor,
+) -> Result<PurchaseOrder> {
+    let sales_order = input.sales_order;
+    let group = input.group;
     let creation_basis_id = basis_id_for(
         &sales_order_basis_fact(sales_order),
         group,
         &command.req.work_item_id,
         target_warehouse_id.as_ref(),
     );
-    let business_org_unit_id =
-        crate::business_ownership::required_business_org(db, command.actor.id(), executor).await?;
-    let order_id = PurchaseOrderId::new(next_id());
-    let mut order = PurchaseOrder::new(
-        order_id.clone(),
+    let business_org_unit_id = required_business_org(db, command.actor.id(), executor).await?;
+    PurchaseOrder::new(
+        PurchaseOrderId::new(next_id()),
         PurchaseOrderData {
             business_org_unit_id,
             purchase_no: String::new(),
@@ -318,17 +384,29 @@ pub async fn persist_basis_draft(
             target_warehouse_id,
         },
         command.actor.id(),
-        super::super::adapters::payment_term::parse,
-    )?;
+        parse,
+    )
+    .map_err(Into::into)
+}
+
+/// 按原销售行顺序冻结金额与供应商商务指针，复用 guard 后批量事实。
+async fn prepare_basis_submission(
+    db: &Database,
+    order: &PurchaseOrder,
+    input: &VerifiedBasisInput<'_>,
+    executor: &mut dyn Executor,
+) -> Result<(PurchaseOrderSubmission, Vec<PurchaseOrderSubmissionLine>)> {
+    let group = input.group;
+    let facts = input.facts;
     let supplier_name = facts
         .supplier_names
         .get(&group.scope.supplier_id.to_string())
         .cloned()
         .unwrap_or_else(|| group.scope.supplier_id.to_string());
-    let computed = compute_selected_lines(selected_lines, group.scope.fulfillment_responsibility);
+    let computed = compute_selected_lines(input.selected_lines, group.scope.fulfillment_responsibility);
     let submission = build_draft_submission(
-        &super::supplier::CreationBasisSupplierAdapter::new(db.clone()),
-        &order_id,
+        &CreationBasisSupplierAdapter::from_facts(db.clone(), &group.scope.supplier_id, facts),
+        &PurchaseOrderId::new(order.base.id.clone()),
         &group.scope,
         &supplier_name,
         computed.totals,
@@ -340,36 +418,7 @@ pub async fn persist_basis_draft(
     for (index, line) in computed.lines.iter().enumerate() {
         submission_lines.push(build_submission_line(&submission_id, (index + 1) as u32, line)?);
     }
-    order.attach_draft_submission(submission.base.id.clone().into())?;
-    crate::adapters::purchase_access(db.clone(), rbac.clone())
-        .ensure_create_and_submit(command.actor, &order, executor)
-        .await?;
-    let write = PreparedDraftWrite {
-        sales_order,
-        order: &order,
-        submission: &submission,
-        lines: &submission_lines,
-        actor: command.actor,
-    };
-    write_prepared_draft(db, rbac, object_read, &write, executor).await?;
-    let submitted = submit_created_draft(
-        db,
-        sales_order,
-        &order.base.id,
-        command.actor,
-        command.req.idempotency_key.as_str(),
-        executor,
-    )
-    .await?;
-    write_creation_receipt(
-        db,
-        command,
-        &order.base.id,
-        submitted.purchase_no,
-        submitted.lock_version,
-        executor,
-    )
-    .await
+    Ok((submission, submission_lines))
 }
 
 /// 写入采购草稿聚合、单据注册和审批绑定。
@@ -381,7 +430,7 @@ pub async fn persist_basis_draft(
 /// * `executor` - 数据访问执行器
 ///
 /// # 返回
-/// 写入成功返回 `Ok(())`。
+/// 返回使用同一执行器成功登记的业务注册行，供随后的冻结步骤复用。
 ///
 /// # 错误
 /// 审批绑定、单据注册或仓储写入失败时返回错误。
@@ -389,12 +438,12 @@ pub async fn persist_basis_draft(
 /// # 关键业务约束
 /// 本函数只写入草稿聚合；正式号与审批启动由随后的提交步骤完成。
 async fn write_prepared_draft(
-    db: &mongodb::Database,
+    db: &Database,
     rbac: &SharedRbacService,
-    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
+    object_read: &dyn ApprovalObjectReadPort,
     write: &PreparedDraftWrite<'_>,
     executor: &mut dyn Executor,
-) -> Result<()> {
+) -> Result<BusinessDocument> {
     let organization_id = purchase_order_responsible_org_id(write.sales_order)?;
     let _ = purchase_order_object_readable(&organization_id, write.actor.id())?;
     let bind_command = BindPublishedDefinitionCommand {
@@ -424,7 +473,7 @@ async fn write_prepared_draft(
     db.purchase_order_submissions().create(write.submission, executor).await?;
     db.purchase_order().create_draft_submission_lines(write.lines, executor).await?;
     sync_procurement_tasks_for_sales_order(db, &write.order.sales_order_id, executor).await?;
-    Ok(())
+    Ok(document)
 }
 
 /// 写入提交后的采购创建命令收据。

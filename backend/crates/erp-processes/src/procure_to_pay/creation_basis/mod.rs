@@ -16,7 +16,7 @@ pub(super) mod supplier;
 pub use create::{CreateBasisCommand, VerifiedBasisInput, persist_basis_draft};
 pub use erp_procurement::service::purchase_order::creation_basis::validate_requested_quantities;
 pub use erp_read_models::purchase_center::repository::{
-    basis_groups_and_facts, basis_groups_for_order, load_effective_sales_order, stock_basis_groups_for_order,
+    basis_groups_and_facts, load_effective_sales_order, stock_basis_groups_for_order,
 };
 /// 保持跨域命令原冲突类别。
 pub fn procurement_quantity_changed() -> crate::Error {

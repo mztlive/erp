@@ -1,5 +1,6 @@
 //! 统一对象键规则下的 S3 存储。
 
+mod content_cache;
 mod error;
 mod path;
 mod s3;

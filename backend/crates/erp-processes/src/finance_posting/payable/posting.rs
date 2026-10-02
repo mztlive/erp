@@ -3,7 +3,9 @@ use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_audit::{AuditActorLogs, AuditExt};
 use erp_finance::entity::payable::{PendingPaymentAllocation, SupplierPayment};
-use erp_finance::service::payable::{PaymentSettlement, finish_supplier_payment, settle_supplier_payment};
+use erp_finance::service::payable::{
+    PaymentSettlement, PaymentSettlementFacts, finish_supplier_payment, settle_supplier_payment_with_facts,
+};
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -29,20 +31,25 @@ pub(super) async fn post_supplier_payment(
     db: &Database,
     payment: &mut SupplierPayment,
     pending: &[PendingPaymentAllocation],
+    facts: PaymentSettlementFacts<'_>,
     source: PaymentPostSource,
     actor: &AuditActor,
     session: &mut dyn Executor,
 ) -> Result<()> {
-    let mut steps = MongoPaymentPosting { db, payment, pending, source, actor, settlement: None };
+    let mut steps = MongoPaymentPosting { db, payment, pending, facts, source, actor, settlement: None };
     execute_posting(&mut steps, session).await
 }
 
 /// 根事务的付款步骤合同；实现只执行本步骤，不创建新事务。
 #[async_trait]
 trait PaymentPostingSteps: Send {
+    /// 按同一执行器写入财务余额。
     async fn settle_accounts(&mut self, executor: &mut dyn Executor) -> Result<()>;
+    /// 在余额更新后重验并同步付款任务。
     async fn synchronize_tasks(&mut self, executor: &mut dyn Executor) -> Result<()>;
+    /// 写入付款状态和核销分配。
     async fn persist_payment(&mut self, executor: &mut dyn Executor) -> Result<()>;
+    /// 在付款事实写入后记录过账审计。
     async fn write_audit(&mut self, executor: &mut dyn Executor) -> Result<()>;
 }
 
@@ -58,12 +65,14 @@ struct MongoPaymentPosting<'a> {
     db: &'a Database,
     payment: &'a mut SupplierPayment,
     pending: &'a [PendingPaymentAllocation],
+    facts: PaymentSettlementFacts<'a>,
     source: PaymentPostSource,
     actor: &'a AuditActor,
     settlement: Option<PaymentSettlement>,
 }
 
 impl MongoPaymentPosting<'_> {
+    /// 返回前一步已经形成的余额核销结果。
     fn settlement(&self) -> Result<&PaymentSettlement> {
         self.settlement.as_ref().ok_or_else(|| Error::Internal("付款过账缺少应付核销结果".to_string()))
     }
@@ -71,13 +80,23 @@ impl MongoPaymentPosting<'_> {
 
 #[async_trait]
 impl PaymentPostingSteps for MongoPaymentPosting<'_> {
+    /// 复用付款任务事实执行财务领域原核销规则及条件写入。
     async fn settle_accounts(&mut self, executor: &mut dyn Executor) -> Result<()> {
         self.settlement = Some(
-            settle_supplier_payment(self.db, self.payment, self.pending, self.actor.id(), executor).await?,
+            settle_supplier_payment_with_facts(
+                self.db,
+                self.payment,
+                self.pending,
+                self.facts,
+                self.actor.id(),
+                executor,
+            )
+            .await?,
         );
         Ok(())
     }
 
+    /// 按余额更新后实际应用的账户顺序同步付款任务。
     async fn synchronize_tasks(&mut self, executor: &mut dyn Executor) -> Result<()> {
         for account_id in &self.settlement()?.applied_account_ids {
             payment_task::sync_purchase_payment_task(self.db, account_id, executor).await?;
@@ -85,6 +104,7 @@ impl PaymentPostingSteps for MongoPaymentPosting<'_> {
         Ok(())
     }
 
+    /// 在任务同步成功后登记付款状态与核销行。
     async fn persist_payment(&mut self, executor: &mut dyn Executor) -> Result<()> {
         let settlement = self
             .settlement
@@ -98,6 +118,7 @@ impl PaymentPostingSteps for MongoPaymentPosting<'_> {
         Ok(())
     }
 
+    /// 为成功过账记录最后一条业务审计。
     async fn write_audit(&mut self, executor: &mut dyn Executor) -> Result<()> {
         let audit = self.actor.clone().resource_log(
             "supplier_payment.post",

@@ -4,7 +4,7 @@ use persistence_core::{Executor, Transactional};
 
 use super::AccessControlService;
 use super::consumers::WIRED_CONSUMERS;
-use super::resolve::DataScopeService;
+use super::resolve::{AuthorizedDataScope, DataScopeService};
 use crate::dto::person_scope::{PersonBusinessOption, PersonScopeView, RetiredPersonScope};
 use crate::repository::access_control::person_scope::PersonDataScopeRepositoryExt;
 use crate::{AccessControlExt, Error, Permission, Result, RoleRepositoryExt, SharedRbacService};
@@ -25,7 +25,8 @@ impl AccessControlService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let policy_version = service.authorize_person_scope(&actor, false, executor).await?;
+                    let policy_version =
+                        service.authorize_person_scope(&actor, false, executor).await?.policy_version;
                     let businesses = service.person_business_options(&user, executor).await?;
                     let items =
                         service.db.person_data_scopes().for_person(&user, None, None, executor).await?;
@@ -44,12 +45,18 @@ impl AccessControlService {
     }
 
     /// 公司组织配置边界与配置动作必须由同一有效角色提供。
+    /// # 参数
+    /// 当前管理员、读写模式及调用方事务执行器。
+    /// # 返回
+    /// 已证明配置资格的完整上下文，可在本阶段复用其组织事实。
+    /// # 错误
+    /// 无公司配置资格、策略漂移或持久化失败时拒绝。
     pub(super) async fn authorize_person_scope(
         &self,
         actor: &AuditActor,
         write: bool,
         executor: &mut dyn Executor,
-    ) -> Result<u64> {
+    ) -> Result<AuthorizedDataScope> {
         let codes = if write {
             vec!["admin:list", "role:list", "data_scope:create"]
         } else {
@@ -76,13 +83,29 @@ impl AccessControlService {
             };
             return Err(Error::Forbidden(message.into()));
         }
-        Ok(access.policy_version)
+        Ok(access)
     }
 
     /// 各操作独立证明，可来自人员不同的有效角色。
     pub(super) async fn person_business_options(
         &self,
         user: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PersonBusinessOption>> {
+        self.person_business_options_for(user, None, executor).await
+    }
+
+    /// 按本次所需业务冻结资格，读取页面时仍返回全部业务候选。
+    /// # 参数
+    /// 人员、可选业务及原事务执行器。
+    /// # 返回
+    /// 各动作分别由当前有效角色证明的候选。
+    /// # 错误
+    /// 人员不存在、策略漂移或持久化失败时拒绝。
+    pub(super) async fn person_business_options_for(
+        &self,
+        user: &str,
+        resource: Option<&str>,
         executor: &mut dyn Executor,
     ) -> Result<Vec<PersonBusinessOption>> {
         let account = self
@@ -94,7 +117,11 @@ impl AccessControlService {
         if !account.is_active_backoffice() {
             return Ok(vec![]);
         }
-        let permissions = WIRED_CONSUMERS
+        let consumers = WIRED_CONSUMERS
+            .iter()
+            .filter(|(name, _, _)| resource.is_none_or(|resource| resource == *name))
+            .collect::<Vec<_>>();
+        let permissions = consumers
             .iter()
             .flat_map(|(r, actions, _)| actions.iter().map(move |a| Permission::parse(format!("{r}:{a}"))))
             .collect::<std::result::Result<Vec<_>, _>>()?;
@@ -103,7 +130,7 @@ impl AccessControlService {
         rbac.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
         let roles = self.db.roles().enabled_roles(snapshot.role_ids(), executor).await?;
         let mut options = Vec::new();
-        for (resource, actions, dimensions) in WIRED_CONSUMERS {
+        for (resource, actions, dimensions) in consumers {
             let mut granted: Vec<String> = Vec::new();
             for action in *actions {
                 let ids = snapshot.granting_role_ids(&Permission::parse(format!("{resource}:{action}"))?);

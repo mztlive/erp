@@ -1,5 +1,6 @@
 use std::path::Path;
-use std::time::Duration;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use aws_sdk_s3::config::{Credentials, Region};
 use aws_sdk_s3::error::SdkError;
@@ -11,6 +12,7 @@ use aws_sdk_s3::types::{CompletedMultipartUpload, CompletedPart};
 use aws_sdk_s3::{Client, Config};
 use url::Url;
 
+use crate::content_cache::ContentCache;
 use crate::path::{is_blank_or_padded, normalize_prefix, object_key_path};
 use crate::{Error, Result};
 
@@ -145,6 +147,7 @@ pub struct S3Storage {
     bucket: String,
     key_prefix: Option<String>,
     public_base_url: Url,
+    content_cache: Arc<Mutex<ContentCache>>,
 }
 
 /// 已直传分片的序号与 ETag，用于合并分片上传。
@@ -208,6 +211,7 @@ impl S3Storage {
             bucket: config.bucket,
             key_prefix,
             public_base_url,
+            content_cache: Arc::new(Mutex::new(ContentCache::default())),
         })
     }
 
@@ -231,13 +235,53 @@ impl S3Storage {
         content: &[u8],
         content_type: Option<&str>,
     ) -> Result<()> {
+        self.save_owned_with_content_type(path, content.to_vec(), content_type).await
+    }
+
+    /// 转移已缓冲上传文件的所有权，避免 SDK 请求体再复制完整文件。
+    ///
+    /// # 参数
+    /// * `path` - 安全相对对象路径。
+    /// * `content` - 已完成类型、大小与内容指纹校验的文件字节。
+    /// * `content_type` - 可选 MIME。
+    /// # 返回
+    /// 成功时返回空。
+    /// # 错误
+    /// 路径非法或 PutObject 失败时返回错误；调用取消时遵循 SDK 上传语义。
+    pub async fn save_owned_with_content_type<P: AsRef<Path>>(
+        &self,
+        path: P,
+        content: Vec<u8>,
+        content_type: Option<&str>,
+    ) -> Result<()> {
         let key = self.object_key(path.as_ref())?;
+        self.invalidate_content(&key);
+        let started = Instant::now();
         let mut request =
-            self.client.put_object().bucket(&self.bucket).key(key).body(ByteStream::from(content.to_vec()));
+            self.client.put_object().bucket(&self.bucket).key(&key).body(ByteStream::from(content));
         if let Some(content_type) = content_type {
             request = request.content_type(content_type);
         }
-        request.send().await.map_err(s3_error)?;
+        let result = request.send().await.map_err(s3_error);
+        self.invalidate_content(&key);
+        record_operation("put_object", started, result.is_ok());
+        result?;
+        Ok(())
+    }
+
+    /// 在启动时预建共享存储连接；不读文件、不写对象。
+    ///
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// HeadBucket 成功时返回空；即使权限拒绝也可能已完成 TLS 连接复用。
+    /// # 错误
+    /// 返回 SDK 错误；调用方可限时并忽略预热失败，不改变服务启动资格。
+    pub async fn warm_connection(&self) -> Result<()> {
+        let started = Instant::now();
+        let result = self.client.head_bucket().bucket(&self.bucket).send().await.map_err(s3_error);
+        record_operation("head_bucket_warmup", started, result.is_ok());
+        result?;
         Ok(())
     }
 
@@ -279,8 +323,47 @@ impl S3Storage {
     /// 对象不存在时返回 `Error::NotFound`；路径无效、S3 请求或响应体读取失败时返回错误。
     pub async fn read<P: AsRef<Path>>(&self, path: P) -> Result<Vec<u8>> {
         let stream = self.read_stream(path).await?;
-        let body = stream.collect().await.map_err(s3_error)?;
+        let started = Instant::now();
+        let body = stream.collect().await.map_err(s3_error);
+        record_operation("get_object_body", started, body.is_ok());
+        let body = body?;
         Ok(body.into_bytes().to_vec())
+    }
+
+    /// 在每次当前业务授权与文件治理校验之后复用不可变对象字节。
+    ///
+    /// 缓存只保存成功 GET 的内容，绝对期限 30 秒，单对象最多 512 KiB，
+    /// 总字节最多 8 MiB、最多 256 项；不缓存 HTTP 响应、授权或审计。
+    /// 调用方须确保内容只读且变更伴随指纹变化；存储写入和删除主动失效。
+    /// 外部绕过本服务的同键覆盖或删除可能在期限内不可见，此入口不适用于可变对象。
+    ///
+    /// # 参数
+    /// * `path` - 安全相对对象路径。
+    /// * `fingerprint` - 当前元数据确认的不可变内容身份。
+    /// # 返回
+    /// 返回完整内容；调用方仍须执行响应前的当前文件状态及版本重验。
+    /// # 错误
+    /// 路径、对象读取与响应体错误沿用 read；缓存故障只退回原读取路径。
+    pub async fn read_immutable<P: AsRef<Path>>(&self, path: P, fingerprint: &str) -> Result<Vec<u8>> {
+        let key = self.object_key(path.as_ref())?;
+        let generation = self.content_cache.lock().ok().and_then(|cache| cache.generation());
+        if !fingerprint.is_empty()
+            && let Some(bytes) = self
+                .content_cache
+                .lock()
+                .ok()
+                .and_then(|mut cache| cache.read(&key, fingerprint, Instant::now()))
+        {
+            tracing::info!(operation = "immutable_content", cache_hit = true, "storage content read");
+            return Ok(bytes);
+        }
+        let bytes = self.read(path).await?;
+        // 缓存锁中毒不改变原对象读取的成功结果。
+        if let Ok(mut cache) = self.content_cache.lock() {
+            cache.insert_if_current(generation, key, fingerprint.to_string(), &bytes, Instant::now());
+        }
+        tracing::info!(operation = "immutable_content", cache_hit = false, "storage content read");
+        Ok(bytes)
     }
 
     /// 以流式读取 S3 对象，供大对象边下边处理。
@@ -295,8 +378,10 @@ impl S3Storage {
     /// 对象不存在时返回 `Error::NotFound`；路径无效或 S3 请求失败时返回错误。
     pub async fn read_stream<P: AsRef<Path>>(&self, path: P) -> Result<ByteStream> {
         let key = self.object_key(path.as_ref())?;
-        let response =
-            self.client.get_object().bucket(&self.bucket).key(key).send().await.map_err(get_error)?;
+        let started = Instant::now();
+        let response = self.client.get_object().bucket(&self.bucket).key(key).send().await.map_err(get_error);
+        record_operation("get_object_headers", started, response.is_ok());
+        let response = response?;
         Ok(response.body)
     }
 
@@ -395,6 +480,8 @@ impl S3Storage {
     ) -> Result<()> {
         validate_complete_parts(upload_id, &parts)?;
         let key = self.object_key(path.as_ref())?;
+        self.invalidate_content(&key);
+        let started = Instant::now();
         let completed = parts
             .into_iter()
             .map(|part| {
@@ -402,15 +489,19 @@ impl S3Storage {
             })
             .collect::<Vec<_>>();
         let upload = CompletedMultipartUpload::builder().set_parts(Some(completed)).build();
-        self.client
+        let result = self
+            .client
             .complete_multipart_upload()
             .bucket(&self.bucket)
-            .key(key)
+            .key(&key)
             .upload_id(upload_id)
             .multipart_upload(upload)
             .send()
             .await
-            .map_err(s3_error)?;
+            .map_err(s3_error);
+        self.invalidate_content(&key);
+        record_operation("complete_multipart_upload", started, result.is_ok());
+        result?;
         Ok(())
     }
 
@@ -444,12 +535,23 @@ impl S3Storage {
     /// 对象不存在时返回 `Error::NotFound`；路径无效或 S3 请求失败时返回错误。
     pub async fn delete<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let key = self.object_key(path.as_ref())?;
+        self.invalidate_content(&key);
         if !self.object_exists(&key).await? {
             return Err(Error::NotFound);
         }
 
-        self.client.delete_object().bucket(&self.bucket).key(key).send().await.map_err(s3_error)?;
+        let result =
+            self.client.delete_object().bucket(&self.bucket).key(&key).send().await.map_err(s3_error);
+        self.invalidate_content(&key);
+        result?;
         Ok(())
+    }
+
+    /// 所有本服务对象变更先使字节缓存失效，不跨 await 持有同步锁。
+    fn invalidate_content(&self, key: &str) {
+        if let Ok(mut cache) = self.content_cache.lock() {
+            cache.invalidate(key);
+        }
     }
 
     /// 返回加上可选前缀的规范 S3 对象键。
@@ -480,8 +582,19 @@ impl S3Storage {
             bucket: bucket.to_string(),
             key_prefix: normalize_prefix(key_prefix.map(str::to_owned))?,
             public_base_url: public_base_url(public_base_url_value)?,
+            content_cache: Arc::new(Mutex::new(ContentCache::default())),
         })
     }
+}
+
+/// 记录外部操作完整等待，日志不得包含对象内容、路径、签名或凭证。
+fn record_operation(operation: &str, started: Instant, success: bool) {
+    tracing::info!(
+        operation,
+        elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+        success,
+        "storage operation completed"
+    );
 }
 
 /// 校验建立 S3 签名客户端必需的配置，并返回规范化结果。
@@ -657,6 +770,35 @@ mod tests {
             request.uri(),
             "https://s3.example.com/erp-assets/tenant-a/uploads/images/example.png?x-id=GetObject"
         );
+        Ok(())
+    }
+
+    /// 只读内容缓存只消除重复 GET；对象路径仍经过统一前缀校验。
+    #[tokio::test]
+    async fn immutable_content_reuses_only_a_successful_get() -> Result<()> {
+        let (storage, request_receiver) = test_storage_with_prefix();
+        assert_eq!(storage.read_immutable("images/private.png", "current-hmac").await?, Vec::<u8>::new());
+        let request = request_receiver.expect_request();
+        assert_eq!(request.method(), "GET");
+        assert_eq!(storage.read_immutable("images/private.png", "current-hmac").await?, Vec::<u8>::new());
+        let rejected = storage.read_immutable("../images/private.png", "current-hmac").await;
+        assert!(matches!(rejected, Err(Error::PathError(_))));
+        Ok(())
+    }
+
+    /// 上传转移原请求体，并在任何对象写入之前使同键缓存失效。
+    #[tokio::test]
+    async fn owned_upload_invalidates_previous_content() -> Result<()> {
+        let (storage, request_receiver) = test_storage_with_prefix();
+        let key = storage.object_key(Path::new("images/private.png"))?;
+        storage.content_cache.lock().unwrap().insert(key.clone(), "old".into(), b"old", Instant::now());
+        storage
+            .save_owned_with_content_type("images/private.png", b"new".to_vec(), Some("image/png"))
+            .await?;
+        let request = request_receiver.expect_request();
+        assert_eq!(request.method(), "PUT");
+        assert_eq!(request.body().bytes(), Some(b"new".as_slice()));
+        assert_eq!(storage.content_cache.lock().unwrap().read(&key, "old", Instant::now()), None);
         Ok(())
     }
 

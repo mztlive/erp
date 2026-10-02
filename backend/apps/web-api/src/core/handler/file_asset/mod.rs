@@ -574,21 +574,23 @@ pub(crate) async fn store_asset_file(
 ) -> std::result::Result<RegisterFileAssetRequest, Error> {
     let config = state.config_snapshot();
     let unique_name = storage_key_with_extension(id_generator::next_id(), &file.file_name);
+    let content_hmac =
+        erp_support::content_fingerprint(&sha256_hex(&file.content), config.app.secret.as_bytes());
+    let byte_size = u64::try_from(file.content.len())
+        .map_err(|_| Error::BadRequest("上传文件大小超出支持范围".to_string()))?;
     state
         .storage()
-        .save_with_content_type(&unique_name, &file.content, Some(file.content_type.as_str()))
+        .save_owned_with_content_type(&unique_name, file.content, Some(file.content_type.as_str()))
         .await
         .map_err(|storage_error| {
             error!(error = %storage_error, object_key = %unique_name, "Failed to save file asset to S3");
             Error::Internal("Object storage operation failed".to_string())
         })?;
-    let content_hmac =
-        erp_support::content_fingerprint(&sha256_hex(&file.content), config.app.secret.as_bytes());
     Ok(RegisterFileAssetRequest {
         storage_object_key: unique_name,
         file_name: file.file_name,
         content_type: file.content_type,
-        byte_size: file.content.len() as u64,
+        byte_size,
         content_hmac,
         sensitivity_class,
         retention_class,

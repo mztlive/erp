@@ -10,6 +10,7 @@
 
 mod background_job;
 mod background_job_item;
+mod input;
 mod selection_item;
 mod selection_snapshot;
 
@@ -20,6 +21,7 @@ use persistence_core::{Executor, Result, mongo_ops};
 
 pub use self::background_job::{BackgroundJobFilter, BackgroundJobRepositoryExt, BackgroundJobRow};
 pub use self::background_job_item::{BackgroundJobItemRepositoryExt, BackgroundJobItemRow};
+pub use self::input::{BACKGROUND_JOB_INPUT_LIMIT, BackgroundJobInput};
 pub use self::selection_item::{BulkSelectionItemRepositoryExt, BulkSelectionItemRow};
 pub use self::selection_snapshot::{
     BulkSelectionSnapshotFilter, BulkSelectionSnapshotRepositoryExt, BulkSelectionSnapshotRow,

@@ -123,6 +123,7 @@ async fn start(cfg: SafeConfig) -> Result<()> {
     erp_identity::ensure_root_role(&state.rbac()).await?;
     ensure_identity_foundation(&state.rbac()).await?;
     bootstrap_initial_admin(&state, config.bootstrap.initial_admin_password()).await?;
+    warm_storage_connection(state.storage()).await;
 
     spawn_config_watcher(
         state.clone(),
@@ -136,6 +137,15 @@ async fn start(cfg: SafeConfig) -> Result<()> {
     let result = run_app(app_port, state).await;
     outbox_worker.stop().await;
     result
+}
+
+/// 将存储连接的 DNS/TLS 首次等待移至有界启动准备，失败不改变服务启动合同。
+async fn warm_storage_connection(storage: &S3Storage) {
+    match tokio::time::timeout(std::time::Duration::from_secs(2), storage.warm_connection()).await {
+        Ok(Ok(())) => {},
+        Ok(Err(_)) => warn!("Object storage connection warmup did not complete successfully"),
+        Err(_) => warn!("Object storage connection warmup exceeded startup time limit"),
+    }
 }
 
 /// 配置了初始密码且库中还没有超级管理员时，创建 `admin` 并绑定 root 角色。

@@ -1,6 +1,7 @@
 //! 供应商付款单查询、银行回单与过账编排。
 
 use std::collections::{HashMap, HashSet};
+use std::future::Future;
 
 use erp_core::ids::{FileAssetId, PartyBankAccountId, SupplierPaymentId};
 use erp_core::money::Amount;
@@ -17,8 +18,8 @@ use persistence_core::NoTransaction;
 use validator::Validate;
 
 use super::dto::{
-    PageView, PaymentRecipientView, SortDir, SupplierPaymentBankReceiptView, SupplierPaymentListParams,
-    SupplierPaymentView,
+    PageView, PaymentAllocationView, PaymentRecipientView, SortDir, SupplierPaymentBankReceiptView,
+    SupplierPaymentListParams, SupplierPaymentView,
 };
 use super::mapping::{payment_recipient_view, zero_amount};
 use super::{PayableReadService, SupplierPaymentFilter, display};
@@ -140,77 +141,34 @@ impl PayableReadService {
             .supplier_payments()
             .find_supplier_payments_by_ids(payment_ids, &mut NoTransaction)
             .await?;
-        let payments_by_id: HashMap<&str, &SupplierPayment> =
-            payments.iter().map(|payment| (payment.base.id.as_str(), payment)).collect();
-        let mut ordered = Vec::with_capacity(payment_ids.len());
-        for id in payment_ids {
-            let payment = payments_by_id
-                .get(id.as_ref())
-                .ok_or_else(|| Error::NotFound("供应商付款单不存在".to_string()))?;
-            ordered.push(*payment);
-        }
+        let ordered = ordered_supplier_payments(payment_ids, &payments)?;
         let allocations = self
             .db
             .payment_allocations()
             .find_allocations_by_payments(payment_ids, &mut NoTransaction)
             .await?;
-        let mut allocations_by_payment: HashMap<String, Vec<&PaymentAllocation>> = HashMap::new();
-        for allocation in &allocations {
-            allocations_by_payment
-                .entry(allocation.supplier_payment_id.to_string())
-                .or_default()
-                .push(allocation);
-        }
-        for group in allocations_by_payment.values_mut() {
-            group.sort_by(|left, right| {
-                left.allocation_seq.cmp(&right.allocation_seq).then_with(|| left.base.id.cmp(&right.base.id))
-            });
-        }
-        let mut grouped_views = Vec::with_capacity(ordered.len());
-        let mut allocated_totals = Vec::with_capacity(ordered.len());
-        for payment in &ordered {
-            let group = allocations_by_payment.get(payment.base.id.as_str()).cloned().unwrap_or_default();
-            let owned: Vec<PaymentAllocation> = group.into_iter().map(|item| (*item).clone()).collect();
-            let (allocated_total, views) = payment_allocation_view(&owned);
-            grouped_views.push(views);
-            allocated_totals.push(allocated_total);
-        }
-        let enriched_groups =
-            display::enrich_payment_allocation_views_batched(&self.db, grouped_views).await?;
-        let supplier_displays = self.supplier_displays_by_ids(&ordered).await?;
-        let receipt_views = self.bank_receipt_views_by_ids(&ordered).await?;
-        let recipient_views = if include_payment_recipient {
-            self.recipient_views_by_ids(&ordered).await?
-        } else {
-            HashMap::new()
-        };
-        let mut views = Vec::with_capacity(ordered.len());
-        for ((payment, allocated_total), enriched) in
-            ordered.into_iter().zip(allocated_totals).zip(enriched_groups)
-        {
-            let (supplier_no, supplier_name) =
-                supplier_displays.get(payment.base.id.as_str()).cloned().unwrap_or((None, None));
-            views.push(SupplierPaymentView {
-                id: payment.base.id.clone(),
-                payment_no: payment.payment_no.clone(),
-                status: payment.status,
-                supplier_id: payment.supplier_id.to_string(),
-                supplier_no,
-                supplier_name,
-                payment_recipient: recipient_views.get(payment.base.id.as_str()).cloned(),
-                paid_at: payment.paid_at,
-                amount: payment.amount,
-                bank_reference: payment.bank_reference.clone(),
-                bank_receipt: receipt_views.get(payment.base.id.as_str()).cloned(),
-                version: payment.base.version,
-                created_at: payment.base.created_at,
-                unallocated_amount: payment.amount.checked_sub(allocated_total),
-                allocated_total,
-                allocations: enriched,
-                related_reversals: Vec::new(),
-            });
-        }
-        Ok(views)
+        let (allocated_totals, grouped_views) = payment_allocation_groups(&ordered, &allocations);
+        let (enriched_groups, supplier_displays, receipt_views, recipient_views) = load_payment_projections(
+            display::enrich_payment_allocation_views_batched(&self.db, grouped_views),
+            self.supplier_displays_by_ids(&ordered),
+            self.bank_receipt_views_by_ids(&ordered),
+            async {
+                if include_payment_recipient {
+                    self.recipient_views_by_ids(&ordered).await
+                } else {
+                    Ok(HashMap::new())
+                }
+            },
+        )
+        .await?;
+        Ok(map_supplier_payment_views(
+            &ordered,
+            allocated_totals,
+            enriched_groups,
+            &supplier_displays,
+            &receipt_views,
+            &recipient_views,
+        ))
     }
 
     /// 按付款集合一次批量解析供应商展示名（FIN-R02）。
@@ -349,6 +307,107 @@ impl PayableReadService {
     }
 }
 
+/// 按调用方 ID 次序读取已批量加载的付款；缺失身份依原次序报错。
+fn ordered_supplier_payments<'a>(
+    payment_ids: &[SupplierPaymentId],
+    payments: &'a [SupplierPayment],
+) -> Result<Vec<&'a SupplierPayment>> {
+    let payments_by_id: HashMap<&str, &SupplierPayment> =
+        payments.iter().map(|payment| (payment.base.id.as_str(), payment)).collect();
+    payment_ids
+        .iter()
+        .map(|id| {
+            payments_by_id
+                .get(id.as_ref())
+                .copied()
+                .ok_or_else(|| Error::NotFound("供应商付款单不存在".to_string()))
+        })
+        .collect()
+}
+
+/// 以付款输入次序分组核销，并保持每组序号和身份的稳定排序。
+fn payment_allocation_groups(
+    ordered: &[&SupplierPayment],
+    allocations: &[PaymentAllocation],
+) -> (Vec<Amount>, Vec<Vec<PaymentAllocationView>>) {
+    let mut allocations_by_payment: HashMap<String, Vec<&PaymentAllocation>> = HashMap::new();
+    for allocation in allocations {
+        allocations_by_payment
+            .entry(allocation.supplier_payment_id.to_string())
+            .or_default()
+            .push(allocation);
+    }
+    for group in allocations_by_payment.values_mut() {
+        group.sort_by(|left, right| {
+            left.allocation_seq.cmp(&right.allocation_seq).then_with(|| left.base.id.cmp(&right.base.id))
+        });
+    }
+    let mut grouped_views = Vec::with_capacity(ordered.len());
+    let mut allocated_totals = Vec::with_capacity(ordered.len());
+    for payment in ordered {
+        let group = allocations_by_payment.get(payment.base.id.as_str()).cloned().unwrap_or_default();
+        let owned: Vec<PaymentAllocation> = group.into_iter().map(|item| (*item).clone()).collect();
+        let (allocated_total, views) = payment_allocation_view(&owned);
+        grouped_views.push(views);
+        allocated_totals.push(allocated_total);
+    }
+    (allocated_totals, grouped_views)
+}
+
+/// 将已经完成错误仲裁的独立投影写入付款响应，保持字段和输入次序。
+fn map_supplier_payment_views(
+    ordered: &[&SupplierPayment],
+    allocated_totals: Vec<Amount>,
+    enriched_groups: Vec<Vec<PaymentAllocationView>>,
+    supplier_displays: &HashMap<String, (Option<String>, Option<String>)>,
+    receipt_views: &HashMap<String, SupplierPaymentBankReceiptView>,
+    recipient_views: &HashMap<String, PaymentRecipientView>,
+) -> Vec<SupplierPaymentView> {
+    ordered
+        .iter()
+        .zip(allocated_totals)
+        .zip(enriched_groups)
+        .map(|((payment, allocated_total), enriched)| {
+            let (supplier_no, supplier_name) =
+                supplier_displays.get(payment.base.id.as_str()).cloned().unwrap_or((None, None));
+            SupplierPaymentView {
+                id: payment.base.id.clone(),
+                payment_no: payment.payment_no.clone(),
+                status: payment.status,
+                supplier_id: payment.supplier_id.to_string(),
+                supplier_no,
+                supplier_name,
+                payment_recipient: recipient_views.get(payment.base.id.as_str()).cloned(),
+                paid_at: payment.paid_at,
+                amount: payment.amount,
+                bank_reference: payment.bank_reference.clone(),
+                bank_receipt: receipt_views.get(payment.base.id.as_str()).cloned(),
+                version: payment.base.version,
+                created_at: payment.base.created_at,
+                unallocated_amount: payment.amount.checked_sub(allocated_total),
+                allocated_total,
+                allocations: enriched,
+                related_reversals: Vec::new(),
+            }
+        })
+        .collect()
+}
+
+/// 并行读取四组独立 NoTransaction 投影，并按既有读取顺序选择首个错误。
+///
+/// 各投影只读取事实，不执行审计或业务写入；等待全部结果后再依序传播错误，
+/// 防止最快失败的读取改变付款视图原有错误优先级。
+async fn load_payment_projections<A, B, C, D>(
+    allocations: impl Future<Output = Result<A>>,
+    suppliers: impl Future<Output = Result<B>>,
+    receipts: impl Future<Output = Result<C>>,
+    recipients: impl Future<Output = Result<D>>,
+) -> Result<(A, B, C, D)> {
+    let (allocations, suppliers, receipts, recipients) =
+        tokio::join!(allocations, suppliers, receipts, recipients);
+    Ok((allocations?, suppliers?, receipts?, recipients?))
+}
+
 /// 汇总付款核销分配并装配视图。
 ///
 /// # 参数
@@ -356,9 +415,7 @@ impl PayableReadService {
 ///
 /// # 返回
 /// 返回 `(净已核销合计, 分配视图列表)`。
-fn payment_allocation_view(
-    allocations: &[PaymentAllocation],
-) -> (Amount, Vec<erp_finance::dto::payable::PaymentAllocationView>) {
+fn payment_allocation_view(allocations: &[PaymentAllocation]) -> (Amount, Vec<PaymentAllocationView>) {
     let mut net = zero_amount();
     let views = allocations
         .iter()
@@ -371,4 +428,40 @@ fn payment_allocation_view(
         })
         .collect();
     (net, views)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::load_payment_projections;
+    use crate::Error;
+
+    /// 独立投影的成功结果保持原装配次序。
+    #[tokio::test]
+    async fn payment_projections_keep_success_order() {
+        let values =
+            load_payment_projections(async { Ok(1) }, async { Ok(2) }, async { Ok(3) }, async { Ok(4) })
+                .await
+                .unwrap();
+        assert_eq!(values, (1, 2, 3, 4));
+    }
+
+    /// 多个读取同时失败时，始终返回原顺序中的首错。
+    #[tokio::test]
+    async fn payment_projections_keep_first_error_order() {
+        for first_failure in 0..4 {
+            let result = load_payment_projections(
+                projection_result(0, first_failure),
+                projection_result(1, first_failure),
+                projection_result(2, first_failure),
+                projection_result(3, first_failure),
+            )
+            .await;
+            assert!(matches!(result, Err(Error::NotFound(message)) if message == first_failure.to_string()));
+        }
+    }
+
+    /// 在给定首错之后让所有投影失败，用于校验实际并行读取编排的错误仲裁。
+    async fn projection_result(index: usize, first_failure: usize) -> crate::Result<usize> {
+        if index >= first_failure { Err(Error::NotFound(index.to_string())) } else { Ok(index) }
+    }
 }

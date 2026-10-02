@@ -28,7 +28,27 @@ pub async fn resolve_current_payment_recipient(
         .find_by_id(supplier_id.as_ref(), executor)
         .await?
         .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
-    resolve_optional_party_payment_recipient(db, &supplier.party_id, executor)
+    resolve_current_party_payment_recipient(db, &supplier.party_id, executor).await
+}
+
+/// 在供应商已由当前 Executor 校验后解析其主体唯一默认收款账户。
+///
+/// # 参数
+/// * `db` - 数据库实例
+/// * `party_id` - 同一执行阶段已经读取的供应商主体身份
+/// * `executor` - 读取供应商事实时使用的调用方执行器
+///
+/// # 返回
+/// 返回当前业务日唯一生效的默认收款账户。
+///
+/// # 错误
+/// 未配置默认账户、多个默认账户或仓储读取失败时返回错误。
+pub async fn resolve_current_party_payment_recipient(
+    db: &Database,
+    party_id: &PartyId,
+    executor: &mut dyn Executor,
+) -> Result<PartyBankAccount> {
+    resolve_optional_party_payment_recipient(db, party_id, executor)
         .await?
         .ok_or_else(|| Error::BusinessLogicError("供应商未配置当前默认收款账户，无法付款".to_string()))
 }

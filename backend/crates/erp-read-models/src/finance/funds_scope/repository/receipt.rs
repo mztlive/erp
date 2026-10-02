@@ -69,9 +69,9 @@ fn pipeline(
     condition: &FundsLinkedCondition,
     summary: bool,
 ) -> Vec<Document> {
-    let mut stages =
-        vec![doc! { "$match": filter.to_doc() }, allocation_lookup(query, authorization, condition, summary)];
+    let mut stages = vec![doc! { "$match": filter.to_doc() }];
     stages.extend(operator_stages(query, condition));
+    stages.push(allocation_lookup(query, authorization, condition, summary));
     if query.sales_order_id.is_some() || query.receivable_account_id.is_some() {
         stages.push(pending_lookup(query));
         stages.push(doc! { "$match": { "$expr": { "$or": [
@@ -206,4 +206,76 @@ fn projection() -> Document {
 /// 保持领域排序字段和 ID 尾键，客户端已按 DTO 规范化。
 fn sort(query: &CustomerReceiptListQuery) -> Document {
     flow::sort(query.paging.sort_by, matches!(query.paging.sort_dir, SortDir::Asc))
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_finance::dto::receivable::CustomerReceiptListParams;
+
+    use super::super::tests::authorization;
+    use super::*;
+
+    /// 登记使用成功创建审计，核销使用提交快照，两类经办身份不互相替代。
+    #[test]
+    fn receipt_operator_filters_keep_registration_and_settlement_facts_distinct() {
+        let mut query = CustomerReceiptListParams::default().normalized().unwrap();
+        let condition =
+            FundsLinkedCondition { operator_user_ids: Some(vec!["operator".into()]), ..Default::default() };
+        for (kind, collection, reference, expected) in [
+            (
+                ReceiptOperatorKind::Register,
+                Database::AUDIT_LOGS,
+                "resource_id",
+                doc! { "resource_type": "customer_receipt", "action": "customer_receipt.create",
+                "success": true, "actor_id": { "$in": ["operator"] }, "deleted_at": 0_i64 },
+            ),
+            (
+                ReceiptOperatorKind::Settle,
+                Database::APPROVAL_SUBJECT_SNAPSHOTS,
+                "business_object_id",
+                doc! { "document_type": "customer_receipt", "payload.submitted_by": { "$in": ["operator"] },
+                "deleted_at": 0_i64 },
+            ),
+        ] {
+            query.operator_kind = Some(kind);
+            let stages = operator_stages(&query, &condition);
+            let lookup = stages[0].get_document("$lookup").unwrap();
+            assert_eq!(lookup.get_str("from").unwrap(), collection);
+            let filter = lookup.get_array("pipeline").unwrap()[0].as_document().unwrap();
+            let conjunction = filter.get_document("$match").unwrap().get_array("$and").unwrap();
+            assert_eq!(conjunction[1].as_document().unwrap(), &expected);
+            assert_eq!(
+                conjunction[0].as_document().unwrap().get_document("$expr").unwrap(),
+                &doc! { "$eq": [format!("${reference}"), "$$linked"] },
+            );
+            assert_eq!(stages[1], doc! { "$match": { "scope_operators.0": { "$exists": true } } });
+        }
+    }
+
+    /// 未提供经办条件不加限制，提供经办条件但无动作类型时保持失败关闭。
+    #[test]
+    fn receipt_operator_filter_requires_explicit_kind() {
+        let query = CustomerReceiptListParams::default().normalized().unwrap();
+        assert!(operator_stages(&query, &FundsLinkedCondition::default()).is_empty());
+        let condition = FundsLinkedCondition { operator_user_ids: Some(vec![]), ..Default::default() };
+        assert_eq!(operator_stages(&query, &condition), [doc! { "$match": { "$expr": false } }]);
+    }
+
+    /// 经办条件先于核销关联执行，两类经办均保持原来源、可见性与分页共同前置条件。
+    #[test]
+    fn receipt_operator_filter_precedes_allocation_sources() {
+        let mut query = CustomerReceiptListParams::default().normalized().unwrap();
+        let condition =
+            FundsLinkedCondition { operator_user_ids: Some(vec!["operator".into()]), ..Default::default() };
+        for kind in [ReceiptOperatorKind::Register, ReceiptOperatorKind::Settle] {
+            query.operator_kind = Some(kind);
+            let stages =
+                pipeline(&query, &CustomerReceiptFilter::default(), &authorization(), &condition, false);
+            assert_eq!(stages[2], doc! { "$match": { "scope_operators.0": { "$exists": true } } });
+            assert_eq!(
+                stages[3].get_document("$lookup").unwrap().get_str("from").unwrap(),
+                Database::RECEIPT_ALLOCATIONS
+            );
+        }
+    }
 }

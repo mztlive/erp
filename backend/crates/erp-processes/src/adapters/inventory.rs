@@ -12,7 +12,7 @@ use erp_catalog::repository::prelude::*;
 use erp_core::ids::SkuId;
 use erp_fulfillment::repository::FulfillmentExt;
 use erp_identity::access_control::ScopedObject;
-use erp_identity::service::access_control::resolve::{AuthorizedDataScope, DataScopeService};
+use erp_identity::service::access_control::resolve::{AuthorizedDataScope, DataScopeBatch, DataScopeService};
 use erp_identity::{Error as IdentityError, Permission, SharedRbacService};
 use erp_inventory::{
     AdjustmentPeopleFact, AdjustmentPeopleFactsPort, AdjustmentSnapshotReadFilter, AuthorizationPort,
@@ -39,6 +39,17 @@ const BALANCE_LIST_PERMISSION: &str = "stock_balance:list";
 const BALANCE_DETAIL_PERMISSION: &str = "stock_balance:detail";
 const MOVEMENT_LIST_PERMISSION: &str = "stock_movement:list";
 const RESERVATION_LIST_PERMISSION: &str = "stock_reservation:list";
+/// 按原授权次序保留八个库存资源动作槽与同角色详情资格要求。
+const INVENTORY_OPERATIONS: [(&str, bool); 8] = [
+    (BALANCE_LIST_PERMISSION, false),
+    (BALANCE_DETAIL_PERMISSION, false),
+    (MOVEMENT_LIST_PERMISSION, false),
+    (RESERVATION_LIST_PERMISSION, false),
+    (ADJUSTMENT_LIST_PERMISSION, true),
+    (DETAIL_PERMISSION, false),
+    (CREATE_PERMISSION, true),
+    (UPDATE_PERMISSION, true),
+];
 
 /// MongoDB adapter that computes inventory warehouse scopes from identity facts.
 #[derive(Clone)]
@@ -97,19 +108,15 @@ pub async fn authorize_inventory(
         return Ok(InventoryAuthorization::inactive());
     }
     let service = DataScopeService::new(db.clone(), rbac.clone());
-    let mut scopes = Vec::new();
-    let mut metas = Vec::new();
-    for (code, requires_detail) in [
-        (BALANCE_LIST_PERMISSION, false),
-        (BALANCE_DETAIL_PERMISSION, false),
-        (MOVEMENT_LIST_PERMISSION, false),
-        (RESERVATION_LIST_PERMISSION, false),
-        (ADJUSTMENT_LIST_PERMISSION, true),
-        (DETAIL_PERMISSION, false),
-        (CREATE_PERMISSION, true),
-        (UPDATE_PERMISSION, true),
-    ] {
-        let (scope, meta) = inventory_scope(&service, actor, code, requires_detail, executor).await?;
+    let permissions = INVENTORY_OPERATIONS
+        .iter()
+        .map(|(code, _)| Permission::parse(*code).expect("固定库存权限合法"))
+        .collect::<Vec<_>>();
+    let mut batch = service.batch(actor, &permissions, executor);
+    let mut scopes = Vec::with_capacity(INVENTORY_OPERATIONS.len());
+    let mut metas = Vec::with_capacity(INVENTORY_OPERATIONS.len());
+    for (code, requires_detail) in INVENTORY_OPERATIONS {
+        let (scope, meta) = inventory_scope(&mut batch, code, requires_detail).await?;
         scopes.push(scope);
         metas.push(meta);
     }
@@ -139,18 +146,16 @@ pub async fn authorize_inventory(
 /// 库存查询共用仓库政策，保留各资源动作的授权槽，避免合并存量范围扩大权限。
 /// 库存调整创建、更新及列表沿用同角色完整详情权限要求；仓库目录范围不参与。
 async fn inventory_scope(
-    service: &DataScopeService,
-    actor: &AuditActor,
+    batch: &mut DataScopeBatch<'_>,
     code: &str,
     requires_detail: bool,
-    executor: &mut dyn Executor,
 ) -> erp_inventory::Result<(WarehouseScope, InventoryScopeMeta)> {
     let (resource, action) = code.split_once(':').expect("固定库存权限合法");
     let extra = requires_detail
         .then(|| Permission::parse(DETAIL_PERMISSION).expect("固定权限合法"))
         .into_iter()
         .collect::<Vec<_>>();
-    let access = match service.resolve_permissions(actor, resource, action, &extra, executor).await {
+    let access = match batch.resolve_permissions(resource, action, &extra).await {
         Ok(access) => access,
         Err(IdentityError::Forbidden(_)) => {
             return Ok((WarehouseScope::empty(), InventoryScopeMeta::empty()));

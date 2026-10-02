@@ -268,7 +268,7 @@ fn invoice_pipeline(
     authorization: &FundsAuthorization,
     condition: &FundsLinkedCondition,
 ) -> Vec<Document> {
-    let mut pipeline = vec![doc! { "$match": filter.to_doc() }];
+    let mut pipeline = vec![doc! { "$match": header_filter(filter, condition) }];
     pipeline.push(allocation_lookup(
         <Database as ReceivableExt>::SALES_INVOICE_ALLOCATIONS,
         sales_stages(authorization, condition),
@@ -296,6 +296,15 @@ fn invoice_pipeline(
     pipeline
 }
 
+/// 登记人直接收窄发票主表，未命中的发票不读取分配与真实来源。
+fn header_filter(filter: &InvoiceFilter, condition: &FundsLinkedCondition) -> Document {
+    let mut document = filter.to_doc();
+    if let Some(ids) = &condition.operator_user_ids {
+        document.insert("created_by", doc! { "$in": ids });
+    }
+    document
+}
+
 /// 来源去重和稳定键排序对应原 BTreeSet，不能只绑定当前页来源。
 fn matched_sources(links: &str) -> Document {
     doc! { "$sortArray": { "input": { "$setUnion": [{ "$map": {
@@ -310,9 +319,6 @@ fn final_match(query: &InvoiceListQuery, condition: &FundsLinkedCondition) -> Do
     let visible = doc! { "$or": [{ "_whole": true }, { "_sales_sources.0": { "$exists": true } },
     { "_purchase_sources.0": { "$exists": true } }] };
     let mut conditions = vec![visible];
-    if let Some(ids) = &condition.operator_user_ids {
-        conditions.push(doc! { "created_by": { "$in": ids } });
-    }
     if condition.owner_user_ids.is_some() {
         conditions.push(doc! { "_sales_sources.0": { "$exists": true } });
     }
@@ -393,6 +399,25 @@ mod tests {
     use std::collections::hash_map::DefaultHasher;
 
     use super::*;
+
+    /// 主表登记人筛选与领域已有条件求交，空经办人集合仍为零匹配条件。
+    #[test]
+    fn header_operator_filter_keeps_original_constraints_and_empty_set() {
+        let filter = InvoiceFilter { keyword_ids: Some(vec!["invoice".into()]), ..Default::default() };
+        let original = filter.to_doc();
+        assert_eq!(header_filter(&filter, &FundsLinkedCondition::default()), original);
+        let condition = FundsLinkedCondition {
+            operator_user_ids: Some(vec!["registrar".into(), "second".into()]),
+            ..Default::default()
+        };
+        let mut expected = original.clone();
+        expected.insert("created_by", doc! { "$in": ["registrar", "second"] });
+        assert_eq!(header_filter(&filter, &condition), expected);
+        let condition = FundsLinkedCondition { operator_user_ids: Some(vec![]), ..Default::default() };
+        let mut expected = original;
+        expected.insert("created_by", doc! { "$in": [] });
+        assert_eq!(header_filter(&filter, &condition), expected);
+    }
 
     /// 轻量完整指纹与旧逐票协议一致，并检测非当前页来源责任版本变化。
     #[test]

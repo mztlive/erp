@@ -4789,6 +4789,7 @@ dependencies = [
  "aws-smithy-http-client",
  "thiserror 2.0.20",
  "tokio",
+ "tracing",
  "url",
 ]
 

@@ -9,6 +9,7 @@ use validator::Validate;
 
 use super::access::{ActorAccess, ViewAccess};
 use super::action_projection::ActionProjection;
+use super::owner_qualification::QualificationCache;
 use super::query::AUTHORIZED_SCAN_BATCH_SIZE;
 use super::{
     ProcessingState, WorkItemAllowedAction, WorkItemDueFilter, WorkItemFamily, WorkItemFamilyCountsView,
@@ -176,6 +177,7 @@ impl<A: WorkflowAuthorizationPort + Clone + Send + Sync + 'static> WorkbenchRead
         filter.narrow_current_handlers(&query.handler_user_ids);
         filter.query = None;
         let mut counts = StatsCounts::default();
+        let mut qualification = QualificationCache::new(executor);
         let mut scan = self.candidate_scan(&filter, executor).await?;
         loop {
             let rows = scan.next_batch(AUTHORIZED_SCAN_BATCH_SIZE, executor).await?;
@@ -183,7 +185,7 @@ impl<A: WorkflowAuthorizationPort + Clone + Send + Sync + 'static> WorkbenchRead
             if candidate_count == 0 {
                 break;
             }
-            self.count_stat_batch(rows, query, context, &mut counts, executor).await?;
+            self.count_stat_batch(rows, query, context, &mut counts, &mut qualification, executor).await?;
             if candidate_count < AUTHORIZED_SCAN_BATCH_SIZE.get() as usize {
                 break;
             }
@@ -198,6 +200,7 @@ impl<A: WorkflowAuthorizationPort + Clone + Send + Sync + 'static> WorkbenchRead
         query: &dto::WorkItemListQuery,
         context: &StatsContext<'_>,
         counts: &mut StatsCounts,
+        qualification: &mut QualificationCache,
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let mut facts = self.candidate_object_facts(&rows, false, executor).await?;
@@ -221,7 +224,7 @@ impl<A: WorkflowAuthorizationPort + Clone + Send + Sync + 'static> WorkbenchRead
         }
         self.apply_stat_approval_contexts(&mut actions, executor).await?;
         let authority = facts.into_iter().map(|(key, fact)| (key, fact.authority)).collect();
-        self.apply_action_qualification(&mut actions, &authority, executor).await?;
+        self.apply_action_qualification(&mut actions, &authority, qualification, executor).await?;
         counts.extend_batch(
             identities.into_iter().zip(actions).map(|(item, action)| (item, action.access)),
             query.scope,

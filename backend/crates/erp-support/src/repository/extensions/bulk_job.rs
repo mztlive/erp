@@ -23,6 +23,8 @@ pub trait BulkJobExt {
     const BACKGROUND_JOBS: &'static str = "background_jobs";
     /// `background_job_item` 集合名。
     const BACKGROUND_JOB_ITEMS: &'static str = "background_job_items";
+    /// 后台任务私有有界输入；仅通过域仓储读取，不加入公开任务 DTO。
+    const BACKGROUND_JOB_INPUTS: &'static str = "background_job_inputs";
 
     /// 选择快照列表筛选条件类型（定义见 `repository::bulk_job`）。
     type BulkSelectionSnapshotFilter;

@@ -119,6 +119,7 @@ pub async fn payment_recipient_reveal(
 ) -> Result<PaymentRecipientRevealView> {
     let sensitive_data = state.sensitive_data();
     let view = PayableService::new(state.db())
+        .with_rbac(state.rbac())
         .with_object_read(state.approval_object_read())
         .reveal_payment_recipient(&id, req, &actor, sensitive_data.as_ref())
         .await?;
@@ -148,6 +149,7 @@ pub async fn payable_account_create(
     Json(req): Json<CreatePayableAccountRequest>,
 ) -> Result<PayableAccountView> {
     let view = PayableService::new(state.db())
+        .with_rbac(state.rbac())
         .with_object_read(state.approval_object_read())
         .create_payable_account(req, &actor)
         .await?;
@@ -238,6 +240,7 @@ pub async fn supplier_payment_merge_candidates(
     Query(params): Query<PaymentMergeCandidatesParams>,
 ) -> Result<PaymentMergeCandidatesView> {
     let view = PayableService::new(state.db())
+        .with_rbac(state.rbac())
         .with_object_read(state.approval_object_read())
         .payment_merge_candidates(params, &actor)
         .await?;
@@ -271,6 +274,7 @@ pub async fn supplier_payment_commit(
     let pending = store_pending_asset_files(&state, files, |_| SensitivityClass::Sensitive).await?;
     let result = erp_processes::commit_supplier_payment_with_assets(
         state.db(),
+        state.rbac(),
         state.approval_object_read(),
         req,
         pending.clone(),
@@ -309,10 +313,11 @@ pub async fn supplier_payment_bank_receipt(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> std::result::Result<Response, Error> {
-    let view = PayableService::new(state.db())
-        .with_object_read(state.approval_object_read())
-        .supplier_payment_bank_receipt(&id, &actor)
-        .await?;
+    let payable = PayableService::new(state.db())
+        .with_rbac(state.rbac())
+        .with_object_read(state.approval_object_read());
+    let snapshot = payable.supplier_payment_bank_receipt(&id, &actor).await?;
+    let view = &snapshot.asset;
     if !matches!(view.content_type.as_str(), "image/jpeg" | "image/png" | "image/webp") {
         return Err(Error::Unprocessable("当前银行回单类型不支持在线预览".to_string()));
     }
@@ -321,14 +326,18 @@ pub async fn supplier_payment_bank_receipt(
     {
         return Err(Error::Unprocessable("银行回单不可预览，请联系管理员".to_string()));
     }
-    let content = state.storage().read(&view.storage_object_key).await.map_err(|storage_error| {
-        error!(
-            error = %storage_error,
-            supplier_payment_id = %id,
-            "Failed to read supplier payment bank receipt"
-        );
-        Error::Internal("Object storage operation failed".to_string())
-    })?;
+    let content =
+        state.storage().read_immutable(&view.storage_object_key, &view.content_hmac).await.map_err(
+            |storage_error| {
+                error!(
+                    error = %storage_error,
+                    supplier_payment_id = %id,
+                    "Failed to read supplier payment bank receipt"
+                );
+                Error::Internal("Object storage operation failed".to_string())
+            },
+        )?;
+    payable.revalidate_supplier_payment_bank_receipt(&id, &actor, &snapshot).await?;
     let content_type = HeaderValue::from_str(&view.content_type)
         .unwrap_or_else(|_| HeaderValue::from_static("application/octet-stream"));
     let mut response = Response::new(Body::from(content));
@@ -390,6 +399,7 @@ pub async fn purchase_invoice_allocation_post(
     Json(req): Json<RegisterPurchaseInvoiceRequest>,
 ) -> Result<PurchaseInvoiceRegisteredView> {
     let view = PayableService::new(state.db())
+        .with_rbac(state.rbac())
         .with_object_read(state.approval_object_read())
         .register_purchase_invoice(req, &actor)
         .await?;

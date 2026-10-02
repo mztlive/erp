@@ -16,7 +16,12 @@
 //!   D19 只拥有 `purchase_invoice_allocation`，禁止复制发票实体）；
 //! - D33 `supplier_settlement_statements()` 解析结算单号供展示。
 
+use std::sync::Arc;
+
 use erp_identity::SharedRbacService;
+use erp_read_models::finance::payable::PayableReadService;
+use erp_support::FileAssetView;
+use erp_workflow::{ApprovalObjectReadPort, FailClosedObjectReadPort};
 use mongodb::Database;
 
 use crate::adapters::identity::shared_rbac_service;
@@ -38,8 +43,11 @@ use erp_finance::dto::payable::SupplierPaymentView;
 /// 提供应付台账、付款单与进项发票登记编排。
 pub struct PayableService {
     db: Database,
-    rbac: SharedRbacService,
-    object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
+    /// 付款任务和单据绑定读取复用的授权实例。
+    authorization_rbac: SharedRbacService,
+    /// 保持本服务局部 policy 写锁与提交未知隔离边界的事务实例。
+    transaction_rbac: SharedRbacService,
+    object_read: Arc<dyn ApprovalObjectReadPort>,
 }
 
 /// 携带银行回单文件资产的付款提交结果。
@@ -48,6 +56,14 @@ pub struct SupplierPaymentWithAssetsResult {
     pub view: SupplierPaymentView,
     /// 本次上传对象是否已随业务事务登记；幂等重放时为 `false`。
     pub assets_committed: bool,
+}
+
+/// 受控银行回单预览的文件元数据和私有完整读取资格快照。
+pub struct SupplierPaymentBankReceiptSnapshot {
+    /// 已完成对象资格校验与预览审计的文件元数据。
+    pub asset: FileAssetView,
+    /// 当前付款及全部来源版本、授权状态形成的资格指纹。
+    qualification: (u64, String),
 }
 
 impl PayableService {
@@ -60,14 +76,37 @@ impl PayableService {
     /// 返回服务实例。
     pub fn new(db: Database) -> Self {
         let rbac = shared_rbac_service(db.clone());
-        Self { db, rbac, object_read: std::sync::Arc::new(erp_workflow::FailClosedObjectReadPort) }
+        Self {
+            db,
+            authorization_rbac: rbac.clone(),
+            transaction_rbac: rbac,
+            object_read: Arc::new(FailClosedObjectReadPort),
+        }
+    }
+
+    /// 注入应用共享授权读取实例，保持付款 policy 事务实例独立。
+    ///
+    /// # 参数
+    /// * `rbac` - 组合根已经装配的共享 RBAC 授权读取实例
+    ///
+    /// # 返回
+    /// 返回复用共享 Enforcer、但保留局部 policy 写锁及未知提交状态的服务。
+    ///
+    /// # 错误
+    /// 本方法不执行 I/O，不返回错误。
+    pub fn with_rbac(mut self, rbac: SharedRbacService) -> Self {
+        self.authorization_rbac = rbac;
+        self
     }
 
     /// Inject composition-root object-read for approval binding.
-    pub fn with_object_read(
-        mut self,
-        object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
-    ) -> Self {
+    ///
+    /// # Parameters
+    /// * `object_read` - composition-root read port
+    ///
+    /// # Returns
+    /// Returns the service with its object-read binding configured.
+    pub fn with_object_read(mut self, object_read: Arc<dyn ApprovalObjectReadPort>) -> Self {
         self.object_read = object_read;
         self
     }
@@ -75,8 +114,8 @@ impl PayableService {
 
 impl PayableService {
     /// 取得应付跨领域读模型，命令回读复用相同装配实现。
-    fn read(&self) -> erp_read_models::finance::payable::PayableReadService {
-        erp_read_models::finance::payable::PayableReadService::new(self.db.clone())
+    fn read(&self) -> PayableReadService {
+        PayableReadService::new(self.db.clone())
     }
 }
 #[cfg(test)]

@@ -1,3 +1,5 @@
+use std::collections::{HashMap, HashSet};
+
 use application_core::AuditActor;
 use bpm::engine::{DefinitionGraph, StartAssigneeBinding};
 use bpm::ids::{
@@ -7,7 +9,8 @@ use bpm::model::types::ApprovalCommandKind;
 use bpm::model::{IdempotencyKey, ParticipantId, SubjectRef, Timestamp};
 use erp_core::common::time::Instant;
 use erp_identity::repository::prelude::*;
-use erp_identity::{AccessControlExt, SharedRbacService};
+use erp_identity::{AccessControlExt, AccountCore, SharedRbacService};
+use erp_inventory::entity::inventory::stock_adjustment::StockAdjustmentBalanceVersions;
 use erp_inventory::{
     ExpectedStockBalanceVersion, InventoryExt, StockAdjustment, StockAdjustmentLine, StockAdjustmentState,
     SubmitStockAdjustmentRequest,
@@ -371,26 +374,11 @@ async fn legacy_balance_versions_match(
     expected: &[ExpectedStockBalanceVersion],
     executor: &mut dyn Executor,
 ) -> Result<bool> {
-    let required_skus =
-        lines.iter().map(|line| line.sku_id.to_string()).collect::<std::collections::HashSet<_>>();
-    let mut ids = std::collections::HashSet::with_capacity(expected.len());
-    let mut covered_skus = std::collections::HashSet::with_capacity(expected.len());
-    for item in expected {
-        if !ids.insert(item.balance_id.as_str()) {
-            return Ok(false);
-        }
-        let Some(balance) = db.stock_balances().find_by_id(&item.balance_id, executor).await? else {
-            return Ok(false);
-        };
-        if balance.base.version != item.expected_version
-            || balance.warehouse_id != adjustment.warehouse_id
-            || !required_skus.contains(&balance.sku_id.to_string())
-            || !covered_skus.insert(balance.sku_id.to_string())
-        {
-            return Ok(false);
-        }
-    }
-    Ok(covered_skus == required_skus)
+    let ids = expected.iter().map(|item| item.balance_id.clone()).collect::<Vec<_>>();
+    let balances = db.inventory().stock_balances_by_ids(&ids, executor).await?;
+    let expected =
+        expected.iter().map(|item| (item.balance_id.as_str(), item.expected_version)).collect::<Vec<_>>();
+    Ok(StockAdjustmentBalanceVersions::new(&balances).matches_legacy_result(adjustment, lines, &expected))
 }
 
 /// 在给定数据库快照内重验库存调整提交人的账号、动作权限、对象读取与范围。
@@ -605,16 +593,21 @@ pub(super) async fn revalidate_stock_adjustment_start_candidates(
         graph.nodes.iter().map(|node| node.assignee_participant_id.as_str().to_string()).collect::<Vec<_>>();
     let policy = require_process_required(DocumentType::StockAdjustment)?;
     ensure_separation_of_duties(policy.separation_of_duties_policy, initiator_id, &assignee_ids)?;
+    let accounts = stock_adjustment_candidate_accounts(db, &assignee_ids, executor).await?;
+    let mut checked = HashSet::with_capacity(assignee_ids.len());
+    let auth = crate::adapters::workflow::workflow_auth(db.clone(), rbac.clone());
     for node in &graph.nodes {
         let assignee = node.assignee_participant_id.as_str();
-        let account = db
-            .accounts()
-            .find_approval_assignee_by_id(assignee, executor)
-            .await?
-            .filter(|account| account.is_active_backoffice())
-            .ok_or_else(|| Error::ValidationError("指定审批人账号不存在、已停用或任职失效".to_string()))?;
+        if accounts.is_some() && !checked.insert(assignee) {
+            continue;
+        }
+        let account = match &accounts {
+            Some(accounts) => accounts.get(assignee).cloned(),
+            None => db.accounts().find_approval_assignee_by_id(assignee, executor).await?,
+        }
+        .filter(|account| account.is_active_backoffice())
+        .ok_or_else(|| Error::ValidationError("指定审批人账号不存在、已停用或任职失效".to_string()))?;
         let assignee_actor = AuditActor::new(account.base.id.clone(), account.base.id.clone(), account.kind);
-        let auth = crate::adapters::workflow::workflow_auth(db.clone(), rbac.clone());
         if !approval_participant_permissions_with_executor(&auth, &assignee_actor, executor).await? {
             return Err(Error::ValidationError("指定审批人缺少审批读取和决定权限".to_string()));
         }
@@ -623,4 +616,18 @@ pub(super) async fn revalidate_stock_adjustment_start_candidates(
         return Err(Error::ConflictError("审批定义没有节点，无法启动库存调整审批".to_string()));
     }
     Ok(())
+}
+
+/// 仅在调用方事务快照内批读候选账号；非事务检查仍逐节点读取当前事实。
+async fn stock_adjustment_candidate_accounts(
+    db: &Database,
+    assignee_ids: &[String],
+    executor: &mut dyn Executor,
+) -> Result<Option<HashMap<String, AccountCore>>> {
+    if executor.session().is_none() {
+        return Ok(None);
+    }
+    let ids = assignee_ids.iter().cloned().collect::<HashSet<_>>().into_iter().collect::<Vec<_>>();
+    let accounts = db.accounts().list_by_ids(&ids, executor).await?;
+    Ok(Some(accounts.into_iter().map(|account| (account.base.id.clone(), account)).collect()))
 }

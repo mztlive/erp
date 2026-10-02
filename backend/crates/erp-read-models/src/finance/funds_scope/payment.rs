@@ -21,6 +21,30 @@ use crate::finance::search::keyword_ids;
 use crate::{Error, Result};
 
 impl FundsAccess {
+    /// 在调用方执行器内验证付款整单读取资格，供整单附件交付前后复核。
+    ///
+    /// # 参数
+    /// 付款身份、服务端操作人、采购访问器与调用方原执行器。
+    /// # 返回
+    /// 返回付款版本及当前授权、主单和全部实际来源版本指纹。
+    /// # 错误
+    /// 不存在、部分可见或损坏来源统一返回 NotFound；资格和读取失败保留错误。
+    ///
+    /// # 关键业务约束
+    /// 财务整账职责及全部实际来源可见共同构成完整资格；不装配金额或分配 DTO。
+    pub async fn supplier_payment_full_read_qualification(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        purchase_access: &PurchaseAccess,
+        executor: &mut dyn Executor,
+    ) -> Result<(u64, String)> {
+        let (_, authorization) = self
+            .resolve_with_purchase(actor, "supplier_payment", "detail", purchase_access, executor)
+            .await?;
+        payment_repository::full_read_qualification(&self.db, id, &authorization, executor).await
+    }
+
     /// 分页查询供应商付款范围行：采购负责人与付款经办人分别查询。
     pub async fn supplier_payment_list_scoped(
         &self,

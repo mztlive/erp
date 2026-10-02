@@ -99,6 +99,24 @@ fn split_permission(code: &str) -> Option<(&str, &str)> {
     Some((resource, action))
 }
 
+/// 一次工作台只读阶段的身份事实；对象读取权和具体任务资格仍须独立验证。
+///
+/// `identity_version` 仅在调用方原入口需要首拍队列版本时填入；终拍版本必须重新读取。
+/// 管理范围的 `None` 仅代表公共 DataScope 解析器证明的公司范围。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkflowQueueAccessFact {
+    /// 按原权限查询合同返回的权限代码，不以任务责任代替操作权。
+    pub permission_codes: Vec<String>,
+    /// 当前账号参与的正式单据身份。
+    pub participant_document_ids: Vec<String>,
+    /// 当前管理范围覆盖的具体负责人，空集合保持失败关闭。
+    pub managed_owner_ids: Option<Vec<String>>,
+    /// 已启用角色是否证明任务管理动作资格。
+    pub can_manage: bool,
+    /// 首拍身份授权版本，不是对象或任务版本。
+    pub identity_version: Option<String>,
+}
+
 /// Closure type for a policy-bound MongoDB write.
 pub type WorkflowPolicyWrite<T, E> = Box<
     dyn for<'a> FnOnce(
@@ -109,6 +127,25 @@ pub type WorkflowPolicyWrite<T, E> = Box<
 
 /// Authorization facts and policy-bound transactions for workflow commands.
 pub trait WorkflowAuthorizationPort: Clone + Send + Sync + 'static {
+    /// 在同一只读阶段复用工作台身份事实，保留原查询及失败顺序。
+    ///
+    /// # 参数
+    /// * `actor` - 服务端认证身份。
+    /// * `include_version` - 原入口是否先读取身份授权版本。
+    /// * `executor` - 调用方同一事务执行器。
+    /// # 返回
+    /// 已装配优化器返回身份事实；`None` 要求调用方沿原授权路径读取，不授予访问权。
+    /// # 错误
+    /// 保留首拍版本、角色、权限、参与单据和管理范围的原首错顺序。
+    fn queue_access_facts(
+        &self,
+        _actor: &AuditActor,
+        _include_version: bool,
+        _executor: &mut dyn Executor,
+    ) -> impl Future<Output = Result<Option<WorkflowQueueAccessFact>>> + Send {
+        async { Ok(None) }
+    }
+
     /// 解析工作流自身资源动作；缺权限返回空，配置和基础设施错误原样传播。
     fn resolve_workflow_scope(
         &self,

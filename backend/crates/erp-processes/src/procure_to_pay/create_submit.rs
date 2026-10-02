@@ -7,14 +7,12 @@ use erp_procurement::entity::purchase_order::{
     PurchaseOrder, PurchaseOrderSubmission, PurchaseOrderSubmissionLine,
 };
 use erp_procurement::repository::PurchaseOrderExt;
-use erp_procurement::service::purchase_order::create_submit::{
-    freeze_submission_from_created_draft, load_created_order,
-};
+use erp_procurement::service::purchase_order::create_submit::freeze_submission_from_created_draft;
 use erp_sales::entity::sales_order::SalesOrder;
 use erp_workflow::entity::document_registry::BusinessDocument;
 use erp_workflow::service::approval::execution::prepare_start;
 use erp_workflow::service::approval::policy::ApprovalDomainAction;
-use erp_workflow::service::document_registry::{find_approval_binding, find_registered_document};
+use erp_workflow::service::document_registry::find_approval_binding;
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -39,15 +37,15 @@ pub(super) struct SubmittedCreatedOrder {
 }
 
 /// 刚写入的草稿聚合。
-struct CreatedDraftBundle {
+pub(super) struct CreatedDraftBundle {
     /// 草稿态采购单。
-    order: PurchaseOrder,
+    pub(super) order: PurchaseOrder,
     /// 可编辑草稿提交。
-    draft: PurchaseOrderSubmission,
+    pub(super) draft: PurchaseOrderSubmission,
     /// 草稿提交行。
-    draft_lines: Vec<PurchaseOrderSubmissionLine>,
+    pub(super) draft_lines: Vec<PurchaseOrderSubmissionLine>,
     /// 已绑定定义的注册行。
-    document: BusinessDocument,
+    pub(super) document: BusinessDocument,
 }
 
 /// 冻结后待写入启动计划的采购单。
@@ -69,7 +67,7 @@ struct FrozenCreatedDraft {
 /// # 参数
 /// * `db` - MongoDB 数据库
 /// * `sales_order` - 来源销售单
-/// * `order_id` - 刚写入的采购单主键
+/// * `bundle` - 使用原执行器成功写入的采购单、草稿头、行及注册行
 /// * `actor` - 审计操作人
 /// * `idempotency_key` - 建单命令幂等键，复用于启动审批
 /// * `executor` - 数据访问执行器
@@ -85,51 +83,28 @@ struct FrozenCreatedDraft {
 pub(super) async fn submit_created_draft(
     db: &Database,
     sales_order: &SalesOrder,
-    order_id: &str,
+    mut bundle: CreatedDraftBundle,
     actor: &AuditActor,
     idempotency_key: &str,
     executor: &mut dyn Executor,
 ) -> Result<SubmittedCreatedOrder> {
     let now = Instant::now();
-    let mut bundle = load_created_draft_bundle(db, order_id, executor).await?;
-    assign_formal_identifiers(&mut bundle.order, &mut bundle.document, now)?;
+    prepare_created_order(&mut bundle.order, &mut bundle.document, now)?;
     let frozen = freeze_created_order(db, bundle, actor, executor).await?;
     persist_created_order_start(db, sales_order, frozen, actor, idempotency_key, now, executor).await
 }
 
-/// 读取刚写入的草稿采购单、提交、明细和注册行。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `order_id` - 采购单主键
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回尚未提交的草稿聚合。
-///
-/// # 错误
-/// 采购单、草稿提交或注册行缺失时返回错误。
-///
-/// # 关键业务约束
-/// 必须用同一事务会话读取，才能看见尚未提交的写入。
-async fn load_created_draft_bundle(
-    db: &Database,
-    order_id: &str,
-    executor: &mut dyn Executor,
-) -> Result<CreatedDraftBundle> {
-    let order = load_created_order(db, order_id, executor).await?;
-    let draft_id =
-        order.draft_submission_id().map_err(|error| Error::BusinessLogicError(error.to_string()))?;
-    let draft = db
-        .purchase_order_submissions()
-        .find_by_id(&draft_id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("草稿提交不存在".to_string()))?;
-    let draft_lines = db.purchase_order().list_submission_lines(&draft_id, executor).await?;
-    let document = find_registered_document(db, order_id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("业务单据未注册".to_string()))?;
-    Ok(CreatedDraftBundle { order, draft, draft_lines, document })
+/// 沿用领域的草稿状态和提交指针检查，全部通过后才分配首次正式号。
+fn prepare_created_order(
+    order: &mut PurchaseOrder,
+    document: &mut BusinessDocument,
+    now: Instant,
+) -> Result<()> {
+    order
+        .ensure_draft_for_submission()
+        .map_err(|_| Error::ConflictError("采购单已提交或已生效，请勿重复提交".to_string()))?;
+    order.draft_submission_id().map_err(|error| Error::BusinessLogicError(error.to_string()))?;
+    assign_formal_identifiers(order, document, now)
 }
 
 /// 首次提交时分配正式采购单号并同步注册行编号。
@@ -420,4 +395,86 @@ async fn load_submitted_created_order(
         .await?
         .ok_or_else(|| Error::Internal("采购单提交后丢失".to_string()))?;
     Ok(SubmittedCreatedOrder { purchase_no: order.purchase_no, lock_version: order.base.version })
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_core::ids::{PurchaseOrderId, SalesOrderId, SalesOrderRevisionId, SupplierAccountId};
+    use erp_procurement::entity::purchase_order::{
+        FulfillmentResponsibility, PurchaseOrderData, PurchaseType,
+    };
+    use erp_workflow::entity::document_registry::DocumentType;
+    use erp_workflow::service::document_registry::new_registered_document;
+
+    use super::super::adapters::payment_term::parse;
+    use super::*;
+
+    /// 构造与依据创建相同的无正式号草稿。
+    fn created_order() -> PurchaseOrder {
+        PurchaseOrder::new(
+            PurchaseOrderId::new("po-created"),
+            PurchaseOrderData {
+                business_org_unit_id: "org-purchase".into(),
+                purchase_no: String::new(),
+                sales_order_id: SalesOrderId::new("so-source"),
+                sales_order_revision_id: SalesOrderRevisionId::new("sales-revision"),
+                creation_basis_id: "basis".into(),
+                supplier_id: SupplierAccountId::new("supplier"),
+                purchase_type: PurchaseType::Physical,
+                payment_term_code: "NET-30".into(),
+                fulfillment_responsibility: FulfillmentResponsibility::SupplierDirect,
+                owner_user_id: "buyer".into(),
+                target_warehouse_id: None,
+            },
+            "buyer",
+            parse,
+        )
+        .unwrap()
+    }
+
+    /// 复用成功写入的草稿仍只分配一次正式号，同时保留原草稿指针与乐观锁版本。
+    #[test]
+    fn created_facts_receive_stable_identifiers_without_changing_draft_version() {
+        let mut order = created_order();
+        order.attach_draft_submission(String::from("draft").into()).unwrap();
+        let mut document = new_registered_document(&order.base.id, DocumentType::PurchaseOrder, "").unwrap();
+        let version = order.base.version;
+        prepare_created_order(&mut order, &mut document, Instant::from_unix_secs(1)).unwrap();
+        assert_eq!(order.purchase_no, "PO-po-created");
+        assert_eq!(document.document_no, order.purchase_no);
+        assert_eq!(order.draft_submission_id().unwrap().as_ref(), "draft");
+        assert_eq!(order.base.version, version);
+        prepare_created_order(&mut order, &mut document, Instant::from_unix_secs(2)).unwrap();
+        assert_eq!(document.document_no, "PO-po-created");
+        assert_eq!(order.base.version, version);
+    }
+
+    /// 缺草稿提交的输入在任何正式号分配之前返回原业务错误。
+    #[test]
+    fn missing_created_draft_pointer_does_not_assign_formal_identifiers() {
+        let mut order = created_order();
+        let mut document = new_registered_document(&order.base.id, DocumentType::PurchaseOrder, "").unwrap();
+        let error = prepare_created_order(&mut order, &mut document, Instant::from_unix_secs(1)).unwrap_err();
+        assert!(
+            matches!(error, Error::BusinessLogicError(message) if message.contains("采购单缺少草稿提交"))
+        );
+        assert!(order.purchase_no.is_empty());
+        assert!(document.document_no.is_empty());
+    }
+
+    /// 复用事实仍先拒绝已提交状态，不得把现有正式提交当作可编辑草稿。
+    #[test]
+    fn submitted_created_facts_keep_original_state_conflict() {
+        let mut order = created_order();
+        order.attach_draft_submission(String::from("draft").into()).unwrap();
+        order.start_approval("formal", "buyer").unwrap();
+        let mut document = new_registered_document(&order.base.id, DocumentType::PurchaseOrder, "").unwrap();
+        let error = prepare_created_order(&mut order, &mut document, Instant::from_unix_secs(1)).unwrap_err();
+        assert!(
+            matches!(error, Error::ConflictError(message) if message == "采购单已提交或已生效，请勿重复提交")
+        );
+        assert!(order.purchase_no.is_empty());
+        assert!(document.document_no.is_empty());
+        assert_eq!(order.current_submission_id.as_deref(), Some("formal"));
+    }
 }

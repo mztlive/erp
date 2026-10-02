@@ -8,8 +8,8 @@ use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Repository
 use serde::{Deserialize, Serialize};
 
 use super::shared::{
-    active_entity_by_id, both_dec, both_inc, cross_inc, ids_to_strings, paged_projection_search,
-    scoped_base_filter, sort_doc, to_bson, with_id_tie_breaker,
+    active_entity_by_id, both_dec, both_inc, cross_inc, find_by_field_in, ids_to_strings,
+    paged_projection_search, scoped_base_filter, sort_doc, to_bson, with_id_tie_breaker,
 };
 use super::{InventoryRepository, STOCK_BALANCES};
 use crate::entity::inventory::StockBalance;
@@ -455,6 +455,25 @@ fn stock_balance_sort(filter: &StockBalanceFilter) -> Document {
 }
 
 impl<'a> InventoryRepository<'a> {
+    /// 在调用方执行器上批量读取未删除的库存余额。
+    ///
+    /// # 参数
+    /// * `ids` - 余额主键集合；空集合不执行查询
+    /// * `executor` - 调用方事务或非事务执行器
+    ///
+    /// # 返回
+    /// 返回匹配的未删除余额；结果顺序不代表调用方校验顺序。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn stock_balances_by_ids(
+        &self,
+        ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<StockBalance>> {
+        find_by_field_in(self.db, STOCK_BALANCES, "id", ids, executor).await
+    }
+
     /// 按主键读取未删除的库存余额。
     ///
     /// # 参数

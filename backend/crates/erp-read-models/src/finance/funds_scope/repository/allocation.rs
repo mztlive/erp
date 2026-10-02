@@ -199,15 +199,18 @@ fn allocation_pipeline(
         ..Default::default()
     };
     let mut pipeline = vec![doc! { "$match": filter.to_doc() }];
+    if let Some(ids) = &condition.operator_user_ids {
+        pipeline.extend(invoice_header_stages());
+        pipeline.push(doc! { "$match": { "_invoice.created_by": { "$in": ids } } });
+    }
     pipeline.extend(purchase_stages(
         authorization,
         condition.owner_user_ids.as_deref(),
         condition.org_unit_ids.as_deref(),
     ));
     pipeline.push(doc! { "$match": { "source_exists": true, "matched": true } });
-    pipeline.extend(invoice_header_stages());
-    if let Some(ids) = &condition.operator_user_ids {
-        pipeline.push(doc! { "$match": { "_invoice.created_by": { "$in": ids } } });
+    if condition.operator_user_ids.is_none() {
+        pipeline.extend(invoice_header_stages());
     }
     pipeline
 }
@@ -246,7 +249,36 @@ fn summary_projection() -> Document {
 mod tests {
     use std::collections::hash_map::DefaultHasher;
 
+    use erp_finance::dto::payable::PurchaseInvoiceAllocationListParams;
+
+    use super::super::tests::authorization;
     use super::*;
+
+    /// 指定收票经办人时先筛当前票头再查来源，无筛选仍保持缺失发票可返回空票号。
+    #[test]
+    fn allocation_operator_filter_precedes_source_lookup_only_when_requested() {
+        let query = PurchaseInvoiceAllocationListParams::default().normalized().unwrap();
+        let condition =
+            FundsLinkedCondition { operator_user_ids: Some(vec!["registrar".into()]), ..Default::default() };
+        let stages = allocation_pipeline(&query, &authorization(), &condition);
+        assert_eq!(
+            stages[1].get_document("$lookup").unwrap().get_str("from").unwrap(),
+            <Database as ReceivableExt>::INVOICES
+        );
+        assert_eq!(stages[3], doc! { "$match": { "_invoice.created_by": { "$in": ["registrar"] } } });
+        assert_eq!(
+            stages[4].get_document("$lookup").unwrap().get_str("from").unwrap(),
+            <Database as PayableExt>::PAYABLE_ACCOUNTS
+        );
+        let unrestricted = allocation_pipeline(&query, &authorization(), &FundsLinkedCondition::default());
+        assert_eq!(
+            unrestricted[1].get_document("$lookup").unwrap().get_str("from").unwrap(),
+            <Database as PayableExt>::PAYABLE_ACCOUNTS
+        );
+        assert!(!unrestricted.iter().any(|stage| {
+            stage.get_document("$match").is_ok_and(|condition| condition.contains_key("_invoice.created_by"))
+        }));
+    }
 
     /// 轻量材料保留旧 Option 来源键的哈希形态，并能检测非当前页责任交接。
     #[test]

@@ -20,7 +20,8 @@ use super::images::RowMediaSource;
 use super::parse::{ParsedProductSheet, parse_product_quote_xlsx};
 use super::resolve::ImportDictionaryCache;
 use super::row_manifest::{
-    RowManifest, RowManifestRow, read_row_manifest, row_entries_by_number, row_media_from_entry,
+    ROW_MANIFEST_INPUT_FORMAT, RowManifest, RowManifestRow, decode_row_manifest, read_row_manifest,
+    row_entries_by_number, row_media_from_entry,
 };
 use crate::{Error, Result};
 
@@ -201,8 +202,18 @@ impl ProductImportProcess {
     /// 返回清单或源文件行来源。
     ///
     /// # 错误
-    /// 清单与源文件均不可用时返回错误。
+    /// 私有输入读取失败时保留持久化错误；其余清单与源文件均不可用时返回错误。
     async fn load_row_source(&self, job: &BackgroundJob) -> Result<JobRowSource> {
+        let job_id = BackgroundJobId::new(job.base.id.clone());
+        let input =
+            self.db.bulk_job().job_input(&job_id, ROW_MANIFEST_INPUT_FORMAT, &mut NoTransaction).await?;
+        if let Some(bytes) = input {
+            match decode_row_manifest(&bytes, &job.request_id) {
+                Ok(manifest) => return Ok(JobRowSource::Manifest(manifest)),
+                Err(error) => tracing::info!(job_id = %job.base.id, error = %error,
+                    "私有行清单不可用，回退到对象清单链路"),
+            }
+        }
         match read_row_manifest(&self.storage, &job.request_id).await {
             Ok(manifest) => Ok(JobRowSource::Manifest(manifest)),
             Err(error) => {

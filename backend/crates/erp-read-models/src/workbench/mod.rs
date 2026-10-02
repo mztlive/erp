@@ -16,6 +16,7 @@ mod fulfillment_operation_brief;
 mod fulfillment_queue;
 mod funds_document_brief;
 mod inventory_settlement_brief;
+pub use inventory_settlement_brief::capture_stock_adjustment_display;
 mod operational_brief;
 mod owner_qualification;
 mod party_names;
@@ -24,6 +25,8 @@ mod purchase_review_brief;
 mod query;
 mod sales_order_brief;
 mod stats;
+#[cfg(test)]
+mod test_auth;
 
 pub(crate) use dto::{
     ProcessingBlockerView, ProcessingState, WorkItemAllowedAction, WorkItemDueFilter, WorkItemFamily,

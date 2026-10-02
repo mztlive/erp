@@ -16,6 +16,44 @@ use super::flow::{self, FlowHeader, FlowPage, FlowVersion, first, lookup};
 use super::{aggregate, linked_condition_document, source_scope_document, source_stages};
 use crate::{Error, Result};
 
+/// 银行回单等整单附件只接收完整读取资格，部分核销份额不能取得整单资格。
+///
+/// # 参数
+/// 付款身份、已解析当前付款详情授权与调用方执行器。
+/// # 返回
+/// 返回付款版本及覆盖授权、付款和全部实际来源版本的指纹。
+/// # 错误
+/// 不存在、来源损坏或没有完整读取资格统一返回 NotFound；读取失败保留错误。
+pub(in crate::finance::funds_scope) async fn full_read_qualification(
+    db: &Database,
+    id: &str,
+    authorization: &FundsAuthorization,
+    executor: &mut dyn Executor,
+) -> Result<(u64, String)> {
+    let stages = full_read_pipeline(id, authorization);
+    let rows: Vec<FlowVersion> =
+        aggregate(db.collection(Database::SUPPLIER_PAYMENTS), stages, executor).await?;
+    full_read_version(&authorization.context.scope_version, rows)
+}
+
+/// 复用付款最终来源集合后进一步要求整单覆盖，只投影必要身份版本。
+fn full_read_pipeline(id: &str, authorization: &FundsAuthorization) -> Vec<Document> {
+    let filter = SupplierPaymentFilter { keyword_ids: Some(vec![id.into()]), ..Default::default() };
+    let mut stages = pipeline(&filter, authorization, &FundsLinkedCondition::default());
+    stages.push(doc! { "$match": { "scope_whole": true } });
+    stages.push(doc! { "$project": flow::version_projection() });
+    stages
+}
+
+/// 不存在及部分可见保持统一拒绝，完整来源版本变化不能复用旧附件资格。
+fn full_read_version(scope: &str, rows: Vec<FlowVersion>) -> Result<(u64, String)> {
+    let row = rows.first().ok_or_else(|| Error::NotFound("供应商付款单不存在".into()))?;
+    if rows.len() != 1 {
+        return Err(Error::Internal("付款完整读取资格身份不唯一".into()));
+    }
+    Ok((row.version, flow::version(scope, &rows)))
+}
+
 /// 同一最终条件返回当前页、总数、完整窄版本和授权份额摘要。
 ///
 /// # 参数
@@ -103,8 +141,9 @@ fn pipeline(
     authorization: &FundsAuthorization,
     condition: &FundsLinkedCondition,
 ) -> Vec<Document> {
-    let mut stages = vec![doc! { "$match": filter.to_doc() }, allocation_lookup(authorization, condition)];
+    let mut stages = vec![doc! { "$match": filter.to_doc() }];
     stages.extend(operator_stages(condition));
+    stages.push(allocation_lookup(authorization, condition));
     stages.extend(flow::visibility(
         authorization.ledger_read,
         condition.owner_user_ids.is_some() || condition.org_unit_ids.is_some(),
@@ -211,8 +250,72 @@ mod tests {
     use erp_finance::entity::payable::PayableSourceType;
     use erp_finance::entity::receivable::AllocationAction;
 
+    use super::super::tests::authorization;
     use super::flow::{FlowCount, SourceOwner, SourceVersion};
     use super::*;
+
+    /// 整单附件资格精确绑定付款身份，必须经过原来源可见性和整单覆盖条件。
+    #[test]
+    fn full_read_pipeline_requires_whole_coverage_before_version_projection() {
+        let mut authorization = authorization();
+        authorization.ledger_read = true;
+        let stages = full_read_pipeline("payment", &authorization);
+        let filter =
+            SupplierPaymentFilter { keyword_ids: Some(vec!["payment".into()]), ..Default::default() };
+        assert_eq!(stages[0], doc! { "$match": filter.to_doc() });
+        assert_eq!(stages[stages.len() - 2], doc! { "$match": { "scope_whole": true } });
+        let project = stages.last().unwrap().get_document("$project").unwrap();
+        assert!(project.contains_key("sources"));
+        assert!(!project.contains_key("amount"));
+    }
+
+    /// 无完整资格和重复身份拒绝；授权、主单及页外实际来源变化均使附件指纹失效。
+    #[test]
+    fn full_read_version_rejects_missing_and_binds_all_current_versions() {
+        assert!(matches!(full_read_version("scope", vec![]), Err(Error::NotFound(_))));
+        let row = |payment_version, source_version| FlowVersion {
+            id: "payment".into(),
+            version: payment_version,
+            sources: vec![SourceVersion { id: "source".into(), version: source_version }],
+        };
+        let before = full_read_version("scope", vec![row(3, 4)]).unwrap();
+        assert_eq!(before.0, 3);
+        assert_ne!(before.1, full_read_version("changed", vec![row(3, 4)]).unwrap().1);
+        assert_ne!(before.1, full_read_version("scope", vec![row(4, 4)]).unwrap().1);
+        assert_ne!(before.1, full_read_version("scope", vec![row(3, 5)]).unwrap().1);
+        assert!(matches!(full_read_version("scope", vec![row(3, 4), row(3, 4)]), Err(Error::Internal(_))));
+    }
+
+    /// 经办审计先收窄父单，成功创建和提交资格均保留，再读取核销真实来源。
+    #[test]
+    fn payment_operator_filter_precedes_allocation_sources() {
+        let condition =
+            FundsLinkedCondition { operator_user_ids: Some(vec!["operator".into()]), ..Default::default() };
+        let stages = pipeline(&SupplierPaymentFilter::default(), &authorization(), &condition);
+        let lookup = stages[1].get_document("$lookup").unwrap();
+        assert_eq!(lookup.get_str("from").unwrap(), Database::AUDIT_LOGS);
+        let filter = lookup.get_array("pipeline").unwrap()[0].as_document().unwrap();
+        let conjunction = filter.get_document("$match").unwrap().get_array("$and").unwrap();
+        assert_eq!(
+            conjunction[1].as_document().unwrap(),
+            &doc! {
+                "resource_type": "supplier_payment", "success": true,
+                "action": { "$in": ["supplier_payment.create", "supplier_payment.commit"] },
+                "actor_id": { "$in": ["operator"] },
+            }
+        );
+        assert_eq!(stages[2], doc! { "$match": { "scope_operators.0": { "$exists": true } } });
+        assert_eq!(
+            stages[3].get_document("$lookup").unwrap().get_str("from").unwrap(),
+            Database::PAYMENT_ALLOCATIONS
+        );
+        let unrestricted =
+            pipeline(&SupplierPaymentFilter::default(), &authorization(), &FundsLinkedCondition::default());
+        assert_eq!(
+            unrestricted[1].get_document("$lookup").unwrap().get_str("from").unwrap(),
+            Database::PAYMENT_ALLOCATIONS
+        );
+    }
 
     fn page(count: u64) -> FlowPage<SupplierPaymentRow> {
         FlowPage { items: vec![], versions: vec![], summary: vec![], total: vec![FlowCount { count }] }
