@@ -116,6 +116,18 @@ pub struct ScopedCustomerReceiptRow {
     pub received_at: erp_core::common::time::Instant,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
+    /// 结算主体；仅整单读取资格返回，供已有回款继续核销。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub counterparty_party_id: Option<String>,
+    /// 经营客户；仅整单读取资格返回。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub customer_id: Option<String>,
+    /// 原银行引用；仅整单读取资格返回。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bank_reference: Option<String>,
+    /// 回款单乐观锁版本；仅整单读取资格返回。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<u64>,
     /// 获授权核销份额合计。
     pub visible_allocated_share: Amount,
     /// 整单到账金额；部分授权为 null。

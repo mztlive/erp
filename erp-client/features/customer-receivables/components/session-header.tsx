@@ -3,7 +3,9 @@
 import Link from "next/link"
 import { XIcon } from "lucide-react"
 
+import { DetailPageHeader } from "@/components/business/detail-page-header"
 import { Button } from "@/components/ui/button"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { formatDateTime } from "@/lib/datetime"
 import type { AllocationSessionView } from "@/features/customer-receivables/types"
@@ -16,6 +18,7 @@ export function SessionHeader({
     draftSavedAt,
     onRequestClose,
     showClose = true,
+    submitted = false,
 }: {
     session: AllocationSessionView
     isReceipt: boolean
@@ -23,7 +26,49 @@ export function SessionHeader({
     draftSavedAt: string | undefined
     onRequestClose: () => void
     showClose?: boolean
+    submitted?: boolean
 }) {
+    if (isReceipt) {
+        const title = existing ? "继续核销回款" : "登记回款"
+        const status = {
+            label: submitted ? "已提交" : "草稿",
+            tone: submitted ? ("warning" as const) : ("neutral" as const),
+        }
+        const description = existing
+            ? "核对原回款记录，关联本次需要核销的应收。"
+            : "填写到账信息，关联销售单应收后提交审批。"
+        return (
+            <div className="space-y-2">
+                {showClose ? (
+                    <DetailPageHeader
+                        title={title}
+                        documentNumber={session.existingFactNo}
+                        primaryStatus={status}
+                        back={{
+                            id: "customer-receivables-session-close",
+                            label:
+                                session.returnContext?.from === "W05" &&
+                                session.returnContext.returnTo
+                                    ? "返回销售单"
+                                    : "客户往来",
+                            onClick: onRequestClose,
+                        }}
+                        meta={
+                            draftSavedAt
+                                ? `草稿已保存 ${formatDateTime(draftSavedAt, "monthDayIntl")}`
+                                : "草稿尚未保存"
+                        }
+                    />
+                ) : (
+                    <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="text-base font-semibold">{title}</h2>
+                        <StatusBadge {...status} />
+                    </div>
+                )}
+                <p className="text-sm text-muted-foreground">{description}</p>
+            </div>
+        )
+    }
     return (
         <>
             <div className="flex flex-wrap items-start justify-between gap-3">

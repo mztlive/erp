@@ -6,7 +6,10 @@ const TIMEOUT = 20_000
 const LONG = 40_000
 
 async function resolveReceiptPartyPicker(page: Page, customerName: string) {
-    const sessionHeading = page.getByRole("heading", { name: /核销 · / })
+    const sessionHeading = page.getByRole("heading", {
+        name: "登记回款",
+        exact: true,
+    })
     const picker = page
         .getByRole("dialog")
         .filter({ hasText: "登记回款 — 选择往来主体" })
@@ -28,7 +31,9 @@ async function resolveReceiptPartyPicker(page: Page, customerName: string) {
             .first()
         await expect(option).toBeVisible({ timeout: TIMEOUT })
         await option.click()
-        await picker.locator("#customer-receivables-party-picker-confirm").click()
+        await picker
+            .locator("#customer-receivables-party-picker-confirm")
+            .click()
     }
     await expect(sessionHeading).toBeVisible({ timeout: LONG })
 }
@@ -49,7 +54,9 @@ export async function registerCustomerReceiptForOrder(
     await expect(page.getByRole("heading", { name: "客户往来" })).toBeVisible({
         timeout: LONG,
     })
-    const register = page.locator("#customer-receivables-header-register-receipt")
+    const register = page.locator(
+        "#customer-receivables-header-register-receipt",
+    )
     await expect(register).toBeEnabled({ timeout: LONG })
     await register.click()
     await resolveReceiptPartyPicker(page, input.customerName)
@@ -58,47 +65,21 @@ export async function registerCustomerReceiptForOrder(
     await expect(amountInput).toBeVisible({ timeout: TIMEOUT })
 
     const poolItem = page
-        .locator("section")
-        .filter({ has: page.getByRole("heading", { name: /同主体待核销池/ }) })
-        .locator("li")
+        .locator("#customer-receivables-session-allocations")
+        .getByRole("row")
         .filter({ hasText: input.orderNo })
-
-    if (await poolItem.isVisible().catch(() => false)) {
-        if (input.amount) {
-            await amountInput.fill(input.amount)
-        } else if (!(await amountInput.inputValue())) {
-            const openText =
-                (await poolItem.getByText(/^开放/).innerText().catch(() => "")) ||
-                ""
-            const matched = openText.replace(/,/g, "").match(/\d+(?:\.\d+)?/)
-            await amountInput.fill(matched?.[0] ?? "")
-        }
-        if (!(await poolItem.getByText("已加入").isVisible().catch(() => false))) {
-            await poolItem.getByRole("button", { name: "加入" }).click()
-            await expect(poolItem.getByText("已加入")).toBeVisible({
-                timeout: TIMEOUT,
-            })
-        }
-    } else {
-        if (input.amount) {
-            await amountInput.fill(input.amount)
-        } else if (!(await amountInput.inputValue())) {
-            const openText =
-                (await page.getByText(/开放/).first().innerText().catch(() => "")) ||
-                ""
-            const matched = openText.replace(/,/g, "").match(/\d+(?:\.\d+)?/)
-            await amountInput.fill(matched?.[0] ?? "")
-        }
-        const addPool = page.getByRole("button", { name: "加入" }).first()
-        if (await addPool.count()) {
-            await addPool.click()
-            await expect(page.getByText("已加入").first()).toBeVisible({
-                timeout: TIMEOUT,
-            })
-        }
+    await expect(poolItem).toBeVisible({ timeout: TIMEOUT })
+    if (input.amount) {
+        await amountInput.fill(input.amount)
+    } else if (!(await amountInput.inputValue())) {
+        const entryAmount = await poolItem.getByRole("cell").nth(2).innerText()
+        const matched = entryAmount.replace(/,/g, "").match(/\d+(?:\.\d+)?/)
+        await amountInput.fill(matched?.[0] ?? "")
     }
-
-    const fillLine = page.getByRole("button", { name: "填满" }).first()
+    const selection = poolItem.getByRole("checkbox")
+    if (!(await selection.isChecked())) await selection.check()
+    await expect(selection).toBeChecked()
+    const fillLine = poolItem.getByRole("button", { name: "填入剩余" })
     await expect(fillLine).toBeVisible({ timeout: TIMEOUT })
     await fillLine.click()
     await page
@@ -107,7 +88,9 @@ export async function registerCustomerReceiptForOrder(
     await page.locator("#customer-receivables-session-submit").click()
     await expect(
         page.getByRole("heading", { name: /提交回款|确认提交回款/ }),
-    ).toBeVisible({ timeout: TIMEOUT })
+    ).toBeVisible({
+        timeout: TIMEOUT,
+    })
 
     const committed = page.waitForResponse(
         (response) =>

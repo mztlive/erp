@@ -22,7 +22,8 @@ import {
     subtractAmounts,
     sumAmounts,
 } from "@/features/customer-receivables/lib/allocation-math"
-import { splitGrossByPercentRate } from "@/lib/fixed-decimal"
+import { normalizeFixed, splitGrossByPercentRate } from "@/lib/fixed-decimal"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
     usePostAllocationMutation,
     useResolvePostUnknownMutation,
@@ -202,19 +203,61 @@ export function useAllocationSession({
             message: "销项开票必须由当前负责人从工作台开票任务进入。",
         })
     }
+    if (isReceipt && factAmountStr.trim()) {
+        try {
+            normalizeFixed(factAmountStr, {
+                maxScale: 2,
+                outputScale: 2,
+                allowNegative: false,
+            })
+        } catch {
+            issues.push({
+                id: "receipt-amount",
+                label: existing ? "可核销余额" : "到账金额",
+                message: "请填写有效的非负金额，最多保留两位小数。",
+                targetId: "customer-receivables-session-amount",
+            })
+        }
+    }
     for (const line of allocations) {
+        const issueKey = isReceipt ? line.targetId : line.lineKey
+        const targetId = isReceipt
+            ? `customer-receivables-session-allocation-${toAutomationIdSegment(line.targetId)}-amount`
+            : undefined
+        if (isReceipt) {
+            try {
+                normalizeFixed(line.amount, {
+                    maxScale: 2,
+                    outputScale: 2,
+                    allowNegative: true,
+                })
+            } catch {
+                issues.push({
+                    id: `invalid-${issueKey}`,
+                    label: line.label,
+                    message:
+                        "请填写有效的核销金额，最多保留两位小数；无需核销时可取消关联。",
+                    targetId,
+                })
+                continue
+            }
+        }
         if (compareAmounts(line.amount, "0") < 0) {
             issues.push({
-                id: `neg-${line.lineKey}`,
+                id: `neg-${issueKey}`,
                 label: line.label,
-                message: "分配金额不能为负",
+                message: isReceipt ? "核销金额不能为负" : "分配金额不能为负",
+                targetId,
             })
         }
         if (compareAmounts(line.amount, line.openAmount) > 0) {
             issues.push({
-                id: `over-${line.lineKey}`,
+                id: `over-${issueKey}`,
                 label: line.label,
-                message: `拟分配不可超过开放余额 ${line.openAmount}`,
+                message: isReceipt
+                    ? `核销金额不可超过应收项目金额 ${line.openAmount}`
+                    : `拟分配不可超过开放余额 ${line.openAmount}`,
+                targetId,
             })
         }
         if (!isReceipt && line.targetId !== taskReceivableAccountId) {
@@ -230,6 +273,9 @@ export function useAllocationSession({
             id: "over-fact",
             label: "拟分配合计",
             message: "拟分配合计超过记录金额",
+            targetId: isReceipt
+                ? "customer-receivables-session-amount"
+                : undefined,
         })
     }
     if (
@@ -241,6 +287,7 @@ export function useAllocationSession({
             id: "need-alloc",
             label: "核销分配",
             message: "提交审批至少需要一条核销分配",
+            targetId: "customer-receivables-session-allocation-search",
         })
     }
 

@@ -1,5 +1,6 @@
 "use client"
 
+import type { ReactNode } from "react"
 import { FormalActionConfirmDialog } from "@/components/business"
 import type { DocumentApprovalView } from "@/features/approval-workflow/types"
 import { CustomerReceiptApprovalArea } from "@/features/customer-receivables/components/customer-receipt-approval-area"
@@ -17,6 +18,7 @@ export function CustomerReceiptSubmitConfirmDialog({
     onConfirm,
     id = "customer-receivables-session-receipt-confirm-dialog",
     idPrefix,
+    summary,
 }: {
     open: boolean
     pending: boolean
@@ -25,6 +27,7 @@ export function CustomerReceiptSubmitConfirmDialog({
     onConfirm: () => void | Promise<void>
     id?: string
     idPrefix?: string
+    summary?: readonly ReactNode[]
 }) {
     return (
         <FormalActionConfirmDialog
@@ -36,6 +39,7 @@ export function CustomerReceiptSubmitConfirmDialog({
             confirmLabel="确认提交"
             fromStatus={{ label: "草稿", tone: "neutral" }}
             toStatus={{ label: "审批中", tone: "warning" }}
+            summary={summary}
             description={
                 <div className="space-y-3">
                     <p>审批期间不可修改；驳回后重新提交将从首节点审批。</p>

@@ -671,9 +671,8 @@ async function searchCustomerInvoices(page: Page, query: string) {
     await expect(page.locator("#customer-receivables-view-sales_invoice")).toBeVisible({
         timeout: TIMEOUT,
     })
-    await page.locator("#customer-receivables-view-sales_invoice").click()
-    await page.locator("#customer-receivables-toolbar-search").fill(query)
-    await page.locator("#customer-receivables-toolbar-search").press("Enter")
+    // URL 已指定视图和关键词；等待回显，避免重复路由更新打断下一次导航。
+    await expect(page.locator("#customer-receivables-toolbar-search")).toHaveValue(query)
 }
 
 async function assertSalesInvoiceRow(

@@ -431,9 +431,18 @@ fn decide_receipt_rows(
 }
 
 impl FundsAccess {
-    /// 单行金额裁剪；整单金额与完整分配仅整单资格返回，否则为 null。
+    /// 单行裁剪；整单金额、登记信息与编辑版本仅整单资格返回。
+    ///
+    /// # 参数
+    /// `row` 为回款事实，`links` 为核销来源，`matched` 为获授权来源；
+    /// `whole` 必须由现有整单读取资格判定取得。
+    ///
+    /// # 返回
+    /// 部分授权只保留获授权份额，金额为 null 且不返回整单登记信息。
+    ///
+    /// # 错误
+    /// 本方法不产生业务错误。
     pub(super) fn cut_receipt_row(
-        &self,
         row: &CustomerReceiptRow,
         links: &[ReceiptLink],
         matched: &[String],
@@ -456,6 +465,10 @@ impl FundsAccess {
             status: row.status,
             received_at: row.received_at,
             created_at: row.created_at,
+            counterparty_party_id: whole.then(|| row.counterparty_party_id.clone()),
+            customer_id: whole.then(|| row.customer_id.clone()).flatten(),
+            bank_reference: whole.then(|| row.bank_reference.clone()).flatten(),
+            version: whole.then_some(row.version),
             visible_allocated_share: sum_signed(links, matched),
             amount: whole_amount(whole, row.amount),
             allocated_total: whole_amount(whole, net),
@@ -507,7 +520,7 @@ impl FundsAccess {
         if !whole && matched.is_empty() {
             return Err(Error::NotFound("客户回款单不存在".into()));
         }
-        let data = self.cut_receipt_row(&row, row_links, &matched, whole);
+        let data = Self::cut_receipt_row(&row, row_links, &matched, whole);
         let mut parts = vec![format!("{}:{}", row.id, row.version)];
         for order in matched.iter().filter_map(|id| facts.get(id)) {
             parts.push(format!("{}:{}", order.owner_user_id, order.version));
@@ -541,7 +554,7 @@ impl FundsAccess {
                     row_links.iter().map(|link| link.order.as_deref()),
                     matched,
                 );
-                self.cut_receipt_row(row, row_links, matched, whole)
+                Self::cut_receipt_row(row, row_links, matched, whole)
             })
             .collect()
     }
@@ -589,6 +602,44 @@ mod tests {
             version: 2,
             created_at: 1,
             pending_allocations: Vec::new(),
+        }
+    }
+
+    /// 整单授权保留恢复草稿所需的原登记信息与提交版本。
+    #[test]
+    fn receipt_whole_projection_keeps_registration_metadata() {
+        let mut row = receipt("draft");
+        row.status = CustomerReceiptStatus::Draft;
+        row.customer_id = Some("customer".into());
+        row.bank_reference = Some("BANK-DRAFT".into());
+        let view = FundsAccess::cut_receipt_row(&row, &[], &[], true);
+        assert_eq!(view.counterparty_party_id.as_deref(), Some("party"));
+        assert_eq!(view.customer_id.as_deref(), Some("customer"));
+        assert_eq!(view.bank_reference.as_deref(), Some("BANK-DRAFT"));
+        assert_eq!(view.version, Some(2));
+        assert_eq!(view.amount, Some(row.amount));
+        assert_eq!(view.unallocated_amount, Some(row.amount));
+        assert!(!view.permission_limited);
+    }
+
+    /// 部分授权不泄露登记信息、编辑版本、整单余额及其他订单的核销份额。
+    #[test]
+    fn receipt_partial_projection_omits_registration_metadata() {
+        let mut row = receipt("receipt");
+        row.customer_id = Some("customer".into());
+        row.bank_reference = Some("BANK-PRIVATE".into());
+        let links = [link("a", Some("so-a"), "60"), link("b", Some("so-b"), "40")];
+        let view = FundsAccess::cut_receipt_row(&row, &links, &["so-a".into()], false);
+        assert!(view.permission_limited);
+        assert_eq!(view.visible_allocated_share, "60".parse().unwrap());
+        assert_eq!(view.amount, None);
+        assert_eq!(view.allocated_total, None);
+        assert_eq!(view.unallocated_amount, None);
+        assert_eq!(view.allocations.as_ref().unwrap().len(), 1);
+        assert_eq!(view.allocations.as_ref().unwrap()[0].id, "a");
+        let json = serde_json::to_value(view).unwrap();
+        for field in ["counterparty_party_id", "customer_id", "bank_reference", "version"] {
+            assert!(json.get(field).is_none(), "部分授权不应返回 {field}");
         }
     }
 

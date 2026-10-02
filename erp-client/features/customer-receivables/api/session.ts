@@ -3,6 +3,7 @@
  */
 
 import { apiGet, type Page } from "@/lib/api"
+import { fetchPartyOption } from "@/features/entity-selectors"
 
 import type {
     AllocationDraftLine,
@@ -27,6 +28,7 @@ import {
     MISSING_COUNTERPARTY_NAME,
     MISSING_CUSTOMER_NAME,
     MISSING_SALES_ORDER_NO,
+    receivableEntryLabel,
 } from "@/features/customer-receivables/lib/display-labels"
 
 type AllocationPoolScope = {
@@ -77,7 +79,7 @@ async function buildPool(
                         return {
                             targetId: e.id,
                             targetKind: "receivable_entry" as const,
-                            label: `${salesOrderNo} · ${e.entry_type}`,
+                            label: `${salesOrderNo} · ${receivableEntryLabel(e.entry_type)}`,
                             salesOrderId: r.sales_order_id,
                             salesOrderNo,
                             // open amount is server field on account; entry-level open is not exposed — use amount as display open
@@ -132,6 +134,23 @@ function recomputeProposed(
     }
 }
 
+/** 已登记到账时刻按日期控件的上海时区回显，保留秒精度。 */
+function receiptReceivedAtInput(secs: number): string {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Shanghai",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hourCycle: "h23",
+    }).formatToParts(new Date(instantToIso(secs)))
+    const part = (type: Intl.DateTimeFormatPartTypes) =>
+        parts.find((item) => item.type === type)?.value ?? ""
+    return `${part("year")}-${part("month")}-${part("day")}T${part("hour")}:${part("minute")}:${part("second")}`
+}
+
 export async function createAllocationSession(
     input: CreateSessionInput,
 ): Promise<AllocationSessionView> {
@@ -150,18 +169,32 @@ export async function createAllocationSession(
     let prefillAllocations: AllocationDraftLine[] = []
     let customerId = input.customerId ?? ""
     let customerName = input.customerName ?? ""
+    let counterpartyPartyName = input.counterpartyPartyName
 
     if (input.mode === "receipt" && input.existingFactId) {
         const r = await apiGet<BackendCustomerReceipt>(
             `/admin/customer-receipts/${encodeURIComponent(input.existingFactId)}`,
         )
+        if (
+            !r.counterparty_party_id ||
+            !r.version ||
+            r.unallocated_amount == null
+        ) {
+            throw {
+                kind: "Validation",
+                message:
+                    "无法读取该回款的完整信息，请刷新或申请完整读取权限后再继续核销。",
+            }
+        }
+        const party = await fetchPartyOption(r.counterparty_party_id)
+        counterpartyPartyName = party?.displayName ?? counterpartyPartyName
         existingFactNo = r.receipt_no
         existingFactVersion = r.version
         approval = mapCustomerReceiptApproval(r.approval)
         customerId = r.customer_id ?? ""
         customerName = input.customerName ?? ""
         fact = {
-            receivedAt: instantToIso(r.received_at).slice(0, 16),
+            receivedAt: receiptReceivedAtInput(r.received_at),
             amount: r.unallocated_amount,
             bankReference: r.bank_reference ?? undefined,
         }
@@ -249,7 +282,7 @@ export async function createAllocationSession(
         mode: input.mode,
         counterpartyPartyId: input.counterpartyPartyId,
         counterpartyPartyName: businessLabelOrPlaceholder(
-            input.counterpartyPartyName,
+            counterpartyPartyName,
             input.counterpartyPartyId,
             MISSING_COUNTERPARTY_NAME,
         ),

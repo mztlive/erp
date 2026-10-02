@@ -22,6 +22,8 @@ import { createCustomerViaUi } from "../helpers/customers"
 import { submitSalesInvoiceRequest } from "../helpers/invoices"
 import { loginViaUi, openLoggedInWorkspace } from "../helpers/login"
 import { expectReceiptPreview, submitReceiptReversalRequest } from "../helpers/receipts"
+import { assertReceiptRegistrationDraft } from "../helpers/receipt-registration"
+import { API_BASE, apiToken } from "../helpers/api"
 import {
     approveCurrentDocument,
     chooseOption,
@@ -38,7 +40,6 @@ const LONG = 40_000
 const SKU_NAME = "狮峰明前龙井礼盒"
 const UNIT_PRICE = "1288.00"
 const SPLIT_AMOUNT = "644.00"
-const RECEIPT_TOTAL = "1288.00"
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const CONTRACT_PDF = path.resolve(REPO_ROOT, "fixtures", "sample-contract.pdf")
@@ -105,19 +106,92 @@ test.describe("flow-06 客户票款：分次回款、销项发票、核销与冲
             await assertCaiwuCannotSubmitReceipt(caiwuDenied.page, legalName)
             await caiwuDenied.context.close()
 
-            // ── 4. 出纳分两次回款：同一张回款核销两张销售单；先部分再结清 ──
+            // ── 4. 出纳分次回款：多单核销、已有草稿提交；先部分再结清 ──
             const fukuan = await openRole(browser, extra, "fukuan")
-            const receipt1No = await registerReceiptAllocatingBothOrders(fukuan.page, {
+            const { receiptNo: receipt1No, counterpartyPartyId } = await registerReceiptAllocatingBothOrders(fukuan.page, {
                 customerName: legalName,
                 orderNos: [orderA.orderNo, orderB.orderNo],
-                amount: RECEIPT_TOTAL,
+                amount: "1500.00",
                 bankReference: `BANK-F06-1-${stamp}`,
+                verifyDraft: true,
             })
-            await fukuan.context.close()
+
+            for (const order of [orderA, orderB]) {
+                await page.goto(`/sales/orders/${order.id}`)
+                await expectCollection(page, "未收")
+            }
 
             const caiwu1 = await openRole(browser, extra, "caiwu")
             await approveWorkspaceTask(caiwu1.page, "回款复核", receipt1No)
             await caiwu1.context.close()
+
+            await fukuan.page.goto("/finance/customer-accounts?view=receipt")
+            await waitHeading(fukuan.page, "客户往来")
+            await fukuan.page.locator("#customer-receivables-toolbar-search").fill(receipt1No)
+            await fukuan.page.locator("#customer-receivables-toolbar-search").press("Enter")
+            await fukuan.page.getByRole("row").filter({ hasText: receipt1No }).click()
+            await expectReceiptPreview(fukuan.page, receipt1No)
+            await expect(fukuan.page.getByText("待核销回款", { exact: true }).locator("..")).toContainText("212.00")
+            const draftNo = `DRAFT-F06-${stamp}`
+            await test.step("已过账回款不可继续编辑，已有草稿保留到账信息并可提交审批", async () => {
+                await expect(fukuan.page.locator("#customer-receivables-preview-receipt-continue-allocate")).toHaveCount(0)
+                const token = await apiToken("fukuan")
+                // UTC 10 月 1 日 16:30 对应上海 10 月 2 日 00:30，覆盖跨日回显。
+                const receivedAt = Date.UTC(2026, 9, 1, 16, 30) / 1000
+                const created = await fukuan.page.request.post(`${API_BASE}/admin/customer-receipts`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                    data: {
+                        receipt_no: draftNo,
+                        counterparty_party_id: counterpartyPartyId,
+                        received_at: receivedAt,
+                        amount: "100.00",
+                        bank_reference: `BANK-DRAFT-F06-${stamp}`,
+                    },
+                })
+                expect(created.ok(), await created.text()).toBeTruthy()
+                const draft = (await created.json()) as { data: { id: string; status: string; version: number } }
+                expect(draft.data.status).toBe("draft")
+                await fukuan.page.goto(`/finance/customer-accounts?view=receipt&previewKind=receipt&previewId=${encodeURIComponent(draft.data.id)}`)
+                await expectReceiptPreview(fukuan.page, draftNo)
+                await fukuan.page.locator("#customer-receivables-preview-receipt-continue-allocate").click()
+                await expect(fukuan.page.getByRole("heading", { name: "继续核销回款", exact: true })).toBeVisible()
+                await expect(fukuan.page.locator("#customer-receivables-session-amount")).toHaveValue("100.00")
+                await expect(fukuan.page.locator("#customer-receivables-session-received-at")).toContainText("2026-10-02 00:30:00")
+                await expect(fukuan.page.locator("#customer-receivables-session-counterparty")).toHaveValue(legalName)
+                await expect(fukuan.page.locator("#customer-receivables-session-bank-reference")).toHaveValue(`BANK-DRAFT-F06-${stamp}`)
+                for (const id of ["amount", "received-at", "bank-reference"]) {
+                    const field = fukuan.page.locator(`#customer-receivables-session-${id}`)
+                    await expect(field).toBeDisabled()
+                }
+                await expect(fukuan.page.locator("#customer-receivables-session-counterparty")).toHaveJSProperty("readOnly", true)
+                await addPoolTarget(fukuan.page, orderA.orderNo)
+                await setAllocationAmount(fukuan.page, orderA.orderNo, "100.00")
+                const screenshot = test.info().outputPath("receipt-registration-existing-draft.png")
+                await fukuan.page.screenshot({ path: screenshot, animations: "disabled" })
+                await test.info().attach("已有回款草稿继续核销", { path: screenshot, contentType: "image/png" })
+                await fukuan.page.locator("#customer-receivables-session-submit").click()
+                const committed = fukuan.page.waitForResponse((response) =>
+                    response.request().method() === "POST" && response.url().includes("/admin/customer-receipts/commit"),
+                )
+                await fukuan.page.locator("#customer-receivables-session-receipt-confirm-dialog-confirm").click()
+                const response = await committed
+                expect(response.ok(), await response.text()).toBeTruthy()
+                expect(response.request().postDataJSON()).toMatchObject({
+                    receipt_id: draft.data.id,
+                    expected_version: draft.data.version,
+                    receipt: null,
+                })
+                const submitted = (await response.json()) as { data: { id: string; status: string; bank_reference: string; received_at: number } }
+                expect(submitted.data.id).toBe(draft.data.id)
+                expect(submitted.data.status).toBe("IN_APPROVAL")
+                expect(submitted.data.bank_reference).toBe(`BANK-DRAFT-F06-${stamp}`)
+                expect(submitted.data.received_at).toBe(receivedAt)
+            })
+            await fukuan.context.close()
+
+            const caiwuDraft = await openRole(browser, extra, "caiwu")
+            await approveWorkspaceTask(caiwuDraft.page, "回款复核", draftNo)
+            await caiwuDraft.context.close()
 
             await page.goto(`/sales/orders/${orderA.id}`)
             await expectCollection(page, "部分回款")
@@ -126,11 +200,12 @@ test.describe("flow-06 客户票款：分次回款、销项发票、核销与冲
             await expectCollection(page, "部分回款")
 
             const fukuan2 = await openRole(browser, extra, "fukuan")
-            const receipt2No = await registerReceiptAllocatingBothOrders(fukuan2.page, {
+            const { receiptNo: receipt2No } = await registerReceiptAllocatingBothOrders(fukuan2.page, {
                 customerName: legalName,
                 orderNos: [orderA.orderNo, orderB.orderNo],
-                amount: RECEIPT_TOTAL,
+                amount: "1188.00",
                 bankReference: `BANK-F06-2-${stamp}`,
+                allocationAmounts: ["544.00", SPLIT_AMOUNT],
             })
             await fukuan2.context.close()
 
@@ -487,7 +562,7 @@ async function startReceiptSession(page: Page, customerName: string) {
     const register = page.locator("#customer-receivables-header-register-receipt")
     await expect(register).toBeEnabled({ timeout: LONG })
     await register.click()
-    const sessionHeading = page.getByRole("heading", { name: /核销 · / })
+    const sessionHeading = page.getByRole("heading", { name: "登记回款", exact: true })
     const picker = page.getByRole("dialog").filter({ hasText: "登记回款 — 选择往来主体" })
     await Promise.race([
         sessionHeading.waitFor({ state: "visible", timeout: LONG }),
@@ -503,26 +578,24 @@ async function startReceiptSession(page: Page, customerName: string) {
         await page.locator("#customer-receivables-party-picker-confirm").click()
     }
     await expect(sessionHeading).toBeVisible({ timeout: LONG })
-    await expect(page.getByRole("heading", { name: "同主体待核销池" })).toBeVisible({
+    await expect(page.getByRole("heading", { name: "关联销售单应收" })).toBeVisible({
         timeout: TIMEOUT,
     })
 }
 
 async function addPoolTarget(page: Page, orderNo: string) {
     const item = page
-        .locator("section")
-        .filter({ has: page.getByRole("heading", { name: /同主体待核销池/ }) })
-        .locator("li")
+        .locator("#customer-receivables-session-allocations")
+        .getByRole("row")
         .filter({ hasText: orderNo })
     await expect(item).toBeVisible({ timeout: TIMEOUT })
-    const joined = item.getByText("已加入")
-    if (await joined.isVisible().catch(() => false)) return
-    await item.getByRole("button", { name: "加入" }).click()
-    await expect(joined).toBeVisible({ timeout: TIMEOUT })
+    const selection = item.getByRole("checkbox")
+    if (!(await selection.isChecked())) await selection.check()
+    await expect(selection).toBeChecked()
 }
 
 async function setAllocationAmount(page: Page, orderNo: string, amount: string) {
-    const amountBox = page.getByLabel(new RegExp(`${orderNo}.*分配金额`))
+    const amountBox = page.getByLabel(new RegExp(`${orderNo}.*本次核销金额`))
     await expect(amountBox).toBeVisible({ timeout: TIMEOUT })
     await amountBox.fill(amount)
 }
@@ -534,6 +607,8 @@ async function registerReceiptAllocatingBothOrders(
         orderNos: readonly [string, string]
         amount: string
         bankReference: string
+        verifyDraft?: boolean
+        allocationAmounts?: readonly [string, string]
     },
 ) {
     await startReceiptSession(page, input.customerName)
@@ -541,9 +616,11 @@ async function registerReceiptAllocatingBothOrders(
     await page.locator("#customer-receivables-session-bank-reference").fill(input.bankReference)
 
     await addPoolTarget(page, input.orderNos[0])
-    await setAllocationAmount(page, input.orderNos[0], SPLIT_AMOUNT)
+    await setAllocationAmount(page, input.orderNos[0], input.allocationAmounts?.[0] ?? SPLIT_AMOUNT)
     await addPoolTarget(page, input.orderNos[1])
-    await setAllocationAmount(page, input.orderNos[1], SPLIT_AMOUNT)
+    await setAllocationAmount(page, input.orderNos[1], input.allocationAmounts?.[1] ?? SPLIT_AMOUNT)
+
+    if (input.verifyDraft) await assertReceiptRegistrationDraft(page, input)
 
     await page.locator("#customer-receivables-session-submit").click()
     await expect(page.getByRole("heading", { name: /提交回款|确认提交回款/ })).toBeVisible({
@@ -558,15 +635,19 @@ async function registerReceiptAllocatingBothOrders(
     await page.locator("#customer-receivables-session-receipt-confirm-dialog-confirm").click()
     const response = await committed
     expect(response.ok(), await response.text()).toBeTruthy()
-    const body = (await response.json()) as { data?: { receipt_no?: string } }
+    const body = (await response.json()) as { data?: { id?: string; receipt_no?: string; counterparty_party_id?: string } }
     const receiptNo = body.data?.receipt_no?.trim() || (await factValue(page, "回款单号"))
     expect(receiptNo.length).toBeGreaterThan(2)
+    const receiptId = body.data?.id ?? ""
+    expect(receiptId).not.toBe("")
+    const counterpartyPartyId = body.data?.counterparty_party_id ?? ""
+    expect(counterpartyPartyId).not.toBe("")
     const close = page.locator("#customer-receivables-session-result-close")
     if (await close.isVisible().catch(() => false)) {
         await close.click()
         await waitHeading(page, "客户往来")
     }
-    return receiptNo
+    return { receiptNo, receiptId, counterpartyPartyId }
 }
 
 async function assertCaiwuCannotSubmitReceipt(page: Page, customerName: string) {
@@ -579,7 +660,7 @@ async function assertCaiwuCannotSubmitReceipt(page: Page, customerName: string) 
         return
     }
     await register.click()
-    const sessionHeading = page.getByRole("heading", { name: /核销 · / })
+    const sessionHeading = page.getByRole("heading", { name: "登记回款", exact: true })
     const picker = page.getByRole("dialog").filter({ hasText: "登记回款 — 选择往来主体" })
     await Promise.race([
         sessionHeading.waitFor({ state: "visible", timeout: LONG }),
@@ -597,10 +678,13 @@ async function assertCaiwuCannotSubmitReceipt(page: Page, customerName: string) 
     await expect(sessionHeading).toBeVisible({ timeout: LONG })
     await page.locator("#customer-receivables-session-amount").fill("1.00")
     await page.locator("#customer-receivables-session-bank-reference").fill("CAI-WU-SHOULD-FAIL")
-    const join = page.getByRole("button", { name: "加入" }).first()
-    if (await join.isVisible().catch(() => false)) {
-        await join.click()
-        const fill = page.getByRole("button", { name: "填满" }).first()
+    const selection = page
+        .locator("#customer-receivables-session-allocations")
+        .getByRole("checkbox")
+        .first()
+    if (await selection.isVisible().catch(() => false)) {
+        await selection.check()
+        const fill = page.getByRole("button", { name: "填入剩余" }).first()
         if (await fill.isVisible().catch(() => false)) await fill.click()
     }
     const submit = page.locator("#customer-receivables-session-submit")
