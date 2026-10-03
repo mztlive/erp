@@ -72,6 +72,14 @@ export function useSalesOrdersListChips(
                 onClear: () => removeFilter("contractId"),
             })
         }
+        if (url.hasContract && url.hasContract !== "all") {
+            chips.push({
+                key: "hasContract",
+                label: `合同状态：${url.hasContract === "yes" ? "有合同" : "无合同"}`,
+                clearLabel: "清除合同状态筛选",
+                onClear: () => removeFilter("hasContract"),
+            })
+        }
         if (url.ownerUserIds)
             chips.push({
                 key: "ownerUserIds",
@@ -87,11 +95,12 @@ export function useSalesOrdersListChips(
                 onClear: () => removeFilter("orgUnitIds"),
             })
         if (url.createdBy) {
-            const ownerLabel = creatorQuery.isSuccess && !creatorQuery.isFetching
-                ? creatorQuery.data?.items.find(
-                      (owner) => owner.id === url.createdBy,
-                  )?.name
-                : undefined
+            const ownerLabel =
+                creatorQuery.isSuccess && !creatorQuery.isFetching
+                    ? creatorQuery.data?.items.find(
+                          (owner) => owner.id === url.createdBy,
+                      )?.name
+                    : undefined
             chips.push({
                 key: "createdBy",
                 label: `创建人：${ownerLabel ?? "已选创建人"}`,
@@ -190,6 +199,7 @@ export function useSalesOrdersListChips(
         url.collection,
         url.commercialStatus,
         url.contractId,
+        url.hasContract,
         url.createdBy,
         url.ownerUserIds,
         url.orgUnitIds,

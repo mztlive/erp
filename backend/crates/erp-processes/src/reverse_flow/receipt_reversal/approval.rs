@@ -9,6 +9,8 @@ use erp_returns::entity::returns::ReceiptReversal;
 use erp_returns::service::receipt_reversal::{
     ensure_receipt_reversal_version, prepare_receipt_reversal_submit,
 };
+use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshotPayload;
+use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
 use erp_workflow::service::approval::execution::{prepare_cancel, prepare_start};
 use erp_workflow::service::document_registry::find_approval_binding;
@@ -26,8 +28,9 @@ use super::super::cancel_approval::{
     persist_receipt_reversal_cancel,
 };
 use super::super::start_approval::{
-    ReceiptReversalStartInput, ReceiptReversalStartPersistInput, build_receipt_reversal_start_input,
-    load_bound_definition_graph, load_receipt_reversal_start_receipt, persist_receipt_reversal_start,
+    ReceiptReversalStartInput, ReceiptReversalStartPersistInput, ReversalSubmitReplayInput,
+    build_receipt_reversal_start_input, load_bound_definition_graph, load_receipt_reversal_start_receipt,
+    persist_receipt_reversal_start, reversal_result_read_error,
 };
 use super::context::load_receipt_reversal_context;
 use crate::Result;
@@ -56,10 +59,20 @@ impl ReturnsProcess {
         actor: &AuditActor,
     ) -> Result<ReceiptReversalView> {
         req.validate()?;
+        let submission = ReversalSubmitReplayInput {
+            id: id.to_string(),
+            document_type: DocumentType::ReceiptReversal,
+            submit_permission: "receipt_reversal:submit",
+            command_receipt: req.command_receipt(id, actor.id())?,
+            actor: actor.clone(),
+        };
+        if let Some(id) = self.replay_reversal_submit(&submission).await? {
+            return self.reads().receipt_reversal_detail(&id).await.map_err(reversal_result_read_error);
+        }
         let adapter = receipt_reversal_adapter()?;
         let mut reversal = self.domain().load_receipt_reversal(id).await?;
         prepare_receipt_reversal_submit(&mut reversal, req.expected_version)?;
-        self.dispatch_receipt_reversal_start(id, reversal, req.idempotency_key, actor, adapter).await
+        self.dispatch_receipt_reversal_start(reversal, req.idempotency_key, adapter, submission).await
     }
 
     /// 撤回回款冲正审批，成功后回到草稿且 `subject_version` 不回退。
@@ -96,26 +109,19 @@ impl ReturnsProcess {
     /// 无绑定、定义缺失或写入失败时返回错误。
     async fn dispatch_receipt_reversal_start(
         &self,
-        id: &str,
         reversal: ReceiptReversal,
         idempotency_key: String,
-        actor: &AuditActor,
         adapter: super::super::adapter::ReceiptReversalAdapter,
+        submission: ReversalSubmitReplayInput,
     ) -> Result<ReceiptReversalView> {
+        let id = submission.id.as_str();
+        let actor = &submission.actor;
         let subject = receipt_reversal_subject_ref(id)?;
         let binding =
             find_approval_binding(&self.db, id, &mut NoTransaction).await.map_err(crate::Error::from)?;
         let binding = require_receipt_reversal_binding(binding.as_ref())?.clone();
         let now = Instant::now();
-        let (organization_id, customer_id) =
-            load_receipt_reversal_context(&self.db, &reversal.original_customer_receipt_id).await?;
-        let snapshot = build_receipt_reversal_snapshot(
-            &reversal,
-            &organization_id,
-            customer_id.as_ref(),
-            actor.id(),
-            now,
-        )?;
+        let (organization_id, snapshot) = self.receipt_reversal_start_snapshot(&reversal, actor, now).await?;
         let start = receipt_reversal_start_command(
             id,
             reversal.approval_subject_version,
@@ -125,13 +131,9 @@ impl ReturnsProcess {
         let _ = receipt_reversal_start_command_kind(&start);
         let _ = receipt_reversal_object_readable(&organization_id, actor.id())?;
         let graph = load_bound_definition_graph(&self.db, &binding).await?;
-        let existing_receipt = load_receipt_reversal_start_receipt(
-            &self.db,
-            &subject,
-            reversal.approval_subject_version,
-            &idempotency_key,
-        )
-        .await?;
+        let version = reversal.approval_subject_version;
+        let existing_receipt =
+            load_receipt_reversal_start_receipt(&self.db, &subject, version, &idempotency_key).await?;
         let start_input = build_receipt_reversal_start_input(ReceiptReversalStartInput {
             graph,
             binding: &binding,
@@ -144,10 +146,10 @@ impl ReturnsProcess {
             now,
         })?;
         let prepared = prepare_start(start_input)?;
-        persist_receipt_reversal_start(
-            &self.db,
+        self.complete_receipt_reversal_start(
             ReceiptReversalStartPersistInput {
                 reversal,
+                command_receipt: submission.command_receipt.clone(),
                 actor: actor.clone(),
                 id: id.to_string(),
                 snapshot_payload: snapshot,
@@ -156,9 +158,39 @@ impl ReturnsProcess {
                 organization_id,
                 now,
             },
+            &submission,
         )
-        .await?;
-        self.reads().receipt_reversal_detail(id).await.map_err(crate::Error::from)
+        .await
+    }
+
+    /// 沿原回款冻结提交组织、客户和单据快照。
+    async fn receipt_reversal_start_snapshot(
+        &self,
+        reversal: &ReceiptReversal,
+        actor: &AuditActor,
+        now: Instant,
+    ) -> Result<(String, ApprovalSubjectSnapshotPayload)> {
+        let (organization_id, customer_id) =
+            load_receipt_reversal_context(&self.db, &reversal.original_customer_receipt_id).await?;
+        let snapshot = build_receipt_reversal_snapshot(
+            reversal,
+            &organization_id,
+            customer_id.as_ref(),
+            actor.id(),
+            now,
+        )?;
+        Ok((organization_id, snapshot))
+    }
+
+    /// 持久化启动并恢复未知结果，响应读取失败保留同操作号重试语义。
+    async fn complete_receipt_reversal_start(
+        &self,
+        input: ReceiptReversalStartPersistInput,
+        submission: &ReversalSubmitReplayInput,
+    ) -> Result<ReceiptReversalView> {
+        let persisted = persist_receipt_reversal_start(&self.db, &self.rbac, input).await.map(|_| ());
+        self.finish_reversal_submit(submission, persisted).await?;
+        self.reads().receipt_reversal_detail(&submission.id).await.map_err(reversal_result_read_error)
     }
 
     /// 加载撤回运行事实并写回草稿。

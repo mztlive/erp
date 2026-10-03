@@ -1,5 +1,7 @@
 "use client"
 
+import { financialDraftEditHref } from "@/features/financial-draft-edit/types"
+import { FinancialDraftEditButton } from "@/features/financial-draft-edit/components/financial-draft-edit-button"
 import { ApprovalActionBar } from "@/features/approval-workflow/components/approval-action-bar"
 import { DefinitionBindingCard } from "@/features/approval-workflow/components/definition-binding-card"
 import { ExecutionHistory } from "@/features/approval-workflow/components/execution-history"
@@ -29,6 +31,7 @@ export function SupplierRefundApprovalArea({
     phase,
     approval,
     documentId,
+    documentVersion,
     workItemId,
     expectedTaskVersion,
     workItemAllowedActions,
@@ -37,6 +40,7 @@ export function SupplierRefundApprovalArea({
     phase: SupplierRefundApprovalPhase
     approval?: DocumentApprovalView
     documentId?: string
+    documentVersion?: number
     workItemId?: string
     expectedTaskVersion?: string
     workItemAllowedActions?: readonly string[]
@@ -64,11 +68,26 @@ export function SupplierRefundApprovalArea({
             <div className="space-y-3">
                 <DefinitionBindingCard definition={approval?.definition} />
                 {documentId ? (
+                    <FinancialDraftEditButton
+                        kind="supplier_refund"
+                        documentId={documentId}
+                    />
+                ) : null}
+                {documentId ? (
                     <ApprovalActionBar
                         allowedActions={allowedActions}
                         definition={approval?.definition}
                         documentType={SUPPLIER_REFUND_DOCUMENT_TYPE}
                         documentId={documentId}
+                        documentVersion={documentVersion}
+                        editDocumentHref={
+                            documentId
+                                ? financialDraftEditHref(
+                                      "supplier_refund",
+                                      documentId,
+                                  )
+                                : undefined
+                        }
                     />
                 ) : null}
             </div>
@@ -82,6 +101,12 @@ export function SupplierRefundApprovalArea({
     return (
         <div className="space-y-3">
             <RuntimeSummary instance={approval?.instance} />
+            {documentId ? (
+                <FinancialDraftEditButton
+                    kind="supplier_refund"
+                    documentId={documentId}
+                />
+            ) : null}
             <ExecutionHistory
                 items={historyItems}
                 hasMore={historyQuery.hasNextPage}
@@ -103,6 +128,12 @@ export function SupplierRefundApprovalArea({
                 definition={approval?.definition}
                 documentType={SUPPLIER_REFUND_DOCUMENT_TYPE}
                 documentId={documentId}
+                documentVersion={documentVersion}
+                editDocumentHref={
+                    documentId
+                        ? financialDraftEditHref("supplier_refund", documentId)
+                        : undefined
+                }
                 afterCancelStatusLabel="草稿"
                 onDecisionApplied={onDecisionApplied}
             />

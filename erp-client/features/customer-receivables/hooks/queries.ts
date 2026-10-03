@@ -1,6 +1,7 @@
 "use client"
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import type { QueryClient } from "@tanstack/react-query"
 
 import { approvalKeys } from "@/features/approval-workflow/queries"
 import {
@@ -24,6 +25,7 @@ import type {
     CustomerAccountsDetailKind,
     CustomerAccountsQuery,
     PostAllocationInput,
+    PostAllocationResult,
 } from "@/features/customer-receivables/types"
 
 export const customerReceivableKeys = {
@@ -34,6 +36,52 @@ export const customerReceivableKeys = {
         [...customerReceivableKeys.all, "detail", kind, id] as const,
     session: (draftSessionId: string) =>
         [...customerReceivableKeys.all, "session", draftSessionId] as const,
+}
+
+/** 首次提交与结果核对成功使用相同的草稿状态和相关业务缓存更新。 */
+async function refreshPostedAllocation(
+    queryClient: QueryClient,
+    result: Extract<PostAllocationResult, { status: "succeeded" }>,
+    input: PostAllocationInput,
+) {
+    await queryClient.invalidateQueries({
+        queryKey: queryKeyRoots.invoiceRequests,
+    })
+    queryClient.setQueryData<AllocationSessionView>(
+        customerReceivableKeys.session(input.draftSessionId),
+        (current) =>
+            current
+                ? {
+                      ...current,
+                      status: "posted",
+                      existingFactId: result.factId,
+                      existingFactNo: result.factNo,
+                      approval: result.approval,
+                  }
+                : current,
+    )
+    await queryClient.invalidateQueries({
+        queryKey: customerReceivableKeys.all,
+    })
+    if (result.mode === "invoice") {
+        await queryClient.invalidateQueries({
+            queryKey: queryKeyRoots.salesOrders,
+        })
+    }
+    await queryClient.invalidateQueries({
+        queryKey: workItemKeys.all,
+    })
+    await queryClient.invalidateQueries({
+        queryKey: queryKeyRoots.workspaceHome,
+    })
+    if (result.mode === "receipt") {
+        await queryClient.invalidateQueries({
+            queryKey: approvalKeys.document(
+                CUSTOMER_RECEIPT_DOCUMENT_TYPE,
+                result.factId,
+            ),
+        })
+    }
 }
 
 export function useCustomerAccountsListQuery(query: CustomerAccountsQuery) {
@@ -113,39 +161,7 @@ export function usePostAllocationMutation() {
             ),
         onSuccess: async (result, input) => {
             if (result.status === "succeeded") {
-                await queryClient.invalidateQueries({
-                    queryKey: queryKeyRoots.invoiceRequests,
-                })
-                queryClient.setQueryData<AllocationSessionView>(
-                    customerReceivableKeys.session(input.draftSessionId),
-                    (current) =>
-                        current
-                            ? {
-                                  ...current,
-                                  status: "posted",
-                                  existingFactId: result.factId,
-                                  existingFactNo: result.factNo,
-                                  approval: result.approval,
-                              }
-                            : current,
-                )
-                await queryClient.invalidateQueries({
-                    queryKey: customerReceivableKeys.all,
-                })
-                await queryClient.invalidateQueries({
-                    queryKey: workItemKeys.all,
-                })
-                await queryClient.invalidateQueries({
-                    queryKey: queryKeyRoots.workspaceHome,
-                })
-                if (result.mode === "receipt") {
-                    await queryClient.invalidateQueries({
-                        queryKey: approvalKeys.document(
-                            CUSTOMER_RECEIPT_DOCUMENT_TYPE,
-                            result.factId,
-                        ),
-                    })
-                }
+                await refreshPostedAllocation(queryClient, result, input)
             }
         },
     })
@@ -161,11 +177,9 @@ export function useResolvePostUnknownMutation() {
                     customerReceivableKeys.session(input.draftSessionId),
                 ) ?? null,
             ),
-        onSuccess: async (result) => {
+        onSuccess: async (result, input) => {
             if (result?.status === "succeeded") {
-                await queryClient.invalidateQueries({
-                    queryKey: customerReceivableKeys.all,
-                })
+                await refreshPostedAllocation(queryClient, result, input)
             }
         },
     })

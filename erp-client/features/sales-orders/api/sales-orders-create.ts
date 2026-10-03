@@ -8,6 +8,7 @@ import { apiGet, apiPost, apiPut } from "@/lib/api"
 import { multiplyFixed, subtractFixed } from "@/lib/fixed-decimal"
 import {
     PAYMENT_TERM_OPTIONS,
+    paymentTermLabel,
     WELFARE_SCENARIO_OPTIONS,
     welfareScenarioLabel,
 } from "@/lib/business-options"
@@ -40,6 +41,7 @@ import type {
 
 type DraftContentInput = {
     nature: SalesOrderNature
+    customerId?: string
     ownerUserId: string
     ownerName: string
     welfareScene: string
@@ -153,7 +155,24 @@ function buildDraftPayload(
         draft: {
             editor_user_id:
                 input.ownerUserId.trim() || input.ownerName.trim() || "unknown",
-            requested_contract_revision_id: requestedContractRevisionId,
+            requested_contract_revision_id: requestedContractRevisionId || null,
+            ...(requestedContractRevisionId
+                ? {}
+                : {
+                      no_contract_terms: {
+                          payment_term_code:
+                              PAYMENT_TERM_OPTIONS.find(
+                                  (option) =>
+                                      option.value === input.paymentTerms ||
+                                      option.label === input.paymentTerms,
+                              )?.value ?? "CONTRACT",
+                          payment_term_name:
+                              paymentTermLabel(input.paymentTerms) ||
+                              input.paymentTerms,
+                          invoice_type: "增值税专用发票",
+                          tax_point: input.taxRatePercent || "0",
+                      },
+                  }),
             // 表头项目名称存中文快照，便于列表/纸质件直接展示
             project_name: welfareScenarioLabel(input.welfareScene) || null,
             business_remark: input.remark.trim() || null,
@@ -192,7 +211,13 @@ export async function createSalesOrder(
     const body = {
         order_no: input.orderNo,
         business_type: businessType,
-        contract_id: input.contract.contractId,
+        contract_id: input.contract.contractId || null,
+        ...(input.contract.contractId
+            ? {}
+            : {
+                  customer_id: input.customerId,
+                  evidence_file_asset_ids: input.evidenceFileAssetIds ?? [],
+              }),
         idempotency_key: input.idempotencyKey,
         intent: input.intent,
         draft,
@@ -245,7 +270,10 @@ export async function saveSalesOrderDraft(
         `/admin/sales-orders/${input.salesOrderId}/working-copy`,
         {
             version: input.version,
-            contract_id: input.contract.contractId,
+            contract_id: input.contract.contractId || null,
+            ...(input.contract.contractId
+                ? {}
+                : { customer_id: input.customerId }),
             draft,
         },
     )
@@ -271,7 +299,8 @@ export async function submitSalesOrder(
     await apiPost(`/admin/sales-orders/${input.salesOrderId}/submit`, {
         version: input.version,
         idempotency_key: input.idempotencyKey,
-        contract_id: input.contract.contractId,
+        contract_id: input.contract.contractId || null,
+        ...(input.contract.contractId ? {} : { customer_id: input.customerId }),
         draft,
     })
     return { salesOrderId: input.salesOrderId }
@@ -282,6 +311,11 @@ export type SalesOrderDraftResumeData = {
     documentNumber: string
     version: number
     contractId: string
+    customerId?: string
+    customerName?: string
+    settlementEntity?: string
+    evidenceFiles?: Array<{ id: string; fileName: string }>
+    evidenceFileAssetIds?: string[]
     nature: SalesOrderNature
     welfareScene: string
     paymentTerms: string
@@ -391,6 +425,15 @@ export async function fetchSalesOrderDraftForResume(
         documentNumber: detail.order_no,
         version: wc?.version ?? detail.version,
         contractId: detail.contract_id ?? "",
+        customerId: detail.customer_id,
+        customerName: source.customer_name,
+        settlementEntity: source.settlement_party_name ?? undefined,
+        evidenceFileAssetIds: detail.evidence_file_asset_ids ?? [],
+        evidenceFiles:
+            detail.evidence_files?.map((file) => ({
+                id: file.file_asset_id,
+                fileName: file.file_name,
+            })) ?? [],
         nature,
         welfareScene,
         paymentTerms,

@@ -130,6 +130,36 @@ export function FulfillmentQueueList({
                                     另 {item.lines.length - 1} 行明细
                                 </Badge>
                             ) : null}
+                            {(item.draft.type === "WAREHOUSE_SHIP" ||
+                                item.draft.type === "SUPPLIER_DIRECT") &&
+                            item.draft.trackingEntries?.length ? (
+                                <Badge
+                                    variant="outline"
+                                    className="font-normal"
+                                >
+                                    {
+                                        new Set(
+                                            item.draft.trackingEntries.map(
+                                                (entry) =>
+                                                    JSON.stringify([
+                                                        entry.carrier ?? "",
+                                                        entry.trackingNo,
+                                                    ]),
+                                            ),
+                                        ).size
+                                    }{" "}
+                                    个包裹 ·{" "}
+                                    {
+                                        new Set(
+                                            item.draft.trackingEntries.map(
+                                                (entry) =>
+                                                    entry.salesOrderLineId,
+                                            ),
+                                        ).size
+                                    }{" "}
+                                    项明细
+                                </Badge>
+                            ) : null}
                         </div>
                     </button>
                 ))}

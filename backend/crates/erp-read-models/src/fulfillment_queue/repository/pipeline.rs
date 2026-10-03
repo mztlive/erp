@@ -253,8 +253,7 @@ fn delivery_lookup() -> Document {
                         "purchase_order_id": 1,
                         "sales_order_id": 1,
                         "warehouse_id": 1,
-                        "carrier": 1,
-                        "tracking_no": 1,
+                        "tracking_entries": 1,
                         "expected_reason_code": {
                             "$cond": [
                                 { "$eq": ["$delivery_type", "WAREHOUSE_SHIP"] },

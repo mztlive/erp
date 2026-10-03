@@ -37,10 +37,17 @@ export function useSalesOrderCreateDefaults({
             contractId: initialDraft?.contractId || initialContractId,
             requestedContractRevisionId: initialContractRevisionId,
             contractRevisionLabel: "",
-            customerId: initialCustomerId,
-            customerName: "",
+            customerId: initialDraft?.customerId || initialCustomerId,
+            evidenceUploadPending: false,
+            evidenceAttachments: initialDraft?.evidenceFiles?.length
+                ? initialDraft.evidenceFiles
+                : (initialDraft?.evidenceFileAssetIds?.map((id) => ({
+                      id,
+                      fileName: "已上传开单凭证",
+                  })) ?? []),
+            customerName: initialDraft?.customerName ?? "",
             settlementPartyId: "",
-            settlementEntity: "",
+            settlementEntity: initialDraft?.settlementEntity ?? "",
             nature,
             ownerUserId: "",
             ownerName: "",

@@ -67,6 +67,7 @@ export async function fetchSalesOrders(
         include_descendants:
             query.orgUnitIds && query.includeDescendants ? true : undefined,
         contract_id: query.contractId,
+        has_contract: query.hasContract,
         business_type: businessType,
         origin_system:
             query.origin === "erp"
@@ -107,7 +108,8 @@ export async function fetchSalesOrders(
         return mapListItemFromBackend(row, {
             contractNumber: display?.contractNumber,
             contractCompanyName: display?.companyName,
-            customerName: display?.companyName || undefined,
+            customerName:
+                row.customer_name || display?.companyName || "客户资料未标注",
         })
     })
 

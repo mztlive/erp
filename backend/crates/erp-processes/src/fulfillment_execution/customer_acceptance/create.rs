@@ -12,6 +12,7 @@ use persistence_core::Transactional;
 use validator::Validate;
 
 use super::CustomerAcceptanceProcess;
+use super::evidence::ensure_evidence;
 use super::registration::register_created_customer_acceptance_document;
 use crate::Result;
 impl CustomerAcceptanceProcess {
@@ -89,6 +90,9 @@ async fn persist_created_customer_acceptance(
     client
         .with_transaction(move |executor| {
             Box::pin(async move {
+                if let Some(asset_id) = acceptance.evidence_attachment_id.as_ref() {
+                    ensure_evidence(&db, &rbac, asset_id, &actor, executor).await?;
+                }
                 register_created_customer_acceptance_document(
                     &db,
                     &rbac,

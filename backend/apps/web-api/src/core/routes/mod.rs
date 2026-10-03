@@ -32,6 +32,7 @@ mod customer_quality;
 mod demo_master_data;
 mod document_registry;
 mod file_asset;
+mod financial_files;
 mod fulfillment;
 mod integration_ops;
 mod inventory;

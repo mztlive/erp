@@ -7,13 +7,15 @@ use erp_core::ids::{SalesOrderId, SalesOrderRevisionId, SalesOrderSubmissionId};
 use erp_sales::entity::sales_order::SalesOrder;
 use erp_sales::repository::prelude::*;
 use erp_sales::repository::{SalesOrderExt, SalesReviewExt};
+use erp_support::FileAssetExt;
+use erp_support::repository::prelude::*;
 use persistence_core::NoTransaction;
 
 use self::facts::DetailFacts;
 use super::super::approval_query::load_document_approval;
 use super::super::dto::{
     ActiveCardSalesApprovalView, DocumentApprovalView, PurchaseCreationAccessView, SalesOrderDetailView,
-    SalesOrderStageSummary, SalesProcurementCoverageView,
+    SalesOrderEvidenceFileView, SalesOrderStageSummary, SalesProcurementCoverageView,
 };
 use super::super::status::{close_eligibility_view, compute_can_start_sales_change, stage_code_label_tone};
 use super::SalesOrderReadService;
@@ -30,6 +32,7 @@ struct DetailPresentation {
     change_order_blocker: Option<String>,
     active_card_sales_approval: Option<ActiveCardSalesApprovalView>,
     approval: DocumentApprovalView,
+    evidence_files: Vec<SalesOrderEvidenceFileView>,
 }
 
 impl SalesOrderReadService {
@@ -79,6 +82,21 @@ impl SalesOrderReadService {
             .await?
             .ok_or_else(|| Error::NotFound("销售单不存在".into()))?;
         Ok((order, None))
+    }
+
+    /// 仅读取已授权销售单自身凭证的安全元数据。
+    async fn evidence_files(&self, order: &SalesOrder) -> Result<Vec<SalesOrderEvidenceFileView>> {
+        let files =
+            self.db.file_assets().find_by_ids(&order.evidence_file_asset_ids, &mut NoTransaction).await?;
+        Ok(files
+            .into_iter()
+            .map(|file| SalesOrderEvidenceFileView {
+                file_asset_id: file.base.id,
+                file_name: file.file_name,
+                content_type: file.content_type,
+                byte_size: file.byte_size,
+            })
+            .collect())
     }
 
     /// 装配后再次执行原授权查询，拒绝期间撤权或单据版本变化。
@@ -134,6 +152,7 @@ impl SalesOrderReadService {
         )
         .await?;
         Ok(DetailPresentation {
+            evidence_files: self.evidence_files(order).await?,
             owner_user_name,
             stage,
             purchase_coverage,
@@ -204,6 +223,8 @@ impl SalesOrderDetailView {
             origin_system: order.origin_system,
             customer_id: order.customer_id.to_string(),
             contract_id: order.contract_id.as_ref().map(ToString::to_string),
+            evidence_file_asset_ids: order.evidence_file_asset_ids.iter().map(ToString::to_string).collect(),
+            evidence_files: presentation.evidence_files,
             settlement_party_id: order.settlement_party_id.to_string(),
             commercial_status: order.commercial_status,
             review_status: order.review_status,

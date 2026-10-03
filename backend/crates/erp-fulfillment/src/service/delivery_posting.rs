@@ -35,7 +35,7 @@ impl FulfillmentService {
         if delivery.base.version != expected_version {
             return Err(Error::ConflictError("发货单版本已变化，请刷新后重试".to_string()));
         }
-        delivery.update(update)?;
+        delivery.update(update).map_err(|error| Error::ValidationError(error.to_string()))?;
         let lines = self
             .db
             .fulfillment()
@@ -44,6 +44,7 @@ impl FulfillmentService {
         if lines.is_empty() {
             return Err(Error::ValidationError("发货单没有行，无法过账".to_string()));
         }
+        delivery.ensure_tracking_lines(&lines).map_err(|error| Error::ValidationError(error.to_string()))?;
         Ok((delivery, lines))
     }
 

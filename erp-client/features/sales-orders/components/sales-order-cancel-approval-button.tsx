@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useRouter } from "next/navigation"
 
 import {
     AlertDialog,
@@ -25,6 +26,8 @@ import {
 import type { SalesOrderDetailActionResult } from "@/features/sales-orders/lib/sales-order-detail-model"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { getErrorPresentation } from "@/lib/api/errors"
+import { documentIsEditableDraft } from "@/features/approval-workflow/api/document-cancel"
+import { classifyFormalCommandError } from "@/lib/formal-command"
 
 /**
  * 销售单详情页头「撤回审批」。
@@ -38,6 +41,7 @@ export function SalesOrderCancelApprovalButton({
     order: SalesOrderDetailView
     onResult?: (result: SalesOrderDetailActionResult) => void
 }) {
+    const router = useRouter()
     const [open, setOpen] = React.useState(false)
     const [reason, setReason] = React.useState("")
     const [idempotencyKey, setIdempotencyKey] = React.useState("")
@@ -45,6 +49,14 @@ export function SalesOrderCancelApprovalButton({
     const profileQuery = useAccountProfileQuery()
     const permissions = useSalesOrderDetailPermissions()
     const cancelMutation = useCancelSalesOrderApprovalMutation()
+    const reviseRejected = Boolean(order.approval?.instance?.latestRejection)
+    const [uncertain, setUncertain] = React.useState(false)
+    const [checking, setChecking] = React.useState(false)
+    const commandInFlight = React.useRef(false)
+    const busy = cancelMutation.isPending || checking
+    const pendingCommand = React.useRef<
+        Parameters<typeof cancelMutation.mutateAsync>[0] | null
+    >(null)
 
     if (!salesOrderAllowsWithdrawApproval(order)) return null
 
@@ -79,7 +91,11 @@ export function SalesOrderCancelApprovalButton({
                 disabled={!gate.enabled}
                 title={gate.reason}
                 onClick={() => {
-                    setReason("")
+                    pendingCommand.current = null
+                    setUncertain(false)
+                    setReason(
+                        reviseRejected ? "按驳回意见修改原单后重新提交" : "",
+                    )
                     setConfirmError(null)
                     setIdempotencyKey(
                         `sales-cancel-approval:${order.id}:${crypto.randomUUID()}`,
@@ -87,14 +103,25 @@ export function SalesOrderCancelApprovalButton({
                     setOpen(true)
                 }}
             >
-                撤回审批
+                {reviseRejected ? "修改原单" : "撤回审批"}
             </Button>
-            <AlertDialog open={open} onOpenChange={setOpen}>
+            <AlertDialog
+                open={open}
+                onOpenChange={(next) => {
+                    if (!pendingCommand.current && !uncertain && !busy)
+                        setOpen(next)
+                }}
+            >
                 <AlertDialogContent className="sm:max-w-md">
                     <AlertDialogHeader>
-                        <AlertDialogTitle>撤回审批</AlertDialogTitle>
+                        <AlertDialogTitle>
+                            {reviseRejected ? "修改原单" : "撤回审批"}
+                        </AlertDialogTitle>
                         <AlertDialogDescription>
                             撤回后，销售单将回到草稿。
+                            {reviseRejected
+                                ? "原销售单编号和审批记录保留，修改后重新提交审批。"
+                                : null}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <div className="space-y-2">
@@ -110,7 +137,7 @@ export function SalesOrderCancelApprovalButton({
                             onChange={(event) => setReason(event.target.value)}
                             placeholder="请输入撤回原因"
                             rows={3}
-                            disabled={cancelMutation.isPending}
+                            disabled={busy || uncertain}
                         />
                         {confirmError ? (
                             <p
@@ -124,28 +151,52 @@ export function SalesOrderCancelApprovalButton({
                     <AlertDialogFooter>
                         <AlertDialogCancel
                             id="sales-orders-detail-cancel-approval-cancel"
-                            disabled={cancelMutation.isPending}
+                            disabled={busy || uncertain}
                         >
                             取消
                         </AlertDialogCancel>
                         <AlertDialogAction
-                            loading={cancelMutation.isPending}
+                            loading={busy}
                             id="sales-orders-detail-cancel-approval-confirm"
-                            disabled={
-                                cancelMutation.isPending || !reason.trim()
-                            }
-                            onClick={() => {
+                            disabled={busy || !reason.trim()}
+                            onClick={(event) => {
+                                event.preventDefault()
+                                if (commandInFlight.current) return
+                                commandInFlight.current = true
+                                setChecking(true)
                                 setConfirmError(null)
-                                void cancelMutation
-                                    .mutateAsync({
-                                        salesOrderId: order.id,
-                                        expectedVersion:
-                                            order.lockVersion || order.version,
-                                        reason: reason.trim(),
-                                        idempotencyKey,
-                                    })
+                                const command = pendingCommand.current ?? {
+                                    salesOrderId: order.id,
+                                    expectedVersion:
+                                        order.lockVersion || order.version,
+                                    reason: reason.trim(),
+                                    idempotencyKey,
+                                }
+                                pendingCommand.current = command
+                                let checkingUnknown = false
+                                void (async () => {
+                                    if (uncertain) {
+                                        checkingUnknown = true
+                                        if (
+                                            await documentIsEditableDraft(
+                                                "SalesOrder",
+                                                command.salesOrderId,
+                                            )
+                                        )
+                                            return
+                                        checkingUnknown = false
+                                    }
+                                    return cancelMutation.mutateAsync(command)
+                                })()
                                     .then(() => {
+                                        pendingCommand.current = null
+                                        setUncertain(false)
                                         setOpen(false)
+                                        if (reviseRejected) {
+                                            router.push(
+                                                `/sales/orders/${encodeURIComponent(order.id)}`,
+                                            )
+                                        }
                                         onResult?.({
                                             status: "succeeded",
                                             title: "审批已撤回",
@@ -155,21 +206,46 @@ export function SalesOrderCancelApprovalButton({
                                         })
                                     })
                                     .catch((error: unknown) => {
+                                        const unknown =
+                                            uncertain ||
+                                            checkingUnknown ||
+                                            classifyFormalCommandError(
+                                                error,
+                                            ) === "unknown"
+                                        setUncertain(unknown)
+                                        if (!unknown)
+                                            pendingCommand.current = null
                                         const failure = getErrorPresentation(
                                             error,
                                             "撤回审批未完成，请刷新后重试。",
                                         )
                                         setConfirmError(failure.description)
                                         onResult?.({
-                                            status: "blocked",
-                                            title: failure.title,
-                                            description: failure.description,
+                                            status: unknown
+                                                ? "unknown"
+                                                : "blocked",
+                                            title: unknown
+                                                ? "处理结果待确认"
+                                                : failure.title,
+                                            description: unknown
+                                                ? "请使用本次操作重试；确认前不要修改输入或重复撤回。"
+                                                : failure.description,
                                             reference: order.documentNumber,
                                         })
                                     })
+                                    .finally(() => {
+                                        commandInFlight.current = false
+                                        setChecking(false)
+                                    })
                             }}
                         >
-                            {cancelMutation.isPending ? "撤回中" : "确认撤回"}
+                            {busy
+                                ? "撤回中"
+                                : uncertain
+                                  ? "核对撤回结果"
+                                  : reviseRejected
+                                    ? "撤回并修改原单"
+                                    : "确认撤回"}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

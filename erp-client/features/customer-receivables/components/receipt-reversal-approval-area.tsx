@@ -1,5 +1,7 @@
 "use client"
 
+import { financialDraftEditHref } from "@/features/financial-draft-edit/types"
+import { FinancialDraftEditButton } from "@/features/financial-draft-edit/components/financial-draft-edit-button"
 import { ApprovalActionBar } from "@/features/approval-workflow/components/approval-action-bar"
 import { DefinitionBindingCard } from "@/features/approval-workflow/components/definition-binding-card"
 import { ExecutionHistory } from "@/features/approval-workflow/components/execution-history"
@@ -29,6 +31,7 @@ export function ReceiptReversalApprovalArea({
     phase,
     approval,
     documentId,
+    documentVersion,
     workItemId,
     expectedTaskVersion,
     workItemAllowedActions,
@@ -37,6 +40,7 @@ export function ReceiptReversalApprovalArea({
     phase: ReceiptReversalApprovalPhase
     approval?: DocumentApprovalView
     documentId?: string
+    documentVersion?: number
     workItemId?: string
     expectedTaskVersion?: string
     workItemAllowedActions?: readonly string[]
@@ -64,12 +68,27 @@ export function ReceiptReversalApprovalArea({
             <div className="space-y-3">
                 <DefinitionBindingCard definition={approval?.definition} />
                 {documentId ? (
+                    <FinancialDraftEditButton
+                        kind="receipt_reversal"
+                        documentId={documentId}
+                    />
+                ) : null}
+                {documentId ? (
                     <ApprovalActionBar
                         id="customer-receivables-reversal-approval-action-bar"
                         allowedActions={allowedActions}
                         definition={approval?.definition}
                         documentType={RECEIPT_REVERSAL_DOCUMENT_TYPE}
                         documentId={documentId}
+                        documentVersion={documentVersion}
+                        editDocumentHref={
+                            documentId
+                                ? financialDraftEditHref(
+                                      "receipt_reversal",
+                                      documentId,
+                                  )
+                                : undefined
+                        }
                     />
                 ) : null}
             </div>
@@ -83,6 +102,12 @@ export function ReceiptReversalApprovalArea({
     return (
         <div className="space-y-3">
             <RuntimeSummary instance={approval?.instance} />
+            {documentId ? (
+                <FinancialDraftEditButton
+                    kind="receipt_reversal"
+                    documentId={documentId}
+                />
+            ) : null}
             <ExecutionHistory
                 id="customer-receivables-reversal-approval-history"
                 items={historyItems}
@@ -106,6 +131,12 @@ export function ReceiptReversalApprovalArea({
                 definition={approval?.definition}
                 documentType={RECEIPT_REVERSAL_DOCUMENT_TYPE}
                 documentId={documentId}
+                documentVersion={documentVersion}
+                editDocumentHref={
+                    documentId
+                        ? financialDraftEditHref("receipt_reversal", documentId)
+                        : undefined
+                }
                 afterCancelStatusLabel="草稿"
                 onDecisionApplied={onDecisionApplied}
             />

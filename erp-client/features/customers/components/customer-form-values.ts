@@ -203,7 +203,7 @@ export function buildFormSubmission(
         return {
             legalName: value.legalName.trim(),
             shortName: value.shortName.trim() || undefined,
-            unifiedCreditCode: value.unifiedCreditCode.trim(),
+            unifiedCreditCode: value.unifiedCreditCode.trim() || undefined,
             defaultPaymentTerm: value.defaultPaymentTerm.trim() || undefined,
             status: value.status,
             contacts: options.canWriteContacts ? contacts : undefined,

@@ -31,8 +31,11 @@ export type AcceptanceEligibleFact = {
     netAcceptedAllocatedQuantity: string
     /** 服务端守恒：本次最多可验收 */
     eligibleQuantity: string
-    carrier?: string
-    trackingNo?: string
+    trackingEntries?: Array<{
+        salesOrderLineId: string
+        trackingNo: string
+        carrier?: string
+    }>
 }
 
 type AcceptanceAllocationRecord = {
@@ -63,6 +66,7 @@ export type AcceptanceHistoryItem = {
     acceptedAt: string
     postedAt: string
     overallResult: AcceptanceOverallResult
+    evidenceAttachmentId?: string
     lines: AcceptanceLineRecord[]
     recordedBy: string
     version: number
@@ -152,6 +156,7 @@ export type CustomerAcceptanceWorkspaceView = {
 }
 
 export type PostAcceptanceInput = {
+    evidenceFile?: File | null
     workItemId?: string
     expectedTaskVersion?: number
     salesOrderId: string

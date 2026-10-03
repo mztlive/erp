@@ -1,7 +1,7 @@
 //! `customer_acceptance` 客户验收单仓储：列表投影查询与按验收单号身份查询。
 
 use erp_core::common::time::Instant;
-use erp_core::ids::{CustomerAcceptanceId, SalesOrderId};
+use erp_core::ids::{CustomerAcceptanceId, FileAssetId, SalesOrderId};
 use mongodb::bson::{Document, doc};
 use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result};
 use serde::{Deserialize, Serialize};
@@ -15,6 +15,9 @@ const CUSTOMER_ACCEPTANCE_SORT_FIELDS: &[&str] = &["accepted_at", "created_at"];
 /// 客户验收单列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CustomerAcceptanceRow {
+    /// 签收单凭证；历史记录可为空。
+    #[serde(default)]
+    pub evidence_attachment_id: Option<FileAssetId>,
     /// 实体主键。
     pub id: String,
     /// 客户验收单号。
@@ -173,6 +176,7 @@ fn customer_acceptance_projection() -> Document {
         "acceptance_no": 1,
         "sales_order_id": 1,
         "accepted_at": 1,
+        "evidence_attachment_id": 1,
         "result": 1,
         "status": 1,
         "reversal_of_acceptance_id": 1,
@@ -198,6 +202,7 @@ mod tests {
                 "acceptance_no",
                 "sales_order_id",
                 "accepted_at",
+                "evidence_attachment_id",
                 "result",
                 "status",
                 "reversal_of_acceptance_id",

@@ -62,6 +62,7 @@ impl FulfillmentService {
                 sales_order_id: row.sales_order_id.to_string(),
                 accepted_at: row.accepted_at.unix_secs(),
                 result: row.result,
+                evidence_attachment_id: row.evidence_attachment_id.map(|id| id.to_string()),
                 status: row.status,
                 reversal_of_acceptance_id: row.reversal_of_acceptance_id.map(|id| id.to_string()),
                 version: row.version,
@@ -135,6 +136,7 @@ impl From<CustomerAcceptance> for CustomerAcceptanceView {
             sales_order_id: acceptance.sales_order_id.to_string(),
             accepted_at: acceptance.accepted_at.unix_secs(),
             result: acceptance.result,
+            evidence_attachment_id: acceptance.evidence_attachment_id.map(|id| id.to_string()),
             status: acceptance.status,
             reversal_of_acceptance_id: acceptance.reversal_of_acceptance_id.map(|id| id.to_string()),
             version: acceptance.base.version,
@@ -189,6 +191,7 @@ pub fn prepare_customer_acceptance_draft(
             sales_order_id: req.sales_order_id,
             accepted_at: erp_core::common::time::Instant::from_unix_secs(req.accepted_at),
             result: req.result,
+            evidence_attachment_id: req.evidence_attachment_id,
         },
     )?;
     let lines = super::FulfillmentService::build_customer_acceptance_lines(id, &req.lines)?;

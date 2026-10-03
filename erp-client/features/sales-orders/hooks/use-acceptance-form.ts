@@ -15,6 +15,24 @@ import {
 const draftHeaderSchema = z.object({
     acceptedAt: z.string().min(1, "请填写客户验收时间"),
     comment: z.string(),
+    evidenceFile: z
+        .custom<File | null>()
+        .refine((file) => file != null, "请上传签收单凭证（图片或 PDF）")
+        .refine(
+            (file) =>
+                !file ||
+                [
+                    "application/pdf",
+                    "image/jpeg",
+                    "image/png",
+                    "image/webp",
+                ].includes(file.type),
+            "凭证仅支持 PDF、JPG、PNG 或 WebP",
+        )
+        .refine(
+            (file) => !file || (file.size > 0 && file.size <= 5 * 1024 * 1024),
+            "请选择不超过 5 MB 的非空凭证文件",
+        ),
 })
 
 export type AcceptanceFormApi = ReturnType<typeof useAcceptanceForm>["form"]
@@ -38,6 +56,7 @@ export function useAcceptanceForm({
         defaultValues: {
             acceptedAt: todayLocalDateTimeInput(),
             comment: "",
+            evidenceFile: null as File | null,
         },
         validators: { onChange: draftHeaderSchema },
         onSubmit: async () => {

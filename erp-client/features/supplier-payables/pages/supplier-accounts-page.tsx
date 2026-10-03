@@ -1,6 +1,7 @@
 "use client"
 
 import { getErrorMessage } from "@/lib/api/errors"
+import { FinancialDraftEditDialog } from "@/features/financial-draft-edit/components/financial-draft-edit-dialog"
 import { BusinessEmptyState, PageScaffold } from "@/components/business"
 import { listWorkspaceStyles } from "@/components/business/list-workspace"
 import { PaymentReversalRequestDialog } from "@/features/supplier-payables/components/payment-reversal-request-dialog"
@@ -267,6 +268,7 @@ export function SupplierAccountsPage() {
 
     return (
         <PageScaffold density="compact" className={listWorkspaceStyles.page}>
+            <FinancialDraftEditDialog side="supplier" />
             <SupplierAccountsHeader
                 data={data}
                 isError={listQuery.isError}

@@ -1,6 +1,7 @@
 //! Receivable account and customer receipt read models.
 
 mod account;
+mod approval_query;
 pub mod approval_view;
 mod customer_receipt;
 pub mod invoice_request;

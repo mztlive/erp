@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useRouter } from "next/navigation"
 
 import { Button } from "@/components/ui/button"
 
@@ -40,6 +41,8 @@ export function ApprovalActionBar({
     documentType,
     documentId,
     documentHref,
+    documentVersion,
+    editDocumentHref,
     afterCancelStatusLabel = "未提交",
     emergencyWithdraw = false,
     canReadSensitive = true,
@@ -58,6 +61,8 @@ export function ApprovalActionBar({
     documentType?: string
     documentId?: string
     documentHref?: string | null
+    documentVersion?: number
+    editDocumentHref?: string
     afterCancelStatusLabel?: string
     emergencyWithdraw?: boolean
     canReadSensitive?: boolean
@@ -75,6 +80,7 @@ export function ApprovalActionBar({
     presentation?: "default" | "workspace"
     id?: string
 }) {
+    const router = useRouter()
     const [dialog, setDialog] = React.useState<DialogKind>(null)
     const hidden = new Set(hiddenActions)
     const actions = new Set(
@@ -90,6 +96,7 @@ export function ApprovalActionBar({
         recoveries.has("CANCEL_BLOCKED") &&
         actions.has("CANCEL_BLOCKED_APPROVAL")
     const showWithdraw = actions.has("CANCEL") || actions.has("CANCEL_APPROVAL")
+    const reviseRejected = showWithdraw && Boolean(instance?.latestRejection)
     const showUpgrade = actions.has("UPGRADE_BINDING") && Boolean(definition)
     const showOpenDocument =
         (actions.has("OPEN_DOCUMENT") || actions.has("VIEW")) &&
@@ -162,9 +169,19 @@ export function ApprovalActionBar({
                     id={`${id}-withdraw`}
                     type="button"
                     variant="outline"
+                    disabled={!documentVersion}
+                    title={
+                        !documentVersion
+                            ? "请打开单据详情后修改或撤回"
+                            : undefined
+                    }
                     onClick={() => setDialog("withdraw")}
                 >
-                    {emergencyWithdraw ? "应急撤回审批" : "撤回审批"}
+                    {reviseRejected
+                        ? "修改原单"
+                        : emergencyWithdraw
+                          ? "应急撤回审批"
+                          : "撤回审批"}
                 </Button>
             ) : null}
             {showUpgrade ? (
@@ -220,13 +237,25 @@ export function ApprovalActionBar({
                     instanceId={instance.id}
                     documentType={documentType}
                     documentId={documentId}
+                    documentVersion={documentVersion}
+                    currentRoundNo={instance.currentRoundNo}
+                    reviseRejected={reviseRejected && dialog === "withdraw"}
                     currentNodeName={instance.currentNodeName}
                     afterStatusLabel={afterCancelStatusLabel}
                     expectedInstanceVersion={instance.instanceVersion ?? ""}
                     expectedExecutionVersion={instance.executionVersion ?? ""}
                     expectedTaskVersion={expectedTaskVersion}
                     emergency={emergencyWithdraw && dialog === "withdraw"}
-                    onApplied={onDecisionApplied}
+                    onApplied={(view) => {
+                        onDecisionApplied?.(view)
+                        if (
+                            reviseRejected &&
+                            editDocumentHref &&
+                            dialog === "withdraw"
+                        ) {
+                            router.push(editDocumentHref)
+                        }
+                    }}
                 />
             ) : null}
             {definition && documentType && documentId ? (

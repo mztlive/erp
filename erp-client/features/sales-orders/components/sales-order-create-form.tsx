@@ -19,6 +19,7 @@ import type { FormalCommandKeyLedger } from "@/lib/formal-command"
 import { ContractUploadDialog } from "@/features/contracts/contract-upload-dialog"
 import { useContractCenterQuery } from "@/features/contracts/queries"
 import type { UploadContractPdfResult } from "@/features/contracts/types"
+import { useCustomerCenterQuery } from "@/features/customers/queries"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { entitySelectorKeys } from "@/features/entity-selectors"
 import type { SalesOrderDraftResumeData } from "@/features/sales-orders/api/sales-orders"
@@ -177,6 +178,13 @@ export function SalesOrderCreateForm({
                     JSON.stringify(submission.savedValues)),
     )
     const nature = useSelector(form.store, (state) => state.values.nature)
+    const selectedCustomerId = useSelector(
+        form.store,
+        (state) => state.values.customerId,
+    )
+    const customerQuery = useCustomerCenterQuery(
+        selectedContractId ? "" : selectedCustomerId,
+    )
     const lineItems = useSelector(form.store, (state) => state.values.lineItems)
     const procurementResponsibilityQuery =
         useSalesLineProcurementResponsibilities({ nature, lines: lineItems })
@@ -241,6 +249,30 @@ export function SalesOrderCreateForm({
             })
         }
     }, [contractQuery.data, form])
+
+    React.useEffect(() => {
+        if (selectedContractId) return
+        const customer = customerQuery.data
+        if (!customer || customer.customerId !== selectedCustomerId) return
+        form.setFieldValue("customerName", customer.currentRevision.legalName, {
+            dontUpdateMeta: true,
+        })
+        form.setFieldValue("settlementPartyId", customer.partyId, {
+            dontUpdateMeta: true,
+        })
+        form.setFieldValue(
+            "settlementEntity",
+            customer.currentRevision.legalName,
+            { dontUpdateMeta: true },
+        )
+        if (!form.state.values.paymentTerms) {
+            form.setFieldValue(
+                "paymentTerms",
+                customer.currentRevision.defaultPaymentTerm || "CONTRACT",
+                { dontUpdateMeta: true },
+            )
+        }
+    }, [customerQuery.data, form, selectedContractId, selectedCustomerId])
 
     /** 负责销售固定为当前登录用户。 */
     React.useEffect(() => {
@@ -372,7 +404,13 @@ export function SalesOrderCreateForm({
                         </div>
                         <SalesOrderCreateContractSection
                             form={form}
-                            initialCustomerId={initialCustomerId}
+                            initialCustomerId={
+                                initialDraft?.customerId ||
+                                (submission.draftIdentity
+                                    ? selectedCustomerId
+                                    : initialCustomerId)
+                            }
+                            customerLocked={submission.draftIdentity != null}
                             contractFetching={contractQuery.isFetching}
                             onContractChange={handleContractChange}
                             onUploadClick={() => setUploadOpen(true)}
@@ -414,7 +452,9 @@ export function SalesOrderCreateForm({
                 <ContractUploadDialog
                     open={uploadOpen}
                     onOpenChange={setUploadOpen}
-                    initialCustomerId={initialCustomerId}
+                    initialCustomerId={
+                        initialDraft?.customerId || initialCustomerId
+                    }
                     onSuccess={(result) => {
                         void handleUploadSuccess(result)
                     }}

@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use erp_core::ids::{DeliveryId, SalesOrderId, SalesOrderLineId, SalesOrderRevisionLineId};
 use erp_fulfillment::entity::fulfillment::{
-    AcceptanceFulfillmentAllocation, AcceptanceLineEligibility, Delivery, DeliveryLine, ElectronicDelivery,
-    FulfillmentFactType, ServiceFulfillment,
+    AcceptanceFulfillmentAllocation, AcceptanceLineEligibility, Delivery, DeliveryLine,
+    DeliveryTrackingEntry, ElectronicDelivery, FulfillmentFactType, ServiceFulfillment,
 };
 use erp_fulfillment::repository::FulfillmentExt;
 use erp_sales::repository::SalesOrderExt;
@@ -293,8 +293,7 @@ fn build_eligibility_views(
                     net_successful_quantity: delivery_line.quantity,
                     net_accepted_allocated_quantity: fact.net_accepted_quantity,
                     eligible_quantity: fact.eligible_quantity,
-                    carrier: delivery.and_then(|delivery| delivery.carrier.clone()),
-                    tracking_no: delivery.and_then(|delivery| delivery.tracking_no.clone()),
+                    tracking_entries: delivery_tracking_entries(delivery.copied(), &line.sales_order_line_id),
                 });
             } else if let Some(record) = electronic_by_id.get(fact.fulfillment_line_id.as_str()) {
                 fact_views.push(EligibleFulfillmentFactView {
@@ -310,8 +309,7 @@ fn build_eligibility_views(
                     net_successful_quantity: record.quantity,
                     net_accepted_allocated_quantity: fact.net_accepted_quantity,
                     eligible_quantity: fact.eligible_quantity,
-                    carrier: None,
-                    tracking_no: None,
+                    tracking_entries: Vec::new(),
                 });
             } else if let Some(record) = service_by_id.get(fact.fulfillment_line_id.as_str()) {
                 fact_views.push(EligibleFulfillmentFactView {
@@ -327,8 +325,7 @@ fn build_eligibility_views(
                     net_successful_quantity: record.quantity,
                     net_accepted_allocated_quantity: fact.net_accepted_quantity,
                     eligible_quantity: fact.eligible_quantity,
-                    carrier: None,
-                    tracking_no: None,
+                    tracking_entries: Vec::new(),
                 });
             }
         }
@@ -344,6 +341,23 @@ fn build_eligibility_views(
     }
     groups.sort_by_key(|group| group.line_no);
     groups
+}
+
+/// 只投影当前销售稳定明细的物流条目，不跨明细推断或去重。
+fn delivery_tracking_entries(
+    delivery: Option<&Delivery>,
+    sales_order_line_id: &str,
+) -> Vec<DeliveryTrackingEntry> {
+    delivery
+        .map(|delivery| {
+            delivery
+                .tracking_entries
+                .iter()
+                .filter(|entry| entry.sales_order_line_id.as_ref() == sales_order_line_id)
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -364,16 +378,18 @@ mod acceptance_eligibility_rule_source_tests {
     use erp_fulfillment::entity::fulfillment::{
         AcceptanceFulfillmentAllocation, AcceptanceFulfillmentAllocationData, AcceptanceProgress,
         AllocationAction, Delivery, DeliveryData, DeliveryLine, DeliveryLineData, DeliveryState,
-        DeliveryType, ElectronicDelivery, ElectronicDeliveryData, ElectronicDeliveryState,
-        FulfillmentFactType, FulfillmentResult, ServiceFulfillment, ServiceFulfillmentData,
-        ServiceFulfillmentState,
+        DeliveryTrackingEntry, DeliveryType, ElectronicDelivery, ElectronicDeliveryData,
+        ElectronicDeliveryState, FulfillmentFactType, FulfillmentResult, ServiceFulfillment,
+        ServiceFulfillmentData, ServiceFulfillmentState,
     };
     use erp_sales::entity::sales_order::{
         LineType, SalesOrderGoodsServiceLineRevision, SalesOrderGoodsServiceLineRevisionData,
         SalesOrderRevisionLine, SalesOrderRevisionLineData,
     };
 
-    use super::{EligibilityGroupSources, build_eligibility_views, build_line_eligibilities};
+    use super::{
+        EligibilityGroupSources, build_eligibility_views, build_line_eligibilities, delivery_tracking_entries,
+    };
 
     /// 构造销售版本公共行（实物服务行）。
     fn revision_line(id: &str, line_no: u32, sales_order_line_id: &str) -> SalesOrderRevisionLine {
@@ -430,8 +446,23 @@ mod acceptance_eligibility_rule_source_tests {
                 sales_order_id: SalesOrderId::new("so-1"),
                 purchase_order_id: None,
                 warehouse_id: Some(WarehouseId::new("wh-1")),
-                carrier: Some("顺丰".to_string()),
-                tracking_no: Some("SF123456".to_string()),
+                tracking_entries: vec![
+                    DeliveryTrackingEntry {
+                        sales_order_line_id: SalesOrderLineId::new("so-line-1"),
+                        tracking_no: "SF123456".to_string(),
+                        carrier: Some("顺丰".to_string()),
+                    },
+                    DeliveryTrackingEntry {
+                        sales_order_line_id: SalesOrderLineId::new("so-line-1"),
+                        tracking_no: "LL123456".to_string(),
+                        carrier: Some("货拉拉".to_string()),
+                    },
+                    DeliveryTrackingEntry {
+                        sales_order_line_id: SalesOrderLineId::new("so-line-2"),
+                        tracking_no: "SF123456".to_string(),
+                        carrier: Some("顺丰".to_string()),
+                    },
+                ],
                 address_snapshot_encrypted: None,
                 address_snapshot_fingerprint: None,
             },
@@ -568,6 +599,21 @@ mod acceptance_eligibility_rule_source_tests {
         .unwrap()
     }
 
+    /// 同号关联多个销售明细时，投影保留每个明细自身的完整条目。
+    #[test]
+    fn logistics_projection_keeps_shared_package_in_each_sales_line() {
+        let delivery = delivery("dlv-1", "DLV-2026-001");
+        let first = delivery_tracking_entries(Some(&delivery), "so-line-1");
+        let second = delivery_tracking_entries(Some(&delivery), "so-line-2");
+        assert_eq!(first.len(), 2);
+        assert_eq!(second.len(), 1);
+        assert_eq!(first[0].tracking_no, second[0].tracking_no);
+        assert_ne!(first[0].sales_order_line_id, second[0].sales_order_line_id);
+        assert_eq!(first[1].carrier.as_deref(), Some("货拉拉"));
+        assert!(delivery_tracking_entries(Some(&delivery), "unrelated-line").is_empty());
+        assert!(delivery_tracking_entries(None, "so-line-1").is_empty());
+    }
+
     /// 三类履约事实（发货/电子交付/服务履约）按稳定销售明细分组，净验收与
     /// 剩余可验收守恒；工作台视图保持行号稳定排序与展示字段。
     #[test]
@@ -632,8 +678,16 @@ mod acceptance_eligibility_rule_source_tests {
         assert_eq!(delivery_fact.net_successful_quantity, Quantity::from_str("5").unwrap());
         assert_eq!(delivery_fact.net_accepted_allocated_quantity, Quantity::from_str("4").unwrap());
         assert_eq!(delivery_fact.eligible_quantity, Quantity::from_str("1").unwrap());
-        assert_eq!(delivery_fact.carrier.as_deref(), Some("顺丰"));
-        assert_eq!(delivery_fact.tracking_no.as_deref(), Some("SF123456"));
+        assert_eq!(delivery_fact.tracking_entries.len(), 2);
+        assert!(
+            delivery_fact
+                .tracking_entries
+                .iter()
+                .all(|entry| entry.sales_order_line_id.as_ref() == "so-line-1")
+        );
+        assert_eq!(delivery_fact.tracking_entries[0].tracking_no, "SF123456");
+        assert_eq!(delivery_fact.tracking_entries[0].carrier.as_deref(), Some("顺丰"));
+        assert_eq!(delivery_fact.tracking_entries[1].carrier.as_deref(), Some("货拉拉"));
 
         assert_eq!(groups[1].line_no, 2);
         assert_eq!(groups[1].sales_order_line_id, "so-line-2");
@@ -647,7 +701,7 @@ mod acceptance_eligibility_rule_source_tests {
         assert_eq!(electronic_fact.net_accepted_allocated_quantity, Quantity::from_str("0.5").unwrap());
         assert_eq!(electronic_fact.eligible_quantity, Quantity::from_str("0.5").unwrap());
         assert_eq!(electronic_fact.delivery_type, None);
-        assert_eq!(electronic_fact.carrier, None);
+        assert!(electronic_fact.tracking_entries.is_empty());
         let service_fact = &groups[1].fulfillment_facts[1];
         assert_eq!(service_fact.fulfillment_fact_type, FulfillmentFactType::ServiceFulfillment);
         assert_eq!(service_fact.fulfillment_no, "SF-2026-001");

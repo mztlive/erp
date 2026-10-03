@@ -4,6 +4,7 @@
 
 import { apiGet, apiPost } from "@/lib/api"
 import { getErrorMessage, isApiError } from "@/lib/api/errors"
+import { classifyFormalCommandError } from "@/lib/formal-command"
 import type {
     AdjustmentDetailView,
     AdjustmentDraftView,
@@ -70,18 +71,34 @@ export const buildAdjustmentSubmitRequest = (input: {
     note: string
     occurredAt: string
     idempotencyKey: string
+    lineUpdates?: readonly {
+        lineId: string
+        quantity: string
+        direction: "increase" | "decrease"
+    }[]
+    balanceVersions?: readonly {
+        balanceId: string
+        expectedVersion: string
+    }[]
 }) => ({
     expected_version: input.command.expectedVersion,
     expected_subject_version: input.command.expectedSubjectVersion,
     reason_type: reasonTypeBackend(input.reasonType),
-    lines: [
+    lines: input.lineUpdates?.map((line) => ({
+        line_id: line.lineId,
+        quantity: line.quantity,
+        direction: line.direction === "increase" ? "INCREASE" : "DECREASE",
+    })) ?? [
         {
             line_id: input.lineId,
             quantity: input.quantity,
             direction: input.direction === "increase" ? "INCREASE" : "DECREASE",
         },
     ],
-    balances: [
+    balances: input.balanceVersions?.map((balance) => ({
+        balance_id: balance.balanceId,
+        expected_version: balance.expectedVersion,
+    })) ?? [
         {
             balance_id: input.balanceId,
             expected_version: input.expectedBalanceVersion,
@@ -196,6 +213,15 @@ export async function submitAdjustment(input: {
     note: string
     occurredAt: string
     idempotencyKey: string
+    lineUpdates?: readonly {
+        lineId: string
+        quantity: string
+        direction: "increase" | "decrease"
+    }[]
+    balanceVersions?: readonly {
+        balanceId: string
+        expectedVersion: string
+    }[]
 }): Promise<AdjustmentSubmitResponse> {
     try {
         const submitted = await apiPost<BackendStockAdjustmentDetail>(
@@ -211,6 +237,8 @@ export async function submitAdjustment(input: {
                 note: input.note,
                 occurredAt: input.occurredAt,
                 idempotencyKey: input.idempotencyKey,
+                lineUpdates: input.lineUpdates,
+                balanceVersions: input.balanceVersions,
             }),
         )
         const approval = toAdjustmentDetailView(submitted).approval
@@ -231,7 +259,10 @@ export async function submitAdjustment(input: {
         }
     } catch (error) {
         if (isApiError(error)) {
-            if (error.code === "OUTCOME_UNKNOWN") {
+            if (
+                error.code === "OUTCOME_UNKNOWN" ||
+                classifyFormalCommandError(error) === "unknown"
+            ) {
                 return {
                     status: "unknown",
                     message: getErrorMessage(
@@ -288,7 +319,7 @@ export async function resolveAdjustmentUnknown(input: {
             },
         }
     } catch (error) {
-        if (isApiError(error) && error.status !== 404) {
+        if (isApiError(error)) {
             return {
                 status: "unknown",
                 message: getErrorMessage(
@@ -300,8 +331,8 @@ export async function resolveAdjustmentUnknown(input: {
         }
     }
     return {
-        status: "failed",
-        code: "NO_PENDING",
-        message: "未找到该任务号对应的处理中请求",
+        status: "unknown",
+        message: "暂未确认本次提交结果，请稍后查询或使用本次操作重试。",
+        idempotencyKey: input.idempotencyKey,
     }
 }

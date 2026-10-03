@@ -87,6 +87,7 @@ export function InvoiceRequestDetail({
     const query = useInvoiceRequest(id)
     const permissions = useInvoiceRequestPermissions()
     const [cancelling, setCancelling] = useState(false)
+    const [reviseRejected, setReviseRejected] = useState(false)
     const request = query.data
     if (query.isPending) return <p>正在读取开票申请…</p>
     if (!request)
@@ -105,9 +106,12 @@ export function InvoiceRequestDetail({
         return (
             <CancelRequestForm
                 request={request}
-                onDone={() => {
+                reviseRejected={reviseRejected}
+                onDone={async () => {
                     setCancelling(false)
-                    void query.refetch()
+                    const refreshed = await query.refetch()
+                    if (reviseRejected && refreshed.data?.status === "draft")
+                        onEdit(refreshed.data)
                 }}
                 onBack={() => setCancelling(false)}
             />
@@ -197,9 +201,18 @@ export function InvoiceRequestDetail({
                     <Button
                         id="invoice-request-cancel"
                         variant="outline"
-                        onClick={() => setCancelling(true)}
+                        onClick={() => {
+                            setReviseRejected(
+                                Boolean(
+                                    facts.approval?.instance?.latestRejection,
+                                ),
+                            )
+                            setCancelling(true)
+                        }}
                     >
-                        撤回申请
+                        {facts.approval?.instance?.latestRejection
+                            ? "修改原单"
+                            : "撤回申请"}
                     </Button>
                 ) : null}
                 {request.created_by === permissions.userId &&
@@ -221,16 +234,20 @@ function CancelRequestForm({
     request,
     onDone,
     onBack,
+    reviseRejected = false,
 }: {
     request: InvoiceRequest
-    onDone: () => void
+    onDone: () => void | Promise<void>
     onBack: () => void
+    reviseRejected?: boolean
 }) {
     const { cancel } = useInvoiceRequestCommands()
     const pending = useRef<Parameters<typeof cancelRequest>[0] | null>(null)
     const [uncertain, setUncertain] = useState(false)
     const form = useAppForm({
-        defaultValues: { reason: "" },
+        defaultValues: {
+            reason: reviseRejected ? "按驳回意见修改原单后重新提交" : "",
+        },
         validators: {
             onSubmit: z.object({
                 reason: z.string().trim().min(1, "请输入撤回原因").max(1000),
@@ -248,7 +265,7 @@ function CancelRequestForm({
                 await cancel.mutateAsync(input)
                 pending.current = null
                 setUncertain(false)
-                onDone()
+                await onDone()
             } catch (error) {
                 const unknown = classifyFormalCommandError(error) === "unknown"
                 setUncertain(unknown)
@@ -265,9 +282,14 @@ function CancelRequestForm({
                 void form.handleSubmit()
             }}
         >
-            <h3 className="font-semibold">撤回 {request.request_no}</h3>
+            <h3 className="font-semibold">
+                {reviseRejected ? "修改原单" : "撤回"} {request.request_no}
+            </h3>
             <p className="text-sm text-muted-foreground">
                 撤回后释放本次申请额度，申请保留为草稿。
+                {reviseRejected
+                    ? "原申请编号和审批记录保留，修改后重新提交审批。"
+                    : null}
             </p>
             <form.AppField name="reason">
                 {(field) => (
@@ -301,7 +323,11 @@ function CancelRequestForm({
                     loading={cancel.isPending}
                     disabled={cancel.isPending}
                 >
-                    {uncertain ? "核对撤回结果" : "撤回申请"}
+                    {uncertain
+                        ? "核对撤回结果"
+                        : reviseRejected
+                          ? "撤回并修改原单"
+                          : "撤回申请"}
                 </LoadingButton>
             </div>
         </form>

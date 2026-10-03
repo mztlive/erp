@@ -20,6 +20,7 @@ use crate::core::middleware::with_permission;
 /// 返回挂载了权限校验层的路由集合。
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
+        .merge(evidence_contract_routes(rbac))
         .route(
             "/sales-orders",
             with_permission(
@@ -90,6 +91,34 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 get(sales_order::sales_order_handover_candidates),
                 rbac,
                 sales_order::sales_order_handover_candidates_permission_key(),
+            ),
+        )
+}
+
+/// 销售凭证下载和补签合同路由。
+///
+/// # 参数
+/// * `rbac` - 当前共享权限服务
+/// # 返回
+/// 返回逐操作保留权限校验和上传限制的路由集合。
+/// # 错误
+/// 无；业务错误由各处理器返回。
+fn evidence_contract_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
+        .route(
+            "/sales-orders/{id}/evidence-files/{asset_id}/download",
+            with_permission(
+                get(sales_order::evidence::sales_order_evidence_download),
+                rbac,
+                sales_order::evidence::sales_order_evidence_download_permission_key(),
+            ),
+        )
+        .route(
+            "/sales-orders/{id}/contract",
+            with_permission(
+                post(sales_order::sales_order_bind_contract),
+                rbac,
+                sales_order::sales_order_bind_contract_permission_key(),
             ),
         )
 }

@@ -271,6 +271,41 @@ impl FileAsset {
         actor_active && !actor_id.is_empty() && (self.created_by == actor_id || preview_granted)
     }
 
+    /// 校验发票图片或 PDF 的文件形态与治理状态。
+    /// # 参数
+    /// 使用当前资产的文件名、MIME、大小与保存策略。
+    /// # 返回
+    /// 有效的敏感长期发票文件返回成功。
+    /// # 错误
+    /// 类型、大小、扩展名不匹配或资产不可读取时拒绝。
+    pub fn ensure_invoice_evidence(&self) -> Result<()> {
+        let extension = self.file_name.rsplit_once('.').map(|(_, value)| value.to_ascii_lowercase());
+        let expected = match extension.as_deref() {
+            Some("pdf") => Some("application/pdf"),
+            Some("jpg" | "jpeg") => Some("image/jpeg"),
+            Some("png") => Some("image/png"),
+            Some("webp") => Some("image/webp"),
+            _ => None,
+        };
+        if expected != Some(self.content_type.as_str())
+            || self.byte_size == 0
+            || self.byte_size > 5 * 1024 * 1024
+        {
+            return Err(Error::from("发票文件须为 5 MiB 内的有效图片或 PDF"));
+        }
+        if self.sensitivity_class == SensitivityClass::General
+            || self.retention_class != RetentionClass::LongTerm
+            || self.destroyed_at.is_some()
+            || matches!(
+                self.security_scan_status,
+                SecurityScanStatus::Rejected | SecurityScanStatus::Quarantined
+            )
+        {
+            return Err(Error::from("发票文件须按敏感长期文件保存且通过安全检查"));
+        }
+        Ok(())
+    }
+
     /// 创建文件资产。
     ///
     /// 完成对象键/文件名/内容类型的校验与规范化（trim、非空、长度上限），
@@ -555,5 +590,29 @@ mod tests {
         assert_eq!(SecurityScanStatus::Pending.label(), "待扫描");
         assert_eq!(RetentionClass::ThirtyDays.label(), "保留 30 天");
         assert_eq!(SensitivityClass::General.label(), "一般");
+    }
+
+    #[test]
+    fn invoice_evidence_requires_matching_sensitive_long_term_valid_files() {
+        let mut input = data();
+        input.file_name = "发票.PDF".into();
+        input.content_type = "application/pdf".into();
+        input.retention_class = RetentionClass::LongTerm;
+        input.expires_at = None;
+        let mut file = FileAsset::new(FileAssetId::new("invoice-file"), input).unwrap();
+        assert!(file.ensure_invoice_evidence().is_ok());
+        file.file_name = "发票.png".into();
+        assert!(file.ensure_invoice_evidence().is_err());
+        file.file_name = "发票.pdf".into();
+        file.byte_size = 0;
+        assert!(file.ensure_invoice_evidence().is_err());
+        file.byte_size = 5 * 1024 * 1024 + 1;
+        assert!(file.ensure_invoice_evidence().is_err());
+        file.byte_size = 12;
+        file.sensitivity_class = SensitivityClass::General;
+        assert!(file.ensure_invoice_evidence().is_err());
+        file.sensitivity_class = SensitivityClass::Sensitive;
+        file.security_scan_status = SecurityScanStatus::Quarantined;
+        assert!(file.ensure_invoice_evidence().is_err());
     }
 }

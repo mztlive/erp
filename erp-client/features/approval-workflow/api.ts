@@ -14,7 +14,6 @@ import {
     type ApprovalInstanceListPage,
     type ApprovalInstanceListPageDto,
     type ApprovalInstanceListView,
-    type CancelApprovalRequest,
     type CancelBlockedRequest,
     type RecoveryOptions,
     type RecoveryOptionsDto,
@@ -40,11 +39,10 @@ export type ApprovalHistoryParams = Readonly<{
     limit?: number
 }>
 
-export type CancelDocumentApprovalParams = Readonly<{
-    documentType: string
-    documentId: string
-    request: CancelApprovalRequest
-}>
+export {
+    cancelDocumentApproval,
+    type CancelDocumentApprovalParams,
+} from "./api/document-cancel"
 
 export type UpgradeDocumentBindingParams = Readonly<{
     documentType: string
@@ -177,14 +175,3 @@ export const upgradeUnsubmittedBinding = (
         `/admin/business-documents/${encodeURIComponent(params.documentType)}/${encodeURIComponent(params.documentId)}/approval-definition/upgrade`,
         params.request,
     ).then(mapUpgradeBindingResultViewDto)
-
-/**
- * 撤回运行中或人员失效受阻的审批。只走业务单据资源接口。
- */
-export const cancelDocumentApproval = (
-    params: CancelDocumentApprovalParams,
-): Promise<ApprovalCommandView> =>
-    apiPost<ApprovalCommandViewDto>(
-        `/admin/business-documents/${encodeURIComponent(params.documentType)}/${encodeURIComponent(params.documentId)}/approval/cancel`,
-        params.request,
-    ).then(mapCommandViewDto)

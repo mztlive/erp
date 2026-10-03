@@ -74,7 +74,7 @@ fn entity_rules_cover_versions_relations_and_operability() {
     assert!(order.matches_version(1));
     assert!(!order.matches_version(0));
     assert!(order.matches_contract_context(
-        &ContractId::new("contract-1"),
+        &Some(ContractId::new("contract-1")),
         &CustomerAccountId::new("cust-1"),
         &PartyId::new("party-1"),
     ));

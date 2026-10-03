@@ -23,6 +23,7 @@ use crate::core::upload;
 /// 返回挂载了权限校验层的路由集合。
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
+        .merge(acceptance_evidence_routes(rbac))
         .route(
             "/purchase-receipts",
             with_permission(
@@ -226,4 +227,23 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 fulfillment::customer_acceptance_reverse_permission_key(),
             ),
         )
+}
+
+/// 客户签收凭证读取路由。
+///
+/// # 参数
+/// * `rbac` - 当前共享权限服务
+/// # 返回
+/// 返回逐操作保留权限校验和上传限制的路由集合。
+/// # 错误
+/// 无；业务错误由各处理器返回。
+fn acceptance_evidence_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new().route(
+        "/customer-acceptances/{id}/evidence",
+        with_permission(
+            get(fulfillment::acceptance_evidence::customer_acceptance_evidence),
+            rbac,
+            fulfillment::acceptance_evidence::customer_acceptance_evidence_permission_key(),
+        ),
+    )
 }

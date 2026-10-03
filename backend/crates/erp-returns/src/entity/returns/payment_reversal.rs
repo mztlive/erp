@@ -14,6 +14,8 @@ use super::common::{
     DOCUMENT_NO_MAX_LEN, REASON_CODE_MAX_LEN, REASON_TEXT_MAX_LEN, ensure_initial_approval,
     ensure_positive_amount, next_approval_version, normalize_created_by, validate_actor_pair,
 };
+use super::draft_edit::FinancialDraftEditPolicy;
+use crate::Result as DraftEditResult;
 
 /// 冲正状态（合同 §4.4.1 / §4.4.2：复核态收敛为唯一 `IN_APPROVAL`）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -147,6 +149,39 @@ pub struct PaymentReversal {
 }
 
 impl PaymentReversal {
+    /// 校验提交及已提交命令回放的原经办人职责。
+    ///
+    /// # 参数
+    /// * `actor_id` - 当前提交人的账号。
+    ///
+    /// # 返回
+    /// 经办本人发起且与复核岗位分离时返回成功。
+    ///
+    /// # 错误
+    /// 非原经办人或岗位未分离时返回权限错误。
+    pub fn ensure_submitter(&self, actor_id: &str) -> DraftEditResult<()> {
+        FinancialDraftEditPolicy::ensure_submitter(&self.handled_by, &self.reviewed_by, actor_id)
+    }
+
+    /// 校验原经办人修改原单草稿的资格。
+    ///
+    /// # 参数
+    /// * `actor_id` - 当前编辑人的账号
+    ///
+    /// # 返回
+    /// 原经办人与复核岗位分离且单据为草稿时返回成功。
+    ///
+    /// # 错误
+    /// 非原经办人返回权限错误，非草稿返回状态冲突。
+    pub fn ensure_draft_editor(&self, actor_id: &str) -> DraftEditResult<()> {
+        FinancialDraftEditPolicy::ensure(
+            &self.handled_by,
+            &self.reviewed_by,
+            actor_id,
+            self.status == PaymentReversalStatus::Draft,
+        )
+    }
+
     /// 创建付款冲正（初始状态为草稿）。
     ///
     /// 完成编号/原因/经办复核人的 trim/非空/长度校验、金额正数校验与经办人
@@ -343,6 +378,27 @@ pub(crate) mod tests {
     use erp_core::money::Amount;
 
     use super::*;
+    use crate::Error as DraftEditError;
+
+    /// 已提交回放保留职责守卫，不要求再次进入草稿。
+    #[test]
+    fn submitter_authority_is_independent_of_reversal_state() {
+        let mut record = PaymentReversal::new(PaymentReversalId::new("pr-1"), data(), "creator-1").unwrap();
+        for status in [
+            PaymentReversalStatus::Draft,
+            PaymentReversalStatus::InApproval,
+            PaymentReversalStatus::Posted,
+            PaymentReversalStatus::Reversed,
+        ] {
+            record.status = status;
+            assert!(record.ensure_submitter("handler-1").is_ok());
+            for actor in ["", "other", "reviewer-1"] {
+                assert!(matches!(record.ensure_submitter(actor), Err(DraftEditError::Forbidden(_))));
+            }
+        }
+        record.reviewed_by = "handler-1".into();
+        assert!(matches!(record.ensure_submitter("handler-1"), Err(DraftEditError::Forbidden(_))));
+    }
 
     pub(crate) fn data() -> PaymentReversalData {
         PaymentReversalData {
@@ -460,5 +516,51 @@ pub(crate) mod tests {
         assert_eq!(reversal.approval_subject_version, 1);
         assert!(reversal.ensure_initial_approval_state().is_err());
         assert!(reversal.mark_posted().is_err());
+    }
+
+    /// 经办人撤回驳回单据后编辑原单并重提；原编号、来源和岗位保持一致。
+    #[test]
+    fn original_handler_can_edit_cancelled_draft_and_resubmit() {
+        let mut record =
+            PaymentReversal::new(PaymentReversalId::new("edit-original"), data(), "creator-1").unwrap();
+        let identity = serde_json::to_value(&record).unwrap();
+        assert!(matches!(record.ensure_draft_editor("other"), Err(DraftEditError::Forbidden(_))));
+        assert!(matches!(record.ensure_draft_editor("reviewer-1"), Err(DraftEditError::Forbidden(_))));
+        record.ensure_draft_editor("handler-1").unwrap();
+        assert!(!record.matches_version(0));
+        record.start_approval().unwrap();
+        assert!(matches!(record.ensure_draft_editor("handler-1"), Err(DraftEditError::ConflictError(_))));
+        record.cancel_approval().unwrap();
+        record.ensure_draft_editor("handler-1").unwrap();
+        record
+            .update(PaymentReversalUpdate {
+                amount: Some(Amount::from_str("120.00").unwrap()),
+                reason_text: Some("修正金额后重新提交".into()),
+                ..PaymentReversalUpdate::default()
+            })
+            .unwrap();
+        let edited = serde_json::to_value(&record).unwrap();
+        for key in [
+            "id",
+            "created_by",
+            "refund_no",
+            "reversal_no",
+            "customer_id",
+            "supplier_id",
+            "original_receipt_id",
+            "original_payment_id",
+            "original_customer_receipt_id",
+            "original_supplier_payment_id",
+            "original_receivable_entry_id",
+            "original_payable_entry_id",
+            "handled_by",
+            "reviewed_by",
+            "occurred_at",
+        ] {
+            assert_eq!(edited.get(key), identity.get(key), "固定字段 {key} 不得改变");
+        }
+        assert_eq!(record.amount.to_string(), "120.00");
+        assert_eq!(record.reason_text, "修正金额后重新提交");
+        assert_eq!(record.start_approval().unwrap(), 2);
     }
 }

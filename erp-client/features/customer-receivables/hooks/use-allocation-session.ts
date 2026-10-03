@@ -15,6 +15,10 @@ import {
     factFromValues,
 } from "@/features/customer-receivables/lib/fact-form"
 import {
+    invoiceFileReference,
+    invoiceFilesError,
+} from "@/features/customer-receivables/lib/invoice-files"
+import {
     amountOrZero,
     compareAmounts,
     minAmount,
@@ -112,7 +116,12 @@ export function useAllocationSession({
     const formValues = useStore(form.store, (s) => s.values)
 
     const snapshot = () =>
-        JSON.stringify({ values: form.state.values, allocations })
+        JSON.stringify({
+            values: form.state.values,
+            invoiceFiles:
+                form.state.values.invoiceFiles.map(invoiceFileReference),
+            allocations,
+        })
 
     React.useEffect(() => {
         setRemovedLine(null)
@@ -179,6 +188,17 @@ export function useAllocationSession({
     )
 
     const issues: ValidationIssue[] = []
+    const invoiceFileError = isReceipt
+        ? undefined
+        : invoiceFilesError(formValues.invoiceFiles)
+    if (invoiceFileError) {
+        issues.push({
+            id: "invoice-files",
+            label: "发票附件",
+            message: invoiceFileError,
+            targetId: "customer-receivables-session-invoice-files-input",
+        })
+    }
     if (!canOperate) {
         issues.push({
             id: "permission",

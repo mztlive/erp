@@ -28,13 +28,10 @@ use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 use super::fingerprint::{hmac_sha256_hex, validate_fingerprint};
+use super::{DeliveryTrackingEntries, DeliveryTrackingEntry};
 
 /// 发货单号最大长度。
 const DELIVERY_NO_MAX_LEN: usize = 64;
-/// 物流承运方最大长度。
-const CARRIER_MAX_LEN: usize = 64;
-/// 物流单号最大长度。
-const TRACKING_NO_MAX_LEN: usize = 128;
 /// 履约地址加密值最大长度。
 const ADDRESS_ENCRYPTED_MAX_LEN: usize = 4096;
 
@@ -163,10 +160,9 @@ pub struct DeliveryData {
     pub purchase_order_id: Option<PurchaseOrderId>,
     /// 入库仓；仓发必填，直发为空。
     pub warehouse_id: Option<WarehouseId>,
-    /// 物流承运方。
-    pub carrier: Option<String>,
-    /// 物流单号。
-    pub tracking_no: Option<String>,
+    /// 每个包裹对应的销售明细、物流单号及承运商。
+    #[serde(default)]
+    pub tracking_entries: Vec<DeliveryTrackingEntry>,
     /// 履约地址加密值（P3 由交付目标地址加密生成；本层只定义结构）。
     pub address_snapshot_encrypted: Option<String>,
     /// 履约地址带密钥 HMAC 查询指纹（64 位十六进制）。
@@ -176,10 +172,8 @@ pub struct DeliveryData {
 /// 发货单更新数据（仅草稿可更新）。
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DeliveryUpdate {
-    /// 物流承运方；`None` 表示不修改。
-    pub carrier: Option<String>,
-    /// 物流单号；`None` 表示不修改。
-    pub tracking_no: Option<String>,
+    /// 完整包裹明细关联；缺省不修改，空数组明确清空。
+    pub tracking_entries: Option<Vec<DeliveryTrackingEntry>>,
 }
 
 /// 履约发货单实体（数据模型 §6.7 表头）。
@@ -203,10 +197,9 @@ pub struct Delivery {
     pub warehouse_id: Option<WarehouseId>,
     /// 当前状态。
     pub status: DeliveryState,
-    /// 物流承运方。
-    pub carrier: Option<String>,
-    /// 物流单号。
-    pub tracking_no: Option<String>,
+    /// 每个包裹的明细关联；缺省为空，不推断历史物流对应明细。
+    #[serde(default)]
+    pub tracking_entries: Vec<DeliveryTrackingEntry>,
     /// 发货时间。
     pub shipped_at: Option<Instant>,
     /// 履约地址加密值。
@@ -227,8 +220,7 @@ impl fmt::Debug for Delivery {
             .field("purchase_order_id", &self.purchase_order_id)
             .field("warehouse_id", &self.warehouse_id)
             .field("status", &self.status)
-            .field("carrier", &self.carrier)
-            .field("tracking_no", &self.tracking_no)
+            .field("tracking_entries", &self.tracking_entries)
             .field("shipped_at", &self.shipped_at)
             .field("address_snapshot_encrypted", &"<redacted>")
             .field("address_snapshot_fingerprint", &"<redacted>")
@@ -246,8 +238,7 @@ impl PartialEq for Delivery {
             && self.purchase_order_id == other.purchase_order_id
             && self.warehouse_id == other.warehouse_id
             && self.status == other.status
-            && self.carrier == other.carrier
-            && self.tracking_no == other.tracking_no
+            && self.tracking_entries == other.tracking_entries
             && self.shipped_at == other.shipped_at
             && self.address_snapshot_encrypted == other.address_snapshot_encrypted
             && self.address_snapshot_fingerprint == other.address_snapshot_fingerprint
@@ -295,8 +286,7 @@ impl Delivery {
             DELIVERY_NO_MAX_LEN,
             "发货单号过长",
         )?;
-        let carrier = normalize_optional_text(data.carrier, "物流承运方", CARRIER_MAX_LEN)?;
-        let tracking_no = normalize_optional_text(data.tracking_no, "物流单号", TRACKING_NO_MAX_LEN)?;
+        let tracking_entries = DeliveryTrackingEntries::new(data.tracking_entries)?.into_entries();
         let address_snapshot_encrypted = normalize_optional_text(
             data.address_snapshot_encrypted,
             "履约地址加密值",
@@ -320,8 +310,7 @@ impl Delivery {
             purchase_order_id: data.purchase_order_id,
             warehouse_id: data.warehouse_id,
             status: DeliveryState::Draft,
-            carrier,
-            tracking_no,
+            tracking_entries,
             shipped_at: None,
             address_snapshot_encrypted,
             address_snapshot_fingerprint,
@@ -387,13 +376,22 @@ impl Delivery {
     /// 状态不可编辑，或物流字段超长时返回错误。
     pub fn update(&mut self, update: DeliveryUpdate) -> Result<()> {
         self.ensure_editable()?;
-        if let Some(carrier) = update.carrier {
-            self.carrier = normalize_optional_text(Some(carrier), "物流承运方", CARRIER_MAX_LEN)?;
-        }
-        if let Some(tracking_no) = update.tracking_no {
-            self.tracking_no = normalize_optional_text(Some(tracking_no), "物流单号", TRACKING_NO_MAX_LEN)?;
+        if let Some(entries) = update.tracking_entries {
+            self.tracking_entries = DeliveryTrackingEntries::new(entries)?.into_entries();
         }
         Ok(())
+    }
+
+    /// 验证包裹关联只包含本发货单实际销售明细。
+    ///
+    /// # 参数
+    /// * `lines` - 同执行器读取或创建的实际发货行。
+    /// # 返回
+    /// 所有包裹关联均命中本发货行时成功。
+    /// # 错误
+    /// 销售明细不在本发货单实际行集合中时拒绝。
+    pub fn ensure_tracking_lines(&self, lines: &[DeliveryLine]) -> Result<()> {
+        DeliveryTrackingEntries::ensure_lines(&self.tracking_entries, &self.base.id, lines)
     }
 
     /// 登记发货（草稿 → 已发货）。
@@ -623,6 +621,7 @@ pub(crate) mod tests {
     const PLAINTEXT_ADDRESS: &str = "上海市浦东新区世纪大道100号 张三 13800000000";
     const FINGERPRINT_KEY: &[u8] = b"test-fingerprint-key";
 
+    /// 构造包含明细包裹关联的仓发测试草稿。
     pub(crate) fn delivery_data() -> DeliveryData {
         DeliveryData {
             delivery_no: " DV-2026-001 ".to_string(),
@@ -630,8 +629,7 @@ pub(crate) mod tests {
             sales_order_id: SalesOrderId::new("so-1"),
             purchase_order_id: None,
             warehouse_id: Some(WarehouseId::new("wh-1")),
-            carrier: Some(" 顺丰 ".to_string()),
-            tracking_no: Some(" SF-001 ".to_string()),
+            tracking_entries: vec![tracking_entry(" SF-001 ", " 顺丰 ")],
             address_snapshot_encrypted: Some("ciphertext-base64...".to_string()),
             address_snapshot_fingerprint: Some(Delivery::address_snapshot_fingerprint(
                 PLAINTEXT_ADDRESS,
@@ -640,6 +638,7 @@ pub(crate) mod tests {
         }
     }
 
+    /// 构造本次发货包含的真实销售明细。
     fn line_data() -> DeliveryLineData {
         DeliveryLineData {
             delivery_id: DeliveryId::new("delivery-1"),
@@ -651,13 +650,21 @@ pub(crate) mod tests {
         }
     }
 
+    /// 构造某销售明细的包裹关联。
+    fn tracking_entry(number: &str, carrier: &str) -> DeliveryTrackingEntry {
+        DeliveryTrackingEntry {
+            sales_order_line_id: SalesOrderLineId::new("so-line-1"),
+            tracking_no: number.into(),
+            carrier: Some(carrier.into()),
+        }
+    }
+
     /// happy path：单号/物流字段规范化、仓发归属、指纹生成与状态机全链路。
     #[test]
     fn new_normalizes_fields_and_drives_state_machine() {
         let mut delivery = Delivery::new(DeliveryId::new("delivery-1"), delivery_data()).unwrap();
         assert_eq!(delivery.delivery_no, "DV-2026-001");
-        assert_eq!(delivery.carrier.as_deref(), Some("顺丰"));
-        assert_eq!(delivery.tracking_no.as_deref(), Some("SF-001"));
+        assert_eq!(delivery.tracking_entries, [tracking_entry("SF-001", "顺丰")]);
         assert_eq!(delivery.status, DeliveryState::Draft);
 
         delivery.mark_shipped(Instant::from_unix_secs(1_700_000_000)).unwrap();
@@ -668,13 +675,71 @@ pub(crate) mod tests {
         assert_eq!(delivery.status, DeliveryState::Reversed);
     }
 
+    /// 多包裹关联完整持久化，每包裹可使用不同承运商。
+    #[test]
+    fn multiple_packages_preserve_per_entry_carriers_and_sales_line() {
+        let delivery = Delivery::new(
+            DeliveryId::new("delivery-multiple"),
+            DeliveryData {
+                tracking_entries: vec![tracking_entry(" LL-1 ", " 货拉拉 "), tracking_entry("SF-2", "顺丰")],
+                ..delivery_data()
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            delivery.tracking_entries,
+            [tracking_entry("LL-1", "货拉拉"), tracking_entry("SF-2", "顺丰")]
+        );
+        let serialized = serde_json::to_value(&delivery).unwrap();
+        assert_eq!(serialized["tracking_entries"][0]["sales_order_line_id"], "so-line-1");
+        assert_eq!(serialized["tracking_entries"][1]["carrier"], "顺丰");
+    }
+
+    /// 重复保存保持同一结果，缺省不修改，显式空数组清空全部包裹。
+    #[test]
+    fn tracking_update_replay_omission_and_explicit_clear_are_consistent() {
+        let mut delivery = Delivery::new(DeliveryId::new("delivery-update"), delivery_data()).unwrap();
+        let update = DeliveryUpdate {
+            tracking_entries: Some(vec![tracking_entry(" LL-1 ", "货拉拉"), tracking_entry("LL-2", "京东")]),
+        };
+        delivery.update(update.clone()).unwrap();
+        let after_first = delivery.clone();
+        delivery.update(update).unwrap();
+        assert_eq!(delivery, after_first);
+        assert_eq!(delivery.tracking_entries[0].tracking_no, "LL-1");
+        delivery.update(DeliveryUpdate::default()).unwrap();
+        assert_eq!(delivery, after_first);
+        delivery.update(DeliveryUpdate { tracking_entries: Some(Vec::new()) }).unwrap();
+        assert!(delivery.tracking_entries.is_empty());
+    }
+
+    /// 包裹更新失败时保留全部原始事实，不产生部分修改。
+    #[test]
+    fn failed_package_update_preserves_all_original_facts() {
+        let mut original = Delivery::new(DeliveryId::new("delivery-update"), delivery_data()).unwrap();
+        let before = original.clone();
+        let error = original
+            .update(DeliveryUpdate {
+                tracking_entries: Some(vec![
+                    tracking_entry("valid", "货拉拉"),
+                    tracking_entry(&"A".repeat(129), "顺丰"),
+                ]),
+            })
+            .unwrap_err();
+        assert_eq!(error.to_string(), "物流单号过长");
+        assert_eq!(original, before);
+    }
+
     /// 失败路径：必填空（单号空白）、超长、仓发/直发归属不一致。
     #[test]
     fn new_rejects_invalid_inputs() {
         let blank_no = DeliveryData { delivery_no: "   ".to_string(), ..delivery_data() };
         assert!(Delivery::new(DeliveryId::new("d2"), blank_no).is_err());
 
-        let overlong_tracking = DeliveryData { tracking_no: Some("t".repeat(129)), ..delivery_data() };
+        let overlong_tracking = DeliveryData {
+            tracking_entries: vec![tracking_entry(&"t".repeat(129), "顺丰")],
+            ..delivery_data()
+        };
         assert!(Delivery::new(DeliveryId::new("d3"), overlong_tracking).is_err());
 
         let warehouse_ship_without_warehouse = DeliveryData { warehouse_id: None, ..delivery_data() };
@@ -710,15 +775,12 @@ pub(crate) mod tests {
         assert!(delivery.mark_signed().is_err(), "未发货不能签收");
         assert!(
             delivery
-                .update(DeliveryUpdate { carrier: Some(" 京东 ".to_string()), tracking_no: None })
+                .update(DeliveryUpdate { tracking_entries: Some(vec![tracking_entry("JD-1", " 京东 ")]) })
                 .is_ok()
         );
 
         delivery.mark_shipped(Instant::from_unix_secs(1_700_000_000)).unwrap();
-        assert!(
-            delivery.update(DeliveryUpdate { carrier: None, tracking_no: None }).is_err(),
-            "已发货不可编辑"
-        );
+        assert!(delivery.update(DeliveryUpdate::default()).is_err(), "已发货不可编辑");
         // from == to 幂等迁移恒合法（state.rs 契约）；SHIPPED 不可编辑由 update 把关。
         assert!(delivery.mark_shipped(Instant::from_unix_secs(1_700_000_100)).is_ok());
         assert!(delivery.reverse().is_ok());

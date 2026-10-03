@@ -13,6 +13,8 @@ import {
 } from "@/components/ui/table"
 import { paymentTermLabel, welfareScenarioLabel } from "@/lib/business-options"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
+import { SalesOrderEvidenceAttachments } from "@/features/sales-orders/components/sales-order-evidence-attachments"
+import { SalesOrderContractSupplement } from "@/features/sales-orders/components/sales-order-contract-supplement"
 import { cn } from "@/lib/utils"
 
 function OverviewField({
@@ -153,6 +155,17 @@ export function OverviewPanel({
                 </div>
             </section>
             {related}
+            <SalesOrderEvidenceAttachments
+                salesOrderId={order.id}
+                files={
+                    order.evidenceFiles?.length
+                        ? order.evidenceFiles
+                        : (order.evidenceFileAssetIds ?? []).map((id) => ({
+                              id,
+                              fileName: "开单凭证",
+                          }))
+                }
+            />
             <section
                 aria-labelledby="sales-order-transaction-heading"
                 className="rounded-lg border border-border/70 p-4 md:p-5"
@@ -166,7 +179,14 @@ export function OverviewPanel({
                 <dl className="grid gap-x-8 gap-y-4 2xl:grid-cols-2">
                     <OverviewField
                         label="关联合同"
-                        value={order.contractRevisionLabel || "—"}
+                        value={
+                            <div className="flex flex-wrap items-center gap-2">
+                                <span>
+                                    {order.contractRevisionLabel || "无合同"}
+                                </span>
+                                <SalesOrderContractSupplement order={order} />
+                            </div>
+                        }
                     />
                     <OverviewField
                         label="结算主体"

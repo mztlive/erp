@@ -2,7 +2,7 @@
 
 use application_core::non_blank;
 use erp_core::common::time::BusinessDate;
-use erp_core::ids::{PartyId, ReceivableAccountId, WorkItemId};
+use erp_core::ids::{FileAssetId, PartyId, ReceivableAccountId, WorkItemId};
 use erp_core::money::Amount;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
@@ -19,6 +19,10 @@ use crate::entity::receivable::{InvoiceDirection, InvoiceKind};
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct CreateInvoiceRequest {
+    /// 本次登记的发票图片或 PDF；历史调用可不提供。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[validate(length(max = 32, message = "发票附件最多 32 个"))]
+    pub attachment_asset_ids: Vec<FileAssetId>,
     /// 发票方向（销项 `Sales` / 进项 `Purchase`；D19 进项登记复用本域 DTO）。
     pub invoice_direction: InvoiceDirection,
     /// 蓝红类型（红票走 `red_issue` 接口，此处仅蓝票草稿）。
@@ -81,6 +85,10 @@ pub struct PostInvoiceRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct CommitInvoiceRequest {
+    /// 本次登记的发票图片或 PDF；可使用 multipart 临时文件引用。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[validate(length(max = 32, message = "发票附件最多 32 个"))]
+    pub attachment_asset_ids: Vec<FileAssetId>,
     /// 当前开放销项开票执行任务。
     pub work_item_id: WorkItemId,
     /// 查询所得任务乐观锁版本。

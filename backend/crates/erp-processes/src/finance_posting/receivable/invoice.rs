@@ -1,16 +1,17 @@
 //! 发票列表、详情、草稿创建、销项提交与过账编排。
 
+use std::sync::Arc;
+
 use application_core::{AuditActor, CommandReceipt};
 use erp_audit::{AuditActorLogs, AuditExt, CommandReceiptServiceExt as _};
-use erp_core::ids::InvoiceId;
-use erp_finance::entity::receivable::{Invoice, InvoiceData, InvoiceStatus};
+use erp_core::ids::{FileAssetId, InvoiceId};
+use erp_finance::entity::receivable::{Invoice, InvoiceData};
 use erp_finance::repository::ReceivableExt;
 use erp_finance::repository::prelude::*;
-use erp_finance::service::receivable::invoice_commit::{
-    PreparedInvoiceCommit, convert_post_allocations, ensure_sales_invoice,
-};
-use erp_finance::service::receivable::mapping::{ensure_expected_version, zero_amount};
+use erp_finance::service::receivable::invoice_commit::{convert_post_allocations, ensure_sales_invoice};
+use erp_finance::service::receivable::mapping::zero_amount;
 use erp_identity::SharedRbacService;
+use erp_support::{EmptyPendingAttachments, PendingAttachmentBatch};
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
 use erp_workflow::service::approval::binding::{
@@ -26,7 +27,16 @@ use validator::Validate;
 
 use super::ReceivableProcess;
 use super::dto::{CommitInvoiceRequest, CreateInvoiceRequest, InvoiceView, PostInvoiceRequest};
+use super::invoice_commit::InvoiceCommitTransaction;
 use crate::{Error, Result};
+
+/// 发票文件批次是否已随业务命令提交，供存储补偿判断。
+pub struct InvoiceWithAssetsResult {
+    /// 已提交或重放的发票。
+    pub view: InvoiceView,
+    /// 新上传对象已持久化到本次事务。
+    pub assets_committed: bool,
+}
 
 impl ReceivableProcess {
     // -----------------------------------------------------------------------
@@ -48,7 +58,27 @@ impl ReceivableProcess {
     /// # 错误
     /// * `ValidationError` - 金额三元组不恒等或字段非法
     pub async fn create_invoice(&self, req: CreateInvoiceRequest, actor: &AuditActor) -> Result<InvoiceView> {
+        self.create_invoice_with_assets(req, Arc::new(EmptyPendingAttachments), actor).await
+    }
+
+    /// 在发票草稿事务内登记附件资产与关系。
+    /// # 参数
+    /// 请求、已写入存储的附件批次与当前账号。
+    /// # 返回
+    /// 带准确附件关联的发票草稿。
+    /// # 错误
+    /// 文件无效或事务失败时拒绝。
+    pub async fn create_invoice_with_assets(
+        &self,
+        mut req: CreateInvoiceRequest,
+        pending: Arc<dyn PendingAttachmentBatch>,
+        actor: &AuditActor,
+    ) -> Result<InvoiceView> {
         req.validate()?;
+        super::invoice_attachments::resolve(&mut req.attachment_asset_ids, pending.as_ref())?;
+        let attachment_ids = req.attachment_asset_ids;
+        let has_pending = !pending.is_empty();
+
         let invoice = Invoice::new(
             InvoiceId::new(next_id()),
             InvoiceData {
@@ -73,9 +103,14 @@ impl ReceivableProcess {
             std::sync::Arc::clone(&self.object_read),
             invoice.clone(),
             actor.clone(),
+            attachment_ids,
+            pending,
         )
         .await?;
-        self.finance.invoice_detail(&invoice.base.id).await.map_err(Error::from)
+        self.finance
+            .invoice_detail(&invoice.base.id)
+            .await
+            .map_err(|error| committed_read_error(error, has_pending))
     }
 
     /// 原子创建或提交销项发票并完成分配。
@@ -96,122 +131,93 @@ impl ReceivableProcess {
     /// * `ConflictError` - 草稿版本、状态或规范化发票号码冲突
     /// * `BusinessLogicError` - 跨主体、分配不守恒或超额开票
     pub async fn commit_invoice(&self, req: CommitInvoiceRequest, actor: &AuditActor) -> Result<InvoiceView> {
+        Ok(self.commit_invoice_with_assets(req, Arc::new(EmptyPendingAttachments), actor).await?.view)
+    }
+
+    /// 原子开票时登记附件；重放结果指明本次新上传对象是否已消费。
+    /// # 参数
+    /// 请求、待登记文件批次与认证账号。
+    /// # 返回
+    /// 发票结果及附件是否已提交。
+    /// # 错误
+    /// 文件、授权、版本或事务失败时拒绝。
+    pub async fn commit_invoice_with_assets(
+        &self,
+        mut req: CommitInvoiceRequest,
+        pending: Arc<dyn PendingAttachmentBatch>,
+        actor: &AuditActor,
+    ) -> Result<InvoiceWithAssetsResult> {
         req.validate()?;
-        let command_receipt = CommandReceipt::from_payload(
-            "sales-invoice-commit-",
-            actor.id(),
-            "invoice.commit",
-            "invoice",
-            &req.idempotency_key,
-            &req,
-        )?;
+        let command_receipt = super::invoice_attachments::receipt(&req, actor.id(), pending.as_ref())?;
         if let Some(invoice_id) = command_receipt.committed_resource_id(&self.db).await? {
-            return self.finance.invoice_detail(&invoice_id).await.map_err(Error::from);
+            return Ok(InvoiceWithAssetsResult {
+                view: self.finance.invoice_detail(&invoice_id).await?,
+                assets_committed: false,
+            });
         }
-        let prepared = req.prepare()?;
-        let expected_task_version =
-            erp_workflow::service::work_item::expected_task_version(&req.expected_task_version)?;
-        let work_item_id = req.work_item_id.clone();
+        if let Some(invoice) = req.invoice.as_mut() {
+            req.attachment_asset_ids.append(&mut invoice.attachment_asset_ids);
+        }
+        super::invoice_attachments::resolve(&mut req.attachment_asset_ids, pending.as_ref())?;
+        let has_pending = !pending.is_empty();
+        let transaction = InvoiceCommitTransaction {
+            db: self.db.clone(),
+            rbac: self.rbac.clone(),
+            object_read: Arc::clone(&self.object_read),
+            prepared: req.prepare()?,
+            pending,
+            attachment_ids: req.attachment_asset_ids.clone(),
+            actor: actor.clone(),
+            receipt: command_receipt.clone(),
+            work_item_id: req.work_item_id.clone(),
+            expected_task_version: erp_workflow::service::work_item::expected_task_version(
+                &req.expected_task_version,
+            )?,
+        };
         let policy_revision = self.rbac.current_policy_revision().await?;
-        let db = self.db.clone();
-        let rbac = self.rbac.clone();
-        let object_read = std::sync::Arc::clone(&self.object_read);
-        let actor_owned = actor.clone();
-        let actor_id = actor.id().to_string();
-        let command_receipt_for_tx = command_receipt.clone();
-        let transaction_result = rbac
+        let result = self
+            .rbac
             .clone()
             .run_authorized_policy_transaction(policy_revision, move |executor| {
-                Box::pin(async move {
-                    let (mut invoice, plan_lines) = match prepared {
-                        PreparedInvoiceCommit::New { invoice, allocations } => {
-                            invoice.validate()?;
-                            let new_invoice = Invoice::new(
-                                InvoiceId::new(next_id()),
-                                InvoiceData {
-                                    invoice_direction: invoice.invoice_direction,
-                                    invoice_kind: invoice.invoice_kind,
-                                    party_id: invoice.party_id,
-                                    invoice_code: invoice.invoice_code,
-                                    invoice_no: invoice.invoice_no,
-                                    invoice_date: invoice.invoice_date,
-                                    gross_amount: invoice.gross_amount,
-                                    net_amount: invoice.net_amount,
-                                    tax_amount: invoice.tax_amount,
-                                    rounding_adjustment_amount: invoice
-                                        .rounding_adjustment_amount
-                                        .unwrap_or(zero_amount()),
-                                    rounding_reason: invoice.rounding_reason,
-                                    original_invoice_id: None,
-                                },
-                                actor_id.as_str(),
-                            )?;
-                            register_created_invoice_document(
-                                &db,
-                                &rbac,
-                                object_read.as_ref(),
-                                &new_invoice,
-                                &actor_owned,
-                                executor,
-                            )
-                            .await?;
-                            db.invoices().create(&new_invoice, executor).await?;
-                            (new_invoice, allocations)
-                        },
-                        PreparedInvoiceCommit::Existing { invoice_id, expected_version, allocations } => {
-                            let invoice = db
-                                .invoices()
-                                .find_by_id(&invoice_id, executor)
-                                .await?
-                                .ok_or_else(|| Error::NotFound("发票不存在".to_string()))?;
-                            ensure_expected_version(invoice.base.version, expected_version)?;
-                            ensure_sales_invoice(&invoice)?;
-                            (invoice, allocations)
-                        },
-                    };
-                    if invoice.stable.status() != InvoiceStatus::Draft {
-                        return Err(Error::ConflictError("发票已登记，请勿重复提交".to_string()));
-                    }
-                    let duplicate = db
-                        .invoices()
-                        .find_by_direction_and_normalized_no(
-                            invoice.invoice_direction,
-                            &invoice.normalized_no,
-                            executor,
-                        )
-                        .await?;
-                    if duplicate.as_ref().is_some_and(|other| other.base.id != invoice.base.id) {
-                        return Err(Error::ConflictError("发票号码已登记，请勿重复提交".to_string()));
-                    }
-                    super::invoice_posting::post_invoice_apply(
-                        &db,
-                        &mut invoice,
-                        super::invoice_posting::InvoicePostingInput {
-                            work_item_id: &work_item_id,
-                            expected_task_version,
-                            plan_lines: &plan_lines,
-                            actor: &actor_owned,
-                            action: "invoice.commit",
-                            command_receipt: Some(&command_receipt_for_tx),
-                        },
-                        executor,
-                    )
-                    .await?;
-                    let committed_id = invoice.base.id.clone();
-                    Ok::<String, crate::Error>(committed_id)
-                })
+                Box::pin(transaction.execute(executor))
             })
             .await;
+        self.committed_invoice_view(result, &command_receipt, has_pending).await
+    }
 
-        let detail_id = match transaction_result {
-            Ok(invoice_id) => invoice_id,
-            Err(error) => match command_receipt.committed_resource_id(&self.db).await? {
-                Some(invoice_id) => invoice_id,
-                None => return Err(error),
+    /// 结果恢复保留未知提交语义；已提交附件后读取失败不能触发存储补偿。
+    async fn committed_invoice_view(
+        &self,
+        result: Result<String>,
+        receipt: &CommandReceipt,
+        has_pending: bool,
+    ) -> Result<InvoiceWithAssetsResult> {
+        let (detail_id, assets_committed) = match result {
+            Ok(id) => (id, has_pending),
+            Err(error) => {
+                let recovered = match receipt.committed_resource_id(&self.db).await {
+                    Ok(result) => result,
+                    Err(recovery_error) => {
+                        if matches!(error, Error::OutcomeUnknown(_)) {
+                            return Err(error);
+                        }
+                        return Err(recovery_error.into());
+                    },
+                };
+                match recovered {
+                    Some(id) => (id, has_pending && matches!(error, Error::OutcomeUnknown(_))),
+                    None => return Err(error),
+                }
             },
         };
-
-        self.finance.invoice_detail(&detail_id).await.map_err(Error::from)
+        Ok(InvoiceWithAssetsResult {
+            view: self
+                .finance
+                .invoice_detail(&detail_id)
+                .await
+                .map_err(|error| committed_read_error(error, assets_committed))?,
+            assets_committed,
+        })
     }
 
     /// 发票登记过账并分配（§8.3-2 事务不变量）。
@@ -296,6 +302,17 @@ impl ReceivableProcess {
         .await?;
 
         self.finance.invoice_detail(&detail_id).await.map_err(Error::from)
+    }
+}
+
+/// 已提交文件后的响应读取失败必须保留对象，由同操作号重试核对已完成结果。
+fn committed_read_error(error: erp_finance::Error, assets_committed: bool) -> Error {
+    if assets_committed {
+        Error::OutcomeUnknown(persistence_core::Error::CommitOutcomeUnknown(mongodb::error::Error::custom(
+            format!("发票已提交但结果读取失败: {error}"),
+        )))
+    } else {
+        error.into()
     }
 }
 
@@ -468,6 +485,8 @@ async fn persist_created_invoice(
     object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
     invoice: Invoice,
     actor: AuditActor,
+    attachment_ids: Vec<FileAssetId>,
+    pending: Arc<dyn PendingAttachmentBatch>,
 ) -> Result<()> {
     let audit = actor.clone().resource_log("invoice.create", "invoice", invoice.base.id.clone())?;
     let db = db.clone();
@@ -487,6 +506,15 @@ async fn persist_created_invoice(
                 )
                 .await?;
                 db.invoices().create(&invoice, executor).await?;
+                super::invoice_attachments::persist(
+                    &db,
+                    &invoice.base.id,
+                    &attachment_ids,
+                    pending.as_ref(),
+                    &actor,
+                    executor,
+                )
+                .await?;
                 db.audit_logs().create(&audit, executor).await?;
                 Ok::<(), crate::Error>(())
             })

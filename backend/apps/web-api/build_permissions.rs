@@ -22,6 +22,7 @@ pub(crate) const DOMAIN_MODULES: &[&str] = &[
     "approval_process",
     "bulk_job",
     "file_asset",
+    "financial_files",
     "access_control",
     "party",
     "customer",

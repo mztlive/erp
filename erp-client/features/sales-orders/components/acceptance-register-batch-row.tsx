@@ -48,6 +48,9 @@ export function AcceptanceRegisterBatchRow({
         draft && result !== "PASS" && !isPositiveQty(passed),
     )
     const showExceptionNotice = Boolean(draft && hasFilledException(draft))
+    const trackingEntries = (fact.trackingEntries ?? []).filter(
+        (entry) => entry.salesOrderLineId === fact.salesOrderLineId,
+    )
     const segmentId = toAutomationIdSegment(fact.fulfillmentLineId)
 
     return (
@@ -62,10 +65,21 @@ export function AcceptanceRegisterBatchRow({
                     </p>
                     <p className="mt-0.5 text-xs text-muted-foreground">
                         {formatOccurredAt(fact.occurredAt)}
-                        {fact.trackingNo
-                            ? ` · ${fact.carrier ?? ""} ${fact.trackingNo}`
-                            : ""}
                     </p>
+                    {trackingEntries.length > 0 ? (
+                        <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+                            {trackingEntries.map((entry) => (
+                                <li
+                                    key={`${entry.salesOrderLineId}:${entry.carrier ?? ""}:${entry.trackingNo}`}
+                                >
+                                    {entry.carrier ? `${entry.carrier} · ` : ""}
+                                    <span className="num font-mono">
+                                        {entry.trackingNo}
+                                    </span>
+                                </li>
+                            ))}
+                        </ul>
+                    ) : null}
                 </div>
                 <p className="text-xs font-medium">
                     待验 {qtyWithUnit(fact.eligibleQuantity, fact.unitCode)}

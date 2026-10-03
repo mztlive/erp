@@ -1,7 +1,7 @@
 //! 客户验收跨域工作台与登记响应，字段保持原 HTTP 合同。
 use erp_core::money::Quantity;
 use erp_fulfillment::dto::CustomerAcceptanceView;
-use erp_fulfillment::entity::fulfillment::{DeliveryType, FulfillmentFactType};
+use erp_fulfillment::entity::fulfillment::{DeliveryTrackingEntry, DeliveryType, FulfillmentFactType};
 use serde::Serialize;
 
 /// 客户验收原子登记结果。
@@ -40,10 +40,8 @@ pub struct EligibleFulfillmentFactView {
     pub net_accepted_allocated_quantity: Quantity,
     /// 本次最多可验收数量（守恒）。
     pub eligible_quantity: Quantity,
-    /// 物流承运方（发货事实）。
-    pub carrier: Option<String>,
-    /// 物流单号（发货事实）。
-    pub tracking_no: Option<String>,
+    /// 仅属于本销售明细的物流条目，逐条保留承运方。
+    pub tracking_entries: Vec<DeliveryTrackingEntry>,
 }
 
 /// 验收销售明细分组视图（W06 销售行 + 可验收事实）。

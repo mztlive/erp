@@ -10,6 +10,8 @@ use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
+use crate::{Error as DraftEditError, Result as DraftEditResult};
+
 /// 回款单号最大长度。
 const RECEIPT_NO_MAX_LEN: usize = 64;
 /// 银行流水引用最大长度。
@@ -180,6 +182,26 @@ pub struct CustomerReceiptApprovalFacts {
 }
 
 impl CustomerReceipt {
+    /// 校验原回款登记人修改本单草稿的资格。
+    ///
+    /// # 参数
+    /// * `actor_id` - 当前已认证编辑人的账号
+    ///
+    /// # 返回
+    /// 原登记人修改草稿时返回成功。
+    ///
+    /// # 错误
+    /// 非原登记人返回权限错误，非草稿返回状态冲突；历史缺失登记人时失败关闭。
+    pub fn ensure_draft_editor(&self, actor_id: &str) -> DraftEditResult<()> {
+        if actor_id.is_empty() || self.created_by != actor_id {
+            return Err(DraftEditError::Forbidden("仅原回款登记人可以修改本单草稿".into()));
+        }
+        if self.status != CustomerReceiptStatus::Draft {
+            return Err(DraftEditError::ConflictError("请先将驳回回款撤回草稿后再修改".into()));
+        }
+        Ok(())
+    }
+
     /// 创建客户回款单（初始状态为草稿）。
     ///
     /// 完成回款单号与银行引用的 trim/非空/长度校验和金额正数校验。
@@ -344,6 +366,7 @@ impl CustomerReceipt {
             return Err(Error::from("只有草稿状态的客户回款单可以提交审批"));
         }
         ensure_pending_allocations(&self.amount, &allocations)?;
+        ensure_resubmit_sources(&self.pending_allocations, &allocations)?;
         let next =
             self.approval_subject_version.checked_add(1).ok_or_else(|| Error::from("审批提交版本溢出"))?;
         self.approval_subject_version = next;
@@ -422,6 +445,25 @@ fn ensure_pending_allocations(amount: &Amount, allocations: &[PendingReceiptAllo
     }
     if total > amount.to_decimal() {
         return Err(Error::from("核销合计超过回款金额"));
+    }
+    Ok(())
+}
+
+/// 原单重提可以调整核销金额，但不能替换、删除或新增原拟核销来源行。
+fn ensure_resubmit_sources(
+    original: &[PendingReceiptAllocation],
+    submitted: &[PendingReceiptAllocation],
+) -> Result<()> {
+    if original.is_empty() {
+        return Ok(());
+    }
+    let mut original_ids = original.iter().map(|line| line.receivable_entry_id.as_ref()).collect::<Vec<_>>();
+    let mut submitted_ids =
+        submitted.iter().map(|line| line.receivable_entry_id.as_ref()).collect::<Vec<_>>();
+    original_ids.sort_unstable();
+    submitted_ids.sort_unstable();
+    if original_ids != submitted_ids {
+        return Err(Error::from("原回款重提不可改变拟核销来源，请保留原应收分录"));
     }
     Ok(())
 }
@@ -613,5 +655,74 @@ mod tests {
         receipt.counterparty_party_id = PartyId::new("   ");
         assert!(receipt.approval_responsible_org_id().is_err());
         assert!(receipt.approval_facts().is_err());
+    }
+
+    /// 原登记人撤回回款审批后编辑同一单据并重提，原单号和资金来源不变。
+    #[test]
+    fn original_creator_can_edit_cancelled_receipt_and_resubmit() {
+        let mut receipt =
+            CustomerReceipt::new(CustomerReceiptId::new("edit-receipt"), data(), "creator-1").unwrap();
+        assert!(matches!(receipt.ensure_draft_editor("other"), Err(DraftEditError::Forbidden(_))));
+        let identity = (
+            receipt.base.id.clone(),
+            receipt.receipt_no.clone(),
+            receipt.counterparty_party_id.clone(),
+            receipt.customer_id.clone(),
+            receipt.created_by.clone(),
+        );
+        let allocations = || {
+            vec![
+                PendingReceiptAllocation::new(
+                    ReceivableEntryId::new("entry-1"),
+                    Amount::from_str("100").unwrap(),
+                )
+                .unwrap(),
+            ]
+        };
+        receipt.start_approval(allocations()).unwrap();
+        assert!(matches!(receipt.ensure_draft_editor("creator-1"), Err(DraftEditError::ConflictError(_))));
+        receipt.cancel_approval().unwrap();
+        receipt.ensure_draft_editor("creator-1").unwrap();
+        receipt
+            .update(CustomerReceiptUpdate {
+                amount: Some(Amount::from_str("150").unwrap()),
+                received_at: Some(Instant::from_unix_secs(1700000100)),
+                bank_reference: Some("BANK-EDIT".into()),
+            })
+            .unwrap();
+        assert_eq!(
+            identity,
+            (
+                receipt.base.id.clone(),
+                receipt.receipt_no.clone(),
+                receipt.counterparty_party_id.clone(),
+                receipt.customer_id.clone(),
+                receipt.created_by.clone()
+            )
+        );
+        assert_eq!(receipt.amount.to_string(), "150");
+        assert_eq!(receipt.received_at.unix_secs(), 1700000100);
+        assert_eq!(receipt.bank_reference.as_deref(), Some("BANK-EDIT"));
+        assert_eq!(receipt.start_approval(allocations()).unwrap(), 2);
+        receipt.created_by.clear();
+        assert!(matches!(receipt.ensure_draft_editor("creator-1"), Err(DraftEditError::Forbidden(_))));
+    }
+
+    /// 撤回原单保留拟核销来源，改金额可重提，换来源失败且不迁移状态或主题版本。
+    #[test]
+    fn resubmit_changes_allocation_amount_but_preserves_original_sources() {
+        let mut receipt =
+            CustomerReceipt::new(CustomerReceiptId::new("resubmit"), data(), "creator").unwrap();
+        let allocation = |id: &str, amount: &str| {
+            PendingReceiptAllocation::new(ReceivableEntryId::new(id), amount.parse().unwrap()).unwrap()
+        };
+        receipt.start_approval(vec![allocation("original", "100")]).unwrap();
+        receipt.cancel_approval().unwrap();
+        assert!(receipt.start_approval(vec![allocation("replacement", "80")]).is_err());
+        assert_eq!(receipt.status, CustomerReceiptStatus::Draft);
+        assert_eq!(receipt.approval_subject_version, 1);
+        assert_eq!(receipt.pending_allocations[0].receivable_entry_id.as_ref(), "original");
+        assert_eq!(receipt.start_approval(vec![allocation("original", "80")]).unwrap(), 2);
+        assert_eq!(receipt.pending_allocations[0].allocated_amount.to_string(), "80");
     }
 }

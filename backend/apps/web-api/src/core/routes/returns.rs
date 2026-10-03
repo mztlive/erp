@@ -6,7 +6,7 @@
 //! 每条路由统一走 JWT + RBAC（`with_permission`）。
 
 use axum::Router;
-use axum::routing::{get, post};
+use axum::routing::{get, post, put};
 use erp_identity::SharedRbacService;
 
 use crate::app_state::AppState;
@@ -22,6 +22,7 @@ use crate::core::middleware::with_permission;
 /// 返回挂载了权限校验层的路由集合。
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
+        .merge(draft_update_routes(rbac))
         .route(
             "/sales-return-cases",
             with_permission(
@@ -268,6 +269,50 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 post(returns::payment_reversal_post),
                 rbac,
                 returns::payment_reversal_post_permission_key(),
+            ),
+        )
+}
+
+/// 退换退款单据草稿修改路由。
+///
+/// # 参数
+/// * `rbac` - 当前共享权限服务
+/// # 返回
+/// 返回逐操作保留权限校验和上传限制的路由集合。
+/// # 错误
+/// 无；业务错误由各处理器返回。
+fn draft_update_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
+        .route(
+            "/customer-refunds/{id}",
+            with_permission(
+                put(returns::draft_update::customer_refund_update),
+                rbac,
+                returns::draft_update::customer_refund_update_permission_key(),
+            ),
+        )
+        .route(
+            "/supplier-refunds/{id}",
+            with_permission(
+                put(returns::draft_update::supplier_refund_update),
+                rbac,
+                returns::draft_update::supplier_refund_update_permission_key(),
+            ),
+        )
+        .route(
+            "/receipt-reversals/{id}",
+            with_permission(
+                put(returns::draft_update::receipt_reversal_update),
+                rbac,
+                returns::draft_update::receipt_reversal_update_permission_key(),
+            ),
+        )
+        .route(
+            "/payment-reversals/{id}",
+            with_permission(
+                put(returns::draft_update::payment_reversal_update),
+                rbac,
+                returns::draft_update::payment_reversal_update_permission_key(),
             ),
         )
 }

@@ -5,6 +5,7 @@
 
 import { apiGet, apiPost, apiPostForm, apiPut } from "@/lib/api"
 import { getErrorMessage, isApiError } from "@/lib/api/errors"
+import { classifyFormalCommandError } from "@/lib/formal-command"
 import type {
     FormalActionResponse,
     PostFulfillmentOperationCommand,
@@ -18,6 +19,7 @@ import {
 } from "@/features/fulfillment-operations/lib/projection"
 import { SERVICE_EVIDENCE_PENDING_REFERENCE } from "@/features/fulfillment-operations/types"
 import { stripDeliveryApprovalField } from "@/features/fulfillment-operations/lib/delivery-no-approval"
+import { trackingEntriesToDto } from "@/features/fulfillment-operations/lib/tracking-entries"
 import { stripElectronicDeliveryApprovalField } from "@/features/fulfillment-operations/lib/electronic-delivery-no-approval"
 import { stripPurchaseReceiptApprovalField } from "@/features/fulfillment-operations/lib/purchase-receipt-no-approval"
 import { stripServiceFulfillmentApprovalField } from "@/features/fulfillment-operations/lib/service-fulfillment-no-approval"
@@ -72,8 +74,9 @@ export async function saveFulfillmentOperation(
                     version: input.expectedDocumentVersion,
                     expected_source_version: input.expectedSourceVersion,
                     idempotency_key: input.idempotencyKey,
-                    carrier: draft.carrier || undefined,
-                    tracking_no: draft.trackingNo || undefined,
+                    tracking_entries: trackingEntriesToDto(
+                        draft.trackingEntries,
+                    ),
                 },
             ),
         )
@@ -130,8 +133,9 @@ export async function postFulfillmentOperation(
                     `/admin/deliveries/${encodeURIComponent(input.operationId)}/post`,
                     {
                         version: input.expectedDocumentVersion,
-                        carrier: draft.carrier || undefined,
-                        tracking_no: draft.trackingNo || undefined,
+                        tracking_entries: trackingEntriesToDto(
+                            draft.trackingEntries,
+                        ),
                     },
                 ),
             )
@@ -266,7 +270,10 @@ export async function postFulfillmentOperation(
         }
     } catch (error) {
         if (isApiError(error)) {
-            if (error.code === "OUTCOME_UNKNOWN") {
+            if (
+                error.code === "OUTCOME_UNKNOWN" ||
+                classifyFormalCommandError(error) === "unknown"
+            ) {
                 return {
                     status: "unknown",
                     message: getErrorMessage(

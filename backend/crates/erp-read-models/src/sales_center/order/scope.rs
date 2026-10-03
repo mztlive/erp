@@ -210,6 +210,7 @@ mod tests {
                     business_type: BusinessType::GoodsService,
                     origin_system: OriginSystem::Erp,
                     customer_id: "cust-1".to_string(),
+                    customer_name: Some("测试客户".to_string()),
                     contract_id: None,
                     commercial_status: CommercialStatus::Draft,
                     review_status: ReviewStatus::NotSubmitted,

@@ -1,5 +1,6 @@
 //! Financial read models combining public finance facts with external display and workflow context.
 
+pub mod document_files;
 pub mod dto;
 pub mod payable;
 

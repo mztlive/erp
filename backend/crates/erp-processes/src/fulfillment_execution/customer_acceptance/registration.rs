@@ -216,6 +216,7 @@ mod customer_acceptance_no_approval_tests {
                 sales_order_id: SalesOrderId::new("so-1"),
                 accepted_at: Instant::from_unix_secs(1_700_000_000),
                 result: AcceptanceResult::Passed,
+                evidence_attachment_id: None,
             },
         )
         .expect("草稿必须可构造")

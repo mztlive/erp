@@ -19,6 +19,8 @@ export type FulfillmentResultPanelProps = {
     currentUrl: string
     resolvePending: boolean
     onResolveUnknown: () => void
+    onRetryUnknown?: () => void
+    retryPending?: boolean
     onNext: () => void
     /** 入库完成后切到同一销售单的待仓发。 */
     onContinueWarehouseShip?: (salesOrderId: string) => void
@@ -40,6 +42,8 @@ export function FulfillmentResultPanel({
     currentUrl,
     resolvePending,
     onResolveUnknown,
+    onRetryUnknown,
+    retryPending = false,
     onNext,
     onContinueWarehouseShip,
     onOpenAcceptance,
@@ -79,11 +83,24 @@ export function FulfillmentResultPanel({
                             id="fulfillment-operations-result-resolve-unknown"
                             type="button"
                             size="sm"
-                            disabled={resolvePending}
+                            disabled={resolvePending || retryPending}
                             loading={resolvePending}
                             onClick={() => void onResolveUnknown()}
                         >
                             {resolvePending ? "查询中…" : "查询最终结果"}
+                        </LoadingButton>
+                    ) : null}
+                    {lastResult.status === "unknown" && onRetryUnknown ? (
+                        <LoadingButton
+                            id="fulfillment-operations-result-retry-unknown"
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={resolvePending || retryPending}
+                            loading={retryPending}
+                            onClick={onRetryUnknown}
+                        >
+                            使用本次操作重试
                         </LoadingButton>
                     ) : null}
                     {lastResult.outcome?.kind === "POSTED" &&
@@ -139,7 +156,8 @@ export function FulfillmentResultPanel({
                     ) : null}
                     {!showNext ||
                     lastResult.stayOnItem === false ||
-                    lastResult.status === "blocked" ? null : (
+                    lastResult.status === "blocked" ||
+                    lastResult.status === "unknown" ? null : (
                         <Button
                             id="fulfillment-operations-result-next"
                             type="button"

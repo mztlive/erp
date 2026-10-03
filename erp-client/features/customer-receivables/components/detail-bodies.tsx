@@ -191,6 +191,7 @@ export function ReceiptDetailBody({
                         )}
                         approval={row.approval}
                         documentId={row.receiptId}
+                        documentVersion={row.baselineVersion}
                         workItemId={workItemId}
                         expectedTaskVersion={expectedTaskVersion}
                         workItemAllowedActions={workItemAllowedActions}
@@ -254,6 +255,7 @@ export function CustomerRefundDetailBody({
                     )}
                     approval={row.approval}
                     documentId={row.refundId}
+                    documentVersion={row.baselineVersion}
                     workItemId={workItemId}
                     expectedTaskVersion={expectedTaskVersion}
                     workItemAllowedActions={workItemAllowedActions}
@@ -306,6 +308,7 @@ export function ReceiptReversalDetailBody({
                     )}
                     approval={row.approval}
                     documentId={row.reversalId}
+                    documentVersion={row.baselineVersion}
                     workItemId={workItemId}
                     expectedTaskVersion={expectedTaskVersion}
                     workItemAllowedActions={workItemAllowedActions}

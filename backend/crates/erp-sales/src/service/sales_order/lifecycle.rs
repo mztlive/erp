@@ -83,7 +83,7 @@ impl SalesOrderService {
         actor: &AuditActor,
         business_org_unit_id: String,
     ) -> Result<SalesOrder> {
-        Ok(SalesOrder::new(
+        let mut order = SalesOrder::new(
             SalesOrderId::new(id_generator::next_id()),
             SalesOrderData {
                 sales_owner_user_id: actor.id().to_string(),
@@ -93,12 +93,14 @@ impl SalesOrderService {
                 origin_system: crate::entity::sales_order::OriginSystem::Erp,
                 source_identity_id: None,
                 customer_id,
-                contract_id: Some(req.contract_id.clone()),
+                contract_id: req.contract_id.clone(),
                 settlement_party_id,
                 source_status_code: None,
             },
             actor.id(),
-        )?)
+        )?;
+        order.set_creation_evidence(req.evidence_file_asset_ids.clone())?;
+        Ok(order)
     }
 
     /// Create the sales stable object at its original position within the caller's root transaction.

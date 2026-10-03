@@ -7,7 +7,7 @@ use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result};
 use serde::{Deserialize, Serialize};
 
 use super::sort_doc;
-use crate::entity::fulfillment::{Delivery, DeliveryState, DeliveryType};
+use crate::entity::fulfillment::{Delivery, DeliveryState, DeliveryTrackingEntry, DeliveryType};
 
 /// 发货单排序白名单（查询与测试共用）。
 const DELIVERY_SORT_FIELDS: &[&str] = &["created_at", "shipped_at"];
@@ -29,10 +29,9 @@ pub struct DeliveryRow {
     pub warehouse_id: Option<WarehouseId>,
     /// 当前状态。
     pub status: DeliveryState,
-    /// 物流承运方。
-    pub carrier: Option<String>,
-    /// 物流单号。
-    pub tracking_no: Option<String>,
+    /// 完整包裹明细关联；没有关联时为空。
+    #[serde(default)]
+    pub tracking_entries: Vec<DeliveryTrackingEntry>,
     /// 发货时间。
     pub shipped_at: Option<Instant>,
     /// 乐观锁版本。
@@ -152,8 +151,7 @@ fn delivery_projection() -> Document {
         "purchase_order_id": 1,
         "warehouse_id": 1,
         "status": 1,
-        "carrier": 1,
-        "tracking_no": 1,
+        "tracking_entries": 1,
         "shipped_at": 1,
         "version": 1,
         "created_at": 1,
@@ -180,8 +178,7 @@ mod tests {
                 "purchase_order_id",
                 "warehouse_id",
                 "status",
-                "carrier",
-                "tracking_no",
+                "tracking_entries",
                 "shipped_at",
                 "version",
                 "created_at",

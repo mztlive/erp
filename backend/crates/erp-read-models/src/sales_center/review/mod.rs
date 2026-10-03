@@ -1,9 +1,11 @@
 //! 销售变更单详情与审批绑定的跨域只读服务。
 
+mod approval_query;
 mod dto;
 mod list;
 mod projection;
 mod query;
+mod submitted_target;
 
 pub use dto::*;
 use erp_identity::SharedRbacService;

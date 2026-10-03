@@ -22,6 +22,7 @@ import type {
     BackendVoidResult,
 } from "./purchase-order-wire-types"
 import { mapPurchaseChangeOrder } from "./purchase-order-mapping"
+import type { PurchaseChangeDraftLine } from "./purchase-change-draft"
 
 export async function savePurchaseOrderDraft(
     input: SavePurchaseOrderDraftInput & { paymentTermLabel: string },
@@ -200,19 +201,26 @@ export async function startPurchaseChange(input: {
  *
  * @param input 变更单版本、原采购单与幂等键。
  */
-export async function submitPurchaseChange(input: {
+export type SubmitPurchaseChangeInput = {
     purchaseChangeOrderId: string
     purchaseOrderId: string
     expectedLockVersion: number
     idempotencyKey: string
-}): Promise<FormalActionResponse<PurchaseChangeOrderSummary>> {
+    paymentTermCode?: string
+    lines?: PurchaseChangeDraftLine[]
+}
+
+export async function submitPurchaseChange(
+    input: SubmitPurchaseChangeInput,
+): Promise<FormalActionResponse<PurchaseChangeOrderSummary>> {
     try {
         const submitted = await apiPost<BackendPurchaseChangeOrder>(
             `/admin/purchase-change-orders/${encodeURIComponent(input.purchaseChangeOrderId)}/submit`,
             {
                 expected_lock_version: input.expectedLockVersion,
-                // 空目标行按服务端契约沿用基准版本明细。
-                lines: [],
+                payment_term_code: input.paymentTermCode,
+                // 已编辑的完整目标行原样提交；无编辑目标时沿用服务端基准。
+                lines: input.lines ?? [],
                 idempotency_key: input.idempotencyKey,
             },
         )

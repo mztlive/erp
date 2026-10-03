@@ -53,6 +53,12 @@ export function buildSalesOrdersListQuery(
         search: url.search,
         customerId: url.customerId,
         contractId: url.contractId,
+        hasContract:
+            url.hasContract === "yes"
+                ? true
+                : url.hasContract === "no"
+                  ? false
+                  : undefined,
         createdBy: url.createdBy,
         ownerUserIds: url.ownerUserIds,
         orgUnitIds: url.orgUnitIds,

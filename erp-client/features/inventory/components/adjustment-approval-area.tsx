@@ -58,6 +58,8 @@ export function AdjustmentApprovalArea({
     onDecisionApplied,
     id,
     idPrefix,
+    onEditOriginal,
+    onCancelled,
 }: {
     phase: AdjustmentApprovalPhase
     approval?: StockAdjustmentApprovalView
@@ -68,6 +70,8 @@ export function AdjustmentApprovalArea({
     onDecisionApplied?: (view: ApprovalCommandView) => void
     id?: string
     idPrefix?: string
+    onEditOriginal?: (stockAdjustmentId: string) => void
+    onCancelled?: () => void
 }) {
     const instanceId = approval?.instance?.id
     const recoveryQuery = useRecoveryOptionsQuery(
@@ -155,6 +159,14 @@ export function AdjustmentApprovalArea({
                         stockAdjustmentId={documentId}
                         command={cancelCommand}
                         currentNodeName={approval?.instance?.currentNodeName}
+                        reviseRejected={Boolean(
+                            approval?.instance?.latestRejection,
+                        )}
+                        onCancelled={(stockAdjustmentId) => {
+                            onCancelled?.()
+                            if (approval?.instance?.latestRejection)
+                                onEditOriginal?.(stockAdjustmentId)
+                        }}
                     />
                 </div>
             ) : null}

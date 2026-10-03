@@ -8,7 +8,7 @@ use erp_finance::entity::receivable::{CustomerReceipt, CustomerReceiptData};
 use erp_finance::repository::ReceivableExt;
 use erp_finance::service::receivable::mapping::ensure_expected_version;
 use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
-use erp_workflow::service::approval::execution::{command_recovery_delay, prepare_cancel};
+use erp_workflow::service::approval::execution::prepare_cancel;
 use erp_workflow::service::document_registry::find_approval_binding;
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
@@ -16,10 +16,8 @@ use validator::Validate;
 
 use super::ReceivableProcess;
 use super::adapter::{
-    self, RECENT_HISTORY_LIMIT, build_customer_receipt_snapshot, customer_receipt_adapter,
-    customer_receipt_object_readable, customer_receipt_responsible_org_id, customer_receipt_start_command,
-    customer_receipt_subject_ref, execute_customer_receipt_domain_action, require_frozen_binding,
-    start_approval_command_kind, start_customer_receipt_approval,
+    self, customer_receipt_adapter, customer_receipt_subject_ref, execute_customer_receipt_domain_action,
+    require_frozen_binding, start_customer_receipt_approval,
 };
 use super::cancel_approval::{
     CustomerReceiptCancelPersistInput, build_customer_receipt_cancel_input, load_cancel_runtime,
@@ -27,18 +25,15 @@ use super::cancel_approval::{
 };
 use super::customer_receipt_posting::{
     CommitTransactionRequest, persist_created_customer_receipt, prepare_customer_receipt_commit_candidate,
-    prepare_dispatch_start, run_commit_transaction,
+    run_commit_transaction,
 };
 pub use super::customer_receipt_posting::{
     cancel_customer_receipt_approval_apply, post_customer_receipt_apply,
 };
+use super::customer_receipt_submit::{persist_receipt_submit, submit_receipt};
 use super::dto::{
     CancelCustomerReceiptApprovalRequest, CommitCustomerReceiptRequest, CreateCustomerReceiptRequest,
     CustomerReceiptView, SubmitCustomerReceiptRequest,
-};
-use super::start_approval::{
-    CustomerReceiptStartPersistInput, persist_customer_receipt_start,
-    replay_customer_receipt_start_with_executor,
 };
 use crate::{Error, Result};
 
@@ -214,13 +209,17 @@ impl ReceivableProcess {
         actor: &AuditActor,
     ) -> Result<CustomerReceiptView> {
         req.validate()?;
+        let command = submit_receipt(id, &req, actor.id())?;
+        if let Some(view) = self.replay_customer_receipt_submit(id, &command, actor).await? {
+            return Ok(view);
+        }
         let adapter = customer_receipt_adapter()?;
         let mut receipt = self.load_customer_receipt(id).await?;
         ensure_expected_version(receipt.base.version, req.expected_version)?;
         let allocations =
             erp_finance::service::receivable::customer_receipt_commit::convert_allocations(&req.allocations)?;
         start_customer_receipt_approval(&mut receipt, allocations)?;
-        self.dispatch_customer_receipt_start(id, receipt, req.idempotency_key, actor, adapter).await
+        self.dispatch_customer_receipt_start(id, receipt, req.idempotency_key, actor, adapter, command).await
     }
 
     /// 撤回客户回款审批，成功后回到草稿且 `subject_version` 不回退。
@@ -273,114 +272,17 @@ impl ReceivableProcess {
         idempotency_key: String,
         actor: &AuditActor,
         adapter: adapter::CustomerReceiptAdapter,
+        command: CommandReceipt,
     ) -> Result<CustomerReceiptView> {
-        let subject = customer_receipt_subject_ref(id)?;
-        let binding =
-            find_approval_binding(&self.db, id, &mut NoTransaction).await.map_err(crate::Error::from)?;
-        let binding = require_frozen_binding(binding.as_ref())?.clone();
-        let now = Instant::now();
-        let snapshot = build_customer_receipt_snapshot(&receipt, actor.id(), now)?;
-        let start = customer_receipt_start_command(
-            id,
-            receipt.approval_subject_version,
-            actor.id(),
-            &idempotency_key,
-        );
-        let _ = (start_approval_command_kind(&start), RECENT_HISTORY_LIMIT);
-        let organization_id = customer_receipt_responsible_org_id(&receipt)?;
-        let _ = customer_receipt_object_readable(&organization_id, actor.id())?;
-        let prepared = prepare_dispatch_start(
-            &self.db,
-            &binding,
-            &subject,
-            receipt.approval_subject_version,
-            &organization_id,
-            actor.id(),
-            &idempotency_key,
-            now,
-        )
-        .await?;
-        let recovery_subject_version = receipt.approval_subject_version;
-        let persisted = persist_customer_receipt_start(
-            &self.db,
-            CustomerReceiptStartPersistInput {
-                receipt,
-                actor: actor.clone(),
-                id: id.to_string(),
-                snapshot_payload: snapshot,
-                prepared,
-                owner_role: adapter.owner_role,
-                organization_id,
-                now,
-            },
-        )
-        .await;
+        let input = self.prepare_receipt_submit_input(id, receipt, &idempotency_key, actor, adapter).await?;
+        let persisted = persist_receipt_submit(&self.db, &self.rbac, input, command.clone()).await;
         if let Err(error) = persisted {
             if !error.command_may_have_committed() {
                 return Err(error);
             }
-            self.recover_customer_receipt_start(id, recovery_subject_version, &idempotency_key, actor, error)
-                .await?;
+            return self.recover_customer_receipt_submit(id, &command, actor, error).await;
         }
         self.read.customer_receipt_detail(id).await.map_err(crate::Error::from)
-    }
-
-    /// receipt 唯一竞争、瞬态事务或提交结果未知后，以 fresh session 有界回读。
-    async fn recover_customer_receipt_start(
-        &self,
-        receipt_id: &str,
-        subject_version: u32,
-        idempotency_key: &str,
-        actor: &AuditActor,
-        original_error: Error,
-    ) -> Result<String> {
-        const RECOVERY_ATTEMPTS: usize = 8;
-        for attempt in 0..RECOVERY_ATTEMPTS {
-            let db = self.db.clone();
-            let receipt_id = receipt_id.to_string();
-            let idempotency_key = idempotency_key.to_string();
-            let actor_id = actor.id().to_string();
-            let recovered = self
-                .db
-                .client()
-                .with_transaction(move |executor| {
-                    Box::pin(async move {
-                        let receipt = db
-                            .customer_receipts()
-                            .find_by_id(&receipt_id, executor)
-                            .await?
-                            .ok_or_else(|| Error::NotFound("客户回款单不存在".to_string()))?;
-                        let organization_id = customer_receipt_responsible_org_id(&receipt)?;
-                        let _ = customer_receipt_object_readable(&organization_id, &actor_id)?;
-                        let binding = find_approval_binding(&db, &receipt_id, executor)
-                            .await
-                            .map_err(crate::Error::from)?;
-                        let binding = require_frozen_binding(binding.as_ref())?;
-                        let subject = customer_receipt_subject_ref(&receipt_id)?;
-                        replay_customer_receipt_start_with_executor(
-                            &db,
-                            &subject,
-                            subject_version,
-                            &idempotency_key,
-                            binding,
-                            &actor_id,
-                            executor,
-                        )
-                        .await
-                    })
-                })
-                .await;
-            match recovered {
-                Ok(Some(instance_id)) => return Ok(instance_id),
-                Ok(None) => {},
-                Err(error) if error.command_may_have_committed() => {},
-                Err(error) => return Err(error),
-            }
-            if attempt + 1 < RECOVERY_ATTEMPTS {
-                tokio::time::sleep(command_recovery_delay(attempt)).await;
-            }
-        }
-        Err(original_error)
     }
 
     /// 加载撤回运行事实并写回草稿。

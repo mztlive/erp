@@ -25,6 +25,7 @@ import { mapWorkItemDto } from "@/features/work-items/types"
 import { useWorkItemDetailQuery } from "@/features/work-items/queries"
 import { AdjustmentDetailSheet } from "./components/adjustment-detail-sheet"
 import { AdjustmentDialog } from "./components/adjustment-dialog"
+import { AdjustmentEditDialog } from "./components/adjustment-edit-dialog"
 import { AdjustmentResultBanner } from "./components/adjustment-result-banner"
 import { ExportJobProgress } from "./components/export-job-progress"
 import {
@@ -51,6 +52,9 @@ import {
 import { buildListQuery } from "./lib/build-list-query"
 
 export function InventoryLedgerPage() {
+    const [editingAdjustmentId, setEditingAdjustmentId] = React.useState<
+        string | null
+    >(null)
     const {
         view,
         qParam,
@@ -492,19 +496,38 @@ export function InventoryLedgerPage() {
             />
 
             <AdjustmentDetailSheet
-                open={previewAdjustmentId != null}
+                open={previewAdjustmentId != null && !editingAdjustmentId}
                 detail={adjustmentDetailQuery.data}
                 isPending={adjustmentDetailQuery.isPending}
                 workItemId={decisionWorkItem?.workItemId}
                 expectedTaskVersion={decisionWorkItem?.expectedTaskVersion}
                 workItemAllowedActions={decisionWorkItem?.allowedActions}
                 onClose={closeAdjustment}
+                onEditOriginal={setEditingAdjustmentId}
+                onCancelled={() => {
+                    void listQuery.refetch()
+                    void adjustmentDetailQuery.refetch()
+                    void workItemQuery.refetch()
+                }}
                 onDecisionApplied={() => {
                     void listQuery.refetch()
                     void adjustmentDetailQuery.refetch()
                     void workItemQuery.refetch()
                 }}
             />
+
+            {editingAdjustmentId ? (
+                <AdjustmentEditDialog
+                    key={editingAdjustmentId}
+                    id={editingAdjustmentId}
+                    onClose={() => setEditingAdjustmentId(null)}
+                    onSubmitted={() => {
+                        void listQuery.refetch()
+                        void adjustmentDetailQuery.refetch()
+                        void workItemQuery.refetch()
+                    }}
+                />
+            ) : null}
 
             <AdjustmentDialog
                 open={adjustment.adjustDraftId != null}
@@ -538,6 +561,21 @@ export function InventoryLedgerPage() {
                                         {adjustment.isResolving
                                             ? "查询中…"
                                             : "查询提交结果"}
+                                    </LoadingButton>
+                                    <LoadingButton
+                                        id="inventory-adjustment-dialog-retry"
+                                        type="button"
+                                        variant="outline"
+                                        disabled={
+                                            adjustment.isResolving ||
+                                            adjustment.isSubmitting
+                                        }
+                                        loading={adjustment.isSubmitting}
+                                        onClick={() =>
+                                            void adjustment.doSubmit()
+                                        }
+                                    >
+                                        使用本次操作重试
                                     </LoadingButton>
                                 </AlertDescription>
                             </Alert>

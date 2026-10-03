@@ -7,6 +7,7 @@ use erp_core::common::time::Instant;
 use erp_core::ids::DeliveryId;
 use erp_fulfillment::dto::{DeliveryView, PostDeliveryRequest};
 use erp_fulfillment::entity::fulfillment::{Delivery, DeliveryLine, DeliveryType, DeliveryUpdate};
+use erp_fulfillment::service::FulfillmentService;
 use erp_procurement::repository::PurchaseOrderExt;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
@@ -52,21 +53,22 @@ impl FulfillmentProcess {
         req.validate()?;
         let delivery_id = DeliveryId::new(id.to_string());
         let expected_version = req.version;
-        let carrier = req.carrier;
-        let tracking_no = req.tracking_no;
+        let tracking_entries = req.tracking_entries;
         let actor = actor.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let posted = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let (delivery, lines) = erp_fulfillment::service::FulfillmentService::new(db.clone())
+                    let (delivery, lines) = FulfillmentService::new(db.clone())
                         .prepare_delivery_posting(
                             &delivery_id,
                             expected_version,
-                            DeliveryUpdate { carrier, tracking_no },
+                            DeliveryUpdate { tracking_entries },
                             executor,
                         )
+                        .await?;
+                    super::delivery_tracking::ensure_tracking_sources(&db, &delivery, &lines, executor)
                         .await?;
                     let occurred_at = Instant::now();
                     let delivery_type = delivery.delivery_type;

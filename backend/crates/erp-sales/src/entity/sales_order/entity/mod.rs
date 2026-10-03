@@ -5,6 +5,7 @@
 //! EFFECTIVE / VOIDED` 4 值（§7.1），审核环节值一律在 `review_status` 审核轨。
 //! 卡券销售单与实物及服务销售单必须使用本表，不得增加平行销售单主表。
 
+mod contract_evidence;
 mod line;
 mod order;
 mod status;

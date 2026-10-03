@@ -7,9 +7,25 @@ use async_trait::async_trait;
 use erp_core::ids::FileAssetId;
 use mongodb::Database;
 use persistence_core::Executor;
+use serde::Serialize;
 
 use crate::entity::file_asset::{PendingFileReferenceSet, SensitivityClass};
 use crate::error::Result;
+
+/// 重传稳定的真实附件内容清单，不包含每次上传生成的资产身份与存储键。
+#[derive(Debug, Clone, Serialize)]
+pub struct PendingFileContent {
+    /// multipart 临时引用。
+    pub reference: String,
+    /// 文件展示名。
+    pub file_name: String,
+    /// 已校验的 MIME。
+    pub content_type: String,
+    /// 真实内容大小。
+    pub byte_size: u64,
+    /// 服务端计算的真实内容 HMAC。
+    pub content_hmac: String,
+}
 
 /// Facts and persist hook for files constructed before a business transaction.
 ///
@@ -34,6 +50,13 @@ pub trait PendingAttachmentBatch: Send + Sync {
     /// # Errors
     /// Duplicate-key or underlying write failures.
     async fn persist(&self, db: &Database, executor: &mut dyn Executor) -> Result<()>;
+
+    /// 返回用于幂等命令指纹的真实内容清单；非空批次消费者须拒绝缺少清单。
+    /// # 返回
+    /// 默认空清单保留旧消费者接口；新上传实现应覆盖。
+    fn content_manifest(&self) -> Vec<PendingFileContent> {
+        Vec::new()
+    }
 
     /// Return whether this batch prepared any files to persist.
     fn is_empty(&self) -> bool;
@@ -90,6 +113,10 @@ impl PendingAttachmentBatch for Arc<dyn PendingAttachmentBatch> {
 
     async fn persist(&self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         (**self).persist(db, executor).await
+    }
+
+    fn content_manifest(&self) -> Vec<PendingFileContent> {
+        (**self).content_manifest()
     }
 
     fn is_empty(&self) -> bool {

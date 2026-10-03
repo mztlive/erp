@@ -14,6 +14,7 @@ mod adapter;
 mod authorization;
 mod cancel_approval;
 mod commands;
+mod draft;
 mod posting;
 mod start_approval;
 pub use adapter::sales_change_order_object_readable;

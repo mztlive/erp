@@ -9,7 +9,7 @@ use validator::Validate;
 
 use super::{DELIVERY_SORT_FIELDS, PageParams, non_blank, normalize_paging};
 use crate::Result;
-use crate::entity::fulfillment::{DeliveryState, DeliveryType};
+use crate::entity::fulfillment::{DeliveryState, DeliveryTrackingEntry, DeliveryType};
 
 /// 发货行输入。
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,10 +41,9 @@ pub struct CreateDeliveryRequest {
     pub purchase_order_id: Option<PurchaseOrderId>,
     /// 入库仓；仓发必填，直发为空。
     pub warehouse_id: Option<WarehouseId>,
-    /// 物流承运方。
-    pub carrier: Option<String>,
-    /// 物流单号。
-    pub tracking_no: Option<String>,
+    /// 包裹对应的销售明细、物流号和可选承运商。
+    #[serde(default)]
+    pub tracking_entries: Vec<DeliveryTrackingEntry>,
     /// 发货行（1–200 行）。
     #[validate(length(min = 1, max = 200, message = "发货行数必须在1-200之间"))]
     pub lines: Vec<DeliveryLineInput>,
@@ -52,14 +51,13 @@ pub struct CreateDeliveryRequest {
 
 /// 发货单更新请求（携带乐观锁版本；仅草稿可更新）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct UpdateDeliveryRequest {
     /// 期望的乐观锁版本；与当前版本不一致时拒绝更新（409）。
     #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
     pub version: u64,
-    /// 物流承运方；缺省表示不修改。
-    pub carrier: Option<String>,
-    /// 物流单号；缺省表示不修改。
-    pub tracking_no: Option<String>,
+    /// 完整包裹明细关联；缺省不修改，空数组清空。
+    pub tracking_entries: Option<Vec<DeliveryTrackingEntry>>,
 }
 
 /// 保存发货最终草稿并过账的原子命令。
@@ -69,10 +67,8 @@ pub struct PostDeliveryRequest {
     /// 期望的发货单版本。
     #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
     pub version: u64,
-    /// 最终物流承运方；缺省表示保持草稿值。
-    pub carrier: Option<String>,
-    /// 最终物流单号；缺省表示保持草稿值。
-    pub tracking_no: Option<String>,
+    /// 最终完整包裹明细关联；缺省保持原值，空数组清空。
+    pub tracking_entries: Option<Vec<DeliveryTrackingEntry>>,
 }
 
 /// 发货行视图。
@@ -109,10 +105,8 @@ pub struct DeliveryView {
     pub warehouse_id: Option<String>,
     /// 当前状态。
     pub status: DeliveryState,
-    /// 物流承运方。
-    pub carrier: Option<String>,
-    /// 物流单号。
-    pub tracking_no: Option<String>,
+    /// 完整包裹明细关联；没有关联时为空，不推断历史单号归属。
+    pub tracking_entries: Vec<DeliveryTrackingEntry>,
     /// 发货时间（秒级时间戳）。
     pub shipped_at: Option<i64>,
     /// 乐观锁版本。
@@ -182,5 +176,39 @@ impl DeliveryListParams {
                 DELIVERY_SORT_FIELDS,
             )?,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{PostDeliveryRequest, UpdateDeliveryRequest};
+
+    /// 物流编辑只接受完整明细包裹关联，旧表头物流字段不接受。
+    #[test]
+    fn delivery_tracking_requests_reject_unknown_legacy_fields() {
+        for field in ["tracking_numbers", "tracking_no", "carrier"] {
+            let mut value = serde_json::json!({"version":1});
+            value.as_object_mut().unwrap().insert(field.into(), serde_json::json!("old"));
+            assert!(serde_json::from_value::<UpdateDeliveryRequest>(value.clone()).is_err());
+            assert!(serde_json::from_value::<PostDeliveryRequest>(value).is_err());
+        }
+    }
+
+    /// 缺省保持现状与显式空数组清空包裹有独立语义。
+    #[test]
+    fn preserves_omitted_entries_and_explicit_empty_clear() {
+        let omitted: UpdateDeliveryRequest =
+            serde_json::from_value(serde_json::json!({"version":1})).unwrap();
+        let clear: UpdateDeliveryRequest =
+            serde_json::from_value(serde_json::json!({"version":1,"tracking_entries":[]})).unwrap();
+        assert_eq!(omitted.tracking_entries, None);
+        assert_eq!(clear.tracking_entries, Some(Vec::new()));
+        let entries: PostDeliveryRequest =
+            serde_json::from_value(serde_json::json!({"version":1,"tracking_entries":[
+                {"sales_order_line_id":"line-1","tracking_no":"A","carrier":"货拉拉"},
+                {"sales_order_line_id":"line-2","tracking_no":"A","carrier":"顺丰"}
+            ]}))
+            .unwrap();
+        assert_eq!(entries.tracking_entries.unwrap().len(), 2);
     }
 }

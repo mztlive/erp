@@ -56,6 +56,15 @@ const invalidateApprovalCaches = async (
         queryClient.invalidateQueries({
             queryKey: queryKeyRoots.workspaceHome,
         }),
+        ...[
+            "sales-orders",
+            "sales-change-orders",
+            "purchase-orders",
+            "purchase-change-orders",
+            "customer-receivables",
+            "supplier-payables",
+            "stock-adjustments",
+        ].map((root) => queryClient.invalidateQueries({ queryKey: [root] })),
         input?.instanceId
             ? queryClient.invalidateQueries({
                   queryKey: approvalKeys.instance(input.instanceId),

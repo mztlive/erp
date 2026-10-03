@@ -3,6 +3,8 @@
 //! Handler 只做协议适配：校验请求、调用采购命令流程或读模型、返回 `ApiResponse`。
 //! DTO 使用采购领域与读模型的唯一定义，禁止重复定义同构类型、禁止直连数据库。
 
+pub mod change_draft;
+
 use application_core::AuditActor;
 use axum::extract::{Path, Query, State};
 use axum::{Extension, Json};

@@ -24,6 +24,8 @@ export function AdjustmentDetailSheet({
     workItemAllowedActions,
     onClose,
     onDecisionApplied,
+    onEditOriginal,
+    onCancelled,
 }: {
     open: boolean
     detail: AdjustmentDetailView | null | undefined
@@ -33,6 +35,8 @@ export function AdjustmentDetailSheet({
     workItemAllowedActions?: readonly string[]
     onClose: () => void
     onDecisionApplied?: (view: ApprovalCommandView) => void
+    onEditOriginal?: (stockAdjustmentId: string) => void
+    onCancelled?: () => void
 }) {
     const adjustment = detail?.adjustment
     return (
@@ -61,14 +65,29 @@ export function AdjustmentDetailSheet({
                 ) : null
             }
             footer={
-                <Button
-                    id="inventory-adjustment-detail-close"
-                    type="button"
-                    variant="outline"
-                    onClick={onClose}
-                >
-                    关闭
-                </Button>
+                <>
+                    {detail?.approval.submitCommand &&
+                    detail.approval.allowedActions.includes("SUBMIT") &&
+                    onEditOriginal ? (
+                        <Button
+                            id="inventory-adjustment-detail-edit"
+                            type="button"
+                            onClick={() =>
+                                onEditOriginal(detail.adjustment.adjustmentId)
+                            }
+                        >
+                            修改原单
+                        </Button>
+                    ) : null}
+                    <Button
+                        id="inventory-adjustment-detail-close"
+                        type="button"
+                        variant="outline"
+                        onClick={onClose}
+                    >
+                        关闭
+                    </Button>
+                </>
             }
         >
             {isPending ? (
@@ -106,6 +125,8 @@ export function AdjustmentDetailSheet({
                         expectedTaskVersion={expectedTaskVersion}
                         workItemAllowedActions={workItemAllowedActions}
                         onDecisionApplied={onDecisionApplied}
+                        onEditOriginal={onEditOriginal}
+                        onCancelled={onCancelled}
                     />
                 </div>
             ) : (

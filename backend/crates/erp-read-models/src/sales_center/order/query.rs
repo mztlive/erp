@@ -1,5 +1,6 @@
 //! 销售单跨域查询：组合销售历史快照、采购覆盖、财务与审批投影。
 
+mod customer_names;
 mod detail;
 
 use std::collections::{HashMap, HashSet};
@@ -106,7 +107,19 @@ impl SalesOrderReadService {
             )
             .await?;
 
-        let items = page.items.into_iter().map(|row| map_sales_row(row, &owners, &owner_names)).collect();
+        let customer_names = self
+            .customer_names_batch(&page.items.iter().map(|row| row.customer_id.clone()).collect::<Vec<_>>())
+            .await?;
+        let items = page
+            .items
+            .into_iter()
+            .map(|row| {
+                let customer_name = customer_names.get(&row.customer_id).cloned();
+                let mut view = map_sales_row(row, &owners, &owner_names);
+                view.customer_name = customer_name;
+                view
+            })
+            .collect();
 
         let current_version = self.scope_fingerprint(params, search, actor).await?;
         if current_version != context.scope_version {
@@ -382,6 +395,7 @@ fn map_sales_row(
         business_type: row.business_type,
         origin_system: row.origin_system,
         customer_id: row.customer_id,
+        customer_name: None,
         contract_id: row.contract_id,
         commercial_status: row.commercial_status,
         review_status: row.review_status,

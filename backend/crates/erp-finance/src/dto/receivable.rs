@@ -9,6 +9,7 @@
 //! 见 P3 PR「契约变更」一节（后端统一 snake_case + 秒级时间戳）。
 
 mod command;
+mod draft_update;
 mod facts;
 mod invoice;
 mod query;
@@ -36,6 +37,7 @@ pub use self::command::{
     CreateReceivableAccountRequest, PostCustomerReceiptRequest, ReceiptAllocationLineRequest,
     SubmitCustomerReceiptRequest,
 };
+pub use self::draft_update::UpdateCustomerReceiptRequest;
 pub use self::facts::{ReceivableInvoiceFactView, ReceivableReceiptFactView};
 pub use self::invoice::{
     CommitInvoiceRequest, CommitRedInvoiceRequest, CreateInvoiceRequest, PostInvoiceRequest,

@@ -29,6 +29,8 @@ export function PurchaseChangeOrderApprovalArea({
     phase,
     approval,
     documentId,
+    documentVersion,
+    editDocumentHref,
     workItemId,
     expectedTaskVersion,
     workItemAllowedActions,
@@ -37,6 +39,8 @@ export function PurchaseChangeOrderApprovalArea({
     phase: PurchaseChangeOrderApprovalPhase
     approval?: DocumentApprovalView
     documentId?: string
+    documentVersion?: number
+    editDocumentHref?: string
     workItemId?: string
     expectedTaskVersion?: string
     workItemAllowedActions?: readonly string[]
@@ -69,6 +73,8 @@ export function PurchaseChangeOrderApprovalArea({
                         definition={approval?.definition}
                         documentType={PURCHASE_CHANGE_ORDER_DOCUMENT_TYPE}
                         documentId={documentId}
+                        documentVersion={documentVersion}
+                        editDocumentHref={editDocumentHref}
                     />
                 ) : null}
             </div>
@@ -103,6 +109,8 @@ export function PurchaseChangeOrderApprovalArea({
                 definition={approval?.definition}
                 documentType={PURCHASE_CHANGE_ORDER_DOCUMENT_TYPE}
                 documentId={documentId}
+                documentVersion={documentVersion}
+                editDocumentHref={editDocumentHref}
                 afterCancelStatusLabel="草稿"
                 onDecisionApplied={onDecisionApplied}
             />

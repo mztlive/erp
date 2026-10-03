@@ -1,7 +1,9 @@
 //! 退款提交和回放使用真实资金来源授权，不依赖尚未生成的审批任务。
 use application_core::AuditActor;
 use async_trait::async_trait;
+use erp_core::ids::ReceiptReversalId;
 use erp_identity::SharedRbacService;
+use erp_returns::repository::ReturnsExt;
 use erp_returns::service::ReturnsService;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::ports::WorkflowAuthorizationPort;
@@ -31,6 +33,13 @@ trait ReplayAuthorizationPort: Send + Sync {
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<bool>;
+    async fn ensure_initiator(
+        &self,
+        actor: &AuditActor,
+        kind: DocumentType,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<()>;
 }
 struct MongoReplayAuthorization<'a> {
     db: &'a Database,
@@ -72,6 +81,15 @@ impl ReplayAuthorizationPort for MongoReplayAuthorization<'_> {
             .approval_source_readable(actor, kind, id, executor)
             .await?)
     }
+    async fn ensure_initiator(
+        &self,
+        actor: &AuditActor,
+        kind: DocumentType,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        ensure_financial_initiator(self.db, actor, kind, id, executor).await
+    }
 }
 /// 失效账号必须先于具体来源读取被拒绝。
 async fn ensure_active<P: ReplayAuthorizationPort>(
@@ -100,6 +118,36 @@ async fn authorize<P: ReplayAuthorizationPort>(
     if !port.source_readable(actor, kind, id, executor).await? {
         return Err(Error::Forbidden("无权读取退款所引用的完整资金来源".to_string()));
     }
+    port.ensure_initiator(actor, kind, id, executor).await
+}
+
+/// 回放重读原经办职责，资格不依赖已提交单据当前是否仍为草稿。
+async fn ensure_financial_initiator(
+    db: &Database,
+    actor: &AuditActor,
+    kind: DocumentType,
+    id: &str,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let service = ReturnsService::new(db.clone());
+    match kind {
+        DocumentType::CustomerRefund => {
+            service.load_customer_refund(id, executor).await?.ensure_submitter(actor.id())?
+        },
+        DocumentType::SupplierRefund => {
+            service.load_supplier_refund(id, executor).await?.ensure_submitter(actor.id())?
+        },
+        DocumentType::ReceiptReversal => db
+            .receipt_reversals()
+            .find_by_id(&ReceiptReversalId::new(id), executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("回款冲正单不存在".to_string()))?
+            .ensure_submitter(actor.id())?,
+        DocumentType::PaymentReversal => {
+            service.load_payment_reversal(id, executor).await?.ensure_submitter(actor.id())?
+        },
+        _ => {},
+    }
     Ok(())
 }
 pub(super) async fn ensure_actor_active(
@@ -119,19 +167,7 @@ pub(super) async fn ensure_replay_authorized(
     id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    authorize(&MongoReplayAuthorization { db, rbac }, actor, kind, permission, id, executor).await?;
-    match kind {
-        DocumentType::CustomerRefund => ReturnsService::new(db.clone())
-            .load_customer_refund(id, executor)
-            .await?
-            .ensure_submitter(actor.id())?,
-        DocumentType::SupplierRefund => ReturnsService::new(db.clone())
-            .load_supplier_refund(id, executor)
-            .await?
-            .ensure_submitter(actor.id())?,
-        _ => {},
-    }
-    Ok(())
+    authorize(&MongoReplayAuthorization { db, rbac }, actor, kind, permission, id, executor).await
 }
 
 impl ReturnsProcess {
@@ -171,6 +207,9 @@ mod tests {
         active: bool,
         action: bool,
         source: bool,
+        initiator: bool,
+        kind: DocumentType,
+        permission: &'static str,
         calls: Mutex<Vec<&'static str>>,
     }
     #[async_trait]
@@ -185,7 +224,7 @@ mod tests {
             permission: &str,
             _: &mut dyn Executor,
         ) -> Result<bool> {
-            assert_eq!(permission, "customer_refund:submit");
+            assert_eq!(permission, self.permission);
             self.calls.lock().unwrap().push("action");
             Ok(self.action)
         }
@@ -196,33 +235,55 @@ mod tests {
             id: &str,
             _: &mut dyn Executor,
         ) -> Result<bool> {
-            assert_eq!((kind, id), (DocumentType::CustomerRefund, "refund-1"));
+            assert_eq!((kind, id), (self.kind, "document-1"));
             self.calls.lock().unwrap().push("source");
             Ok(self.source)
+        }
+        async fn ensure_initiator(
+            &self,
+            _: &AuditActor,
+            kind: DocumentType,
+            id: &str,
+            _: &mut dyn Executor,
+        ) -> Result<()> {
+            assert_eq!((kind, id), (self.kind, "document-1"));
+            self.calls.lock().unwrap().push("initiator");
+            if !self.initiator {
+                return Err(Error::Forbidden("仅原经办人可以提交".into()));
+            }
+            Ok(())
         }
     }
     /// 首次提交与回放仅依赖自己的静态动作和精确资金来源，无审批参与权限依赖。
     #[tokio::test]
     async fn submission_checks_active_actor_action_and_exact_source() {
-        for (active, action, source, expected_calls) in [
-            (true, true, true, vec!["actor", "action", "source"]),
-            (false, true, true, vec!["actor"]),
-            (true, false, true, vec!["actor", "action"]),
-            (true, true, false, vec!["actor", "action", "source"]),
+        for (kind, permission) in [
+            (DocumentType::CustomerRefund, "customer_refund:submit"),
+            (DocumentType::ReceiptReversal, "receipt_reversal:submit"),
+            (DocumentType::PaymentReversal, "payment_reversal:submit"),
         ] {
-            let port = RecordingPort { active, action, source, calls: Mutex::new(Vec::new()) };
-            let actor = AuditActor::new("actor-1".into(), "actor".into(), erp_core::AccountKind::Admin);
-            let result = authorize(
-                &port,
-                &actor,
-                DocumentType::CustomerRefund,
-                "customer_refund:submit",
-                "refund-1",
-                &mut NoTransaction,
-            )
-            .await;
-            assert_eq!(result.is_ok(), active && action && source);
-            assert_eq!(port.calls.into_inner().unwrap(), expected_calls);
+            for (active, action, source, initiator, expected_calls) in [
+                (true, true, true, true, vec!["actor", "action", "source", "initiator"]),
+                (false, true, true, true, vec!["actor"]),
+                (true, false, true, true, vec!["actor", "action"]),
+                (true, true, false, true, vec!["actor", "action", "source"]),
+                (true, true, true, false, vec!["actor", "action", "source", "initiator"]),
+            ] {
+                let port = RecordingPort {
+                    active,
+                    action,
+                    source,
+                    initiator,
+                    kind,
+                    permission,
+                    calls: Mutex::new(Vec::new()),
+                };
+                let actor = AuditActor::new("actor-1".into(), "actor".into(), erp_core::AccountKind::Admin);
+                let result =
+                    authorize(&port, &actor, kind, permission, "document-1", &mut NoTransaction).await;
+                assert_eq!(result.is_ok(), active && action && source && initiator);
+                assert_eq!(port.calls.into_inner().unwrap(), expected_calls);
+            }
         }
     }
 }

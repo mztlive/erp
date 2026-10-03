@@ -4,6 +4,14 @@ import { useEffect, useMemo, useState, type ReactNode } from "react"
 
 import { ValidationSummary, type ValidationIssue } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { FileUpload } from "@/components/ui/file-upload"
+import {
+    Field,
+    FieldError,
+    FieldLabel,
+    FieldDescription,
+} from "@/components/ui/field"
+import { toFieldErrors } from "@/components/form/utils"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
@@ -215,6 +223,53 @@ export function AcceptanceRegisterDialog({
                                     </p>
                                 ) : null}
                             </div>
+                        </div>
+
+                        <div className="shrink-0 border-t border-grid px-6 py-3">
+                            <form.AppField name="evidenceFile">
+                                {(field) => (
+                                    <Field
+                                        data-invalid={
+                                            field.state.meta.errors.length >
+                                                0 || undefined
+                                        }
+                                    >
+                                        <FieldLabel htmlFor="sales-orders-acceptance-evidence-input">
+                                            签收单凭证{" "}
+                                            <span className="text-destructive">
+                                                *
+                                            </span>
+                                        </FieldLabel>
+                                        <FileUpload
+                                            idPrefix="sales-orders-acceptance-evidence"
+                                            accept="application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp"
+                                            multiple={false}
+                                            density="compact"
+                                            disabled={!canPost || postPending}
+                                            label={
+                                                field.state.value?.name ??
+                                                "上传签收单凭证"
+                                            }
+                                            description="点击选择图片或 PDF"
+                                            onFilesSelected={(files) => {
+                                                field.handleChange(
+                                                    files[0] ?? null,
+                                                )
+                                                field.handleBlur()
+                                            }}
+                                        />
+                                        <FieldDescription>
+                                            支持 PDF、JPG、PNG、WebP，文件不超过
+                                            5 MB。
+                                        </FieldDescription>
+                                        <FieldError
+                                            errors={toFieldErrors(
+                                                field.state.meta.errors,
+                                            )}
+                                        />
+                                    </Field>
+                                )}
+                            </form.AppField>
                         </div>
 
                         <div className="shrink-0 border-t border-grid px-6 py-3">

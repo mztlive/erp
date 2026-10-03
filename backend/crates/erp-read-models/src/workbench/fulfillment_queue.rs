@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use application_core::AuditActor;
 use application_core::query::{normalized_text, page_or_default, page_size_or_default};
 use erp_core::common::time::Instant;
+use erp_fulfillment::entity::fulfillment::DeliveryTrackingEntry;
 use erp_workflow::entity::work_item::{
     QueueContextField, QueueContextIdentity, WorkItemPriority, WorkItemType,
 };
@@ -261,12 +262,8 @@ pub struct FulfillmentQueueItemView {
     /// 履约结果代码。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub result: Option<String>,
-    /// 承运人。
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub carrier: Option<String>,
-    /// 运单号。
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tracking_no: Option<String>,
+    /// 完整物流条目，每条关联销售明细和承运方。
+    pub tracking_entries: Vec<DeliveryTrackingEntry>,
     /// 先决条件状态。
     pub gate_state: FulfillmentQueueGateState,
     /// 冻结付款条件要求的最低金额。
@@ -534,8 +531,7 @@ fn map_item(row: FulfillmentQueueItemRow) -> Result<FulfillmentQueueItemView> {
         purchase_line_sales_allocation_id: row.purchase_line_sales_allocation_id,
         quantity: row.quantity,
         result: row.result,
-        carrier: row.carrier,
-        tracking_no: row.tracking_no,
+        tracking_entries: row.tracking_entries,
         gate_state,
         gate_required_amount: row.gate_required_amount,
         gate_effective_paid_amount: row.gate_effective_paid_amount,

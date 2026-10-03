@@ -17,6 +17,8 @@ pub struct SalesOrderView {
     pub origin_system: OriginSystem,
     /// 客户稳定身份。
     pub customer_id: String,
+    /// 当前客户主体的法定名称。
+    pub customer_name: Option<String>,
     /// 合同稳定身份。
     pub contract_id: Option<String>,
     /// 商业主状态。
@@ -176,6 +178,19 @@ pub struct PurchaseCreationAccessView {
     pub blocker: Option<String>,
 }
 
+/// 销售首次建单凭证的安全元数据；不返回对象存储键。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct SalesOrderEvidenceFileView {
+    /// 受控文件资产身份。
+    pub file_asset_id: String,
+    /// 文件名。
+    pub file_name: String,
+    /// 内容类型。
+    pub content_type: String,
+    /// 文件字节大小。
+    pub byte_size: u64,
+}
+
 /// 销售单详情视图（订单 + 稳定明细 + 草稿 + 提交历史 + 版本历史）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct SalesOrderDetailView {
@@ -191,6 +206,10 @@ pub struct SalesOrderDetailView {
     pub customer_id: String,
     /// 合同稳定身份。
     pub contract_id: Option<String>,
+    /// 首次建单凭证的受控文件身份。
+    pub evidence_file_asset_ids: Vec<String>,
+    /// 首次建单凭证的安全文件元数据。
+    pub evidence_files: Vec<SalesOrderEvidenceFileView>,
     /// 结算主体。
     pub settlement_party_id: String,
     /// 商业主状态。

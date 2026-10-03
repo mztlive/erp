@@ -46,6 +46,15 @@ const progressFields = [
 ] as const
 const sourceFields = [
     {
+        key: "hasContract",
+        id: "has-contract",
+        label: "合同状态",
+        options: [
+            { value: "yes", label: "有合同" },
+            { value: "no", label: "无合同" },
+        ],
+    },
+    {
         key: "origin",
         id: "origin",
         label: "创建来源",
@@ -83,6 +92,7 @@ export function SalesOrdersListFilterPanel({
             | "closeStatus"
             | "origin"
             | "reviewStatus"
+            | "hasContract"
         id: string
         label: string
         options: readonly { value: string; label: string }[]

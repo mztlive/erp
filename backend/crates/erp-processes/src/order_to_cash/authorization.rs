@@ -197,22 +197,23 @@ impl SalesCommandAccess {
     /// 按销售单已绑定合同与客户在调用方事务内重验跨域 detail 范围。
     ///
     /// # 参数
-    /// * `order` - 即将写入的销售单，必须已带合同与客户
+    /// * `order` - 即将写入的销售单，带明确客户及可选合同
     /// * `executor` - 原写入事务执行器
     ///
     /// # 返回
     /// 合同与客户均在范围内时成功。
     ///
     /// # 错误
-    /// 缺少合同绑定返回校验错误；越权对象返回 NotFound。
+    /// 客户或已选合同越权时返回 NotFound。
     ///
     /// # 关键业务约束
-    /// 无合同的来源不得走本销售写命令绑定路径。
+    /// 客户始终独立重验；只有已选择合同时才重验合同对象。
     pub(super) async fn related_order(&self, order: &SalesOrder, executor: &mut dyn Executor) -> Result<()> {
-        let Some(contract_id) = order.contract_id.as_ref() else {
-            return Err(Error::ValidationError("销售单缺少关联合同，无法重验合同范围".into()));
-        };
-        self.related(contract_id.as_ref(), order.customer_id.as_ref(), executor).await
+        if let Some(contract_id) = order.contract_id.as_ref() {
+            self.related(contract_id.as_ref(), order.customer_id.as_ref(), executor).await
+        } else {
+            self.require_customer(order.customer_id.as_ref(), executor).await
+        }
     }
 
     /// 在调用方执行器内按合同 detail 动作装载合同实体。

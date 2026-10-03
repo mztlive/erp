@@ -68,6 +68,10 @@ export function FulfillmentOperationsWorkspace({
                         onResolveUnknown={() =>
                             void controller.handleResolveUnknown()
                         }
+                        onRetryUnknown={() =>
+                            void controller.handleRetryUnknown()
+                        }
+                        retryPending={controller.retryPending}
                         onNext={() => {
                             const completedOperationId =
                                 controller.lastResult?.outcome?.operationId

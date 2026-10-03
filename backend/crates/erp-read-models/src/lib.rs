@@ -1,5 +1,6 @@
 //! Cross-domain read models: workbench, customer center and fulfillment queue.
 
+mod approval_runtime;
 mod errors;
 mod support;
 

@@ -177,6 +177,19 @@ type ServiceDraftLine = Readonly<{
     evidenceNote?: string
 }>
 
+/** 每个包裹明确关联销售明细；同一包裹可关联多条明细。 */
+export type DeliveryTrackingEntry = Readonly<{
+    salesOrderLineId: string
+    trackingNo: string
+    carrier?: string
+}>
+
+export type DeliveryTrackingEntryDto = Readonly<{
+    sales_order_line_id: string
+    tracking_no: string
+    carrier?: string | null
+}>
+
 export type FulfillmentDraft =
     | {
           type: "RECEIPT"
@@ -189,16 +202,22 @@ export type FulfillmentDraft =
           type: "WAREHOUSE_SHIP"
           warehouseId: string
           warehouseLabel: string
-          carrier: string
-          trackingNo: string
+          trackingEntries?: DeliveryTrackingEntry[]
+          pendingTrackingLineIds?: string[]
+          /** 仅保留旧调用方的类型签名；生产流程不读取或提交。 */
+          carrier?: string
+          trackingNo?: string
           shippedAt: string
           evidenceNote?: string
           lines: ShipDraftLine[]
       }
     | {
           type: "SUPPLIER_DIRECT"
-          carrier: string
-          trackingNo: string
+          trackingEntries?: DeliveryTrackingEntry[]
+          pendingTrackingLineIds?: string[]
+          /** 仅保留旧调用方的类型签名；生产流程不读取或提交。 */
+          carrier?: string
+          trackingNo?: string
           shippedAt: string
           evidenceNote?: string
           lines: DirectDraftLine[]

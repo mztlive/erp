@@ -6,7 +6,9 @@
 //!
 //! 契约来源：erp-client `features/sales-orders`（W05 变更轨）。
 
+mod draft;
 use application_core::{page_or_default, page_size_or_default};
+pub use draft::{SalesChangeDraftView, SaveSalesChangeDraftRequest};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 

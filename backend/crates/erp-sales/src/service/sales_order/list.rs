@@ -98,6 +98,7 @@ fn list_filter(
         order_no: query.order_no,
         customer_id: query.customer_id,
         contract_id: query.contract_id,
+        has_contract: query.has_contract,
         origin_system: query.origin_system,
         commercial_status: query.commercial_status,
         review_status: query.review_status,
@@ -132,7 +133,7 @@ mod tests {
         let mut params: SalesOrderListParams = serde_json::from_value(json!({
             "order_no": " SO-1 ", "created_by": " creator ", "owner_user_ids": "sales-1,sales-2",
             "org_unit_ids": "org-1", "include_descendants": true,
-            "created_from": 10, "created_to": 20, "customer_id": "customer-1", "contract_id": "contract-1"
+            "has_contract": false, "created_from": 10, "created_to": 20, "customer_id": "customer-1", "contract_id": "contract-1"
         }))
         .unwrap();
         let search = SalesOrderSearch { q: Some("客户".into()), ..Default::default() };
@@ -153,6 +154,7 @@ mod tests {
         assert_eq!((next.created_from, next.created_to), (Some(10), Some(20)));
         assert_eq!(next.customer_id.as_deref(), Some("customer-1"));
         assert_eq!(next.contract_id.as_deref(), Some("contract-1"));
+        assert_eq!(next.has_contract, Some(false));
         assert_eq!(next.search.q.as_deref(), Some("客户"));
     }
 

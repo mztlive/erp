@@ -10,8 +10,8 @@ use erp_audit::{AuditActorLogs, AuditExt, AuditLog};
 use erp_core::ids::FileAssetId;
 use erp_support::repository::prelude::*;
 use erp_support::{
-    FileAsset, FileAssetExt, PendingAttachmentBatch, PendingFileAssetRequest, PendingFileReference,
-    PendingFileReferenceSet, SensitivityClass,
+    FileAsset, FileAssetExt, PendingAttachmentBatch, PendingFileAssetRequest, PendingFileContent,
+    PendingFileReference, PendingFileReferenceSet, SensitivityClass,
 };
 use id_generator::next_id;
 use mongodb::Database;
@@ -26,6 +26,7 @@ pub struct PendingFileAssets {
     assets: Vec<FileAsset>,
     audits: Vec<AuditLog>,
     references: PendingFileReferenceSet,
+    manifest: Vec<PendingFileContent>,
 }
 
 impl PendingFileAssets {
@@ -38,11 +39,19 @@ impl PendingFileAssets {
     /// # Errors
     /// Invalid temporary references, registration validation failures, or duplicate tokens.
     pub fn prepare(requests: Vec<PendingFileAssetRequest>, actor: &AuditActor) -> Result<Self> {
+        let mut manifest = Vec::new();
         let mut assets = Vec::with_capacity(requests.len());
         let mut audits = Vec::with_capacity(requests.len());
         let mut references = Vec::with_capacity(requests.len());
         for request in requests {
             let reference = PendingFileReference::parse(&request.reference)?;
+            manifest.push(PendingFileContent {
+                reference: reference.as_str().to_string(),
+                file_name: request.registration.file_name.clone(),
+                content_type: request.registration.content_type.clone(),
+                byte_size: request.registration.byte_size,
+                content_hmac: request.registration.content_hmac.clone(),
+            });
             request.registration.validate()?;
             let sensitivity = request.registration.sensitivity_class;
             let asset =
@@ -54,7 +63,8 @@ impl PendingFileAssets {
             assets.push(asset);
             audits.push(audit);
         }
-        Ok(Self { assets, references: PendingFileReferenceSet::new(references)?, audits })
+        manifest.sort_by(|a, b| a.reference.cmp(&b.reference));
+        Ok(Self { assets, references: PendingFileReferenceSet::new(references)?, audits, manifest })
     }
 
     /// Wrap the batch as a `'static` consumer port.
@@ -85,6 +95,10 @@ impl PendingAttachmentBatch for PendingFileAssets {
         db.file_assets().create_many_ordered(&self.assets, executor).await?;
         db.audit_logs().create_many_ordered(&self.audits, executor).await?;
         Ok(())
+    }
+
+    fn content_manifest(&self) -> Vec<PendingFileContent> {
+        self.manifest.clone()
     }
 
     fn is_empty(&self) -> bool {

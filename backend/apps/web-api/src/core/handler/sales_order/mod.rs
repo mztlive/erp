@@ -3,6 +3,8 @@
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
 //! 直接复用 销售域和销售中心的 DTO，禁止重复定义同构类型、禁止直连数据库。
 
+pub mod evidence;
+
 use application_core::AuditActor;
 use axum::extract::{Path, Query, State};
 use axum::{Extension, Json};
@@ -10,9 +12,9 @@ use erp_processes::order_to_cash::SalesOrderCommandProcess;
 use erp_read_models::sales_center::order::dto::SalesOrderDetailView;
 use erp_read_models::sales_center::order::{SalesListParams, SalesListView, SalesOrderReadService};
 use erp_sales::dto::sales_order::{
-    CancelSalesOrderApprovalRequest, CreateSalesOrderRequest, HandoverCandidateView,
-    HandoverSalesOrderRequest, HandoverSalesOrderView, SaveWorkingCopyRequest, SubmissionView,
-    SubmitSalesOrderRequest, VoidSalesOrderRequest, WorkingCopyView,
+    BindSalesOrderContractRequest, CancelSalesOrderApprovalRequest, CreateSalesOrderRequest,
+    HandoverCandidateView, HandoverSalesOrderRequest, HandoverSalesOrderView, SaveWorkingCopyRequest,
+    SubmissionView, SubmitSalesOrderRequest, VoidSalesOrderRequest, WorkingCopyView,
 };
 
 use crate::app_state::AppState;
@@ -80,8 +82,10 @@ pub async fn sales_order_create(
 ) -> Result<SalesOrderDetailView> {
     let service = SalesOrderCommandProcess::with_rbac(state.db(), state.rbac())
         .with_object_read(state.approval_object_read());
-    ensure_contract_access(&state, &actor, "detail", req.contract_id.as_ref()).await?;
-    let customer_id = service.sales_command_customer_id(&actor, &req.contract_id).await?;
+    if let Some(contract_id) = req.contract_id.as_ref() {
+        ensure_contract_access(&state, &actor, "detail", contract_id.as_ref()).await?;
+    }
+    let customer_id = service.sales_command_customer_id(&actor, &req.contract_id, &req.customer_id).await?;
     ensure_customer_access(&state, &actor, "detail", customer_id.as_ref()).await?;
     let view = service.create_sales_order(req, &actor).await?;
 
@@ -144,10 +148,12 @@ pub async fn sales_order_save_working_copy(
     Path(id): Path<String>,
     Json(req): Json<SaveWorkingCopyRequest>,
 ) -> Result<WorkingCopyView> {
-    ensure_contract_access(&state, &actor, "detail", req.contract_id.as_ref()).await?;
+    if let Some(contract_id) = req.contract_id.as_ref() {
+        ensure_contract_access(&state, &actor, "detail", contract_id.as_ref()).await?;
+    }
     let service = SalesOrderCommandProcess::with_rbac(state.db(), state.rbac())
         .with_object_read(state.approval_object_read());
-    let customer_id = service.sales_command_customer_id(&actor, &req.contract_id).await?;
+    let customer_id = service.sales_command_customer_id(&actor, &req.contract_id, &req.customer_id).await?;
     ensure_customer_access(&state, &actor, "detail", customer_id.as_ref()).await?;
     let view = service.save_working_copy(&id, req, &actor).await?;
 
@@ -183,10 +189,12 @@ pub async fn sales_order_submit(
     Path(id): Path<String>,
     Json(req): Json<SubmitSalesOrderRequest>,
 ) -> Result<SubmissionView> {
-    ensure_contract_access(&state, &actor, "detail", req.contract_id.as_ref()).await?;
+    if let Some(contract_id) = req.contract_id.as_ref() {
+        ensure_contract_access(&state, &actor, "detail", contract_id.as_ref()).await?;
+    }
     let service = SalesOrderCommandProcess::with_rbac(state.db(), state.rbac())
         .with_object_read(state.approval_object_read());
-    let customer_id = service.sales_command_customer_id(&actor, &req.contract_id).await?;
+    let customer_id = service.sales_command_customer_id(&actor, &req.contract_id, &req.customer_id).await?;
     ensure_customer_access(&state, &actor, "detail", customer_id.as_ref()).await?;
     let view = service.submit_sales_order(&id, req, &actor).await?;
 
@@ -373,4 +381,33 @@ mod scope_query_tests {
         let legacy: Uri = "/?owner_name=someone".parse().unwrap();
         assert!(Query::<SalesListParams>::try_from_uri(&legacy).is_err());
     }
+}
+
+#[permission_macros::permission(
+    group = "销售单",
+    group_desc = "销售单（W05）管理",
+    desc = "补录销售单合同",
+    resource = "sales_order",
+    action = "update"
+)]
+/// 为原销售单首次补录合同，保留既有客户、结算主体与全部历史商业快照。
+///
+/// # 参数
+/// * `state` / `actor` - 当前应用状态和认证用户
+/// * `id` / `req` - 原销售单身份、单据版本及合同当前有效修订
+/// # 返回
+/// 返回更新后的销售单详情。
+/// # 错误
+/// 越权、冲突或不符合关联规则时拒绝。
+pub async fn sales_order_bind_contract(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<BindSalesOrderContractRequest>,
+) -> Result<SalesOrderDetailView> {
+    let view = SalesOrderCommandProcess::with_rbac(state.db(), state.rbac())
+        .with_object_read(state.approval_object_read())
+        .bind_sales_order_contract(&id, req, &actor)
+        .await?;
+    Ok(ApiResponse::ok_with_data(view))
 }

@@ -8,9 +8,11 @@
 //! 契约来源：erp-client `features/sales-orders`（W05）；本域接口按后端实体字段
 //! 形状提供，与前端 mock 视图的差异见批次报告「契约变更」。
 
+mod no_contract;
+
 use application_core::{normalized_text, page_or_default, page_size_or_default};
 use erp_core::common::time::BusinessDate;
-use erp_core::ids::{ContractId, CustomerAccountId, SkuId};
+use erp_core::ids::{ContractId, ContractRevisionId, CustomerAccountId, FileAssetId, SkuId};
 use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
@@ -92,7 +94,7 @@ pub struct SalesOrderDraftRequest {
     /// 合同编号快照；无合同时省略。
     pub contract_no: Option<String>,
     /// 用户明确选择的合同不可变版本；有合同时必填。
-    pub requested_contract_revision_id: Option<erp_core::ids::ContractRevisionId>,
+    pub requested_contract_revision_id: Option<ContractRevisionId>,
     /// 结算主体名称快照；与 `settlement_party_id` 同时提供。
     pub settlement_party_name: Option<String>,
     /// 付款条件代码。
@@ -124,16 +126,20 @@ pub struct SalesOrderDraftRequest {
 
 /// 前端可编辑的销售草稿命令。
 ///
-/// 客户、合同号、结算主体、付款条件与开票要求均由服务端按所选合同修订冻结，
-/// 客户端不得复制后再回传这些权威快照。
+/// 有合同的客户、结算主体和商业条款由服务端按所选合同修订冻结；
+/// 无合同时仅接受明确约定条款，客户和结算主体仍从服务端资料读取。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct SalesOrderEditableDraftRequest {
     /// 当前草稿责任人。
     #[validate(custom(function = "non_blank", message = "编辑人不能为空"))]
     pub editor_user_id: String,
-    /// 用户明确选择的合同不可变版本。
-    pub requested_contract_revision_id: erp_core::ids::ContractRevisionId,
+    /// 用户明确选择的合同不可变版本；无合同时为空。
+    pub requested_contract_revision_id: Option<ContractRevisionId>,
+    /// 无合同时由客户与销售约定的付款和开票条款。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[validate(nested)]
+    pub no_contract_terms: Option<SalesOrderNoContractTerms>,
     /// 客户项目名称。
     pub project_name: Option<String>,
     /// 业务备注。
@@ -150,7 +156,38 @@ pub struct SalesOrderEditableDraftRequest {
     pub lines: Vec<SalesOrderDraftLineRequest>,
 }
 
-/// 创建销售单请求（W05 M5：合同 + 可编辑草稿 + 意图 + 幂等键）。
+/// 无合同销售约定条款；客户及结算主体名称由服务端冻结。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct SalesOrderNoContractTerms {
+    /// 付款条件代码。
+    #[validate(custom(function = "non_blank", message = "付款条件代码不能为空"))]
+    pub payment_term_code: String,
+    /// 付款条件名称。
+    #[validate(custom(function = "non_blank", message = "付款条件名称不能为空"))]
+    pub payment_term_name: String,
+    /// 开票类型。
+    #[validate(custom(function = "non_blank", message = "开票类型不能为空"))]
+    pub invoice_type: String,
+    /// 税点。
+    #[validate(custom(function = "non_blank", message = "税点不能为空"))]
+    pub tax_point: String,
+}
+
+/// 后补合同请求；只更新稳定关系，不覆盖已冻结商业内容。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct BindSalesOrderContractRequest {
+    /// 销售单稳定对象的期望版本。
+    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    pub version: u64,
+    /// 所选合同稳定身份。
+    pub contract_id: ContractId,
+    /// 所选合同当前有效修订。
+    pub requested_contract_revision_id: ContractRevisionId,
+}
+
+/// 创建销售单请求（可选合同 + 可编辑草稿 + 意图 + 幂等键）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct CreateSalesOrderRequest {
@@ -159,13 +196,19 @@ pub struct CreateSalesOrderRequest {
     pub order_no: String,
     /// 业务性质（创建后永久不变）。
     pub business_type: BusinessType,
-    /// 合同稳定身份；客户与结算主体由服务端从当前合同修订解析。
-    pub contract_id: ContractId,
+    /// 合同稳定身份；无合同时为空，有合同时从当前合同修订解析归属。
+    pub contract_id: Option<ContractId>,
+    /// 无合同时选择的客户；有合同由服务端解析。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub customer_id: Option<CustomerAccountId>,
     /// 幂等键；同一操作人、同一键和同一完整载荷返回原销售单，异载荷返回冲突。
     #[validate(length(min = 1, max = 128, message = "幂等键长度必须在1-128之间"))]
     pub idempotency_key: String,
     /// 建单意图。
     pub intent: SalesOrderCreateIntent,
+    /// 建单凭证受控资产；无合同时至少一份 PDF 或图片。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub evidence_file_asset_ids: Vec<FileAssetId>,
     /// 客户端可编辑草稿；合同权威快照由服务端补齐。
     #[validate(nested)]
     pub draft: SalesOrderEditableDraftRequest,
@@ -178,8 +221,11 @@ pub struct SaveWorkingCopyRequest {
     /// 期望的乐观锁版本；与当前版本不一致时拒绝更新（409）。
     #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
     pub version: u64,
-    /// 所选合同稳定身份。
-    pub contract_id: ContractId,
+    /// 所选合同稳定身份；无合同时为空。
+    pub contract_id: Option<ContractId>,
+    /// 无合同时选择的客户；有合同由服务端解析。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub customer_id: Option<CustomerAccountId>,
     /// 客户端可编辑草稿；合同权威快照由服务端补齐。
     #[validate(nested)]
     pub draft: SalesOrderEditableDraftRequest,
@@ -197,8 +243,11 @@ pub struct SubmitSalesOrderRequest {
     /// 幂等键（重复提交按「同一草稿已提交」去重，返回既有提交）。
     #[validate(length(min = 1, max = 128, message = "幂等键长度必须在1-128之间"))]
     pub idempotency_key: String,
-    /// 所选合同稳定身份。
-    pub contract_id: ContractId,
+    /// 所选合同稳定身份；无合同时为空。
+    pub contract_id: Option<ContractId>,
+    /// 无合同时选择的客户；有合同由服务端解析。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub customer_id: Option<CustomerAccountId>,
     /// 本次提交的完整可编辑草稿。
     #[validate(nested)]
     pub draft: SalesOrderEditableDraftRequest,
@@ -297,6 +346,8 @@ pub struct SalesOrderListParams {
     pub customer_id: Option<CustomerAccountId>,
     /// 合同筛选。
     pub contract_id: Option<ContractId>,
+    /// 是否已绑定合同；None 不筛选。
+    pub has_contract: Option<bool>,
     /// 最初创建入口筛选。
     pub origin_system: Option<OriginSystem>,
     /// 商业主状态筛选。
@@ -353,6 +404,8 @@ pub(crate) struct SalesOrderListQuery {
     pub customer_id: Option<String>,
     /// 合同筛选。
     pub contract_id: Option<String>,
+    /// 是否已绑定合同。
+    pub has_contract: Option<bool>,
     /// 最初创建入口筛选。
     pub origin_system: Option<OriginSystem>,
     /// 商业主状态筛选。
@@ -414,6 +467,7 @@ impl SalesOrderListParams {
             order_no: normalized_text(self.order_no.as_deref()),
             customer_id: self.customer_id.as_ref().map(ToString::to_string),
             contract_id: self.contract_id.as_ref().map(ToString::to_string),
+            has_contract: self.has_contract,
             origin_system: self.origin_system,
             commercial_status: self.commercial_status,
             review_status: self.review_status,

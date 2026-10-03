@@ -118,6 +118,7 @@ impl SalesOrderCommandProcess {
                 Box::pin(async move {
                     access.related_order(&related_order, executor).await?;
                     access.revalidate(&order_id, expected_order_version, executor).await?;
+                    Self::persist_first_contract_binding(&db, &access, &related_order, executor).await?;
                     erp_sales::service::sales_order::SalesOrderService::new(db.clone())
                         .ensure_sellable_refs(
                             &sellable_refs,

@@ -31,6 +31,7 @@ const MORE_CHIP_KEYS: readonly SalesOrdersListFilterKey[] = [
     "closeStatus",
     "customerId",
     "contractId",
+    "hasContract",
     "createdBy",
     "orgUnitIds",
 ]

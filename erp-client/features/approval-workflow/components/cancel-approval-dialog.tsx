@@ -14,10 +14,13 @@ import {
 } from "@/components/ui/dialog"
 
 import { approvalConflictMessage, isApprovalConflict } from "../api"
+import { documentIsEditableDraft } from "../api/document-cancel"
 import { createApprovalIdempotencyKey } from "../idempotency"
 import { useCancelApprovalMutation, useCancelBlockedMutation } from "../queries"
 import { reasonFormSchema } from "../schema"
 import type { ApprovalCommandView } from "../types"
+import { getErrorMessage } from "@/lib/api/errors"
+import { classifyFormalCommandError } from "@/lib/formal-command"
 
 /**
  * 撤回审批或取消受阻审批。
@@ -31,6 +34,9 @@ export function CancelApprovalDialog({
     instanceId,
     documentType,
     documentId,
+    documentVersion,
+    currentRoundNo = 1,
+    reviseRejected = false,
     currentNodeName,
     afterStatusLabel,
     expectedInstanceVersion,
@@ -46,6 +52,9 @@ export function CancelApprovalDialog({
     instanceId: string
     documentType?: string
     documentId?: string
+    documentVersion?: number
+    currentRoundNo?: number
+    reviseRejected?: boolean
     currentNodeName?: string
     afterStatusLabel: string
     expectedInstanceVersion: string
@@ -58,6 +67,14 @@ export function CancelApprovalDialog({
     const cancelApproval = useCancelApprovalMutation()
     const cancelBlocked = useCancelBlockedMutation(instanceId)
     const pending = cancelApproval.isPending || cancelBlocked.isPending
+    const [uncertain, setUncertain] = React.useState(false)
+    const frozenWithdraw = React.useRef<
+        Parameters<typeof cancelApproval.mutateAsync>[0] | null
+    >(null)
+    const frozenBlocked = React.useRef<
+        Parameters<typeof cancelBlocked.mutateAsync>[0] | null
+    >(null)
+    const submissionInFlight = React.useRef(false)
     const [idempotencyKey, setIdempotencyKey] = React.useState("")
     const [conflictMessage, setConflictMessage] = React.useState<string | null>(
         null,
@@ -69,48 +86,98 @@ export function CancelApprovalDialog({
             onChange: reasonFormSchema,
         },
         onSubmit: async ({ value }) => {
+            if (submissionInFlight.current) return
+            submissionInFlight.current = true
+            const wasUncertain = uncertain
+            let checkingUnknown = false
             try {
+                const withdraw = frozenWithdraw.current ?? {
+                    documentType: documentType ?? "",
+                    documentId: documentId ?? "",
+                    documentVersion: documentVersion ?? 0,
+                    instanceId,
+                    currentRoundNo,
+                    request: {
+                        reason: value.reason,
+                        expected_instance_version: expectedInstanceVersion,
+                        expected_execution_version: expectedExecutionVersion,
+                        expected_task_version: expectedTaskVersion ?? null,
+                        idempotency_key: idempotencyKey,
+                    },
+                }
+                if (mode === "withdraw") frozenWithdraw.current = withdraw
+                const blocked = frozenBlocked.current ?? {
+                    reason: value.reason,
+                    expected_instance_version: expectedInstanceVersion,
+                    expected_execution_version: expectedExecutionVersion,
+                    expected_task_version: expectedTaskVersion ?? null,
+                    idempotency_key: idempotencyKey,
+                }
+                if (mode === "cancel-blocked") frozenBlocked.current = blocked
+                if (wasUncertain && mode === "withdraw") {
+                    checkingUnknown = true
+                    if (
+                        await documentIsEditableDraft(
+                            withdraw.documentType,
+                            withdraw.documentId,
+                        )
+                    ) {
+                        frozenWithdraw.current = null
+                        setUncertain(false)
+                        onOpenChange(false)
+                        onApplied?.({
+                            instanceId,
+                            currentRoundNo,
+                            instanceStatus: "CANCELLED",
+                            subjectStatus: "draft",
+                            outcome: "APPLIED",
+                        })
+                        return
+                    }
+                    checkingUnknown = false
+                }
                 const view =
                     mode === "withdraw"
-                        ? await cancelApproval.mutateAsync({
-                              documentType: documentType ?? "",
-                              documentId: documentId ?? "",
-                              request: {
-                                  reason: value.reason,
-                                  expected_instance_version:
-                                      expectedInstanceVersion,
-                                  expected_execution_version:
-                                      expectedExecutionVersion,
-                                  expected_task_version:
-                                      expectedTaskVersion ?? null,
-                                  idempotency_key: idempotencyKey,
-                              },
-                          })
-                        : await cancelBlocked.mutateAsync({
-                              reason: value.reason,
-                              expected_instance_version:
-                                  expectedInstanceVersion,
-                              expected_execution_version:
-                                  expectedExecutionVersion,
-                              expected_task_version:
-                                  expectedTaskVersion ?? null,
-                              idempotency_key: idempotencyKey,
-                          })
+                        ? await cancelApproval.mutateAsync(withdraw)
+                        : await cancelBlocked.mutateAsync(blocked)
+                frozenWithdraw.current = null
+                frozenBlocked.current = null
+                setUncertain(false)
                 onOpenChange(false)
                 onApplied?.(view)
             } catch (error) {
+                const unknown =
+                    wasUncertain ||
+                    checkingUnknown ||
+                    classifyFormalCommandError(error) === "unknown"
+                setUncertain(unknown)
+                if (!unknown) {
+                    frozenWithdraw.current = null
+                    frozenBlocked.current = null
+                }
                 if (isApprovalConflict(error)) {
                     setConflictMessage(approvalConflictMessage(error))
                     return
                 }
-                throw error
+                setConflictMessage(
+                    unknown
+                        ? "处理结果待确认，请使用本次操作重试；确认前不要修改输入或重复撤回。"
+                        : getErrorMessage(error, "撤回未完成，请刷新后重试。"),
+                )
+            } finally {
+                submissionInFlight.current = false
             }
         },
     })
 
     React.useEffect(() => {
         if (!open) return
-        form.reset({ reason: "" })
+        frozenWithdraw.current = null
+        frozenBlocked.current = null
+        setUncertain(false)
+        form.reset({
+            reason: reviseRejected ? "按驳回意见修改原单后重新提交" : "",
+        })
         setIdempotencyKey(
             createApprovalIdempotencyKey(
                 mode === "withdraw" ? "cancel" : "cancel-blocked",
@@ -118,23 +185,37 @@ export function CancelApprovalDialog({
             ),
         )
         setConflictMessage(null)
-    }, [form, instanceId, mode, open])
+    }, [form, instanceId, mode, open, reviseRejected])
 
     const title =
-        mode === "withdraw"
-            ? emergency
-                ? "应急撤回审批"
-                : "撤回审批"
-            : "取消受阻审批"
+        reviseRejected && mode === "withdraw"
+            ? "修改原单"
+            : mode === "withdraw"
+              ? emergency
+                  ? "应急撤回审批"
+                  : "撤回审批"
+              : "取消受阻审批"
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent closeButtonId={`${id}-close`}>
+        <Dialog
+            open={open}
+            onOpenChange={(next) => {
+                if (!submissionInFlight.current && !pending && !uncertain)
+                    onOpenChange(next)
+            }}
+        >
+            <DialogContent
+                closeButtonId={`${id}-close`}
+                showCloseButton={!pending && !uncertain}
+            >
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
                     <DialogDescription>
                         当前节点：{currentNodeName ?? "—"}。撤回后单据将回到
                         {afterStatusLabel}。
+                        {reviseRejected
+                            ? "原单编号与审批记录保留，修改后需重新提交审批。"
+                            : null}
                         {mode === "cancel-blocked"
                             ? "此操作不可恢复，不会改派或继续推进。"
                             : null}
@@ -157,7 +238,7 @@ export function CancelApprovalDialog({
                                 id={`${id}-reason`}
                                 label="原因"
                                 required
-                                disabled={pending}
+                                disabled={pending || uncertain}
                             />
                         )}
                     />
@@ -171,7 +252,7 @@ export function CancelApprovalDialog({
                             id={`${id}-cancel`}
                             type="button"
                             variant="outline"
-                            disabled={pending}
+                            disabled={pending || uncertain}
                             onClick={() => onOpenChange(false)}
                         >
                             取消
@@ -181,9 +262,13 @@ export function CancelApprovalDialog({
                                 loading={pending}
                                 id={`${id}-submit`}
                                 label={
-                                    mode === "withdraw"
-                                        ? "确认撤回"
-                                        : "确认取消"
+                                    uncertain
+                                        ? "核对撤回结果"
+                                        : reviseRejected && mode === "withdraw"
+                                          ? "撤回并修改原单"
+                                          : mode === "withdraw"
+                                            ? "确认撤回"
+                                            : "确认取消"
                                 }
                                 disabled={pending}
                             />

@@ -50,8 +50,8 @@ pub use entity::source_registry::{
 pub use error::{Error, Result};
 pub use ports::{
     BUSINESS_DOCUMENT_TYPE_CODES, BusinessDocumentPort, EmptyPendingAttachments, FailClosedAuditPort,
-    FailClosedBusinessDocumentPort, PendingAttachmentBatch, PreparedSupportAudit, SupportAuditPort,
-    is_business_document_type,
+    FailClosedBusinessDocumentPort, PendingAttachmentBatch, PendingFileContent, PreparedSupportAudit,
+    SupportAuditPort, is_business_document_type,
 };
 pub use repository::{
     BackgroundJobFilter, BackgroundJobItemRow, BackgroundJobRegistration, BulkJobExt, BulkJobRepository,

@@ -129,54 +129,110 @@ async fn load_authorized_change(
     db.client()
         .clone()
         .with_transaction(move |executor| {
-            Box::pin(async move {
-                let change = db
-                    .sales_change_orders()
-                    .find_by_id(&id, executor)
-                    .await?
-                    .ok_or_else(|| Error::NotFound("销售变更单不存在或无权查看".to_string()))?;
-                let access = SalesAccess::new(db.clone(), rbac);
-                let (context, scope) = access.resolve(&actor, "detail", &[], executor).await?;
-                let order = db
-                    .sales_orders()
-                    .find_authorized(change.sales_order_id.as_ref(), &scope, executor)
-                    .await?
-                    .ok_or_else(|| Error::NotFound("销售变更单不存在或无权查看".to_string()))?;
-                let binding =
-                    match find_approval_binding(&db, &id, executor).await.map_err(crate::Error::from) {
-                        Ok(binding) => binding,
-                        Err(Error::NotFound(_)) => None,
-                        Err(error) => return Err(error),
-                    };
-                let graph = match binding.as_ref() {
-                    Some(binding) => Some(
-                        db.bpm_workflow()
-                            .load_definition_graph(&binding.approval_process_definition_id, executor)
-                            .await?
-                            .ok_or_else(|| {
-                                Error::ConflictError("销售变更绑定的审批定义不存在".to_string())
-                            })?,
-                    ),
-                    None => None,
-                };
-                let mut view = detail_view(change, binding);
-                if let (Some(definition), Some(mut graph)) = (view.approval.definition.as_mut(), graph) {
-                    definition.name = graph.definition.name;
-                    graph.nodes.sort_by_key(|node| node.display_order);
-                    definition.nodes = graph
-                        .nodes
-                        .into_iter()
-                        .map(|node| super::dto::DocumentApprovalNodeView {
-                            key: node.node_key,
-                            name: node.node_name,
-                        })
-                        .collect();
-                }
-                let version = format!("{}:{}:{}", context.scope_version, order.base.id, order.base.version);
-                Ok((view, version))
-            })
+            Box::pin(async move { load_change_snapshot(&db, &rbac, &actor, &id, executor).await })
         })
         .await
+}
+
+/// 在同一执行器先核验来源详情范围，再装配当前变更事实。
+///
+/// # 参数
+/// * `db` - 销售集合数据库
+/// * `rbac` - 当前授权源
+/// * `actor` - 当前账号
+/// * `id` - 原变更单身份
+/// * `executor` - 当前读取事务执行器
+///
+/// # 返回
+/// 返回原单视图及来源范围版本。
+///
+/// # 错误
+/// 来源不可见、缺单、审批关系非法或仓储失败时拒绝。
+async fn load_change_snapshot(
+    db: &mongodb::Database,
+    rbac: &erp_identity::SharedRbacService,
+    actor: &AuditActor,
+    id: &str,
+    executor: &mut dyn persistence_core::Executor,
+) -> Result<(SalesChangeOrderDetailView, String)> {
+    let change = db
+        .sales_change_orders()
+        .find_by_id(id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("销售变更单不存在或无权查看".to_string()))?;
+    let access = SalesAccess::new(db.clone(), rbac.clone());
+    let (context, scope) = access.resolve(actor, "detail", &[], executor).await?;
+    let order = db
+        .sales_orders()
+        .find_authorized(change.sales_order_id.as_ref(), &scope, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("销售变更单不存在或无权查看".to_string()))?;
+    let binding = match find_approval_binding(db, id, executor).await.map_err(crate::Error::from) {
+        Ok(binding) => binding,
+        Err(Error::NotFound(_)) => None,
+        Err(error) => return Err(error),
+    };
+    let version =
+        format!("{}:{}:{}:{}", context.scope_version, order.base.id, order.base.version, change.base.version);
+    let view = runtime_detail_view(db, rbac, actor, change, binding, executor).await?;
+    Ok((view, version))
+}
+
+/// 使用已授权原单装配定义、真实运行审批与冻结目标身份。
+///
+/// # 参数
+/// * `db` - 销售集合数据库
+/// * `rbac` - 当前授权源
+/// * `actor` - 当前账号
+/// * `change` - 已核验来源可见的变更单
+/// * `binding` - 变更创建时冻结的定义
+/// * `executor` - 原授权事务执行器
+///
+/// # 返回
+/// 返回完整只读详情。
+///
+/// # 错误
+/// 定义缺失、当前提交来源或审批事实不一致时拒绝。
+async fn runtime_detail_view(
+    db: &mongodb::Database,
+    rbac: &erp_identity::SharedRbacService,
+    actor: &AuditActor,
+    change: SalesChangeOrder,
+    binding: Option<erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding>,
+    executor: &mut dyn persistence_core::Executor,
+) -> Result<SalesChangeOrderDetailView> {
+    let graph = match binding.as_ref() {
+        Some(binding) => Some(
+            db.bpm_workflow()
+                .load_definition_graph(&binding.approval_process_definition_id, executor)
+                .await?
+                .ok_or_else(|| Error::ConflictError("销售变更绑定的审批定义不存在".to_string()))?,
+        ),
+        None => None,
+    };
+    let content_hash = super::submitted_target::submitted_content_hash(db, &change, executor).await?;
+    let approval = super::approval_query::load_change_document_approval(
+        db,
+        rbac,
+        &change,
+        binding.as_ref(),
+        actor,
+        executor,
+    )
+    .await?;
+    let mut view = detail_view(change, binding);
+    view.submitted_working_copy_content_hash = content_hash;
+    view.approval = approval;
+    if let (Some(definition), Some(mut graph)) = (view.approval.definition.as_mut(), graph) {
+        definition.name = graph.definition.name;
+        graph.nodes.sort_by_key(|node| node.display_order);
+        definition.nodes = graph
+            .nodes
+            .into_iter()
+            .map(|node| super::dto::DocumentApprovalNodeView { key: node.node_key, name: node.node_name })
+            .collect();
+    }
+    Ok(view)
 }
 
 /// 构建详情视图，并附带只读审批结构。
@@ -200,6 +256,7 @@ fn detail_view(
         status: change_order.stable.status(),
         current_submission_id: change_order.current_submission_id.as_ref().map(ToString::to_string),
         target_content_hash: change_order.target_content_hash,
+        submitted_working_copy_content_hash: None,
         effective_revision_id: change_order.effective_revision_id.as_ref().map(ToString::to_string),
         version: change_order.base.version,
         created_at: change_order.base.created_at,

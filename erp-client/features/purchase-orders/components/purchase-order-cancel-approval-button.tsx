@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useRouter } from "next/navigation"
 
 import {
     AlertDialog,
@@ -20,6 +21,8 @@ import type { PurchaseOrderDetailResult } from "@/features/purchase-orders/hooks
 import { isPurchaseOrderApprovalInProgress } from "@/features/purchase-orders/lib/purchase-order-approval"
 import type { PurchaseOrderCenterView } from "@/features/purchase-orders/types"
 import { getErrorPresentation } from "@/lib/api/errors"
+import { documentIsEditableDraft } from "@/features/approval-workflow/api/document-cancel"
+import { classifyFormalCommandError } from "@/lib/formal-command"
 import { hasPermission } from "@/lib/permissions"
 
 /**
@@ -34,12 +37,21 @@ export function PurchaseOrderCancelApprovalButton({
     order: PurchaseOrderCenterView
     onResult?: (result: PurchaseOrderDetailResult) => void
 }) {
+    const router = useRouter()
     const [open, setOpen] = React.useState(false)
     const [reason, setReason] = React.useState("")
     const [idempotencyKey, setIdempotencyKey] = React.useState("")
     const [confirmError, setConfirmError] = React.useState<string | null>(null)
     const profileQuery = useAccountProfileQuery()
     const cancelMutation = useCancelPurchaseOrderApprovalMutation()
+    const reviseRejected = Boolean(order.approval?.instance?.latestRejection)
+    const [uncertain, setUncertain] = React.useState(false)
+    const [checking, setChecking] = React.useState(false)
+    const commandInFlight = React.useRef(false)
+    const busy = cancelMutation.isPending || checking
+    const pendingCommand = React.useRef<
+        Parameters<typeof cancelMutation.mutateAsync>[0] | null
+    >(null)
     const documentReference =
         order.identity.purchaseNo ?? order.identity.draftLabel
 
@@ -80,7 +92,11 @@ export function PurchaseOrderCancelApprovalButton({
                 disabled={!gate.enabled}
                 title={gate.reason}
                 onClick={() => {
-                    setReason("")
+                    pendingCommand.current = null
+                    setUncertain(false)
+                    setReason(
+                        reviseRejected ? "按驳回意见修改原单后重新提交" : "",
+                    )
                     setConfirmError(null)
                     setIdempotencyKey(
                         `purchase-cancel-approval:${order.identity.purchaseOrderId}:${crypto.randomUUID()}`,
@@ -88,14 +104,25 @@ export function PurchaseOrderCancelApprovalButton({
                     setOpen(true)
                 }}
             >
-                撤回审批
+                {reviseRejected ? "修改原单" : "撤回审批"}
             </Button>
-            <AlertDialog open={open} onOpenChange={setOpen}>
+            <AlertDialog
+                open={open}
+                onOpenChange={(next) => {
+                    if (!pendingCommand.current && !uncertain && !busy)
+                        setOpen(next)
+                }}
+            >
                 <AlertDialogContent className="sm:max-w-md">
                     <AlertDialogHeader>
-                        <AlertDialogTitle>撤回审批</AlertDialogTitle>
+                        <AlertDialogTitle>
+                            {reviseRejected ? "修改原单" : "撤回审批"}
+                        </AlertDialogTitle>
                         <AlertDialogDescription>
                             撤回后，采购单将回到草稿。
+                            {reviseRejected
+                                ? "原采购单编号和审批记录保留，修改后重新提交审批。"
+                                : null}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <div className="space-y-2">
@@ -111,7 +138,7 @@ export function PurchaseOrderCancelApprovalButton({
                             onChange={(event) => setReason(event.target.value)}
                             placeholder="请输入撤回原因"
                             rows={3}
-                            disabled={cancelMutation.isPending}
+                            disabled={busy || uncertain}
                         />
                         {confirmError ? (
                             <p
@@ -125,29 +152,53 @@ export function PurchaseOrderCancelApprovalButton({
                     <AlertDialogFooter>
                         <AlertDialogCancel
                             id={`procurement-orders-detail-cancel-approval-cancel-${order.identity.purchaseOrderId}`}
-                            disabled={cancelMutation.isPending}
+                            disabled={busy || uncertain}
                         >
                             取消
                         </AlertDialogCancel>
                         <AlertDialogAction
-                            loading={cancelMutation.isPending}
+                            loading={busy}
                             id={`procurement-orders-detail-cancel-approval-confirm-${order.identity.purchaseOrderId}`}
-                            disabled={
-                                cancelMutation.isPending || !reason.trim()
-                            }
-                            onClick={() => {
+                            disabled={busy || !reason.trim()}
+                            onClick={(event) => {
+                                event.preventDefault()
+                                if (commandInFlight.current) return
+                                commandInFlight.current = true
+                                setChecking(true)
                                 setConfirmError(null)
-                                void cancelMutation
-                                    .mutateAsync({
-                                        purchaseOrderId:
-                                            order.identity.purchaseOrderId,
-                                        expectedLockVersion:
-                                            order.identity.lockVersion,
-                                        reason: reason.trim(),
-                                        idempotencyKey,
-                                    })
+                                const command = pendingCommand.current ?? {
+                                    purchaseOrderId:
+                                        order.identity.purchaseOrderId,
+                                    expectedLockVersion:
+                                        order.identity.lockVersion,
+                                    reason: reason.trim(),
+                                    idempotencyKey,
+                                }
+                                pendingCommand.current = command
+                                let checkingUnknown = false
+                                void (async () => {
+                                    if (uncertain) {
+                                        checkingUnknown = true
+                                        if (
+                                            await documentIsEditableDraft(
+                                                "PurchaseOrder",
+                                                command.purchaseOrderId,
+                                            )
+                                        )
+                                            return
+                                        checkingUnknown = false
+                                    }
+                                    return cancelMutation.mutateAsync(command)
+                                })()
                                     .then(() => {
+                                        pendingCommand.current = null
+                                        setUncertain(false)
                                         setOpen(false)
+                                        if (reviseRejected) {
+                                            router.push(
+                                                `/procurement/orders/${encodeURIComponent(order.identity.purchaseOrderId)}?mode=edit`,
+                                            )
+                                        }
                                         onResult?.({
                                             status: "succeeded",
                                             title: "审批已撤回",
@@ -157,21 +208,46 @@ export function PurchaseOrderCancelApprovalButton({
                                         })
                                     })
                                     .catch((error: unknown) => {
+                                        const unknown =
+                                            uncertain ||
+                                            checkingUnknown ||
+                                            classifyFormalCommandError(
+                                                error,
+                                            ) === "unknown"
+                                        setUncertain(unknown)
+                                        if (!unknown)
+                                            pendingCommand.current = null
                                         const failure = getErrorPresentation(
                                             error,
                                             "撤回审批未完成，请刷新后重试。",
                                         )
                                         setConfirmError(failure.description)
                                         onResult?.({
-                                            status: "blocked",
-                                            title: failure.title,
-                                            description: failure.description,
+                                            status: unknown
+                                                ? "unknown"
+                                                : "blocked",
+                                            title: unknown
+                                                ? "处理结果待确认"
+                                                : failure.title,
+                                            description: unknown
+                                                ? "请使用本次操作重试；确认前不要修改输入或重复撤回。"
+                                                : failure.description,
                                             reference: documentReference,
                                         })
                                     })
+                                    .finally(() => {
+                                        commandInFlight.current = false
+                                        setChecking(false)
+                                    })
                             }}
                         >
-                            {cancelMutation.isPending ? "撤回中" : "确认撤回"}
+                            {busy
+                                ? "撤回中"
+                                : uncertain
+                                  ? "核对撤回结果"
+                                  : reviseRejected
+                                    ? "撤回并修改原单"
+                                    : "确认撤回"}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

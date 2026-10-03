@@ -10,13 +10,72 @@ use erp_read_models::sales_center::review::{
     SalesChangeListView, SalesChangeOrderDetailView, SalesChangeReadService,
 };
 use erp_sales::dto::sales_review::{
-    CancelSalesChangeApprovalRequest, CreateSalesChangeOrderRequest, SalesChangeOrderListParams,
-    SubmitSalesChangeRequest, VoidSalesChangeOrderRequest,
+    CancelSalesChangeApprovalRequest, CreateSalesChangeOrderRequest, SalesChangeDraftView,
+    SalesChangeOrderListParams, SaveSalesChangeDraftRequest, SubmitSalesChangeRequest,
+    VoidSalesChangeOrderRequest,
 };
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::response::ApiResponse;
+
+#[permission_macros::permission(
+    group = "销售复核",
+    group_desc = "销售审批与采购二次确认（W05/W07）管理",
+    desc = "读取销售变更原单草稿",
+    resource = "sales_change_order",
+    action = "submit"
+)]
+/// 读取原变更可修改内容。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 认证账号
+/// * `id` - 原变更单身份
+///
+/// # 返回
+/// 返回完整目标草稿与版本。
+///
+/// # 错误
+/// 无权限、状态非法或缺单时拒绝。
+pub async fn sales_change_draft(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+) -> Result<SalesChangeDraftView> {
+    Ok(ApiResponse::ok_with_data(SalesChangeProcess::new(state.db(), state.rbac()).draft(&id, &actor).await?))
+}
+
+#[permission_macros::permission(
+    group = "销售复核",
+    group_desc = "销售审批与采购二次确认（W05/W07）管理",
+    desc = "修改销售变更原单草稿",
+    resource = "sales_change_order",
+    action = "submit"
+)]
+/// 保存原变更可修改内容。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 认证账号
+/// * `id` - 原变更单身份
+/// * `request` - 两项版本与完整目标内容
+///
+/// # 返回
+/// 返回保存后的目标草稿。
+///
+/// # 错误
+/// 无权限、版本变化、状态非法或输入不成立时拒绝。
+pub async fn sales_change_save_draft(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(request): Json<SaveSalesChangeDraftRequest>,
+) -> Result<SalesChangeDraftView> {
+    Ok(ApiResponse::ok_with_data(
+        SalesChangeProcess::new(state.db(), state.rbac()).save_draft(&id, request, &actor).await?,
+    ))
+}
 
 #[permission_macros::permission(
     group = "销售复核",

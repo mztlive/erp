@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog"
 import { FieldGroup } from "@/components/ui/field"
 import type { FulfillmentQueueFilters } from "@/features/fulfillment-operations/api"
+import { PurchasePaymentReceipts } from "@/features/fulfillment-operations/components/purchase-payment-receipts"
 import { FULFILLMENT_ROLES } from "@/features/fulfillment-operations/lib/fulfillment-roles"
 import { FulfillmentOperationsWorkspace } from "@/features/fulfillment-operations/pages/components/fulfillment-operations-workspace"
 import { FulfillmentPageStates } from "@/features/fulfillment-operations/pages/components/fulfillment-page-states"
@@ -123,18 +124,23 @@ export function WorkspaceFulfillmentTask({
                     onRetry={() => void controller.queueQuery.refetch()}
                 />
             ) : (
-                <FulfillmentOperationsWorkspace
-                    controller={controller}
-                    headerDescription="当前任务"
-                    operationTypes={[operationType!]}
-                    roleLabel={
-                        controller.context?.roleLabel ??
-                        FULFILLMENT_ROLES[descriptor.role].label
-                    }
-                    embedded
-                    singleOperation
-                    onBack={() => undefined}
-                />
+                <div className="space-y-5">
+                    {descriptor.role === "procurement" ? (
+                        <PurchasePaymentReceipts workItemId={item.workItemId} />
+                    ) : null}
+                    <FulfillmentOperationsWorkspace
+                        controller={controller}
+                        headerDescription="当前任务"
+                        operationTypes={[operationType!]}
+                        roleLabel={
+                            controller.context?.roleLabel ??
+                            FULFILLMENT_ROLES[descriptor.role].label
+                        }
+                        embedded
+                        singleOperation
+                        onBack={() => undefined}
+                    />
+                </div>
             )}
         </WorkspaceTaskPane>
     )

@@ -8,6 +8,14 @@ import {
     type FulfillmentOperation,
 } from "@/features/fulfillment-operations/types"
 import { getErrorMessage } from "@/lib/api/errors"
+import {
+    FormalCommandKeyLedger,
+    classifyFormalCommandError,
+} from "@/lib/formal-command"
+import type {
+    PostFulfillmentOperationCommand,
+    SaveFulfillmentOperationCommand,
+} from "../../types"
 import { resultText } from "@/lib/ui-text"
 import { createIdempotencyKey } from "../lib/idempotency"
 
@@ -81,6 +89,9 @@ export function useFulfillmentActions({
     onPosted,
     onOperationCompleted,
 }: FulfillmentActionsOptions) {
+    const ledger = React.useRef(new FormalCommandKeyLedger())
+    const postInFlight = React.useRef(false)
+    const postContext = React.useRef<FulfillmentOperation | null>(null)
     const supportsSave =
         draft?.type === "RECEIPT" ||
         draft?.type === "WAREHOUSE_SHIP" ||
@@ -88,6 +99,18 @@ export function useFulfillmentActions({
 
     const handleSave = React.useCallback(async (): Promise<boolean> => {
         if (!operation || !draft) return false
+        if (
+            (draft.type === "WAREHOUSE_SHIP" ||
+                draft.type === "SUPPLIER_DIRECT") &&
+            draft.pendingTrackingLineIds?.length
+        ) {
+            setActionError("请先点击添加物流号，再保存草稿")
+            return false
+        }
+        if (ledger.current.peek("post")) {
+            setActionError("请先确认本次发货结果，确认前不能另存草稿")
+            return false
+        }
         if (!canExecute) {
             setActionError("当前账号没有保存这类履约单据的权限")
             return false
@@ -97,22 +120,45 @@ export function useFulfillmentActions({
             return false
         }
         try {
-            await saveMutation.mutateAsync({
-                operationId: operation.operationId,
-                expectedDocumentVersion: operation.editVersion,
-                expectedSourceVersion: operation.sourceVersion,
-                idempotencyKey: createIdempotencyKey(
-                    operation.operationId,
-                    operation.editVersion,
+            const command =
+                ledger.current.acquire<SaveFulfillmentOperationCommand>(
                     "save",
-                ),
-                draft,
-            })
+                    `fulfillment:${operation.operationId}:save`,
+                    {
+                        operationId: operation.operationId,
+                        expectedDocumentVersion: operation.editVersion,
+                        expectedSourceVersion: operation.sourceVersion,
+                        idempotencyKey: createIdempotencyKey(
+                            operation.operationId,
+                            operation.editVersion,
+                            "save",
+                        ),
+                        draft,
+                    },
+                )
+            await saveMutation.mutateAsync(command.payload)
+            ledger.current.settle("save", "succeeded")
+            setLastResult(null)
             markDraftPristine()
             setSaveMessage("草稿已保存")
             setActionError(null)
             return true
         } catch (error) {
+            const outcome = classifyFormalCommandError(error)
+            ledger.current.settle("save", outcome)
+            if (outcome === "unknown") {
+                setLastResult({
+                    status: "unknown",
+                    title: resultText.unknown,
+                    description:
+                        "保存结果暂无法确认，当前输入已保留，请使用本次操作重试。",
+                    pendingIdempotencyKey:
+                        ledger.current.peek<SaveFulfillmentOperationCommand>(
+                            "save",
+                        )?.payload.idempotencyKey,
+                    stayOnItem: true,
+                })
+            }
             setActionError(
                 getErrorMessage(error, "保存失败，请检查必填项后重试"),
             )
@@ -127,29 +173,53 @@ export function useFulfillmentActions({
         markDraftPristine,
         setActionError,
         setSaveMessage,
+        setLastResult,
     ])
 
     const handlePost = React.useCallback(async () => {
-        if (!operation || !draft) return
+        const frozen =
+            ledger.current.peek<PostFulfillmentOperationCommand>("post")
+        const activeOperation = frozen ? postContext.current : operation
+        const activeDraft = frozen?.payload.draft ?? draft
+        if (!activeOperation || !activeDraft) return
+        if (postInFlight.current || ledger.current.peek("save")) return
         if (!canExecute) {
             setActionError("当前账号没有确认这类履约单据的权限")
             setConfirmOpen(false)
             return
         }
         setActionError(null)
+        postInFlight.current = true
+        if (!frozen) postContext.current = activeOperation
         try {
             const nextId = neighborId(1)
-            const response = await postMutation.mutateAsync({
-                operationId: operation.operationId,
-                expectedSourceVersion: operation.sourceVersion,
-                expectedDocumentVersion: operation.editVersion,
-                idempotencyKey: createIdempotencyKey(
-                    operation.operationId,
-                    operation.editVersion,
+            const command =
+                frozen ??
+                ledger.current.acquire<PostFulfillmentOperationCommand>(
                     "post",
-                ),
-                draft,
-            })
+                    `fulfillment:${activeOperation.operationId}:post`,
+                    {
+                        operationId: activeOperation.operationId,
+                        expectedSourceVersion: activeOperation.sourceVersion,
+                        expectedDocumentVersion: activeOperation.editVersion,
+                        idempotencyKey: createIdempotencyKey(
+                            activeOperation.operationId,
+                            activeOperation.editVersion,
+                            "post",
+                        ),
+                        draft: activeDraft,
+                    },
+                )
+            const response = await postMutation.mutateAsync(command.payload)
+            const uncertainConflict = Boolean(
+                frozen &&
+                response.status === "failed" &&
+                response.code === "SUBJECT_VERSION_MISMATCH",
+            )
+            ledger.current.settle(
+                "post",
+                uncertainConflict ? "unknown" : response.status,
+            )
             setConfirmOpen(false)
 
             if (response.status === "unknown") {
@@ -164,23 +234,24 @@ export function useFulfillmentActions({
             }
             if (response.status === "failed") {
                 setActionError(response.message)
+                if (!uncertainConflict) setLastResult(null)
                 return
             }
             const outcome = {
                 ...response.outcome,
                 salesOrderId:
                     response.outcome.salesOrderId ||
-                    operation.source.salesOrderId,
+                    activeOperation.source.salesOrderId,
                 salesOrderNo:
                     response.outcome.salesOrderNo ||
-                    operation.source.salesOrderNo,
+                    activeOperation.source.salesOrderNo,
             }
             setLastResult({
                 status: "succeeded",
                 title: OPERATION_DONE_LABEL[response.outcome.operationType],
                 description: autoNext
                     ? "已记下来了，马上打开下一条。"
-                    : operation.operationType === "RECEIPT"
+                    : activeOperation.operationType === "RECEIPT"
                       ? "已记下来了。合格的货已入库并按销售单留好，可以继续本单仓发。"
                       : "已记下来了。可以先核对一下库存变化再继续。",
                 reference: response.outcome.factNo,
@@ -193,7 +264,24 @@ export function useFulfillmentActions({
                 advanceIfNeeded(true, nextId, true)
             }
         } catch (error) {
+            const outcome = classifyFormalCommandError(error)
+            ledger.current.settle("post", outcome)
+            if (outcome === "unknown") {
+                setLastResult({
+                    status: "unknown",
+                    title: resultText.unknown,
+                    description:
+                        "处理结果暂无法确认，当前输入已保留，请查询结果或使用本次操作重试。",
+                    pendingIdempotencyKey:
+                        ledger.current.peek<PostFulfillmentOperationCommand>(
+                            "post",
+                        )?.payload.idempotencyKey,
+                    stayOnItem: true,
+                })
+            }
             setActionError(getErrorMessage(error, "提交失败，请稍后重试"))
+        } finally {
+            postInFlight.current = false
         }
     }, [
         advanceIfNeeded,
@@ -224,14 +312,25 @@ export function useFulfillmentActions({
     }, [dirty, goToOperation, neighborId, setActionError])
 
     const handleResolveUnknown = React.useCallback(async () => {
-        if (!operation || !draft) return
+        if (ledger.current.peek("save")) {
+            await handleSave()
+            return
+        }
+        const frozen =
+            ledger.current.peek<PostFulfillmentOperationCommand>("post")
+        const operationId =
+            frozen?.payload.operationId ?? operation?.operationId
+        if (!operationId) return
         const response = await resolveUnknownMutation.mutateAsync({
-            operationId: operation.operationId,
+            operationId,
             idempotencyKey:
+                frozen?.payload.idempotencyKey ??
                 pendingIdempotencyKey ??
                 createIdempotencyKey(
-                    operation.operationId,
-                    operation.editVersion,
+                    operationId,
+                    operation?.editVersion ??
+                        frozen?.payload.expectedDocumentVersion ??
+                        0,
                     "post",
                 ),
         })
@@ -250,22 +349,22 @@ export function useFulfillmentActions({
             return
         }
         if (response.outcome.kind === "POSTED") {
+            ledger.current.settle("post", "succeeded")
             setLastResult({
                 status: "succeeded",
                 title: "查到了：这一条已经做完",
-                description: "查到的是同一条记录，库存和留货没有被重复改动。",
+                description: "该单据当前已完成，请核对本次处理信息。",
                 reference: response.outcome.factNo,
                 outcome: response.outcome,
                 stayOnItem: !autoNext,
             })
             onPosted?.(response.outcome.salesOrderId)
             onOperationCompleted?.(response.outcome.operationId)
-            if (autoNext) advanceIfNeeded(true)
+            if (autoNext) advanceIfNeeded(true, undefined, true)
         }
     }, [
         advanceIfNeeded,
         autoNext,
-        draft,
         pendingIdempotencyKey,
         resolveUnknownMutation,
         operation,
@@ -273,6 +372,7 @@ export function useFulfillmentActions({
         onOperationCompleted,
         setActionError,
         setLastResult,
+        handleSave,
     ])
 
     return {
@@ -281,5 +381,7 @@ export function useFulfillmentActions({
         handlePost,
         handleSkip,
         handleResolveUnknown,
+        handleRetryUnknown: () =>
+            ledger.current.peek("save") ? handleSave() : handlePost(),
     }
 }

@@ -12,6 +12,8 @@ export type SalesOrderDetailView = SalesOrderListItem & {
     /** 详情内原地登记票款时使用的经营客户与结算主体稳定身份。 */
     customerId?: string
     settlementPartyId?: string
+    evidenceFiles?: Array<{ id: string; fileName: string }>
+    evidenceFileAssetIds?: string[]
     acceptance?: {
         acceptedQuantity: string
         note: string
@@ -35,6 +37,7 @@ export type SalesOrdersListQuery = {
     search?: string
     customerId?: string
     contractId?: string
+    hasContract?: boolean
     createdBy?: string
     nature?: "all" | "physical_service" | "card_voucher"
     /** 四个固定工作视图；"mine"/"createdByMe" 需要 `currentUserId`。 */
@@ -123,6 +126,7 @@ export type BackendSalesOrderView = {
     business_type: "VOUCHER" | "GOODS_SERVICE" | string
     origin_system: "MALL" | "ERP" | string
     customer_id: string
+    customer_name?: string | null
     contract_id?: string | null
     commercial_status: string
     review_status: string
@@ -272,6 +276,13 @@ export type BackendSalesOrderDetail = {
     customer_id: string
     contract_id?: string | null
     settlement_party_id: string
+    evidence_files?: Array<{
+        file_asset_id: string
+        file_name: string
+        content_type: string
+        byte_size: number
+    }>
+    evidence_file_asset_ids?: string[]
     commercial_status: string
     review_status: string
     fulfillment_progress: string

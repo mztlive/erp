@@ -351,13 +351,21 @@ export function useFulfillmentOperationsController({
 
     const goToOperation = React.useCallback(
         (operationId: string | undefined | null, keepResult?: boolean) => {
+            if (dirty && !keepResult) {
+                setActionError("有未保存修改，请先保存或放弃后再切换")
+                return
+            }
+            if (lastResult?.status === "unknown" && !keepResult) {
+                setActionError("请先确认本次处理结果，再切换单据")
+                return
+            }
             if (!keepResult) setLastResult(null)
             setActionError(null)
             replaceUrl({
                 currentOperationId: operationId ?? null,
             })
         },
-        [replaceUrl],
+        [replaceUrl, lastResult?.status, dirty],
     )
 
     React.useEffect(() => {
@@ -449,13 +457,15 @@ export function useFulfillmentOperationsController({
     const formalPending =
         postMutation.isPending ||
         saveMutation.isPending ||
-        resolveUnknownMutation.isPending
+        resolveUnknownMutation.isPending ||
+        lastResult?.status === "unknown"
 
     const updateDraft = React.useCallback(
         (next: FulfillmentDraft) => {
+            if (formalPending) return
             draftForm.setFieldValue("draft", next)
         },
-        [draftForm],
+        [draftForm, formalPending],
     )
     const handleSubmit = React.useCallback(
         () => draftForm.handleSubmit(),
@@ -465,10 +475,11 @@ export function useFulfillmentOperationsController({
     /** 回到最近一次保存的草稿；多处「请先保存或放弃」提示都指向这里 */
     const handleDiscard = React.useCallback(() => {
         if (!operation) return
+        if (formalPending) return
         draftForm.reset({ draft: cloneDraft(operation.draft) })
         setActionError(null)
         setSaveMessage(null)
-    }, [draftForm, operation])
+    }, [draftForm, operation, formalPending])
 
     const handleNavigate = React.useCallback(
         (delta: 1 | -1) => {
@@ -484,7 +495,7 @@ export function useFulfillmentOperationsController({
 
     const setTypeFilter = React.useCallback(
         (next: FulfillmentOperationType | "all") => {
-            if (dirty) {
+            if (dirty || lastResult?.status === "unknown") {
                 setActionError("有没保存的修改，先保存或放弃再切换类型")
                 return
             }
@@ -495,12 +506,12 @@ export function useFulfillmentOperationsController({
                 page: null,
             })
         },
-        [dirty, replaceUrl],
+        [dirty, replaceUrl, lastResult?.status],
     )
 
     /** 空态出口：类型、单号、仓库、到期、门禁和来源对象筛选一次清干净 */
     const clearAllFilters = React.useCallback(() => {
-        if (dirty) {
+        if (dirty || lastResult?.status === "unknown") {
             setActionError("有没保存的修改，先保存或放弃再清除筛选")
             return
         }
@@ -516,18 +527,18 @@ export function useFulfillmentOperationsController({
             currentOperationId: null,
             page: null,
         })
-    }, [dirty, replaceUrl])
+    }, [dirty, replaceUrl, lastResult?.status])
 
     const handlePatch = React.useCallback(
         (patch: Record<string, string | null | undefined>) => {
-            if (dirty) {
+            if (dirty || lastResult?.status === "unknown") {
                 setActionError("有没保存的修改，先保存或放弃再改筛选")
                 return
             }
             setLastResult(null)
             replaceUrl({ ...patch, page: null })
         },
-        [dirty, replaceUrl],
+        [dirty, replaceUrl, lastResult?.status],
     )
 
     const setAutoNext = React.useCallback(
@@ -555,7 +566,7 @@ export function useFulfillmentOperationsController({
 
     const setPage = React.useCallback(
         (page: number) => {
-            if (dirty) {
+            if (dirty || lastResult?.status === "unknown") {
                 setActionError("有未保存修改，请先保存或放弃后再翻页")
                 return
             }
@@ -569,7 +580,7 @@ export function useFulfillmentOperationsController({
                 currentOperationId: null,
             })
         },
-        [context?.totalPages, dirty, replaceUrl],
+        [context?.totalPages, dirty, replaceUrl, lastResult?.status],
     )
 
     const currentUrl = `${pathname}?${searchParams.toString()}`
@@ -612,6 +623,8 @@ export function useFulfillmentOperationsController({
         handlePost: actions.handlePost,
         handleSkip: actions.handleSkip,
         handleResolveUnknown: actions.handleResolveUnknown,
+        handleRetryUnknown: actions.handleRetryUnknown,
+        retryPending: postMutation.isPending || saveMutation.isPending,
         handleNavigate,
         goToOperation,
         setActionError,

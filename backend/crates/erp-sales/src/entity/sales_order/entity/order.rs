@@ -3,7 +3,9 @@ use entity_macros::Entity;
 use erp_core::common::stable::StableBase;
 use erp_core::common::state::ensure_transition;
 use erp_core::common::time::Instant;
-use erp_core::ids::{ContractId, CustomerAccountId, PartyId, SalesOrderId, SalesOrderRevisionId};
+use erp_core::ids::{
+    ContractId, CustomerAccountId, FileAssetId, PartyId, SalesOrderId, SalesOrderRevisionId,
+};
 use erp_core::money::Quantity;
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
@@ -110,6 +112,9 @@ pub struct SalesOrder {
     /// 采购创建串行化版本；每次成功占用采购剩余量前递增。
     #[serde(default)]
     pub procurement_guard_version: u64,
+    /// 首次 ERP 建单时的凭证资产，历史单据缺省为空。
+    #[serde(default)]
+    pub evidence_file_asset_ids: Vec<FileAssetId>,
 }
 
 impl PartialEq for SalesOrder {
@@ -140,6 +145,7 @@ impl PartialEq for SalesOrder {
             && self.attribution == other.attribution
             && self.closed_at == other.closed_at
             && self.procurement_guard_version == other.procurement_guard_version
+            && self.evidence_file_asset_ids == other.evidence_file_asset_ids
     }
 }
 
@@ -200,6 +206,7 @@ impl SalesOrder {
             effective_at: None,
             closed_at: None,
             procurement_guard_version: 0,
+            evidence_file_asset_ids: Vec::new(),
         })
     }
 
@@ -233,11 +240,11 @@ impl SalesOrder {
     /// 三项关系与销售单稳定关系完全一致时返回 `true`。
     pub fn matches_contract_context(
         &self,
-        contract_id: &ContractId,
+        contract_id: &Option<ContractId>,
         customer_id: &CustomerAccountId,
         settlement_party_id: &PartyId,
     ) -> bool {
-        self.contract_id.as_ref() == Some(contract_id)
+        &self.contract_id == contract_id
             && &self.customer_id == customer_id
             && &self.settlement_party_id == settlement_party_id
     }

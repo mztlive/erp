@@ -172,6 +172,7 @@ mod tests {
 
     fn valid_invoice() -> CreateInvoiceRequest {
         CreateInvoiceRequest {
+            attachment_asset_ids: vec![],
             invoice_direction: InvoiceDirection::Sales,
             invoice_kind: crate::entity::receivable::InvoiceKind::Blue,
             party_id: PartyId::new("party-1"),
@@ -198,6 +199,7 @@ mod tests {
     fn base_request() -> CommitInvoiceRequest {
         use erp_core::ids::WorkItemId;
         CommitInvoiceRequest {
+            attachment_asset_ids: vec![],
             work_item_id: WorkItemId::new("wi-1"),
             expected_task_version: "1".to_string(),
             invoice_id: None,

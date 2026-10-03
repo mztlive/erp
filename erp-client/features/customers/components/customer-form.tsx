@@ -217,8 +217,7 @@ export function CustomerForm({
                                 <field.TextField
                                     id="customers-form-credit-code"
                                     label="统一社会信用代码"
-                                    required
-                                    placeholder="18 位字母或数字"
+                                    placeholder="可选，18 位字母或数字"
                                 />
                             )}
                         />
@@ -291,8 +290,7 @@ export function CustomerForm({
                             <field.TextField
                                 id="customers-form-credit-code"
                                 label="统一社会信用代码"
-                                required
-                                placeholder="18 位字母或数字"
+                                placeholder="可选，18 位字母或数字"
                             />
                         )}
                     />

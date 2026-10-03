@@ -153,16 +153,16 @@ impl SalesOrderCommandProcess {
         if let Some(existing) = self.replay_sales_submission(&audit_id, &fingerprint, id, actor).await? {
             return Ok(existing);
         }
-        let (customer_id, settlement_party_id, draft) = self
-            .resolve_sales_command_draft(&access, &req.contract_id, req.draft, &mut NoTransaction)
+        let (order, draft) = self
+            .prepare_sales_edit(
+                &access,
+                authorized_order,
+                (req.contract_id, req.customer_id),
+                req.draft,
+                actor,
+                true,
+            )
             .await?;
-        let order = authorized_order;
-        order
-            .ensure_first_submission_working_copy_editable()
-            .map_err(|error| Error::ConflictError(error.to_string()))?;
-        if !order.matches_contract_context(&req.contract_id, &customer_id, &settlement_party_id) {
-            return Err(Error::ConflictError("销售单合同归属已变化，请刷新后重试".to_string()));
-        }
         self.sales().ensure_sellable_draft_lines(&draft.lines, &self.catalog()).await?;
         let order_id = SalesOrderId::new(order.base.id.clone());
         let active_working_copy = self

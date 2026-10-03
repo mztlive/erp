@@ -11,7 +11,7 @@ use crate::dto::{
     CreateDeliveryRequest, DeliveryDetailView, DeliveryLineView, DeliveryListParams, DeliveryView,
     UpdateDeliveryRequest,
 };
-use crate::entity::fulfillment::{Delivery, DeliveryData, DeliveryLine, DeliveryLineBatch};
+use crate::entity::fulfillment::{Delivery, DeliveryData, DeliveryLine, DeliveryLineBatch, DeliveryUpdate};
 use crate::repository::FulfillmentExt;
 use crate::repository::prelude::*;
 use crate::{Error, Result};
@@ -60,8 +60,7 @@ impl FulfillmentService {
                 purchase_order_id: row.purchase_order_id.map(|id| id.to_string()),
                 warehouse_id: row.warehouse_id.map(|id| id.to_string()),
                 status: row.status,
-                carrier: row.carrier,
-                tracking_no: row.tracking_no,
+                tracking_entries: row.tracking_entries,
                 shipped_at: row.shipped_at.map(|instant| instant.unix_secs()),
                 version: row.version,
                 created_at: row.created_at,
@@ -120,37 +119,51 @@ impl FulfillmentService {
                 sales_order_id: req.sales_order_id,
                 purchase_order_id: req.purchase_order_id,
                 warehouse_id: req.warehouse_id,
-                carrier: req.carrier,
-                tracking_no: req.tracking_no,
+                tracking_entries: req.tracking_entries,
                 address_snapshot_encrypted: None,
                 address_snapshot_fingerprint: None,
             },
-        )?;
+        )
+        .map_err(|error| Error::ValidationError(error.to_string()))?;
         let lines = DeliveryLineBatch::build(id, delivery.delivery_type, 1, delivery_line_specs(&req.lines)?)
             .map_err(Error::Logic)?;
+        delivery.ensure_tracking_lines(&lines).map_err(|error| Error::ValidationError(error.to_string()))?;
         Ok((delivery, lines))
     }
 
-    /// 在原无事务读取位置加载并修改发货草稿，先校验版本再执行实体更新。
+    /// 在调用方事务内加载真实发货行并校验包裹关联后修改草稿。
     ///
     /// # 错误
     /// 请求非法、发货单不存在、版本冲突或状态不允许更新时保留原错误。
-    pub async fn prepare_delivery_update(&self, id: &str, req: UpdateDeliveryRequest) -> Result<Delivery> {
+    pub async fn prepare_delivery_update(
+        &self,
+        id: &str,
+        req: UpdateDeliveryRequest,
+        executor: &mut dyn Executor,
+    ) -> Result<(Delivery, Vec<DeliveryLine>)> {
         req.validate()?;
         let mut delivery = self
             .db
             .deliveries()
-            .find_by_id(id, &mut NoTransaction)
+            .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("发货单不存在".to_string()))?;
         if delivery.base.version != req.version {
             return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
         }
-        delivery.update(crate::entity::fulfillment::DeliveryUpdate {
-            carrier: req.carrier,
-            tracking_no: req.tracking_no,
-        })?;
-        Ok(delivery)
+        if !delivery.is_editable() {
+            return Err(Error::ConflictError("只有草稿状态的发货单可以修改包裹".into()));
+        }
+        delivery
+            .update(DeliveryUpdate { tracking_entries: req.tracking_entries })
+            .map_err(|error| Error::ValidationError(error.to_string()))?;
+        let lines = self
+            .db
+            .fulfillment()
+            .delivery_lines_by_delivery_ids(&[delivery.base.id.clone().into()], executor)
+            .await?;
+        delivery.ensure_tracking_lines(&lines).map_err(|error| Error::ValidationError(error.to_string()))?;
+        Ok((delivery, lines))
     }
 
     /// 将已构造的发货表头和行写入调用方事务；单据注册必须由组合层先完成。
@@ -190,8 +203,7 @@ impl From<Delivery> for DeliveryView {
             purchase_order_id: delivery.purchase_order_id.map(|id| id.to_string()),
             warehouse_id: delivery.warehouse_id.map(|id| id.to_string()),
             status: delivery.status,
-            carrier: delivery.carrier,
-            tracking_no: delivery.tracking_no,
+            tracking_entries: delivery.tracking_entries,
             shipped_at: delivery.shipped_at.map(|instant| instant.unix_secs()),
             version: delivery.base.version,
             created_at: delivery.base.created_at,

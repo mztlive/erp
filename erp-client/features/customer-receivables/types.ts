@@ -328,6 +328,8 @@ export type AllocationSessionView = Readonly<{
         grossAmount?: string
         netAmount?: string
         taxAmount?: string
+        /** 本次登记同时上传的图片或 PDF；仅保存在当前草稿与提交快照中。 */
+        invoiceFiles?: readonly File[]
         invoiceKind?: "blue" | "red"
         originalInvoiceId?: string
     }

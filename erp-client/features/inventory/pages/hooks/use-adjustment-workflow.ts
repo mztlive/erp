@@ -5,6 +5,7 @@ import * as React from "react"
 import type { ResultState } from "@/components/business/feedback"
 import { useAppForm } from "@/components/form"
 import { getErrorMessage } from "@/lib/api/errors"
+import { classifyFormalCommandError } from "@/lib/formal-command"
 import { resultText } from "@/lib/ui-text"
 import {
     useCreateAdjustmentDraftMutation,
@@ -190,7 +191,7 @@ export function useAdjustmentWorkflow({
     )
 
     const doSubmit = React.useCallback(async (): Promise<void> => {
-        if (submitMutation.isPending || lastResult?.status === "unknown") return
+        if (submitMutation.isPending) return
         if (!adjustDraftId || !adjustMeta) return
         const submitCommand = adjustMeta.approval?.submitCommand
         if (
@@ -206,28 +207,43 @@ export function useAdjustmentWorkflow({
             REASON_TYPE_OPTIONS.find((r) => r.value === values.reasonType) ??
             REASON_TYPE_OPTIONS[1]
         if (!idempotencyRef.current) {
-            idempotencyRef.current = `w10-adj-${adjustDraftId}-${Date.now()}`
+            idempotencyRef.current = `w10-adj-${adjustDraftId}-${crypto.randomUUID()}`
         }
-        const payload: AdjustmentPendingPayload = {
-            stockAdjustmentId: adjustDraftId,
-            submitCommand,
-            lineId: adjustMeta.lineId,
-            balanceId: adjustMeta.balanceId,
-            expectedBalanceLockVersion: adjustLockVersion,
-            reasonType: values.reasonType,
-            reasonTypeLabel: reason.label,
-            direction: reason.direction,
-            quantity: values.quantity.trim(),
-            note: values.note.trim(),
-            occurredAt: values.occurredAt,
-            idempotencyKey: idempotencyRef.current,
-        }
+        const payload: AdjustmentPendingPayload =
+            lastResult?.status === "unknown" && pendingPayload
+                ? pendingPayload
+                : {
+                      stockAdjustmentId: adjustDraftId,
+                      submitCommand,
+                      lineId: adjustMeta.lineId,
+                      balanceId: adjustMeta.balanceId,
+                      expectedBalanceLockVersion: adjustLockVersion,
+                      reasonType: values.reasonType,
+                      reasonTypeLabel: reason.label,
+                      direction: reason.direction,
+                      quantity: values.quantity.trim(),
+                      note: values.note.trim(),
+                      occurredAt: values.occurredAt,
+                      idempotencyKey: idempotencyRef.current,
+                  }
         setPendingPayload(payload)
         setActionError(null)
         let result
         try {
             result = await submitMutation.mutateAsync(payload)
         } catch (cause) {
+            if (classifyFormalCommandError(cause) === "unknown") {
+                setLastResult({
+                    status: "unknown",
+                    title: resultText.unknown,
+                    description:
+                        "提交结果暂无法确认，输入已保留，请查询结果或使用本次操作重试。",
+                    pendingIdempotencyKey: payload.idempotencyKey,
+                })
+            } else {
+                idempotencyRef.current = null
+                setPendingPayload(null)
+            }
             setActionError(getErrorMessage(cause, "提交未完成，请重试。"))
             return
         }
@@ -256,6 +272,9 @@ export function useAdjustmentWorkflow({
 
             return
         }
+        idempotencyRef.current = null
+        setPendingPayload(null)
+        setLastResult(null)
         if (
             result.code === "VERSION_CONFLICT" &&
             result.latestLockVersion != null
@@ -271,6 +290,7 @@ export function useAdjustmentWorkflow({
         adjustMeta,
         adjustLockVersion,
         lastResult?.status,
+        pendingPayload,
         form.state.values,
         submitMutation,
         closeAdjustment,
@@ -303,6 +323,8 @@ export function useAdjustmentWorkflow({
                 pendingIdempotencyKey: r.idempotencyKey,
             })
         } else {
+            idempotencyRef.current = null
+            setPendingPayload(null)
             setLastResult(null)
             setActionError(r.message)
         }

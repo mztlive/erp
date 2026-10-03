@@ -23,6 +23,7 @@ export type SalesOrdersUrlState = {
     search?: string
     customerId?: string
     contractId?: string
+    hasContract?: "all" | "yes" | "no"
     ownerUserIds?: string
     orgUnitIds?: string
     includeDescendants: boolean
@@ -108,6 +109,7 @@ const MANAGED_QUERY_KEYS = [
     "search",
     "customerId",
     "contractId",
+    "hasContract",
     "createdBy",
     "ownerUserIds",
     "orgUnitIds",
@@ -142,6 +144,12 @@ const codec = createUrlStateCodec<SalesOrdersUrlState>([
     },
     { key: "customerId", type: "string", trim: true },
     { key: "contractId", type: "string", trim: true },
+    {
+        key: "hasContract",
+        type: "enum",
+        values: ["all", "yes", "no"],
+        defaultValue: "all",
+    },
     { key: "ownerUserIds", type: "string" },
     { key: "orgUnitIds", type: "string" },
     { key: "includeDescendants", type: "boolean", defaultValue: false },

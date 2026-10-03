@@ -6,12 +6,13 @@
 //! `#[permission_macros::permission]`。
 
 use axum::Router;
-use axum::routing::{get, post};
+use axum::routing::{get, post, put};
 use erp_identity::SharedRbacService;
 
 use crate::app_state::AppState;
 use crate::core::handler::receivable;
 use crate::core::middleware::with_permission;
+use crate::core::upload;
 
 /// 返回本域管理端路由集合。
 ///
@@ -22,6 +23,7 @@ use crate::core::middleware::with_permission;
 /// 返回挂载了权限校验层的路由集合。
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
+        .merge(additional_document_routes(rbac))
         .route(
             "/receivable-accounts",
             with_permission(
@@ -180,6 +182,56 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 post(receivable::invoice_red_issue),
                 rbac,
                 receivable::invoice_red_issue_permission_key(),
+            ),
+        )
+}
+
+/// 发票文件上传路由。
+///
+/// # 参数
+/// * `rbac` - 当前共享权限服务
+/// # 返回
+/// 返回逐操作保留权限校验和上传限制的路由集合。
+/// # 错误
+/// 无；业务错误由各处理器返回。
+fn additional_document_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
+        .route(
+            "/invoices/with-files",
+            with_permission(
+                upload::multipart_route(
+                    post(receivable::invoice_files::invoice_create_with_files),
+                    32 * upload::MAX_UPLOAD_FILE_BYTES + 1024 * 1024,
+                ),
+                rbac,
+                receivable::invoice_files::invoice_create_with_files_permission_key(),
+            ),
+        )
+        .route(
+            "/invoices/commit-with-files",
+            with_permission(
+                upload::multipart_route(
+                    post(receivable::invoice_files::invoice_commit_with_files),
+                    32 * upload::MAX_UPLOAD_FILE_BYTES + 1024 * 1024,
+                ),
+                rbac,
+                receivable::invoice_files::invoice_commit_with_files_permission_key(),
+            ),
+        )
+        .route(
+            "/customer-receipts/{id}",
+            with_permission(
+                put(receivable::draft_update::customer_receipt_update),
+                rbac,
+                receivable::draft_update::customer_receipt_update_permission_key(),
+            ),
+        )
+        .route(
+            "/customer-receipts/{id}/draft",
+            with_permission(
+                get(receivable::draft_read::customer_receipt_draft),
+                rbac,
+                receivable::draft_read::customer_receipt_draft_permission_key(),
             ),
         )
 }

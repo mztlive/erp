@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { detailApprovalSummaryClassName } from "@/components/business/detail-presentation"
 import { ApprovalReadonly } from "@/features/approval-workflow/components/approval-readonly"
 import { ApprovalActionBar } from "@/features/approval-workflow/components/approval-action-bar"
@@ -9,8 +10,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
 import { PurchaseChangeOrderApprovalArea } from "@/features/purchase-orders/components/purchase-change-order-approval-area"
-import { PurchaseChangeOrderSubmitConfirmDialog } from "@/features/purchase-orders/components/purchase-change-order-submit-confirm-dialog"
-import { useSubmitPurchaseChangeMutation } from "@/features/purchase-orders/hooks/queries"
+import { PurchaseChangeOrderEditDialog } from "./purchase-change-order-edit-dialog"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { PurchaseOrderDetailResult } from "@/features/purchase-orders/hooks/use-purchase-order-detail-command-state"
 import {
     mergePurchaseChangeOrderAllowedActions,
@@ -18,7 +19,6 @@ import {
     purchaseChangeOrderApprovalPhase,
 } from "@/features/purchase-orders/lib/purchase-change-order-approval"
 import type { PurchaseChangeOrderSummary } from "@/features/purchase-orders/types"
-import { FormalCommandKeyLedger } from "@/lib/formal-command"
 
 /**
  * 采购变更单在详情页上的审批区入口。
@@ -42,13 +42,44 @@ export function PurchaseChangeOrderApprovalSection({
     workItemAllowedActions?: readonly string[]
     onResult?: (result: PurchaseOrderDetailResult) => void
 }) {
-    const submitMutation = useSubmitPurchaseChangeMutation()
-    const [submitOpen, setSubmitOpen] = React.useState(false)
-    const ledgerRef = React.useRef<FormalCommandKeyLedger | null>(null)
-    if (ledgerRef.current == null) {
-        ledgerRef.current = new FormalCommandKeyLedger()
+    const [editOpen, setEditOpen] = React.useState(false)
+    const searchParams = useSearchParams()
+    const router = useRouter()
+    const pathname = usePathname()
+    const consumedEdit = React.useRef<string | null>(null)
+    const autoEdit =
+        searchParams.get("editChange") === "1" &&
+        searchParams.get("changeOrderId") === changeOrder?.id
+    const autoCanSubmit = Boolean(
+        changeOrder &&
+        purchaseChangeOrderApprovalPhase(
+            changeOrder.approval,
+            changeOrder.statusCode,
+        ) === "draft" &&
+        mergePurchaseChangeOrderAllowedActions(
+            changeOrder.approval?.allowedActions,
+            workItemAllowedActions,
+        ).includes("SUBMIT"),
+    )
+    React.useEffect(() => {
+        if (!autoEdit) consumedEdit.current = null
+        if (
+            autoEdit &&
+            autoCanSubmit &&
+            consumedEdit.current !== changeOrder?.id
+        ) {
+            consumedEdit.current = changeOrder?.id ?? null
+            setEditOpen(true)
+        }
+    }, [autoEdit, autoCanSubmit, changeOrder?.id])
+    const changeEditOpen = (open: boolean) => {
+        setEditOpen(open)
+        if (!open && autoEdit) {
+            const params = new URLSearchParams(searchParams.toString())
+            params.delete("editChange")
+            router.replace(`${pathname}?${params}`, { scroll: false })
+        }
     }
-    const commandLedger = ledgerRef.current
 
     if (!changeOrder) {
         return (
@@ -74,65 +105,7 @@ export function PurchaseChangeOrderApprovalSection({
         allowedActions.includes("SUBMIT") &&
         (changeOrder.version ?? 0) > 0
 
-    const submitChange = async () => {
-        const slot = `submit-change:${changeOrder.id}`
-        let command = commandLedger.peek<{
-            purchaseChangeOrderId: string
-            purchaseOrderId: string
-            expectedLockVersion: number
-        }>(slot)
-        if (!command) {
-            command = commandLedger.acquire(
-                slot,
-                `purchase-change:${changeOrder.id}:submit`,
-                {
-                    purchaseChangeOrderId: changeOrder.id,
-                    purchaseOrderId,
-                    expectedLockVersion: changeOrder.version ?? 0,
-                },
-            )
-        }
-        if (!command) return
-        const response = await submitMutation.mutateAsync({
-            ...command.payload,
-            idempotencyKey: command.idempotencyKey,
-        })
-        commandLedger.settle(slot, response.status)
-        if (response.status === "succeeded") {
-            setSubmitOpen(false)
-            onResult?.({
-                status: "succeeded",
-                title: "改单已提交审批",
-                description: `已进入「${response.data.statusLabel}」。当前采购版本对供应商仍然有效。`,
-                reference: response.reference,
-                facts: response.data.approval?.instance?.currentAssigneeName
-                    ? [
-                          {
-                              label: "当前审批人",
-                              value: response.data.approval.instance
-                                  .currentAssigneeName,
-                          },
-                      ]
-                    : undefined,
-            })
-            return
-        }
-        if (response.status === "unknown") {
-            onResult?.({
-                status: "unknown",
-                title: "处理结果待确认",
-                description: "请使用本次操作重试；确认前不要重复提交改单。",
-                reference: changeOrder.id,
-            })
-            return
-        }
-        onResult?.({
-            status: "blocked",
-            title: "改单未提交",
-            description: response.message,
-            reference: changeOrder.id,
-        })
-    }
+    const editDocumentHref = `/procurement/orders/${encodeURIComponent(purchaseOrderId)}?${new URLSearchParams({ section: "changes", changeOrderId: changeOrder.id, editChange: "1" })}`
 
     return (
         <div className="space-y-3">
@@ -147,6 +120,8 @@ export function PurchaseChangeOrderApprovalSection({
                     phase={phase}
                     approval={changeOrder.approval}
                     documentId={changeOrder.id}
+                    documentVersion={changeOrder.version}
+                    editDocumentHref={editDocumentHref}
                     workItemId={workItemId}
                     expectedTaskVersion={expectedTaskVersion}
                     workItemAllowedActions={workItemAllowedActions}
@@ -182,6 +157,8 @@ export function PurchaseChangeOrderApprovalSection({
                     instance={changeOrder.approval?.instance}
                     documentType={PURCHASE_CHANGE_ORDER_DOCUMENT_TYPE}
                     documentId={changeOrder.id}
+                    documentVersion={changeOrder.version}
+                    editDocumentHref={editDocumentHref}
                     onDecisionApplied={() =>
                         onResult?.({
                             status: "succeeded",
@@ -194,22 +171,20 @@ export function PurchaseChangeOrderApprovalSection({
             ) : null}
             {canSubmit ? (
                 <Button
-                    id={`procurement-orders-change-submit-${changeOrder.id}`}
+                    id={`procurement-orders-change-submit-${toAutomationIdSegment(changeOrder.id)}`}
                     type="button"
-                    onClick={() => setSubmitOpen(true)}
+                    onClick={() => changeEditOpen(true)}
                 >
-                    提交改单
+                    修改并提交
                 </Button>
             ) : null}
-            <PurchaseChangeOrderSubmitConfirmDialog
-                idPrefix="procurement-orders-change-submit-confirm"
-                open={submitOpen}
-                pending={submitMutation.isPending}
+            <PurchaseChangeOrderEditDialog
+                open={editOpen}
+                purchaseOrderId={purchaseOrderId}
+                changeOrderId={changeOrder.id}
                 approval={changeOrder.approval}
-                onOpenChange={setSubmitOpen}
-                onConfirm={() => {
-                    void submitChange()
-                }}
+                onOpenChange={changeEditOpen}
+                onResult={onResult}
             />
         </div>
     )

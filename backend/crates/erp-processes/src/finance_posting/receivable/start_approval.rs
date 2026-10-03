@@ -19,8 +19,7 @@ use erp_workflow::repository::bpm::ApprovalInstanceListProjection;
 use erp_workflow::repository::prelude::*;
 use erp_workflow::service::approval::execution::authorization::{AuthorizationFailure, converge_eligibility};
 use erp_workflow::service::approval::execution::idempotency::{
-    ReceiptBranch, StartIdentityParams, normalize_idempotency_key, payload_conflict_error, start_identity,
-    start_scope_candidates,
+    normalize_idempotency_key, start_scope_candidates,
 };
 use erp_workflow::service::approval::execution::{
     ExecutionCommandInput, PreparedExecution, StartExecutionInput, map_receipt_first_write_error,
@@ -29,7 +28,7 @@ use erp_workflow::service::approval::process_kind::process_kind_of;
 use erp_workflow::{ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, WorkItemExt};
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, NoTransaction};
 
 use super::adapter::customer_receipt_object_readable;
 use crate::adapters::freeze_approval_materials;
@@ -155,67 +154,6 @@ pub(super) async fn load_start_receipt_with_executor(
         }
     }
     Ok(None)
-}
-
-/// 在 fresh 事务快照内按完整 V3/legacy 身份回读已提交的客户回款启动结果。
-pub(super) async fn replay_customer_receipt_start_with_executor(
-    db: &Database,
-    subject: &SubjectRef,
-    subject_version: u32,
-    idempotency_key: &str,
-    binding: &ApprovalDefinitionBinding,
-    actor_id: &str,
-    executor: &mut dyn Executor,
-) -> Result<Option<String>> {
-    let key = normalize_idempotency_key(idempotency_key)?;
-    let process_kind = process_kind_of(DocumentType::CustomerReceipt);
-    let identity = start_identity(StartIdentityParams {
-        idempotency_key: key,
-        process_kind: process_kind.as_str(),
-        subject_kind: subject.subject_kind(),
-        subject_id: subject.subject_id(),
-        subject_version,
-        binding_id: binding.approval_process_definition_id.as_ref(),
-        definition_version: binding.approval_definition_version,
-        actor_participant_id: actor_id,
-    })?;
-    let mut receipt = None;
-    for scope in identity.scope_candidates() {
-        receipt = db
-            .bpm_workflow()
-            .find_command_receipt(
-                bpm::model::types::ApprovalCommandKind::StartApproval,
-                scope,
-                identity.idempotency_key(),
-                executor,
-            )
-            .await?;
-        if receipt.is_some() {
-            break;
-        }
-    }
-    let receipt = match identity.classify(receipt.as_ref()) {
-        ReceiptBranch::Fresh => return Ok(None),
-        ReceiptBranch::PayloadConflict => return Err(payload_conflict_error().into()),
-        ReceiptBranch::SamePayload(receipt) => receipt,
-    };
-    let instance = db
-        .bpm_workflow()
-        .find_instance_by_id(&ApprovalProcessInstanceId::new(&receipt.result_ref), executor)
-        .await?
-        .ok_or_else(|| Error::ConflictError("客户回款启动收据引用的审批实例不存在".to_string()))?;
-    if instance.base.id != receipt.result_ref
-        || instance.process_kind != process_kind
-        || instance.subject.subject_kind() != subject.subject_kind()
-        || instance.subject.subject_id() != subject.subject_id()
-        || instance.subject_version != subject_version
-        || instance.started_by.as_str() != actor_id
-        || instance.process_definition_id != binding.approval_process_definition_id
-        || instance.definition_version != binding.approval_definition_version
-    {
-        return Err(Error::ConflictError("客户回款启动收据与冻结运行事实不一致".to_string()));
-    }
-    Ok(Some(instance.base.id))
 }
 
 /// 客户回款启动输入。
@@ -392,36 +330,6 @@ pub(super) struct CustomerReceiptStartPersistInput {
     pub organization_id: String,
     /// 调用方时间。
     pub now: Instant,
-}
-
-/// 在同一事务中写入单据迁移、快照、BPM 运行事实与入口任务。
-///
-/// # 用途
-/// 提交启动后原子写入回款单、快照与运行事实。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `input` - 回款单、快照与启动计划
-///
-/// # 返回
-/// 返回提交后的回款单实体，由调用方装配视图。
-///
-/// # 错误
-/// 仓储写入失败或计划不完整时返回错误，事务回滚。
-///
-/// # 关键业务约束
-/// Replay 不得重复写运行事实；Apply 必须写入快照与入口任务。
-pub(super) async fn persist_customer_receipt_start(
-    db: &Database,
-    input: CustomerReceiptStartPersistInput,
-) -> Result<CustomerReceipt> {
-    let db = db.clone();
-    let client = db.client().clone();
-    client
-        .with_transaction(move |executor| {
-            Box::pin(async move { persist_customer_receipt_start_apply(&db, input, executor).await })
-        })
-        .await
 }
 
 /// 在调用方事务内写入回款审批启动事实。

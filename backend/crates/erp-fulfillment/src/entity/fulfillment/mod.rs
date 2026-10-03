@@ -17,11 +17,13 @@
 //! - `Delivery` 签署为 `NO_APPROVAL`，不得新增审批绑定字段或审批状态机。
 
 pub mod acceptance_eligibility;
+pub mod acceptance_evidence;
 pub mod acceptance_fulfillment_allocation;
 pub mod customer_acceptance;
 pub mod customer_acceptance_line_batch;
 pub mod delivery;
 pub mod delivery_line_batch;
+pub mod delivery_tracking;
 pub mod electronic_delivery;
 pub mod electronic_delivery_draft;
 mod fingerprint;
@@ -32,6 +34,7 @@ pub mod service_fulfillment;
 pub mod service_fulfillment_draft;
 
 pub use acceptance_eligibility::{AcceptanceFactEligibility, AcceptanceLineEligibility, AcceptanceProgress};
+pub use acceptance_evidence::{AcceptanceEvidenceMetadata, AcceptanceEvidencePolicy};
 pub use acceptance_fulfillment_allocation::{
     AcceptanceFulfillmentAllocation, AcceptanceFulfillmentAllocationData, AllocationAction,
     FulfillmentFactType,
@@ -47,6 +50,7 @@ pub use delivery::{
     Delivery, DeliveryData, DeliveryLine, DeliveryLineData, DeliveryState, DeliveryType, DeliveryUpdate,
 };
 pub use delivery_line_batch::{DeliveryLineBatch, DeliveryLineSpec};
+pub use delivery_tracking::{DeliveryTrackingEntries, DeliveryTrackingEntry};
 pub use electronic_delivery::{
     ElectronicDelivery, ElectronicDeliveryData, ElectronicDeliveryState, ElectronicDeliveryUpdate,
     FulfillmentResult,

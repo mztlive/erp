@@ -5,6 +5,7 @@
 
 import type { FulfillmentOperation } from "@/features/fulfillment-operations/types"
 import { stripDeliveryApprovalField } from "@/features/fulfillment-operations/lib/delivery-no-approval"
+import { trackingEntriesFromDto } from "@/features/fulfillment-operations/lib/tracking-entries"
 import { stripPurchaseReceiptApprovalField } from "@/features/fulfillment-operations/lib/purchase-receipt-no-approval"
 import {
     emptySourceLine,
@@ -90,8 +91,9 @@ function applyDeliveryDetail(
                 type: "WAREHOUSE_SHIP",
                 warehouseId: delivery.warehouse_id ?? "",
                 warehouseLabel: "",
-                carrier: delivery.carrier ?? "",
-                trackingNo: delivery.tracking_no ?? "",
+                trackingEntries: trackingEntriesFromDto(
+                    delivery.tracking_entries,
+                ),
                 shippedAt: nowIso().slice(0, 16),
                 lines: detail.lines.map((line) => ({
                     salesOrderLineId: line.sales_order_line_id,
@@ -108,8 +110,7 @@ function applyDeliveryDetail(
         lines,
         draft: {
             type: "SUPPLIER_DIRECT",
-            carrier: delivery.carrier ?? "",
-            trackingNo: delivery.tracking_no ?? "",
+            trackingEntries: trackingEntriesFromDto(delivery.tracking_entries),
             shippedAt: nowIso().slice(0, 16),
             lines: detail.lines.map((line) => ({
                 salesOrderLineId: line.sales_order_line_id,

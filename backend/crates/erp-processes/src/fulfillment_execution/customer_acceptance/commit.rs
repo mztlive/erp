@@ -6,14 +6,18 @@ use erp_fulfillment::dto::CommitCustomerAcceptanceRequest;
 use erp_fulfillment::entity::fulfillment::CustomerAcceptance;
 use erp_fulfillment::service::FulfillmentService;
 use erp_fulfillment::service::document_number::next_customer_acceptance_no;
+use erp_identity::SharedRbacService;
 use erp_read_models::fulfillment_center::dto::CommitCustomerAcceptanceView;
 use erp_sales::repository::SalesOrderExt;
+use erp_workflow::ApprovalObjectReadPort;
 use id_generator::next_id;
-use persistence_core::Transactional;
+use mongodb::Database;
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::CustomerAcceptanceProcess;
 use super::completion::{CompletionKind, complete_acceptance};
+use super::evidence::ensure_evidence;
 use super::registration::register_created_customer_acceptance_document;
 use super::task::prepare_customer_acceptance_task_command;
 use crate::{Error, Result};
@@ -121,17 +125,8 @@ impl CustomerAcceptanceProcess {
                         &req,
                         generated_acceptance_no.clone(),
                     )?;
-                    if is_new {
-                        register_created_customer_acceptance_document(
-                            &db,
-                            &rbac,
-                            object_read.as_ref(),
-                            &acceptance,
-                            &actor,
-                            executor,
-                        )
+                    prepare_document(&db, &rbac, object_read.as_ref(), &acceptance, is_new, &actor, executor)
                         .await?;
-                    }
                     FulfillmentService::persist_customer_acceptance_commit(
                         &db,
                         &mut acceptance,
@@ -169,5 +164,79 @@ impl CustomerAcceptanceProcess {
         };
         let remaining_eligibility = self.read.acceptance_eligibility(sales_order_id.as_ref()).await?;
         Ok(CommitCustomerAcceptanceView { acceptance: posted.into(), remaining_eligibility })
+    }
+}
+
+/// 先校验签收凭证，再按原顺序登记新验收单据。
+///
+/// # 参数
+/// 组合根依赖、当前验收表头、新建标识、操作人和同一事务执行器。
+/// # 返回
+/// 凭证验证以及必要的新单据登记均成功时返回成功。
+/// # 错误
+/// 凭证不可用、无转授资格或新单据登记失败时返回原错误。
+async fn prepare_document(
+    db: &Database,
+    rbac: &SharedRbacService,
+    object_read: &dyn ApprovalObjectReadPort,
+    acceptance: &CustomerAcceptance,
+    is_new: bool,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    ensure_evidence(db, rbac, acceptance.require_evidence()?, actor, executor).await?;
+    if is_new {
+        register_created_customer_acceptance_document(db, rbac, object_read, acceptance, actor, executor)
+            .await?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use application_core::CommandReceipt;
+    use erp_core::ids::FileAssetId;
+    use erp_fulfillment::dto::CommitCustomerAcceptanceRequest;
+    use serde_json::json;
+
+    #[test]
+    fn receipt_conflicts_when_signature_evidence_changes() {
+        let mut request: CommitCustomerAcceptanceRequest = serde_json::from_value(json!({
+            "sales_order_id": "sales-1", "expected_sales_order_version": 1,
+            "accepted_at": 1700000000, "result": "PASSED", "lines": [],
+            "idempotency_key": "signature-command", "evidence_attachment_id": "file-one"
+        }))
+        .unwrap();
+        let first = CommandReceipt::from_payload(
+            "customer-acceptance-commit-",
+            "actor-1",
+            "customer_acceptance.commit",
+            "customer_acceptance",
+            &request.idempotency_key,
+            &request,
+        )
+        .unwrap();
+        request.evidence_attachment_id = Some(FileAssetId::new("file-two"));
+        let changed = CommandReceipt::from_payload(
+            "customer-acceptance-commit-",
+            "actor-1",
+            "customer_acceptance.commit",
+            "customer_acceptance",
+            &request.idempotency_key,
+            &request,
+        )
+        .unwrap();
+        assert_ne!(first.fingerprints().0, changed.fingerprints().0);
+        request.evidence_attachment_id = None;
+        let missing = CommandReceipt::from_payload(
+            "customer-acceptance-commit-",
+            "actor-1",
+            "customer_acceptance.commit",
+            "customer_acceptance",
+            &request.idempotency_key,
+            &request,
+        )
+        .unwrap();
+        assert_ne!(first.fingerprints().0, missing.fingerprints().0);
     }
 }

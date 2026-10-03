@@ -1,5 +1,5 @@
 //! 履约customer_acceptance请求及单域查询 DTO。
-use erp_core::ids::{SalesOrderId, SalesOrderLineId};
+use erp_core::ids::{FileAssetId, SalesOrderId, SalesOrderLineId};
 use erp_core::money::Quantity;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
@@ -41,6 +41,9 @@ pub struct AcceptanceLineInput {
 /// 客户验收单创建请求（表头 + 行一次提交，初始状态为草稿）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct CreateCustomerAcceptanceRequest {
+    /// 签收单图片/PDF 凭证；过账时必须具备。
+    #[serde(default)]
+    pub evidence_attachment_id: Option<FileAssetId>,
     /// 销售单。
     pub sales_order_id: SalesOrderId,
     /// 验收时间（秒级时间戳）。
@@ -55,6 +58,9 @@ pub struct CreateCustomerAcceptanceRequest {
 /// 客户验收过账请求（携带逐行分配；通过/短少/拒收数量以草稿行为准）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct PostCustomerAcceptanceRequest {
+    /// 签收单图片/PDF 凭证；过账时必须具备。
+    #[serde(default)]
+    pub evidence_attachment_id: Option<FileAssetId>,
     /// 从统一工作台进入时携带的客户验收任务主键；与期望任务版本同时提供。
     pub work_item_id: Option<String>,
     /// 从统一工作台进入时携带的任务乐观锁版本；与任务主键同时提供。
@@ -70,6 +76,9 @@ pub struct PostCustomerAcceptanceRequest {
 /// 草稿创建或替换、分配校验与写入、过账、销售单履约进度刷新和审计。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct CommitCustomerAcceptanceRequest {
+    /// 签收单图片/PDF 凭证；过账时必须具备。
+    #[serde(default)]
+    pub evidence_attachment_id: Option<FileAssetId>,
     /// 从统一工作台进入时携带的客户验收任务主键；与期望任务版本同时提供。
     pub work_item_id: Option<String>,
     /// 从统一工作台进入时携带的任务乐观锁版本；与任务主键同时提供。
@@ -122,6 +131,8 @@ pub struct ReverseCustomerAcceptanceRequest {
 /// 客户验收单列表视图。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct CustomerAcceptanceView {
+    /// 签收单图片/PDF 凭证；历史记录可为空。
+    pub evidence_attachment_id: Option<String>,
     /// 实体主键。
     pub id: String,
     /// 客户验收单号。

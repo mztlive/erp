@@ -74,6 +74,7 @@ impl super::FulfillmentService {
                 acceptance.update(CustomerAcceptanceUpdate {
                     accepted_at: Some(Instant::from_unix_secs(req.accepted_at)),
                     result: Some(req.result),
+                    evidence_attachment_id: req.evidence_attachment_id.clone(),
                 })?;
                 Ok((acceptance, false))
             },
@@ -87,6 +88,7 @@ impl super::FulfillmentService {
                         sales_order_id: req.sales_order_id.clone(),
                         accepted_at: Instant::from_unix_secs(req.accepted_at),
                         result: req.result,
+                        evidence_attachment_id: req.evidence_attachment_id.clone(),
                     },
                 )?;
                 Ok((acceptance, true))
@@ -104,6 +106,7 @@ impl super::FulfillmentService {
         req: &CommitCustomerAcceptanceRequest,
         session: &mut dyn persistence_core::Executor,
     ) -> Result<()> {
+        acceptance.require_evidence()?;
         let acceptance_id = CustomerAcceptanceId::new(acceptance.base.id.clone());
         if is_new {
             db.fulfillment().create_customer_acceptance_with_lines(acceptance, final_lines, session).await?;
@@ -139,6 +142,7 @@ impl super::FulfillmentService {
         req: &PostCustomerAcceptanceRequest,
         session: &mut dyn persistence_core::Executor,
     ) -> Result<()> {
+        acceptance.require_evidence()?;
         let acceptance_id = CustomerAcceptanceId::new(acceptance.base.id.clone());
         let lines = db
             .fulfillment()
@@ -185,6 +189,7 @@ impl super::FulfillmentService {
                 sales_order_id: original.sales_order_id.clone(),
                 accepted_at: Instant::now(),
                 result: AcceptanceResult::Rejected,
+                evidence_attachment_id: original.evidence_attachment_id.clone(),
             },
         )?;
         let (reverse_lines, reverse_allocations) = build_reverse_lines_and_allocations(
@@ -645,6 +650,7 @@ mod tests {
                 sales_order_id: SalesOrderId::new("sales-order-1"),
                 accepted_at: Instant::from_unix_secs(1_700_000_000),
                 result: AcceptanceResult::Passed,
+                evidence_attachment_id: None,
             },
         )
         .expect("测试验收草稿应合法")

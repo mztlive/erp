@@ -15,6 +15,7 @@ import {
     secsToIso,
 } from "@/features/fulfillment-operations/lib/projection"
 import { stripDeliveryApprovalField } from "@/features/fulfillment-operations/lib/delivery-no-approval"
+import { trackingEntriesFromDto } from "@/features/fulfillment-operations/lib/tracking-entries"
 import { stripElectronicDeliveryApprovalField } from "@/features/fulfillment-operations/lib/electronic-delivery-no-approval"
 import { stripPurchaseReceiptApprovalField } from "@/features/fulfillment-operations/lib/purchase-receipt-no-approval"
 import { stripServiceFulfillmentApprovalField } from "@/features/fulfillment-operations/lib/service-fulfillment-no-approval"
@@ -58,8 +59,7 @@ export type BackendDelivery = {
     purchase_order_id?: string | null
     warehouse_id?: string | null
     status: string
-    carrier?: string | null
-    tracking_no?: string | null
+    tracking_entries?: import("../types").DeliveryTrackingEntryDto[]
     shipped_at?: number | null
     version: number
     created_at: number
@@ -188,8 +188,9 @@ export function deliveryToOperation(d: BackendDelivery): FulfillmentOperation {
                 type: "WAREHOUSE_SHIP",
                 warehouseId: delivery.warehouse_id ?? "",
                 warehouseLabel: "",
-                carrier: delivery.carrier ?? "",
-                trackingNo: delivery.tracking_no ?? "",
+                trackingEntries: trackingEntriesFromDto(
+                    delivery.tracking_entries,
+                ),
                 shippedAt: nowIso().slice(0, 16),
                 lines: [],
             },
@@ -211,8 +212,7 @@ export function deliveryToOperation(d: BackendDelivery): FulfillmentOperation {
         },
         draft: {
             type: "SUPPLIER_DIRECT",
-            carrier: delivery.carrier ?? "",
-            trackingNo: delivery.tracking_no ?? "",
+            trackingEntries: trackingEntriesFromDto(delivery.tracking_entries),
             shippedAt: nowIso().slice(0, 16),
             lines: [],
         },

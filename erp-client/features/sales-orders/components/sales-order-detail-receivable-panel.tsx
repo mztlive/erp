@@ -1,5 +1,6 @@
 "use client"
 
+import { SalesOrderInvoiceFiles } from "./sales-order-invoice-files"
 import { InvoiceRequestPanel } from "@/features/invoice-requests/components/request-panel"
 import type { ReactNode } from "react"
 import {
@@ -59,7 +60,12 @@ export function ReceivablePanel({ order }: { order: SalesOrderDetailView }) {
             ? (() => {
                   const amounts = readableAccounts.map((row) => row[field])
                   // 范围接口对未授权整单金额返回 null。缺任一金额时合计保持未知，不能把 null 送进小数求和。
-                  if (amounts.some((amount) => typeof amount !== "string" || amount === ""))
+                  if (
+                      amounts.some(
+                          (amount) =>
+                              typeof amount !== "string" || amount === "",
+                      )
+                  )
                       return undefined
                   return sumFixed(amounts, { maxScale: 2, outputScale: 2 })
               })()
@@ -183,6 +189,7 @@ export function ReceivablePanel({ order }: { order: SalesOrderDetailView }) {
                     onRetry={() => void state.profile.refetch()}
                 />
             ) : null}
+            <SalesOrderInvoiceFiles salesOrderId={order.id} />
             <InvoiceRequestPanel
                 salesOrderId={order.id}
                 accountId={

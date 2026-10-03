@@ -8,6 +8,7 @@ mod page;
 mod pipeline;
 mod prepayment;
 
+use erp_fulfillment::entity::fulfillment::DeliveryTrackingEntry;
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::WorkItemPriority;
 use futures_util::TryStreamExt;
@@ -188,8 +189,8 @@ pub struct FulfillmentQueueItemRow {
     pub purchase_line_sales_allocation_id: Option<String>,
     pub quantity: Option<String>,
     pub result: Option<String>,
-    pub carrier: Option<String>,
-    pub tracking_no: Option<String>,
+    /// 物流条目保留销售明细归属；非发货作业为空。
+    pub tracking_entries: Vec<DeliveryTrackingEntry>,
     pub gate_state: String,
     pub gate_required_amount: Option<String>,
     pub gate_effective_paid_amount: Option<String>,

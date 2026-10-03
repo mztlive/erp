@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import { useSearchParams } from "next/navigation"
+import { SalesChangeOrderEditDialog } from "./sales-change-order-edit-dialog"
 import { detailApprovalSummaryClassName } from "@/components/business/detail-presentation"
 import { ApprovalActionBar } from "@/features/approval-workflow/components/approval-action-bar"
 import { ApprovalReadonly } from "@/features/approval-workflow/components/approval-readonly"
@@ -53,11 +55,30 @@ export function SalesChangeOrderApprovalSection({
 }) {
     const submitMutation = useSubmitSalesChangeOrderMutation()
     const [submitOpen, setSubmitOpen] = React.useState(false)
+    const [editOpen, setEditOpen] = React.useState(false)
+    const searchParams = useSearchParams()
     const ledgerRef = React.useRef<FormalCommandKeyLedger | null>(null)
     if (ledgerRef.current == null) {
         ledgerRef.current = new FormalCommandKeyLedger()
     }
     const commandLedger = ledgerRef.current
+
+    const consumedEditRequest = React.useRef<string | null>(null)
+    const editRequested = searchParams.get("editChange") === changeOrder?.id
+    React.useEffect(() => {
+        if (
+            editRequested &&
+            consumedEditRequest.current !== changeOrder?.id &&
+            changeOrder &&
+            salesChangeOrderApprovalPhase(
+                changeOrder.approval,
+                changeOrder.statusCode,
+            ) === "draft"
+        ) {
+            consumedEditRequest.current = changeOrder.id
+            setEditOpen(true)
+        }
+    }, [editRequested, changeOrder])
 
     if (!changeOrder) {
         return (
@@ -82,6 +103,8 @@ export function SalesChangeOrderApprovalSection({
         phase === "draft" &&
         allowedActions.includes("SUBMIT") &&
         (changeOrder.version ?? 0) > 0
+
+    const editDocumentHref = `/sales/orders/${encodeURIComponent(salesOrderId)}?section=change-review&changeOrderId=${encodeURIComponent(changeOrder.id)}&editChange=${encodeURIComponent(changeOrder.id)}`
 
     const submitChange = async () => {
         const slot = `submit-change:${changeOrder.id}`
@@ -154,6 +177,8 @@ export function SalesChangeOrderApprovalSection({
                     phase={phase}
                     approval={changeOrder.approval}
                     documentId={changeOrder.id}
+                    documentVersion={changeOrder.version}
+                    editDocumentHref={editDocumentHref}
                     workItemId={workItemId}
                     expectedTaskVersion={expectedTaskVersion}
                     workItemAllowedActions={workItemAllowedActions}
@@ -182,11 +207,42 @@ export function SalesChangeOrderApprovalSection({
                     instance={changeOrder.approval?.instance}
                     documentType={SALES_CHANGE_ORDER_DOCUMENT_TYPE}
                     documentId={changeOrder.id}
+                    documentVersion={changeOrder.version}
+                    editDocumentHref={editDocumentHref}
                     onDecisionApplied={() =>
                         onResult?.({
                             status: "succeeded",
                             title: "改单审批已撤回",
                             description: "请查阅更新后的改单状态。",
+                            reference: changeOrder.id,
+                        })
+                    }
+                />
+            ) : null}
+            {canSubmit ? (
+                <Button
+                    id="sales-orders-change-edit-original"
+                    type="button"
+                    variant="outline"
+                    onClick={() => setEditOpen(true)}
+                >
+                    修改并提交原单
+                </Button>
+            ) : null}
+            {canSubmit && editOpen ? (
+                <SalesChangeOrderEditDialog
+                    open={editOpen}
+                    onOpenChange={setEditOpen}
+                    salesOrderId={salesOrderId}
+                    changeOrderId={changeOrder.id}
+                    nature={nature}
+                    approval={changeOrder.approval}
+                    onApplied={() =>
+                        onResult?.({
+                            status: "succeeded",
+                            title: "原改单已修改并提交",
+                            description:
+                                "修改内容已保存，并以原变更单重新发起审批。",
                             reference: changeOrder.id,
                         })
                     }

@@ -3,6 +3,7 @@ mod adapter;
 mod cancel_approval;
 mod cancel_write;
 mod customer_refund;
+mod draft_update;
 mod payment_posting;
 mod payment_reversal;
 mod purchase_return;

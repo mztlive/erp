@@ -60,7 +60,7 @@ const draftLineSchema = z.object({
     cardForm: z.string(),
 })
 
-/** 草稿只要求「已选合同 + 至少一行明细」，明细内容允许不完整。 */
+/** 草稿保留客户、合同或开单凭证身份；明细允许未完成。 */
 const draftRowSchema = z.object({
     rowKey: z.string().min(1),
     name: z.string(),
@@ -81,6 +81,10 @@ const draftRowSchema = z.object({
 const createSalesOrderSchema = z
     .object({
         contractId: z.string(),
+        evidenceUploadPending: z.boolean().optional(),
+        evidenceAttachments: z
+            .array(z.object({ id: z.string(), fileName: z.string() }))
+            .optional(),
         requestedContractRevisionId: z.string(),
         contractRevisionLabel: z.string(),
         customerId: z.string(),
@@ -110,12 +114,28 @@ const createSalesOrderSchema = z
         lineItems: z.array(draftLineSchema).min(1, "至少需要一条销售明细"),
     })
     .superRefine((value, context) => {
-        if (!value.contractId.trim()) {
+        if (value.evidenceUploadPending) {
             context.addIssue({
                 code: "custom",
-                path: ["contractId"],
-                message: "请选择已有有效合同",
+                path: ["evidenceAttachments"],
+                message: "请等待开单凭证上传完成",
             })
+        }
+        if (!value.contractId.trim()) {
+            if (!value.customerId.trim() || !value.customerName.trim()) {
+                context.addIssue({
+                    code: "custom",
+                    path: ["customerId"],
+                    message: "请选择客户",
+                })
+            }
+            if (!value.evidenceAttachments?.length) {
+                context.addIssue({
+                    code: "custom",
+                    path: ["evidenceAttachments"],
+                    message: "无合同时请先上传开单凭证（PDF 或图片）",
+                })
+            }
         } else if (
             !value.requestedContractRevisionId ||
             !value.contractRevisionLabel
@@ -230,10 +250,14 @@ const createSalesOrderSchema = z
 
 export type CreateSalesOrderFormValues = z.input<typeof createSalesOrderSchema>
 
-/** 保存草稿：宽松校验（合同已选 + 至少一行明细），提交才走全量 schema。 */
+/** 保存草稿保留客户及开单依据，提交时校验完整商业字段。 */
 const draftSalesOrderSchema = z
     .object({
         contractId: z.string(),
+        evidenceUploadPending: z.boolean().optional(),
+        evidenceAttachments: z
+            .array(z.object({ id: z.string(), fileName: z.string() }))
+            .optional(),
         requestedContractRevisionId: z.string(),
         contractRevisionLabel: z.string(),
         customerId: z.string(),
@@ -252,12 +276,28 @@ const draftSalesOrderSchema = z
         lineItems: z.array(draftRowSchema).min(1, "至少需要一条销售明细"),
     })
     .superRefine((value, context) => {
-        if (!value.contractId.trim()) {
+        if (value.evidenceUploadPending) {
             context.addIssue({
                 code: "custom",
-                path: ["contractId"],
-                message: "请选择已有有效合同",
+                path: ["evidenceAttachments"],
+                message: "请等待开单凭证上传完成",
             })
+        }
+        if (!value.contractId.trim()) {
+            if (!value.customerId.trim() || !value.customerName.trim()) {
+                context.addIssue({
+                    code: "custom",
+                    path: ["customerId"],
+                    message: "请选择客户",
+                })
+            }
+            if (!value.evidenceAttachments?.length) {
+                context.addIssue({
+                    code: "custom",
+                    path: ["evidenceAttachments"],
+                    message: "无合同时请先上传开单凭证（PDF 或图片）",
+                })
+            }
         }
     })
 

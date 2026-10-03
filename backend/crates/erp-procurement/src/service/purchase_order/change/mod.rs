@@ -1,4 +1,5 @@
 //! 采购变更命令拥有的本域准备、状态与事务内写入。
+mod draft;
 mod effect;
 mod load;
 pub mod mapping;

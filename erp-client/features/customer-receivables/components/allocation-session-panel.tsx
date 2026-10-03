@@ -244,7 +244,7 @@ export function AllocationSessionPanel({
                         form={form}
                         isReceipt={isReceipt}
                         existing={existing}
-                        locked={locked}
+                        locked={locked || editingDisabled}
                     />
                     <SessionPool
                         session={session}

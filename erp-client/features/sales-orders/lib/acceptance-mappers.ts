@@ -31,8 +31,11 @@ export type BackendEligibleFact = {
     net_successful_quantity: string
     net_accepted_allocated_quantity: string
     eligible_quantity: string
-    carrier?: string | null
-    tracking_no?: string | null
+    tracking_entries?: Array<{
+        sales_order_line_id: string
+        tracking_no: string
+        carrier?: string | null
+    }>
 }
 
 export type BackendSalesLineGroup = {
@@ -52,6 +55,7 @@ export type BackendAcceptanceHeader = {
     accepted_at: number
     result: string
     status: string
+    evidence_attachment_id?: string | null
     reversal_of_acceptance_id?: string | null
     version: number
     created_at: number
@@ -178,8 +182,15 @@ export function mapEligibleFact(
         netSuccessfulQuantity: f.net_successful_quantity,
         netAcceptedAllocatedQuantity: f.net_accepted_allocated_quantity,
         eligibleQuantity: f.eligible_quantity,
-        carrier: f.carrier ?? undefined,
-        trackingNo: f.tracking_no ?? undefined,
+        trackingEntries: (f.tracking_entries ?? [])
+            .filter(
+                (entry) => entry.sales_order_line_id === f.sales_order_line_id,
+            )
+            .map((entry) => ({
+                salesOrderLineId: entry.sales_order_line_id,
+                trackingNo: entry.tracking_no,
+                carrier: entry.carrier ?? undefined,
+            })),
     }
 }
 
@@ -220,6 +231,7 @@ export function mapHistoryItem(
         acceptedAt: formatInstant(h.accepted_at),
         postedAt: formatInstant(h.created_at),
         overallResult: mapOverallResult(h.result),
+        evidenceAttachmentId: h.evidence_attachment_id ?? undefined,
         lines: [],
         recordedBy: "",
         version: h.version,

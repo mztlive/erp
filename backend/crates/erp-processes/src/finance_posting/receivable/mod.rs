@@ -24,15 +24,22 @@ mod adapter;
 mod cancel_approval;
 mod customer_receipt;
 mod customer_receipt_posting;
+mod customer_receipt_submit;
+mod draft_read;
+mod draft_update;
 
 mod dto;
 mod invoice;
+mod invoice_attachments;
+mod invoice_commit;
 mod invoice_posting;
 pub(crate) mod invoice_request;
 
 pub(crate) mod invoice_task;
 mod red_invoice;
 mod start_approval;
+
+pub use invoice::InvoiceWithAssetsResult;
 
 pub use self::adapter::customer_receipt_object_readable;
 pub use self::customer_receipt::{cancel_customer_receipt_approval_apply, post_customer_receipt_apply};

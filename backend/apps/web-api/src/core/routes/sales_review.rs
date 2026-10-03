@@ -19,6 +19,7 @@ use crate::core::middleware::with_permission;
 /// 返回挂载了权限校验层的路由集合。
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
+        .merge(draft_routes(rbac))
         .route(
             "/sales-change-orders",
             with_permission(
@@ -65,6 +66,34 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 post(sales_review::sales_change_order_cancel_approval),
                 rbac,
                 sales_review::sales_change_order_cancel_approval_permission_key(),
+            ),
+        )
+}
+
+/// 销售变更草稿读取与保存路由。
+///
+/// # 参数
+/// * `rbac` - 当前共享权限服务
+/// # 返回
+/// 返回逐操作保留权限校验和上传限制的路由集合。
+/// # 错误
+/// 无；业务错误由各处理器返回。
+fn draft_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
+        .route(
+            "/sales-change-orders/{id}/draft",
+            with_permission(
+                get(sales_review::sales_change_draft),
+                rbac,
+                sales_review::sales_change_draft_permission_key(),
+            ),
+        )
+        .route(
+            "/sales-change-orders/{id}/draft",
+            with_permission(
+                post(sales_review::sales_change_save_draft),
+                rbac,
+                sales_review::sales_change_save_draft_permission_key(),
             ),
         )
 }

@@ -12,7 +12,7 @@ use erp_finance::service::receivable::mapping::zero_amount;
 use erp_workflow::DocumentRegistryExt;
 use erp_workflow::repository::prelude::*;
 use erp_workflow::service::document_registry::find_approval_binding;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
 
 use super::ReceivableReadService;
@@ -143,26 +143,49 @@ impl ReceivableReadService {
     /// # 错误
     /// * `NotFound` - 回款单不存在
     pub async fn customer_receipt_view(&self, id: String) -> Result<CustomerReceiptView> {
+        self.customer_receipt_view_with_executor(&id, &mut NoTransaction).await
+    }
+
+    /// 使用调用方执行器读取完整回款、核销安排与冻结审批绑定。
+    ///
+    /// # 参数
+    /// * `id` - 回款单主键
+    /// * `executor` - 已完成完整来源授权的事务执行器
+    ///
+    /// # 返回
+    /// 返回实际金额、当前版本及原拟核销分配，不进行资金范围裁剪。
+    ///
+    /// # 错误
+    /// 回款不存在、绑定事实或仓储读取失败时返回对应错误。
+    pub async fn customer_receipt_view_with_executor(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<CustomerReceiptView> {
         let receipt = self
             .db
             .customer_receipts()
-            .find_by_id(&id, &mut NoTransaction)
+            .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("客户回款单不存在".to_string()))?;
         let allocations = self
             .db
             .receipt_allocations()
-            .find_allocations_by_receipts(&[receipt.base.id.clone().into()], &mut NoTransaction)
+            .find_allocations_by_receipts(&[receipt.base.id.clone().into()], executor)
             .await?;
         let (allocated_total, views) = allocation_view(&allocations);
-        let binding = match find_approval_binding(&self.db, &id, &mut NoTransaction)
-            .await
-            .map_err(crate::Error::from)
-        {
+        let binding = match find_approval_binding(&self.db, id, executor).await.map_err(crate::Error::from) {
             Ok(binding) => binding,
             Err(Error::NotFound(_)) => None,
             Err(error) => return Err(error),
         };
+        let approval = super::approval_query::load_receipt_document_approval(
+            &self.db,
+            &receipt,
+            binding.as_ref(),
+            executor,
+        )
+        .await?;
         Ok(CustomerReceiptView {
             id: receipt.base.id.clone(),
             receipt_no: receipt.receipt_no,
@@ -178,7 +201,7 @@ impl ReceivableReadService {
             allocated_total,
             allocations: views,
             pending_allocations: receipt.pending_allocations,
-            approval: document_approval_view(binding.as_ref(), None, receipt.status),
+            approval,
         })
     }
 }

@@ -3,6 +3,7 @@
 mod commit;
 mod completion;
 mod create;
+mod evidence;
 mod post;
 mod registration;
 mod reverse;

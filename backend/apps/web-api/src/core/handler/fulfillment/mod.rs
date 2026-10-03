@@ -4,6 +4,8 @@
 //! 直接复用 领域与读模型的 DTO，禁止重复定义同构类型、禁止直连数据库。
 //! 履约对象快照查询指纹密钥取 `app.secret` 字节（Service 构造参数）。
 
+pub mod acceptance_evidence;
+
 use application_core::AuditActor;
 use axum::extract::{Multipart, Path, Query, State};
 use axum::{Extension, Json};

@@ -1,5 +1,8 @@
 "use client"
 
+import { useMutation } from "@tanstack/react-query"
+import { downloadAcceptanceEvidence } from "@/features/sales-orders/lib/acceptance-mutations"
+
 import {
     BanIcon,
     CircleAlertIcon,
@@ -118,6 +121,10 @@ function HistoryEntry({
     canReverse: boolean
     onReverse: (item: AcceptanceHistoryItem) => void
 }) {
+    const download = useMutation({
+        mutationFn: () =>
+            downloadAcceptanceEvidence(item.acceptanceId, item.acceptanceNo),
+    })
     const tone = historyTone(item)
     const Icon = historyMarkerIcon(item, tone)
     const occurredAt = item.acceptedAt || item.postedAt
@@ -142,6 +149,7 @@ function HistoryEntry({
         Boolean(comment) ||
         item.lines.length > 0 ||
         showFactNotice ||
+        Boolean(item.evidenceAttachmentId) ||
         canReverseThis
 
     return (
@@ -207,6 +215,23 @@ function HistoryEntry({
                             {FACT_ONLY_NOTICE}
                         </p>
                     ) : null}
+                    {item.evidenceAttachmentId ? (
+                        <Button
+                            id={`sales-orders-acceptance-history-${toAutomationIdSegment(item.acceptanceId)}-download`}
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={download.isPending}
+                            onClick={() => download.mutate()}
+                            className="self-start"
+                        >
+                            {download.isPending ? "下载中…" : "下载签收单凭证"}
+                        </Button>
+                    ) : (
+                        <p className="text-xs text-muted-foreground">
+                            未上传签收单凭证
+                        </p>
+                    )}
                     {canReverseThis ? (
                         <div>
                             <Button
@@ -225,7 +250,9 @@ function HistoryEntry({
                         </div>
                     ) : null}
                 </TimelineDescription>
-            ) : null}
+            ) : (
+                <TimelineDescription>未上传签收单凭证</TimelineDescription>
+            )}
         </TimelineItem>
     )
 }

@@ -14,6 +14,16 @@ import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-
 const HEADER_VALIDATION_FIELDS = [
     { name: "contractId", label: "有效合同", targetId: "contractId" },
     {
+        name: "customerId",
+        label: "客户",
+        targetId: "sales-orders-create-customer",
+    },
+    {
+        name: "evidenceAttachments",
+        label: "开单凭证",
+        targetId: "sales-orders-create-evidence-select",
+    },
+    {
         name: "ownerName",
         label: "负责销售",
         targetId: "sales-orders-create-header-owner-name",

@@ -20,6 +20,14 @@ use crate::core::middleware::with_permission;
 /// # 返回
 /// 返回挂载了权限校验层的路由集合。
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
+    purchase_document_routes(rbac)
+        .merge(purchase_workflow_routes(rbac))
+        .merge(purchase_change_routes(rbac))
+        .merge(purchase_change_draft_routes(rbac))
+}
+
+/// 采购单列表、创建、详情和原单草稿保存入口。
+fn purchase_document_routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
             "/purchase-orders",
@@ -61,6 +69,11 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 purchase_order::purchase_order_save_draft_permission_key(),
             ),
         )
+}
+
+/// 采购单审批、作废、建单依据及发起变更入口。
+fn purchase_workflow_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
         .route(
             "/purchase-orders/{id}/void",
             with_permission(
@@ -101,6 +114,11 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 purchase_order::purchase_change_create_permission_key(),
             ),
         )
+}
+
+/// 采购变更详情和既有审批命令入口。
+fn purchase_change_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
         .route(
             "/purchase-change-orders",
             with_permission(
@@ -141,4 +159,16 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 purchase_order::purchase_change_effect_permission_key(),
             ),
         )
+}
+
+/// 复用采购变更提交权限读取完整原单编辑目标。
+fn purchase_change_draft_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new().route(
+        "/purchase-change-orders/{id}/draft",
+        with_permission(
+            get(purchase_order::change_draft::purchase_change_draft),
+            rbac,
+            purchase_order::change_draft::purchase_change_draft_permission_key(),
+        ),
+    )
 }

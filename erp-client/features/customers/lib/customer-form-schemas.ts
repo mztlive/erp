@@ -60,8 +60,9 @@ const bankAccountRowSchema = z
 const unifiedCreditCodeSchema = z
     .string()
     .trim()
-    .min(1, "请填写统一社会信用代码")
-    .regex(/^[0-9A-Za-z]{18}$/, "统一社会信用代码必须是 18 位字母或数字")
+    .refine((value) => !value || /^[0-9A-Za-z]{18}$/.test(value), {
+        message: "统一社会信用代码必须是 18 位字母或数字",
+    })
 
 const createSchema = z.object({
     legalName: z.string().trim().min(2, "请填写法定名称"),

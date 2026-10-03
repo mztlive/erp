@@ -4,6 +4,7 @@
  */
 
 import type { ValidationIssue } from "@/components/business"
+import { trackingEntriesValidationMessage } from "@/features/fulfillment-operations/lib/tracking-entries"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type {
     FulfillmentDraft,
@@ -147,22 +148,43 @@ export function clientValidation(
             }
         })
     }
-    if (draft.type === "WAREHOUSE_SHIP") {
-        if (!draft.carrier.trim()) {
+    if (draft.type === "WAREHOUSE_SHIP" || draft.type === "SUPPLIER_DIRECT") {
+        const kind = draft.type === "WAREHOUSE_SHIP" ? "ship" : "direct"
+        for (const lineId of draft.pendingTrackingLineIds ?? []) {
             issues.push({
-                id: "carrier",
-                label: "承运方",
-                message: "必填",
-                targetId: "fulfillment-operations-ship-form-carrier",
+                id: `tracking-pending-${lineId}`,
+                label: "物流号",
+                message: "请先点击添加物流号，再保存或确认发货",
+                targetId: `fulfillment-operations-${kind}-form-line-${toAutomationIdSegment(lineId)}-add`,
             })
         }
-        if (!draft.trackingNo.trim()) {
+    }
+    if (draft.type === "WAREHOUSE_SHIP") {
+        const trackingMessage = trackingEntriesValidationMessage(
+            draft.trackingEntries,
+            draft.lines.map((line) => line.salesOrderLineId),
+        )
+        if (trackingMessage)
             issues.push({
                 id: "tracking",
-                label: "物流单号",
-                message: "必填",
-                targetId: "fulfillment-operations-ship-form-tracking-no",
+                label: "物流号",
+                message: trackingMessage,
+                targetId: draft.lines[0]
+                    ? `fulfillment-operations-ship-form-line-${toAutomationIdSegment(draft.lines[0].salesOrderLineId)}-tracking-no`
+                    : undefined,
             })
+        for (const line of draft.lines) {
+            if (
+                !draft.trackingEntries?.some(
+                    (entry) => entry.salesOrderLineId === line.salesOrderLineId,
+                )
+            )
+                issues.push({
+                    id: `tracking-${line.salesOrderLineId}`,
+                    label: "明细物流号",
+                    message: "请为本次发货的每项明细添加物流号",
+                    targetId: `fulfillment-operations-ship-form-line-${toAutomationIdSegment(line.salesOrderLineId)}-tracking-no`,
+                })
         }
         draft.lines.forEach((line, i) => {
             const src = operation.lines.find(
@@ -195,21 +217,31 @@ export function clientValidation(
         })
     }
     if (draft.type === "SUPPLIER_DIRECT") {
-        if (!draft.carrier.trim()) {
-            issues.push({
-                id: "d-carrier",
-                label: "承运方",
-                message: "必填",
-                targetId: "fulfillment-operations-direct-form-carrier",
-            })
-        }
-        if (!draft.trackingNo.trim()) {
+        const trackingMessage = trackingEntriesValidationMessage(
+            draft.trackingEntries,
+            draft.lines.map((line) => line.salesOrderLineId),
+        )
+        if (trackingMessage)
             issues.push({
                 id: "d-tracking",
-                label: "物流单号",
-                message: "必填",
-                targetId: "fulfillment-operations-direct-form-tracking-no",
+                label: "物流号",
+                message: trackingMessage,
+                targetId: draft.lines[0]
+                    ? `fulfillment-operations-direct-form-line-${toAutomationIdSegment(draft.lines[0].salesOrderLineId)}-tracking-no`
+                    : undefined,
             })
+        for (const line of draft.lines) {
+            if (
+                !draft.trackingEntries?.some(
+                    (entry) => entry.salesOrderLineId === line.salesOrderLineId,
+                )
+            )
+                issues.push({
+                    id: `d-tracking-${line.salesOrderLineId}`,
+                    label: "明细物流号",
+                    message: "请为本次发货的每项明细添加物流号",
+                    targetId: `fulfillment-operations-direct-form-line-${toAutomationIdSegment(line.salesOrderLineId)}-tracking-no`,
+                })
         }
     }
     if (draft.type === "ELECTRONIC") {

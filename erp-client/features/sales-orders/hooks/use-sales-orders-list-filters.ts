@@ -15,6 +15,7 @@ export type SalesOrdersListFilterKey =
     | "summary"
     | "customerId"
     | "contractId"
+    | "hasContract"
     | "createdBy"
     | "ownerUserIds"
     | "orgUnitIds"
@@ -45,6 +46,7 @@ export function useSalesOrdersListFilters(
         search,
         customerId,
         contractId,
+        hasContract,
         createdBy,
         ownerUserIds,
         orgUnitIds,
@@ -68,6 +70,7 @@ export function useSalesOrdersListFilters(
             filterDraftFromUrl({
                 customerId,
                 contractId,
+                hasContract,
                 createdBy,
                 ownerUserIds,
                 orgUnitIds,
@@ -89,6 +92,7 @@ export function useSalesOrdersListFilters(
         collection,
         commercialStatus,
         contractId,
+        hasContract,
         createdBy,
         ownerUserIds,
         orgUnitIds,
@@ -134,6 +138,9 @@ export function useSalesOrdersListFilters(
                     break
                 case "contractId":
                     pushUrl({ contractId: undefined, page: 1 })
+                    break
+                case "hasContract":
+                    pushUrl({ hasContract: "all", page: 1 })
                     break
                 case "ownerUserIds":
                     pushUrl({ ownerUserIds: undefined, page: 1 })
@@ -222,6 +229,7 @@ export function useSalesOrdersListFilters(
             summary: "all",
             customerId: undefined,
             contractId: undefined,
+            hasContract: "all",
             createdBy: undefined,
             ownerUserIds: undefined,
             orgUnitIds: undefined,

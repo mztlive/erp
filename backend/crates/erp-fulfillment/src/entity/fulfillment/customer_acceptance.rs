@@ -136,6 +136,9 @@ pub struct CustomerAcceptanceData {
     pub accepted_at: Instant,
     /// 验收结果。
     pub result: AcceptanceResult,
+    /// 签收单凭证；历史记录可为空，新签收过账时必填。
+    #[serde(default)]
+    pub evidence_attachment_id: Option<FileAssetId>,
 }
 
 /// 客户验收单更新数据（仅草稿可更新）。
@@ -145,6 +148,8 @@ pub struct CustomerAcceptanceUpdate {
     pub accepted_at: Option<Instant>,
     /// 验收结果；`None` 表示不修改。
     pub result: Option<AcceptanceResult>,
+    /// 签收单凭证；`None` 表示不修改。
+    pub evidence_attachment_id: Option<FileAssetId>,
 }
 
 /// 客户验收单实体（数据模型 §6.7 表头）。
@@ -163,6 +168,9 @@ pub struct CustomerAcceptance {
     pub accepted_at: Instant,
     /// 验收结果。
     pub result: AcceptanceResult,
+    /// 签收单凭证；历史记录可为空，新签收过账时必填。
+    #[serde(default)]
+    pub evidence_attachment_id: Option<FileAssetId>,
     /// 当前状态。
     pub status: CustomerAcceptanceState,
     /// 误录验收的反向事实。
@@ -196,6 +204,7 @@ impl CustomerAcceptance {
             sales_order_id: data.sales_order_id,
             accepted_at: data.accepted_at,
             result: data.result,
+            evidence_attachment_id: data.evidence_attachment_id,
             status: CustomerAcceptanceState::Draft,
             reversal_of_acceptance_id: None,
         })
@@ -215,6 +224,12 @@ impl CustomerAcceptance {
     /// 状态不可编辑时返回错误。
     pub fn update(&mut self, update: CustomerAcceptanceUpdate) -> Result<()> {
         self.ensure_editable()?;
+        if let Some(id) = update.evidence_attachment_id {
+            if id.as_ref().trim().is_empty() {
+                return Err(Error::from("请上传签收单凭证（图片或 PDF）"));
+            }
+            self.evidence_attachment_id = Some(id);
+        }
         if let Some(accepted_at) = update.accepted_at {
             self.accepted_at = accepted_at;
         }
@@ -222,6 +237,21 @@ impl CustomerAcceptance {
             self.result = result;
         }
         Ok(())
+    }
+
+    /// 读取新签收必须提供的凭证身份。
+    ///
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 返回非空的签收单文件资产身份。
+    /// # 错误
+    /// 缺少凭证或身份为空时拒绝签收。
+    pub fn require_evidence(&self) -> Result<&FileAssetId> {
+        self.evidence_attachment_id
+            .as_ref()
+            .filter(|id| !id.as_ref().trim().is_empty())
+            .ok_or_else(|| Error::from("请上传签收单凭证（图片或 PDF）"))
     }
 
     /// 判断既有验收单是否属于同一业务身份。
@@ -544,7 +574,45 @@ pub(crate) mod tests {
             sales_order_id: SalesOrderId::new("so-1"),
             accepted_at: Instant::from_unix_secs(1_700_000_000),
             result: AcceptanceResult::Passed,
+            evidence_attachment_id: None,
         }
+    }
+
+    #[test]
+    fn signature_requires_non_blank_evidence_and_keeps_legacy_readable() {
+        let mut acceptance =
+            CustomerAcceptance::new(CustomerAcceptanceId::new("acceptance-1"), data()).unwrap();
+        assert!(acceptance.require_evidence().is_err());
+        acceptance.evidence_attachment_id = Some(FileAssetId::new("  "));
+        assert!(acceptance.require_evidence().is_err());
+        acceptance
+            .update(CustomerAcceptanceUpdate {
+                evidence_attachment_id: Some(FileAssetId::new("file-signature")),
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(acceptance.require_evidence().unwrap().as_ref(), "file-signature");
+        let mut legacy = serde_json::to_value(&acceptance).unwrap();
+        legacy.as_object_mut().unwrap().remove("evidence_attachment_id");
+        let decoded: CustomerAcceptance = serde_json::from_value(legacy).unwrap();
+        assert!(decoded.evidence_attachment_id.is_none());
+    }
+
+    #[test]
+    fn invalid_signature_update_keeps_draft_unchanged() {
+        let mut acceptance =
+            CustomerAcceptance::new(CustomerAcceptanceId::new("acceptance-1"), data()).unwrap();
+        let original = acceptance.clone();
+        assert!(
+            acceptance
+                .update(CustomerAcceptanceUpdate {
+                    accepted_at: Some(Instant::now()),
+                    evidence_attachment_id: Some(FileAssetId::new("  ")),
+                    ..Default::default()
+                })
+                .is_err()
+        );
+        assert_eq!(acceptance, original);
     }
 
     fn line_data() -> CustomerAcceptanceLineData {

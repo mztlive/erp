@@ -3,8 +3,8 @@ use std::collections::{HashMap, HashSet};
 
 use erp_core::money::Quantity;
 use erp_fulfillment::entity::fulfillment::{
-    Delivery, ElectronicDelivery, ElectronicDeliveryState, PurchaseReceipt, PurchaseReceiptLine,
-    ServiceFulfillment, ServiceFulfillmentState,
+    Delivery, DeliveryLine, ElectronicDelivery, ElectronicDeliveryState, PurchaseReceipt,
+    PurchaseReceiptLine, ServiceFulfillment, ServiceFulfillmentState,
 };
 use erp_fulfillment::repository::FulfillmentExt;
 use erp_procurement::repository::PurchaseOrderExt;
@@ -86,7 +86,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             let visible = lines
                 .iter()
                 .filter(|l| l.delivery_id.as_ref() == row.base.id)
-                .map(|l| item_line(names.get(l.sales_order_line_id.as_ref()), l.line_no, &l.quantity))
+                .map(|l| delivery_line(&row, l, &names))
                 .collect();
             apply(facts, ObjectKind::Delivery, &row.base.id, fields, visible);
         }
@@ -309,17 +309,31 @@ fn receipt_line(row: &PurchaseReceiptLine, names: &Names) -> BriefLine {
     }
 }
 
-/// 发货批次固定展示业务状态与物流字段。
+/// 发货批次展示业务状态；物流信息随明细展示以保留归属。
 fn delivery_fields(row: &Delivery, warehouses: &HashMap<String, String>) -> Vec<BriefSection> {
     let mut fields = head(&row.delivery_no, pending_status(row.status.label(), "待发货"));
     field(&mut fields, "发货方式", Some(row.delivery_type.label()));
     if let Some(id) = &row.warehouse_id {
         field(&mut fields, "发货仓库", warehouses.get(id.as_ref()).map(String::as_str));
     }
-    field(&mut fields, "承运方", row.carrier.as_deref());
-    field(&mut fields, "物流单号", row.tracking_no.as_deref());
     field(&mut fields, "发货时间", row.shipped_at.map(format_instant_datetime).as_deref());
     fields
+}
+
+/// 明细简报只展示同一销售明细的物流单号与对应承运方。
+fn delivery_line(row: &Delivery, line: &DeliveryLine, names: &Names) -> BriefLine {
+    let mut brief = item_line(names.get(line.sales_order_line_id.as_ref()), line.line_no, &line.quantity);
+    let tracking = row
+        .tracking_entries
+        .iter()
+        .filter(|entry| entry.sales_order_line_id == line.sales_order_line_id)
+        .map(|entry| match &entry.carrier {
+            Some(carrier) => format!("{carrier} · {}", entry.tracking_no),
+            None => entry.tracking_no.clone(),
+        })
+        .collect::<Vec<_>>();
+    brief.due_label = Some(if tracking.is_empty() { "物流未登记".into() } else { tracking.join("；") });
+    brief
 }
 
 /// 草稿默认结果不是已完成事实，确认前结果与完成时点均显示未登记。
@@ -368,14 +382,43 @@ mod tests {
     fn delivery_fields_are_business_facts_without_private_address() {
         let row: Delivery = entity(
             json!({"delivery_no":"DL-001", "delivery_type":"SUPPLIER_DIRECT", "sales_order_id":"sales-id", "status":"DRAFT",
-            "carrier":"顺丰", "tracking_no":"SF123", "address_snapshot_encrypted":"secret-cipher"}),
+            "tracking_entries":[{"sales_order_line_id":"line-1","tracking_no":"SF123","carrier":"顺丰"}], "address_snapshot_encrypted":"secret-cipher"}),
         );
         let fields = delivery_fields(&row, &HashMap::new());
-        assert!(fields.iter().any(|s| s.value == "SF123"));
         assert!(fields.iter().any(|s| s.label == "履约状态" && s.value == "待发货"));
         assert!(fields.iter().any(|s| s.label == "履约批次" && s.value == "DL-001"));
         assert!(!format!("{fields:?}").contains("secret-cipher"));
         assert!(!format!("{fields:?}").contains("sales-id"));
+    }
+
+    /// 同一单号可以跨明细，逐明细保留多条物流与各自承运方。
+    #[test]
+    fn delivery_lines_keep_tracking_entries_and_carriers_per_sales_line() {
+        let row: Delivery = entity(json!({
+            "delivery_no": "DL-MULTI", "delivery_type": "SUPPLIER_DIRECT",
+            "sales_order_id": "sales-id", "status": "DRAFT",
+            "tracking_entries": [
+                {"sales_order_line_id":"line-1","tracking_no":"SF-001","carrier":"顺丰"},
+                {"sales_order_line_id":"line-1","tracking_no":"LL-001","carrier":"货拉拉"},
+                {"sales_order_line_id":"line-2","tracking_no":"SF-001","carrier":"顺丰"}
+            ]
+        }));
+        let first: DeliveryLine = entity(json!({
+            "delivery_id":"internal-id", "line_no":1, "sales_order_line_id":"line-1", "quantity":"1"
+        }));
+        let second: DeliveryLine = entity(json!({
+            "delivery_id":"internal-id", "line_no":2, "sales_order_line_id":"line-2", "quantity":"1"
+        }));
+        assert_eq!(
+            delivery_line(&row, &first, &Names::new()).due_label.as_deref(),
+            Some("顺丰 · SF-001；货拉拉 · LL-001")
+        );
+        assert_eq!(delivery_line(&row, &second, &Names::new()).due_label.as_deref(), Some("顺丰 · SF-001"));
+        assert!(
+            delivery_fields(&row, &HashMap::new())
+                .iter()
+                .any(|field| field.label == "履约批次" && field.value == "DL-MULTI")
+        );
     }
 
     /// 入库三种数量均按实际行保留，包含零值和业务单位。

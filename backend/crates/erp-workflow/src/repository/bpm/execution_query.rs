@@ -101,6 +101,30 @@ impl<'a> BpmWorkflowRepository<'a> {
         self.executions().find_one(current_execution_filter(instance_id), executor).await
     }
 
+    /// 读取实例最后一次真实驳回，不受详情首屏历史的页大小影响。
+    ///
+    /// # 参数
+    /// * `instance_id` - 已授权单据对应的审批实例
+    /// * `executor` - 原单据读取执行器
+    /// # 返回
+    /// 返回执行序号最大的驳回执行，没有驳回时为空。
+    /// # 错误
+    /// 仓储读取或反序列化失败时返回错误。
+    pub async fn find_latest_rejected_execution(
+        &self,
+        instance_id: &ApprovalProcessInstanceId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ApprovalNodeExecution>> {
+        let mut rows = find_limited(
+            &self.db.collection(EXECUTIONS),
+            doc! { "process_instance_id": instance_id.as_ref(), "status": ApprovalNodeExecutionStatus::Rejected.as_str(), "deleted_at": NOT_DELETED_TIMESTAMP_BSON },
+            doc! { "execution_no": -1 },
+            1,
+            executor,
+        ).await?;
+        Ok(rows.pop())
+    }
+
     /// 读取取消用例所需的当前活动或受阻执行。
     ///
     /// # 参数

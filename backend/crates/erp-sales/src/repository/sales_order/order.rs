@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::bson::{Document, doc};
+use mongodb::bson::{Bson, Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{
     Executor, PageResult, Pagination, QueryFilter, Repository, Result, insert_literal_regex_filter, mongo_ops,
@@ -109,6 +109,8 @@ pub struct SalesOrderFilter {
     pub customer_id: Option<String>,
     /// 合同；`None` 表示不筛选。
     pub contract_id: Option<String>,
+    /// 是否已绑定合同；None 不筛选。
+    pub has_contract: Option<bool>,
     /// 最初创建入口；`None` 表示不筛选。
     pub origin_system: Option<crate::entity::sales_order::OriginSystem>,
     /// 商业主状态；`None` 表示不筛选。
@@ -153,6 +155,7 @@ impl Default for SalesOrderFilter {
             order_no: None,
             customer_id: None,
             contract_id: None,
+            has_contract: None,
             origin_system: None,
             commercial_status: None,
             review_status: None,
@@ -175,6 +178,44 @@ impl Default for SalesOrderFilter {
     }
 }
 
+impl SalesOrderFilter {
+    /// 合同存在性与其余条件求交，空合同覆盖历史缺字段及空字符串。
+    fn append_contract_presence(&self, filter: &mut Document) {
+        if let Some(has_contract) = self.has_contract {
+            let condition = if has_contract {
+                doc! { "contract_id": { "$exists": true, "$nin": [Bson::Null, ""] } }
+            } else {
+                doc! { "$or": [{ "contract_id": Bson::Null }, { "contract_id": "" }] }
+            };
+            Self::intersect(filter, condition);
+        }
+    }
+
+    /// 关键词命中任一受支持身份，同时保留结构化合同筛选。
+    fn append_keyword(&self, filter: &mut Document) {
+        if let Some(q) = &self.search.q {
+            let mut number = Document::new();
+            insert_literal_regex_filter(&mut number, "order_no", Some(q));
+            let condition = doc! { "$or": [
+                number,
+                doc! { "customer_id": { "$in": &self.search.customer_ids } },
+                doc! { "contract_id": { "$in": &self.search.contract_ids } },
+            ] };
+            Self::intersect(filter, condition);
+        }
+    }
+
+    /// 追加一项交集条件，避免覆盖先前的关键词或合同存在性条件。
+    fn intersect(filter: &mut Document, condition: Document) {
+        filter
+            .entry("$and".to_string())
+            .or_insert_with(|| Bson::Array(Vec::new()))
+            .as_array_mut()
+            .expect("筛选交集始终是数组")
+            .push(condition.into());
+    }
+}
+
 impl QueryFilter for SalesOrderFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
@@ -189,6 +230,7 @@ impl QueryFilter for SalesOrderFilter {
         if let Some(contract_id) = &self.contract_id {
             filter.insert("contract_id", contract_id);
         }
+        self.append_contract_presence(&mut filter);
         if let Some(origin_system) = self.origin_system {
             filter.insert("origin_system", origin_system.as_str());
         }
@@ -258,18 +300,7 @@ impl QueryFilter for SalesOrderFilter {
                 filter.insert("review_status", ReviewStatus::Rejected.as_str());
             },
         }
-        if let Some(q) = &self.search.q {
-            let mut number = Document::new();
-            insert_literal_regex_filter(&mut number, "order_no", Some(q));
-            filter.insert(
-                "$and",
-                vec![doc! { "$or": [
-                    number,
-                    doc! { "customer_id": { "$in": &self.search.customer_ids } },
-                    doc! { "contract_id": { "$in": &self.search.contract_ids } },
-                ] }],
-            );
-        }
+        self.append_keyword(&mut filter);
         filter
     }
 }
@@ -724,6 +755,7 @@ mod tests {
             order_no: Some("SO-2026".to_string()),
             customer_id: Some("cust-1".to_string()),
             contract_id: Some("contract-1".to_string()),
+            has_contract: None,
             origin_system: Some(crate::entity::sales_order::OriginSystem::Erp),
             commercial_status: Some(CommercialStatus::PendingReview),
             review_status: Some(ReviewStatus::PendingOperations),
@@ -773,6 +805,7 @@ mod tests {
             order_no: None,
             customer_id: None,
             contract_id: None,
+            has_contract: None,
             origin_system: None,
             commercial_status: None,
             review_status: None,
@@ -807,6 +840,7 @@ mod tests {
             order_no: Some("SO-2026.[x]".to_string()),
             customer_id: None,
             contract_id: None,
+            has_contract: None,
             origin_system: None,
             commercial_status: None,
             review_status: None,
@@ -861,6 +895,7 @@ mod keyword_regression_tests {
             order_no: None,
             customer_id: None,
             contract_id: None,
+            has_contract: None,
             origin_system: None,
             commercial_status: None,
             review_status: None,
@@ -895,5 +930,32 @@ mod keyword_regression_tests {
             r"Acme\.\[1\]"
         );
         assert!(format!("{query:?}").contains("contract-hit"));
+    }
+    #[test]
+    fn contract_presence_intersects_keyword_customer_and_todo_filters() {
+        let filter = SalesOrderFilter {
+            has_contract: Some(false),
+            customer_id: Some("customer-1".into()),
+            search: SalesOrderSearch { q: Some("凭证".into()), ..Default::default() },
+            view: SalesOrderListView::MyTodo,
+            ..Default::default()
+        };
+        let query = filter.to_doc();
+        assert_eq!(query.get_str("customer_id").unwrap(), "customer-1");
+        assert!(query.contains_key("$or"));
+        let intersection = query.get_array("$and").unwrap();
+        assert_eq!(intersection.len(), 2);
+        let absent = intersection[0].as_document().unwrap().get_array("$or").unwrap();
+        assert_eq!(absent[0].as_document().unwrap().get("contract_id"), Some(&Bson::Null));
+        let present = SalesOrderFilter { has_contract: Some(true), ..Default::default() }.to_doc();
+        assert!(
+            present.get_array("$and").unwrap()[0]
+                .as_document()
+                .unwrap()
+                .get_document("contract_id")
+                .unwrap()
+                .get_bool("$exists")
+                .unwrap()
+        );
     }
 }

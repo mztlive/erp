@@ -82,6 +82,7 @@ export const CARRIER_OPTIONS: readonly ComboboxOption[] = [
     { value: "圆通速递", label: "圆通速递" },
     { value: "京东物流", label: "京东物流" },
     { value: "德邦物流", label: "德邦物流" },
+    { value: "货拉拉", label: "货拉拉" },
     { value: "供应商自送", label: "供应商自送" },
 ] as const
 

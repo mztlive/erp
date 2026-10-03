@@ -3,7 +3,8 @@
  * 从 api/acceptance.ts 拆出；api/acceptance.ts 保持原导出名 re-export。
  */
 
-import { apiPost } from "@/lib/api"
+import { uploadEvidenceFileAsset } from "@/features/file-assets/api"
+import { apiGetBlob, apiPost } from "@/lib/api"
 import { getErrorMessage, type ApiError } from "@/lib/api/errors"
 import type {
     PostAcceptanceInput,
@@ -26,6 +27,13 @@ export async function postCustomerAcceptanceWorkspace(
     input: PostAcceptanceInput,
 ): Promise<PostAcceptanceResult> {
     try {
+        if (!input.evidenceFile) {
+            return {
+                status: "failed",
+                message: "请上传签收单凭证（图片或 PDF）",
+            }
+        }
+        const evidence = await uploadEvidenceFileAsset(input.evidenceFile)
         const hasServerDraft =
             Boolean(input.acceptanceDraftId) &&
             !input.acceptanceDraftId.startsWith("draft_")
@@ -33,6 +41,7 @@ export async function postCustomerAcceptanceWorkspace(
             acceptance: BackendAcceptanceHeader
             remaining_eligibility: BackendEligibilityView
         }>("/admin/customer-acceptances/commit", {
+            evidence_attachment_id: evidence.id,
             work_item_id: input.workItemId ?? null,
             expected_task_version: input.expectedTaskVersion ?? null,
             acceptance_id: hasServerDraft ? input.acceptanceDraftId : null,
@@ -144,4 +153,31 @@ export async function reverseCustomerAcceptanceWorkspace(
             message: getErrorMessage(err, "冲正失败，请稍后重试。"),
         }
     }
+}
+
+/** 沿签收单和销售单范围重新校验后下载签收凭证。 */
+export async function downloadAcceptanceEvidence(
+    acceptanceId: string,
+    acceptanceNo: string,
+): Promise<void> {
+    const blob = await apiGetBlob(
+        `/admin/customer-acceptances/${encodeURIComponent(acceptanceId)}/evidence`,
+        { timeoutMs: 30_000, cache: "no-store" },
+    )
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    const extension =
+        blob.type === "application/pdf"
+            ? ".pdf"
+            : blob.type === "image/jpeg"
+              ? ".jpg"
+              : blob.type === "image/webp"
+                ? ".webp"
+                : ".png"
+    link.download = `${acceptanceNo || "签收单"}${extension}`
+    document.body.append(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
 }

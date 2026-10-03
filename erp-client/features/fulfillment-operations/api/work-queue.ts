@@ -3,6 +3,7 @@
 import { z } from "zod"
 
 import type { FulfillmentOperation } from "@/features/fulfillment-operations/types"
+import { trackingEntriesFromDto } from "@/features/fulfillment-operations/lib/tracking-entries"
 import {
     baseOperation,
     emptySourceLine,
@@ -44,8 +45,17 @@ const queueItemSchema = z
         purchase_line_sales_allocation_id: z.string().optional(),
         quantity: z.string().optional(),
         result: z.string().optional(),
-        carrier: z.string().optional(),
-        tracking_no: z.string().optional(),
+        tracking_entries: z
+            .array(
+                z
+                    .object({
+                        sales_order_line_id: z.string().min(1),
+                        tracking_no: z.string().min(1),
+                        carrier: z.string().nullable().optional(),
+                    })
+                    .strict(),
+            )
+            .optional(),
         gate_state: z.enum(["SATISFIED", "BLOCKED", "NOT_APPLICABLE"]),
         gate_required_amount: z.string().optional(),
         gate_effective_paid_amount: z.string().optional(),
@@ -190,8 +200,9 @@ export function fulfillmentQueueItemToOperation(
                     type: "WAREHOUSE_SHIP",
                     warehouseId: row.warehouse_id ?? "",
                     warehouseLabel: row.warehouse_label ?? "",
-                    carrier: row.carrier ?? "",
-                    trackingNo: row.tracking_no ?? "",
+                    trackingEntries: trackingEntriesFromDto(
+                        row.tracking_entries,
+                    ),
                     shippedAt: dueAt.slice(0, 16),
                     lines: [],
                 },
@@ -202,8 +213,9 @@ export function fulfillmentQueueItemToOperation(
                 operationType: "SUPPLIER_DIRECT",
                 draft: {
                     type: "SUPPLIER_DIRECT",
-                    carrier: row.carrier ?? "",
-                    trackingNo: row.tracking_no ?? "",
+                    trackingEntries: trackingEntriesFromDto(
+                        row.tracking_entries,
+                    ),
                     shippedAt: dueAt.slice(0, 16),
                     lines: [],
                 },

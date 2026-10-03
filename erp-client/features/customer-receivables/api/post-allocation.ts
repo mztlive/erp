@@ -12,12 +12,18 @@ import type {
 } from "@/features/customer-receivables/types"
 import { mapCustomerReceiptApproval } from "@/features/customer-receivables/lib/customer-receipt-approval"
 import { stripInvoiceApprovalField } from "@/features/customer-receivables/lib/invoice-no-approval"
-import type { BackendCustomerReceipt, BackendInvoice } from "./dto"
+import type { BackendCustomerReceipt } from "./dto"
+import { postInvoiceCommit } from "./invoice-files"
 
 function freezePostInput(input: PostAllocationInput): PostAllocationInput {
     return {
         ...input,
-        fact: { ...input.fact },
+        fact: {
+            ...input.fact,
+            invoiceFiles: input.fact.invoiceFiles
+                ? [...input.fact.invoiceFiles]
+                : undefined,
+        },
         allocations: input.allocations.map((line) => ({ ...line })),
     }
 }
@@ -162,34 +168,38 @@ export async function postAllocation(
         const net = s.fact.netAmount || gross
         const tax = s.fact.taxAmount || "0"
         const posted = stripInvoiceApprovalField(
-            await apiPost<BackendInvoice>("/admin/invoices/commit", {
-                work_item_id: commandInput.workItemId,
-                expected_task_version: commandInput.expectedTaskVersion,
-                invoice_id: s.existingFactId ?? null,
-                expected_version: s.existingFactId
-                    ? (s.existingFactVersion ?? null)
-                    : null,
-                invoice: s.existingFactId
-                    ? null
-                    : {
-                          invoice_direction: "sales",
-                          invoice_kind: s.fact.invoiceKind ?? "blue",
-                          party_id: s.counterpartyPartyId,
-                          invoice_code: s.fact.invoiceCode?.trim() || undefined,
-                          invoice_no: (s.fact.invoiceNo ?? "").trim(),
-                          invoice_date: s.fact.invoiceDate,
-                          gross_amount: gross,
-                          net_amount: net,
-                          tax_amount: tax,
-                      },
-                allocations: positiveLines.map((line) => ({
-                    receivable_account_id: line.targetId,
-                    allocated_gross_amount: line.amount,
-                    allocated_net_amount: net,
-                    allocated_tax_amount: tax,
-                })),
-                idempotency_key: commandInput.idempotencyKey,
-            }),
+            await postInvoiceCommit(
+                {
+                    work_item_id: commandInput.workItemId,
+                    expected_task_version: commandInput.expectedTaskVersion,
+                    invoice_id: s.existingFactId ?? null,
+                    expected_version: s.existingFactId
+                        ? (s.existingFactVersion ?? null)
+                        : null,
+                    invoice: s.existingFactId
+                        ? null
+                        : {
+                              invoice_direction: "sales",
+                              invoice_kind: s.fact.invoiceKind ?? "blue",
+                              party_id: s.counterpartyPartyId,
+                              invoice_code:
+                                  s.fact.invoiceCode?.trim() || undefined,
+                              invoice_no: (s.fact.invoiceNo ?? "").trim(),
+                              invoice_date: s.fact.invoiceDate,
+                              gross_amount: gross,
+                              net_amount: net,
+                              tax_amount: tax,
+                          },
+                    allocations: positiveLines.map((line) => ({
+                        receivable_account_id: line.targetId,
+                        allocated_gross_amount: line.amount,
+                        allocated_net_amount: net,
+                        allocated_tax_amount: tax,
+                    })),
+                    idempotency_key: commandInput.idempotencyKey,
+                },
+                s.fact.invoiceFiles ?? [],
+            ),
         )
         const result: PostAllocationResult = {
             status: "succeeded",

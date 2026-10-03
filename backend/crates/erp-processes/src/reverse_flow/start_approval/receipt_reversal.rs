@@ -1,11 +1,14 @@
-use application_core::AuditActor;
+use application_core::{AuditActor, CommandReceipt};
 use bpm::engine::{DefinitionGraph, TaskIntent};
 use bpm::ids::ApprovalProcessInstanceId;
 use bpm::model::SubjectRef;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::{AuditExt, CommandReceiptServiceExt as _};
 use erp_core::common::time::Instant;
 use erp_core::ids::{ApprovalSubjectSnapshotId, WorkItemId};
+use erp_identity::SharedRbacService;
 use erp_returns::entity::returns::ReceiptReversal;
+use erp_returns::repository::ReturnsExt;
+use erp_returns::service::ReturnsService;
 use erp_workflow::entity::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
@@ -14,7 +17,7 @@ use erp_workflow::repository::prelude::*;
 use erp_workflow::service::approval::execution::{
     PreparedExecution, StartExecutionInput, map_receipt_first_write_error,
 };
-use erp_workflow::{ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, WorkItemExt};
+use erp_workflow::{ApprovalIntegrationExt, BpmExt, WorkItemExt};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
@@ -22,7 +25,8 @@ use persistence_core::{Executor, Transactional};
 use super::super::adapter::receipt_reversal_object_readable;
 use super::common::{ReverseStartContracts, ReverseStartInput, build_reverse_start_input};
 use super::mapping::list_projection_from_execution;
-use super::prepare::load_start_receipt_for_document_type;
+use super::prepare::{ensure_return_start_replay_authorized, load_start_receipt_for_document_type};
+use super::reversal_submit::{committed_reversal_submit, mark_reversal_started};
 use crate::adapters::freeze_approval_materials;
 use crate::{Error, Result};
 
@@ -164,6 +168,8 @@ pub fn build_receipt_reversal_start_input(
 pub struct ReceiptReversalStartPersistInput {
     /// 已进入 `IN_APPROVAL` 的冲正单。
     pub reversal: ReceiptReversal,
+    /// 包含请求原版本的精确提交收据，与启动事实同事务持久化。
+    pub command_receipt: CommandReceipt,
     /// 审计操作人。
     pub actor: AuditActor,
     /// 冲正单主键。
@@ -199,10 +205,39 @@ pub struct ReceiptReversalStartPersistInput {
 /// Replay 不得重复写运行事实；Apply 必须写入快照与入口任务。
 pub async fn persist_receipt_reversal_start(
     db: &Database,
+    rbac: &SharedRbacService,
     input: ReceiptReversalStartPersistInput,
 ) -> Result<ReceiptReversal> {
+    let db = db.clone();
+    let rbac = rbac.clone();
+    let client = db.client().clone();
+    client
+        .with_transaction(move |executor| {
+            Box::pin(async move { persist_receipt_reversal_start_apply(&db, &rbac, input, executor).await })
+        })
+        .await
+}
+
+/// 在调用方执行器内重验提交资格并按原顺序写入启动事实。
+async fn persist_receipt_reversal_start_apply(
+    db: &Database,
+    rbac: &SharedRbacService,
+    input: ReceiptReversalStartPersistInput,
+    executor: &mut dyn Executor,
+) -> Result<ReceiptReversal> {
+    ensure_return_start_replay_authorized(
+        db,
+        rbac,
+        &input.actor,
+        DocumentType::ReceiptReversal,
+        "receipt_reversal:submit",
+        &input.id,
+        executor,
+    )
+    .await?;
     let ReceiptReversalStartPersistInput {
         reversal,
+        command_receipt,
         actor,
         id,
         snapshot_payload,
@@ -212,50 +247,44 @@ pub async fn persist_receipt_reversal_start(
         now,
     } = input;
     let PreparedExecution::Apply(writes) = prepared else {
-        return Ok(reversal);
+        return replay_persisted_receipt_reversal(db, &id, &command_receipt, executor).await;
     };
-    let audit = actor.resource_log("receipt_reversal.submit", "receipt_reversal", id)?;
-    let db = db.clone();
-    let client = db.client().clone();
-    client
-        .with_transaction(move |executor| {
-            Box::pin(async move {
-                db.bpm_workflow()
-                    .insert_command_receipt(&writes.receipt, executor)
-                    .await
-                    .map_err(map_receipt_first_write_error)?;
-                let guarded = db
-                    .business_documents()
-                    .mark_approval_started(
-                        writes.instance.subject.subject_id(),
-                        DocumentType::ReceiptReversal,
-                        &writes.instance.process_definition_id,
-                        writes.instance.definition_version,
-                        now,
-                        executor,
-                    )
-                    .await?;
-                if guarded.is_none() {
-                    return Err(Error::ConflictError("回款冲正单审批启动守卫冲突，请刷新后重试".to_string()));
-                }
-                let mut reversal = reversal;
-                erp_returns::service::ReturnsService::persist_receipt_reversal(&db, &mut reversal, executor)
-                    .await?;
-                persist_receipt_reversal_runtime(
-                    &db,
-                    &writes,
-                    &snapshot_payload,
-                    owner_role,
-                    &organization_id,
-                    now,
-                    executor,
-                )
-                .await?;
-                db.audit_logs().create(&audit, executor).await?;
-                Ok::<ReceiptReversal, crate::Error>(reversal)
-            })
-        })
+    let audit = command_receipt.audit(actor, id)?;
+    db.bpm_workflow()
+        .insert_command_receipt(&writes.receipt, executor)
         .await
+        .map_err(map_receipt_first_write_error)?;
+    mark_reversal_started(db, DocumentType::ReceiptReversal, &writes, now, executor).await?;
+    let mut reversal = reversal;
+    ReturnsService::persist_receipt_reversal(db, &mut reversal, executor).await?;
+    persist_receipt_reversal_runtime(
+        db,
+        &writes,
+        &snapshot_payload,
+        owner_role,
+        &organization_id,
+        now,
+        executor,
+    )
+    .await?;
+    db.audit_logs().create(&audit, executor).await?;
+    Ok(reversal)
+}
+
+/// 引擎回放必须存在精确原版本请求收据，否则不能把历史 BPM 收据当作原提交。
+async fn replay_persisted_receipt_reversal(
+    db: &Database,
+    id: &str,
+    command_receipt: &CommandReceipt,
+    executor: &mut dyn Executor,
+) -> Result<ReceiptReversal> {
+    committed_reversal_submit(db, id, command_receipt, executor)
+        .await?
+        .ok_or_else(|| Error::ConflictError("缺少匹配原请求版本的冲正提交收据".into()))?;
+    db.receipt_reversals()
+        .find_by_id(id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("冲正单不存在".into()))
 }
 
 /// 将回款冲正启动计划写入 BPM 集合、不可变快照和入口 WorkItem。

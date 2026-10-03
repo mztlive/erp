@@ -7,6 +7,7 @@
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::SalesChangeOrderId;
 use mongodb::bson::{Document, doc};
+use mongodb::options::FindOptions;
 use persistence_core::{Executor, Pagination, QueryFilter, Repository, Result, mongo_ops};
 
 use super::{
@@ -186,14 +187,22 @@ impl SalesOrderWorkingCopyRepositoryExt for Repository<'_, SalesOrderWorkingCopy
         sales_change_order_id: &SalesChangeOrderId,
         executor: &mut dyn Executor,
     ) -> Result<Option<SalesOrderWorkingCopy>> {
-        self.find_one(
+        let options = FindOptions::builder()
+            .sort(doc! { "draft_version": -1, "created_at": -1, "_id": -1 })
+            .limit(1)
+            .build();
+        let copies = mongo_ops::find_many(
+            &self.collection(),
             doc! {
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
                 "sales_change_order_id": sales_change_order_id.to_string(),
                 "working_purpose": WorkingPurpose::SalesChange.as_str(),
             },
+            options,
             executor,
         )
-        .await
+        .await?;
+        Ok(copies.into_iter().next())
     }
 
     async fn find_resubmittable_sales_change_copy(

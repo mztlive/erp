@@ -2,6 +2,7 @@
 mod adapter;
 mod approval_query;
 pub mod dto;
+mod evidence;
 mod query;
 mod scope;
 pub use scope::{SalesListParams, SalesListView};

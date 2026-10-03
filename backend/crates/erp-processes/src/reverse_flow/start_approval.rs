@@ -7,6 +7,7 @@ mod mapping;
 mod payment_reversal;
 mod prepare;
 mod receipt_reversal;
+mod reversal_submit;
 mod supplier_refund;
 
 pub(super) use customer_refund::{
@@ -26,6 +27,7 @@ pub(super) use receipt_reversal::{
     ReceiptReversalStartInput, ReceiptReversalStartPersistInput, build_receipt_reversal_start_input,
     load_receipt_reversal_start_receipt, persist_receipt_reversal_runtime, persist_receipt_reversal_start,
 };
+pub(super) use reversal_submit::{ReversalSubmitReplayInput, reversal_result_read_error};
 pub(super) use supplier_refund::{
     SupplierRefundStartInput, SupplierRefundStartPersistInput, build_supplier_refund_start_input,
     load_supplier_refund_start_receipt, persist_supplier_refund_runtime, persist_supplier_refund_start,

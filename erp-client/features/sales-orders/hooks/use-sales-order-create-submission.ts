@@ -89,6 +89,7 @@ export function useSalesOrderCreateSubmission({
     ) => {
         const draftContent = {
             nature: value.nature,
+            customerId: value.customerId,
             ownerUserId: value.ownerUserId,
             ownerName: value.ownerName,
             welfareScene: value.welfareScene,
@@ -189,6 +190,8 @@ export function useSalesOrderCreateSubmission({
                         value.requestedContractRevisionId,
                 },
                 ...draftContent,
+                evidenceFileAssetIds:
+                    value.evidenceAttachments?.map((file) => file.id) ?? [],
                 intent: submitIntentRef.current,
             })
         }
@@ -219,6 +222,12 @@ export function useSalesOrderCreateSubmission({
                 value.contractId === command.payload.contract.contractId &&
                 value.requestedContractRevisionId ===
                     command.payload.contract.requestedContractRevisionId &&
+                JSON.stringify(
+                    value.evidenceAttachments?.map((file) => file.id) ?? [],
+                ) ===
+                    JSON.stringify(
+                        command.payload.evidenceFileAssetIds ?? [],
+                    ) &&
                 Object.entries(draftContent).every(
                     ([key, current]) =>
                         JSON.stringify(current) ===

@@ -77,7 +77,7 @@ export async function createCustomer(
         idempotency_key: input.idempotencyKey,
         legal_name: input.legalName.trim(),
         short_name: input.shortName?.trim() || undefined,
-        unified_credit_code: input.unifiedCreditCode.trim(),
+        unified_credit_code: input.unifiedCreditCode?.trim() || undefined,
         default_payment_term_id: input.defaultPaymentTerm?.trim() || undefined,
         status: input.status ?? "active",
         contacts: input.contacts?.map(mapContactInput),

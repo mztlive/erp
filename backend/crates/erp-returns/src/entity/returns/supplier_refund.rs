@@ -18,6 +18,8 @@ use super::common::{
     ensure_positive_amount, next_approval_version, normalize_created_by, validate_actor_pair,
     validate_exclusive_target,
 };
+use super::draft_edit::FinancialDraftEditPolicy;
+use crate::Result as DraftEditResult;
 
 /// 退款状态（合同 §4.4.1 / §4.4.2：复核态收敛为唯一 `IN_APPROVAL`）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -164,6 +166,25 @@ pub struct SupplierRefund {
 }
 
 impl SupplierRefund {
+    /// 校验原经办人修改原单草稿的资格。
+    ///
+    /// # 参数
+    /// * `actor_id` - 当前编辑人的账号
+    ///
+    /// # 返回
+    /// 原经办人与复核岗位分离且单据为草稿时返回成功。
+    ///
+    /// # 错误
+    /// 非原经办人返回权限错误，非草稿返回状态冲突。
+    pub fn ensure_draft_editor(&self, actor_id: &str) -> DraftEditResult<()> {
+        FinancialDraftEditPolicy::ensure(
+            &self.handled_by,
+            &self.reviewed_by,
+            actor_id,
+            self.status == SupplierRefundStatus::Draft,
+        )
+    }
+
     /// 退款发起职责属于登记的经办人，复核人不得代为提交。
     ///
     /// # 参数
@@ -381,6 +402,7 @@ pub(crate) mod tests {
     use erp_core::money::Amount;
 
     use super::*;
+    use crate::Error as DraftEditError;
 
     pub(crate) fn data() -> SupplierRefundData {
         SupplierRefundData {
@@ -516,5 +538,51 @@ pub(crate) mod tests {
         assert_eq!(refund.approval_subject_version, 1);
         assert!(refund.ensure_initial_approval_state().is_err());
         assert!(refund.mark_posted().is_err());
+    }
+
+    /// 经办人撤回驳回单据后编辑原单并重提；原编号、来源和岗位保持一致。
+    #[test]
+    fn original_handler_can_edit_cancelled_draft_and_resubmit() {
+        let mut record =
+            SupplierRefund::new(SupplierRefundId::new("edit-original"), data(), "creator-1").unwrap();
+        let identity = serde_json::to_value(&record).unwrap();
+        assert!(matches!(record.ensure_draft_editor("other"), Err(DraftEditError::Forbidden(_))));
+        assert!(matches!(record.ensure_draft_editor("reviewer-1"), Err(DraftEditError::Forbidden(_))));
+        record.ensure_draft_editor("handler-1").unwrap();
+        assert!(!record.matches_version(0));
+        record.start_approval().unwrap();
+        assert!(matches!(record.ensure_draft_editor("handler-1"), Err(DraftEditError::ConflictError(_))));
+        record.cancel_approval().unwrap();
+        record.ensure_draft_editor("handler-1").unwrap();
+        record
+            .update(SupplierRefundUpdate {
+                amount: Some(Amount::from_str("120.00").unwrap()),
+                reason_text: Some("修正金额后重新提交".into()),
+                ..SupplierRefundUpdate::default()
+            })
+            .unwrap();
+        let edited = serde_json::to_value(&record).unwrap();
+        for key in [
+            "id",
+            "created_by",
+            "refund_no",
+            "reversal_no",
+            "customer_id",
+            "supplier_id",
+            "original_receipt_id",
+            "original_payment_id",
+            "original_customer_receipt_id",
+            "original_supplier_payment_id",
+            "original_receivable_entry_id",
+            "original_payable_entry_id",
+            "handled_by",
+            "reviewed_by",
+            "occurred_at",
+        ] {
+            assert_eq!(edited.get(key), identity.get(key), "固定字段 {key} 不得改变");
+        }
+        assert_eq!(record.amount.to_string(), "120.00");
+        assert_eq!(record.reason_text, "修正金额后重新提交");
+        assert_eq!(record.start_approval().unwrap(), 2);
     }
 }

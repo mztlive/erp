@@ -9,4 +9,4 @@ pub use business_document::{
     BUSINESS_DOCUMENT_TYPE_CODES, BusinessDocumentPort, FailClosedBusinessDocumentPort,
     is_business_document_type,
 };
-pub use pending::{EmptyPendingAttachments, PendingAttachmentBatch};
+pub use pending::{EmptyPendingAttachments, PendingAttachmentBatch, PendingFileContent};

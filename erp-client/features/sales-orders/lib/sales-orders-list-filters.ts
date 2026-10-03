@@ -14,6 +14,7 @@ import type { SalesOrdersUrlState } from "@/features/sales-orders/lib/url-state"
 export type SalesOrdersListFilterDraft = {
     customerId: string
     contractId: string
+    hasContract: "all" | "yes" | "no"
     ownerUserIds: string
     orgUnitIds: string
     includeDescendants: boolean
@@ -34,6 +35,7 @@ export function hasMoreSalesOrdersFilters(url: SalesOrdersUrlState): boolean {
     return Boolean(
         url.customerId ||
         url.contractId ||
+        (url.hasContract ?? "all") !== "all" ||
         url.createdBy ||
         url.ownerUserIds ||
         url.orgUnitIds ||
@@ -62,6 +64,7 @@ export function salesOrdersListFilterDraftsEqual(
     return (
         left.customerId === right.customerId &&
         left.contractId === right.contractId &&
+        left.hasContract === right.hasContract &&
         left.createdBy === right.createdBy &&
         left.ownerUserIds === right.ownerUserIds &&
         left.orgUnitIds === right.orgUnitIds &&
@@ -94,6 +97,7 @@ export type SalesOrdersListFilterUrl = Pick<
     SalesOrdersUrlState,
     | "customerId"
     | "contractId"
+    | "hasContract"
     | "createdBy"
     | "ownerUserIds"
     | "orgUnitIds"
@@ -116,6 +120,7 @@ export function filterDraftFromUrl(
     return {
         customerId: url.customerId ?? "",
         contractId: url.contractId ?? "",
+        hasContract: url.hasContract ?? "all",
         createdBy: url.createdBy ?? "",
         ownerUserIds: url.ownerUserIds ?? "",
         orgUnitIds: url.orgUnitIds ?? "",
@@ -137,6 +142,7 @@ export const EMPTY_SALES_ORDERS_LIST_FILTER_DRAFT: SalesOrdersListFilterDraft =
     {
         customerId: "",
         contractId: "",
+        hasContract: "all",
         createdBy: "",
         ownerUserIds: "",
         orgUnitIds: "",
@@ -183,6 +189,7 @@ export function resolveSalesOrdersListFilterPatch(input: {
         search: searchDraft.trim() || undefined,
         customerId: filterDraft.customerId || undefined,
         contractId: filterDraft.contractId || undefined,
+        hasContract: filterDraft.hasContract,
         createdBy: filterDraft.createdBy || undefined,
         ownerUserIds: filterDraft.ownerUserIds || undefined,
         orgUnitIds: filterDraft.orgUnitIds.trim() || undefined,

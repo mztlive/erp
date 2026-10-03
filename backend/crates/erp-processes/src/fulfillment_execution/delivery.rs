@@ -85,14 +85,18 @@ impl FulfillmentProcess {
         req: UpdateDeliveryRequest,
         actor: &AuditActor,
     ) -> Result<DeliveryView> {
-        let mut delivery = self.domain().prepare_delivery_update(id, req).await?;
         let audit = actor.clone().resource_log("delivery.update", "delivery", id.to_string())?;
         let db = self.db.clone();
         let actor_id = actor.id().to_string();
+        let id = id.to_string();
         let client = db.client().clone();
         let updated = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    let service = erp_fulfillment::service::FulfillmentService::new(db.clone());
+                    let (mut delivery, lines) = service.prepare_delivery_update(&id, req, executor).await?;
+                    super::delivery_tracking::ensure_tracking_sources(&db, &delivery, &lines, executor)
+                        .await?;
                     erp_fulfillment::service::FulfillmentService::new(db.clone())
                         .persist_delivery(&mut delivery, executor)
                         .await?;
@@ -252,6 +256,7 @@ async fn persist_created_delivery(
     client
         .with_transaction(move |executor| {
             Box::pin(async move {
+                super::delivery_tracking::ensure_tracking_sources(&db, &delivery, &lines, executor).await?;
                 register_created_delivery_document(
                     &db,
                     &rbac,
@@ -302,8 +307,7 @@ mod delivery_no_approval_tests {
                 sales_order_id: SalesOrderId::new("so-1"),
                 purchase_order_id: None,
                 warehouse_id: Some(WarehouseId::new("wh-1")),
-                carrier: None,
-                tracking_no: None,
+                tracking_entries: Vec::new(),
                 address_snapshot_encrypted: None,
                 address_snapshot_fingerprint: None,
             },

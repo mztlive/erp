@@ -7,6 +7,7 @@
 //! Service 只编排元数据
 //! （TRANSACTIONS.md：事务闭包内禁止文件 I/O）。
 
+mod read;
 use application_core::AuditActor;
 use axum::body::Body;
 use axum::extract::{Multipart, Path, Query, State};
@@ -19,6 +20,7 @@ use erp_support::{
     FileAssetListParams, FileAssetView, MarkScanResultRequest, PageView, PendingFileAssetRequest,
     RegisterFileAssetRequest,
 };
+pub(crate) use read::{asset_download_response, read_asset, revalidate_asset};
 use serde::de::DeserializeOwned;
 use tracing::error;
 

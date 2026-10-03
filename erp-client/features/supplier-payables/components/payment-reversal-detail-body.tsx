@@ -92,6 +92,7 @@ export function PaymentReversalDetailBody({
                     )}
                     approval={row.approval}
                     documentId={row.reversalId}
+                    documentVersion={row.baselineVersion}
                     workItemId={workItemId}
                     expectedTaskVersion={expectedTaskVersion}
                     workItemAllowedActions={workItemAllowedActions}

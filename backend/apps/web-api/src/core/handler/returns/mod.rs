@@ -3,6 +3,8 @@
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
 //! 直接复用 领域与读模型的 DTO。
 
+pub mod draft_update;
+
 use application_core::AuditActor;
 use axum::extract::{Path, Query, State};
 use axum::{Extension, Json};

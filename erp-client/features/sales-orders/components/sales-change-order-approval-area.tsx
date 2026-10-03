@@ -29,6 +29,8 @@ export function SalesChangeOrderApprovalArea({
     phase,
     approval,
     documentId,
+    documentVersion,
+    editDocumentHref,
     workItemId,
     expectedTaskVersion,
     workItemAllowedActions,
@@ -37,6 +39,8 @@ export function SalesChangeOrderApprovalArea({
     phase: SalesChangeOrderApprovalPhase
     approval?: DocumentApprovalView
     documentId?: string
+    documentVersion?: number
+    editDocumentHref?: string
     workItemId?: string
     expectedTaskVersion?: string
     workItemAllowedActions?: readonly string[]
@@ -73,6 +77,8 @@ export function SalesChangeOrderApprovalArea({
                         definition={approval?.definition}
                         documentType={SALES_CHANGE_ORDER_DOCUMENT_TYPE}
                         documentId={documentId}
+                        documentVersion={documentVersion}
+                        editDocumentHref={editDocumentHref}
                     />
                 ) : null}
             </div>
@@ -109,6 +115,8 @@ export function SalesChangeOrderApprovalArea({
                 definition={approval?.definition}
                 documentType={SALES_CHANGE_ORDER_DOCUMENT_TYPE}
                 documentId={documentId}
+                documentVersion={documentVersion}
+                editDocumentHref={editDocumentHref}
                 afterCancelStatusLabel="草稿"
                 onDecisionApplied={onDecisionApplied}
             />

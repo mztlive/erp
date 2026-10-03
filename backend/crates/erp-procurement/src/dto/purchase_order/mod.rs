@@ -13,12 +13,14 @@
 //! - 表单类写操作（创建/保存/提交/审核）统一返回稳定业务结果，不再返回
 //!   `FormalActionResponse` 信封（由 HTTP 统一信封承载）。
 
+mod change_draft;
 mod change_order;
 mod command;
 mod query;
 
 pub(crate) use application_core::normalize_sort;
 pub use application_core::{PageView, SortDir};
+pub use change_draft::PurchaseChangeDraftView;
 
 pub use self::change_order::{
     CancelPurchaseChangeApprovalRequest, EffectPurchaseChangeRequest, PurchaseChangeEffectResult,

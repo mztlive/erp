@@ -1,6 +1,8 @@
 "use client"
 
 import type { useAllocationSession } from "@/features/customer-receivables/hooks/use-allocation-session"
+import { InvoiceFilesField } from "@/features/customer-receivables/components/invoice-files-field"
+import { toFieldErrors } from "@/components/form"
 
 type AllocationForm = ReturnType<typeof useAllocationSession>["form"]
 
@@ -135,6 +137,28 @@ export function SessionFactFields({
                             )}
                         />
                     </div>
+                    {!existing ? (
+                        <form.AppField
+                            name="invoiceFiles"
+                            children={(field) => (
+                                <InvoiceFilesField
+                                    files={field.state.value}
+                                    disabled={locked}
+                                    errors={
+                                        field.state.meta.isTouched
+                                            ? toFieldErrors(
+                                                  field.state.meta.errors,
+                                              )
+                                            : []
+                                    }
+                                    onChange={(files) => {
+                                        field.handleChange(files)
+                                        field.handleBlur()
+                                    }}
+                                />
+                            )}
+                        />
+                    ) : null}
                 </div>
             )}
         </section>

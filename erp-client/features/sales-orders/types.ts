@@ -48,17 +48,19 @@ export type SalesOrderDraftLineInput = {
     cardForm: string
 }
 
-/** M5 建单仅引用已有有效合同的当前修订；新合同先经 W04 上传 Dialog 归档。 */
+/** 已选合同引用其有效当前修订；空合同允许先上传开单凭证。 */
 export type SalesOrderContractInput = {
     contractId: string
     requestedContractRevisionId: string
 }
 
-/** M5 建单输入；合同必须选择已有有效版本。 */
+/** 销售建单输入；无合同时必须提供客户和开单凭证。 */
 export type CreateSalesOrderInput = {
     /** 页面生命周期内冻结；结果未知时与原幂等键一起重用。 */
     orderNo: string
     contract: SalesOrderContractInput
+    customerId?: string
+    evidenceFileAssetIds?: string[]
     nature: SalesOrderNature
     /** 负责销售用户 id（当前登录用户）。 */
     ownerUserId: string

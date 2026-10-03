@@ -63,34 +63,7 @@ impl PurchaseOrderService {
         if lines.is_empty() {
             return Err(Error::BusinessLogicError("采购变更基准版本缺少明细".to_string()));
         }
-        Ok(lines
-            .into_iter()
-            .map(|line| {
-                let is_item = line.line_type == crate::entity::purchase_order::PurchaseLineType::ItemService;
-                SavePurchaseOrderLine {
-                    line_type: line.line_type,
-                    procurement_confirmation_line_id: line
-                        .procurement_confirmation_line_id
-                        .map(|value| value.to_string()),
-                    sku_id: line.sku_id.map(|value| value.to_string()),
-                    sku_revision_id: line.sku_revision_id.map(|value| value.to_string()),
-                    product_name: line.product_name_snapshot,
-                    specification: line.specification_snapshot,
-                    quantity: line.quantity.map(|value| value.to_string()),
-                    base_unit_code: line.base_unit_code,
-                    unit_cost_gross: line.unit_cost_gross.map(|value| value.to_string()),
-                    input_tax_rate: line.input_tax_rate.map(|value| value.to_string()),
-                    expected_delivery_date: line.expected_delivery_date.map(|value| value.to_string()),
-                    sales_order_line_id: line.sales_order_line_id.map(|value| value.to_string()),
-                    sales_order_revision_line_id: line
-                        .sales_order_revision_line_id
-                        .map(|value| value.to_string()),
-                    sales_order_submission_line_id: None,
-                    allocated_quantity: line.allocated_quantity.map(|value| value.to_string()),
-                    gross_amount: if is_item { None } else { Some(line.gross_amount.to_string()) },
-                }
-            })
-            .collect())
+        Ok(lines.iter().map(SavePurchaseOrderLine::from).collect())
     }
     /// 计算下一个变更提交序号。
     async fn next_change_submission_no(&self, change: &PurchaseChangeOrder) -> Result<String> {

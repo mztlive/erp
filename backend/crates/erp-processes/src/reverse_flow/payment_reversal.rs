@@ -41,9 +41,10 @@ use super::cancel_approval::{
     persist_payment_reversal_cancel,
 };
 use super::start_approval::{
-    PaymentReversalStartInput, PaymentReversalStartPersistInput, build_payment_reversal_start_input,
-    load_bound_definition_graph, load_bound_definition_graph_with_executor,
-    load_payment_reversal_start_receipt, persist_payment_reversal_runtime, persist_payment_reversal_start,
+    PaymentReversalStartInput, PaymentReversalStartPersistInput, ReversalSubmitReplayInput,
+    build_payment_reversal_start_input, load_bound_definition_graph,
+    load_bound_definition_graph_with_executor, load_payment_reversal_start_receipt,
+    persist_payment_reversal_runtime, persist_payment_reversal_start, reversal_result_read_error,
 };
 use crate::{Error, Result};
 
@@ -231,11 +232,21 @@ impl ReturnsProcess {
         actor: &AuditActor,
     ) -> Result<PaymentReversalView> {
         req.validate()?;
+        let submission = ReversalSubmitReplayInput {
+            id: id.to_string(),
+            document_type: DocumentType::PaymentReversal,
+            submit_permission: "payment_reversal:submit",
+            command_receipt: req.command_receipt(id, actor.id())?,
+            actor: actor.clone(),
+        };
+        if let Some(id) = self.replay_reversal_submit(&submission).await? {
+            return self.reads().payment_reversal_detail(&id).await.map_err(reversal_result_read_error);
+        }
         let adapter = payment_reversal_adapter()?;
         let mut reversal = self.domain().load_payment_reversal(id, &mut NoTransaction).await?;
         conflict_if_stale_version(reversal.matches_version(req.expected_version))?;
         start_payment_reversal_approval(&mut reversal)?;
-        self.dispatch_payment_reversal_start(id, reversal, req.idempotency_key, actor, adapter).await
+        self.dispatch_payment_reversal_start(reversal, req.idempotency_key, adapter, submission).await
     }
 
     /// 撤回付款冲正审批，成功后回到草稿且 `subject_version` 不回退。
@@ -272,12 +283,13 @@ impl ReturnsProcess {
     /// 无绑定、定义缺失或写入失败时返回错误。
     async fn dispatch_payment_reversal_start(
         &self,
-        id: &str,
         reversal: PaymentReversal,
         idempotency_key: String,
-        actor: &AuditActor,
         adapter: super::adapter::PaymentReversalAdapter,
+        submission: ReversalSubmitReplayInput,
     ) -> Result<PaymentReversalView> {
+        let id = submission.id.as_str();
+        let actor = &submission.actor;
         let subject = payment_reversal_subject_ref(id)?;
         let binding =
             find_approval_binding(&self.db, id, &mut NoTransaction).await.map_err(crate::Error::from)?;
@@ -296,13 +308,9 @@ impl ReturnsProcess {
         let _ = payment_reversal_start_command_kind(&start);
         let _ = payment_reversal_object_readable(&organization_id, actor.id())?;
         let graph = load_bound_definition_graph(&self.db, &binding).await?;
-        let existing_receipt = load_payment_reversal_start_receipt(
-            &self.db,
-            &subject,
-            reversal.approval_subject_version,
-            &idempotency_key,
-        )
-        .await?;
+        let version = reversal.approval_subject_version;
+        let existing_receipt =
+            load_payment_reversal_start_receipt(&self.db, &subject, version, &idempotency_key).await?;
         let start_input = build_payment_reversal_start_input(PaymentReversalStartInput {
             graph,
             binding: &binding,
@@ -315,10 +323,10 @@ impl ReturnsProcess {
             now,
         })?;
         let prepared = prepare_start(start_input)?;
-        persist_payment_reversal_start(
-            &self.db,
+        self.complete_payment_reversal_start(
             PaymentReversalStartPersistInput {
                 reversal,
+                command_receipt: submission.command_receipt.clone(),
                 actor: actor.clone(),
                 id: id.to_string(),
                 snapshot_payload: snapshot,
@@ -327,9 +335,20 @@ impl ReturnsProcess {
                 organization_id,
                 now,
             },
+            &submission,
         )
-        .await?;
-        self.reads().payment_reversal_detail(id).await.map_err(crate::Error::from)
+        .await
+    }
+
+    /// 持久化启动并恢复未知结果，响应读取失败保留同操作号重试语义。
+    async fn complete_payment_reversal_start(
+        &self,
+        input: PaymentReversalStartPersistInput,
+        submission: &ReversalSubmitReplayInput,
+    ) -> Result<PaymentReversalView> {
+        let persisted = persist_payment_reversal_start(&self.db, &self.rbac, input).await.map(|_| ());
+        self.finish_reversal_submit(submission, persisted).await?;
+        self.reads().payment_reversal_detail(&submission.id).await.map_err(reversal_result_read_error)
     }
 
     /// 加载撤回运行事实并写回草稿。

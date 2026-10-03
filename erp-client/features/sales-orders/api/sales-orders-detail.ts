@@ -240,6 +240,12 @@ export async function fetchSalesOrderDetail(
         ...order,
         customerId: detail.customer_id,
         settlementPartyId: detail.settlement_party_id,
+        evidenceFileAssetIds: detail.evidence_file_asset_ids ?? [],
+        evidenceFiles:
+            detail.evidence_files?.map((file) => ({
+                id: file.file_asset_id,
+                fileName: file.file_name,
+            })) ?? [],
         acceptance,
         permissionVersion: PERMISSION_VERSION,
         sourceAsOf: queriedAt,

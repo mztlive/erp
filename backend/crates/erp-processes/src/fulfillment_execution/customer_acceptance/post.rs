@@ -2,13 +2,14 @@
 use application_core::AuditActor;
 use erp_core::ids::CustomerAcceptanceId;
 use erp_fulfillment::dto::{CustomerAcceptanceView, PostCustomerAcceptanceRequest};
-use erp_fulfillment::entity::fulfillment::CustomerAcceptance;
+use erp_fulfillment::entity::fulfillment::{CustomerAcceptance, CustomerAcceptanceUpdate};
 use erp_fulfillment::service::FulfillmentService;
 use persistence_core::Transactional;
 use validator::Validate;
 
 use super::CustomerAcceptanceProcess;
 use super::completion::{CompletionKind, complete_acceptance};
+use super::evidence::ensure_evidence;
 use super::task::prepare_customer_acceptance_task_command;
 use crate::Result;
 impl CustomerAcceptanceProcess {
@@ -54,6 +55,7 @@ impl CustomerAcceptanceProcess {
         let acceptance_id = CustomerAcceptanceId::new(id.to_string());
         let actor = actor.clone();
         let db = self.db.clone();
+        let rbac = self.rbac.clone();
         let client = db.client().clone();
         let posted = client
             .with_transaction(move |executor| {
@@ -61,6 +63,11 @@ impl CustomerAcceptanceProcess {
                     let mut acceptance =
                         FulfillmentService::load_customer_acceptance_for_post(&db, &acceptance_id, executor)
                             .await?;
+                    acceptance.update(CustomerAcceptanceUpdate {
+                        evidence_attachment_id: req.evidence_attachment_id.clone(),
+                        ..Default::default()
+                    })?;
+                    ensure_evidence(&db, &rbac, acceptance.require_evidence()?, &actor, executor).await?;
                     let task = prepare_customer_acceptance_task_command(
                         &db,
                         &acceptance.sales_order_id,

@@ -13,6 +13,7 @@ pub mod customer_quality;
 pub mod demo_master_data;
 pub mod document_registry;
 pub mod file_asset;
+pub mod financial_files;
 pub mod fulfillment;
 pub mod integration_ops;
 pub mod inventory;

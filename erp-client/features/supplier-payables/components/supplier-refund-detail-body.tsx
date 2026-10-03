@@ -81,6 +81,7 @@ export function SupplierRefundDetailBody({
                     )}
                     approval={row.approval}
                     documentId={row.refundId}
+                    documentVersion={row.baselineVersion}
                     workItemId={workItemId}
                     expectedTaskVersion={expectedTaskVersion}
                     workItemAllowedActions={workItemAllowedActions}

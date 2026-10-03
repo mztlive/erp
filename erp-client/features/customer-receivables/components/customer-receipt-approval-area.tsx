@@ -1,5 +1,10 @@
 "use client"
 
+import { financialDraftEditHref } from "@/features/financial-draft-edit/types"
+import { FinancialDraftEditButton } from "@/features/financial-draft-edit/components/financial-draft-edit-button"
+import { useFinancialDraftQuery } from "@/features/financial-draft-edit/hooks/queries"
+import { useAccountProfileQuery } from "@/features/auth/hooks/queries"
+import { hasPermission } from "@/lib/permissions"
 import { ApprovalActionBar } from "@/features/approval-workflow/components/approval-action-bar"
 import { DefinitionBindingCard } from "@/features/approval-workflow/components/definition-binding-card"
 import { ExecutionHistory } from "@/features/approval-workflow/components/execution-history"
@@ -13,9 +18,11 @@ import type {
     ApprovalCommandView,
     DocumentApprovalView,
 } from "@/features/approval-workflow/types"
+import { mapDocumentApprovalViewDto } from "@/features/approval-workflow/types"
 import {
     CUSTOMER_RECEIPT_DOCUMENT_TYPE,
     mergeCustomerReceiptAllowedActions,
+    customerReceiptApprovalPhase,
     type CustomerReceiptApprovalPhase,
 } from "@/features/customer-receivables/lib/customer-receipt-approval"
 
@@ -26,9 +33,10 @@ import {
  * 动作入口只读 `allowed_actions` 与 `recovery_options`，不复制审批状态推导。
  */
 export function CustomerReceiptApprovalArea({
-    phase,
-    approval,
+    phase: providedPhase,
+    approval: providedApproval,
     documentId,
+    documentVersion: providedDocumentVersion,
     workItemId,
     expectedTaskVersion,
     workItemAllowedActions,
@@ -37,11 +45,37 @@ export function CustomerReceiptApprovalArea({
     phase: CustomerReceiptApprovalPhase
     approval?: DocumentApprovalView
     documentId?: string
+    documentVersion?: number
     workItemId?: string
     expectedTaskVersion?: string
     workItemAllowedActions?: readonly string[]
     onDecisionApplied?: (view: ApprovalCommandView) => void
 }) {
+    const profileQuery = useAccountProfileQuery()
+    const canReadEditable = hasPermission(
+        profileQuery.data?.permissions,
+        "customer_receipt:submit",
+    )
+    // 完整审批结构仅从通过原登记人与完整资金源资格的专用读取取得。
+    const editableQuery = useFinancialDraftQuery(
+        "customer_receipt",
+        documentId ?? "",
+        canReadEditable,
+    )
+    const qualifiedDraft =
+        canReadEditable && !editableQuery.isError
+            ? editableQuery.data
+            : undefined
+    const approval = qualifiedDraft?.approval
+        ? mapDocumentApprovalViewDto(qualifiedDraft.approval)
+        : providedApproval
+    const documentVersion = qualifiedDraft?.version ?? providedDocumentVersion
+    const phase =
+        providedPhase === "confirm"
+            ? providedPhase
+            : qualifiedDraft
+              ? customerReceiptApprovalPhase(approval, qualifiedDraft.status)
+              : providedPhase
     const instanceId = approval?.instance?.id
     const recoveryQuery = useRecoveryOptionsQuery(
         instanceId,
@@ -64,12 +98,27 @@ export function CustomerReceiptApprovalArea({
             <div className="space-y-3">
                 <DefinitionBindingCard definition={approval?.definition} />
                 {documentId ? (
+                    <FinancialDraftEditButton
+                        kind="customer_receipt"
+                        documentId={documentId}
+                    />
+                ) : null}
+                {documentId ? (
                     <ApprovalActionBar
                         id="customer-receivables-receipt-approval-action-bar"
                         allowedActions={allowedActions}
                         definition={approval?.definition}
                         documentType={CUSTOMER_RECEIPT_DOCUMENT_TYPE}
                         documentId={documentId}
+                        documentVersion={documentVersion}
+                        editDocumentHref={
+                            documentId
+                                ? financialDraftEditHref(
+                                      "customer_receipt",
+                                      documentId,
+                                  )
+                                : undefined
+                        }
                     />
                 ) : null}
             </div>
@@ -83,6 +132,12 @@ export function CustomerReceiptApprovalArea({
     return (
         <div className="space-y-3">
             <RuntimeSummary instance={approval?.instance} />
+            {documentId ? (
+                <FinancialDraftEditButton
+                    kind="customer_receipt"
+                    documentId={documentId}
+                />
+            ) : null}
             <ExecutionHistory
                 id="customer-receivables-receipt-approval-history"
                 items={historyItems}
@@ -106,6 +161,12 @@ export function CustomerReceiptApprovalArea({
                 definition={approval?.definition}
                 documentType={CUSTOMER_RECEIPT_DOCUMENT_TYPE}
                 documentId={documentId}
+                documentVersion={documentVersion}
+                editDocumentHref={
+                    documentId
+                        ? financialDraftEditHref("customer_receipt", documentId)
+                        : undefined
+                }
                 afterCancelStatusLabel="草稿"
                 onDecisionApplied={onDecisionApplied}
             />
