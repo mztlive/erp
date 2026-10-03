@@ -17,6 +17,8 @@ pub struct Cli {
 /// 支持的运维子命令。
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// 登记合同模板新增集合及唯一索引，不修改历史合同。
+    MigrateContractTemplates,
     /// 创建或修复系统超级管理员。
     InitAdmin(InitAdminArgs),
     /// 预览人员数据范围迁移；--apply 显式写入。

@@ -5,6 +5,7 @@ pub mod extensions;
 pub mod owned;
 pub mod prelude;
 pub mod scope;
+pub mod templates;
 
 pub use contract::{
     ContractDomainRepository, ContractFilter, ContractRepositoryExt, ContractRevisionRepositoryExt,

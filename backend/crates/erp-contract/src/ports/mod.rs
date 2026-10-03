@@ -1,6 +1,7 @@
 //! Consumer ports for customer, identity, attachment and audit facts.
 
 mod audit;
+mod company;
 mod customer;
 mod data_scope;
 mod file_asset;
@@ -8,6 +9,7 @@ mod identity;
 mod participant;
 
 pub use audit::{ContractAuditPort, FailClosedAuditPort, PreparedContractAudit};
+pub use company::{SigningCompanyFact, SigningCompanyPort};
 pub use customer::{
     ContractAssignmentFact, CustomerAccountFact, CustomerAssignmentFactsPort, CustomerFactsPort,
     EmptyAssignments, EmptyCustomers, FailClosedAssignmentFactsPort, FailClosedCustomerFactsPort,

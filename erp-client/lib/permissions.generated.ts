@@ -2637,6 +2637,26 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "POST",
+                path: "/admin/contracts/{id}/revisions",
+                description: "归档合同新版本",
+                permission: {
+                    resource: "contract",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/contracts/{id}/terminate",
+                description: "终止合同",
+                permission: {
+                    resource: "contract",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
                 method: "GET",
                 path: "/admin/contracts/{id}/files/{file_id}",
                 description: "查询合同附件",
@@ -2655,24 +2675,106 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                     action: "detail",
                 },
             },
+        ],
+    },
+    {
+        name: "合同模板",
+        description: "Word 模板与合同领号",
+        permissions: [
             {
                 module: "admin",
-                method: "POST",
-                path: "/admin/contracts/{id}/revisions",
-                description: "归档合同新版本",
+                method: "GET",
+                path: "/admin/contract-templates",
+                description: "查询合同模板",
                 permission: {
-                    resource: "contract",
-                    action: "update",
+                    resource: "contract_template",
+                    action: "list",
                 },
             },
             {
                 module: "admin",
                 method: "POST",
-                path: "/admin/contracts/{id}/terminate",
-                description: "终止合同",
+                path: "/admin/contract-templates",
+                description: "维护合同模板与编号规则",
                 permission: {
-                    resource: "contract",
-                    action: "update",
+                    resource: "contract_template",
+                    action: "manage",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/contract-templates/{id}/status",
+                description: "启停合同模板",
+                permission: {
+                    resource: "contract_template",
+                    action: "manage",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/contract-templates/{id}/sample",
+                description: "下载编号样张",
+                permission: {
+                    resource: "contract_template",
+                    action: "manage",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/contract-number-counters",
+                description: "读取年度合同流水",
+                permission: {
+                    resource: "contract_template",
+                    action: "manage",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/contract-number-counters",
+                description: "校准年度合同流水",
+                permission: {
+                    resource: "contract_template",
+                    action: "manage",
+                },
+            },
+        ],
+    },
+    {
+        name: "合同申请",
+        description: "本人合同领号及下载",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/contract-applications",
+                description: "查询本人合同申请",
+                permission: {
+                    resource: "contract_application",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/contract-applications",
+                description: "申请销售合同编号",
+                permission: {
+                    resource: "contract_application",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/contract-applications/{id}/download",
+                description: "下载本人带编号 Word 合同",
+                permission: {
+                    resource: "contract_application",
+                    action: "download",
                 },
             },
         ],
@@ -5281,7 +5383,8 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     },
     {
         name: "财务整账",
-        description: "完整财务台账及无来源记录的读取资格；仍检查业务读取动作和来源边界",
+        description:
+            "完整财务台账及无来源记录的读取资格；仍检查业务读取动作和来源边界",
         permissions: [
             {
                 module: "admin",

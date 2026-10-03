@@ -6,6 +6,7 @@ pub(crate) use approval_materials::freeze_approval_materials;
 mod catalog_data_scope;
 mod contract;
 mod contract_data_scope;
+mod contract_template;
 mod customer;
 mod customer_data_scope;
 mod fulfillment_order_data_scope;
@@ -29,6 +30,7 @@ use std::sync::Arc;
 pub use catalog::{CatalogPendingAttachments, MongoCatalogAudit, MongoCatalogFileAssets, catalog_service};
 pub use contract::{contract_access, contract_service, scoped_contract_service};
 pub use contract_data_scope::MongoContractDataScope;
+pub use contract_template::contract_template_service;
 pub use customer::{MongoCustomerAccountFacts, MongoCustomerAudit, MongoCustomerPartyFacts};
 pub use customer_data_scope::{MongoCustomerDataScope, customer_access};
 use erp_customer::{CustomerAssignmentService, CustomerService, FailClosedCustomerDataScopePort};
@@ -51,6 +53,7 @@ pub use supplier::{MongoSupplierFileAssets, MongoSupplierPartyFacts, MongoSuppli
 pub use supplier_data_scope::{
     MongoSupplierDataScope, scoped_supplier_service, scoped_supplier_service_with_sensitive, supplier_access,
 };
+pub(crate) use warehouse::MongoWarehouseIdentity;
 pub use warehouse::warehouse_service;
 
 /// Construct a party service with audit and supplier-role adapters.

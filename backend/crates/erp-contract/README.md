@@ -8,6 +8,7 @@
 
 - 调整合同创建、查询、终止和归档规则。
 - 维护合同修订、客户与结算快照，或合同 PDF 的业务关联。
+- 管理签约前 Word 模板、稳定公司编号组和年度流水，记录销售领号及本人下载。
 
 ## 协作示例
 
@@ -17,6 +18,7 @@
 
 - 合同稳定身份、合同状态及不可变归档修订。
 - 客户和结算资料快照、合同 PDF 关联及首次归档和上传归档计划。
+- 不可变 DOCX 模板、首页编号处理、年度领号和同申请键核对；领号记录不得成为有效合同或销售资格。
 
 ## 依赖与协作边界
 
@@ -32,6 +34,7 @@
 | 入口 | 用途 |
 | --- | --- |
 | [src/service/contract/mod.rs](src/service/contract/mod.rs) | ContractService 与归档计划 |
+| [src/service/template/mod.rs](src/service/template/mod.rs) | 模板目录、编号组绑定、年度流水及申请 |
 | [src/entity/contract/snapshot.rs](src/entity/contract/snapshot.rs) | ContractSnapshot |
 | [src/ports/mod.rs](src/ports/mod.rs) | 客户、账号、附件和审计合同 |
 | [src/entity/mod.rs](src/entity/mod.rs) | 本域实体、值对象和确定性规则 |
@@ -45,6 +48,7 @@
 3. 新增或调整集合查询时同步评估索引；组合根复用本域公开索引入口，保持既有逐集合注册顺序。
 4. HTTP 请求和响应优先复用本域 DTO；扩展公开合同须同步检查 Process、ReadModel 和应用调用方。
 5. 业务改动补充本域库单元测试，覆盖成功、失败、边界及相关幂等或版本冲突路径。
+6. 模板与编号行为必须遵守[合同模板与申请执行合同](../../../docs/contract-template-contract.md)；对象存储 I/O 必须位于数据库事务外，申请及流水必须原子提交。
 
 ## 验证要求
 

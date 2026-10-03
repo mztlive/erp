@@ -1,7 +1,6 @@
 # ERP CLI
 
-运维命令行，用于初始化超级管理员和重置管理员密码。本 crate 只依赖 `services`、
-`database` 与 `config`，禁止依赖 `web-api`。
+运维命令行，提供管理员维护、人员数据范围迁移和合同模板增量索引登记。业务用例必须复用拥有领域与组合层；数据库连接及事务能力校验必须使用 `persistence-core`，禁止依赖 `web-api`。
 
 ## 命令
 
@@ -9,9 +8,12 @@
 # 在 backend 目录下
 cargo run -p cli -- init-admin --account admin --name "System Admin"
 cargo run -p cli -- reset-password --account admin
+cargo run -p cli -- migrate-contract-templates
 ```
 
 默认读取 `./config.toml`。可用 `--config-path` 覆盖，全局参数可放在子命令前或后。
+
+`migrate-contract-templates` 必须在开放合同申请前执行，复用 `erp-contract::indexes::ensure_templates` 登记模板、主体编号绑定、年度流水及申请记录的索引；不得修改历史合同和已有流水。正常 API 启动也必须完成同一索引登记。迁移与回退执行[合同模板与申请合同](../../../docs/contract-template-contract.md)第 6 节。
 
 密码读取顺序：
 

@@ -474,6 +474,17 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                     icon: FileTextIcon,
                 },
                 {
+                    routeId: "W04",
+                    href: "/sales/contract-templates",
+                    label: "合同模板与申请",
+                    icon: FileTextIcon,
+                    requiredPermissions: [
+                        "contract_template:list",
+                        "contract_template:manage",
+                        "contract_application:list",
+                    ],
+                },
+                {
                     routeId: "W05",
                     label: "销售单",
                     icon: ShoppingCartIcon,

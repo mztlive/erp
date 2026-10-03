@@ -1,8 +1,9 @@
 //! ERP 运维命令行入口。
 //!
-//! 本 crate 只装配身份领域已有账号用例，禁止依赖 `web-api`。
+//! 本 crate 复用身份用例与领域增量索引入口，禁止依赖 `web-api`。
 
 mod indexes;
+mod migrate_contract_templates;
 mod migrate_scopes;
 
 mod args;
@@ -43,6 +44,7 @@ async fn run() -> Result<()> {
     init_tracing();
     let cli = Cli::parse();
     match cli.command {
+        Command::MigrateContractTemplates => migrate_contract_templates::run(&cli.config_path).await,
         Command::MigratePersonScopes(args) => migrate_scopes::run(&cli.config_path, args).await,
         Command::InitAdmin(args) => init_admin::run(&cli.config_path, args).await,
         Command::ResetPassword(args) => reset_password::run(&cli.config_path, args).await,

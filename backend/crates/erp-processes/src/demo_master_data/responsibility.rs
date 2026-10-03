@@ -14,7 +14,9 @@ use erp_workflow::entity::work_item::{
     EnableStatus as FinanceStatus, FinanceResponsibilityOperation, FinanceResponsibilityScope,
 };
 use erp_workflow::repository::prelude::FinanceResponsibilityRuleRepositoryExt;
-use erp_workflow::service::work_item::CreateFinanceResponsibilityRuleRequest;
+use erp_workflow::service::work_item::{
+    CreateFinanceResponsibilityRuleRequest, FinanceResponsibilityOwnerOptionView,
+};
 use persistence_core::NoTransaction;
 
 use super::accounts::PreparedAccounts;
@@ -73,9 +75,11 @@ impl DemoMasterDataService {
         Ok(())
     }
 
+    /// 分页读取默认规则，并使用正式采购资格核验保留的启用负责人。
     async fn procurement_default_flags(&self) -> Result<Vec<bool>> {
         let mut page = 1_u64;
         let mut flags = Vec::new();
+        let responsibility = ProcurementResponsibilityProcess::new(self.db.clone(), self.rbac.clone());
         loop {
             let found = self
                 .db
@@ -83,6 +87,9 @@ impl DemoMasterDataService {
                 .search_procurement_responsibility_rules(&dispatcher_filter(page), &mut NoTransaction)
                 .await?;
             let batch = found.items.len();
+            for rule in found.items.iter().filter(|rule| rule.is_active()) {
+                responsibility.authorize_owner_eligibility(&rule.owner_user_id).await?;
+            }
             flags.extend(found.items.iter().map(|rule| rule.is_active()));
             let counted = i64::try_from(flags.len())
                 .map_err(|_| Error::Internal("采购责任规则数量溢出".to_string()))?;
@@ -93,17 +100,26 @@ impl DemoMasterDataService {
         }
     }
 
+    /// 保留既有负责人前复用工作项服务的完整执行资格，失效规则阻断准备。
     async fn finance_default_flags(&self, operation: FinanceResponsibilityOperation) -> Result<Vec<bool>> {
         let rules = self
             .db
             .finance_responsibility_rules()
             .list_finance_responsibility_rules(&mut NoTransaction)
             .await?;
-        Ok(rules
+        let defaults = rules
             .into_iter()
             .filter(|rule| rule.operation == operation && rule.scope == FinanceResponsibilityScope::Default)
-            .map(|rule| rule.is_active())
-            .collect())
+            .collect::<Vec<_>>();
+        if defaults.iter().any(|rule| rule.is_active()) {
+            let options = work_item_service(self.db.clone(), self.rbac.clone())
+                .finance_responsibility_owner_options()
+                .await?;
+            for rule in defaults.iter().filter(|rule| rule.is_active()) {
+                ensure_finance_owner(operation, &rule.owner_user_id, &options)?;
+            }
+        }
+        Ok(defaults.iter().map(|rule| rule.is_active()).collect())
     }
 
     async fn create_procurement_dispatcher(&self, actor: &AuditActor, owner_user_id: &str) -> Result<()> {
@@ -146,6 +162,29 @@ impl DemoMasterDataService {
     }
 }
 
+/// 根据正式候选资格核验已启用默认规则，不替换人工选定的负责人。
+fn ensure_finance_owner(
+    operation: FinanceResponsibilityOperation,
+    owner_user_id: &str,
+    options: &[FinanceResponsibilityOwnerOptionView],
+) -> Result<()> {
+    let eligible = options.iter().any(|option| {
+        option.user_id == owner_user_id
+            && match operation {
+                FinanceResponsibilityOperation::SupplierPayment => option.supplier_payment_eligible,
+                FinanceResponsibilityOperation::SalesInvoice => option.sales_invoice_eligible,
+                FinanceResponsibilityOperation::CardFundsReview => false,
+            }
+    });
+    if eligible {
+        return Ok(());
+    }
+    Err(Error::ValidationError(format!(
+        "已启用的默认{}责任人 {owner_user_id} 不可用或缺少完整执行权限，请维护财务责任配置后重新生成",
+        operation.label()
+    )))
+}
+
 fn account_id(accounts: &PreparedAccounts, key: &str) -> Result<String> {
     accounts.by_key.get(key).cloned().ok_or_else(|| Error::NotFound(format!("责任人 {key} 尚未建号")))
 }
@@ -167,7 +206,7 @@ fn dispatcher_filter(page: u64) -> ProcurementResponsibilityRuleFilter {
 
 #[cfg(test)]
 mod tests {
-    use super::should_create_responsibility;
+    use super::*;
 
     #[test]
     fn missing_or_disabled_default_rule_is_created() {
@@ -179,5 +218,41 @@ mod tests {
     fn active_default_rule_keeps_its_owner() {
         assert!(!should_create_responsibility(&[true]));
         assert!(!should_create_responsibility(&[false, true]));
+    }
+
+    /// 正式候选允许自定义负责人，不要求负责人等于种子账号。
+    #[test]
+    fn finance_default_keeps_qualified_custom_owner() {
+        let options = vec![FinanceResponsibilityOwnerOptionView {
+            user_id: "custom-payer".into(),
+            display_name: "财务经办".into(),
+            account: "custom".into(),
+            supplier_payment_eligible: true,
+            sales_invoice_eligible: false,
+        }];
+        ensure_finance_owner(FinanceResponsibilityOperation::SupplierPayment, "custom-payer", &options)
+            .unwrap();
+        assert!(!should_create_responsibility(&[true]));
+    }
+
+    /// 停用、删除或缺权人员不在正式候选中；另一财务操作资格不能替代所需操作。
+    #[test]
+    fn finance_default_rejects_missing_owner_and_wrong_operation() {
+        let options = vec![FinanceResponsibilityOwnerOptionView {
+            user_id: "invoice-only".into(),
+            display_name: "开票经办".into(),
+            account: "invoice-only".into(),
+            supplier_payment_eligible: false,
+            sales_invoice_eligible: true,
+        }];
+        for owner in ["unavailable", "invoice-only"] {
+            let error =
+                ensure_finance_owner(FinanceResponsibilityOperation::SupplierPayment, owner, &options)
+                    .unwrap_err();
+            assert!(
+                matches!(error, Error::ValidationError(message) if message.contains(owner) && message.contains("供应商付款") && message.contains("财务责任配置"))
+            );
+        }
+        ensure_finance_owner(FinanceResponsibilityOperation::SalesInvoice, "invoice-only", &options).unwrap();
     }
 }

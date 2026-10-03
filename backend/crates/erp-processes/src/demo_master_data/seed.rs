@@ -1,6 +1,6 @@
 //! JSON 种子复用领域创建输入；运行时 ID 在写入前解析。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use erp_catalog::{
     CreateProductBrandRequest, CreateProductCategoryRequest, CreateProductRequest,
@@ -115,6 +115,7 @@ pub(super) fn load(json: &str) -> Result<Vec<DemoStep>> {
     let requests: Vec<SeedRequest> = serde_json::from_str(json)
         .map_err(|error| Error::ValidationError(format!("演示种子 JSON 无效：{error}")))?;
     let mut known = HashMap::new();
+    let mut sku_numbers = HashSet::new();
     let mut steps = Vec::new();
     for request in requests {
         request.validate(&known)?;
@@ -122,6 +123,13 @@ pub(super) fn load(json: &str) -> Result<Vec<DemoStep>> {
         let key = key.to_string();
         if key.trim().is_empty() || known.insert(key.clone(), kind).is_some() {
             return Err(Error::ValidationError(format!("演示种子身份为空或重复：{key}")));
+        }
+        if let SeedRequest::Product(product) = &request {
+            for sku in &product.skus {
+                if !sku_numbers.insert(sku.sku_no.trim().to_string()) {
+                    return Err(Error::ValidationError(format!("演示 SKU 编号重复：{}", sku.sku_no)));
+                }
+            }
         }
         steps.push(DemoStep { kind, key, request });
     }
@@ -174,6 +182,14 @@ fn reference(previous: &HashMap<String, DemoKind>, key: &str, kind: DemoKind) ->
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
+    use erp_catalog::entity::catalog::SkuSalesPrices;
+    use erp_core::ids::{SupplierAccountId, SupplierCommercialProfileRevisionId};
+    use erp_core::money::Quantity;
+    use erp_supplier::entity::supplier::{
+        SupplierCommercialProfileRevision, SupplierCommercialProfileRevisionData,
+    };
     use serde_json::{Value, json};
 
     use super::{SeedRequest, load};
@@ -184,7 +200,7 @@ mod tests {
         let steps = load(include_str!("master-data.json")).unwrap();
         let counts = planned_counts(&steps);
         assert_eq!((counts.unit, counts.brand, counts.category, counts.warehouse), (6, 8, 13, 6));
-        assert_eq!((counts.customer, counts.supplier, counts.product), (24, 18, 27));
+        assert_eq!((counts.customer, counts.supplier, counts.product), (24, 28, 28));
         let SeedRequest::Product(product) = &steps.last().unwrap().request else {
             panic!("商品必须最后生成")
         };
@@ -194,6 +210,91 @@ mod tests {
         assert!(product.skus[0].bulk_min_quantity.is_none());
         assert_eq!(product.skus[0].sku_no, "DEMO-MD-P-27");
         assert!(steps.iter().all(|step| !step.request.label().is_empty()));
+    }
+
+    /// 用声明的公司价执行正式数量取价规则，并保留缺少可选价格的对照规格。
+    #[test]
+    fn demo_multispec_prices_cover_bulk_threshold_and_fallback() {
+        let steps = load(include_str!("master-data.json")).unwrap();
+        let SeedRequest::Product(product) =
+            &steps.iter().find(|step| step.key == "DEMO-MD-P-28").unwrap().request
+        else {
+            panic!("多规格演示商品")
+        };
+        assert_eq!(product.skus.len(), 2);
+        assert_ne!(
+            serde_json::to_value(&product.skus[0].spec_entries).unwrap(),
+            serde_json::to_value(&product.skus[1].spec_entries).unwrap()
+        );
+        let standard = &product.skus[0];
+        assert_eq!(standard.factory_price_gross.unwrap().to_string(), "77.00");
+        assert_eq!(standard.market_price.unwrap().to_string(), "159.00");
+        let prices = SkuSalesPrices {
+            sales_visible_price_gross: standard.sales_visible_price_gross,
+            bulk_price_gross: standard.bulk_price_gross,
+            bulk_min_quantity: standard.bulk_min_quantity,
+        };
+        assert_eq!(prices.reference_price("9".parse::<Quantity>().unwrap()).unwrap().to_string(), "129.00");
+        assert_eq!(prices.reference_price("10".parse::<Quantity>().unwrap()).unwrap().to_string(), "119.00");
+        let light = &product.skus[1];
+        assert!(light.factory_price_gross.is_none() && light.market_price.is_none());
+        let fallback = SkuSalesPrices {
+            sales_visible_price_gross: light.sales_visible_price_gross,
+            bulk_price_gross: light.bulk_price_gross,
+            bulk_min_quantity: light.bulk_min_quantity,
+        };
+        assert_eq!(
+            fallback.reference_price("100".parse::<Quantity>().unwrap()).unwrap().to_string(),
+            "99.00"
+        );
+    }
+
+    /// 每条供应商输入均须通过真实商务版本工厂，并覆盖全部固定条件与自然周期。
+    #[test]
+    fn demo_suppliers_cover_payment_terms_with_valid_commercial_revisions() {
+        let steps = load(include_str!("master-data.json")).unwrap();
+        let mut terms = HashSet::new();
+        for step in &steps {
+            let SeedRequest::Supplier(row) = &step.request else { continue };
+            let revision = SupplierCommercialProfileRevision::new(
+                SupplierCommercialProfileRevisionId::new("validation"),
+                SupplierCommercialProfileRevisionData {
+                    supplier_id: SupplierAccountId::new(&step.key),
+                    revision_no: 1,
+                    settlement_mode: row.settlement_mode,
+                    reconciliation_cycle: row.reconciliation_cycle,
+                    payment_term_snapshot: row.payment_term_snapshot.clone(),
+                    business_category: row.business_category.clone(),
+                    invoice_type: row.invoice_type,
+                    invoice_tax_rate: row.invoice_tax_rate,
+                    invoice_tax_rates: row.invoice_tax_rates.clone(),
+                    signing_entity_party_id: row.signing_entity_party_id.clone(),
+                    payment_entity_party_id: row.payment_entity_party_id.clone(),
+                    change_reason: row.change_reason.clone(),
+                },
+            )
+            .unwrap();
+            terms.insert(revision.effective_payment_term_code());
+        }
+        assert_eq!(
+            terms,
+            [
+                "PREPAY_100",
+                "PREPAY_50",
+                "PREPAY_30",
+                "CASH_ON_APPROVAL",
+                "POSTPAY_NET15",
+                "POSTPAY_NET30",
+                "PERIOD_WEEK_7",
+                "PERIOD_MONTH_15",
+                "PERIOD_QUARTER_15",
+                "PERIOD_HALF_YEAR_30",
+                "PERIOD_YEAR_30",
+            ]
+            .map(str::to_string)
+            .into_iter()
+            .collect()
+        );
     }
 
     #[test]
@@ -211,6 +312,24 @@ mod tests {
         assert!(load(&bad_price.to_string()).is_err());
         assert!(load("not json").is_err());
         assert!(load("[]").unwrap().is_empty());
+    }
+
+    /// SKU 编号跨商品唯一，不能因供给集合按编号归组而漏验重复规格。
+    #[test]
+    fn duplicate_sku_number_across_products_fails_before_execution() {
+        let mut rows: Value = serde_json::from_str(include_str!("master-data.json")).unwrap();
+        let mut duplicate = rows
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["data"]["product_no"] == "DEMO-MD-P-01")
+            .unwrap()
+            .clone();
+        duplicate["data"]["product_no"] = json!("DEMO-MD-P-DUPLICATE");
+        rows.as_array_mut().unwrap().push(duplicate);
+        assert!(
+            matches!(load(&rows.to_string()), Err(crate::Error::ValidationError(message)) if message.contains("SKU 编号重复"))
+        );
     }
 
     #[test]

@@ -7,6 +7,8 @@ pub(crate) const SYSADMIN_PERMISSIONS: &[&str] = &[
     "company:detail",
     "company:create",
     "company:update",
+    "contract_template:list",
+    "contract_template:manage",
     "procurement_responsibility:list",
     "procurement_responsibility:manage",
     "finance_responsibility:list",

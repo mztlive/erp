@@ -592,5 +592,269 @@
     "available_quantity": "10000",
     "change_reason": "演示商品可售供给",
     "idempotency_key": "demo-offering-27"
+  },
+  {
+    "sku_id": "DEMO-MD-SKU-28-A",
+    "supplier_id": "demo-master-supplier-01",
+    "supplier_product_code": "DEMO-SUP-01-GIFT",
+    "supplier_sku_code": "DEMO-SUP-01-STANDARD",
+    "source_type": "MANUAL",
+    "terms": {
+      "dropship_supply_price_gross": "60.00",
+      "bulk_supply_price_gross": "50.00",
+      "input_tax_rate": "0.13",
+      "bulk_minimum_order_quantity": "6",
+      "supply_region": [
+        "全国"
+      ],
+      "product_capabilities": [],
+      "valid_from": "2026-01-01"
+    },
+    "availability_status": "AVAILABLE",
+    "available_quantity": "10000",
+    "change_reason": "演示多供应商及采购付款条件",
+    "idempotency_key": "demo-offering-28-a-01"
+  },
+  {
+    "sku_id": "DEMO-MD-SKU-28-A",
+    "supplier_id": "demo-master-supplier-19",
+    "supplier_product_code": "DEMO-SUP-19-GIFT",
+    "supplier_sku_code": "DEMO-SUP-19-STANDARD",
+    "source_type": "MANUAL",
+    "terms": {
+      "dropship_supply_price_gross": "61.00",
+      "bulk_supply_price_gross": "51.00",
+      "input_tax_rate": "0.13",
+      "bulk_minimum_order_quantity": "6",
+      "supply_region": [
+        "全国"
+      ],
+      "product_capabilities": [],
+      "valid_from": "2026-01-01"
+    },
+    "availability_status": "AVAILABLE",
+    "available_quantity": "10000",
+    "change_reason": "演示多供应商及采购付款条件",
+    "idempotency_key": "demo-offering-28-a-19"
+  },
+  {
+    "sku_id": "DEMO-MD-SKU-28-A",
+    "supplier_id": "demo-master-supplier-20",
+    "supplier_product_code": "DEMO-SUP-20-GIFT",
+    "supplier_sku_code": "DEMO-SUP-20-STANDARD",
+    "source_type": "MANUAL",
+    "terms": {
+      "dropship_supply_price_gross": "62.00",
+      "bulk_supply_price_gross": "52.00",
+      "input_tax_rate": "0.13",
+      "bulk_minimum_order_quantity": "6",
+      "supply_region": [
+        "全国"
+      ],
+      "product_capabilities": [],
+      "valid_from": "2026-01-01"
+    },
+    "availability_status": "AVAILABLE",
+    "available_quantity": "10000",
+    "change_reason": "演示多供应商及采购付款条件",
+    "idempotency_key": "demo-offering-28-a-20"
+  },
+  {
+    "sku_id": "DEMO-MD-SKU-28-A",
+    "supplier_id": "demo-master-supplier-21",
+    "supplier_product_code": "DEMO-SUP-21-GIFT",
+    "supplier_sku_code": "DEMO-SUP-21-STANDARD",
+    "source_type": "MANUAL",
+    "terms": {
+      "dropship_supply_price_gross": "63.00",
+      "bulk_supply_price_gross": "53.00",
+      "input_tax_rate": "0.13",
+      "bulk_minimum_order_quantity": "6",
+      "supply_region": [
+        "全国"
+      ],
+      "product_capabilities": [],
+      "valid_from": "2026-01-01"
+    },
+    "availability_status": "AVAILABLE",
+    "available_quantity": "10000",
+    "change_reason": "演示多供应商及采购付款条件",
+    "idempotency_key": "demo-offering-28-a-21"
+  },
+  {
+    "sku_id": "DEMO-MD-SKU-28-A",
+    "supplier_id": "demo-master-supplier-22",
+    "supplier_product_code": "DEMO-SUP-22-GIFT",
+    "supplier_sku_code": "DEMO-SUP-22-STANDARD",
+    "source_type": "MANUAL",
+    "terms": {
+      "dropship_supply_price_gross": "64.00",
+      "bulk_supply_price_gross": "54.00",
+      "input_tax_rate": "0.13",
+      "bulk_minimum_order_quantity": "6",
+      "supply_region": [
+        "全国"
+      ],
+      "product_capabilities": [],
+      "valid_from": "2026-01-01"
+    },
+    "availability_status": "AVAILABLE",
+    "available_quantity": "10000",
+    "change_reason": "演示多供应商及采购付款条件",
+    "idempotency_key": "demo-offering-28-a-22"
+  },
+  {
+    "sku_id": "DEMO-MD-SKU-28-A",
+    "supplier_id": "demo-master-supplier-23",
+    "supplier_product_code": "DEMO-SUP-23-GIFT",
+    "supplier_sku_code": "DEMO-SUP-23-STANDARD",
+    "source_type": "MANUAL",
+    "terms": {
+      "dropship_supply_price_gross": "65.00",
+      "bulk_supply_price_gross": "55.00",
+      "input_tax_rate": "0.13",
+      "bulk_minimum_order_quantity": "6",
+      "supply_region": [
+        "全国"
+      ],
+      "product_capabilities": [],
+      "valid_from": "2026-01-01"
+    },
+    "availability_status": "AVAILABLE",
+    "available_quantity": "10000",
+    "change_reason": "演示多供应商及采购付款条件",
+    "idempotency_key": "demo-offering-28-a-23"
+  },
+  {
+    "sku_id": "DEMO-MD-SKU-28-A",
+    "supplier_id": "demo-master-supplier-24",
+    "supplier_product_code": "DEMO-SUP-24-GIFT",
+    "supplier_sku_code": "DEMO-SUP-24-STANDARD",
+    "source_type": "MANUAL",
+    "terms": {
+      "dropship_supply_price_gross": "66.00",
+      "bulk_supply_price_gross": "56.00",
+      "input_tax_rate": "0.13",
+      "bulk_minimum_order_quantity": "6",
+      "supply_region": [
+        "全国"
+      ],
+      "product_capabilities": [],
+      "valid_from": "2026-01-01"
+    },
+    "availability_status": "AVAILABLE",
+    "available_quantity": "10000",
+    "change_reason": "演示多供应商及采购付款条件",
+    "idempotency_key": "demo-offering-28-a-24"
+  },
+  {
+    "sku_id": "DEMO-MD-SKU-28-A",
+    "supplier_id": "demo-master-supplier-25",
+    "supplier_product_code": "DEMO-SUP-25-GIFT",
+    "supplier_sku_code": "DEMO-SUP-25-STANDARD",
+    "source_type": "MANUAL",
+    "terms": {
+      "dropship_supply_price_gross": "67.00",
+      "bulk_supply_price_gross": "57.00",
+      "input_tax_rate": "0.13",
+      "bulk_minimum_order_quantity": "6",
+      "supply_region": [
+        "全国"
+      ],
+      "product_capabilities": [],
+      "valid_from": "2026-01-01"
+    },
+    "availability_status": "AVAILABLE",
+    "available_quantity": "10000",
+    "change_reason": "演示多供应商及采购付款条件",
+    "idempotency_key": "demo-offering-28-a-25"
+  },
+  {
+    "sku_id": "DEMO-MD-SKU-28-A",
+    "supplier_id": "demo-master-supplier-26",
+    "supplier_product_code": "DEMO-SUP-26-GIFT",
+    "supplier_sku_code": "DEMO-SUP-26-STANDARD",
+    "source_type": "MANUAL",
+    "terms": {
+      "dropship_supply_price_gross": "68.00",
+      "bulk_supply_price_gross": "58.00",
+      "input_tax_rate": "0.13",
+      "bulk_minimum_order_quantity": "6",
+      "supply_region": [
+        "全国"
+      ],
+      "product_capabilities": [],
+      "valid_from": "2026-01-01"
+    },
+    "availability_status": "AVAILABLE",
+    "available_quantity": "10000",
+    "change_reason": "演示多供应商及采购付款条件",
+    "idempotency_key": "demo-offering-28-a-26"
+  },
+  {
+    "sku_id": "DEMO-MD-SKU-28-A",
+    "supplier_id": "demo-master-supplier-27",
+    "supplier_product_code": "DEMO-SUP-27-GIFT",
+    "supplier_sku_code": "DEMO-SUP-27-STANDARD",
+    "source_type": "MANUAL",
+    "terms": {
+      "dropship_supply_price_gross": "69.00",
+      "bulk_supply_price_gross": "59.00",
+      "input_tax_rate": "0.13",
+      "bulk_minimum_order_quantity": "6",
+      "supply_region": [
+        "全国"
+      ],
+      "product_capabilities": [],
+      "valid_from": "2026-01-01"
+    },
+    "availability_status": "AVAILABLE",
+    "available_quantity": "10000",
+    "change_reason": "演示多供应商及采购付款条件",
+    "idempotency_key": "demo-offering-28-a-27"
+  },
+  {
+    "sku_id": "DEMO-MD-SKU-28-A",
+    "supplier_id": "demo-master-supplier-28",
+    "supplier_product_code": "DEMO-SUP-28-GIFT",
+    "supplier_sku_code": "DEMO-SUP-28-STANDARD",
+    "source_type": "MANUAL",
+    "terms": {
+      "dropship_supply_price_gross": "70.00",
+      "bulk_supply_price_gross": "60.00",
+      "input_tax_rate": "0.13",
+      "bulk_minimum_order_quantity": "6",
+      "supply_region": [
+        "全国"
+      ],
+      "product_capabilities": [],
+      "valid_from": "2026-01-01"
+    },
+    "availability_status": "AVAILABLE",
+    "available_quantity": "10000",
+    "change_reason": "演示多供应商及采购付款条件",
+    "idempotency_key": "demo-offering-28-a-28"
+  },
+  {
+    "sku_id": "DEMO-MD-SKU-28-B",
+    "supplier_id": "demo-master-supplier-21",
+    "supplier_product_code": "DEMO-SUP-21-GIFT",
+    "supplier_sku_code": "DEMO-SUP-21-LIGHT",
+    "source_type": "MANUAL",
+    "terms": {
+      "dropship_supply_price_gross": "45.00",
+      "bulk_supply_price_gross": "40.00",
+      "input_tax_rate": "0.13",
+      "bulk_minimum_order_quantity": "6",
+      "supply_region": [
+        "全国"
+      ],
+      "product_capabilities": [],
+      "valid_from": "2026-01-01"
+    },
+    "availability_status": "AVAILABLE",
+    "available_quantity": "10000",
+    "change_reason": "演示未维护可选销售参考价的规格",
+    "idempotency_key": "demo-offering-28-b-21"
   }
 ]

@@ -38,3 +38,4 @@ pub use service::contract::{
     ContractAccess, ContractScopePorts, ContractService, PlannedContractArchive, plan_first_archive,
     plan_upload_archive,
 };
+pub use service::template::ContractTemplateService;

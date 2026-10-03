@@ -2,10 +2,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use config::{Config, SafeConfig};
+use erp_contract::ContractTemplateService;
 use erp_identity::SharedRbacService;
 use erp_integration::ports::evidence::IntegrationEvidenceAuthority;
 use erp_party::SensitiveDataCodec;
 use erp_processes::ApprovalActionRegistry;
+use erp_processes::adapters::contract_template_service;
 use erp_processes::adapters::supplier_api::{
     UnavailableSupplierApiGateway, UnavailableSupplierReferenceRegistry,
 };
@@ -599,6 +601,17 @@ impl AppState {
     /// Contract domain service with customer, identity, attachment and audit adapters.
     pub fn contract_service(&self) -> erp_contract::ContractService {
         erp_processes::adapters::scoped_contract_service(self.db(), self.rbac())
+    }
+
+    /// 装配合同模板和领号服务。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 本域服务及公司、审计 Port。
+    /// # 错误
+    /// 无。
+    pub fn contract_template_service(&self) -> ContractTemplateService {
+        contract_template_service(self.db())
     }
 
     /// Import-domain query service with bulk-job identity adapter.

@@ -138,6 +138,7 @@ impl DemoMasterDataService {
         Ok(changed)
     }
 
+    /// 按当前快照构造稳定命令；组织变化后使用新键，避免回放旧版本调整。
     async fn apply_org(
         &self,
         actor: &AuditActor,
@@ -145,12 +146,7 @@ impl DemoMasterDataService {
         key: &str,
         operation: OrganizationOperation,
     ) -> Result<()> {
-        let request = OrganizationChangeRequest {
-            expected_version: snap.version,
-            idempotency_key: key.to_string(),
-            reason: "演示主数据岗位部门".to_string(),
-            change: operation,
-        };
+        let request = organization_request(key, snap.version, operation);
         let service = organization_service(self.db.clone(), self.rbac.clone());
         service.preview(actor, request.clone()).await?;
         service.change(actor, request).await?;
@@ -164,6 +160,16 @@ impl DemoMasterDataService {
         }
         let found = self.db.accounts().find_by_account(login, &mut persistence_core::NoTransaction).await?;
         Ok(found.map(|account| account.base.id))
+    }
+}
+
+/// 绑定组织版本，使同一请求可重试、后续修复不与历史回执冲突。
+fn organization_request(key: &str, version: u64, change: OrganizationOperation) -> OrganizationChangeRequest {
+    OrganizationChangeRequest {
+        expected_version: version,
+        idempotency_key: format!("{key}-v{version}"),
+        reason: "演示主数据岗位部门".to_string(),
+        change,
     }
 }
 
@@ -196,4 +202,52 @@ fn active_membership<'a>(snap: &'a OrgSnap, user_id: &str) -> Result<Option<&'a 
         return Err(Error::ValidationError(format!("{user_id} 存在多个有效所属部门")));
     }
     Ok(matches.first().copied())
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_identity::Error as IdentityError;
+    use erp_identity::entity::organization_change::OrganizationState;
+
+    use super::*;
+
+    /// 创建可确定时间下执行真实归属迁移的部门状态。
+    fn state() -> OrganizationState {
+        let unit = |id: &str| {
+            OrgUnit::new(id.into(), id.into(), None, OrgUnitKind::Department, "admin".into(), "初始化".into())
+                .unwrap()
+        };
+        OrganizationState {
+            version: 1,
+            units: vec![unit("sales"), unit("other")],
+            ..OrganizationState::default()
+        }
+    }
+
+    /// 同输入重试保持完整请求一致；人工转部门后的修复采用新键并恢复归属。
+    #[test]
+    fn member_repair_after_org_change_uses_new_receipt_identity() {
+        let target =
+            OrganizationOperation::TransferMember { user_id: "seller".into(), org_unit_id: "sales".into() };
+        let original = organization_request("demo-org-member-seller", 1, target.clone());
+        let retry = organization_request("demo-org-member-seller", 1, target.clone());
+        assert_eq!(original, retry);
+        original.validate().unwrap();
+        let seated = state().changed(&original, "seat-1", "admin", Instant::from_unix_secs(10)).unwrap();
+        let move_request = organization_request(
+            "manual-transfer",
+            seated.version,
+            OrganizationOperation::TransferMember { user_id: "seller".into(), org_unit_id: "other".into() },
+        );
+        let moved = seated.changed(&move_request, "seat-2", "admin", Instant::from_unix_secs(20)).unwrap();
+        assert_eq!(moved.own_org("seller", Instant::from_unix_secs(20)).unwrap(), Some("other"));
+        let repair = organization_request("demo-org-member-seller", moved.version, target);
+        assert_ne!(repair.idempotency_key, original.idempotency_key);
+        let repaired = moved.changed(&repair, "seat-3", "admin", Instant::from_unix_secs(30)).unwrap();
+        assert_eq!(repaired.own_org("seller", Instant::from_unix_secs(30)).unwrap(), Some("sales"));
+        assert!(matches!(
+            moved.changed(&original, "stale", "admin", Instant::from_unix_secs(30)),
+            Err(IdentityError::ConflictError(_))
+        ));
+    }
 }

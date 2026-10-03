@@ -55,8 +55,8 @@ impl DemoMasterDataService {
             .await?
             .ok_or_else(|| Error::NotFound("演示客户创建后未能读回".to_string()))?;
         let created = account.base.deleted_at == entity_core::NOT_DELETED_TIMESTAMP;
+        lifecycle::restore_party(&self.db, actor, account.party_id.as_ref()).await?;
         if !created {
-            lifecycle::restore_party(&self.db, actor, &view.party_id).await?;
             lifecycle::restore_customer(&self.db, actor, &view.customer_id).await?;
         }
         record::save(&self.db, &customer_record(step, &view.customer_id, &view.party_id)).await?;
@@ -79,8 +79,8 @@ impl DemoMasterDataService {
             .ok_or_else(|| Error::NotFound("演示客户命令缺少客户".to_string()))?;
         let party_id = account.party_id.to_string();
         let live = account.base.deleted_at == entity_core::NOT_DELETED_TIMESTAMP;
+        lifecycle::restore_party(&self.db, actor, &party_id).await?;
         if !live {
-            restore_optional(lifecycle::restore_party(&self.db, actor, &party_id).await)?;
             lifecycle::restore_customer(&self.db, actor, customer_id).await?;
         }
         self.align_customer_owner(actor, customer_id, notices).await?;
@@ -143,14 +143,6 @@ fn customer_record(step: &DemoStep, customer_id: &str, party_id: &str) -> DemoMa
         related_ids: vec![party_id.to_string()],
         label: step_label(step),
         removed: false,
-    }
-}
-
-/// 将已不存在的可选主体视为无需恢复。
-fn restore_optional(result: Result<()>) -> Result<()> {
-    match result {
-        Ok(()) | Err(Error::NotFound(_)) => Ok(()),
-        Err(error) => Err(error),
     }
 }
 
