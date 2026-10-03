@@ -1,13 +1,13 @@
 //! Sales-owned frozen snapshot queries.
 use std::collections::HashMap;
 
-use erp_core::ids::{SalesOrderId, SalesOrderRevisionId};
+use erp_core::ids::{SalesOrderId, SalesOrderRevisionId, SalesOrderRevisionLineId};
 use persistence_core::NoTransaction;
 
 use super::SalesOrderService;
 use super::mapper::{revision_view, working_copy_line_view};
 use crate::Result;
-use crate::dto::sales_order::{RevisionView, WorkingCopyView};
+use crate::dto::sales_order::{RevisionView, SalesOrderWorkingCopyLineView, WorkingCopyView};
 use crate::entity::sales_order::{SalesOrderRevision, SalesOrderRevisionLine, SalesOrderWorkingCopy};
 use crate::repository::SalesOrderExt;
 use crate::repository::prelude::*;
@@ -41,7 +41,7 @@ fn previous_revision_numbers(revisions: &[SalesOrderRevision]) -> HashMap<String
 }
 
 impl SalesOrderService {
-    /// 组装销售单正式版本历史视图（含当时表头快照与明细摘要）。
+    /// 组装销售单正式版本历史视图（含当时表头、明细摘要与完整成交快照）。
     ///
     /// # 参数
     /// * `order_id` - 稳定销售单
@@ -53,7 +53,7 @@ impl SalesOrderService {
     /// * `RepositoryError` - 查询正式版本或版本行失败
     ///
     /// # 关键业务约束
-    /// 版本行按版本 ID 一次批量取出，禁止按版本循环查询。
+    /// 公共行按版本 ID、子类型按公共行 ID 批量取出，禁止按版本循环查询。
     pub async fn load_revision_views(&self, order_id: &SalesOrderId) -> Result<Vec<RevisionView>> {
         let revisions = self.db.sales_order_revisions().list_by_order(order_id, &mut NoTransaction).await?;
         let revision_ids =
@@ -63,6 +63,7 @@ impl SalesOrderService {
             .sales_order_revision_lines()
             .list_lines_by_revisions(&revision_ids, &mut NoTransaction)
             .await?;
+        let mut commercial_by_line = self.revision_commercial_lines(&lines).await?;
         let mut lines_by_revision = group_revision_lines(lines);
         let previous_nos = previous_revision_numbers(&revisions);
         Ok(revisions
@@ -70,9 +71,45 @@ impl SalesOrderService {
             .map(|revision| {
                 let lines = lines_by_revision.remove(&revision.base.id).unwrap_or_default();
                 let previous_revision_no = previous_nos.get(&revision.base.id).copied();
-                revision_view(revision, lines, previous_revision_no)
+                let commercial_lines =
+                    lines.iter().filter_map(|line| commercial_by_line.remove(&line.base.id)).collect();
+                revision_view(revision, lines, previous_revision_no, commercial_lines)
             })
             .collect())
+    }
+
+    /// 批量读取所有版本公共行的不可变子类型，并按公共行身份组装成交明细。
+    async fn revision_commercial_lines(
+        &self,
+        lines: &[SalesOrderRevisionLine],
+    ) -> Result<HashMap<String, SalesOrderWorkingCopyLineView>> {
+        let ids =
+            lines.iter().map(|line| SalesOrderRevisionLineId::new(line.base.id.clone())).collect::<Vec<_>>();
+        let goods = self
+            .db
+            .sales_order_goods_service_line_revisions()
+            .list_by_revision_line_ids(&ids, &mut NoTransaction)
+            .await?;
+        let vouchers = self
+            .db
+            .sales_order_voucher_line_revisions()
+            .list_by_revision_line_ids(&ids, &mut NoTransaction)
+            .await?;
+        let goods_by_line: HashMap<_, _> =
+            goods.into_iter().map(|line| (line.revision_line_id.to_string(), line)).collect();
+        let vouchers_by_line: HashMap<_, _> =
+            vouchers.into_iter().map(|line| (line.revision_line_id.to_string(), line)).collect();
+        lines
+            .iter()
+            .map(|line| {
+                SalesOrderWorkingCopyLineView::from_revision_line(
+                    line,
+                    goods_by_line.get(&line.base.id),
+                    vouchers_by_line.get(&line.base.id),
+                )
+                .map(|view| (line.base.id.clone(), view))
+            })
+            .collect()
     }
 
     /// 构建工作副本行视图。

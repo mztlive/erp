@@ -30,13 +30,18 @@ export async function expandSourcingEditor(
  */
 export async function confirmSupplyAllocation(
     page: Page,
-    success: string | RegExp = /已创建 \d+ 张采购单并提交审批|已将缺口拆成|供给分配已完成|本次全部由现有库存满足/,
+    success:
+        | string
+        | RegExp = /已创建 \d+ 张采购单并提交审批|已将缺口拆成|供给分配已完成|本次全部由现有库存满足/,
 ): Promise<void> {
-    const preview = page.getByRole("dialog", { name: "预览供给分配" })
-    if (!(await preview.isVisible().catch(() => false))) {
+    const preview = page.getByRole("dialog", {
+        name: "预览供给分配",
+        exact: true,
+    })
+    if (!(await preview.isVisible())) {
         await page.locator("#procurement-orders-create-preview").click()
-        await expect(preview).toBeVisible({ timeout: UI_TIMEOUT })
     }
+    await expect(preview).toBeVisible({ timeout: UI_TIMEOUT })
     const committed = page.waitForResponse(
         (response) =>
             response.request().method() === "POST" &&
@@ -45,6 +50,9 @@ export async function confirmSupplyAllocation(
     )
     await preview.locator("#procurement-orders-create-preview-confirm").click()
     const response = await committed
-    expect(response.ok(), await response.text()).toBeTruthy()
+    const body = await response.text()
+    const failure = `供给分配提交失败（HTTP ${response.status()}）: ${body}`
+    expect(response.ok(), failure).toBeTruthy()
+    expect(JSON.parse(body).success, failure).toBe(true)
     await expectToast(page, success)
 }

@@ -3,6 +3,7 @@ import type { WorkspaceWorkItem } from "../types"
 const PAYMENT_REASON_CODES = new Set([
     "PAYABLE_PAYMENT_REQUIRED",
     "PAYABLE_REOPENED_BY_REVERSAL",
+    "PAYABLE_REOPENED_BY_PURCHASE_CHANGE",
 ])
 
 export type WorkspacePaymentDescriptor = Readonly<{

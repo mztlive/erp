@@ -57,7 +57,8 @@ export const salesChangeOrderStatusLabel = (status?: string): string => {
 /**
  * 按单据生命周期选择销售变更审批区相位。提交确认由调用方显式传入。
  *
- * 有运行实例或已离开未提交阶段时进入 runtime，不得按角色、影响路径或 BusinessType 推导。
+ * 未提交单据没有实例或仅有已取消实例时进入 draft；已取消实例继续作为审批历史展示。
+ * 其它实例或已离开未提交阶段时进入 runtime，不得按角色、影响路径或 BusinessType 推导。
  *
  * @param approval 服务端只读审批投影。
  * @param status 单据状态码。
@@ -66,7 +67,8 @@ export const salesChangeOrderApprovalPhase = (
     approval?: DocumentApprovalView,
     status?: string,
 ): Exclude<SalesChangeOrderApprovalPhase, "confirm"> =>
-    approval?.instance || !isUnsubmittedSalesChangeOrderStatus(status)
+    !isUnsubmittedSalesChangeOrderStatus(status) ||
+    (approval?.instance && approval.instance.status !== "CANCELLED")
         ? "runtime"
         : "draft"
 

@@ -22,7 +22,7 @@ import {
 /**
  * 销售变更单审批区。
  *
- * 未提交展示绑定卡，提交确认展示固定路线，运行中/终态展示摘要与历史。
+ * 未提交展示绑定卡及已有审批历史，提交确认展示固定路线，运行中/终态展示摘要与历史。
  * 动作入口只读 `allowed_actions` 与 `recovery_options`，不恢复影响确认或财务复核专用决定。
  */
 export function SalesChangeOrderApprovalArea({
@@ -53,7 +53,7 @@ export function SalesChangeOrderApprovalArea({
     )
     const historyQuery = useApprovalHistoryInfiniteQuery(
         { instanceId: instanceId ?? "" },
-        phase === "runtime" && Boolean(instanceId),
+        phase !== "confirm" && Boolean(instanceId),
     )
     const historyItems = historyQuery.data
         ? historyQuery.data.pages.flatMap((page) => page.items)
@@ -61,6 +61,24 @@ export function SalesChangeOrderApprovalArea({
     const allowedActions = mergeSalesChangeOrderAllowedActions(
         approval?.allowedActions,
         workItemAllowedActions,
+    )
+    const approvalHistory = (
+        <>
+            <RuntimeSummary instance={approval?.instance} compact />
+            <ExecutionHistory
+                items={historyItems}
+                hasMore={historyQuery.hasNextPage}
+                loadingMore={historyQuery.isFetchingNextPage}
+                onLoadMore={
+                    historyQuery.hasNextPage
+                        ? () => {
+                              void historyQuery.fetchNextPage()
+                          }
+                        : undefined
+                }
+                compact
+            />
+        </>
     )
 
     if (phase === "draft") {
@@ -70,6 +88,7 @@ export function SalesChangeOrderApprovalArea({
                     definition={approval?.definition}
                     compact
                 />
+                {instanceId ? approvalHistory : null}
                 {documentId ? (
                     <ApprovalActionBar
                         id="sales-orders-change-approval-bar"
@@ -91,20 +110,7 @@ export function SalesChangeOrderApprovalArea({
 
     return (
         <div className="flex flex-col gap-4">
-            <RuntimeSummary instance={approval?.instance} compact />
-            <ExecutionHistory
-                items={historyItems}
-                hasMore={historyQuery.hasNextPage}
-                loadingMore={historyQuery.isFetchingNextPage}
-                onLoadMore={
-                    historyQuery.hasNextPage
-                        ? () => {
-                              void historyQuery.fetchNextPage()
-                          }
-                        : undefined
-                }
-                compact
-            />
+            {approvalHistory}
             <ApprovalActionBar
                 id="sales-orders-change-approval-bar"
                 allowedActions={allowedActions}

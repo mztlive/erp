@@ -34,7 +34,13 @@ import {
 import { apiGet, apiToken } from "../helpers/api"
 import { createCustomerViaUi } from "../helpers/customers"
 import { headedAwareViewport } from "../helpers/headed"
-import { submitSalesInvoiceRequest } from "../helpers/invoices"
+import {
+    expectInvoiceEvidenceCommit,
+    expectSalesInvoiceEvidence,
+    invoiceEvidenceFiles,
+    submitSalesInvoiceRequest,
+    uploadInvoiceEvidence,
+} from "../helpers/invoices"
 import { loginViaUi, openLoggedInWorkspace } from "../helpers/login"
 import { expandSourcingEditor } from "../helpers/sourcing"
 import {
@@ -135,13 +141,13 @@ test("销项与进项红票按 Invoice 强类型命令登记，不进审批且�
         await caiwuInvoice.context.close()
 
         const kaipiao = await openRole(browser, extra, "kaipiao")
-        const registeredSalesNo = await registerSalesInvoiceFromWorkspace(
+        const registeredInvoice = await registerSalesInvoiceFromWorkspace(
             kaipiao.page,
             order.orderNo,
             salesInvoiceNo,
             legalName,
         )
-        expect(registeredSalesNo).toBe(salesInvoiceNo)
+        expect(registeredInvoice.invoiceNo).toBe(salesInvoiceNo)
         await assertNoInvoiceApprovalUi(kaipiao.page)
         await expect(kaipiao.page.getByRole("button", { name: /发票审批/ })).toHaveCount(0)
 
@@ -150,6 +156,7 @@ test("销项与进项红票按 Invoice 强类型命令登记，不进审批且�
         await expectInvoicedAmount(page, UNIT_PRICE)
         await expectNotClosed(page)
         await expectFulfillmentNotStarted(page)
+        await expectSalesInvoiceEvidence(page, { salesOrderId: order.id, ...registeredInvoice })
 
         // 开票完成后任务应离开队列；红冲前不得出现发票审批待办
         await kaipiao.page.goto("/workspace")
@@ -184,6 +191,8 @@ test("销项与进项红票按 Invoice 强类型命令登记，不进审批且�
         await expect(kaipiao.page.getByText("红票").first()).toBeVisible({ timeout: LONG })
         await expect(kaipiao.page.getByText(salesRedNo).first()).toBeVisible({ timeout: LONG })
         await expect(kaipiao.page.getByText("已登记").first()).toBeVisible({ timeout: LONG })
+        // 红票保留原蓝票及其附件，销售仍按原销售来源下载真实蓝票文件。
+        await expectSalesInvoiceEvidence(page, { salesOrderId: order.id, ...registeredInvoice })
 
         // 发票搜索会把 q 留在 URL；切应收 Tab 不会清关键词，必须硬导航。
         await kaipiao.page.goto(
@@ -642,6 +651,8 @@ async function registerSalesInvoiceFromWorkspace(
 
     await page.locator("#customer-receivables-session-invoice-no").fill(invoiceNo)
     await page.locator("#customer-receivables-session-gross-amount").fill(UNIT_PRICE)
+    const files = invoiceEvidenceFiles(invoiceNo).slice(0, 1)
+    await uploadInvoiceEvidence(page, files)
     const join = page.getByRole("button", { name: "加入" }).first()
     if (await join.isVisible().catch(() => false)) {
         await join.click()
@@ -656,13 +667,13 @@ async function registerSalesInvoiceFromWorkspace(
     })
     const confirm = page.getByRole("alertdialog").filter({ hasText: "确认登记销项发票并分配" })
     await expect(confirm.getByText("提交审批")).toHaveCount(0)
-    const committed = page.waitForResponse(response => response.request().method() === "POST" && response.url().endsWith("/admin/invoices/commit"), { timeout: LONG })
+    const committed = page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname === "/admin/invoices/commit-with-files", { timeout: LONG })
     await page.locator("#customer-receivables-session-invoice-confirm-dialog-confirm").click()
-    expect((await committed).ok()).toBeTruthy()
+    const invoiceId = await expectInvoiceEvidenceCommit(await committed, files)
     await expect(confirm).toBeHidden({ timeout: LONG })
     // 任务完成后处理面板会关闭，以持久化台账验证发票登记结果。
     await assertSalesInvoiceRow(page, invoiceNo, { kind: "蓝票", status: "已登记" })
-    return invoiceNo
+    return { invoiceId, invoiceNo, files }
 }
 
 async function searchCustomerInvoices(page: Page, query: string) {

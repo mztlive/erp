@@ -35,6 +35,7 @@ import {
 } from "../helpers/test";
 
 import { createCustomerViaUi } from "../helpers/customers";
+import { addDeliveryTrackingEntry, uploadAcceptanceEvidence } from "../helpers/fulfillment";
 import { submitSalesInvoiceRequest } from "../helpers/invoices";
 import { openLoggedInWorkspace } from "../helpers/login";
 import {
@@ -180,14 +181,12 @@ async function confirmSupplierPaymentIfGated(page: Page): Promise<boolean> {
     );
 }
 
-async function fillDirectShipQuantity(page: Page) {
-    const shipQty = page.locator('[id^="fulfillment-operations-direct-form-quantity-"]').first();
-    if (await shipQty.count()) {
-        const current = await shipQty.inputValue();
-        if (!current || current === "0") {
-            await shipQty.fill(SALES_QTY);
-        }
-    }
+async function assertDirectShipQuantity(page: Page) {
+    await expect(
+        page.locator('[aria-label="供应商直发表单"]').getByText(
+            new RegExp(`^本次发货\\s*${SALES_QTY}(?:\\.0+)?(?:\\s*盒)?$`),
+        ),
+    ).toBeVisible({ timeout: UI_TIMEOUT });
 }
 
 async function submitSupplierPayment(page: Page, stamp: string, purchaseNo: string) {
@@ -451,9 +450,13 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
 
         // 10) 采购登记代发并确认发货
         await expect(page.locator('[aria-label="供应商直发表单"]')).toBeVisible({ timeout: UI_TIMEOUT });
-        await chooseOption(page, page.locator("#fulfillment-operations-direct-form-carrier"), "顺丰速运");
-        await page.locator("#fulfillment-operations-direct-form-tracking-no").fill(trackingNo);
-        await fillDirectShipQuantity(page);
+        await addDeliveryTrackingEntry(page, {
+            kind: "direct",
+            lineIndex: 0,
+            trackingNo,
+            carrier: "顺丰速运",
+        });
+        await assertDirectShipQuantity(page);
         const confirmShip = page.locator("#fulfillment-operations-work-surface-confirm");
         if (!(await confirmShip.isEnabled().catch(() => false))) {
             page = await switchTo("fukuan");
@@ -461,9 +464,13 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
             page = await switchTo("caigou");
             await openWorkspaceTask(page, "履约处理", customerName, "fulfillment");
             await openFulfillmentWorkspaceForm(page);
-            await chooseOption(page, page.locator("#fulfillment-operations-direct-form-carrier"), "顺丰速运");
-            await page.locator("#fulfillment-operations-direct-form-tracking-no").fill(trackingNo);
-            await fillDirectShipQuantity(page);
+            await addDeliveryTrackingEntry(page, {
+                kind: "direct",
+                lineIndex: 0,
+                trackingNo,
+                carrier: "顺丰速运",
+            });
+            await assertDirectShipQuantity(page);
         }
         await expect(page.locator("#fulfillment-operations-work-surface-confirm")).toBeEnabled({
             timeout: UI_TIMEOUT,
@@ -492,6 +499,7 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
         await acceptanceDialog.getByPlaceholder("短少或拒收时必填").fill("外箱破损，客户拒收一件");
         await expect(acceptanceDialog.getByText(FACT_ONLY_NOTICE)).toBeVisible();
         await expect(acceptanceDialog.getByRole("button", { name: /创建退货|另开退货/ })).toHaveCount(0);
+        await uploadAcceptanceEvidence(page);
         await acceptanceDialog.locator("#sales-orders-acceptance-register-submit").click();
         const acceptConfirm = page.getByRole("alertdialog", { name: "确认客户验收", exact: true });
         await expect(acceptConfirm).toBeVisible({ timeout: UI_TIMEOUT });

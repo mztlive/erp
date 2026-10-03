@@ -3,7 +3,7 @@
 //! 任务对象固定为 `payable_account`，负责人由供应商精确责任规则或付款默认规则
 //! 解析并冻结。采购审批最终通过已经提供付款授权；付款单不再创建第二套审批
 //! 任务。付款部分核销只更新摘要，开放余额归零自动完成；冲正重新产生余额时按
-//! 当前责任规则创建新任务身份。
+//! 当前责任规则创建新任务身份；采购变更增额同样建立带变更原因的新任务。
 
 use application_core::AuditActor;
 use erp_core::common::time::{BusinessDate, Instant};
@@ -123,6 +123,36 @@ pub(crate) async fn sync_purchase_payment_task(
     account_id: &PayableAccountId,
     executor: &mut dyn Executor,
 ) -> Result<()> {
+    sync_payment_task(db, account_id, SupplierPaymentTaskReason::ReopenedByReversal, executor).await
+}
+
+/// 在采购变更生效事务内同步付款余额与执行责任。
+///
+/// # 参数
+/// * `db` - MongoDB 数据库
+/// * `account_id` - 本次采购变更已更新的原应付子账
+/// * `executor` - 采购变更生效的同一事务执行器
+///
+/// # 返回
+/// 摘要更新、结清完成或带采购变更原因的后继任务建立成功时返回成功。
+///
+/// # 错误
+/// 子账缺失、开放任务重复、历史责任损坏或仓储失败时返回错误。
+pub(crate) async fn sync_purchase_payment_task_after_change(
+    db: &mongodb::Database,
+    account_id: &PayableAccountId,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    sync_payment_task(db, account_id, SupplierPaymentTaskReason::ReopenedByPurchaseChange, executor).await
+}
+
+/// 同一付款任务生命周期编排按真实触发原因生成后继任务。
+async fn sync_payment_task(
+    db: &mongodb::Database,
+    account_id: &PayableAccountId,
+    reopen_reason: SupplierPaymentTaskReason,
+    executor: &mut dyn Executor,
+) -> Result<()> {
     let account = db
         .payable_accounts()
         .find_by_id(account_id, executor)
@@ -147,7 +177,7 @@ pub(crate) async fn sync_purchase_payment_task(
     if let Some(task) = open.into_iter().next() {
         return update_open_task_summary(db, task, &account, executor).await;
     }
-    create_reopened_task(db, &account, &tasks, executor).await
+    create_reopened_task(db, &account, &tasks, reopen_reason, executor).await
 }
 
 /// 一次付款执行要校验的任务集合与核销范围。
@@ -412,11 +442,12 @@ pub(crate) async fn authorize_payment_execution(
     Ok((task, account))
 }
 
-/// 按当前责任规则创建冲正后继任务；没有历史任务属于损坏事实并失败关闭。
+/// 按当前责任规则和真实触发原因创建后继任务；缺少历史任务失败关闭。
 async fn create_reopened_task(
     db: &mongodb::Database,
     account: &PayableAccount,
     tasks: &[WorkItem],
+    reason: SupplierPaymentTaskReason,
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let previous = tasks.first().ok_or_else(|| {
@@ -439,7 +470,7 @@ async fn create_reopened_task(
             subject_version: account.base.version.to_string(),
             owner_organization_id,
             owner_user_id: responsibility.owner_user_id.clone(),
-            reason: SupplierPaymentTaskReason::ReopenedByReversal,
+            reason,
             due_at: payment_due_at(due_date).map_err(Error::Logic)?,
             open_total: account.open_total,
         },

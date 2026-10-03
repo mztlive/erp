@@ -22,7 +22,7 @@ import {
 /**
  * 采购变更单审批区。
  *
- * 未提交展示绑定卡，提交确认展示固定路线，运行中/终态展示摘要与历史。
+ * 未提交展示绑定卡及已有审批历史，提交确认展示固定路线，运行中/终态展示摘要与历史。
  * 动作入口只读 `allowed_actions` 与 `recovery_options`，不恢复仓配影响或财务复核专用决定。
  */
 export function PurchaseChangeOrderApprovalArea({
@@ -53,7 +53,7 @@ export function PurchaseChangeOrderApprovalArea({
     )
     const historyQuery = useApprovalHistoryInfiniteQuery(
         { instanceId: instanceId ?? "" },
-        phase === "runtime" && Boolean(instanceId),
+        phase !== "confirm" && Boolean(instanceId),
     )
     const historyItems = historyQuery.data
         ? historyQuery.data.pages.flatMap((page) => page.items)
@@ -62,11 +62,29 @@ export function PurchaseChangeOrderApprovalArea({
         approval?.allowedActions,
         workItemAllowedActions,
     )
+    const approvalHistory = (
+        <>
+            <RuntimeSummary instance={approval?.instance} />
+            <ExecutionHistory
+                items={historyItems}
+                hasMore={historyQuery.hasNextPage}
+                loadingMore={historyQuery.isFetchingNextPage}
+                onLoadMore={
+                    historyQuery.hasNextPage
+                        ? () => {
+                              void historyQuery.fetchNextPage()
+                          }
+                        : undefined
+                }
+            />
+        </>
+    )
 
     if (phase === "draft") {
         return (
             <div className="space-y-3">
                 <DefinitionBindingCard definition={approval?.definition} />
+                {instanceId ? approvalHistory : null}
                 {documentId ? (
                     <ApprovalActionBar
                         allowedActions={allowedActions}
@@ -87,19 +105,7 @@ export function PurchaseChangeOrderApprovalArea({
 
     return (
         <div className="space-y-3">
-            <RuntimeSummary instance={approval?.instance} />
-            <ExecutionHistory
-                items={historyItems}
-                hasMore={historyQuery.hasNextPage}
-                loadingMore={historyQuery.isFetchingNextPage}
-                onLoadMore={
-                    historyQuery.hasNextPage
-                        ? () => {
-                              void historyQuery.fetchNextPage()
-                          }
-                        : undefined
-                }
-            />
+            {approvalHistory}
             <ApprovalActionBar
                 allowedActions={allowedActions}
                 recoveryOptions={recoveryQuery.data?.actions ?? []}

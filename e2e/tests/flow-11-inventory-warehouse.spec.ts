@@ -29,6 +29,7 @@ import {
 
 import { apiGet, apiToken } from "../helpers/api";
 import { createCustomerViaUi } from "../helpers/customers";
+import { addDeliveryTrackingEntry, uploadAcceptanceEvidence } from "../helpers/fulfillment";
 import {
     ensureWarehouseStockScope,
     ensureZeroBalanceDimension,
@@ -127,11 +128,31 @@ async function searchInventory(page: Page, query: string) {
     // 列表查询返回前只有加载标题，余额按钮尚未挂载。
     const balance = page.locator("#inventory-ledger-view-balance");
     await expect(balance).toBeVisible({ timeout: UI_TIMEOUT });
-    await balance.click();
+    await expect(balance).toHaveAttribute("aria-pressed", "true", { timeout: UI_TIMEOUT });
     const search = page.locator("#inventory-ledger-search");
     await expect(search).toBeVisible({ timeout: UI_TIMEOUT });
     await search.fill(query);
     await search.press("Enter");
+    // 等查询 URL 和已应用条件落定，避免旧余额导航覆盖紧接着的视图切换。
+    await page.waitForURL(
+        (url) => url.pathname === "/inventory" &&
+            url.searchParams.get("view") === "balance" &&
+            url.searchParams.get("q") === query,
+        { timeout: UI_TIMEOUT },
+    );
+    await expect(page.getByText(`搜索：${query}`, { exact: true })).toBeVisible({ timeout: UI_TIMEOUT });
+    await expect(balance).toHaveAttribute("aria-pressed", "true", { timeout: UI_TIMEOUT });
+}
+
+async function selectInventoryView(page: Page, view: "reservation" | "movement") {
+    const button = page.locator(`#inventory-ledger-view-${view}`);
+    await button.click();
+    await page.waitForURL(
+        (url) => url.pathname === "/inventory" && url.searchParams.get("view") === view,
+        { timeout: UI_TIMEOUT },
+    );
+    await expect(button).toHaveAttribute("aria-pressed", "true", { timeout: UI_TIMEOUT });
+    await expect(page.locator(`#inventory-ledger-${view}-table`)).toBeVisible({ timeout: UI_TIMEOUT });
 }
 
 async function assertBalanceNumbers(
@@ -429,7 +450,7 @@ test("flow-11 现有库存仓发：盘盈 → 销售生效 → 纯库存供给�
             available: AFTER_RESERVE_AVAILABLE,
         });
         await expect(balanceRow(page)).toContainText("有预占");
-        await page.locator("#inventory-ledger-view-reservation").click();
+        await selectInventoryView(page, "reservation");
         const reservation = page
             .locator("#inventory-ledger-reservation-table")
             .getByRole("row")
@@ -444,23 +465,17 @@ test("flow-11 现有库存仓发：盘盈 → 销售生效 → 纯库存供给�
         await expect(page.locator('[aria-label="公司仓发表单"]')).toBeVisible({ timeout: UI_TIMEOUT });
         await expect(page.getByRole("button", { name: /^(通过|同意审批)$/ })).toHaveCount(0);
         await expect(page.getByRole("button", { name: "过账" })).toHaveCount(0);
-        await chooseOption(
-            page,
-            page.locator("#fulfillment-operations-ship-form-carrier"),
-            "顺丰速运",
-        );
-        await page
-            .locator("#fulfillment-operations-ship-form-tracking-no")
-            .fill(`SF${stamp}`);
-        const shipQty = page
-            .locator('[id^="fulfillment-operations-ship-form-quantity-"]')
-            .first();
-        if (await shipQty.count()) {
-            const current = await shipQty.inputValue();
-            if (!current || current === "0") {
-                await shipQty.fill(SALE_QTY);
-            }
-        }
+        await addDeliveryTrackingEntry(page, {
+            kind: "ship",
+            salesOrderLineId: salesLineId,
+            trackingNo: `SF${stamp}`,
+            carrier: "顺丰速运",
+        });
+        await expect(
+            page.locator('[aria-label="公司仓发表单"]').getByText(
+                new RegExp(`^本次发货\\s*${SALE_QTY}(?:\\.0+)?(?:\\s*盒)?$`),
+            ),
+        ).toBeVisible({ timeout: UI_TIMEOUT });
         await page.locator("#fulfillment-operations-work-surface-confirm").click();
         await confirmFormal(page, "确认发货？", "确认发货");
 
@@ -469,14 +484,14 @@ test("flow-11 现有库存仓发：盘盈 → 销售生效 → 纯库存供给�
             reserved: "0",
             available: AFTER_RESERVE_AVAILABLE,
         });
-        await page.locator("#inventory-ledger-view-reservation").click();
+        await selectInventoryView(page, "reservation");
         const consumed = page
             .locator("#inventory-ledger-reservation-table")
             .getByRole("row")
             .filter({ hasText: salesLineId });
         await expect(consumed).toBeVisible({ timeout: UI_TIMEOUT });
         await expect(consumed).toContainText("已消耗");
-        await page.locator("#inventory-ledger-view-movement").click();
+        await selectInventoryView(page, "movement");
         await expect(page.getByText("库存调整").first()).toBeVisible({
             timeout: UI_TIMEOUT,
         });
@@ -497,6 +512,7 @@ test("flow-11 现有库存仓发：盘盈 → 销售生效 → 纯库存供给�
         await expect(acceptanceDialog).toBeVisible({ timeout: UI_TIMEOUT });
         // 验收结果本身包含“通过”选项；无审批应检查审批动作。
         await expect(acceptanceDialog.getByRole("button", { name: /提交审批|选择审批流程/ })).toHaveCount(0);
+        await uploadAcceptanceEvidence(page);
         await acceptanceDialog.locator("#sales-orders-acceptance-register-submit").click();
         await confirmFormal(page, "确认客户验收", "确认本次验收");
 

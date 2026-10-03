@@ -13,8 +13,9 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import { createCustomerViaUi } from '../helpers/customers'
+import { uploadAcceptanceEvidence } from '../helpers/fulfillment'
 import { openLoggedInWorkspace } from '../helpers/login'
-import { payOnlySupplierTask } from '../helpers/payments'
+import { expectProcurementPaymentReceipt, payOnlySupplierTask } from '../helpers/payments'
 import { ensureDefaultProcurementOwner } from '../helpers/procurement'
 import {
     approveCurrentDocument,
@@ -418,6 +419,7 @@ test('虚拟商品电子交付全流程：销售单生效后只能采购、登�
     const contractNo = `HT-E2E-ED-${stamp}`
     const due = isoDate(45)
     let salesOrderId = ''
+    let supplierPayment: Awaited<ReturnType<typeof payOnlySupplierTask>>
     let salesOrderNo = ''
 
     {
@@ -552,7 +554,7 @@ test('虚拟商品电子交付全流程：销售单生效后只能采购、登�
     {
         const { context, page } = await openLoggedInWorkspace(browser, 'fukuan')
         try {
-            await payOnlySupplierTask(page)
+            supplierPayment = await payOnlySupplierTask(page)
         } finally { await context.close() }
     }
 
@@ -588,6 +590,7 @@ test('虚拟商品电子交付全流程：销售单生效后只能采购、登�
 
             await openElectronicFulfillment(page, purchaseNo)
             await openFulfillmentWorkspaceForm(page)
+            await expectProcurementPaymentReceipt(page, supplierPayment!)
             const deliveryDialog = page.getByRole('dialog', { name: '处理履约' })
             await expect(page.locator('[aria-label="电子交付表单"]')).toBeVisible({ timeout: 30000 })
             await expect(deliveryDialog.getByText(salesOrderNo).first()).toBeVisible({ timeout: 20000 })
@@ -623,9 +626,16 @@ test('虚拟商品电子交付全流程：销售单生效后只能采购、登�
             await page.locator('#sales-orders-acceptance-register-open').click()
             await expect(page.getByRole('dialog', { name: '登记客户验收' })).toBeVisible({ timeout: 20000 })
             await expect(page.getByText('电子交付').first()).toBeVisible()
+            await uploadAcceptanceEvidence(page)
             await page.locator('#sales-orders-acceptance-register-submit').click()
             await expect(page.getByRole('heading', { name: '确认客户验收' })).toBeVisible({ timeout: 20000 })
+            const accepted = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname === '/admin/customer-acceptances/commit', { timeout: 90_000 })
             await page.locator('#sales-orders-acceptance-confirm-confirm').click()
+            const acceptanceResponse = await accepted
+            expect(acceptanceResponse.ok(), await acceptanceResponse.text()).toBeTruthy()
+            const evidenceId = acceptanceResponse.request().postDataJSON().evidence_attachment_id
+            expect(evidenceId).toBeTruthy()
+            expect((await acceptanceResponse.json()).data.acceptance).toMatchObject({ sales_order_id: salesOrderId, evidence_attachment_id: evidenceId })
             await expectToast(page, '客户验收已登记')
             await expect(page.getByRole('dialog', { name: '登记客户验收' })).toBeHidden({ timeout: 20000 })
 

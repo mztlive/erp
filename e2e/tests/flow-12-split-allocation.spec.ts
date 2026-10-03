@@ -20,6 +20,7 @@ import path from "node:path"
 import { expect, test, type BrowserContext, type Locator, type Page } from "../helpers/test"
 
 import { createCustomerViaUi } from "../helpers/customers"
+import { addDeliveryTrackingEntry, uploadAcceptanceEvidence } from "../helpers/fulfillment"
 import { FRONTEND_BASE_URL } from "../helpers/env"
 import {
     ensureWarehouseStockScope,
@@ -283,7 +284,7 @@ async function confirmSplitAllocation(page: Page, salesOrderNo: string) {
     await purchaseQty.fill(PURCHASE_QTY)
 
     await page.getByRole("button", { name: "预览供给分配" }).click()
-    const preview = page.getByRole("dialog", { name: "预览供给分配" })
+    const preview = page.getByRole("dialog", { name: "预览供给分配", exact: true })
     await expect(preview).toBeVisible({ timeout: TIMEOUT })
     await expect(preview.getByText("现有库存分配")).toBeVisible({ timeout: TIMEOUT })
     await expect(preview.getByRole("listitem").filter({ hasText: WAREHOUSE_NAME })).toContainText(new RegExp(`·\\s*${STOCK_QTY}\\s*盒$`))
@@ -450,10 +451,18 @@ async function completeFulfillment(
     await expect(page.locator('[aria-label="公司仓发表单"]')).toBeVisible({
         timeout: TIMEOUT,
     })
-    await chooseOption(page, page.getByLabel("承运方"), "顺丰速运")
-    await page.getByLabel("物流单号").fill(extra?.trackingNo ?? `SF12-${Date.now()}`)
+    await addDeliveryTrackingEntry(page, {
+        kind: "ship",
+        lineIndex: 0,
+        trackingNo: extra?.trackingNo ?? `SF12-${Date.now()}`,
+        carrier: "顺丰速运",
+    })
     if (extra?.quantity) {
-        await page.locator('[id^="fulfillment-operations-ship-form-quantity-"]').first().fill(extra.quantity)
+        await expect(
+            page.locator('[aria-label="公司仓发表单"]').getByText(
+                new RegExp(`^本次发货\\s*${extra.quantity}(?:\\.0+)?(?:\\s*盒)?$`),
+            ),
+        ).toBeVisible({ timeout: TIMEOUT })
     }
     await page.getByRole("button", { name: "确认发货" }).click()
     const confirm = page.getByRole("alertdialog", { name: "确认发货？" })
@@ -475,6 +484,7 @@ async function registerAcceptance(page: Page, salesOrderNo: string) {
     await open.click()
     const register = page.getByRole("dialog", { name: "登记客户验收" })
     await expect(register).toBeVisible({ timeout: TIMEOUT })
+    await uploadAcceptanceEvidence(page)
     await register.locator("#sales-orders-acceptance-register-submit").click()
     const confirm = page.getByRole("alertdialog", { name: "确认客户验收" })
     await expect(confirm).toBeVisible({ timeout: TIMEOUT })

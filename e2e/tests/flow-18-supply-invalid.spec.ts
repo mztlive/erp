@@ -6,18 +6,12 @@
  *           caigou（销售审批、供给分配）、caiwu（变更单财务复核）、
  *           cangchu（库存预占负向核对）
  *
- * 文档-代码差异（以代码为准）:
- * 1. §7.4 要求选源与有效供给不一致时采购单不得创建、按 §6.3 改品或改量后再分配；
- *    代码 qualified_supply 只收录 ACTIVE + 条款有效 + AVAILABLE 的供给，停止可供后
- *    创建依据为空，工作台呈现「当前没有待分配供给」，无法预览/确认建单。
- * 2. 销售变更单创建时克隆当前生效版本，原因写死「销售发起变更」，
- *    PUT /sales-orders/{id}/working-copy 只服务 FirstSubmission，详情页无改品/改量
- *    编辑面；变更审批通过后 SKU/数量仍与 v1 相同，供给仍失效则仍不得建采购单。
- * 3. 文档 §6.5.1 时序由销售「生效」变更单；代码末节点通过即 apply_effective_change。
- * 4. 文档「采购确认履约影响 / 财务复核」已收敛为 SalesChangeOrder 的 DOCUMENT_APPROVAL；
- *    退役类型不再进入 W01。
- * 5. 销售单生效后「撤回审批」不渲染（salesOrderAllowsWithdrawApproval 仅审批中）；
- *    禁止回到审批改选源，由按钮缺失 + 审批区无「通过」共同断言。
+ * 验收约束:
+ * 1. 仅 ACTIVE、条款有效且 AVAILABLE 的供给允许建采购单；停止可供后不得预览或确认。
+ * 2. 本流程提交克隆的销售变更草稿，不修改 SKU/数量；生效后供给仍失效，仍不得建单。
+ *    变更草稿编辑及驳回后原单重提由 flow-08 覆盖。
+ * 3. 销售变更由采购确认履约影响、财务复核，末节点通过后自动生效。
+ * 4. 已生效销售单不得撤回原审批回到草稿改选源，必须另走销售变更。
  */
 import fs from "node:fs"
 import path from "node:path"
@@ -115,24 +109,17 @@ async function expectNoPurchaseOrders(page: Page, salesOrderNo: string) {
 }
 
 async function expectAllocationCannotCreatePurchase(page: Page, salesOrderNo: string, salesOrderId: string) {
-    const [response] = await Promise.all([
-        page.waitForResponse((response) => {
-            const url = new URL(response.url())
-            return response.request().method() === "GET"
-                && url.pathname === "/admin/purchase-creation-bases"
-                && url.searchParams.get("sales_order_id") === salesOrderId
-        }),
-        openWorkspaceTask(page, "待供给分配", salesOrderNo, "procurement"),
-    ])
-    expect(response.ok()).toBeTruthy()
-    const envelope = await response.json()
-    expect(envelope.success).toBe(true)
-    expect(Array.isArray(envelope.data)).toBe(true)
+    await openWorkspaceTask(page, "待供给分配", salesOrderNo, "procurement")
+    // 工作台打开任务可能继续导航，完成后按同一采购账号读取真实依据，避免读取已卸载页面的响应。
+    const bases = await apiGet<unknown[]>(await apiToken("caigou"), "/admin/purchase-creation-bases", {
+        sales_order_id: salesOrderId,
+    })
+    expect(Array.isArray(bases)).toBe(true)
     await expect(page.getByRole("heading", { name: "供给分配", exact: true })).toBeVisible({ timeout: UI_TIMEOUT })
 
     const empty = page.getByText("当前没有待分配供给", { exact: true })
     const table = page.getByRole("heading", { name: "销售明细与供给方案" })
-    if (envelope.data.length === 0) {
+    if (bases.length === 0) {
         await expect(empty).toBeVisible({ timeout: UI_TIMEOUT })
         await expect(
             page.getByText(/既无可用库存也无合格采购供给|请检查已生效销售单、库存余额和供应商供给/),
@@ -590,7 +577,7 @@ test("flow-18 停止可供后供给分配不得建采购单，必须走销售变
         await expect(page.getByRole("tab", { name: /采购/ })).toHaveAttribute("aria-selected", "true")
         await expect(page.getByTestId("sales-order-purchase-status")).toContainText("待采购")
 
-        // 10) 发起销售变更单（代码无改品/改量编辑面，工作副本克隆当前版本）
+        // 10) 发起销售变更单，本流程保留克隆的 SKU/数量
         await startChange.click()
         const startDialog = dialogish(page, "发起改单")
         await expect(startDialog.first()).toBeVisible({ timeout: UI_TIMEOUT })

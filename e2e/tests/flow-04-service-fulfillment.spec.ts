@@ -16,6 +16,7 @@ import path from 'node:path'
 import { expect, test, type Page } from '../helpers/test'
 
 import { createCustomerViaUi } from '../helpers/customers'
+import { uploadAcceptanceEvidence } from '../helpers/fulfillment'
 import { openLoggedInWorkspace } from '../helpers/login'
 import { ensureDefaultProcurementOwner } from '../helpers/procurement'
 import { expandSourcingEditor } from '../helpers/sourcing'
@@ -63,7 +64,7 @@ function isoDate(offsetDays = 0): string {
 }
 
 function uniqueCreditCode(): string {
-  // 统一社会信用代码必须恰好 18 位字母或数字，否则创建按钮保持禁用。
+  // 本流程填写信用代码时仍须恰好 18 位字母或数字；客户建档允许留空。
   const stamp = Date.now().toString().slice(-8)
   return `91110108MA${stamp}`
 }
@@ -486,9 +487,16 @@ test('flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
     await sales.page.locator('#sales-orders-acceptance-register-open').click()
     await expect(sales.page.getByRole('heading', { name: '登记客户验收' })).toBeVisible({ timeout: TIMEOUT })
     await expect(sales.page.getByText('服务履约').first()).toBeVisible({ timeout: TIMEOUT })
+    await uploadAcceptanceEvidence(sales.page)
     await sales.page.locator('#sales-orders-acceptance-register-submit').click()
     await expect(sales.page.getByRole('heading', { name: '确认客户验收' })).toBeVisible({ timeout: TIMEOUT })
+    const accepted = sales.page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname === '/admin/customer-acceptances/commit', { timeout: 90_000 })
     await sales.page.locator('#sales-orders-acceptance-confirm-confirm').click()
+    const acceptanceResponse = await accepted
+    expect(acceptanceResponse.ok(), await acceptanceResponse.text()).toBeTruthy()
+    const evidenceId = acceptanceResponse.request().postDataJSON().evidence_attachment_id
+    expect(evidenceId).toBeTruthy()
+    expect((await acceptanceResponse.json()).data.acceptance).toMatchObject({ sales_order_id: salesOrderId, evidence_attachment_id: evidenceId })
     await expectToast(sales.page, '客户验收已登记')
     await expect(sales.page.getByRole('heading', { name: '登记客户验收' })).toBeHidden({ timeout: TIMEOUT })
     await expect(sales.page.getByRole('button', { name: /^(通过|同意审批)$/ })).toHaveCount(0)

@@ -262,10 +262,20 @@ export type BackendRevision = {
     tax_point?: string
     project_name?: string | null
     business_remark?: string | null
+    voucher_category_sku_id?: string | null
+    voucher_expiry_at?: number | null
     previous_revision_id?: string | null
     previous_revision_no?: number | null
     line_summary?: string
     lines?: BackendRevisionLine[]
+    commercial_lines?: BackendWorkingCopyLine[]
+}
+
+/** 详情商业内容按同一冻结版本读取，历史摘要行不作为成交明细。 */
+export type BackendRevisionCommercial = Omit<BackendRevision, "lines"> & {
+    lines: BackendWorkingCopyLine[]
+    /** 卡券原销售冻结提交的附属日期；正式修订当前未持久化该字段。 */
+    receivable_due_date?: string | null
 }
 
 export type BackendSalesOrderDetail = {

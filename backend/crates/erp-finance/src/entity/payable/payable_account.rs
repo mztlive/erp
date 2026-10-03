@@ -3,11 +3,13 @@
 use entity_core::BaseModel;
 use entity_macros::Entity;
 use erp_core::common::stable::StableBase;
-use erp_core::ids::{PayableAccountId, SupplierAccountId};
+use erp_core::ids::{PayableAccountId, PurchaseOrderId, SupplierAccountId};
 use erp_core::money::Amount;
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
+
+use super::payable_entry::EntryDirection;
 
 /// 来源单据 ID 最大长度。
 const DOCUMENT_ID_MAX_LEN: usize = 128;
@@ -104,6 +106,39 @@ pub struct PayableAccountData {
     pub invoiceable_total: Amount,
     /// 净已收票含税总额。
     pub invoiced_total: Amount,
+}
+
+/// 非零采购变更差额，方向与正数金额共同表达增减事实。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct PurchaseChangePayableDelta {
+    pub(crate) direction: EntryDirection,
+    pub(crate) amount: Amount,
+}
+
+impl PurchaseChangePayableDelta {
+    /// 按冻结基准与目标含税金额计算差额。
+    ///
+    /// # 参数
+    /// * `base_gross` - 冻结基准版本金额
+    /// * `new_gross` - 本次目标版本金额
+    ///
+    /// # 返回
+    /// 零差额返回 `None`，其余返回方向及差额绝对金额。
+    ///
+    /// # 错误
+    /// 任一版本金额为负或差额无法表示时返回错误。
+    pub(crate) fn between(base_gross: Amount, new_gross: Amount) -> Result<Option<Self>> {
+        if base_gross.to_decimal().is_sign_negative() || new_gross.to_decimal().is_sign_negative() {
+            return Err(Error::from("采购版本含税金额不得为负"));
+        }
+        let difference = new_gross.to_decimal() - base_gross.to_decimal();
+        if difference.is_zero() {
+            return Ok(None);
+        }
+        let direction =
+            if difference.is_sign_positive() { EntryDirection::Increase } else { EntryDirection::Decrease };
+        Ok(Some(Self { direction, amount: Amount::try_from(difference.abs())? }))
+    }
 }
 
 /// 应付往来子账实体（稳定主表，数据模型 §6.9）。
@@ -242,6 +277,46 @@ impl PayableAccount {
         Ok(())
     }
 
+    /// 将采购变更目标金额应用到既有应付子账，保留已核销及已收票事实。
+    ///
+    /// # 参数
+    /// * `purchase_order_id` - 原采购单身份
+    /// * `supplier_id` - 冻结采购供应商身份
+    /// * `base_gross` - 本次冻结基准含税金额
+    /// * `new_gross` - 本次冻结目标含税金额
+    ///
+    /// # 返回
+    /// 成功时同步应付及可收票总额、开放余额和状态，其他身份字段保持原值。
+    ///
+    /// # 错误
+    /// 来源或供应商不一致、基准金额漂移，或目标金额低于已核销/已收票时拒绝。
+    pub(crate) fn apply_purchase_change(
+        &mut self,
+        purchase_order_id: &PurchaseOrderId,
+        supplier_id: &SupplierAccountId,
+        base_gross: Amount,
+        new_gross: Amount,
+    ) -> Result<()> {
+        if self.source_type != PayableSourceType::PurchaseOrder
+            || self.source_document_id != purchase_order_id.as_ref()
+            || &self.supplier_id != supplier_id
+        {
+            return Err(Error::from("采购变更应付来源或供应商不一致"));
+        }
+        if self.gross_total != base_gross {
+            return Err(Error::from("应付总额与采购变更基准版本不一致"));
+        }
+        let (open_total, open_invoiceable) =
+            validate_totals(new_gross, self.settled_total, new_gross, self.invoiced_total)?;
+        self.gross_total = new_gross;
+        self.invoiceable_total = new_gross;
+        self.open_total = open_total;
+        self.open_invoiceable_total = open_invoiceable;
+        self.stable.status = derive_status(open_total, self.settled_total);
+        self.stable.touch("system");
+        Ok(())
+    }
+
     /// 判断子账是否已结清。
     ///
     /// # 返回
@@ -375,6 +450,40 @@ mod tests {
                 )
                 .is_err()
         );
+    }
+
+    /// 所有采购变更校验失败必须发生在账户字段修改之前。
+    #[test]
+    fn purchase_change_guard_failures_leave_original_account_unchanged() {
+        let original = PayableAccount::new(
+            PayableAccountId::new("pa-1"),
+            PayableAccountData {
+                settled_total: Amount::from_str("400").unwrap(),
+                invoiced_total: Amount::from_str("500").unwrap(),
+                ..data()
+            },
+            "admin-1",
+        )
+        .unwrap();
+        for (order, supplier, base, target, expected) in [
+            ("other-po", "sup-1", "1000", "1100", "采购变更应付来源或供应商不一致"),
+            ("PO-2026-001", "other-supplier", "1000", "1100", "采购变更应付来源或供应商不一致"),
+            ("PO-2026-001", "sup-1", "999", "1100", "应付总额与采购变更基准版本不一致"),
+            ("PO-2026-001", "sup-1", "1000", "399.99", "已核销总额不得超过含税应付总额"),
+            ("PO-2026-001", "sup-1", "1000", "499.99", "净已收票金额不得超过可收票总额"),
+        ] {
+            let mut candidate = original.clone();
+            let error = candidate
+                .apply_purchase_change(
+                    &PurchaseOrderId::new(order),
+                    &SupplierAccountId::new(supplier),
+                    Amount::from_str(base).unwrap(),
+                    Amount::from_str(target).unwrap(),
+                )
+                .unwrap_err();
+            assert_eq!(error.to_string(), expected);
+            assert_eq!(candidate, original);
+        }
     }
 
     #[test]

@@ -17,6 +17,7 @@
 //! 跨聚合校验（超行量分配、逐行引用采购确认、表头行汇总守恒）留给 P3，条目见各文件注释。
 
 mod allocation;
+mod cancelled_draft;
 mod change_order;
 mod command_receipt;
 mod coverage;

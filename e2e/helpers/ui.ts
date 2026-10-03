@@ -627,6 +627,18 @@ export async function approveCurrentDocument(page: Page): Promise<void> {
         .or(dialog.getByRole("button", { name: "确认通过" }))
         .first()
     await dismissToasts(page)
+    const decided = page.waitForResponse(
+        (response) =>
+            response.request().method() === "POST" &&
+            new URL(response.url()).pathname === "/admin/approval-decisions",
+        { timeout: 60_000 },
+    )
     await confirm.click()
+    const response = await decided
+    const body = await response.text()
+    const diagnostics = `审批决定失败（HTTP ${response.status()}）: ${body}`
+    expect(response.ok(), diagnostics).toBe(true)
+    const result = JSON.parse(body) as { success?: boolean }
+    expect(result.success, diagnostics).toBe(true)
     await expect(dialog).toBeHidden({ timeout: UI_TIMEOUT })
 }

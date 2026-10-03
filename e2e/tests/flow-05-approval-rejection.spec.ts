@@ -1,5 +1,5 @@
 /**
- * 流程: [flow-05] 销售单审批驳回与三条出路
+ * 流程: [flow-05] 销售单审批驳回、修改原单重提与作废
  * 文档: docs/erp-phase-1.md §4.4、§7.3.1；approval-workflow-contract.md §4.4.2–§4.4.4、§11
  * 账号: xiaoshou（提交）→ caigou（采购确认节点驳回/通过）；admin 仅补采购责任默认调度人
  *
@@ -20,12 +20,12 @@ import { createCustomerViaUi } from '../helpers/customers'
 import { openLoggedInWorkspace } from '../helpers/login'
 import { ensureDefaultProcurementOwner } from '../helpers/procurement'
 import {
-    approveCurrentDocument,
-    chooseOption,
-    dismissToasts,
-    expectToast,
-    openWorkspaceTask,
-    pickCalendarDay,
+  approveCurrentDocument,
+  chooseOption,
+  dismissToasts,
+  expectToast,
+  openWorkspaceTask,
+  pickCalendarDay,
 } from '../helpers/ui'
 
 const VISIBLE = { timeout: 20_000 } as const
@@ -33,8 +33,7 @@ const API_BASE = process.env.API_BASE || 'http://127.0.0.1:10001'
 const SKU_NAME = '狮峰明前龙井礼盒'
 const REJECT_REASON = '无法履约，成本上涨，交期不满足'
 const WITHDRAW_REASON = '与客户改数量后重提'
-const VOID_HTTP_NOTE =
-  '销售单草稿作废无页面按钮，走已发布 POST /admin/sales-orders/{id}/void'
+const VOID_HTTP_NOTE = '销售单草稿作废无页面按钮，走已发布 POST /admin/sales-orders/{id}/void'
 
 type OrderSnapshot = {
   id: string
@@ -59,7 +58,10 @@ function addDays(base: Date, days: number): Date {
 }
 
 function uniqueCreditCode(): string {
-  const stamp = Date.now().toString(36).toUpperCase().replace(/[^0-9A-Z]/g, '0')
+  const stamp = Date.now()
+    .toString(36)
+    .toUpperCase()
+    .replace(/[^0-9A-Z]/g, '0')
   return `91110108MA01${stamp}`.slice(0, 18).padEnd(18, '0')
 }
 
@@ -116,15 +118,11 @@ async function bearerToken(page: Page): Promise<string> {
   return token as string
 }
 
-async function fetchSalesOrder(
-  page: Page,
-  salesOrderId: string,
-): Promise<Record<string, unknown>> {
+async function fetchSalesOrder(page: Page, salesOrderId: string): Promise<Record<string, unknown>> {
   const token = await bearerToken(page)
-  const response = await page.request.get(
-    `${API_BASE}/admin/sales-orders/${salesOrderId}`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  )
+  const response = await page.request.get(`${API_BASE}/admin/sales-orders/${salesOrderId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
   expect(response.ok(), `读取销售单 ${salesOrderId} 失败`).toBeTruthy()
   const body = (await response.json()) as { data?: Record<string, unknown> } & Record<
     string,
@@ -175,8 +173,16 @@ async function uploadContract(
     input.customerName,
   )
   await chooseOption(page, dialog.getByLabel('付款条件'), '按合同约定')
-  await pickCalendarDay(page, page.locator('#card-contracts-upload-signed-at'), isoDate(input.today))
-  await pickCalendarDay(page, page.locator('#card-contracts-upload-valid-from'), isoDate(input.today))
+  await pickCalendarDay(
+    page,
+    page.locator('#card-contracts-upload-signed-at'),
+    isoDate(input.today),
+  )
+  await pickCalendarDay(
+    page,
+    page.locator('#card-contracts-upload-valid-from'),
+    isoDate(input.today),
+  )
   await pickCalendarDay(
     page,
     page.locator('#card-contracts-upload-valid-to'),
@@ -184,13 +190,11 @@ async function uploadContract(
   )
   await dialog.getByRole('button', { name: '上传并归档' }).click()
   await expect(dialog).toBeHidden(VISIBLE)
-  await expect(page.getByText(new RegExp(`客户\\s+${input.customerName}`))).toBeVisible(
-    VISIBLE,
-  )
+  await expect(page.getByText(new RegExp(`客户\\s+${input.customerName}`))).toBeVisible(VISIBLE)
 }
 
 async function pickSkuAndFillLine(page: Page, due: Date, quantity: string): Promise<void> {
-  await page.locator("#sales-orders-create-line-items-add").click()
+  await page.locator('#sales-orders-create-line-items-add').click()
   const picker = page.getByRole('dialog', { name: '添加商品' })
   await expect(picker).toBeVisible(VISIBLE)
   await picker.getByPlaceholder('搜索 SKU、商品名称、编号或规格').fill(SKU_NAME)
@@ -200,15 +204,15 @@ async function pickSkuAndFillLine(page: Page, due: Date, quantity: string): Prom
   await skuRow.check()
   await picker.getByRole('button', { name: /加入所选/ }).click()
   await expect(picker).toBeHidden(VISIBLE)
-  await expect(page.getByRole('button', { name: new RegExp(`更换销售项目 ${SKU_NAME}`) })).toBeVisible(
-    VISIBLE,
-  )
+  await expect(
+    page.getByRole('button', { name: new RegExp(`更换销售项目 ${SKU_NAME}`) }),
+  ).toBeVisible(VISIBLE)
   await expect(page.locator('[data-testid^="sales-line-procurement-owner-"]')).toContainText(
     /陈国平|采购/,
     VISIBLE,
   )
   await page.getByLabel('数量').first().fill(quantity)
-  await page.locator("#sales-orders-create-batch-due-date-open").click()
+  await page.locator('#sales-orders-create-batch-due-date-open').click()
   await pickCalendarDay(page, page.locator('#sales-orders-create-batch-due-date'), isoDate(due))
   await page.locator('#sales-orders-create-batch-due-date-apply').click()
   await expectToast(page, '已批量设置交期')
@@ -216,14 +220,19 @@ async function pickSkuAndFillLine(page: Page, due: Date, quantity: string): Prom
 
 async function submitSalesOrder(page: Page, quantity: string): Promise<OrderSnapshot> {
   await clickWithoutToastOverlay(page, page.locator('#sales-orders-create-submit'), async () =>
-    page.getByRole('dialog', { name: '提交销售单' }).isVisible().catch(() => false),
+    page
+      .getByRole('dialog', { name: '提交销售单' })
+      .isVisible()
+      .catch(() => false),
   )
   const confirm = page.getByRole('dialog', { name: '提交销售单' })
   await expect(confirm).toBeVisible(VISIBLE)
   // 批量交期 toast 常盖住确认按钮：先清 toast 再点，盖住不散时走 DOM 派发。
   // settled 只做即时判断：第一次点按前页面必然还在新建页，等 URL 只会白等。
-  await clickWithoutToastOverlay(page, confirm.locator('#sales-orders-submit-confirm-confirm'), async () =>
-    !/\/sales\/orders\?mode=create/.test(page.url()),
+  await clickWithoutToastOverlay(
+    page,
+    confirm.locator('#sales-orders-submit-confirm-confirm'),
+    async () => !/\/sales\/orders\?mode=create/.test(page.url()),
   )
   await expect(page).toHaveURL(/\/sales\/orders\/[^/?]+/, VISIBLE)
   const id = page.url().split('/').pop()?.split('?')[0] ?? ''
@@ -232,14 +241,16 @@ async function submitSalesOrder(page: Page, quantity: string): Promise<OrderSnap
   const orderNo = String(detail.order_no ?? '')
   await expect(page.getByText('审批中').first()).toBeVisible(VISIBLE)
   await expect(page.getByText(orderNo).first()).toBeVisible(VISIBLE)
-  const line = (
-    (detail.working_copy as { lines?: Array<{ quantity?: string; unit_price_gross?: string }> } | undefined)
-      ?.lines ??
+  const line = ((
+    detail.working_copy as
+      | { lines?: Array<{ quantity?: string; unit_price_gross?: string }> }
+      | undefined
+  )?.lines ??
     (
-      (detail.submissions as Array<{ lines?: Array<{ quantity?: string; unit_price_gross?: string }> }>) ??
-      []
-    ).flatMap((item) => item.lines ?? [])
-  )[0]
+      (detail.submissions as Array<{
+        lines?: Array<{ quantity?: string; unit_price_gross?: string }>
+      }>) ?? []
+    ).flatMap((item) => item.lines ?? []))[0]
   return {
     id,
     orderNo,
@@ -264,9 +275,7 @@ async function attachContract(
       new RegExp(input.contractNo),
       input.contractNo,
     )
-    await expect(page.getByText(new RegExp(`客户\\s+${input.customerName}`))).toBeVisible(
-      VISIBLE,
-    )
+    await expect(page.getByText(new RegExp(`客户\\s+${input.customerName}`))).toBeVisible(VISIBLE)
     return
   } catch {
     await page.keyboard.press('Escape')
@@ -331,9 +340,7 @@ async function assertRejectedNotEffective(page: Page, order: OrderSnapshot): Pro
   )
   await page.getByRole('tab', { name: /^概览/ }).click()
   await expect(page.getByText(SKU_NAME).first()).toBeVisible(VISIBLE)
-  await expect(page.getByText(new RegExp(`${order.quantity}\\s+盒`)).first()).toBeVisible(
-    VISIBLE,
-  )
+  await expect(page.getByText(new RegExp(`${order.quantity}\\s+盒`)).first()).toBeVisible(VISIBLE)
   await page.getByRole('tab', { name: /^采购/ }).click()
   await expect(page.getByTestId('sales-order-purchase-status')).toContainText('待采购')
   await expect(page.getByRole('link', { name: '继续分配供给' })).toHaveCount(0)
@@ -347,7 +354,9 @@ async function assertNoSupplyOrFulfillmentTask(page: Page, orderNo: string): Pro
   await page.goto('/workspace')
   // 后端搜索不匹配单号，填单号会把列表滤空导致断言恒成立；直接断言无匹配任务。
   await expect(
-    page.getByRole('button', { name: new RegExp(`待供给分配[\\s\\S]*${orderNo}|${orderNo}[\\s\\S]*待供给分配`) }),
+    page.getByRole('button', {
+      name: new RegExp(`待供给分配[\\s\\S]*${orderNo}|${orderNo}[\\s\\S]*待供给分配`),
+    }),
   ).toHaveCount(0)
   await expect(
     page.getByRole('button', { name: new RegExp(`履约处理[\\s\\S]*${orderNo}`) }),
@@ -357,8 +366,8 @@ async function assertNoSupplyOrFulfillmentTask(page: Page, orderNo: string): Pro
 async function withdrawApproval(page: Page, order: OrderSnapshot): Promise<void> {
   await openSalesOrder(page, order)
   await page.locator('#sales-orders-detail-cancel-approval-trigger').click()
-  // 撤回框实现为 alertdialog 而非 dialog。
-  const dialog = page.getByRole('alertdialog', { name: '撤回审批' })
+  await expect(page.locator('#sales-orders-detail-cancel-approval-trigger')).toHaveText('修改原单')
+  const dialog = page.getByRole('alertdialog', { name: '修改原单' })
   await expect(dialog).toBeVisible(VISIBLE)
   await dialog.getByLabel('撤回原因').fill(WITHDRAW_REASON)
   await dialog.locator('#sales-orders-detail-cancel-approval-confirm').click()
@@ -376,22 +385,19 @@ async function voidDraftViaHttp(page: Page, order: OrderSnapshot): Promise<void>
   const detail = await fetchSalesOrder(page, order.id)
   const version = Number(detail.version ?? 1)
   const token = await bearerToken(page)
-  const response = await page.request.post(
-    `${API_BASE}/admin/sales-orders/${order.id}/void`,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      data: { version },
+  const response = await page.request.post(`${API_BASE}/admin/sales-orders/${order.id}/void`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
     },
-  )
+    data: { version },
+  })
   expect(response.ok(), `${VOID_HTTP_NOTE}; HTTP ${response.status()}`).toBeTruthy()
 }
 
 test.describe.configure({ mode: 'serial' })
 
-test('销售单审批驳回后可照原条件承接、撤回改单重提或作废', async ({ browser }) => {
+test('销售单审批驳回后可照原条件承接、修改原单重提或作废', async ({ browser }) => {
   test.setTimeout(12 * 60 * 1000)
   const today = new Date()
   const due = addDays(today, 7)
@@ -439,7 +445,9 @@ test('销售单审批驳回后可照原条件承接、撤回改单重提或作�
       await expect(procurement.page.getByText('第 2 轮').first()).toBeVisible(VISIBLE)
       await expect(procurement.page.getByText('采购确认').first()).toBeVisible(VISIBLE)
       await expect(
-        procurement.page.getByRole('button', { name: new RegExp(`待供给分配[\\s\\S]*${orderA.orderNo}`) }),
+        procurement.page.getByRole('button', {
+          name: new RegExp(`待供给分配[\\s\\S]*${orderA.orderNo}`),
+        }),
       ).toHaveCount(0)
     })
 
@@ -467,20 +475,42 @@ test('销售单审批驳回后可照原条件承接、撤回改单重提或作�
       return created
     })
 
-    await test.step('场景B 撤回改单重提后审批通过生效', async () => {
+    await test.step('场景B 修改原单：保留单号和旧提交，改量重提后生效', async () => {
+      const beforeEdit = await fetchSalesOrder(sales.page, orderB.id)
+      const originalSubmissions = beforeEdit.submissions
+      const originalInstanceId = (beforeEdit.approval as { instance?: { id?: string } } | undefined)
+        ?.instance?.id
       await withdrawApproval(sales.page, orderB)
+      await expect(sales.page).toHaveURL(new RegExp(`/sales/orders/${orderB.id}`), VISIBLE)
+      const editable = await fetchSalesOrder(sales.page, orderB.id)
+      expect(editable.id).toBe(orderB.id)
+      expect(editable.order_no).toBe(orderB.orderNo)
+      expect(editable.commercial_status).toBe('DRAFT')
+      expect(editable.review_status).toBe('NOT_SUBMITTED')
+      expect(editable.submissions).toEqual(originalSubmissions)
+      expect(
+        (editable.approval as { instance?: { status?: string } } | undefined)?.instance?.status,
+      ).toBe('CANCELLED')
       await expect(sales.page.getByRole('button', { name: '发起改单' })).toHaveCount(0)
       // 继续编辑会异步回填合同修订、客户和结算主体；等表单实际同步后再编辑重提。
       const contractSection = sales.page.locator('#contractId').locator('..')
-      await expect(contractSection.getByText(`${contractNo}@v1`, { exact: true })).toBeVisible(VISIBLE)
+      await expect(contractSection.getByText(`${contractNo}@v1`, { exact: true })).toBeVisible(
+        VISIBLE,
+      )
       await expect(contractSection).toContainText(`客户 ${customerName}`, VISIBLE)
       await expect(contractSection).toContainText(`结算主体 ${customerName}`, VISIBLE)
       await expect(contractSection.getByText('加载中…', { exact: true })).toBeHidden(VISIBLE)
       await sales.page.getByLabel('数量').first().fill('5')
       // 改数后工作副本自动保存完成前提交保持禁用：等提交可用再点，避免确认框空关。
       await expect(sales.page.locator('#sales-orders-create-submit')).toBeEnabled(VISIBLE)
-      await clickWithoutToastOverlay(sales.page, sales.page.locator('#sales-orders-create-submit'), async () =>
-        sales.page.getByRole('dialog', { name: '提交销售单' }).isVisible().catch(() => false),
+      await clickWithoutToastOverlay(
+        sales.page,
+        sales.page.locator('#sales-orders-create-submit'),
+        async () =>
+          sales.page
+            .getByRole('dialog', { name: '提交销售单' })
+            .isVisible()
+            .catch(() => false),
       )
       const confirm = sales.page.getByRole('dialog', { name: '提交销售单' })
       await expect(confirm).toBeVisible(VISIBLE)
@@ -504,7 +534,22 @@ test('销售单审批驳回后可照原条件承接、撤回改单重提或作�
       expect(resubmitResponse?.ok()).toBe(true)
       await expect(sales.page).toHaveURL(new RegExp(`/sales/orders/${orderB.id}`), VISIBLE)
       const resubmitted = await fetchSalesOrder(sales.page, orderB.id)
+      expect(resubmitted.id).toBe(orderB.id)
+      expect(resubmitted.order_no).toBe(orderB.orderNo)
+      const submissions = resubmitted.submissions as Array<{
+        submission_no: number
+        lines: Array<{ quantity: string }>
+      }>
+      expect(
+        submissions.find((item) => item.submission_no === orderB.submissionNo)?.lines[0]?.quantity,
+      ).toBe(orderB.quantity)
+      expect(
+        (resubmitted.approval as { instance?: { id?: string } } | undefined)?.instance?.id,
+      ).not.toBe(originalInstanceId)
       const newSubmissionNo = submissionNoOf(resubmitted)
+      expect(
+        submissions.find((item) => item.submission_no === newSubmissionNo)?.lines[0]?.quantity,
+      ).toMatch(/^5(?:\.0+)?$/)
       expect(newSubmissionNo).toBeGreaterThan(orderB.submissionNo)
       await expect(sales.page.getByText('审批中').first()).toBeVisible(VISIBLE)
       await openApprovalTask(procurement.page, orderB.orderNo)
@@ -538,9 +583,7 @@ test('销售单审批驳回后可照原条件承接、撤回改单重提或作�
       await voidDraftViaHttp(sales.page, orderC)
       await sales.page.reload()
       await expect(sales.page.getByText('已作废').first()).toBeVisible(VISIBLE)
-      await expect(sales.page.getByText('本单已作废，不再进入履约或结案。')).toBeVisible(
-        VISIBLE,
-      )
+      await expect(sales.page.getByText('本单已作废，不再进入履约或结案。')).toBeVisible(VISIBLE)
       const live = await fetchSalesOrder(sales.page, orderC.id)
       expect(live.commercial_status ?? live.commercialStatus).toBe('VOIDED')
       const changeBtn = sales.page.locator('#sales-orders-detail-start-change')

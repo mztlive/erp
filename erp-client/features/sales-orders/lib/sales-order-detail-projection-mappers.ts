@@ -1,6 +1,7 @@
 import type {
     BackendSalesChangeOrder,
     BackendSalesOrderDetail,
+    BackendRevisionCommercial,
     BackendSubmission,
     BackendWorkingCopy,
     BackendWorkingCopyLine,
@@ -71,19 +72,38 @@ function latestSubmission(
 }
 
 /**
- * 选择详情当前应展示的商业快照：可编辑工作副本优先，否则取最新提交。
+ * 生效后只取当前版本指针指定的冻结成交快照；首次生效前取工作副本或最新提交。
  * 合同精确修订等附属显示必须复用同一来源，避免字段跨版本拼接。
  */
 export function pickSalesOrderCommercialSource(
     detail: BackendSalesOrderDetail,
-): BackendWorkingCopy | BackendSubmission | undefined {
+):
+    | BackendWorkingCopy
+    | BackendSubmission
+    | BackendRevisionCommercial
+    | undefined {
+    if (detail.current_revision_id) {
+        const revision = detail.revisions?.find(
+            (item) => item.id === detail.current_revision_id,
+        )
+        if (!revision?.commercial_lines) return undefined
+        return {
+            ...revision,
+            lines: revision.commercial_lines,
+            // 卡券禁止 ERP 商业改单；到期日未收入正式修订，沿用原销售冻结提交的日期显示。
+            receivable_due_date:
+                detail.business_type === "VOUCHER"
+                    ? latestSubmission(detail)?.receivable_due_date
+                    : undefined,
+        }
+    }
     if (detail.working_copy?.lines?.length) return detail.working_copy
     return latestSubmission(detail)
 }
 
 /**
- * 详情商业内容优先：可编辑草稿 → 最新提交快照。
- * 提交后 working_copy 为空时必须从 submission 回填明细与表头。
+ * 详情商业内容优先：当前生效版本 → 首次提交草稿 → 首次提交快照。
+ * 变更审批期间保留原生效版本，变更通过后从新版本读取完整成交内容。
  */
 function pickCommercialContent(detail: BackendSalesOrderDetail): {
     lines: BackendWorkingCopyLine[]

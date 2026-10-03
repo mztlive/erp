@@ -19,7 +19,14 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 import { createCustomerViaUi } from "../helpers/customers"
-import { submitSalesInvoiceRequest } from "../helpers/invoices"
+import { rejectFinancialOriginal, reviseFinancialOriginal } from "../helpers/financial-draft-edit"
+import {
+    expectInvoiceEvidenceCommit,
+    expectSalesInvoiceEvidence,
+    invoiceEvidenceFiles,
+    submitSalesInvoiceRequest,
+    uploadInvoiceEvidence,
+} from "../helpers/invoices"
 import { loginViaUi, openLoggedInWorkspace } from "../helpers/login"
 import { expectReceiptPreview, submitReceiptReversalRequest } from "../helpers/receipts"
 import { assertReceiptRegistrationDraft } from "../helpers/receipt-registration"
@@ -108,7 +115,7 @@ test.describe("flow-06 客户票款：分次回款、销项发票、核销与冲
 
             // ── 4. 出纳分次回款：多单核销、已有草稿提交；先部分再结清 ──
             const fukuan = await openRole(browser, extra, "fukuan")
-            const { receiptNo: receipt1No, counterpartyPartyId } = await registerReceiptAllocatingBothOrders(fukuan.page, {
+            const { receiptNo: receipt1No, receiptId: receipt1Id, counterpartyPartyId } = await registerReceiptAllocatingBothOrders(fukuan.page, {
                 customerName: legalName,
                 orderNos: [orderA.orderNo, orderB.orderNo],
                 amount: "1500.00",
@@ -122,6 +129,14 @@ test.describe("flow-06 客户票款：分次回款、销项发票、核销与冲
             }
 
             const caiwu1 = await openRole(browser, extra, "caiwu")
+            await openWorkspaceTask(caiwu1.page, "回款复核", receipt1No, "approval")
+            await rejectFinancialOriginal(caiwu1.page, "银行流水号需补齐，修改原回款单后重提")
+            await reviseFinancialOriginal(fukuan.page, {
+                kind: "customer_receipt",
+                id: receipt1Id,
+                documentNo: receipt1No,
+                changedText: `BANK-F06-1-REVISED-${stamp}`,
+            })
             await approveWorkspaceTask(caiwu1.page, "回款复核", receipt1No)
             await caiwu1.context.close()
 
@@ -241,20 +256,33 @@ test.describe("flow-06 客户票款：分次回款、销项发票、核销与冲
             await caiwuInvoice.context.close()
 
             const kaipiao = await openRole(browser, extra, "kaipiao")
-            await registerSalesInvoiceFromWorkspace(kaipiao.page, orderA.orderNo, legalName)
+            const registeredInvoice = await registerSalesInvoiceFromWorkspace(kaipiao.page, orderA.orderNo, legalName)
             await kaipiao.context.close()
 
             await page.goto(`/sales/orders/${orderA.id}`)
             await expectInvoicing(page, "已开齐")
             await expectCollection(page, "已结清")
             await expectNotClosed(page)
+            await expectSalesInvoiceEvidence(page, {
+                salesOrderId: orderA.id,
+                otherSalesOrderId: orderB.id,
+                ...registeredInvoice,
+            })
 
             // ── 6. 回款冲正：fukuan 提交 → lisiyong 确认依据 → caiwu 审批入账 ──
             const fukuan3 = await openRole(browser, extra, "fukuan")
-            const reversalNo = await submitReceiptReversal(fukuan3.page, receipt2No)
-            await fukuan3.context.close()
+            const { reversalNo, reversalId } = await submitReceiptReversal(fukuan3.page, receipt2No)
 
             const leader = await openRole(browser, extra, "lisiyong")
+            await openWorkspaceTask(leader.page, "回款冲正审批", reversalNo, "approval")
+            await rejectFinancialOriginal(leader.page, "冲正依据需补齐，修改原冲正单后重提")
+            await reviseFinancialOriginal(fukuan3.page, {
+                kind: "receipt_reversal",
+                id: reversalId,
+                documentNo: reversalNo,
+                changedText: "补齐原回款银行凭证后，按原金额冲正并重开应收",
+            })
+            await fukuan3.context.close()
             await approveWorkspaceTask(leader.page, "回款冲正审批", reversalNo)
             await leader.context.close()
 
@@ -710,8 +738,10 @@ async function registerSalesInvoiceFromWorkspace(
     await expect(page.getByRole("heading", { name: /核销 · / })).toBeVisible({ timeout: LONG })
 
     const invoiceNo = `FP${Date.now()}`
+    const files = invoiceEvidenceFiles(invoiceNo)
     await page.locator("#customer-receivables-session-invoice-no").fill(invoiceNo)
     await page.locator("#customer-receivables-session-gross-amount").fill(UNIT_PRICE)
+    await uploadInvoiceEvidence(page, files)
     const join = page.getByRole("button", { name: "加入" }).first()
     if (await join.isVisible().catch(() => false)) {
         await join.click()
@@ -730,12 +760,12 @@ async function registerSalesInvoiceFromWorkspace(
     const commitResponse = page.waitForResponse(
         (res) =>
             res.request().method() === "POST" &&
-            res.url().includes("/admin/invoices/commit"),
+            new URL(res.url()).pathname === "/admin/invoices/commit-with-files",
         { timeout: 90_000 },
     )
     await page.locator("#customer-receivables-session-invoice-confirm-dialog-confirm").click()
     const committed = await commitResponse
-    expect(committed.ok()).toBeTruthy()
+    const invoiceId = await expectInvoiceEvidenceCommit(committed, files)
     await expect(page.getByRole("heading", { name: "确认登记销项发票并分配" })).toBeHidden({
         timeout: LONG,
     })
@@ -752,7 +782,7 @@ async function registerSalesInvoiceFromWorkspace(
     await expect(
         page.getByRole("row").filter({ hasText: invoiceNo }).first(),
     ).toBeVisible({ timeout: LONG })
-    return invoiceNo
+    return { invoiceId, invoiceNo, files }
 }
 
 // ─── 回款冲正 ──────────────────────────────────────────────────────────────
@@ -768,6 +798,15 @@ async function submitReceiptReversal(page: Page, receiptNo: string) {
     await row.first().click()
     await expectReceiptPreview(page, receiptNo)
     await page.locator("#customer-receivables-preview-receipt-reverse").click()
+    const committed = page.waitForResponse(
+        (response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/admin/receipt-reversals/commit",
+        { timeout: 90_000 },
+    )
     await submitReceiptReversalRequest(page, "错回款，按原单全额冲正重开应收")
-    return factValue(page, "冲正单号")
+    const response = await committed
+    expect(response.ok(), await response.text()).toBeTruthy()
+    const reversal = (await response.json()).data as { id: string; reversal_no: string }
+    expect(reversal.id).toBeTruthy()
+    expect(reversal.reversal_no).toBeTruthy()
+    return { reversalId: reversal.id, reversalNo: reversal.reversal_no }
 }

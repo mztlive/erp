@@ -26,7 +26,9 @@ import { test, expect, type Page } from "../helpers/test"
 import fs from "node:fs"
 import path from "node:path"
 
+import { apiGet, apiToken } from "../helpers/api"
 import { createCustomerViaUi } from "../helpers/customers"
+import { fillDeliveryTrackingEntries, uploadAcceptanceEvidence } from "../helpers/fulfillment"
 import { ensureWarehouseStockScope } from "../helpers/inventory"
 import { openLoggedInWorkspace, type LoggedInSession } from "../helpers/login"
 import { payOnlySupplierTask } from "../helpers/payments"
@@ -45,6 +47,7 @@ import {
 test.describe.configure({ mode: "serial" })
 
 const SKU_KEYWORD = "狮峰明前龙井"
+const SECOND_SKU_KEYWORD = "狮峰陈皮普洱"
 const SUPPLIER_SHORT = "狮峰茶叶"
 const DIRECT_OPTION = /狮峰茶叶.* · 供应商直发|供应商直发/
 const WAREHOUSE_OPTION = /狮峰茶叶.* · 入仓| · 入仓/
@@ -125,8 +128,13 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
     const contractNo = `HT-DS-${stamp}`
     const dueDate = isoPlusDays(90)
     const trackingNo = `SF${stamp.slice(-10)}`
+    const secondTrackingNo = `LL${stamp.slice(-10)}`
+    const otherLineTrackingNo = `SF-SECOND-${stamp.slice(-10)}`
+    const sharedTrackingNo = `SHARED-${stamp.slice(-10)}`
+    let salesLineIds: string[] = []
     let salesOrderNo = ""
     let purchaseOrderNo = ""
+    let acceptanceNo = ""
     let session: LoggedInSession | undefined
 
     const switchTo = async (login: LoginName) => {
@@ -232,9 +240,21 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
         await skuDialog.locator("#sales-orders-sku-picker-confirm").click()
         await expect(skuDialog).toBeHidden({ timeout: 20000 })
         await expect(page.getByText(SKU_KEYWORD)).toBeVisible({ timeout: 20000 })
-        await expect(
-            page.locator('[data-testid^="sales-line-procurement-owner-"]'),
-        ).not.toContainText("暂未确定", { timeout: 20000 })
+
+        await page.locator("#sales-orders-create-line-items-add").click()
+        await expect(skuDialog).toBeVisible({ timeout: 20000 })
+        await skuSearch.fill(SECOND_SKU_KEYWORD)
+        await skuSearch.press("Enter")
+        await skuDialog.getByRole("checkbox", { name: new RegExp(SECOND_SKU_KEYWORD) }).check()
+        await skuDialog.locator("#sales-orders-sku-picker-confirm").click()
+        await expect(skuDialog).toBeHidden({ timeout: 20000 })
+        await expect(page.getByText(SECOND_SKU_KEYWORD)).toBeVisible({ timeout: 20000 })
+        await expect(page.locator('[id^="sales-orders-create-line-"][id$="-quantity"]')).toHaveCount(2)
+        const owners = page.locator('[data-testid^="sales-line-procurement-owner-"]')
+        await expect(owners).toHaveCount(2)
+        for (let index = 0; index < 2; index += 1) {
+            await expect(owners.nth(index)).not.toContainText("暂未确定", { timeout: 20000 })
+        }
 
         await page.locator("#sales-orders-create-batch-due-date-open").click()
         await pickCalendarDay(
@@ -260,6 +280,14 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
         })
         salesOrderNo = await readHeaderDocumentNumber(page)
         expect(salesOrderNo.length).toBeGreaterThan(0)
+        const salesOrderId = new URL(page.url()).pathname.split("/").at(-1)
+        const order = await apiGet<{ lines: Array<{ id: string; line_no: number }> }>(
+            await apiToken("xiaoshou"),
+            `/admin/sales-orders/${salesOrderId}`,
+        )
+        expect(order.lines).toHaveLength(2)
+        salesLineIds = order.lines.sort((left, right) => left.line_no - right.line_no).map(line => line.id)
+        expect(new Set(salesLineIds).size).toBe(2)
     }
 
     // ── 4. 负向：生效前不得建采购单、不得履约、采购确认不得选源 ──
@@ -312,15 +340,18 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
         await expect(page.getByText("销售明细与供给方案")).toBeVisible({
             timeout: 20000,
         })
-        await expandSourcingEditor(page)
+        await expandSourcingEditor(page, new RegExp(SKU_KEYWORD))
+        await expandSourcingEditor(page, new RegExp(SECOND_SKU_KEYWORD))
 
         const sourcing = page.locator(
             '[id^="procurement-orders-create-row-"][id$="-sourcing-option"]',
         )
-        await expect(sourcing).toBeVisible({ timeout: 20000 })
-        await chooseOption(page, sourcing, DIRECT_OPTION, "供应商直发")
-        await expect(sourcing).toHaveValue(new RegExp("供应商直发"))
-        await expect(sourcing).not.toHaveValue(WAREHOUSE_OPTION)
+        await expect(sourcing).toHaveCount(2)
+        for (let index = 0; index < 2; index += 1) {
+            await chooseOption(page, sourcing.nth(index), DIRECT_OPTION, "供应商直发")
+            await expect(sourcing.nth(index)).toHaveValue(new RegExp("供应商直发"))
+            await expect(sourcing.nth(index)).not.toHaveValue(WAREHOUSE_OPTION)
+        }
         await expect(page.locator('[id$="-warehouse"]')).toHaveCount(0)
         await expect(page.getByRole("combobox", { name: "仓库", exact: true })).toHaveCount(0)
 
@@ -333,7 +364,7 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
             timeout: 20000,
         })
         await expect(preview.getByText("现有库存分配")).toHaveCount(0)
-        await expect(preview.getByText("供应商直发")).toBeVisible()
+        await expect(preview.getByText("供应商直发").first()).toBeVisible()
         await expect(preview.getByText("入仓")).not.toBeVisible()
         await confirmSupplyAllocation(page, /供给分配已完成|本次供给分配已保存/)
     }
@@ -412,15 +443,17 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
             timeout: 20000,
         })
         await expect(page.getByText("不走自有仓库，库存不变")).toBeVisible()
-        await chooseOption(
-            page,
-            page.locator("#fulfillment-operations-direct-form-carrier"),
-            "顺丰速运",
-            "顺丰",
-        )
-        await page
-            .locator("#fulfillment-operations-direct-form-tracking-no")
-            .fill(trackingNo)
+        await expect(page.locator('[id^="fulfillment-operations-direct-form-line-"][id$="-tracking-no"]')).toHaveCount(2)
+        await fillDeliveryTrackingEntries(page, {
+            kind: "direct",
+            entries: [
+                { salesOrderLineId: salesLineIds[0], trackingNo, carrier: "顺丰速运" },
+                { salesOrderLineId: salesLineIds[0], trackingNo: secondTrackingNo, carrier: "货拉拉" },
+                { salesOrderLineId: salesLineIds[0], trackingNo: sharedTrackingNo, carrier: "货拉拉" },
+                { salesOrderLineId: salesLineIds[1], trackingNo: otherLineTrackingNo, carrier: "顺丰速运" },
+                { salesOrderLineId: salesLineIds[1], trackingNo: sharedTrackingNo, carrier: "货拉拉" },
+            ],
+        })
         await expect(
             page.locator("#fulfillment-operations-work-surface-confirm"),
         ).toBeEnabled({ timeout: 20000 })
@@ -433,7 +466,20 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
         await confirm.locator("#fulfillment-operations-workspace-confirm-confirm").click()
         const postedResponse = await posted
         expect(postedResponse.ok(), "供应商直发必须已由后端确认后才能关闭会话").toBeTruthy()
-        expect((await postedResponse.json()).data.status).toBe("SHIPPED")
+        const delivery = (await postedResponse.json()).data
+        expect(delivery.status).toBe("SHIPPED")
+        const expectedTrackingEntries = [
+            { sales_order_line_id: salesLineIds[0], tracking_no: trackingNo, carrier: "顺丰速运" },
+            { sales_order_line_id: salesLineIds[0], tracking_no: secondTrackingNo, carrier: "货拉拉" },
+            { sales_order_line_id: salesLineIds[0], tracking_no: sharedTrackingNo, carrier: "货拉拉" },
+            { sales_order_line_id: salesLineIds[1], tracking_no: otherLineTrackingNo, carrier: "顺丰速运" },
+            { sales_order_line_id: salesLineIds[1], tracking_no: sharedTrackingNo, carrier: "货拉拉" },
+        ]
+        expect(postedResponse.request().postDataJSON().tracking_entries).toEqual(expectedTrackingEntries)
+        expect(delivery.tracking_entries).toEqual(expectedTrackingEntries)
+        expect(delivery).not.toHaveProperty("tracking_no")
+        expect(delivery).not.toHaveProperty("tracking_numbers")
+        expect(delivery).not.toHaveProperty("carrier")
         await expect(confirm).toBeHidden({ timeout: 20000 })
     }
 
@@ -444,10 +490,37 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
         await page.locator("#sales-orders-acceptance-register-open").click()
         const dialog = page.getByRole("dialog", { name: "登记客户验收" })
         await expect(dialog).toBeVisible({ timeout: 20000 })
+        const batches = dialog.locator("#acceptance-register-list")
+        await dialog.getByRole("button", { name: /^明细 1，/ }).click()
+        await expect(batches.getByText(trackingNo, { exact: true })).toBeVisible()
+        await expect(batches.getByText(secondTrackingNo, { exact: true })).toBeVisible()
+        await expect(batches.getByText(sharedTrackingNo, { exact: true })).toBeVisible()
+        await expect(batches.getByText("货拉拉 ·", { exact: false }).first()).toBeVisible()
+        await expect(batches.getByText(otherLineTrackingNo, { exact: true })).toHaveCount(0)
+        await dialog.getByRole("button", { name: /^明细 2，/ }).click()
+        await expect(batches.getByText(otherLineTrackingNo, { exact: true })).toBeVisible()
+        await expect(batches.getByText(sharedTrackingNo, { exact: true })).toBeVisible()
+        await expect(batches.getByText(trackingNo, { exact: true })).toHaveCount(0)
+        await expect(batches.getByText(secondTrackingNo, { exact: true })).toHaveCount(0)
+        await dialog.locator("#sales-orders-acceptance-comment").fill("按销售明细登记并核验包裹")
+        await expect(dialog.locator("#sales-orders-acceptance-register-submit")).toBeDisabled({ timeout: 20000 })
+        await expect(dialog.getByText("请上传签收单凭证（图片或 PDF）", { exact: true })).toBeVisible()
+        await uploadAcceptanceEvidence(page)
+        await expect(dialog.locator("#sales-orders-acceptance-register-submit")).toBeEnabled({ timeout: 20000 })
         await dialog.locator("#sales-orders-acceptance-register-submit").click()
         const confirm = page.getByRole("alertdialog", { name: "确认客户验收" })
         await expect(confirm).toBeVisible({ timeout: 20000 })
+        const accepted = page.waitForResponse(
+            response => response.request().method() === "POST" && response.url().endsWith("/admin/customer-acceptances/commit"),
+        )
         await confirm.locator("#sales-orders-acceptance-confirm-confirm").click()
+        const acceptedResponse = await accepted
+        expect(acceptedResponse.ok(), await acceptedResponse.text()).toBeTruthy()
+        const acceptance = (await acceptedResponse.json()).data.acceptance
+        expect(acceptance.evidence_attachment_id).toBeTruthy()
+        acceptanceNo = acceptance.acceptance_no
+        expect(acceptanceNo).toBeTruthy()
+        expect(acceptedResponse.request().postDataJSON().lines.map((line: { sales_order_line_id: string }) => line.sales_order_line_id).sort()).toEqual([...salesLineIds].sort())
         await expectToast(page, "客户验收已登记")
         // 验收提交后任务完成、任务视图关闭；下游销售单已完成断言覆盖正确性。
         await expect(page.getByText("当前筛选没有待办")).toBeVisible({ timeout: 20000 })
@@ -486,6 +559,24 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
         await page.getByRole("button", { name: `查看销售单 ${salesOrderNo}` }).click()
         await expect(page.getByText("已生效").first()).toBeVisible({ timeout: 20000 })
         await expect(page.getByText(/已完成|履约/).first()).toBeVisible({ timeout: 20000 })
+        await page.getByRole("tab", { name: "验收", exact: true }).click()
+        const evidenceDownload = page.getByRole("button", { name: "下载签收单凭证", exact: true })
+        await expect(evidenceDownload).toBeVisible({ timeout: 20000 })
+        const [download, evidenceResponse] = await Promise.all([
+            page.waitForEvent("download"),
+            page.waitForResponse(response =>
+                response.request().method() === "GET" && /\/admin\/customer-acceptances\/[^/]+\/evidence$/.test(new URL(response.url()).pathname),
+            ),
+            evidenceDownload.click(),
+        ])
+        expect(await download.failure()).toBeNull()
+        expect(download.suggestedFilename()).toBe(`${acceptanceNo}.pdf`)
+        expect(evidenceResponse.ok(), await evidenceResponse.text()).toBeTruthy()
+        expect(evidenceResponse.headers()["content-type"]).toBe("application/pdf")
+        expect(evidenceResponse.headers()["cache-control"]).toBe("private, no-store")
+        const downloadedPath = await download.path()
+        expect(downloadedPath).toBeTruthy()
+        expect(fs.readFileSync(downloadedPath!)).toEqual(contractPdf().buffer)
     }
     } finally {
         await session?.context.close()

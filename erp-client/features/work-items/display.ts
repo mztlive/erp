@@ -10,6 +10,10 @@ const KNOWN_REASON_LABELS: Record<string, string> = {
         "采购驳回后，需要上级确认是否按原条件承接",
     supplier_settlement_review_dispatched: "供应商结算单待复核",
     import_trial_confirmation: "导入试算已完成，需要业务确认范围",
+    payable_payment_required: "采购应付已确认，需要安排付款",
+    payable_reopened_by_reversal: "付款已冲正，应付余额需要重新安排付款",
+    payable_reopened_by_purchase_change:
+        "采购变更增加了应付金额，需要继续安排付款",
 }
 
 const LEGACY_OWNER_PLACEHOLDERS = new Set(["当前处理人", "处理人待确认"])

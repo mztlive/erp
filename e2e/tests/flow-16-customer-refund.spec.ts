@@ -1,5 +1,5 @@
 /**
- * 流程: [flow-16] 客户退款单（含驳回轮次 + 供应商退款）
+ * 流程: [flow-16] 客户/供应商退款驳回后修改原单重提
  * 文档: docs/erp-phase-1.md §6.3 / §6.5.4；approval-workflow-contract.md §4.3/§4.4；
  *       workbench-workitem-contract.md 第 3 节
  * 账号: xiaoshou 建客户/合同/销售单；caigou 审批销售单、供给分配、确认供应商退款依据；
@@ -16,16 +16,24 @@
  * 3. 文档客户侧业务部门写「销售」；已发布定义首节点是「销售领导确认退款依据」
  *    （lisiyong），不是 xiaoshou。
  * 4. 客户往来没有退款 Tab（仅应收/回款/销项发票/待核销）；退款详情走 previewKind=refund。
- * 5. 合同 §4.4.2：驳回保持 IN_APPROVAL、轮次加一回到入口节点；前端 REJECTED 文案
- *    映射为「草稿」，但驳回后页面仍展示「审批中」+「第 2 轮」。
+ * 5. 驳回保持 IN_APPROVAL、轮次加一回到入口节点；出纳点击「修改原单」撤回旧审批，
+ *    以同 ID、同单号及原资金来源编辑并重提，新的提交重新从首节点审批。
  */
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { test, expect, type Browser, type BrowserContext, type Page } from "../helpers/test"
+import {
+    test,
+    expect,
+    type Browser,
+    type BrowserContext,
+    type Page,
+} from "../helpers/test"
 
+import { apiGet, apiToken } from "../helpers/api"
 import { createCustomerViaUi } from "../helpers/customers"
+import { readFinancialApprovalVersion } from "../helpers/financial-draft-edit"
 import { headedAwareViewport } from "../helpers/headed"
 import { loginViaUi, openLoggedInWorkspace } from "../helpers/login"
 import { payOnlySupplierTask } from "../helpers/payments"
@@ -58,14 +66,19 @@ const CUSTOMER_NODE = "销售领导确认退款依据"
 const FINANCE_NODE = "财务总监审批"
 const PROCUREMENT_NODE = "采购确认退款依据"
 const REJECT_REASON = "退款依据不足，请补充原回款与客户约定后再报"
-const CUSTOMER_REFUND_REASON = "客户取消订单，按已入账回款全额退回资金，原回款保留"
-const SUPPLIER_REFUND_REASON = "供应商退回多收款，按已入账付款全额退款，原付款保留"
+const CUSTOMER_REFUND_REASON =
+    "客户取消订单，按已入账回款全额退回资金，原回款保留"
+const SUPPLIER_REFUND_REASON =
+    "供应商退回多收款，按已入账付款全额退款，原付款保留"
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
+const REPO_ROOT = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "..",
+)
 const CONTRACT_PDF = path.resolve(REPO_ROOT, "fixtures", "sample-contract.pdf")
 
 test.describe("flow-16 客户退款单", () => {
-    test("出纳提交客户退款：驳回轮次加一后通过，应收恢复且原回款保留", async ({
+    test("出纳提交客户退款：驳回后修改原单重提，应收恢复且原回款保留", async ({
         page,
         browser,
     }) => {
@@ -73,14 +86,18 @@ test.describe("flow-16 客户退款单", () => {
         const stamp = Date.now().toString(36).toUpperCase()
         const legalName = `退款测试客户${stamp}`
         const shortName = `退款${stamp.slice(-6)}`
-        const creditCode = `9111F16${stamp}000000000000`.replace(/[^0-9A-Z]/g, "0").slice(0, 18)
+        const creditCode = `9111F16${stamp}000000000000`
+            .replace(/[^0-9A-Z]/g, "0")
+            .slice(0, 18)
         const contractNo = `HT-F16-${stamp}`
         const extra: BrowserContext[] = []
 
         try {
             // ── 1. 销售：客户 + 合同 + 实物销售单 ──
             await loginViaUi(page, "xiaoshou")
-            await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible({
+            await expect(
+                page.getByRole("heading", { name: "我的工作台" }),
+            ).toBeVisible({
                 timeout: LONG,
             })
 
@@ -104,20 +121,26 @@ test.describe("flow-16 客户退款单", () => {
             await page.goto(`/sales/orders/${order.id}`)
             await expectEffectiveSalesOrder(page, order.orderNo)
             await page.getByRole("tab", { name: /^采购/ }).click()
-            await expect(page.getByTestId("sales-order-purchase-status")).toContainText(
-                "待采购",
-                { timeout: TIMEOUT },
-            )
-            await expect(page.getByText("本单还没有采购单。")).toBeVisible({ timeout: TIMEOUT })
+            await expect(
+                page.getByTestId("sales-order-purchase-status"),
+            ).toContainText("待采购", {
+                timeout: TIMEOUT,
+            })
+            await expect(page.getByText("本单还没有采购单。")).toBeVisible({
+                timeout: TIMEOUT,
+            })
             await expectFulfillmentNotStarted(page)
 
             // ── 3. 出纳登记回款并核销本单 ──
             const fukuan = await openRole(browser, extra, "fukuan")
-            const { receiptNo } = await registerCustomerReceiptForOrder(fukuan.page, {
-                customerName: legalName,
-                orderNo: order.orderNo,
-                bankReference: `BANK-F16-${stamp}`,
-            })
+            const { receiptNo } = await registerCustomerReceiptForOrder(
+                fukuan.page,
+                {
+                    customerName: legalName,
+                    orderNo: order.orderNo,
+                    bankReference: `BANK-F16-${stamp}`,
+                },
+            )
             await fukuan.context.close()
 
             const caiwuReceipt = await openRole(browser, extra, "caiwu")
@@ -130,24 +153,29 @@ test.describe("flow-16 客户退款单", () => {
 
             // ── 4. 负向：caiwu 不得自己提交客户退款 ──
             const caiwuDenied = await openRole(browser, extra, "caiwu")
-            await assertCaiwuCannotSubmitCustomerRefund(caiwuDenied.page, receiptNo)
+            await assertCaiwuCannotSubmitCustomerRefund(
+                caiwuDenied.page,
+                receiptNo,
+            )
             await caiwuDenied.context.close()
 
             // ── 5. 出纳从已过账回款发起客户退款（与冲正不同入口）──
             const fukuanRefund = await openRole(browser, extra, "fukuan")
-            const { refundNo, refundId } = await submitCustomerRefundFromReceipt(
-                fukuanRefund.page,
-                receiptNo,
-                CUSTOMER_REFUND_REASON,
-            )
-            await expect(fukuanRefund.page.getByText(CUSTOMER_NODE).first()).toBeVisible({
+            const { refundNo, refundId } =
+                await submitCustomerRefundFromReceipt(
+                    fukuanRefund.page,
+                    receiptNo,
+                    CUSTOMER_REFUND_REASON,
+                )
+            await expect(
+                fukuanRefund.page.getByText(CUSTOMER_NODE).first(),
+            ).toBeVisible({
                 timeout: TIMEOUT,
             })
             await expect(
-                fukuanRefund.page.locator('[data-slot="quick-preview-summary"]').getByText(
-                    "审批中",
-                    { exact: true },
-                ),
+                fukuanRefund.page
+                    .locator('[data-slot="quick-preview-summary"]')
+                    .getByText("审批中", { exact: true }),
             ).toBeVisible({ timeout: TIMEOUT })
             await fukuanRefund.context.close()
             expect(refundNo.length).toBeGreaterThan(2)
@@ -170,32 +198,69 @@ test.describe("flow-16 客户退款单", () => {
                 refundNo,
                 REJECT_REASON,
             )
-            await openWorkspaceApprovalTask(leaderReject.page, "客户退款审批", refundNo)
-            await expect(leaderReject.page.getByText("第 2 轮").first()).toBeVisible({ timeout: LONG })
-            await expect(leaderReject.page.getByText(CUSTOMER_NODE).first()).toBeVisible({
+            await openWorkspaceApprovalTask(
+                leaderReject.page,
+                "客户退款审批",
+                refundNo,
+            )
+            await expect(
+                leaderReject.page.getByText("第 2 轮").first(),
+            ).toBeVisible({ timeout: LONG })
+            await expect(
+                leaderReject.page.getByText(CUSTOMER_NODE).first(),
+            ).toBeVisible({
                 timeout: LONG,
             })
-            await expect(leaderReject.page.getByRole("alert").filter({ hasText: "最近驳回" }).getByText(REJECT_REASON)).toBeVisible({
+            await expect(
+                leaderReject.page
+                    .getByRole("alert")
+                    .filter({ hasText: "最近驳回" })
+                    .getByText(REJECT_REASON),
+            ).toBeVisible({
                 timeout: LONG,
             })
-            await expect(leaderReject.page.getByRole("button", { name: /^(通过|同意审批)$/ })).toBeVisible({
+            await expect(
+                leaderReject.page.getByRole("button", {
+                    name: /^(通过|同意审批)$/,
+                }),
+            ).toBeVisible({
                 timeout: TIMEOUT,
             })
-            await expect(leaderReject.page.getByRole("button", { name: "驳回" })).toBeVisible({
+            await expect(
+                leaderReject.page.getByRole("button", { name: "驳回" }),
+            ).toBeVisible({
                 timeout: TIMEOUT,
             })
             await leaderReject.context.close()
 
             const fukuanAfterReject = await openRole(browser, extra, "fukuan")
-            await assertCustomerRefundPreview(fukuanAfterReject.page, refundId, refundNo, "审批中")
-            await expect(fukuanAfterReject.page.getByText("第 2 轮").first()).toBeVisible({ timeout: LONG })
-            await expect(fukuanAfterReject.page.getByText(CUSTOMER_NODE).first()).toBeVisible({
+            await assertCustomerRefundPreview(
+                fukuanAfterReject.page,
+                refundId,
+                refundNo,
+                "审批中",
+            )
+            await expect(
+                fukuanAfterReject.page.getByText("第 2 轮").first(),
+            ).toBeVisible({
+                timeout: LONG,
+            })
+            await expect(
+                fukuanAfterReject.page.getByText(CUSTOMER_NODE).first(),
+            ).toBeVisible({
                 timeout: TIMEOUT,
             })
-            await expect(fukuanAfterReject.page.getByRole("alert").filter({ hasText: "最近驳回" }).getByText(REJECT_REASON)).toBeVisible({
+            await expect(
+                fukuanAfterReject.page
+                    .getByRole("alert")
+                    .filter({ hasText: "最近驳回" })
+                    .getByText(REJECT_REASON),
+            ).toBeVisible({
                 timeout: TIMEOUT,
             })
-            await fukuanAfterReject.page.locator("#customer-receivables-preview-close").click()
+            await fukuanAfterReject.page
+                .locator("#customer-receivables-preview-close")
+                .click()
             await assertReceiptStillPosted(fukuanAfterReject.page, receiptNo)
             await fukuanAfterReject.context.close()
 
@@ -203,49 +268,107 @@ test.describe("flow-16 客户退款单", () => {
             await expectCollection(page, "已结清")
             await expectNotClosed(page)
 
-            // ── 7. 销售领导通过 → 财务总监审批入账 ──
+            // ── 7. 按驳回意见修改原退款，保留来源、单号与金额后重新提交。 ──
+            const fukuanRevise = await openRole(browser, extra, "fukuan")
+            await assertCustomerRefundPreview(
+                fukuanRevise.page,
+                refundId,
+                refundNo,
+                "审批中",
+            )
+            await reviseRefundOriginal(fukuanRevise.page, {
+                kind: "customer_refund",
+                id: refundId,
+                refundNo,
+                reason: "已补充客户取消约定及原回款凭证，按原金额退还",
+            })
+            await fukuanRevise.context.close()
+
+            // ── 8. 销售领导通过 → 财务总监审批入账 ──
             const leaderApprove = await openRole(browser, extra, "lisiyong")
-            await approveWorkspaceTask(leaderApprove.page, "客户退款审批", refundNo)
+            await approveWorkspaceTask(
+                leaderApprove.page,
+                "客户退款审批",
+                refundNo,
+            )
             await leaderApprove.context.close()
 
             const caiwuRefund = await openRole(browser, extra, "caiwu")
-            await openWorkspaceApprovalTask(caiwuRefund.page, "客户退款审批", refundNo)
-            await expect(caiwuRefund.page.getByText(FINANCE_NODE).first()).toBeVisible({ timeout: LONG })
+            await openWorkspaceApprovalTask(
+                caiwuRefund.page,
+                "客户退款审批",
+                refundNo,
+            )
+            await expect(
+                caiwuRefund.page.getByText(FINANCE_NODE).first(),
+            ).toBeVisible({ timeout: LONG })
             await confirmApprove(caiwuRefund.page)
             await caiwuRefund.context.close()
 
             // ── 8. 断言：退款已过账、应收恢复、原回款仍为已过账（不是冲正）──
             const fukuanPosted = await openRole(browser, extra, "fukuan")
-            await assertCustomerRefundPreview(fukuanPosted.page, refundId, refundNo, "已过账")
+            await assertCustomerRefundPreview(
+                fukuanPosted.page,
+                refundId,
+                refundNo,
+                "已过账",
+            )
             await expect(
-                fukuanPosted.page.getByText("已过账记录不可编辑或删除；纠错须追加反向记录。"),
+                fukuanPosted.page.getByText(
+                    "已过账记录不可编辑或删除；纠错须追加反向记录。",
+                ),
             ).toBeVisible({
                 timeout: TIMEOUT,
             })
-            await fukuanPosted.page.locator("#customer-receivables-preview-close").click()
+            await fukuanPosted.page
+                .locator("#customer-receivables-preview-close")
+                .click()
             await assertReceiptStillPosted(fukuanPosted.page, receiptNo)
-            await fukuanPosted.page.getByRole("row").filter({ hasText: receiptNo }).click()
+            await fukuanPosted.page
+                .getByRole("row")
+                .filter({ hasText: receiptNo })
+                .click()
             await expectReceiptPreview(fukuanPosted.page, receiptNo)
             await expect(
-                fukuanPosted.page.locator('[data-slot="quick-preview-summary"]').getByText("已过账", {
-                    exact: true,
-                }),
+                fukuanPosted.page
+                    .locator('[data-slot="quick-preview-summary"]')
+                    .getByText("已过账", {
+                        exact: true,
+                    }),
             ).toBeVisible({ timeout: TIMEOUT })
             await expect(
-                fukuanPosted.page.locator("#customer-receivables-preview-receipt-refund"),
+                fukuanPosted.page.locator(
+                    "#customer-receivables-preview-receipt-refund",
+                ),
             ).toBeVisible({ timeout: TIMEOUT })
             await expect(
-                fukuanPosted.page.locator("#customer-receivables-preview-receipt-reverse"),
+                fukuanPosted.page.locator(
+                    "#customer-receivables-preview-receipt-reverse",
+                ),
             ).toBeVisible({ timeout: TIMEOUT })
-            await fukuanPosted.page.locator("#customer-receivables-preview-close").click()
+            await fukuanPosted.page
+                .locator("#customer-receivables-preview-close")
+                .click()
 
-            await fukuanPosted.page.goto("/finance/customer-accounts?view=receivable")
+            await fukuanPosted.page.goto(
+                "/finance/customer-accounts?view=receivable",
+            )
             await waitHeading(fukuanPosted.page, "客户往来")
-            await fukuanPosted.page.locator("#customer-receivables-view-receivable").click()
-            await fukuanPosted.page.locator("#customer-receivables-toolbar-search").fill(order.orderNo)
-            await fukuanPosted.page.locator("#customer-receivables-toolbar-search").press("Enter")
-            const receivableRow = fukuanPosted.page.getByRole("row").filter({ hasText: order.orderNo })
-            await expect(receivableRow.getByText("未结")).toBeVisible({ timeout: LONG })
+            await fukuanPosted.page
+                .locator("#customer-receivables-view-receivable")
+                .click()
+            await fukuanPosted.page
+                .locator("#customer-receivables-toolbar-search")
+                .fill(order.orderNo)
+            await fukuanPosted.page
+                .locator("#customer-receivables-toolbar-search")
+                .press("Enter")
+            const receivableRow = fukuanPosted.page
+                .getByRole("row")
+                .filter({ hasText: order.orderNo })
+            await expect(receivableRow.getByText("未结")).toBeVisible({
+                timeout: LONG,
+            })
             await expect(receivableRow.getByText("已结清")).toHaveCount(0)
             await fukuanPosted.context.close()
 
@@ -254,16 +377,17 @@ test.describe("flow-16 客户退款单", () => {
             await expectNotClosed(page)
             await expectFulfillmentNotStarted(page)
             await page.getByRole("tab", { name: /^采购/ }).click()
-            await expect(page.getByTestId("sales-order-purchase-status")).toContainText(
-                "待采购",
-                { timeout: TIMEOUT },
-            )
+            await expect(
+                page.getByTestId("sales-order-purchase-status"),
+            ).toContainText("待采购", {
+                timeout: TIMEOUT,
+            })
         } finally {
             await Promise.allSettled(extra.map((context) => context.close()))
         }
     })
 
-    test("供应商退款：fukuan 提交 → caigou 确认依据 → caiwu 审批入账", async ({
+    test("供应商退款：采购驳回后出纳修改原单，重新确认并审批入账", async ({
         page,
         browser,
     }) => {
@@ -271,7 +395,9 @@ test.describe("flow-16 客户退款单", () => {
         const stamp = Date.now().toString(36).toUpperCase()
         const legalName = `供退测试客户${stamp}`
         const shortName = `供退${stamp.slice(-6)}`
-        const creditCode = `9111F16B${stamp}00000000000`.replace(/[^0-9A-Z]/g, "0").slice(0, 18)
+        const creditCode = `9111F16B${stamp}00000000000`
+            .replace(/[^0-9A-Z]/g, "0")
+            .slice(0, 18)
         const contractNo = `HT-F16S-${stamp}`
         const extra: BrowserContext[] = []
         let purchaseNo = ""
@@ -279,7 +405,9 @@ test.describe("flow-16 客户退款单", () => {
         try {
             // ── 1. 销售：客户 + 合同 + 销售单 ──
             await loginViaUi(page, "xiaoshou")
-            await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible({
+            await expect(
+                page.getByRole("heading", { name: "我的工作台" }),
+            ).toBeVisible({
                 timeout: LONG,
             })
             const customerId = await createCustomer(page, {
@@ -297,11 +425,20 @@ test.describe("flow-16 客户退款单", () => {
             // ── 2. 采购：销售单通过 → 供给分配创建采购单并立即提交 ──
             const caigou = await openRole(browser, extra, "caigou")
             await approveWorkspaceTask(caigou.page, "销售单审批", order.orderNo)
-            await openWorkspaceTask(caigou.page, "待供给分配", order.orderNo, "procurement")
-            await expect(caigou.page.getByRole("heading", { name: "供给分配" })).toBeVisible({
+            await openWorkspaceTask(
+                caigou.page,
+                "待供给分配",
+                order.orderNo,
+                "procurement",
+            )
+            await expect(
+                caigou.page.getByRole("heading", { name: "供给分配" }),
+            ).toBeVisible({
                 timeout: LONG,
             })
-            await expect(caigou.page.getByText("将创建采购单")).toBeVisible({ timeout: TIMEOUT })
+            await expect(caigou.page.getByText("将创建采购单")).toBeVisible({
+                timeout: TIMEOUT,
+            })
             await expandSourcingEditor(caigou.page)
             const sourcing = caigou.page.locator('[id$="-sourcing-option"]')
             await expect(sourcing.first()).toBeVisible({ timeout: TIMEOUT })
@@ -311,7 +448,9 @@ test.describe("flow-16 客户退款单", () => {
             for (let index = 0; index < sourcingCount; index += 1) {
                 const combo = sourcing.nth(index)
                 if (!(await combo.isVisible().catch(() => false))) continue
-                const shown = ((await combo.inputValue().catch(() => "")) || "").replace(/\s+/g, " ")
+                const shown = (
+                    (await combo.inputValue().catch(() => "")) || ""
+                ).replace(/\s+/g, " ")
                 if (/入仓/.test(shown) && !/可用/.test(shown)) {
                     purchase = combo
                     sawWarehousePurchase = true
@@ -323,8 +462,13 @@ test.describe("flow-16 客户退款单", () => {
             }
             const purchaseId = await purchase.getAttribute("id")
             const purchasePrefix = purchaseId?.replace(/-sourcing-option$/, "")
-            expect(purchasePrefix, `未能读取入仓履约方案身份: ${purchaseId}`).toBeTruthy()
-            const warehouse = caigou.page.locator(`#${purchasePrefix}-warehouse`)
+            expect(
+                purchasePrefix,
+                `未能读取入仓履约方案身份: ${purchaseId}`,
+            ).toBeTruthy()
+            const warehouse = caigou.page.locator(
+                `#${purchasePrefix}-warehouse`,
+            )
             await expect(warehouse).toBeVisible({ timeout: TIMEOUT })
             await warehouse.click()
             await warehouse.fill("BJ-TZ-01")
@@ -333,11 +477,19 @@ test.describe("flow-16 客户退款单", () => {
                 .first()
             await expect(option).toBeVisible({ timeout: TIMEOUT })
             await option.click({ force: true })
-            await caigou.page.locator("#procurement-orders-create-preview").click()
-            const preview = caigou.page.getByRole("dialog", { name: "预览供给分配" })
+            await caigou.page
+                .locator("#procurement-orders-create-preview")
+                .click()
+            const preview = caigou.page.getByRole("dialog", {
+                name: "预览供给分配",
+            })
             await expect(preview).toBeVisible({ timeout: TIMEOUT })
-            await expect(preview.getByText("本次全部由现有库存满足")).toHaveCount(0)
-            await preview.locator("#procurement-orders-create-preview-confirm").click()
+            await expect(
+                preview.getByText("本次全部由现有库存满足"),
+            ).toHaveCount(0)
+            await preview
+                .locator("#procurement-orders-create-preview-confirm")
+                .click()
             const allocated = /已创建 1 张采购单并提交审批|已将缺口拆成/
             const created = caigou.page.getByText(allocated)
             const stale = caigou.page.getByRole("alert").filter({
@@ -346,12 +498,23 @@ test.describe("flow-16 客户退款单", () => {
             await expect(created.or(stale)).toBeVisible({ timeout: LONG })
             if (await stale.isVisible().catch(() => false)) {
                 await expect(preview).toBeHidden({ timeout: TIMEOUT })
-                const refreshedSourcing = caigou.page.locator('[id$="-sourcing-option"]:visible').first()
-                await chooseOption(caigou.page, refreshedSourcing, /入仓/, "入仓")
-                const refreshedWarehouse = caigou.page
-                    .locator('[id^="procurement-orders-create-row-"][id$="-warehouse"]:visible')
+                const refreshedSourcing = caigou.page
+                    .locator('[id$="-sourcing-option"]:visible')
                     .first()
-                await expect(refreshedWarehouse).toBeVisible({ timeout: TIMEOUT })
+                await chooseOption(
+                    caigou.page,
+                    refreshedSourcing,
+                    /入仓/,
+                    "入仓",
+                )
+                const refreshedWarehouse = caigou.page
+                    .locator(
+                        '[id^="procurement-orders-create-row-"][id$="-warehouse"]:visible',
+                    )
+                    .first()
+                await expect(refreshedWarehouse).toBeVisible({
+                    timeout: TIMEOUT,
+                })
                 await refreshedWarehouse.click()
                 await refreshedWarehouse.fill("BJ-TZ-01")
                 const refreshedOption = caigou.page
@@ -359,31 +522,54 @@ test.describe("flow-16 客户退款单", () => {
                     .first()
                 await expect(refreshedOption).toBeVisible({ timeout: TIMEOUT })
                 await refreshedOption.click({ force: true })
-                await caigou.page.locator("#procurement-orders-create-preview").click()
-                const refreshedPreview = caigou.page.getByRole("dialog", { name: "预览供给分配" })
+                await caigou.page
+                    .locator("#procurement-orders-create-preview")
+                    .click()
+                const refreshedPreview = caigou.page.getByRole("dialog", {
+                    name: "预览供给分配",
+                })
                 await expect(refreshedPreview).toBeVisible({ timeout: TIMEOUT })
-                await expect(refreshedPreview.getByText("本次全部由现有库存满足")).toHaveCount(0)
-                await refreshedPreview.locator("#procurement-orders-create-preview-confirm").click()
+                await expect(
+                    refreshedPreview.getByText("本次全部由现有库存满足"),
+                ).toHaveCount(0)
+                await refreshedPreview
+                    .locator("#procurement-orders-create-preview-confirm")
+                    .click()
                 await expect(created).toBeVisible({ timeout: LONG })
             }
             await caigou.context.close()
 
             // ── 3. 财务：采购单审批通过，形成应付 ──
             const caiwuPo = await openRole(browser, extra, "caiwu")
-            await openWorkspaceTask(caiwuPo.page, "采购单审批", undefined, "approval")
-            purchaseNo = ((await caiwuPo.page.locator("body").innerText()).match(/PO-[0-9a-f]+/i) ?? [""])[0]
+            await openWorkspaceTask(
+                caiwuPo.page,
+                "采购单审批",
+                undefined,
+                "approval",
+            )
+            purchaseNo = ((
+                await caiwuPo.page.locator("body").innerText()
+            ).match(/PO-[0-9a-f]+/i) ?? [""])[0]
             expect(purchaseNo.length).toBeGreaterThan(2)
             await confirmApprove(caiwuPo.page)
             await caiwuPo.page.goto("/finance/supplier-accounts")
-            await expect(caiwuPo.page.getByRole("heading", { name: "供应商往来" })).toBeVisible({
-                timeout: LONG,
-            })
-            await expect(caiwuPo.page.getByText(new RegExp(SUPPLIER_SHORT)).first()).toBeVisible({
-                timeout: LONG,
-            })
-            await expect(caiwuPo.page.getByText("未结").first()).toBeVisible({ timeout: TIMEOUT })
             await expect(
-                caiwuPo.page.locator("#supplier-payables-header-register-payment"),
+                caiwuPo.page.getByRole("heading", { name: "供应商往来" }),
+            ).toBeVisible({
+                timeout: LONG,
+            })
+            await expect(
+                caiwuPo.page.getByText(new RegExp(SUPPLIER_SHORT)).first(),
+            ).toBeVisible({
+                timeout: LONG,
+            })
+            await expect(caiwuPo.page.getByText("未结").first()).toBeVisible({
+                timeout: TIMEOUT,
+            })
+            await expect(
+                caiwuPo.page.locator(
+                    "#supplier-payables-header-register-payment",
+                ),
             ).toBeDisabled()
             await caiwuPo.context.close()
 
@@ -393,14 +579,29 @@ test.describe("flow-16 客户退款单", () => {
             await expectToast(fukuanPay.page, /付款已登记/)
 
             await fukuanPay.page.goto("/finance/supplier-accounts?view=payment")
-            await expect(fukuanPay.page.getByRole("heading", { name: "供应商往来" })).toBeVisible({
+            await expect(
+                fukuanPay.page.getByRole("heading", { name: "供应商往来" }),
+            ).toBeVisible({
                 timeout: LONG,
             })
-            await fukuanPay.page.locator("#supplier-payables-view-tabs-trigger-payment").click()
-            await fukuanPay.page.locator("#supplier-payables-toolbar-search").fill(SUPPLIER_SHORT)
-            await fukuanPay.page.locator("#supplier-payables-toolbar-search").press("Enter")
-            const paymentRow = fukuanPay.page.getByRole("row").filter({ hasText: "已过账" }).first()
-            await expect(paymentRow.getByText("已过账", { exact: true })).toBeVisible({ timeout: TIMEOUT })
+            await fukuanPay.page
+                .locator("#supplier-payables-view-tabs-trigger-payment")
+                .click()
+            await fukuanPay.page
+                .locator("#supplier-payables-toolbar-search")
+                .fill(SUPPLIER_SHORT)
+            await fukuanPay.page
+                .locator("#supplier-payables-toolbar-search")
+                .press("Enter")
+            const paymentRow = fukuanPay.page
+                .getByRole("row")
+                .filter({ hasText: "已过账" })
+                .first()
+            await expect(
+                paymentRow.getByText("已过账", { exact: true }),
+            ).toBeVisible({
+                timeout: TIMEOUT,
+            })
             await expect(paymentRow.getByText("已冲正")).toHaveCount(0)
             await paymentRow.click()
             const paymentRefundBtn = fukuanPay.page.locator(
@@ -416,39 +617,98 @@ test.describe("flow-16 客户退款单", () => {
             // ── 6. 出纳提交供应商退款 ──
             await paymentRefundBtn.click()
             await expect(
-                fukuanPay.page.getByRole("dialog").getByRole("heading", { name: /供应商退款/ }),
+                fukuanPay.page
+                    .getByRole("dialog")
+                    .getByRole("heading", { name: /供应商退款/ }),
             ).toBeVisible({ timeout: TIMEOUT })
-            await fukuanPay.page.locator("#supplier-payables-refund-request-reason").fill(
-                SUPPLIER_REFUND_REASON,
+            await fukuanPay.page
+                .locator("#supplier-payables-refund-request-reason")
+                .fill(SUPPLIER_REFUND_REASON)
+            const supplierRefundCommitted = fukuanPay.page.waitForResponse(
+                (response) =>
+                    response.request().method() === "POST" &&
+                    response.url().includes("/admin/supplier-refunds"),
             )
-            const supplierRefundCommitted = fukuanPay.page.waitForResponse(response => response.request().method() === "POST" && response.url().includes("/admin/supplier-refunds"))
-            await fukuanPay.page.locator("#supplier-payables-refund-request-submit").click()
-            const refundConfirm = fukuanPay.page.getByRole("alertdialog", { name: /提交退款|确认提交/ })
-            if (await optionalStepVisible(refundConfirm, supplierRefundCommitted)) {
-                await fukuanPay.page.locator("#supplier-payables-refund-submit-confirm-confirm").click()
+            await fukuanPay.page
+                .locator("#supplier-payables-refund-request-submit")
+                .click()
+            const refundConfirm = fukuanPay.page.getByRole("alertdialog", {
+                name: /提交退款|确认提交/,
+            })
+            if (
+                await optionalStepVisible(
+                    refundConfirm,
+                    supplierRefundCommitted,
+                )
+            ) {
+                await fukuanPay.page
+                    .locator("#supplier-payables-refund-submit-confirm-confirm")
+                    .click()
             }
             const supplierRefundResponse = await supplierRefundCommitted
             expect(supplierRefundResponse.ok()).toBeTruthy()
-            expect((await supplierRefundResponse.json()).data.status).toBe("IN_APPROVAL")
-            await expect(fukuanPay.page).toHaveURL(/previewKind=refund/, { timeout: LONG })
+            expect((await supplierRefundResponse.json()).data.status).toBe(
+                "IN_APPROVAL",
+            )
+            await expect(fukuanPay.page).toHaveURL(/previewKind=refund/, {
+                timeout: LONG,
+            })
             const supplierRefundNo = await factValue(fukuanPay.page, "退款单号")
             expect(supplierRefundNo.length).toBeGreaterThan(2)
             const supplierRefundId =
                 new URL(fukuanPay.page.url()).searchParams.get("detailId") ?? ""
             expect(supplierRefundId).toBeTruthy()
-            await expect(fukuanPay.page.getByText(PROCUREMENT_NODE).first()).toBeVisible({
+            await expect(
+                fukuanPay.page.getByText(PROCUREMENT_NODE).first(),
+            ).toBeVisible({
                 timeout: TIMEOUT,
             })
             await fukuanPay.context.close()
 
-            // ── 7. 采购确认依据 → 财务总监审批入账 ──
+            // ── 7. 采购驳回后，出纳修改同一退款单，再由首节点重新确认。 ──
+            const caigouReject = await openRole(browser, extra, "caigou")
+            await rejectWorkspaceTask(
+                caigouReject.page,
+                "供应商退款审批",
+                supplierRefundNo,
+                "退款凭证需补齐供应商对账依据",
+            )
+            await caigouReject.context.close()
+            const fukuanRevise = await openRole(browser, extra, "fukuan")
+            await fukuanRevise.page.goto(
+                `/finance/supplier-accounts?view=payment&previewKind=refund&detailId=${encodeURIComponent(supplierRefundId)}`,
+            )
+            await expect(
+                fukuanRevise.page.getByText(supplierRefundNo).first(),
+            ).toBeVisible({
+                timeout: LONG,
+            })
+            await reviseRefundOriginal(fukuanRevise.page, {
+                kind: "supplier_refund",
+                id: supplierRefundId,
+                refundNo: supplierRefundNo,
+                reason: "已补充供应商对账确认，按原付款金额退还多收款",
+            })
+            await fukuanRevise.context.close()
+
+            // ── 8. 采购确认依据 → 财务总监审批入账 ──
             const caigouRefund = await openRole(browser, extra, "caigou")
-            await approveWorkspaceTask(caigouRefund.page, "供应商退款审批", supplierRefundNo)
+            await approveWorkspaceTask(
+                caigouRefund.page,
+                "供应商退款审批",
+                supplierRefundNo,
+            )
             await caigouRefund.context.close()
 
             const caiwuRefund = await openRole(browser, extra, "caiwu")
-            await openWorkspaceApprovalTask(caiwuRefund.page, "供应商退款审批", supplierRefundNo)
-            await expect(caiwuRefund.page.getByText(FINANCE_NODE).first()).toBeVisible({ timeout: LONG })
+            await openWorkspaceApprovalTask(
+                caiwuRefund.page,
+                "供应商退款审批",
+                supplierRefundNo,
+            )
+            await expect(
+                caiwuRefund.page.getByText(FINANCE_NODE).first(),
+            ).toBeVisible({ timeout: LONG })
             await confirmApprove(caiwuRefund.page)
             await caiwuRefund.context.close()
 
@@ -458,34 +718,56 @@ test.describe("flow-16 客户退款单", () => {
                 `/finance/supplier-accounts?view=payment&previewKind=refund&detailId=${encodeURIComponent(supplierRefundId)}`,
             )
             await expect(
-                fukuanAssert.page.getByText(new RegExp(`退款单：${supplierRefundNo}|${supplierRefundNo}`)).first(),
+                fukuanAssert.page
+                    .getByText(
+                        new RegExp(
+                            `退款单：${supplierRefundNo}|${supplierRefundNo}`,
+                        ),
+                    )
+                    .first(),
             ).toBeVisible({ timeout: LONG })
-            await expect(fukuanAssert.page.getByText("已过账", { exact: true }).first()).toBeVisible({
+            await expect(
+                fukuanAssert.page.getByText("已过账", { exact: true }).first(),
+            ).toBeVisible({
                 timeout: LONG,
             })
 
-            await fukuanAssert.page.goto("/finance/supplier-accounts?view=payment")
-            await fukuanAssert.page.locator("#supplier-payables-view-tabs-trigger-payment").click()
-            await fukuanAssert.page.locator("#supplier-payables-toolbar-search").fill(SUPPLIER_SHORT)
-            await fukuanAssert.page.locator("#supplier-payables-toolbar-search").press("Enter")
+            await fukuanAssert.page.goto(
+                "/finance/supplier-accounts?view=payment",
+            )
+            await fukuanAssert.page
+                .locator("#supplier-payables-view-tabs-trigger-payment")
+                .click()
+            await fukuanAssert.page
+                .locator("#supplier-payables-toolbar-search")
+                .fill(SUPPLIER_SHORT)
+            await fukuanAssert.page
+                .locator("#supplier-payables-toolbar-search")
+                .press("Enter")
             const postedPayment = fukuanAssert.page
                 .getByRole("row")
                 .filter({ hasText: "已过账" })
                 .first()
-            await expect(postedPayment.getByText("已过账", { exact: true })).toBeVisible({
+            await expect(
+                postedPayment.getByText("已过账", { exact: true }),
+            ).toBeVisible({
                 timeout: LONG,
             })
             await expect(postedPayment.getByText("已冲正")).toHaveCount(0)
             await postedPayment.click()
             await expect(
-                fukuanAssert.page.locator("#supplier-payables-preview-record-refund"),
+                fukuanAssert.page.locator(
+                    "#supplier-payables-preview-record-refund",
+                ),
             ).toBeVisible({ timeout: LONG })
 
             // 预览抽屉会挡住视图切换，改硬导航到应付台账。
             await fukuanAssert.page.goto(
                 `/finance/supplier-accounts?view=payable&q=${encodeURIComponent(SUPPLIER_SHORT)}`,
             )
-            await expect(fukuanAssert.page.getByRole("heading", { name: "供应商往来" })).toBeVisible({
+            await expect(
+                fukuanAssert.page.getByRole("heading", { name: "供应商往来" }),
+            ).toBeVisible({
                 timeout: LONG,
             })
             await expect(
@@ -538,13 +820,19 @@ function contractPdfFile() {
 }
 
 async function factValue(page: Page, label: string) {
-    const dt = page.locator('[data-slot="formal-action-result"] dt', { hasText: label })
+    const dt = page.locator('[data-slot="formal-action-result"] dt', {
+        hasText: label,
+    })
     await expect(dt).toBeVisible({ timeout: TIMEOUT })
-    return (await dt.locator("xpath=following-sibling::dd[1]").innerText()).trim()
+    return (
+        await dt.locator("xpath=following-sibling::dd[1]").innerText()
+    ).trim()
 }
 
 async function waitHeading(page: Page, name: string | RegExp) {
-    await expect(page.getByRole("heading", { name })).toBeVisible({ timeout: LONG })
+    await expect(page.getByRole("heading", { name })).toBeVisible({
+        timeout: LONG,
+    })
 }
 
 // ─── 客户 / 合同 / 销售单 ─────────────────────────────────────────────────
@@ -564,7 +852,9 @@ async function createCustomer(
     const open = page.getByRole("link", { name: input.shortName })
     await expect(open).toBeVisible({ timeout: LONG })
     await open.click()
-    await expect(page.getByRole("heading", { name: input.legalName })).toBeVisible({
+    await expect(
+        page.getByRole("heading", { name: input.legalName }),
+    ).toBeVisible({
         timeout: LONG,
     })
     const match = page.url().match(/\/sales\/customers\/([^/?#]+)/)
@@ -576,12 +866,18 @@ async function uploadContract(
     page: Page,
     input: { customerId: string; legalName: string; contractNo: string },
 ) {
-    await page.goto(`/sales/contracts?customerId=${encodeURIComponent(input.customerId)}&upload=1`)
-    await expect(page.getByRole("dialog").getByRole("heading", { name: "上传合同 PDF" })).toBeVisible(
-        { timeout: LONG },
+    await page.goto(
+        `/sales/contracts?customerId=${encodeURIComponent(input.customerId)}&upload=1`,
     )
-    await page.locator("#card-contracts-upload-pdf-input").setInputFiles(contractPdfFile())
-    await page.locator("#card-contracts-upload-contract-no").fill(input.contractNo)
+    await expect(
+        page.getByRole("dialog").getByRole("heading", { name: "上传合同 PDF" }),
+    ).toBeVisible({ timeout: LONG })
+    await page
+        .locator("#card-contracts-upload-pdf-input")
+        .setInputFiles(contractPdfFile())
+    await page
+        .locator("#card-contracts-upload-contract-no")
+        .fill(input.contractNo)
     const customerInput = page.locator("#card-contracts-upload-customer")
     const customerValue = (await customerInput.inputValue()).trim()
     if (!customerValue) {
@@ -592,21 +888,34 @@ async function uploadContract(
             input.legalName,
         )
     }
-    await expect(page.locator("#card-contracts-upload-settlement-party")).not.toHaveValue("", {
+    await expect(
+        page.locator("#card-contracts-upload-settlement-party"),
+    ).not.toHaveValue("", {
         timeout: LONG,
     })
     await page.locator("#card-contracts-upload-submit").click()
-    await expect(page.getByRole("dialog").getByRole("heading", { name: "上传合同 PDF" })).toBeHidden(
-        { timeout: LONG },
-    )
-    await expect(page.getByRole("button", { name: `打开合同 ${input.contractNo}`, exact: true })).toBeVisible({ timeout: LONG })
+    await expect(
+        page.getByRole("dialog").getByRole("heading", { name: "上传合同 PDF" }),
+    ).toBeHidden({
+        timeout: LONG,
+    })
+    await expect(
+        page.getByRole("button", {
+            name: `打开合同 ${input.contractNo}`,
+            exact: true,
+        }),
+    ).toBeVisible({ timeout: LONG })
 }
 
 // 负责销售是展示名，不是输入框：必须等于侧栏账号菜单里的当前用户，且不能停在占位文案。
 async function expectLoggedInSalesOwner(page: Page, timeout: number) {
     const placeholders = ["加载当前用户…", "无法获取登录用户", "当前用户未就绪"]
-    const accountName = page.locator("#workspace-sidebar-account-trigger span.font-medium")
-    const ownerName = page.locator("#sales-orders-create-header-owner-name > span").nth(1)
+    const accountName = page.locator(
+        "#workspace-sidebar-account-trigger span.font-medium",
+    )
+    const ownerName = page
+        .locator("#sales-orders-create-header-owner-name > span")
+        .nth(1)
     await expect(accountName).toBeVisible({ timeout })
     await expect(ownerName).toBeVisible({ timeout })
     await expect(async () => {
@@ -622,10 +931,14 @@ async function createAndSubmitPhysicalSalesOrder(
     page: Page,
     input: { customerId: string; contractNo: string; legalName: string },
 ) {
-    await page.goto(`/sales/orders?mode=create&customerId=${encodeURIComponent(input.customerId)}`)
+    await page.goto(
+        `/sales/orders?mode=create&customerId=${encodeURIComponent(input.customerId)}`,
+    )
     await expect(
         page.getByRole("heading", { name: /新建销售单|业务信息/ }),
-    ).toBeVisible({ timeout: LONG })
+    ).toBeVisible({
+        timeout: LONG,
+    })
 
     await chooseOption(
         page,
@@ -633,7 +946,9 @@ async function createAndSubmitPhysicalSalesOrder(
         input.contractNo,
         input.contractNo,
     )
-    await expect(page.getByText(new RegExp(`客户\\s+${input.legalName}`))).toBeVisible({
+    await expect(
+        page.getByText(new RegExp(`客户\\s+${input.legalName}`)),
+    ).toBeVisible({
         timeout: LONG,
     })
     await expectLoggedInSalesOwner(page, LONG)
@@ -652,37 +967,58 @@ async function createAndSubmitPhysicalSalesOrder(
     )
 
     await page.locator("#sales-orders-create-line-items-add").click()
-    await expect(page.getByRole("dialog").getByRole("heading", { name: "添加商品" })).toBeVisible({
+    await expect(
+        page.getByRole("dialog").getByRole("heading", { name: "添加商品" }),
+    ).toBeVisible({
         timeout: TIMEOUT,
     })
-    const skuSearch = page.locator("#master-data-list-sellable-list-toolbar-search-input")
+    const skuSearch = page.locator(
+        "#master-data-list-sellable-list-toolbar-search-input",
+    )
     await skuSearch.fill(SKU_NAME)
     await skuSearch.press("Enter")
-    const skuCheckbox = page.getByRole("checkbox", { name: new RegExp(`选择 ${SKU_NAME}`) })
+    const skuCheckbox = page.getByRole("checkbox", {
+        name: new RegExp(`选择 ${SKU_NAME}`),
+    })
     await expect(skuCheckbox.first()).toBeVisible({ timeout: LONG })
     await skuCheckbox.first().check()
     await page.locator("#sales-orders-sku-picker-confirm").click()
-    await expect(page.getByRole("dialog").getByRole("heading", { name: "添加商品" })).toBeHidden({
+    await expect(
+        page.getByRole("dialog").getByRole("heading", { name: "添加商品" }),
+    ).toBeHidden({
         timeout: TIMEOUT,
     })
-    await expect(page.getByRole("button", { name: new RegExp(`更换销售项目 ${SKU_NAME}`) })).toBeVisible({ timeout: TIMEOUT })
-    await expect(page.getByTestId(/sales-line-procurement-owner-/)).not.toContainText(
-        "暂未确定采购负责人",
-        { timeout: LONG },
-    )
+    await expect(
+        page.getByRole("button", {
+            name: new RegExp(`更换销售项目 ${SKU_NAME}`),
+        }),
+    ).toBeVisible({ timeout: TIMEOUT })
+    await expect(
+        page.getByTestId(/sales-line-procurement-owner-/),
+    ).not.toContainText("暂未确定采购负责人", { timeout: LONG })
 
     await page.locator("#sales-orders-create-batch-due-date-open").click()
-    await pickCalendarDay(page, page.locator("#sales-orders-create-batch-due-date"), todayIso())
+    await pickCalendarDay(
+        page,
+        page.locator("#sales-orders-create-batch-due-date"),
+        todayIso(),
+    )
     await page.locator("#sales-orders-create-batch-due-date-apply").click()
     await expectToast(page, "已批量设置交期")
 
     await page.locator("#sales-orders-create-submit").click()
-    await expect(page.getByRole("dialog").getByRole("heading", { name: "提交销售单" })).toBeVisible({
+    await expect(
+        page.getByRole("dialog").getByRole("heading", { name: "提交销售单" }),
+    ).toBeVisible({
         timeout: TIMEOUT,
     })
-    await page.locator("#sales-orders-submit-confirm-confirm").click({ force: true })
+    await page
+        .locator("#sales-orders-submit-confirm-confirm")
+        .click({ force: true })
     await expect(page).toHaveURL(/\/sales\/orders\/[^/?#]+/, { timeout: LONG })
-    await expect(page.getByText("审批中", { exact: true }).first()).toBeVisible({ timeout: LONG })
+    await expect(page.getByText("审批中", { exact: true }).first()).toBeVisible(
+        { timeout: LONG },
+    )
 
     const id = page.url().split("/sales/orders/")[1]?.split(/[?#]/)[0] ?? ""
     expect(id).toBeTruthy()
@@ -692,33 +1028,52 @@ async function createAndSubmitPhysicalSalesOrder(
 }
 
 async function expectEffectiveSalesOrder(page: Page, orderNo: string) {
-    await expect(page.locator("header").getByText(orderNo)).toBeVisible({ timeout: LONG })
-    await expect(page.getByText("已生效", { exact: true }).first()).toBeVisible({ timeout: LONG })
+    await expect(page.locator("header").getByText(orderNo)).toBeVisible({
+        timeout: LONG,
+    })
+    await expect(page.getByText("已生效", { exact: true }).first()).toBeVisible(
+        { timeout: LONG },
+    )
     await expectCollection(page, "未收")
     await expectNotClosed(page)
 }
 
-async function expectCollection(page: Page, label: "未收" | "部分回款" | "已结清") {
-    await expect(salesOrderAmountSummary(page).getByText(label, { exact: true })).toBeVisible({
+async function expectCollection(
+    page: Page,
+    label: "未收" | "部分回款" | "已结清",
+) {
+    await expect(
+        salesOrderAmountSummary(page).getByText(label, { exact: true }),
+    ).toBeVisible({
         timeout: LONG,
     })
 }
 
 async function expectFulfillmentNotStarted(page: Page) {
-    await expect(page.getByText("未开始", { exact: true }).first()).toBeVisible({
-        timeout: TIMEOUT,
-    })
+    await expect(page.getByText("未开始", { exact: true }).first()).toBeVisible(
+        {
+            timeout: TIMEOUT,
+        },
+    )
 }
 
 async function expectNotClosed(page: Page) {
-    const identity = page.getByRole("heading", { level: 1 }).locator("xpath=ancestor::header[1]")
-    await expect(identity.getByText("已生效", { exact: true })).toBeVisible({ timeout: LONG })
+    const identity = page
+        .getByRole("heading", { level: 1 })
+        .locator("xpath=ancestor::header[1]")
+    await expect(identity.getByText("已生效", { exact: true })).toBeVisible({
+        timeout: LONG,
+    })
     await expect(identity.getByText("已关闭", { exact: true })).toHaveCount(0)
 }
 
 // ─── 工作台审批 ────────────────────────────────────────────────────────────
 
-async function openWorkspaceApprovalTask(page: Page, typeLabel: string, hint: string) {
+async function openWorkspaceApprovalTask(
+    page: Page,
+    typeLabel: string,
+    hint: string,
+) {
     await openWorkspaceTask(page, typeLabel, hint, "approval")
 }
 
@@ -726,7 +1081,11 @@ async function confirmApprove(page: Page) {
     await approveCurrentDocument(page)
 }
 
-async function approveWorkspaceTask(page: Page, typeLabel: string, hint: string) {
+async function approveWorkspaceTask(
+    page: Page,
+    typeLabel: string,
+    hint: string,
+) {
     await openWorkspaceApprovalTask(page, typeLabel, hint)
     await confirmApprove(page)
 }
@@ -741,10 +1100,14 @@ async function rejectWorkspaceTask(
     const reject = page.getByRole("button", { name: "驳回" })
     await expect(reject).toBeVisible({ timeout: LONG })
     await reject.click()
-    await expect(page.getByRole("heading", { name: "确认驳回" })).toBeVisible({ timeout: TIMEOUT })
+    await expect(page.getByRole("heading", { name: "确认驳回" })).toBeVisible({
+        timeout: TIMEOUT,
+    })
     await page.getByLabel("驳回原因").fill(reason)
     await page.getByRole("button", { name: "确认驳回" }).click()
-    await expect(page.getByRole("heading", { name: "确认驳回" })).toBeHidden({ timeout: LONG })
+    await expect(page.getByRole("heading", { name: "确认驳回" })).toBeHidden({
+        timeout: LONG,
+    })
 }
 
 // ─── 回款 / 客户退款 ──────────────────────────────────────────────────────
@@ -758,10 +1121,16 @@ async function assertCustomerRefundPreview(
     await page.goto(
         `/finance/customer-accounts?view=receipt&previewKind=refund&previewId=${encodeURIComponent(refundId)}`,
     )
-    await expect(page.getByRole("heading", { name: "客户退款" })).toBeVisible({ timeout: LONG })
-    await expect(page.getByText(`退款单：${refundNo}`)).toBeVisible({ timeout: LONG })
+    await expect(page.getByRole("heading", { name: "客户退款" })).toBeVisible({
+        timeout: LONG,
+    })
+    await expect(page.getByText(`退款单：${refundNo}`)).toBeVisible({
+        timeout: LONG,
+    })
     await expect(
-        page.locator('[data-slot="quick-preview-summary"]').getByText(status, { exact: true }),
+        page
+            .locator('[data-slot="quick-preview-summary"]')
+            .getByText(status, { exact: true }),
     ).toBeVisible({ timeout: LONG })
 }
 
@@ -773,7 +1142,9 @@ async function assertReceiptStillPosted(page: Page, receiptNo: string) {
     await page.locator("#customer-receivables-toolbar-search").press("Enter")
     const row = page.getByRole("row").filter({ hasText: receiptNo })
     await expect(row).toBeVisible({ timeout: LONG })
-    await expect(row.getByText("已过账", { exact: true })).toBeVisible({ timeout: TIMEOUT })
+    await expect(row.getByText("已过账", { exact: true })).toBeVisible({
+        timeout: TIMEOUT,
+    })
     await expect(row.getByText("已冲正")).toHaveCount(0)
 }
 
@@ -785,29 +1156,45 @@ async function openPostedReceiptPreview(page: Page, receiptNo: string) {
     await page.locator("#customer-receivables-toolbar-search").press("Enter")
     const row = page.getByRole("row").filter({ hasText: receiptNo })
     await expect(row).toBeVisible({ timeout: LONG })
-    await expect(row.getByText("已过账", { exact: true })).toBeVisible({ timeout: TIMEOUT })
+    await expect(row.getByText("已过账", { exact: true })).toBeVisible({
+        timeout: TIMEOUT,
+    })
     await row.click()
     await expectReceiptPreview(page, receiptNo)
 }
 
-async function submitCustomerRefundFromReceipt(page: Page, receiptNo: string, reason: string) {
+async function submitCustomerRefundFromReceipt(
+    page: Page,
+    receiptNo: string,
+    reason: string,
+) {
     await openPostedReceiptPreview(page, receiptNo)
-    await expect(page.locator("#customer-receivables-preview-receipt-refund")).toBeVisible({
+    await expect(
+        page.locator("#customer-receivables-preview-receipt-refund"),
+    ).toBeVisible({
         timeout: TIMEOUT,
     })
-    await expect(page.locator("#customer-receivables-preview-receipt-reverse")).toBeVisible({
+    await expect(
+        page.locator("#customer-receivables-preview-receipt-reverse"),
+    ).toBeVisible({
         timeout: TIMEOUT,
     })
     await page.locator("#customer-receivables-preview-receipt-refund").click()
     const submitted = await submitCustomerRefundRequest(page, reason)
     await expect(page).toHaveURL(/previewKind=refund/, { timeout: LONG })
-    const refundNo = (await factValue(page, "退款单号").catch(() => submitted.refundNo)) || submitted.refundNo
-    const refundId = new URL(page.url()).searchParams.get("previewId") ?? submitted.refundId
+    const refundNo =
+        (await factValue(page, "退款单号").catch(() => submitted.refundNo)) ||
+        submitted.refundNo
+    const refundId =
+        new URL(page.url()).searchParams.get("previewId") ?? submitted.refundId
     expect(refundId).toBeTruthy()
     return { refundNo, refundId }
 }
 
-async function assertCaiwuCannotSubmitCustomerRefund(page: Page, receiptNo: string) {
+async function assertCaiwuCannotSubmitCustomerRefund(
+    page: Page,
+    receiptNo: string,
+) {
     await openPostedReceiptPreview(page, receiptNo)
     const refund = page.locator("#customer-receivables-preview-receipt-refund")
     await expect(refund).toBeVisible({ timeout: LONG })
@@ -816,7 +1203,9 @@ async function assertCaiwuCannotSubmitCustomerRefund(page: Page, receiptNo: stri
         return
     }
     await refund.click()
-    const request = page.getByRole("dialog").getByRole("heading", { name: /客户退款/ })
+    const request = page
+        .getByRole("dialog")
+        .getByRole("heading", { name: /客户退款/ })
     await expect(request).toBeVisible({ timeout: TIMEOUT })
     await page
         .locator("#customer-receivables-refund-request-reason")
@@ -824,8 +1213,12 @@ async function assertCaiwuCannotSubmitCustomerRefund(page: Page, receiptNo: stri
         .first()
         .fill("财务总监不得提交自己的退款")
     await page.locator("#customer-receivables-refund-request-submit").click()
-    const confirm = page.locator("#customer-receivables-refund-submit-confirm-dialog-confirm")
-    const denied = page.getByText(/提交人不得审批自己的单据|当前账号没有执行此操作的权限/)
+    const confirm = page.locator(
+        "#customer-receivables-refund-submit-confirm-dialog-confirm",
+    )
+    const denied = page.getByText(
+        /提交人不得审批自己的单据|当前账号没有执行此操作的权限/,
+    )
     if (await optionalStepVisible(confirm, denied, TIMEOUT)) {
         await confirm.click()
     }
@@ -834,7 +1227,9 @@ async function assertCaiwuCannotSubmitCustomerRefund(page: Page, receiptNo: stri
 
 async function assertCaiwuCannotSubmitSupplierRefund(page: Page) {
     await page.goto("/finance/supplier-accounts?view=payment")
-    await expect(page.getByRole("heading", { name: "供应商往来" })).toBeVisible({ timeout: LONG })
+    await expect(page.getByRole("heading", { name: "供应商往来" })).toBeVisible(
+        { timeout: LONG },
+    )
     await page.locator("#supplier-payables-view-tabs-trigger-payment").click()
     await page.locator("#supplier-payables-toolbar-search").fill(SUPPLIER_SHORT)
     await page.locator("#supplier-payables-toolbar-search").press("Enter")
@@ -846,17 +1241,142 @@ async function assertCaiwuCannotSubmitSupplierRefund(page: Page) {
         return
     }
     await refund.click()
-    await expect(page.getByRole("dialog").getByRole("heading", { name: /供应商退款/ })).toBeVisible(
-        { timeout: TIMEOUT },
-    )
-    await page.locator("#supplier-payables-refund-request-reason").fill(
-        "财务总监不得提交自己的供应商退款",
-    )
+    await expect(
+        page.getByRole("dialog").getByRole("heading", { name: /供应商退款/ }),
+    ).toBeVisible({
+        timeout: TIMEOUT,
+    })
+    await page
+        .locator("#supplier-payables-refund-request-reason")
+        .fill("财务总监不得提交自己的供应商退款")
     await page.locator("#supplier-payables-refund-request-submit").click()
-    const confirm = page.locator("#supplier-payables-refund-submit-confirm-confirm")
-    const denied = page.getByText(/提交人不得审批自己的单据|当前账号没有执行此操作的权限/)
+    const confirm = page.locator(
+        "#supplier-payables-refund-submit-confirm-confirm",
+    )
+    const denied = page.getByText(
+        /提交人不得审批自己的单据|当前账号没有执行此操作的权限/,
+    )
     if (await optionalStepVisible(confirm, denied, TIMEOUT)) {
         await confirm.click()
     }
     await expect(denied.first()).toBeVisible({ timeout: LONG })
+}
+
+type RefundDetail = {
+    id: string
+    refund_no: string
+    status: string
+    amount: string
+    reason_text: string
+    original_receipt_id?: string | null
+    original_payment_id?: string | null
+    original_receivable_entry_id?: string | null
+    original_payable_entry_id?: string | null
+    approval?: {
+        instance?: {
+            id: string
+            status: string
+            current_round_no: number
+            subject_version?: number | string
+        }
+    }
+}
+
+/** 驳回后的入口必须撤回原审批，再保存同一退款单并形成新提交。 */
+async function reviseRefundOriginal(
+    page: Page,
+    input: {
+        kind: "customer_refund" | "supplier_refund"
+        id: string
+        refundNo: string
+        reason: string
+    },
+) {
+    const resource =
+        input.kind === "customer_refund"
+            ? "customer-refunds"
+            : "supplier-refunds"
+    const token = await apiToken("fukuan")
+    const before = await apiGet<RefundDetail>(
+        token,
+        `/admin/${resource}/${input.id}`,
+    )
+    expect(before.status).toBe("IN_APPROVAL")
+    expect(before.refund_no).toBe(input.refundNo)
+    expect(before.approval?.instance?.current_round_no).toBe(2)
+    expect(before.approval?.instance?.id).toBeTruthy()
+    const originalSubjectVersion = await readFinancialApprovalVersion(
+        input.kind,
+        input.id,
+        before.approval!.instance!.id,
+    )
+    await page.getByRole("button", { name: "修改原单", exact: true }).click()
+    const cancel = page.getByRole("dialog", { name: "修改原单", exact: true })
+    await expect(cancel).toBeVisible({ timeout: LONG })
+    await cancel.getByLabel(/^原因\s*\*?$/).fill("补齐驳回依据后修改原退款单")
+    await cancel
+        .getByRole("button", { name: "撤回并修改原单", exact: true })
+        .click()
+    const editor = page.getByRole("dialog", {
+        name:
+            input.kind === "customer_refund"
+                ? "修改客户退款单"
+                : "修改供应商退款单",
+        exact: true,
+    })
+    await expect(editor).toBeVisible({ timeout: LONG })
+    await expect(page).toHaveURL(new RegExp(`editId=${input.id}`), {
+        timeout: LONG,
+    })
+    const draft = await apiGet<RefundDetail>(
+        token,
+        `/admin/${resource}/${input.id}`,
+    )
+    expect(draft.id).toBe(input.id)
+    expect(draft.refund_no).toBe(input.refundNo)
+    expect(draft.status).toBe("draft")
+    expect(draft.approval?.instance?.id).toBe(before.approval?.instance?.id)
+    expect(draft.approval?.instance?.status).toBe("CANCELLED")
+    expect(draft.amount).toBe(before.amount)
+    expect(draft.reason_text).toBe(before.reason_text)
+    await editor.getByLabel(/^原因说明\s*\*?$/).fill(input.reason)
+    const submitted = page.waitForResponse(
+        (response) =>
+            response.request().method() === "POST" &&
+            response.url().includes(`/admin/${resource}/${input.id}/submit`),
+        { timeout: LONG },
+    )
+    await editor
+        .getByRole("button", { name: "保存并提交审批", exact: true })
+        .click()
+    const response = await submitted
+    expect(response.ok()).toBeTruthy()
+    await expect(editor).toBeHidden({ timeout: LONG })
+    const resubmitted = await apiGet<RefundDetail>(
+        token,
+        `/admin/${resource}/${input.id}`,
+    )
+    expect(resubmitted.id).toBe(input.id)
+    expect(resubmitted.refund_no).toBe(input.refundNo)
+    expect(resubmitted.status).toBe("IN_APPROVAL")
+    expect(resubmitted.amount).toBe(before.amount)
+    expect(resubmitted.reason_text).toBe(input.reason)
+    for (const field of [
+        "original_receipt_id",
+        "original_payment_id",
+        "original_receivable_entry_id",
+        "original_payable_entry_id",
+    ] as const) {
+        expect(resubmitted[field]).toBe(before[field])
+    }
+    expect(resubmitted.approval?.instance?.id).not.toBe(
+        before.approval?.instance?.id,
+    )
+    const resubmittedSubjectVersion = await readFinancialApprovalVersion(
+        input.kind,
+        input.id,
+        resubmitted.approval!.instance!.id,
+    )
+    expect(resubmittedSubjectVersion).toBe(originalSubjectVersion + 1)
+    expect(resubmitted.approval?.instance?.current_round_no).toBe(1)
 }

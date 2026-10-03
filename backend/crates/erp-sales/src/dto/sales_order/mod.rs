@@ -9,6 +9,7 @@
 //! 形状提供，与前端 mock 视图的差异见批次报告「契约变更」。
 
 mod no_contract;
+mod revision_lines;
 
 use application_core::{normalized_text, page_or_default, page_size_or_default};
 use erp_core::common::time::BusinessDate;
@@ -730,6 +731,10 @@ pub struct RevisionView {
     pub project_name: Option<String>,
     /// 当时业务备注。
     pub business_remark: Option<String>,
+    /// 当时卡券类目 SKU；非卡券版本为空。
+    pub voucher_category_sku_id: Option<String>,
+    /// 当时卡券履约期限（秒级时间戳）。
+    pub voucher_expiry_at: Option<u64>,
     /// 前一生效版本。
     pub previous_revision_id: Option<String>,
     /// 前一生效版本号；无法在本单版本列表中解析时为空。
@@ -748,6 +753,8 @@ pub struct RevisionView {
     pub line_summary: String,
     /// 当时公共行，按行号升序。
     pub lines: Vec<RevisionLineView>,
+    /// 当时完整成交明细，供当前生效版本详情展示；仅使用同版不可变子类型快照。
+    pub commercial_lines: Vec<SalesOrderWorkingCopyLineView>,
 }
 
 #[cfg(test)]

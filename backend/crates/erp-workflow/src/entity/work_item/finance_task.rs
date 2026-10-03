@@ -56,14 +56,26 @@ pub enum SupplierPaymentTaskReason {
     Initial,
     /// 冲正重新产生余额后重开。
     ReopenedByReversal,
+    /// 采购变更增额使已结清应付重新出现开放余额。
+    ReopenedByPurchaseChange,
 }
 
 impl SupplierPaymentTaskReason {
     /// 返回稳定的原因代码。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回与真实业务触发原因一致的付款任务原因码。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Initial => "PAYABLE_PAYMENT_REQUIRED",
             Self::ReopenedByReversal => "PAYABLE_REOPENED_BY_REVERSAL",
+            Self::ReopenedByPurchaseChange => "PAYABLE_REOPENED_BY_PURCHASE_CHANGE",
         }
     }
 }
@@ -303,6 +315,9 @@ pub fn is_purchase_payable(fact: &PayablePurchaseAdmissionFact<'_>) -> bool {
 ///
 /// # 返回
 /// 身份一致返回 `true`，任一维度不符返回 `false`。
+///
+/// # 错误
+/// 不返回错误；任一身份维度不匹配时返回 `false`。
 pub fn matches_supplier_payment_identity(task: &WorkItem, account_id: &str) -> bool {
     task.work_item_type == WorkItemType::SupplierPaymentExecution
         && task.business_object_type == PAYABLE_OBJECT_TYPE
@@ -311,7 +326,11 @@ pub fn matches_supplier_payment_identity(task: &WorkItem, account_id: &str) -> b
         && task.responsibility_key().is_some_and(|key| key.starts_with("finance:SUPPLIER_PAYMENT:"))
         && matches!(
             task.reason_code.as_deref(),
-            Some("PAYABLE_PAYMENT_REQUIRED" | "PAYABLE_REOPENED_BY_REVERSAL")
+            Some(
+                "PAYABLE_PAYMENT_REQUIRED"
+                    | "PAYABLE_REOPENED_BY_REVERSAL"
+                    | "PAYABLE_REOPENED_BY_PURCHASE_CHANGE"
+            )
         )
 }
 
@@ -574,6 +593,29 @@ mod tests {
         .unwrap();
         assert_eq!(reopened.reason_code.as_deref(), Some("PAYABLE_REOPENED_BY_REVERSAL"));
         assert!(matches_supplier_payment_identity(&reopened, "pa-1"));
+    }
+
+    /// 采购变更后继任务具备合法付款身份，且不冒用冲正原因。
+    #[test]
+    fn purchase_change_payment_task_preserves_source_identity_and_distinct_reason() {
+        let task = new_supplier_payment_task(
+            WorkItemId::new("wi-change"),
+            SupplierPaymentTaskSpec {
+                subject_version: "6".into(),
+                open_total: amount("180.00"),
+                reason: SupplierPaymentTaskReason::ReopenedByPurchaseChange,
+                ..supplier_spec()
+            },
+            "finance:SUPPLIER_PAYMENT:sup-1".to_string(),
+        )
+        .unwrap();
+        assert_eq!(task.reason_code.as_deref(), Some("PAYABLE_REOPENED_BY_PURCHASE_CHANGE"));
+        assert_ne!(task.reason_code.as_deref(), Some(SupplierPaymentTaskReason::ReopenedByReversal.as_str()));
+        assert!(matches_supplier_payment_identity(&task, "pa-1"));
+        assert!(!matches_supplier_payment_identity(&task, "pa-other"));
+        assert_eq!(task.subject_version, "6");
+        assert!(task.impact_summary.as_deref().unwrap().contains("180.00"));
+        assert_eq!(task.status, WorkItemStatus::Open);
     }
 
     /// 同一业务事实生成稳定 key/summary/due；重复 ensure 幂等。

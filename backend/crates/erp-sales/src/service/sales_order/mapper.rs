@@ -369,6 +369,7 @@ pub fn working_copy_line_view(line: SalesOrderWorkingCopyLine) -> SalesOrderWork
 /// * `revision` - 正式销售版本实体
 /// * `lines` - 该版本下的公共行；调用方须已按行号升序
 /// * `previous_revision_no` - 前一生效版本号；无法在本单版本列表解析时为空
+/// * `commercial_lines` - 同版公共行与子类型快照组装的完整成交明细
 ///
 /// # 返回
 /// 返回详情「版本」分区使用的视图。
@@ -382,6 +383,7 @@ pub fn revision_view(
     revision: SalesOrderRevision,
     lines: Vec<SalesOrderRevisionLine>,
     previous_revision_no: Option<u32>,
+    commercial_lines: Vec<SalesOrderWorkingCopyLineView>,
 ) -> RevisionView {
     RevisionView {
         id: revision.base.id,
@@ -400,6 +402,8 @@ pub fn revision_view(
         tax_point: revision.invoice_requirement_snapshot.tax_point,
         project_name: revision.project_name,
         business_remark: revision.business_remark,
+        voucher_category_sku_id: revision.voucher_category_sku_id.as_ref().map(ToString::to_string),
+        voucher_expiry_at: revision.voucher_expiry_at.map(|instant| instant.unix_secs() as u64),
         previous_revision_id: revision.previous_revision_id.as_ref().map(ToString::to_string),
         previous_revision_no,
         gross_amount: revision.gross_amount,
@@ -409,6 +413,7 @@ pub fn revision_view(
         created_at: revision.base.created_at,
         line_summary: revision_line_summary(&lines),
         lines: lines.into_iter().map(revision_line_view).collect(),
+        commercial_lines,
     }
 }
 
@@ -573,7 +578,7 @@ mod tests {
     #[test]
     fn revision_view_keeps_header_snapshot_and_line_summary() {
         let revision = SalesOrderRevision::new(SalesOrderRevisionId::new("rev-1"), header_data()).unwrap();
-        let view = revision_view(revision, vec![revision_line("年货礼盒", 1)], None);
+        let view = revision_view(revision, vec![revision_line("年货礼盒", 1)], None, Vec::new());
 
         assert_eq!(view.revision_no, 1);
         assert_eq!(view.customer_name, "东方企业");

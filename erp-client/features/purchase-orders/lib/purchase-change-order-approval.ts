@@ -82,7 +82,8 @@ export const purchaseChangeOrderStatusTone = (status?: string): StatusTone => {
 /**
  * 按单据生命周期选择采购变更审批区相位。提交确认由调用方显式传入。
  *
- * 有运行实例或已离开未提交阶段时进入 runtime，不得按仓配影响或财务复核推导。
+ * 未提交单据没有实例或仅有已取消实例时进入 draft；已取消实例继续作为审批历史展示。
+ * 其它实例或已离开未提交阶段时进入 runtime，不得按仓配影响或财务复核推导。
  *
  * @param approval 服务端只读审批投影。
  * @param status 单据状态码。
@@ -91,7 +92,8 @@ export const purchaseChangeOrderApprovalPhase = (
     approval?: DocumentApprovalView,
     status?: string,
 ): Exclude<PurchaseChangeOrderApprovalPhase, "confirm"> =>
-    approval?.instance || !isUnsubmittedPurchaseChangeOrderStatus(status)
+    !isUnsubmittedPurchaseChangeOrderStatus(status) ||
+    (approval?.instance && approval.instance.status !== "CANCELLED")
         ? "runtime"
         : "draft"
 

@@ -18,6 +18,7 @@ import {
 
 import { apiGet, apiToken } from "../helpers/api";
 import { createCustomerViaUi } from "../helpers/customers";
+import { addDeliveryTrackingEntry } from "../helpers/fulfillment";
 import { ensureWarehouseStockScope, ensureZeroBalanceDimension } from "../helpers/inventory";
 import { openLoggedInWorkspace, type LoggedInSession } from "../helpers/login";
 import {
@@ -667,8 +668,12 @@ test("flow-19 已生效销售单禁止直接作废：预占和仓发草稿保持
         await openWorkspaceTask(page, "履约处理", customerName, "fulfillment");
         await openFulfillmentWorkspaceForm(page);
         await expect(page.locator('[aria-label="公司仓发表单"]')).toBeVisible({ timeout: UI_TIMEOUT });
-        await chooseOption(page, page.getByLabel("承运方"), "顺丰速运");
-        await page.getByLabel("物流单号").fill(`SF19-${stamp}`);
+        await addDeliveryTrackingEntry(page, {
+            kind: "ship",
+            salesOrderLineId: reservedLineId!,
+            carrier: "顺丰速运",
+            trackingNo: `SF19-${stamp}`,
+        });
         await expect(page.locator("#fulfillment-operations-work-surface-confirm"))
             .toBeEnabled({ timeout: UI_TIMEOUT });
 

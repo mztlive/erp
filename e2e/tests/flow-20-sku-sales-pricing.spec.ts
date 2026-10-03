@@ -103,6 +103,8 @@ type DraftBody = {
     version?: number
     contract_id: string
     draft: {
+        requested_contract_revision_id: string
+        no_contract_terms?: unknown
         lines: Array<{
             goods: { unit_price_gross: string; pricing_mode: string }
         }>
@@ -359,10 +361,35 @@ async function expectPriceCell(
     await expect(row.getByRole("cell").nth(index)).toContainText(value)
 }
 
+/** 合同派生版本写入 Form 后才保存或提交，续编价格回显本身不代表合同已加载。 */
+async function expectContractReady(
+    page: Page,
+    contractNo: string,
+): Promise<void> {
+    const section = page.locator(
+        'section[aria-labelledby="sales-create-contract-title"]',
+    )
+    await expect(
+        section.getByText(`${contractNo}@v1`, { exact: true }),
+    ).toBeVisible(VISIBLE)
+    await expect(section.getByText("加载中…", { exact: true })).toHaveCount(
+        0,
+        VISIBLE,
+    )
+    await expect(page.locator("#sales-orders-create-contract")).toHaveAttribute(
+        "aria-expanded",
+        "false",
+        VISIBLE,
+    )
+}
+
 async function saveDraft(
     page: Page,
+    contractNo: string,
     salesOrderId?: string,
+    expectedContract?: { id: string; revisionId: string },
 ): Promise<{ order: SalesOrder; payload: DraftBody }> {
+    await expectContractReady(page, contractNo)
     await dismissToasts(page)
     const endpoint = salesOrderId
         ? `/admin/sales-orders/${salesOrderId}/working-copy`
@@ -379,12 +406,26 @@ async function saveDraft(
     const result = await readUiResult<{ id?: string }>(response)
     const id = salesOrderId || result.id
     expect(id).toBeTruthy()
+    const payload = response.request().postDataJSON() as DraftBody
+    expect(payload.draft.requested_contract_revision_id).toEqual(
+        expect.any(String),
+    )
+    expect(payload.draft.requested_contract_revision_id.length).toBeGreaterThan(
+        0,
+    )
+    expect(payload.draft.no_contract_terms).toBeUndefined()
+    if (expectedContract) {
+        expect(payload.contract_id).toBe(expectedContract.id)
+        expect(payload.draft.requested_contract_revision_id).toBe(
+            expectedContract.revisionId,
+        )
+    }
     return {
         order: await apiGet<SalesOrder>(
             await apiToken("xiaoshou"),
             `/admin/sales-orders/${id}`,
         ),
-        payload: response.request().postDataJSON() as DraftBody,
+        payload,
     }
 }
 
@@ -541,6 +582,7 @@ test("[flow-20] 四价与供应商编号、数量自动报价、手动保留及�
         page.locator("#sales-orders-create-contract"),
         contractNo,
     )
+    await expectContractReady(page, contractNo)
     await chooseOption(
         page,
         page.locator("#sales-orders-create-header-welfare-scene"),
@@ -587,17 +629,27 @@ test("[flow-20] 四价与供应商编号、数量自动报价、手动保留及�
     )
     await page.locator("#sales-orders-create-batch-due-date-apply").click()
     await expectToast(page, "已批量设置交期")
-    const firstSaved = await saveDraft(page)
+    const firstSaved = await saveDraft(page, contractNo)
     const salesOrderId = firstSaved.order.id
+    const frozenContract = {
+        id: firstSaved.payload.contract_id,
+        revisionId: firstSaved.payload.draft.requested_contract_revision_id,
+    }
     expectWorkingPrice(firstSaved.order, "MANUAL", "20", "125.00", "2500.00")
 
     await test.step("保存续编保留手动模式，显式恢复 AUTO 并由服务端核价", async () => {
         await page.goto(`/sales/orders/${salesOrderId}`)
+        await expectContractReady(page, contractNo)
         await expect(quantity).toHaveValue("20")
         await expect(price).toHaveValue("125.00")
         await quantity.fill("9")
         await expect(price).toHaveValue("125.00")
-        const manualSaved = await saveDraft(page, salesOrderId)
+        const manualSaved = await saveDraft(
+            page,
+            contractNo,
+            salesOrderId,
+            frozenContract,
+        )
         expectWorkingPrice(
             manualSaved.order,
             "MANUAL",
@@ -606,6 +658,7 @@ test("[flow-20] 四价与供应商编号、数量自动报价、手动保留及�
             "1125.00",
         )
         await page.goto(`/sales/orders/${salesOrderId}`)
+        await expectContractReady(page, contractNo)
         await expect(quantity).toHaveValue("9")
         await expect(price).toHaveValue("125.00")
         await page
@@ -614,7 +667,12 @@ test("[flow-20] 四价与供应商编号、数量自动报价、手动保留及�
         await expect(price).toHaveValue("129.00")
         await quantity.fill("10")
         await expect(price).toHaveValue("119.00")
-        const automaticSaved = await saveDraft(page, salesOrderId)
+        const automaticSaved = await saveDraft(
+            page,
+            contractNo,
+            salesOrderId,
+            frozenContract,
+        )
         expectWorkingPrice(
             automaticSaved.order,
             "AUTO",
@@ -623,7 +681,12 @@ test("[flow-20] 四价与供应商编号、数量自动报价、手动保留及�
             "1190.00",
         )
         await price.fill("125.00")
-        const changedToManual = await saveDraft(page, salesOrderId)
+        const changedToManual = await saveDraft(
+            page,
+            contractNo,
+            salesOrderId,
+            frozenContract,
+        )
         expectWorkingPrice(
             changedToManual.order,
             "MANUAL",
@@ -632,12 +695,18 @@ test("[flow-20] 四价与供应商编号、数量自动报价、手动保留及�
             "1250.00",
         )
         await page.goto(`/sales/orders/${salesOrderId}`)
+        await expectContractReady(page, contractNo)
         await expect(price).toHaveValue("125.00")
         await page
             .getByRole("button", { name: "按数量取价", exact: true })
             .click()
         await expect(price).toHaveValue("119.00")
-        const saved = await saveDraft(page, salesOrderId)
+        const saved = await saveDraft(
+            page,
+            contractNo,
+            salesOrderId,
+            frozenContract,
+        )
         expectWorkingPrice(saved.order, "AUTO", "10", "119.00", "1190.00")
         expect(
             saved.order.working_copy?.lines[0]?.reference_prices,
@@ -660,6 +729,7 @@ test("[flow-20] 四价与供应商编号、数量自动报价、手动保留及�
 
     await test.step("提交与生效保存成交快照，后续公司 SKU 改价不得重算正式金额", async () => {
         await page.goto(`/sales/orders/${salesOrderId}`)
+        await expectContractReady(page, contractNo)
         await expect(price).toHaveValue("119.00")
         await quantity.fill("9")
         await expect(price).toHaveValue("129.00")

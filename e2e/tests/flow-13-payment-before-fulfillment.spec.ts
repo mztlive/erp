@@ -26,7 +26,8 @@ import path from "node:path";
 import { test, expect, type Browser, type BrowserContext, type Page } from "../helpers/test";
 
 import { createCustomerViaUi } from "../helpers/customers";
-import { apiGet } from "../helpers/api";
+import { addDeliveryTrackingEntry } from "../helpers/fulfillment";
+import { API_BASE, apiGet, apiToken } from "../helpers/api";
 import { openLoggedInWorkspace } from "../helpers/login";
 import {
     ensureDefaultProcurementOwner,
@@ -292,16 +293,15 @@ async function fillReceiptDraft(page: Page) {
 }
 
 async function fillDirectDraft(page: Page, trackingNo: string) {
-    await chooseOption(
-        page,
-        page.locator("#fulfillment-operations-direct-form-carrier"),
-        "顺丰速运",
-        "顺丰",
-    );
-    await page.locator("#fulfillment-operations-direct-form-tracking-no").fill(trackingNo);
+    await addDeliveryTrackingEntry(page, {
+        kind: "direct",
+        lineIndex: 0,
+        trackingNo,
+        carrier: "顺丰速运",
+    });
 }
 
-async function payPurchaseOrder(page: Page, purchaseNo: string) {
+async function payPurchaseOrder(page: Page, purchaseNo: string): Promise<string> {
     await openWorkspaceTask(page, /供应商付款处理/, purchaseNo, "finance");
     await expect(page.getByLabel("当前付款任务")).toBeVisible({ timeout: UI_TIMEOUT });
     await expect(page.getByRole("heading", { name: /向.+付款/ })).toBeVisible({
@@ -322,8 +322,18 @@ async function payPurchaseOrder(page: Page, purchaseNo: string) {
     const payDialog = page.getByRole("alertdialog").filter({ hasText: "确认付款" });
     await expect(payDialog).toBeVisible({ timeout: UI_TIMEOUT });
     await expect(payDialog.getByText("提交审批")).toHaveCount(0);
+    const committed = page.waitForResponse(
+        response => response.request().method() === "POST" && response.url().includes("/admin/supplier-payments/commit"),
+        { timeout: 60_000 },
+    );
     await payDialog.locator("#supplier-payables-payment-submit-confirm-confirm").click();
+    const response = await committed;
+    expect(response.ok(), await response.text()).toBeTruthy();
+    const payment = (await response.json()).data as { id: string; status: string };
+    expect(payment.status).toBe("posted");
+    expect(payment.id).toBeTruthy();
     await expectToast(page, /付款已登记/);
+    return payment.id;
 }
 
 async function assertConfirmEnabled(page: Page) {
@@ -347,6 +357,8 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
     let salesOrderNo = "";
     let inboundPo = "";
     let directPo = "";
+    let inboundPaymentId = "";
+    let directPaymentId = "";
 
     const switchTo = async (login: LoginName) => {
         await session?.context.close();
@@ -672,7 +684,7 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
         page = await switchTo("fukuan");
         await page.goto("/workspace?family=approval");
         await assertNoPaymentApproval(page);
-        await payPurchaseOrder(page, inboundPo);
+        inboundPaymentId = await payPurchaseOrder(page, inboundPo);
         await page.goto("/workspace?family=finance");
         await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible({
             timeout: UI_TIMEOUT,
@@ -698,7 +710,7 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
 
         // 9) 付清代发采购单后才能确认直发
         page = await switchTo("fukuan");
-        await payPurchaseOrder(page, directPo);
+        directPaymentId = await payPurchaseOrder(page, directPo);
         await page.goto("/workspace?family=finance");
         await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible({
             timeout: UI_TIMEOUT,
@@ -718,6 +730,19 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
         await expect(page.locator('[aria-label="供应商直发表单"]')).toBeVisible({ timeout: UI_TIMEOUT });
         await fillDirectDraft(page, trackingNo);
         await assertConfirmEnabled(page);
+        await expect(page.getByRole("heading", { name: "财务付款回单", exact: true })).toBeVisible({ timeout: UI_TIMEOUT });
+        const workItemId = new URL(page.url()).searchParams.get("currentWorkItemId");
+        expect(workItemId).toBeTruthy();
+        const token = await apiToken("caigou");
+        const receiptPath = `/admin/work-items/${workItemId}/payment-receipts`;
+        const receipts = await apiGet<Array<{ document_id: string }>>(token, receiptPath);
+        expect(receipts.map(receipt => receipt.document_id)).toEqual([directPaymentId]);
+        expect(receipts.map(receipt => receipt.document_id)).not.toContain(inboundPaymentId);
+        const wrongPurchaseReceipt = await page.request.get(
+            `${API_BASE}${receiptPath}/${inboundPaymentId}/download`,
+            { headers: { Authorization: `Bearer ${token}` } },
+        );
+        expect(wrongPurchaseReceipt.status(), await wrongPurchaseReceipt.text()).toBe(404);
         await page.locator("#fulfillment-operations-work-surface-confirm").click();
         await confirmFormal(page, "确认发货？", "确认发货");
 
@@ -734,8 +759,12 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
 
         await openFulfillmentTask(page, inboundPo);
         await expect(page.locator('[aria-label="公司仓发表单"]')).toBeVisible({ timeout: UI_TIMEOUT });
-        await chooseOption(page, page.locator("#fulfillment-operations-ship-form-carrier"), "顺丰速运", "顺丰");
-        await page.locator("#fulfillment-operations-ship-form-tracking-no").fill(`WH${trackingNo}`);
+        await addDeliveryTrackingEntry(page, {
+            kind: "ship",
+            lineIndex: 0,
+            trackingNo: `WH${trackingNo}`,
+            carrier: "顺丰速运",
+        });
         await page.locator("#fulfillment-operations-work-surface-confirm").click();
         await confirmFormal(page, "确认发货？", "确认发货");
 

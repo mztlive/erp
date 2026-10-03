@@ -172,6 +172,7 @@ fn mapped_reason_label(code: &str) -> Option<&'static str> {
         "purchase_order_review_resubmitted" => "采购已再次提交，需要重新核对成本与付款条件",
         "payable_payment_required" => "采购应付已确认，需要安排付款",
         "payable_reopened_by_reversal" => "付款已冲正，应付余额需要重新安排付款",
+        "payable_reopened_by_purchase_change" => "采购变更增加了应付金额，需要继续安排付款",
         "receivable_invoice_required" => "销售应收已确认，需要安排销项开票",
         "invoiceable_reopened_by_red_invoice" => "销项发票已红冲，需要重新安排开票",
         "invoiceable_reopened_by_sales_change" => "销售变更增加了可开票金额，需要继续安排开票",
@@ -320,6 +321,13 @@ mod tests {
             reason_label(Some("purchase_order_review_resubmitted"), WorkItemType::PurchaseOrderReview),
             "采购已再次提交，需要重新核对成本与付款条件"
         );
+        let changed_payable =
+            reason_label(Some("PAYABLE_REOPENED_BY_PURCHASE_CHANGE"), WorkItemType::SupplierPaymentExecution);
+        let reversed_payment =
+            reason_label(Some("PAYABLE_REOPENED_BY_REVERSAL"), WorkItemType::SupplierPaymentExecution);
+        assert_eq!(changed_payable, "采购变更增加了应付金额，需要继续安排付款");
+        assert_eq!(reversed_payment, "付款已冲正，应付余额需要重新安排付款");
+        assert_ne!(changed_payable, reversed_payment);
         assert_eq!(
             reason_label(Some("客户资料缺失"), WorkItemType::ImportBusinessConfirmation),
             "客户资料缺失"

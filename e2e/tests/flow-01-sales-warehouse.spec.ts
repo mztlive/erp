@@ -17,6 +17,7 @@ import path from "node:path";
 import { test, expect, type Page } from "../helpers/test";
 
 import { createCustomerViaUi } from "../helpers/customers";
+import { addDeliveryTrackingEntry, uploadAcceptanceEvidence } from "../helpers/fulfillment";
 import { submitSalesInvoiceRequest } from "../helpers/invoices";
 import { openLoggedInWorkspace, type LoggedInSession } from "../helpers/login";
 import { payOnlySupplierTask } from "../helpers/payments";
@@ -339,23 +340,17 @@ test("flow-01 外部采购入仓后由公司仓库发货", async ({ browser }) =
             await openFulfillmentWorkspaceForm(page);
         }
         await expect(page.locator('[aria-label="公司仓发表单"]')).toBeVisible({ timeout: UI_TIMEOUT });
-        await chooseOption(
-            page,
-            page.locator("#fulfillment-operations-ship-form-carrier"),
-            "顺丰速运",
-        );
-        await page
-            .locator("#fulfillment-operations-ship-form-tracking-no")
-            .fill(`SF${stamp}`);
-        const shipQty = page
-            .locator('[id^="fulfillment-operations-ship-form-quantity-"]')
-            .first();
-        if (await shipQty.count()) {
-            const current = await shipQty.inputValue();
-            if (!current || current === "0") {
-                await shipQty.fill(SALES_QTY);
-            }
-        }
+        await addDeliveryTrackingEntry(page, {
+            kind: "ship",
+            lineIndex: 0,
+            trackingNo: `SF${stamp}`,
+            carrier: "顺丰速运",
+        });
+        await expect(
+            page.locator('[aria-label="公司仓发表单"]').getByText(
+                new RegExp(`^本次发货\\s*${SALES_QTY}(?:\\.0+)?(?:\\s*盒)?$`),
+            ),
+        ).toBeVisible({ timeout: UI_TIMEOUT });
         await page.locator("#fulfillment-operations-work-surface-confirm").click();
         await confirmFormal(page, "确认发货？", "确认发货");
 
@@ -365,6 +360,7 @@ test("flow-01 外部采购入仓后由公司仓库发货", async ({ browser }) =
         await page.locator("#sales-orders-acceptance-register-open").click();
         const acceptanceDialog = page.getByRole("dialog", { name: "登记客户验收" });
         await expect(acceptanceDialog).toBeVisible({ timeout: UI_TIMEOUT });
+        await uploadAcceptanceEvidence(page);
         await acceptanceDialog.locator("#sales-orders-acceptance-register-submit").click();
         await confirmFormal(page, "确认客户验收", "确认本次验收");
 

@@ -50,7 +50,7 @@ export type CreateCustomerAddressInput = {
 export type CreateCustomerViaUiInput = {
     legalName: string
     shortName?: string
-    creditCode: string
+    creditCode?: string
     paymentTermLabel: string
     contact?: CreateCustomerContactInput
     address?: string | CreateCustomerAddressInput
@@ -233,7 +233,7 @@ export async function createCustomerViaUi(
     if (input.shortName) {
         await dialog.locator("#customers-form-short-name").fill(input.shortName)
     }
-    await dialog.locator("#customers-form-credit-code").fill(input.creditCode)
+    await dialog.locator("#customers-form-credit-code").fill(input.creditCode ?? "")
     await chooseOption(
         page,
         dialog.locator("#customers-form-payment-term"),

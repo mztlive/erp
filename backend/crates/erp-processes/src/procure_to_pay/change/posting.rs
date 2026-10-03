@@ -1,6 +1,7 @@
 //! 采购变更生效真实步骤，统一使用调用方执行器；失败不得推进后继写入。
 use async_trait::async_trait;
 use erp_audit::{AuditExt, AuditLog};
+use erp_core::ids::PayableAccountId;
 use erp_procurement::entity::purchase_order::PurchaseOrder;
 use erp_procurement::service::purchase_order::allocation_maintenance::{
     PreparedSalesAllocations, persist_current_sales_allocations,
@@ -12,6 +13,7 @@ use persistence_core::Executor;
 use super::super::allocation_maintenance::prepare_current_sales_allocations;
 use super::super::procurement_task_sync::sync_procurement_tasks_for_sales_order;
 use super::effect::EffectiveChangePosting;
+use crate::finance_posting::payable::payment_task::sync_purchase_payment_task_after_change;
 use crate::{Error, Result};
 
 /// 原事务中的真实跨域操作；没有成本构造或成本写入步骤，因为原差额成本恒空。
@@ -24,6 +26,7 @@ enum EffectStep {
     CurrentOrder,
     ProcurementTasks,
     Payable,
+    PaymentTask,
     Submission,
     Change,
     Audit,
@@ -32,6 +35,9 @@ enum EffectStep {
 /// 生产适配器与失败替身共用的真实写步骤合同。
 #[async_trait]
 trait EffectSteps: Send {
+    /// 非零差额才需要写入应付和同步付款任务。
+    fn has_payable_change(&self) -> bool;
+
     /// 执行单步并直接传播原错误，执行器必须保持调用方的同一借用。
     async fn apply(&mut self, step: EffectStep, executor: &mut dyn Executor) -> Result<()>;
 }
@@ -47,10 +53,14 @@ async fn execute(steps: &mut impl EffectSteps, executor: &mut dyn Executor) -> R
         CurrentOrder,
         ProcurementTasks,
         Payable,
+        PaymentTask,
         Submission,
         Change,
         Audit,
     ] {
+        if matches!(step, Payable | PaymentTask) && !steps.has_payable_change() {
+            continue;
+        }
         steps.apply(step, executor).await?;
     }
     Ok(())
@@ -63,9 +73,26 @@ struct MongoEffect<'a> {
     audit: AuditLog,
     actor_id: &'a str,
     allocations: Option<PreparedSalesAllocations>,
+    payable_account_id: Option<PayableAccountId>,
 }
+
+impl MongoEffect<'_> {
+    /// 使用已更新的真实应付身份在同一执行器内同步采购变更付款任务。
+    async fn sync_payment_task(&self, executor: &mut dyn Executor) -> Result<()> {
+        let account_id = self
+            .payable_account_id
+            .as_ref()
+            .ok_or_else(|| Error::Internal("采购变更差额缺少已更新的应付子账身份".into()))?;
+        sync_purchase_payment_task_after_change(self.db, account_id, executor).await
+    }
+}
+
 #[async_trait]
 impl EffectSteps for MongoEffect<'_> {
+    fn has_payable_change(&self) -> bool {
+        self.write.payable.is_some()
+    }
+
     async fn apply(&mut self, step: EffectStep, executor: &mut dyn Executor) -> Result<()> {
         use EffectStep::*;
         let purchase = &mut self.write.purchase;
@@ -100,9 +127,10 @@ impl EffectSteps for MongoEffect<'_> {
             },
             Payable => {
                 if let Some(payable) = self.write.payable.as_ref() {
-                    payable.persist(self.db, executor).await?;
+                    self.payable_account_id = Some(payable.persist(self.db, executor).await?);
                 }
             },
+            PaymentTask => self.sync_payment_task(executor).await?,
             Submission => purchase.persist_approved_submission(self.db, executor).await?,
             Change => purchase.persist_change(self.db, executor).await?,
             Audit => {
@@ -127,7 +155,7 @@ pub(super) async fn persist_effective_writes(
     actor_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<u64> {
-    let mut steps = MongoEffect { db, write, audit, actor_id, allocations: None };
+    let mut steps = MongoEffect { db, write, audit, actor_id, allocations: None, payable_account_id: None };
     execute(&mut steps, executor).await?;
     Ok(steps.write.purchase.order.base.version)
 }
@@ -170,9 +198,14 @@ mod tests {
         calls: Vec<EffectStep>,
         identity: usize,
         fail_at: Option<EffectStep>,
+        has_payable_change: bool,
     }
     #[async_trait]
     impl EffectSteps for RecordingSteps {
+        fn has_payable_change(&self) -> bool {
+            self.has_payable_change
+        }
+
         async fn apply(&mut self, step: EffectStep, executor: &mut dyn Executor) -> Result<()> {
             assert_eq!(executor as *mut dyn Executor as *mut () as usize, self.identity);
             self.calls.push(step);
@@ -192,6 +225,7 @@ mod tests {
             CurrentOrder,
             ProcurementTasks,
             Payable,
+            PaymentTask,
             Submission,
             Change,
             Audit,
@@ -202,7 +236,8 @@ mod tests {
         let mut executor = TestExecutor { identity: 1 };
         assert_eq!(executor.identity, 1);
         let identity = &mut executor as *mut TestExecutor as usize;
-        let mut steps = RecordingSteps { calls: Vec::new(), identity, fail_at: None };
+        let mut steps =
+            RecordingSteps { calls: Vec::new(), identity, fail_at: None, has_payable_change: true };
         execute(&mut steps, &mut executor).await.unwrap();
         assert_eq!(steps.calls, expected());
     }
@@ -211,12 +246,28 @@ mod tests {
         for (index, step) in expected().into_iter().enumerate() {
             let mut executor = TestExecutor { identity: 1 };
             let identity = &mut executor as *mut TestExecutor as usize;
-            let mut steps = RecordingSteps { calls: Vec::new(), identity, fail_at: Some(step) };
+            let mut steps =
+                RecordingSteps { calls: Vec::new(), identity, fail_at: Some(step), has_payable_change: true };
             let error = execute(&mut steps, &mut executor).await.unwrap_err();
             assert!(
                 matches!(error, Error::ConflictError(message) if message == "original purchase change conflict")
             );
             assert_eq!(steps.calls, expected()[..=index]);
         }
+    }
+
+    /// 零差额生效不写财务差额或同步付款任务，其他正式写入步骤保持次序。
+    #[tokio::test]
+    async fn zero_delta_skips_payable_and_payment_task_without_skipping_other_effects() {
+        let mut executor = TestExecutor { identity: 1 };
+        let identity = &mut executor as *mut TestExecutor as usize;
+        let mut steps =
+            RecordingSteps { calls: Vec::new(), identity, fail_at: None, has_payable_change: false };
+        execute(&mut steps, &mut executor).await.unwrap();
+        let expected = expected()
+            .into_iter()
+            .filter(|step| !matches!(step, EffectStep::Payable | EffectStep::PaymentTask))
+            .collect::<Vec<_>>();
+        assert_eq!(steps.calls, expected);
     }
 }

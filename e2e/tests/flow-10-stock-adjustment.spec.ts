@@ -17,7 +17,13 @@
  * helpers：openLoggedInWorkspace / openWorkspaceTask / approveCurrentDocument /
  *   ensureZeroBalanceDimension；工作台 h2 是「库存调整单审批」，单号在任务卡。
  */
-import { expect, test, type Browser, type Locator, type Page } from "../helpers/test"
+import {
+    expect,
+    test,
+    type Browser,
+    type Locator,
+    type Page,
+} from "../helpers/test"
 
 import { apiGet, apiToken } from "../helpers/api"
 import { ensureZeroBalanceDimension } from "../helpers/inventory"
@@ -71,6 +77,19 @@ type StockAdjustment = {
     status: string
 }
 
+type AdjustmentDetail = {
+    adjustment: StockAdjustment & { version: string; note?: string }
+    lines: Array<{ id: string; quantity: string; direction: string }>
+    approval?: {
+        instance?: {
+            id: string
+            status: string
+            subject_version?: string
+            current_round_no: number
+        }
+    }
+}
+
 type Session = { context: { close(): Promise<void> }; page: Page }
 
 function qtyOf(value: string | number | undefined | null): number {
@@ -101,13 +120,18 @@ async function searchInventorySku(page: Page): Promise<void> {
     const search = page.getByLabel("搜索库存")
     await search.fill(SKU_NO)
     await search.press("Enter")
-    await expect(page.getByRole("table").getByText(SKU_NO, { exact: true })).toBeVisible(VISIBLE)
+    await expect(
+        page.getByRole("table").getByText(SKU_NO, { exact: true }),
+    ).toBeVisible(VISIBLE)
 }
 
 function skuBalanceRow(page: Page): Locator {
-    return page.getByRole("row").filter({ hasText: SKU_NO }).filter({
-        hasText: new RegExp(`${WAREHOUSE_NAME}|${WAREHOUSE_CODE}`),
-    })
+    return page
+        .getByRole("row")
+        .filter({ hasText: SKU_NO })
+        .filter({
+            hasText: new RegExp(`${WAREHOUSE_NAME}|${WAREHOUSE_CODE}`),
+        })
 }
 
 async function openBalanceTab(page: Page): Promise<void> {
@@ -121,7 +145,10 @@ async function refreshLedger(page: Page): Promise<void> {
     await page.getByRole("button", { name: "刷新" }).click()
 }
 
-async function selectReasonType(page: Page, optionLabel: string): Promise<void> {
+async function selectReasonType(
+    page: Page,
+    optionLabel: string,
+): Promise<void> {
     const combo = page.locator("#inventory-adjustment-dialog-reason-type")
     await expect(combo).toBeVisible(VISIBLE)
     await combo.click()
@@ -143,7 +170,10 @@ async function submitStockAdjustment(
     const text = (await banner.innerText()).replace(/\s+/g, " ")
     const matched = text.match(/单号\s+([A-Za-z0-9_-]+)/)
     const adjustmentNo = matched?.[1]?.replace(/[。．.]+$/, "") ?? ""
-    expect(adjustmentNo.length, `未能从提交结果解析单号：${text}`).toBeGreaterThan(2)
+    expect(
+        adjustmentNo.length,
+        `未能从提交结果解析单号：${text}`,
+    ).toBeGreaterThan(2)
     await expect(page.getByText(APPROVAL_NODE)).toBeVisible(VISIBLE)
     await expect(page.getByRole("dialog")).toHaveCount(0)
     return adjustmentNo
@@ -158,23 +188,33 @@ async function startAdjustmentFromBalance(page: Page): Promise<void> {
     await expectHeading(page, "发起库存调整")
 }
 
-async function openStockAdjustmentApproval(page: Page, documentNo: string): Promise<void> {
+async function openStockAdjustmentApproval(
+    page: Page,
+    documentNo: string,
+): Promise<void> {
     await openWorkspaceTask(page, "库存调整单审批", documentNo, "approval")
-    await expect(page.getByRole("heading", { name: "库存调整单审批" })).toBeVisible(VISIBLE)
     await expect(
-        page.getByRole("button", { name: new RegExp(documentNo) }).or(page.getByText(documentNo)).first(),
+        page.getByRole("heading", { name: "库存调整单审批" }),
+    ).toBeVisible(VISIBLE)
+    await expect(
+        page
+            .getByRole("button", { name: new RegExp(documentNo) })
+            .or(page.getByText(documentNo))
+            .first(),
     ).toBeVisible(VISIBLE)
 }
 
-async function rejectCurrentDocument(page: Page, reason: string): Promise<void> {
+async function rejectCurrentDocument(
+    page: Page,
+    reason: string,
+): Promise<void> {
     await page.getByRole("button", { name: "驳回", exact: true }).click()
     await expectHeading(page, "确认驳回")
     await page.getByLabel("驳回原因").fill(reason)
     await page.getByRole("button", { name: "确认驳回" }).click()
-    await expect(page.getByRole("heading", { name: /确认通过|确认驳回/ })).toHaveCount(
-        0,
-        VISIBLE,
-    )
+    await expect(
+        page.getByRole("heading", { name: /确认通过|确认驳回/ }),
+    ).toHaveCount(0, VISIBLE)
 }
 
 async function readOnHand(): Promise<number> {
@@ -196,25 +236,35 @@ async function expectOnHandUi(page: Page, expected: number): Promise<void> {
     }
 }
 
-function tokenOf(kind: "cangchu" | "caiwu" | "caigou" | "admin"): Promise<string> {
+function tokenOf(
+    kind: "cangchu" | "caiwu" | "caigou" | "admin",
+): Promise<string> {
     return apiToken(kind)
 }
 
 async function listBalances(token: string): Promise<StockBalance[]> {
-    const page = await apiGet<ApiPage<StockBalance>>(token, "/admin/stock-balances", {
-        page: 1,
-        page_size: 100,
-    })
+    const page = await apiGet<ApiPage<StockBalance>>(
+        token,
+        "/admin/stock-balances",
+        {
+            page: 1,
+            page_size: 100,
+        },
+    )
     return page.items ?? []
 }
 
 async function listMovements(token: string): Promise<StockMovement[]> {
-    const page = await apiGet<ApiPage<StockMovement>>(token, "/admin/stock-movements", {
-        page: 1,
-        page_size: 100,
-        sort_by: "occurred_at",
-        sort_dir: "desc",
-    })
+    const page = await apiGet<ApiPage<StockMovement>>(
+        token,
+        "/admin/stock-movements",
+        {
+            page: 1,
+            page_size: 100,
+            sort_by: "occurred_at",
+            sort_dir: "desc",
+        },
+    )
     return page.items ?? []
 }
 
@@ -222,7 +272,12 @@ async function listAdjustments(token: string): Promise<StockAdjustment[]> {
     const page = await apiGet<ApiPage<StockAdjustment>>(
         token,
         "/admin/stock-adjustments",
-        { page: 1, page_size: 100, sort_by: "created_at", sort_dir: "desc" },
+        {
+            page: 1,
+            page_size: 100,
+            sort_by: "created_at",
+            sort_dir: "desc",
+        },
     )
     return page.items ?? []
 }
@@ -259,15 +314,22 @@ async function readPurchaseAndFulfillmentTotals(): Promise<ProcurementLedgerTota
     const receipts = await apiGet<ApiPage<unknown>>(
         warehouseToken,
         "/admin/purchase-receipts",
-        { page: 1, page_size: 20 },
+        {
+            page: 1,
+            page_size: 20,
+        },
     )
     const deliveries = await apiGet<ApiPage<unknown>>(
         warehouseToken,
         "/admin/deliveries",
-        { page: 1, page_size: 20 },
+        {
+            page: 1,
+            page_size: 20,
+        },
     )
     return {
-        purchaseOrders: purchaseOrders.total ?? (purchaseOrders.items ?? []).length,
+        purchaseOrders:
+            purchaseOrders.total ?? (purchaseOrders.items ?? []).length,
         receipts: receipts.total ?? (receipts.items ?? []).length,
         deliveries: deliveries.total ?? (deliveries.items ?? []).length,
     }
@@ -280,8 +342,12 @@ function expectPurchaseAndFulfillmentUnchanged(
     expect(after.purchaseOrders, "库存调整不应新增采购单").toBeLessThanOrEqual(
         before.purchaseOrders,
     )
-    expect(after.receipts, "库存调整不应新增采购入库").toBeLessThanOrEqual(before.receipts)
-    expect(after.deliveries, "库存调整不应新增发货").toBeLessThanOrEqual(before.deliveries)
+    expect(after.receipts, "库存调整不应新增采购入库").toBeLessThanOrEqual(
+        before.receipts,
+    )
+    expect(after.deliveries, "库存调整不应新增发货").toBeLessThanOrEqual(
+        before.deliveries,
+    )
 }
 
 async function expectCaiwuCannotSubmit(browser: Browser): Promise<void> {
@@ -294,7 +360,9 @@ async function expectCaiwuCannotSubmit(browser: Browser): Promise<void> {
         page.getByText(/当前角色未配置仓库数据范围|权限已收回/).first(),
     ).toBeVisible(VISIBLE)
     await expect(page.getByRole("button", { name: "库存调整" })).toHaveCount(0)
-    await expect(page.getByRole("button", { name: "发起库存调整" })).toHaveCount(0)
+    await expect(
+        page.getByRole("button", { name: "发起库存调整" }),
+    ).toHaveCount(0)
     await expect(page.getByRole("button", { name: "提交审批" })).toHaveCount(0)
 
     const financeToken = await tokenOf("caiwu")
@@ -312,10 +380,14 @@ async function expectCaiwuCannotSubmit(browser: Browser): Promise<void> {
             lines: [{ sku_id: "x", quantity: "1", direction: "INCREASE" }],
         }),
     })
-    expect(createRes.status, "caiwu 不得创建库存调整单").toBeGreaterThanOrEqual(400)
+    expect(createRes.status, "caiwu 不得创建库存调整单").toBeGreaterThanOrEqual(
+        400,
+    )
 }
 
-test("库存调整：盘盈、盘亏、损坏入账与驳回", async ({ browser }) => {
+test("库存调整：盘盈、盘亏、损坏入账与驳回原单修改重提", async ({
+    browser,
+}) => {
     test.setTimeout(240_000)
 
     // 0. 财务不得自己提交库存调整（岗位分离）
@@ -354,13 +426,21 @@ test("库存调整：盘盈、盘亏、损坏入账与驳回", async ({ browser 
     const afterGain = openingOnHand + qtyOf(GAIN_QTY)
     await expect.poll(async () => readOnHand(), VISIBLE).toBe(afterGain)
     await expectOnHandUi(warehouse.page, afterGain)
-    await warehouse.page.getByRole("button", { name: /^流水(?: \d+)?$/ }).click()
-    const movementTable = warehouse.page.locator("#inventory-ledger-movement-table")
+    await warehouse.page
+        .getByRole("button", { name: /^流水(?: \d+)?$/ })
+        .click()
+    const movementTable = warehouse.page.locator(
+        "#inventory-ledger-movement-table",
+    )
     await expect(movementTable).toBeVisible(VISIBLE)
     await expect(movementTable).toContainText("库存调整")
     await expect(movementTable).toContainText("增加")
-    await warehouse.page.getByRole("button", { name: /^调整记录(?: \d+)?$/ }).click()
-    const adjustmentTable = warehouse.page.locator("#inventory-ledger-adjustment-table")
+    await warehouse.page
+        .getByRole("button", { name: /^调整记录(?: \d+)?$/ })
+        .click()
+    const adjustmentTable = warehouse.page.locator(
+        "#inventory-ledger-adjustment-table",
+    )
     await expect(adjustmentTable).toBeVisible(VISIBLE)
     await expect(adjustmentTable).toContainText(gainNo)
     await expect(adjustmentTable).toContainText("盘盈")
@@ -369,9 +449,9 @@ test("库存调整：盘盈、盘亏、损坏入账与驳回", async ({ browser 
 
     const afterGainMovements = await listMovements(await tokenOf("cangchu"))
     expect(afterGainMovements.length).toBe(openingMovements.length + 1)
-    expect(afterGainMovements.some((row) => row.movement_type === "STOCK_GAIN")).toBe(
-        true,
-    )
+    expect(
+        afterGainMovements.some((row) => row.movement_type === "STOCK_GAIN"),
+    ).toBe(true)
 
     // 3. 盘亏 10 → 审批通过 → 库存减少，原盘盈流水保留
     warehouse = await openLoggedInWorkspace(browser, "cangchu")
@@ -394,27 +474,31 @@ test("库存调整：盘盈、盘亏、损坏入账与驳回", async ({ browser 
     const afterLoss = afterGain - qtyOf(LOSS_QTY)
     await expect.poll(async () => readOnHand(), VISIBLE).toBe(afterLoss)
     await expectOnHandUi(warehouse.page, afterLoss)
-    await warehouse.page.getByRole("button", { name: /^流水(?: \d+)?$/ }).click()
-    await expect(warehouse.page.locator("#inventory-ledger-movement-table")).toContainText(
-        "减少",
-    )
-    await warehouse.page.getByRole("button", { name: /^调整记录(?: \d+)?$/ }).click()
-    await expect(warehouse.page.locator("#inventory-ledger-adjustment-table")).toContainText(
-        lossNo,
-    )
-    await expect(warehouse.page.locator("#inventory-ledger-adjustment-table")).toContainText(
-        "盘亏",
-    )
+    await warehouse.page
+        .getByRole("button", { name: /^流水(?: \d+)?$/ })
+        .click()
+    await expect(
+        warehouse.page.locator("#inventory-ledger-movement-table"),
+    ).toContainText("减少")
+    await warehouse.page
+        .getByRole("button", { name: /^调整记录(?: \d+)?$/ })
+        .click()
+    await expect(
+        warehouse.page.locator("#inventory-ledger-adjustment-table"),
+    ).toContainText(lossNo)
+    await expect(
+        warehouse.page.locator("#inventory-ledger-adjustment-table"),
+    ).toContainText("盘亏")
     await closeSession(warehouse)
 
     const afterLossMovements = await listMovements(await tokenOf("cangchu"))
     expect(afterLossMovements.length).toBe(afterGainMovements.length + 1)
-    expect(afterLossMovements.some((row) => row.movement_type === "STOCK_GAIN")).toBe(
-        true,
-    )
-    expect(afterLossMovements.some((row) => row.movement_type === "STOCK_LOSS")).toBe(
-        true,
-    )
+    expect(
+        afterLossMovements.some((row) => row.movement_type === "STOCK_GAIN"),
+    ).toBe(true)
+    expect(
+        afterLossMovements.some((row) => row.movement_type === "STOCK_LOSS"),
+    ).toBe(true)
 
     // 4. 损坏 5 → 审批通过 → 库存再减，原出入库记录仍在
     warehouse = await openLoggedInWorkspace(browser, "cangchu")
@@ -437,18 +521,22 @@ test("库存调整：盘盈、盘亏、损坏入账与驳回", async ({ browser 
     const afterDamage = afterLoss - qtyOf(DAMAGE_QTY)
     await expect.poll(async () => readOnHand(), VISIBLE).toBe(afterDamage)
     await expectOnHandUi(warehouse.page, afterDamage)
-    await warehouse.page.getByRole("button", { name: /^调整记录(?: \d+)?$/ }).click()
-    await expect(warehouse.page.locator("#inventory-ledger-adjustment-table")).toContainText(
-        damageNo,
-    )
-    await expect(warehouse.page.locator("#inventory-ledger-adjustment-table")).toContainText(
-        "损坏",
-    )
+    await warehouse.page
+        .getByRole("button", { name: /^调整记录(?: \d+)?$/ })
+        .click()
+    await expect(
+        warehouse.page.locator("#inventory-ledger-adjustment-table"),
+    ).toContainText(damageNo)
+    await expect(
+        warehouse.page.locator("#inventory-ledger-adjustment-table"),
+    ).toContainText("损坏")
     await closeSession(warehouse)
 
     const afterDamageMovements = await listMovements(await tokenOf("cangchu"))
     expect(afterDamageMovements.length).toBe(afterLossMovements.length + 1)
-    expect(afterDamageMovements.some((row) => row.movement_type === "DAMAGE")).toBe(true)
+    expect(
+        afterDamageMovements.some((row) => row.movement_type === "DAMAGE"),
+    ).toBe(true)
     expect(afterDamageMovements.map((row) => row.id).sort()).toEqual(
         expect.arrayContaining(afterLossMovements.map((row) => row.id).sort()),
     )
@@ -471,14 +559,18 @@ test("库存调整：盘盈、盘亏、损坏入账与驳回", async ({ browser 
     await expect(finance.page.getByText("第 2 轮")).toBeVisible(VISIBLE)
     await expect(finance.page.getByText(APPROVAL_NODE)).toBeVisible(VISIBLE)
     await expect(finance.page.getByText(/最近驳回/)).toBeVisible(VISIBLE)
-    await expect(finance.page.getByText("数量依据不足，驳回重报")).toBeVisible(VISIBLE)
+    await expect(finance.page.getByText("数量依据不足，驳回重报")).toBeVisible(
+        VISIBLE,
+    )
     await closeSession(finance)
 
     warehouse = await openLoggedInWorkspace(browser, "cangchu")
     await gotoInventory(warehouse.page)
     expect(await readOnHand()).toBe(afterDamage)
     await expectOnHandUi(warehouse.page, afterDamage)
-    await warehouse.page.getByRole("button", { name: /^调整记录(?: \d+)?$/ }).click()
+    await warehouse.page
+        .getByRole("button", { name: /^调整记录(?: \d+)?$/ })
+        .click()
     const rejectRow = warehouse.page
         .locator("#inventory-ledger-adjustment-table")
         .getByRole("row")
@@ -486,28 +578,182 @@ test("库存调整：盘盈、盘亏、损坏入账与驳回", async ({ browser 
     await expect(rejectRow).toBeVisible(VISIBLE)
     await expect(rejectRow).toContainText("审批中")
     await rejectRow.click()
-    await expect(warehouse.page.getByRole("definition").filter({ hasText: "第 2 轮" })).toBeVisible(VISIBLE)
-    await expect(warehouse.page.locator("#inventory-adjustment-detail-close")).toBeVisible(
-        VISIBLE,
-    )
+    await expect(
+        warehouse.page.getByRole("definition").filter({ hasText: "第 2 轮" }),
+    ).toBeVisible(VISIBLE)
+    await expect(
+        warehouse.page.locator("#inventory-adjustment-detail-close"),
+    ).toBeVisible(VISIBLE)
     await warehouse.page.locator("#inventory-adjustment-detail-close").click()
     await closeSession(warehouse)
 
     const afterRejectMovements = await listMovements(await tokenOf("cangchu"))
     expect(afterRejectMovements.length).toBe(afterDamageMovements.length)
     const posted = await listAdjustments(await tokenOf("cangchu"))
-    expect(posted.filter((row) => row.adjustment_no === rejectNo)[0]?.status).toBe(
-        "IN_APPROVAL",
+    expect(
+        posted.filter((row) => row.adjustment_no === rejectNo)[0]?.status,
+    ).toBe("IN_APPROVAL")
+
+    // 6. 按驳回意见修改原单，保留原 ID、单号和明细身份，再次审批后入账。
+    const rejectedAdjustment = posted.find(
+        (row) => row.adjustment_no === rejectNo,
+    )!
+    const rejectedDetail = await apiGet<AdjustmentDetail>(
+        await tokenOf("cangchu"),
+        `/admin/stock-adjustments/${rejectedAdjustment.id}`,
     )
+    const rejectedInstanceId = rejectedDetail.approval?.instance?.id
+    expect(rejectedInstanceId).toBeTruthy()
+    warehouse = await openLoggedInWorkspace(browser, "cangchu")
+    await gotoInventory(warehouse.page)
+    await warehouse.page
+        .getByRole("button", { name: /^调整记录(?: \d+)?$/ })
+        .click()
+    await warehouse.page
+        .locator("#inventory-ledger-adjustment-table")
+        .getByRole("row")
+        .filter({ hasText: rejectNo })
+        .click()
+    await warehouse.page
+        .getByRole("button", { name: "修改原单", exact: true })
+        .click()
+    const cancel = warehouse.page.getByRole("dialog", {
+        name: "修改原单",
+        exact: true,
+    })
+    await expect(cancel).toBeVisible(VISIBLE)
+    await cancel.getByLabel(/^原因\s*\*?$/).fill("补齐盘点依据后修改原单重提")
+    await cancel
+        .getByRole("button", { name: "撤回并修改", exact: true })
+        .click()
+    const editor = warehouse.page.getByRole("dialog", {
+        name: `修改库存调整单 · ${rejectNo}`,
+        exact: true,
+    })
+    await expect(editor).toBeVisible(VISIBLE)
+    const draftDetail = await apiGet<AdjustmentDetail>(
+        await tokenOf("cangchu"),
+        `/admin/stock-adjustments/${rejectedAdjustment.id}`,
+    )
+    expect(draftDetail.adjustment.id).toBe(rejectedAdjustment.id)
+    expect(draftDetail.adjustment.adjustment_no).toBe(rejectNo)
+    expect(draftDetail.adjustment.status).toBe("DRAFT")
+    expect(draftDetail.approval?.instance?.status).toBe("CANCELLED")
+    expect(draftDetail.lines).toEqual(rejectedDetail.lines)
+    await editor.getByLabel(/^调整数量\s*\*?$/).fill("3")
+    await editor
+        .getByLabel(/^原因说明\s*\*?$/)
+        .fill("补齐盘点依据，实际盘盈三盒")
+    const resubmitting = warehouse.page.waitForResponse(
+        (response) =>
+            response.request().method() === "POST" &&
+            new URL(response.url()).pathname ===
+                `/admin/stock-adjustments/${rejectedAdjustment.id}/submit`,
+        { timeout: 60_000 },
+    )
+    await editor
+        .getByRole("button", { name: "保存并提交审批", exact: true })
+        .click()
+    const resubmitResponse = await resubmitting
+    const resubmitBody = await resubmitResponse.text()
+    const diagnostics = `原库存调整单提交失败（HTTP ${resubmitResponse.status()}）: ${resubmitBody}`
+    expect(resubmitResponse.ok(), diagnostics).toBe(true)
+    const resubmitResult = JSON.parse(resubmitBody) as {
+        success: boolean
+        data: AdjustmentDetail
+    }
+    expect(resubmitResult.success, diagnostics).toBe(true)
+    expect(resubmitResult.data.adjustment.id).toBe(rejectedAdjustment.id)
+    expect(resubmitResult.data.adjustment.status).toBe("IN_APPROVAL")
+    await expect(editor).toBeHidden(VISIBLE)
+    const resubmittedDetail = await apiGet<AdjustmentDetail>(
+        await tokenOf("cangchu"),
+        `/admin/stock-adjustments/${rejectedAdjustment.id}`,
+    )
+    expect(resubmittedDetail.adjustment.id).toBe(rejectedAdjustment.id)
+    expect(resubmittedDetail.adjustment.adjustment_no).toBe(rejectNo)
+    expect(resubmittedDetail.adjustment.status).toBe("IN_APPROVAL")
+    expect(resubmittedDetail.lines.map((line) => line.id)).toEqual(
+        rejectedDetail.lines.map((line) => line.id),
+    )
+    expect(resubmittedDetail.lines[0].quantity).toMatch(/^3(?:\.0+)?$/)
+    expect(resubmittedDetail.adjustment.note).toBe("补齐盘点依据，实际盘盈三盒")
+    expect(resubmittedDetail.approval?.instance?.id).not.toBe(
+        rejectedInstanceId,
+    )
+    expect(resubmittedDetail.approval?.instance?.current_round_no).toBe(1)
+    expect(
+        (await listAdjustments(await tokenOf("cangchu")))
+            .map((row) => row.id)
+            .sort(),
+    ).toEqual(posted.map((row) => row.id).sort())
+    expect(await readOnHand()).toBe(afterDamage)
+    await closeSession(warehouse)
+    finance = await openLoggedInWorkspace(browser, "caiwu")
+    await openStockAdjustmentApproval(finance.page, rejectNo)
+    await approveCurrentDocument(finance.page)
+    await closeSession(finance)
+    expect(await readOnHand()).toBe(afterDamage + 3)
+    const afterResubmitMovements = await listMovements(await tokenOf("cangchu"))
+    expect(afterResubmitMovements.length).toBe(afterRejectMovements.length + 1)
+    const correctedMovement = afterResubmitMovements.find(
+        (row) => row.source_document_id === rejectedAdjustment.id,
+    )
+    expect(correctedMovement?.quantity).toMatch(/^3(?:\.0+)?$/)
 
     expectPurchaseAndFulfillmentUnchanged(
         ledgerBefore,
         await readPurchaseAndFulfillmentTotals(),
     )
-    const instances = await apiGet<ApiPage<{ document_type?: string; status?: string }>>(
+    // mine 只列本人当前 OPEN 的 DOCUMENT_APPROVAL；终审后应从待办移除。
+    const pendingInstances = await apiGet<ApiPage<{ instance_id: string }>>(
         await tokenOf("caiwu"),
         "/admin/approval-instances",
-        { view: "mine", document_type: "stock_adjustment", limit: 20 },
+        {
+            view: "mine",
+            document_type: "stock_adjustment",
+            q: rejectNo,
+            limit: 20,
+        },
     )
-    expect((instances.items ?? []).length).toBeGreaterThan(0)
+    expect(pendingInstances.items ?? []).toEqual([])
+    const instances = await apiGet<
+        ApiPage<{
+            instance_id: string
+            document_id: string
+            status: string
+        }>
+    >(await tokenOf("cangchu"), "/admin/approval-instances", {
+        view: "started",
+        document_type: "stock_adjustment",
+        status: "APPROVED",
+        q: rejectNo,
+        limit: 20,
+    })
+    expect(instances.items).toHaveLength(1)
+    expect(instances.items![0].document_id).toBe(rejectedAdjustment.id)
+    expect(instances.items![0].instance_id).toBe(
+        resubmittedDetail.approval?.instance?.id,
+    )
+    expect(instances.items![0].status).toBe("APPROVED")
+    const oldHistory = await apiGet<ApiPage<{ result: string }>>(
+        await tokenOf("cangchu"),
+        `/admin/approval-instances/${rejectedInstanceId}/history`,
+        { limit: 50 },
+    )
+    expect(oldHistory.items?.some((item) => item.result === "REJECTED")).toBe(
+        true,
+    )
+    expect(oldHistory.items?.some((item) => item.result === "CANCELLED")).toBe(
+        true,
+    )
+    const postedDetail = await apiGet<AdjustmentDetail>(
+        await tokenOf("cangchu"),
+        `/admin/stock-adjustments/${rejectedAdjustment.id}`,
+    )
+    expect(postedDetail.adjustment.status).toBe("POSTED")
+    expect(postedDetail.approval?.instance?.id).toBe(
+        resubmittedDetail.approval?.instance?.id,
+    )
+    expect(postedDetail.approval?.instance?.status).toBe("APPROVED")
 })

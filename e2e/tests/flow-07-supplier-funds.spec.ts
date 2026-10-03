@@ -26,6 +26,7 @@ import {
 } from "../helpers/test";
 
 import { createCustomerViaUi } from "../helpers/customers";
+import { rejectFinancialOriginal, reviseFinancialOriginal } from "../helpers/financial-draft-edit"
 import { headedAwareViewport } from "../helpers/headed";
 import { loginViaUi, openLoggedInWorkspace } from "../helpers/login";
 import { confirmSupplyAllocation, expandSourcingEditor } from "../helpers/sourcing"
@@ -571,6 +572,10 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
     await reversalRequest
         .locator("#supplier-payables-reversal-request-reason")
         .fill("E2E 付款冲正：错付核对");
+    const reversalCommitted = fukuanPage.waitForResponse(
+        (response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/admin/payment-reversals/commit",
+        { timeout: 90_000 },
+    )
     await reversalRequest.locator("#supplier-payables-reversal-request-submit").click();
     const reversalSubmit = fukuanPage.getByRole("alertdialog", {
         name: /确认提交冲正|提交冲正/,
@@ -584,11 +589,24 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
     await expect(fukuanPage.getByText(/冲正已提交审批/).first()).toBeVisible({
         timeout: 20_000,
     });
+    const reversalResponse = await reversalCommitted
+    expect(reversalResponse.ok(), await reversalResponse.text()).toBeTruthy()
+    const reversal = (await reversalResponse.json()).data as { id: string; reversal_no: string }
+    expect(reversal.id).toBeTruthy()
+    expect(reversal.reversal_no).toBeTruthy()
 
-    await openWorkspaceTask(caigouPage, /付款冲正审批/, undefined, "approval");
+    await openWorkspaceTask(caigouPage, /付款冲正审批/, reversal.reversal_no, "approval");
+    await rejectFinancialOriginal(caigouPage, "付款冲正原因需补齐，修改原冲正单后重提")
+    await reviseFinancialOriginal(fukuanPage, {
+        kind: "payment_reversal",
+        id: reversal.id,
+        documentNo: reversal.reversal_no,
+        changedText: "已核对原采购付款回单，按原金额冲正错付款",
+    })
+    await openWorkspaceTask(caigouPage, /付款冲正审批/, reversal.reversal_no, "approval");
     await approveOpenTask(caigouPage, "采购确认冲正依据");
 
-    await openWorkspaceTask(caiwuPage, /付款冲正审批/, undefined, "approval");
+    await openWorkspaceTask(caiwuPage, /付款冲正审批/, reversal.reversal_no, "approval");
     await approveOpenTask(caiwuPage, "财务总监审批");
 
     await fukuanPage.goto("/finance/supplier-accounts?view=payment");
