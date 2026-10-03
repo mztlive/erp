@@ -251,6 +251,12 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                                             size="icon-sm"
                                             aria-label="编辑账号资料"
                                             title="编辑账号资料"
+                                            disabled={
+                                                can("org_unit:list") &&
+                                                can("org_unit:manage") &&
+                                                (org.isPending ||
+                                                    org.isFetching)
+                                            }
                                             onClick={() =>
                                                 setProfileSnapshot({
                                                     account,

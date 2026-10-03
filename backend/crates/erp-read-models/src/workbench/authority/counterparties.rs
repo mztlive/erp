@@ -8,7 +8,24 @@ impl WorkItemFactsReader {
         id: &str,
         executor: &mut dyn persistence_core::Executor,
     ) -> crate::errors::Result<bool> {
-        Ok(self.counterparty_numbers(kind, &[id.to_string()], executor).await?.contains_key(id))
+        use erp_core::ids::{CustomerAccountId, SupplierAccountId};
+        use erp_customer::CustomerExt;
+        use erp_supplier::SupplierExt;
+        Ok(match kind {
+            "supplier" => self
+                .db
+                .supplier_accounts()
+                .find_by_id(&SupplierAccountId::new(id), executor)
+                .await?
+                .is_some_and(|account| account.is_active()),
+            "customer" => self
+                .db
+                .customer_accounts()
+                .find_by_id(&CustomerAccountId::new(id), executor)
+                .await?
+                .is_some_and(|account| account.is_active()),
+            _ => false,
+        })
     }
 
     /// Display numbers for counterparties of one kind.

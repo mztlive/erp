@@ -58,7 +58,7 @@ impl SupplierProfileService {
         let (signing, payment) = row.company_names();
         let signing = self.import_company(signing).await?;
         let payment = self.import_company(payment).await?;
-        let command = row.command(signing, payment)?;
+        let command = row.command(signing, payment, actor.id())?;
         self.submit_import_row(row, command, actor).await
     }
 

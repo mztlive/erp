@@ -100,6 +100,29 @@ fn all_required_permissions_cannot_be_spliced_across_roles() {
     assert!(snapshot.granting_role_ids_for_all(&[]).is_empty());
 }
 
+/// 经营盈亏继承销售范围，但收入与成本权限必须由同一角色授予。
+#[test]
+fn profit_loss_source_scope_still_requires_cost_permission_in_the_same_role() {
+    let sales = Permission::parse("sales_order:list").unwrap();
+    let cost = Permission::parse("cost_entry:list").unwrap();
+    let required = [sales.clone(), cost.clone()];
+    let mut snapshot = RolePermissionSnapshot {
+        role_ids: vec!["sales".into(), "cost".into(), "finance".into()],
+        grants: HashMap::from([
+            ("sales".into(), HashSet::from([sales.clone()])),
+            ("cost".into(), HashSet::from([cost.clone()])),
+            ("finance".into(), HashSet::from([sales.clone(), cost.clone()])),
+        ]),
+        policy_revision: 7,
+    };
+    assert_eq!(snapshot.granting_role_ids_for_all(&required), vec!["finance"]);
+    snapshot.grants.remove("finance");
+    assert!(snapshot.granting_role_ids_for_all(&required).is_empty());
+    snapshot.grants.remove("cost");
+    assert_eq!(snapshot.granting_role_ids(&sales), vec!["sales"]);
+    assert!(snapshot.granting_role_ids_for_all(&required).is_empty());
+}
+
 #[test]
 fn remote_policy_revision_invalidates_the_local_snapshot() {
     assert!(policy_revisions_match(7, 7));

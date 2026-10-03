@@ -6,6 +6,7 @@ mod delivery_posting;
 mod delivery_tracking;
 mod electronic_confirm;
 mod electronic_delivery;
+mod fulfillment_actual_cost;
 mod purchase_context;
 mod purchase_receipt;
 mod purchase_receipt_posting;

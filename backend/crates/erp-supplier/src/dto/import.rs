@@ -4,6 +4,7 @@ use std::str::FromStr;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::PartyId;
 use erp_core::money::Rate;
+use erp_core::validation::non_empty_trimmed;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -139,12 +140,27 @@ impl SupplierImportRow {
         Ok(())
     }
 
-    /// 将完整模板行转成现有根命令，空税率不推断默认值。
+    /// 将完整模板行转成根命令，由服务端指定当前提交人为维护人。
     ///
-    /// # Errors
-    /// 必填、税率、结算或评级不符合约束时拒绝整行。
-    pub fn command(&self, signing: PartyId, payment: PartyId) -> Result<SaveSupplierProfileRequest> {
+    /// # 参数
+    /// * `signing` - 已解析的公司签约主体
+    /// * `payment` - 已解析的公司付款主体
+    /// * `maintainer_user_id` - 当前已认证提交人的账号 ID，不读取模板内容
+    ///
+    /// # 返回
+    /// 返回完整创建命令；空税率保持未提供。
+    ///
+    /// # 错误
+    /// 必填、维护人、税率、结算或评级不符合约束时拒绝整行。
+    pub fn command(
+        &self,
+        signing: PartyId,
+        payment: PartyId,
+        maintainer_user_id: &str,
+    ) -> Result<SaveSupplierProfileRequest> {
         self.validate()?;
+        let maintainer_user_id = non_empty_trimmed(maintainer_user_id, "供应商维护人不能为空")
+            .map_err(|error| Error::ValidationError(error.to_string()))?;
         let (settlement_mode, reconciliation_cycle, payment_term_snapshot) = import_settlement(self.cell(9))?;
         Ok(SaveSupplierProfileRequest {
             idempotency_key: self.command_key(),
@@ -172,7 +188,7 @@ impl SupplierImportRow {
             invoice_tax_rates: Some(import_tax_rates(self.cell(19))?),
             signing_entity_party_id: signing,
             payment_entity_party_id: payment,
-            maintainer_user_id: None,
+            maintainer_user_id: Some(maintainer_user_id),
             capability_owners: vec![],
             capability_codes: vec![],
             qualifications: self.qualifications(),
@@ -344,17 +360,31 @@ mod tests {
     fn complete_row_keeps_optional_data_empty_and_complements_company() {
         let row = complete_row();
         assert_eq!(row.company_names(), ("示例公司", "示例公司"));
-        let command = row.command(PartyId::new("signing"), PartyId::new("payment")).unwrap();
+        let command = row.command(PartyId::new("signing"), PartyId::new("payment"), "buyer-1").unwrap();
         assert_eq!(command.supplier_no.as_deref(), Some("SUP-test"));
         assert!(command.invoice_tax_rates.unwrap().is_empty());
         assert!(command.contact.is_none());
         assert!(command.rating.is_none());
+        assert_eq!(command.maintainer_user_id.as_deref(), Some("buyer-1"));
         let mut reverse = row.clone();
         reverse.cells.swap(7, 8);
         assert_eq!(reverse.company_names(), row.company_names());
         reverse.cells[1] = " 示例供应商 (上海) 有限公司 ".into();
         reverse.cells[0] = "不同旧编号".into();
         assert_eq!(reverse.command_key(), row.command_key());
+    }
+    #[test]
+    fn import_command_requires_the_authenticated_submitter_as_maintainer() {
+        let row = complete_row();
+        let command = row.command(PartyId::new("signing"), PartyId::new("payment"), " buyer-2 ").unwrap();
+        assert_eq!(command.maintainer_user_id.as_deref(), Some("buyer-2"));
+        assert!(command.validate_contract().is_ok());
+        for missing in ["", " \n\t "] {
+            assert!(matches!(
+                row.command(PartyId::new("signing"), PartyId::new("payment"), missing),
+                Err(Error::ValidationError(message)) if message.contains("供应商维护人不能为空")
+            ));
+        }
     }
     #[test]
     fn incomplete_rows_and_unreadable_cells_are_rejected_without_defaults() {

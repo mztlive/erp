@@ -2,8 +2,8 @@
  * [flow-04] 线下服务履约
  *
  * 文档：docs/erp-phase-1.md §7.3.3 + §7.4（供给分配为唯一选源；线下服务不得分配现有库存）
- * 账号：xiaoshou（销售） / caigou（采购确认、供给分配、服务履约） / caiwu（采购单审批）
- *        admin 仅在采购责任规则缺失时补默认调度人（主数据，非业务单据）
+ * 账号：xiaoshou（销售） / caigou（采购确认、供给分配） / caiwu（采购单审批）
+ *        admin 补默认调度人，并作为转交后的新责任人完成服务履约
  *
  * 文档-代码差异（以代码为准）：
  * - 服务履约表单没有独立「服务对象」字段，而是完成数量 + 履约结果 + 服务时间 + 服务地点 + 图片凭证 + 完成说明
@@ -15,11 +15,13 @@ import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { expect, test, type Page } from '../helpers/test'
 
+import { apiGet, apiToken } from '../helpers/api'
 import { createCustomerViaUi } from '../helpers/customers'
 import { uploadAcceptanceEvidence } from '../helpers/fulfillment'
 import { openLoggedInWorkspace } from '../helpers/login'
 import { ensureDefaultProcurementOwner } from '../helpers/procurement'
 import { expandSourcingEditor } from '../helpers/sourcing'
+import { verifyServiceTaskReassignment } from '../helpers/task-reassignment'
 import {
     approveCurrentDocument,
     chooseOption,
@@ -410,25 +412,28 @@ test('flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
     await expect(procurement.page.getByRole('table').getByText('已生效', { exact: true }).first()).toBeVisible({ timeout: TIMEOUT })
     await expect(procurement.page.getByRole('table').getByText('草稿', { exact: true })).toHaveCount(0)
 
-    // 8. 采购登记服务履约（对象由销售明细锁定；时间/地点/结果/凭证）
-    await refreshWorkspace(procurement.page)
+    const transferred = await verifyServiceTaskReassignment(admin.page, salesOrderId)
+    const serviceOwner = admin
+
+    // 8. 新责任人登记服务履约（对象由销售明细锁定；时间/地点/结果/凭证）
+    await refreshWorkspace(serviceOwner.page)
     // 工作台轮询可能在填写期间把任务面板刷掉（family 切回全部、表单卸载）：整个填写包三轮重试，
     // 每轮先确保面板打开再重填（覆盖写等幂，草稿存在也不怕）。
     for (let attempt = 0; ; attempt += 1) {
-      if ((await procurement.page.locator('[aria-label="线下服务表单"]').count()) === 0) {
-        await openWorkspaceTask(procurement.page, /履约处理/, '北京安达', 'fulfillment')
-        await openFulfillmentWorkspaceForm(procurement.page)
+      if ((await serviceOwner.page.locator('[aria-label="线下服务表单"]').count()) === 0) {
+        await openWorkspaceTask(serviceOwner.page, /履约处理/, '北京安达', 'fulfillment')
+        await openFulfillmentWorkspaceForm(serviceOwner.page)
         // 任务标题使用采购单身份，实际履约表单必须为线下服务。
-        await expect(procurement.page.locator('[aria-label="线下服务表单"]')).toBeVisible({
+        await expect(serviceOwner.page.locator('[aria-label="线下服务表单"]')).toBeVisible({
           timeout: TIMEOUT,
         })
       }
       try {
-        await expect(procurement.page.locator('[aria-label="线下服务表单"]')).toBeVisible({ timeout: 10_000 })
-        await procurement.page.getByLabel('本次完成数量').fill('2')
+        await expect(serviceOwner.page.locator('[aria-label="线下服务表单"]')).toBeVisible({ timeout: 10_000 })
+        await serviceOwner.page.getByLabel('本次完成数量').fill('2')
         await chooseOption(
-          procurement.page,
-          procurement.page.locator('#fulfillment-operations-service-form-result'),
+          serviceOwner.page,
+          serviceOwner.page.locator('#fulfillment-operations-service-form-result'),
           '成功',
         )
         // 服务时间是 DateTimeRangeLocalPicker：触发按钮的 aria-label 是占位文案而非「服务时间」，
@@ -437,9 +442,9 @@ test('flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
         // 日历点选当天一次即落定起止同一天（截图证实触发器已显示完整范围）：直接用全局 id 定位，
         // 不经过 popover 链（同页可能残留其他弹层导致 last() 错位）。第二次点选反而会重置范围。
         // 弹层开关受工作台轮询干扰偶发打不开：轮询触发器直到当天按钮出现，最多 4 轮。
-        const serviceDay = procurement.page.locator(`button[id$="-day-${todayIso}"]:not([disabled])`).first()
+        const serviceDay = serviceOwner.page.locator(`button[id$="-day-${todayIso}"]:not([disabled])`).first()
         for (let round = 0; round < 4; round += 1) {
-          await procurement.page.locator('#fulfillment-operations-service-form-service-time').click({ force: true })
+          await serviceOwner.page.locator('#fulfillment-operations-service-form-service-time').click({ force: true })
           const opened = await serviceDay
             .waitFor({ state: 'visible', timeout: 5_000 })
             .then(() => true, () => false)
@@ -447,38 +452,44 @@ test('flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
         }
         await expect(serviceDay).toBeVisible({ timeout: 10_000 })
         await serviceDay.click({ force: true })
-        const fromTime = procurement.page.locator('#fulfillment-operations-service-form-service-time-from-time')
-        const toTime = procurement.page.locator('#fulfillment-operations-service-form-service-time-to-time')
+        const fromTime = serviceOwner.page.locator('#fulfillment-operations-service-form-service-time-from-time')
+        const toTime = serviceOwner.page.locator('#fulfillment-operations-service-form-service-time-to-time')
         await expect(fromTime).toBeEnabled({ timeout: 10_000 })
         await expect(toTime).toBeEnabled({ timeout: 10_000 })
         await fromTime.fill('09:00')
         await toTime.fill('11:00')
-        const timeDone = procurement.page.locator('#fulfillment-operations-service-form-service-time-done')
+        const timeDone = serviceOwner.page.locator('#fulfillment-operations-service-form-service-time-done')
         await expect(timeDone).toBeEnabled({ timeout: 10_000 })
         await timeDone.click({ force: true })
-        await procurement.page.getByLabel('服务地点').fill('北京市大兴区旧宫镇客户现场')
-        await procurement.page.locator('#fulfillment-operations-service-form-evidence-input').setInputFiles({
+        await serviceOwner.page.getByLabel('服务地点').fill('北京市大兴区旧宫镇客户现场')
+        await serviceOwner.page.locator('#fulfillment-operations-service-form-evidence-input').setInputFiles({
           name: 'service-evidence.png',
           mimeType: 'image/png',
           buffer: PNG_1X1,
         })
-        await procurement.page.getByLabel('完成说明').fill('已上门安装并完成现场验收')
+        await serviceOwner.page.getByLabel('完成说明').fill('已上门安装并完成现场验收')
         break
       } catch (error) {
         if (attempt >= 2) throw error
       }
     }
-    await expect(procurement.page.getByRole('button', { name: /^(通过|同意审批)$/ })).toHaveCount(0)
-    await expect(procurement.page.getByRole('button', { name: '驳回', exact: true })).toHaveCount(0)
-    await expect(procurement.page.getByText('审批摘要')).toHaveCount(0)
-    await procurement.page.locator('#fulfillment-operations-work-surface-confirm').click()
-    await expect(procurement.page.getByRole('heading', { name: '确认服务完成？' })).toBeVisible({ timeout: TIMEOUT })
-    await procurement.page.locator('#fulfillment-operations-workspace-confirm-confirm').click()
-    await expect(procurement.page.getByRole('heading', { name: '确认服务完成？' })).toBeHidden({
+    await expect(serviceOwner.page.getByRole('button', { name: /^(通过|同意审批)$/ })).toHaveCount(0)
+    await expect(serviceOwner.page.getByRole('button', { name: '驳回', exact: true })).toHaveCount(0)
+    await expect(serviceOwner.page.getByText('审批摘要')).toHaveCount(0)
+    await serviceOwner.page.locator('#fulfillment-operations-work-surface-confirm').click()
+    await expect(serviceOwner.page.getByRole('heading', { name: '确认服务完成？' })).toBeVisible({ timeout: TIMEOUT })
+    await serviceOwner.page.locator('#fulfillment-operations-workspace-confirm-confirm').click()
+    await expect(serviceOwner.page.getByRole('heading', { name: '确认服务完成？' })).toBeHidden({
       timeout: TIMEOUT,
     })
-    await expect(procurement.page.getByRole('button', { name: /^(通过|同意审批)$/ })).toHaveCount(0)
-    await expect(procurement.page.getByText('当前节点')).toHaveCount(0)
+    await expect(serviceOwner.page.getByRole('button', { name: /^(通过|同意审批)$/ })).toHaveCount(0)
+    await expect(serviceOwner.page.getByText('当前节点')).toHaveCount(0)
+
+    const completedTask = await apiGet<{ status: string; owner_user_id: string }>(
+      await apiToken('admin'),
+      `/admin/work-items/${transferred.taskId}`,
+    )
+    expect(completedTask).toMatchObject({ status: 'COMPLETED', owner_user_id: transferred.ownerUserId })
 
     // 9. 销售在 W01 登记客户验收（NO_APPROVAL）
     await openWorkspaceTask(sales.page, /客户验收登记/, orderNo, 'fulfillment')

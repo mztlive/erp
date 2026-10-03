@@ -68,7 +68,10 @@ export function DefinitionEditor({
             name: detail.name,
             nodes: seedDraftNodes(detail.document_type, detail.nodes),
         },
-        validators: { onSubmit: definitionEditorSchema },
+        validators: {
+            onChange: definitionEditorSchema,
+            onSubmit: definitionEditorSchema,
+        },
         onSubmitInvalid: () => {
             setSubmitError(INCOMPLETE_DRAFT_MESSAGE)
             setSaveState("failed")

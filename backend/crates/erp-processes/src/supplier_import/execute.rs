@@ -63,7 +63,8 @@ impl SupplierImportProcess {
             .background_job_items()
             .list_entities_by_job(&BackgroundJobId::new(&job.base.id), &mut NoTransaction)
             .await?;
-        let service = SupplierProfileService::new(self.db.clone(), self.codec.clone());
+        let service =
+            SupplierProfileService::new(self.db.clone(), self.codec.clone()).with_rbac(self.rbac.clone());
         let actor = AuditActor::new(job.requested_by.clone(), job.requested_by.clone(), AccountKind::Admin);
         for mut item in items.into_iter().filter(|item| item.status.is_none()) {
             if !self.renew(job).await? {

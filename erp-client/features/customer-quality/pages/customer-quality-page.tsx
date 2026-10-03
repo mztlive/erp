@@ -28,6 +28,7 @@ import { CustomerQualityFilterCard } from "../components/customer-quality-filter
 import { CustomerQualityMainView } from "../components/customer-quality-main-view"
 import { CustomerQualityPageSkeleton } from "../components/customer-quality-page-skeleton"
 import { PeriodBlockerCard } from "../components/period-blocker-card"
+import { DualQualitySection } from "../components/dual-quality-section"
 
 export function CustomerQualityPage() {
     const searchParams = useSearchParams()
@@ -214,6 +215,22 @@ export function CustomerQualityPage() {
                         </Button>
                     }
                 />
+                <PeriodBlockerCard
+                    periodPolicy={undefined}
+                    explicitFrom={period.explicitFrom}
+                    explicitTo={period.explicitTo}
+                    onFromChange={period.setExplicitFrom}
+                    onToChange={period.setExplicitTo}
+                    onApplyExplicit={period.applyExplicitPeriod}
+                    onApplyPreset={period.applyPreset}
+                    description="默认统计期间暂无法读取。选定期间后可查询当前负责客户与历史订单贡献。"
+                />
+                {period.hasPeriod && !period.periodInvalid ? (
+                    <DualQualitySection
+                        from={period.resolvedFrom}
+                        to={period.resolvedTo}
+                    />
+                ) : null}
             </PageScaffold>
         )
     }

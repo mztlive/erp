@@ -152,6 +152,8 @@ export function ProfitLossRowsPanel({
 
     return (
         <ListWorkSurface
+            className="flex-none"
+            tableClassName="flex-none [&_[data-slot=data-table]]:h-auto [&_[data-slot=data-table-surface]]:flex-none"
             ariaLabel={`实际经营盈亏明细 · ${SCOPE_LABEL}`}
             views={
                 <ListWorkspaceViews

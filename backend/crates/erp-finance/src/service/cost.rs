@@ -3,6 +3,7 @@
 //! 成本事实查询、金额守恒与分配构建由本模块承担。根流程先校验销售来源，
 //! 再将同一个 Executor 传入成本事实和分配写入；本模块不得另开事务或写审计。
 
+pub mod fulfillment_actual;
 pub mod purchase_initial;
 
 use std::collections::{HashMap, HashSet};

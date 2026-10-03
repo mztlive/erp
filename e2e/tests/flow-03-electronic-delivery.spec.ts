@@ -12,6 +12,7 @@ import { test, expect, type Locator, type Page } from '../helpers/test'
 import fs from 'node:fs'
 import path from 'node:path'
 
+import { apiGet, apiToken } from '../helpers/api'
 import { createCustomerViaUi } from '../helpers/customers'
 import { uploadAcceptanceEvidence } from '../helpers/fulfillment'
 import { openLoggedInWorkspace } from '../helpers/login'
@@ -585,7 +586,7 @@ test('虚拟商品电子交付全流程：销售单生效后只能采购、登�
                 .replace(/^打开采购单\s*/, '')
                 .trim()
             const fromText = ((await openPo.innerText()) || '').trim()
-            const purchaseNo = /^PO-/.test(fromAria) ? fromAria : fromText
+            const purchaseNo = fromAria.startsWith('PO-') ? fromAria : fromText
             expect(purchaseNo).toMatch(/^PO-/)
 
             await openElectronicFulfillment(page, purchaseNo)
@@ -612,6 +613,41 @@ test('虚拟商品电子交付全流程：销售单生效后只能采购、登�
             const body = await response.json()
             expect(response.ok(), JSON.stringify(body)).toBeTruthy()
             expect(body.data).toMatchObject({ status: 'CONFIRMED', result: 'SUCCESS', quantity })
+            // 成功交付按正式采购冻结分配入实际商品成本，归属稳定销售行。
+            const adminToken = await apiToken('admin')
+            const purchase = await apiGet<{
+                allocations: Array<{
+                    id: string
+                    allocated_quantity: string
+                    allocated_cost_gross: string
+                    allocated_cost_net: string
+                }>
+            }>(adminToken, `/admin/purchase-orders/${body.data.purchase_order_id}`)
+            const allocation = purchase.allocations.find(row => row.id === body.data.purchase_line_sales_allocation_id)
+            expect(allocation).toBeDefined()
+            expect(allocation!.allocated_quantity).toBe(quantity)
+            const sales = await apiGet<{ lines: Array<{ id: string }> }>(adminToken, `/admin/sales-orders/${salesOrderId}`)
+            expect(sales.lines.map(row => row.id)).toContain(body.data.sales_order_line_id)
+            const costs = await apiGet<{ items: Array<{
+                cost_type: string
+                cost_stage: string
+                source_fact_type: string
+                source_document_id: string
+                source_line_id: string
+                gross_amount: string
+                net_amount: string
+                allocations: Array<Record<string, unknown>>
+            }> }>(adminToken, '/admin/cost-entries', { source_document_id: body.data.purchase_order_id, cost_stage: 'actual' })
+            expect(costs.items).toHaveLength(1)
+            expect(costs.items[0]).toMatchObject({
+                cost_type: 'product', cost_stage: 'actual', source_fact_type: 'purchase_fulfillment',
+                source_document_id: body.data.purchase_order_id, source_line_id: allocation!.id,
+                gross_amount: allocation!.allocated_cost_gross, net_amount: allocation!.allocated_cost_net,
+            })
+            expect(costs.items[0]!.allocations).toEqual([expect.objectContaining({
+                sales_order_id: salesOrderId, sales_order_line_id: body.data.sales_order_line_id,
+                allocated_gross_amount: allocation!.allocated_cost_gross, allocated_net_amount: allocation!.allocated_cost_net,
+            })])
             await expect(confirm).toBeHidden({ timeout: 20000 })
 
         } finally {

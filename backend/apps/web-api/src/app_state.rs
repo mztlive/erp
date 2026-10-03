@@ -552,11 +552,23 @@ impl AppState {
         erp_processes::SupplierProfileService::new(self.db(), self.sensitive_data()).with_rbac(self.rbac())
     }
 
-    /// 绑定供应商后台导入所需数据库、对象存储和密文编解码器。
+    /// 绑定供应商后台导入所需数据库、授权源、对象存储和密文编解码器。
     ///
-    /// 返回导入流程；不执行 I/O，不产生错误。
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回导入流程；不执行 I/O。
+    ///
+    /// # 错误
+    /// 无。
     pub fn supplier_import_process(&self) -> erp_processes::SupplierImportProcess {
-        erp_processes::SupplierImportProcess::new(self.db(), self.storage().clone(), self.sensitive_data())
+        erp_processes::SupplierImportProcess::new(
+            self.db(),
+            self.rbac(),
+            self.storage().clone(),
+            self.sensitive_data(),
+        )
     }
 
     /// Catalog domain service with audit and file-asset adapters.

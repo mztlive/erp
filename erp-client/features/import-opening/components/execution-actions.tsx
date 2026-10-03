@@ -221,6 +221,7 @@ export function ImportExecutionActions({
                     }}
                     title="提交导入应用"
                     actionLabel="确认提交应用"
+                    confirmLabel="确认提交应用"
                     description="提交后开始导入当前待应用项。"
                     fromStatus={{ label: "待应用", tone: "success" }}
                     toStatus={{ label: "导入中", tone: "info" }}
@@ -241,6 +242,7 @@ export function ImportExecutionActions({
                     }}
                     title="重新准备失败项"
                     actionLabel="确认重新准备"
+                    confirmLabel="确认重新准备"
                     description="仅准备上轮失败项；准备完成后仍需点击“提交应用”。"
                     fromStatus={{ label: "失败结果", tone: "destructive" }}
                     toStatus={{ label: "待应用", tone: "success" }}

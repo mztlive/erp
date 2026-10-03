@@ -17,6 +17,7 @@ use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::FulfillmentProcess;
+use super::fulfillment_actual_cost::{ActualCostSource, post as post_actual_cost};
 use super::purchase_context::{ensure_allocation_valid, ensure_po_fulfillable, ensure_prepay_gate};
 use crate::{Error, Result};
 
@@ -132,6 +133,7 @@ async fn purchase_context(
     Ok(order)
 }
 
+/// 完成任务并在成功交付时追加实际成本及验收可用事实。
 async fn finish(
     db: &Database,
     record: &ElectronicDelivery,
@@ -146,6 +148,21 @@ async fn finish(
         executor,
     )
     .await?;
+    if record.result == FulfillmentResult::Success {
+        post_actual_cost(
+            db,
+            ActualCostSource {
+                purchase: order,
+                allocation_id: &record.purchase_line_sales_allocation_id,
+                sales_order_line_id: &record.sales_order_line_id,
+                quantity: record.quantity,
+                occurred_at: record.fact.occurred_at,
+                evidence_attachment_id: record.evidence_attachment_id.clone(),
+            },
+            executor,
+        )
+        .await?;
+    }
     if record.result != FulfillmentResult::Failure {
         super::customer_acceptance::task::ensure_customer_acceptance_task(
             db,

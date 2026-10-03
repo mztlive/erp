@@ -212,11 +212,13 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             )?;
             let db = self.db.clone();
             let rbac = self.auth.clone();
+            let facts = Arc::clone(&self.facts);
             let audit_port = Arc::clone(&self.audit);
             let rule = rbac
                 .clone()
                 .run_authorized_policy_transaction(policy_revision, move |executor| {
-                    let service = WorkItemService::new(db.clone(), rbac);
+                    let service =
+                        WorkItemService::with_ports(db.clone(), rbac, facts, Arc::clone(&audit_port));
                     Box::pin(async move {
                         service.validate_finance_rule_data(&data, true, true, executor).await?;
                         db.finance_responsibility_rules().create(&rule, executor).await?;
@@ -263,11 +265,12 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             )?;
             let db = self.db.clone();
             let rbac = self.auth.clone();
+            let facts = Arc::clone(&self.facts);
             let audit_port = Arc::clone(&self.audit);
             let rule = rbac
                 .clone()
                 .run_authorized_policy_transaction(policy_revision, move |executor| {
-                    let service = WorkItemService::new(db, rbac);
+                    let service = WorkItemService::with_ports(db, rbac, facts, Arc::clone(&audit_port));
                     Box::pin(async move {
                         let rule =
                             service.update_finance_rule(&id, version, data, updated_by, executor).await?;

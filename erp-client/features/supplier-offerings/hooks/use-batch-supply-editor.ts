@@ -20,6 +20,10 @@ import {
 import { errorMessage, idempotencyKey } from "../lib/offering-forms"
 import { parseDelimited } from "../lib/batch-supply-import"
 import {
+    batchValidationMessage,
+    SupplyBatchValidationError,
+} from "../lib/batch-supply-error"
+import {
     useReloadSupplyRowsMutation,
     useSupplyBatchMutation,
     useSupplyFileMutation,
@@ -200,11 +204,13 @@ export function useBatchSupplyEditor({
                 matrix.length + rowIndex > rows.length ||
                 matrix.some((row) => row.length + columnIndex > columns.length)
             )
-                throw new Error(
+                throw new SupplyBatchValidationError(
                     "粘贴范围超出表格，请先添加足够的 SKU，并核对列顺序",
                 )
             if (matrix.some((_, i) => lockedRow(rows[rowIndex + i])))
-                throw new Error("粘贴范围包含已完成或待确认的行，请调整范围")
+                throw new SupplyBatchValidationError(
+                    "粘贴范围包含已完成或待确认的行，请调整范围",
+                )
             matrix.forEach((cells, i) => {
                 const row = { ...rows[rowIndex + i] }
                 cells.forEach((value, j) => {
@@ -223,14 +229,14 @@ export function useBatchSupplyEditor({
             changeRows(rows)
             message(`已粘贴 ${matrix.length} 行，请核对后校验。`)
         } catch (error) {
-            message(errorMessage(error, "粘贴失败"))
+            message(batchValidationMessage(error, "粘贴失败"))
         }
     }
     async function importFile(file: File) {
         try {
             addRows(await fileMutation.mutateAsync(file))
         } catch (error) {
-            message(errorMessage(error, "文件导入失败"))
+            message(batchValidationMessage(error, "文件导入失败"))
         }
     }
     async function reloadFailed() {

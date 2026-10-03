@@ -17,19 +17,8 @@ impl ActualProfitLossReadModel {
         executor: &mut dyn Executor,
     ) -> Result<(AuthorizedDataScope, SalesReadScope)> {
         let resolver = SalesAccess::new(self.db.clone(), self.rbac.clone());
-        let (mut context, mut scope) =
-            resolver.resolve(actor, "list", &[Permission::parse("cost_entry:list")?], executor).await?;
-        let (cost_context, cost_scope) = resolver
-            .resolve_resource(
-                actor,
-                "cost_entry",
-                "list",
-                &[Permission::parse("sales_order:list")?],
-                executor,
-            )
-            .await?;
-        context.scope_version = format!("{}:{}", context.scope_version, cost_context.scope_version);
-        scope.required_scopes.push(cost_scope);
-        Ok((context, scope))
+        // 成本按来源销售分配继承范围，不存在可单独配置的成本部门范围。
+        // 同角色成本查询权限由销售解析器的额外权限集合一并证明。
+        resolver.resolve(actor, "list", &[Permission::parse("cost_entry:list")?], executor).await
     }
 }

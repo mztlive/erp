@@ -3,6 +3,15 @@ import type { ProposalView, PublicPageView } from "./types"
 const proposals = "/admin/sales-selection-proposals"
 const publicBase = "/public/selection"
 
+/** 公开接口旧响应不含提示列表，页面统一消费完整视图。 */
+type PublicPageWire = Omit<PublicPageView, "notices"> & {
+    notices?: string[] | null
+}
+
+function publicPageView(page: PublicPageWire): PublicPageView {
+    return { ...page, notices: page.notices ?? [] }
+}
+
 export async function fetchProposal(id: string): Promise<ProposalView> {
     return apiGet(`${proposals}/${id}`)
 }
@@ -17,7 +26,11 @@ export function publicImageUrl(
 }
 
 export async function fetchPublicPage(token: string): Promise<PublicPageView> {
-    return apiGet(`${publicBase}/${encodeURIComponent(token)}`)
+    return publicPageView(
+        await apiGet<PublicPageWire>(
+            `${publicBase}/${encodeURIComponent(token)}`,
+        ),
+    )
 }
 
 export async function savePublicSession(
@@ -28,19 +41,29 @@ export async function savePublicSession(
         choices: Array<{ item_id: string; quantity?: number }>
     },
 ): Promise<PublicPageView> {
-    return apiPost(`${publicBase}/${encodeURIComponent(token)}/session`, {
-        idempotency_key: input.idempotencyKey,
-        expected_session_version: input.expectedSessionVersion,
-        choices: input.choices,
-    })
+    return publicPageView(
+        await apiPost<PublicPageWire>(
+            `${publicBase}/${encodeURIComponent(token)}/session`,
+            {
+                idempotency_key: input.idempotencyKey,
+                expected_session_version: input.expectedSessionVersion,
+                choices: input.choices,
+            },
+        ),
+    )
 }
 
 export async function submitPublicSession(
     token: string,
     input: { idempotencyKey: string; expectedSessionVersion: number },
 ): Promise<PublicPageView> {
-    return apiPost(`${publicBase}/${encodeURIComponent(token)}/submit`, {
-        idempotency_key: input.idempotencyKey,
-        expected_session_version: input.expectedSessionVersion,
-    })
+    return publicPageView(
+        await apiPost<PublicPageWire>(
+            `${publicBase}/${encodeURIComponent(token)}/submit`,
+            {
+                idempotency_key: input.idempotencyKey,
+                expected_session_version: input.expectedSessionVersion,
+            },
+        ),
+    )
 }

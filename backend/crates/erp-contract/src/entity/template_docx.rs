@@ -78,9 +78,7 @@ fn unpack(bytes: &[u8]) -> Result<Package> {
         return Err(invalid());
     }
     let mut archive = ZipArchive::new(Cursor::new(bytes)).map_err(|_| invalid())?;
-    if archive.len() > 2048 {
-        return Err(invalid());
-    }
+    require_directory_entries(bytes, archive.central_directory_start(), archive.len())?;
     let mut package = Package::new();
     let mut total = 0_u64;
     for index in 0..archive.len() {
@@ -124,6 +122,28 @@ fn unpack(bytes: &[u8]) -> Result<Package> {
         return Err(invalid());
     }
     Ok(package)
+}
+
+/// ZIP 库按名称合并中央目录，须在展开前核对原始条目数量，避免重名与数量限制失效。
+fn require_directory_entries(bytes: &[u8], start: u64, expected: usize) -> Result<()> {
+    let mut offset = usize::try_from(start).map_err(|_| invalid())?;
+    let mut count = 0;
+    while bytes.get(offset..offset.saturating_add(4)) == Some(b"PK\x01\x02") {
+        let header = bytes.get(offset..offset.saturating_add(46)).ok_or_else(invalid)?;
+        let length = [28, 30, 32]
+            .into_iter()
+            .map(|index| usize::from(u16::from_le_bytes([header[index], header[index + 1]])))
+            .sum::<usize>();
+        offset = offset.checked_add(46 + length).filter(|end| *end <= bytes.len()).ok_or_else(invalid)?;
+        count += 1;
+        if count > 2048 {
+            return Err(invalid());
+        }
+    }
+    if count != expected {
+        return Err(invalid());
+    }
+    Ok(())
 }
 
 fn pack(package: Package) -> Result<Vec<u8>> {
@@ -418,6 +438,50 @@ mod tests {
         assert!(stamp(b"not a docx", "FSY-S-260453").is_err());
         assert!(stamp(&fixture("<w:p/>"), "FSY-S-260453").is_err());
         assert!(stamp(&fixture("<w:sectPr/>"), "bad\nnumber").is_err());
+    }
+
+    #[test]
+    fn rejects_duplicate_raw_directory_entries_hidden_by_zip_reader() {
+        let original = fixture("<w:p/><w:sectPr/>");
+        let archive = ZipArchive::new(Cursor::new(&original)).unwrap();
+        let start = usize::try_from(archive.central_directory_start()).unwrap();
+        let length = [28, 30, 32]
+            .into_iter()
+            .map(|index| {
+                usize::from(u16::from_le_bytes([original[start + index], original[start + index + 1]]))
+            })
+            .sum::<usize>()
+            + 46;
+        let entry = original[start..start + length].to_vec();
+        let mut duplicated = original.clone();
+        let end = original.len() - 22;
+        duplicated.splice(end..end, entry);
+        let end = end + length;
+        let count = u16::try_from(archive.len() + 1).unwrap().to_le_bytes();
+        duplicated[end + 8..end + 10].copy_from_slice(&count);
+        duplicated[end + 10..end + 12].copy_from_slice(&count);
+        let size = u32::from_le_bytes(duplicated[end + 12..end + 16].try_into().unwrap());
+        let size = (size + u32::try_from(length).unwrap()).to_le_bytes();
+        duplicated[end + 12..end + 16].copy_from_slice(&size);
+
+        assert!(stamp(&original, "FSY-S-260453").is_ok());
+        assert!(stamp(&duplicated, "FSY-S-260453").is_err());
+    }
+
+    #[test]
+    fn rejects_excessive_and_truncated_central_directories() {
+        let original = fixture("<w:p/><w:sectPr/>");
+        let mut package = unpack(&original).unwrap();
+        for index in 0..2049 {
+            package.insert(format!("extra/{index}"), Vec::new());
+        }
+        assert!(stamp(&pack(package).unwrap(), "FSY-S-260453").is_err());
+
+        let archive = ZipArchive::new(Cursor::new(&original)).unwrap();
+        let start = usize::try_from(archive.central_directory_start()).unwrap();
+        let mut malformed = original;
+        malformed[start + 28..start + 30].copy_from_slice(&u16::MAX.to_le_bytes());
+        assert!(stamp(&malformed, "FSY-S-260453").is_err());
     }
 
     #[test]

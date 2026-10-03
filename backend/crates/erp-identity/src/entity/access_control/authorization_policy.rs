@@ -163,6 +163,9 @@ mod tests {
         for (resource, action) in [
             ("approval_instance", "decide"),
             ("contract", "list"),
+            ("cost_entry", "list"),
+            ("cost_entry", "detail"),
+            ("cost_allocation", "list"),
             ("supplier_settlement_statement", "confirm"),
             ("reconciliation_difference", "decide"),
             ("integration_error_task", "create"),

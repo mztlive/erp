@@ -407,6 +407,45 @@ mod tests {
         assert!(authorized_item_fields(item, &access, &facts).is_none());
     }
 
+    /// 导入确认的冻结负责人可读取系统批次，陌生人、撤权和缺失事实仍失败关闭。
+    #[test]
+    fn import_confirmation_owner_requires_read_permission_and_existing_batch() {
+        let item = WorkItem::new_at(
+            WorkItemId::new("wi-import-confirmation"),
+            WorkItemData {
+                work_item_type: WorkItemType::ImportBusinessConfirmation,
+                business_object_type: "LEGACY_IMPORT_BATCH".to_string(),
+                business_object_id: "batch-1".to_string(),
+                subject_version: "trial-1".to_string(),
+                owner_role: "role-sales".to_string(),
+                owner_organization_id: "company".to_string(),
+                owner_user_id: "confirmation-owner".to_string(),
+                assignment_source: AssignmentSource::SystemRule,
+                priority: WorkItemPriority::Normal,
+                due_at: None,
+                reason_code: Some("IMPORT_TRIAL_CONFIRMATION".to_string()),
+                impact_summary: None,
+            },
+            Instant::from_unix_secs(100),
+        )
+        .unwrap();
+        let facts = HashMap::from([(
+            (ObjectKind::LegacyImportBatch, "batch-1".to_string()),
+            ObjectFact::new("batch-1", "旧数据导入批次", "__system__"),
+        )]);
+        let mut access = ActorAccess::new("confirmation-owner".to_string())
+            .with_permissions(vec!["legacy_import_batch:detail".to_string()])
+            .with_managed_owner_ids(Some(Vec::new()));
+        assert!(!access.can_manage);
+        assert!(authorized_item_fields(item.clone(), &access, &facts).is_some());
+        assert!(authorized_item_fields(item.clone(), &access, &HashMap::new()).is_none());
+        access.actor_id = "stranger".to_string();
+        assert!(authorized_item_fields(item.clone(), &access, &facts).is_none());
+        access.actor_id = "confirmation-owner".to_string();
+        access.permissions.clear();
+        assert!(authorized_item_fields(item, &access, &facts).is_none());
+    }
+
     #[test]
     fn procurement_owner_and_reassign_candidate_use_concrete_permission() {
         let owner_access = procurement_access("buyer-1");

@@ -5,6 +5,7 @@ import {
     type BatchRow,
     type TextFieldKey,
 } from "./batch-supply"
+import { SupplyBatchValidationError } from "./batch-supply-error"
 
 export const IMPORT_COLUMNS = [
     "公司 SKU 编号",
@@ -50,21 +51,29 @@ export function parseDelimited(text: string, delimiter = "\t"): string[][] {
             }
         } else cell += char
     }
-    if (quoted) throw new Error("粘贴内容的引号未闭合，请检查原表格")
+    if (quoted)
+        throw new SupplyBatchValidationError(
+            "粘贴内容的引号未闭合，请检查原表格",
+        )
     row.push(cell)
     rows.push(row)
     return rows.filter((cells) => cells.some((value) => value.trim()))
 }
 export function importRows(matrix: string[][]): ImportRow[] {
-    if (matrix.length < 2) throw new Error("文件没有数据，请按模板填写后导入")
+    if (matrix.length < 2)
+        throw new SupplyBatchValidationError("文件没有数据，请按模板填写后导入")
     const headers = matrix[0].map((value) => value.trim())
     for (const name of IMPORT_COLUMNS.slice(0, 3))
         if (!headers.includes(name))
-            throw new Error(`缺少列「${name}」，请使用供给模板`)
+            throw new SupplyBatchValidationError(
+                `缺少列「${name}」，请使用供给模板`,
+            )
     if (new Set(headers).size !== headers.length)
-        throw new Error("文件存在重复列名，请检查表头")
+        throw new SupplyBatchValidationError("文件存在重复列名，请检查表头")
     if (matrix.length - 1 > BATCH_LIMIT)
-        throw new Error(`每批最多 ${BATCH_LIMIT} 行，请拆分文件`)
+        throw new SupplyBatchValidationError(
+            `每批最多 ${BATCH_LIMIT} 行，请拆分文件`,
+        )
     return matrix
         .slice(1)
         .map((cells) =>
@@ -79,24 +88,29 @@ export function importRows(matrix: string[][]): ImportRow[] {
         )
 }
 export async function readSupplyFile(file: File): Promise<ImportRow[]> {
-    if (file.size > 5 * 1024 * 1024) throw new Error("文件不能超过 5 MB")
+    if (file.size > 5 * 1024 * 1024)
+        throw new SupplyBatchValidationError("文件不能超过 5 MB")
     if (/\.csv$/i.test(file.name))
         return importRows(parseDelimited(await file.text(), ","))
     if (!/\.xlsx$/i.test(file.name))
-        throw new Error("请选择 .xlsx 或 UTF-8 CSV 文件")
+        throw new SupplyBatchValidationError("请选择 .xlsx 或 UTF-8 CSV 文件")
     const { Workbook } = await import("exceljs")
     const workbook = new Workbook()
     await workbook.xlsx.load(await file.arrayBuffer())
     const sheet = workbook.getWorksheet("供给配置") ?? workbook.worksheets[0]
     if (!sheet || sheet.rowCount > BATCH_LIMIT + 1 || sheet.columnCount > 40)
-        throw new Error(`每批最多 ${BATCH_LIMIT} 行，请使用供给模板`)
+        throw new SupplyBatchValidationError(
+            `每批最多 ${BATCH_LIMIT} 行，请使用供给模板`,
+        )
     const matrix: string[][] = []
     sheet.eachRow((row) => {
         const cells: string[] = []
         for (let i = 1; i <= sheet.columnCount; i++) {
             const cell = row.getCell(i)
             if (cell.formula)
-                throw new Error(`第 ${row.number} 行包含公式，请先粘贴为值`)
+                throw new SupplyBatchValidationError(
+                    `第 ${row.number} 行包含公式，请先粘贴为值`,
+                )
             cells.push(
                 cell.value instanceof Date
                     ? cell.value.toISOString().slice(0, 10)

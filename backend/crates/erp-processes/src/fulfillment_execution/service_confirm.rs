@@ -19,6 +19,7 @@ use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::FulfillmentProcess;
+use super::fulfillment_actual_cost::{ActualCostSource, post as post_actual_cost};
 use super::purchase_context::{ensure_allocation_valid, ensure_po_fulfillable, ensure_prepay_gate};
 use super::service_crypto::{ServiceCryptoAdapter, evidence_metadata};
 use crate::{Error, Result};
@@ -250,10 +251,18 @@ trait ServiceConfirmationPort: Send + Sync {
     async fn confirm(&self, record: &mut Self::Record, executor: &mut dyn Executor) -> Result<()>;
     async fn task(&self, record: &Self::Record, executor: &mut dyn Executor) -> Result<()>;
     fn is_acceptance_eligible(&self, record: &Self::Record) -> bool;
+    /// 在成功确认后记录整笔实际成本，失败确认不得执行此步骤。
+    async fn cost(
+        &self,
+        record: &Self::Record,
+        purchase: &Self::Purchase,
+        executor: &mut dyn Executor,
+    ) -> Result<()>;
     async fn acceptance(&self, purchase: &Self::Purchase, executor: &mut dyn Executor) -> Result<()>;
     async fn audit(&self, executor: &mut dyn Executor) -> Result<()>;
 }
 
+/// 依次确认事实、完成任务、记录成功履约实际成本并创建验收任务。
 async fn execute_confirmation<P: ServiceConfirmationPort>(
     port: &P,
     executor: &mut dyn Executor,
@@ -266,6 +275,7 @@ async fn execute_confirmation<P: ServiceConfirmationPort>(
     port.confirm(&mut record, executor).await?;
     port.task(&record, executor).await?;
     if port.is_acceptance_eligible(&record) {
+        port.cost(&record, &purchase, executor).await?;
         port.acceptance(&purchase, executor).await?;
     }
     port.audit(executor).await?;
@@ -354,6 +364,28 @@ impl ServiceConfirmationPort for MongoServiceConfirmation<'_> {
 
     fn is_acceptance_eligible(&self, record: &Self::Record) -> bool {
         record.is_acceptance_eligible()
+    }
+
+    /// 实际服务成本与首次确认、任务和验收可用事实共享同一 Executor。
+    async fn cost(
+        &self,
+        record: &Self::Record,
+        purchase: &Self::Purchase,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        post_actual_cost(
+            self.db,
+            ActualCostSource {
+                purchase,
+                allocation_id: &record.purchase_line_sales_allocation_id,
+                sales_order_line_id: &record.sales_order_line_id,
+                quantity: record.quantity,
+                occurred_at: record.service_ended_at.unwrap_or(record.fact.occurred_at),
+                evidence_attachment_id: record.evidence_attachment_id.clone(),
+            },
+            executor,
+        )
+        .await
     }
 
     async fn acceptance(&self, po: &Self::Purchase, executor: &mut dyn Executor) -> Result<()> {
@@ -488,6 +520,9 @@ mod confirmation_order_tests {
         fn is_acceptance_eligible(&self, record: &bool) -> bool {
             *record
         }
+        async fn cost(&self, _: &bool, _: &(), e: &mut dyn Executor) -> Result<()> {
+            self.record("actual_cost", e)
+        }
         async fn acceptance(&self, _: &(), e: &mut dyn Executor) -> Result<()> {
             self.record("acceptance", e)
         }
@@ -503,6 +538,7 @@ mod confirmation_order_tests {
         "pending",
         "confirm",
         "task",
+        "actual_cost",
         "acceptance",
         "audit",
     ];

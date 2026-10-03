@@ -24,6 +24,7 @@ export function PeriodBlockerCard({
     onToChange,
     onApplyExplicit,
     onApplyPreset,
+    description = "尚未设置默认统计期间。选定期间后才会显示指标、图表与明细。",
 }: {
     periodPolicy: CustomerQualityPeriodPolicy | undefined
     explicitFrom: string
@@ -32,15 +33,14 @@ export function PeriodBlockerCard({
     onToChange: (value: string) => void
     onApplyExplicit: () => void
     onApplyPreset: (presetId: string, from: string, to: string) => void
+    description?: string
 }) {
     return (
         <>
             <Alert variant="warning">
                 <CalendarRangeIcon aria-hidden="true" />
                 <AlertTitle>请选择统计期间</AlertTitle>
-                <AlertDescription>
-                    尚未设置默认统计期间。选定期间后才会显示指标、图表与明细。
-                </AlertDescription>
+                <AlertDescription>{description}</AlertDescription>
             </Alert>
             <Card size="sm" className={surfacePanelClassName}>
                 <CardHeader className="border-b border-grid">

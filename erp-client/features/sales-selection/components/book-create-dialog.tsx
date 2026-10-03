@@ -9,7 +9,8 @@ import * as React from "react"
 import { useAppForm } from "@/components/form"
 import { OwnerCombobox } from "@/components/business"
 import { Input } from "@/components/ui/input"
-import { useOwnerOptionsQuery } from "@/hooks/use-options"
+import { usePersonDirectoryList } from "@/features/entity-selectors/hooks/person-directory"
+import { SelectorQueryFeedback } from "@/components/business/selector-query-feedback"
 import { CustomerSearchCombobox } from "@/features/entity-selectors/components/customer-search-combobox"
 import { Button } from "@/components/ui/button"
 import {
@@ -72,7 +73,22 @@ export const BookCreateDialog = ({
     onLaunched?: (result: BookLaunchResult) => void
 }) => {
     const operations = useBookOperations()
-    const ownerOptionsQuery = useOwnerOptionsQuery()
+    const [ownerSearch, setOwnerSearch] = React.useState("")
+    const ownerOptionsQuery = usePersonDirectoryList({
+        category: "sales",
+        q: ownerSearch,
+        orgUnitIds: [],
+        includeDescendants: false,
+        pageCount: 1,
+    })
+    const ownerOptions = (ownerOptionsQuery.data?.pages ?? [])
+        .flatMap((page) => page.items)
+        .filter((person) => person.status === "active")
+        .map((person) => ({
+            userId: person.id,
+            displayName: person.name,
+            userCode: person.account,
+        }))
 
     const form = useAppForm({
         defaultValues: {
@@ -200,13 +216,27 @@ export const BookCreateDialog = ({
                                     </Label>
                                     <OwnerCombobox
                                         id="sales-selection-create-owner"
-                                        owners={ownerOptionsQuery.data ?? []}
+                                        owners={ownerOptions}
                                         loading={ownerOptionsQuery.isFetching}
                                         value={field.state.value || undefined}
                                         onValueChange={(next) =>
                                             field.handleChange(next ?? "")
                                         }
                                         placeholder="搜索负责人或工号"
+                                        onSearchChange={setOwnerSearch}
+                                        filterMode="remote"
+                                    />
+                                    <SelectorQueryFeedback
+                                        id="sales-selection-create-owner"
+                                        failed={ownerOptionsQuery.isError}
+                                        error={ownerOptionsQuery.error}
+                                        noScope={
+                                            ownerOptionsQuery.data?.pages[0]
+                                                ?.empty_reason === "no_scope"
+                                        }
+                                        onRetry={() =>
+                                            void ownerOptionsQuery.refetch()
+                                        }
                                     />
                                     {field.state.meta.isTouched &&
                                     !field.state.meta.isValid ? (

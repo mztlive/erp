@@ -319,6 +319,7 @@ export function ConfirmSection({
                     }}
                     title={`确认${CONFIRMATION_SCOPE_LABEL[confirming.scope]}`}
                     actionLabel="确认本范围"
+                    confirmLabel="确认本范围"
                     description="确认本范围的试算结果。"
                     fromStatus={{ label: "待确认", tone: "warning" }}
                     toStatus={{ label: "已确认", tone: "success" }}

@@ -7,12 +7,17 @@ import { cn } from "@/lib/utils"
 function Switch({
     className,
     size = "default",
+    nativeButton = true,
+    // oxlint-disable-next-line jsx-a11y/control-has-associated-label -- Base UI binds the field label and switch content to this button.
+    render = <button type="button" />,
     ...props
 }: SwitchPrimitive.Root.Props & {
     size?: "sm" | "default"
 }) {
     return (
         <SwitchPrimitive.Root
+            nativeButton={nativeButton}
+            render={render}
             data-slot="switch"
             data-size={size}
             className={cn(

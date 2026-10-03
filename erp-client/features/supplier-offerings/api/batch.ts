@@ -9,6 +9,7 @@ import type {
 import { newBatchRow } from "../lib/batch-supply"
 import type { ImportRow } from "../lib/batch-supply-import"
 import { AVAILABILITY_STATUS_LABELS } from "../types"
+import { SupplyBatchValidationError } from "../lib/batch-supply-error"
 
 export function submitSupplyBatch(
     mode: BatchMode,
@@ -28,9 +29,11 @@ export async function resolveSupplyImport(
     const seen = new Set<string>()
     for (const source of rows) {
         const code = source.skuCode?.trim() ?? ""
-        if (!code) throw new Error("公司 SKU 编号不能为空")
+        if (!code) throw new SupplyBatchValidationError("公司 SKU 编号不能为空")
         if (seen.has(code))
-            throw new Error(`公司 SKU「${code}」在文件中重复，请合并后导入`)
+            throw new SupplyBatchValidationError(
+                `公司 SKU「${code}」在文件中重复，请合并后导入`,
+            )
         seen.add(code)
         const page = await apiGet<
             Page<{
@@ -47,7 +50,7 @@ export async function resolveSupplyImport(
         })
         const exact = page.items.filter((item) => item.sku_no === code)
         if (exact.length !== 1)
-            throw new Error(
+            throw new SupplyBatchValidationError(
                 `公司 SKU「${code}」不存在、无权选择或匹配不唯一，请先维护商品资料`,
             )
         const item = exact[0]
@@ -62,7 +65,7 @@ export async function resolveSupplyImport(
             ([, label]) => label === source.availabilityStatus,
         )?.[0]
         if (source.availabilityStatus && !status)
-            throw new Error(
+            throw new SupplyBatchValidationError(
                 `SKU「${code}」的可供状态无法识别，请使用模板中的中文状态`,
             )
         result.push({

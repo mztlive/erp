@@ -52,7 +52,8 @@ export async function centerSupplier(
         detail.short_name ||
         detail.party_no ||
         detail.supplier_no
-    const row = mapSupplierRow(detail, partyName, profile)
+    const supplierName = detail.short_name?.trim() || partyName
+    const row = mapSupplierRow(detail, supplierName, profile)
 
     const contact = pickDefaultOrFirst(contacts)
     const bank = pickDefaultOrFirst(banks)
@@ -256,7 +257,7 @@ export async function centerSupplier(
         currentRevision: {
             revisionId: profile?.id ?? detail.id,
             revisionNo: profile?.revision_no ?? detail.version,
-            name: partyName,
+            name: supplierName,
             effectiveFrom: tsToIso(
                 profile?.created_at ?? detail.created_at,
             ).slice(0, 10),
