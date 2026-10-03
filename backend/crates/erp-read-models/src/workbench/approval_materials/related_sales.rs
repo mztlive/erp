@@ -5,9 +5,10 @@ use std::collections::BTreeSet;
 use erp_core::ids::{
     PurchaseOrderId, PurchaseOrderSubmissionId, SalesOrderRevisionId, SalesOrderRevisionLineId,
 };
-use erp_procurement::entity::purchase_order::{PurchaseLineType, PurchaseOrderSubmissionLine};
+use erp_procurement::entity::purchase_order::{
+    PurchaseLineType, PurchaseOrder, PurchaseOrderSubmission, PurchaseOrderSubmissionLine,
+};
 use erp_procurement::repository::PurchaseOrderExt;
-use erp_procurement::repository::prelude::*;
 use erp_sales::entity::sales_order::{
     LineType, SalesOrderGoodsServiceLineRevision, SalesOrderRevision, SalesOrderRevisionLine,
 };
@@ -80,11 +81,7 @@ async fn source_revisions(
         .find_by_id(order_id.as_ref(), executor)
         .await?
         .ok_or_else(|| Error::ConflictError("采购审批来源采购单不存在".into()))?;
-    let submission = db
-        .purchase_order_submissions()
-        .find_by_order_and_submission_no(&order_id, &snapshot.subject_version.to_string(), executor)
-        .await?
-        .ok_or_else(|| Error::ConflictError("采购审批精确提交不存在".into()))?;
+    let submission = source_submission(db, &order, snapshot, executor).await?;
     let lines = db
         .purchase_order()
         .list_submission_lines(&PurchaseOrderSubmissionId::new(&submission.base.id), executor)
@@ -114,6 +111,62 @@ async fn source_revisions(
         return Err(Error::ConflictError("采购提交关联了其他销售单版本".into()));
     }
     Ok(revisions)
+}
+
+/// 只读取订单当前指针锁定的正式提交，并在原 Executor 中证明快照版本关系。
+async fn source_submission(
+    db: &Database,
+    order: &PurchaseOrder,
+    snapshot: &ApprovalSubjectSnapshot,
+    executor: &mut dyn Executor,
+) -> Result<PurchaseOrderSubmission> {
+    let submission_id = current_submission_id(
+        order.approval_subject_version,
+        snapshot.subject_version,
+        order.current_submission_id.as_deref(),
+    )?;
+    let submission = db
+        .purchase_order_submissions()
+        .find_by_id(submission_id.as_ref(), executor)
+        .await?
+        .ok_or_else(|| Error::ConflictError("采购审批精确提交不存在".into()))?;
+    validate_submission(
+        &PurchaseOrderId::new(&snapshot.business_object_id),
+        &submission_id,
+        snapshot.subject_version,
+        &submission,
+    )?;
+    Ok(submission)
+}
+
+/// 采购单的当前审批版本必须仍对应待冻结的快照，缺指针时不得回退历史提交。
+fn current_submission_id(
+    order_version: u32,
+    subject_version: u32,
+    current_id: Option<&str>,
+) -> Result<PurchaseOrderSubmissionId> {
+    if order_version != subject_version {
+        return Err(Error::ConflictError("采购审批来源版本已变化".into()));
+    }
+    current_id
+        .map(PurchaseOrderSubmissionId::new)
+        .ok_or_else(|| Error::ConflictError("采购审批缺少当前正式提交".into()))
+}
+
+/// 验证跨快照的提交身份与正式序号，提交可用状态由采购实体规则判定。
+fn validate_submission(
+    order_id: &PurchaseOrderId,
+    submission_id: &PurchaseOrderSubmissionId,
+    subject_version: u32,
+    submission: &PurchaseOrderSubmission,
+) -> Result<()> {
+    if submission.purchase_order_id != *order_id
+        || submission.base.id != submission_id.as_ref()
+        || submission.formal_sequence() != Some(subject_version)
+    {
+        return Err(Error::ConflictError("采购审批提交与冻结版本不匹配".into()));
+    }
+    submission.ensure_pending().map_err(|_| Error::ConflictError("采购审批正式提交已失效".into()))
 }
 
 /// 商品行必须准确引用同一稳定销售行的实物版本；费用行不制造来源行。
@@ -218,14 +271,98 @@ mod tests {
     use erp_core::common::time::Instant;
     use erp_core::ids::{
         ProcurementConfirmationLineId, PurchaseOrderSubmissionLineId, SalesOrderGoodsServiceLineRevisionId,
-        SalesOrderLineId, SkuId, SkuRevisionId,
+        SalesOrderLineId, SkuId, SkuRevisionId, SupplierAccountId, SupplierCommercialProfileRevisionId,
     };
-    use erp_procurement::entity::purchase_order::PurchaseOrderSubmissionLineData;
+    use erp_procurement::entity::facts::PaymentTermFact;
+    use erp_procurement::entity::purchase_order::{
+        FulfillmentResponsibility, PaymentTermSnapshot, PurchaseOrderSubmissionData,
+        PurchaseOrderSubmissionLineData, PurchaseType, SubmissionStatus, SupplierSnapshot,
+    };
     use erp_sales::entity::sales_order::{
         SalesOrderGoodsServiceLineRevisionData, SalesOrderRevisionLineData,
     };
 
     use super::*;
+
+    fn submission() -> PurchaseOrderSubmission {
+        let mut submission = PurchaseOrderSubmission::new(
+            PurchaseOrderSubmissionId::new("purchase-submission"),
+            PurchaseOrderSubmissionData {
+                purchase_order_id: PurchaseOrderId::new("purchase-order"),
+                submission_no: PurchaseOrderSubmission::next_submission_no(&[]).unwrap(),
+                supplier_id: SupplierAccountId::new("supplier"),
+                purchase_type: PurchaseType::Physical,
+                fulfillment_responsibility: FulfillmentResponsibility::Warehouse,
+                supplier_revision_id: SupplierCommercialProfileRevisionId::new("supplier-revision"),
+                supplier_snapshot: SupplierSnapshot::new("供应商".into()).unwrap(),
+                payment_term_snapshot: PaymentTermSnapshot::new("NET-30".into(), false, None, None, |code| {
+                    Ok(PaymentTermFact::new(code))
+                })
+                .unwrap(),
+                gross_amount: "30".parse().unwrap(),
+                net_amount: "30".parse().unwrap(),
+                tax_amount: "0".parse().unwrap(),
+            },
+        )
+        .unwrap();
+        submission.submit(Instant::from_unix_secs(1_800_000_000), "actor").unwrap();
+        submission
+    }
+
+    #[test]
+    fn current_submission_matches_padded_formal_number_and_subject_version() {
+        let submission = submission();
+        let id = current_submission_id(1, 1, Some(&submission.base.id)).unwrap();
+        assert_eq!(submission.submission_no, "SUB-000001");
+        validate_submission(&PurchaseOrderId::new("purchase-order"), &id, 1, &submission).unwrap();
+    }
+
+    #[test]
+    fn source_submission_rejects_stale_order_version_or_missing_pointer() {
+        assert!(matches!(
+            current_submission_id(2, 1, Some("purchase-submission")),
+            Err(Error::ConflictError(_))
+        ));
+        assert!(matches!(current_submission_id(1, 1, None), Err(Error::ConflictError(_))));
+    }
+
+    #[test]
+    fn source_submission_rejects_wrong_order_identity_or_formal_version() {
+        let mut submission = submission();
+        let order_id = PurchaseOrderId::new("purchase-order");
+        let id = PurchaseOrderSubmissionId::new("purchase-submission");
+        assert!(matches!(
+            validate_submission(&PurchaseOrderId::new("another-order"), &id, 1, &submission),
+            Err(Error::ConflictError(_))
+        ));
+        assert!(matches!(
+            validate_submission(&order_id, &PurchaseOrderSubmissionId::new("old-submission"), 1, &submission),
+            Err(Error::ConflictError(_))
+        ));
+        submission.submission_no = "SUB-000002".into();
+        assert!(matches!(validate_submission(&order_id, &id, 1, &submission), Err(Error::ConflictError(_))));
+        submission.submission_no = "DRAFT-000001".into();
+        assert!(matches!(validate_submission(&order_id, &id, 1, &submission), Err(Error::ConflictError(_))));
+    }
+
+    #[test]
+    fn source_submission_rejects_draft_superseded_and_completed_submissions() {
+        let mut submission = submission();
+        let order_id = PurchaseOrderId::new("purchase-order");
+        let id = PurchaseOrderSubmissionId::new("purchase-submission");
+        for status in [
+            SubmissionStatus::Draft,
+            SubmissionStatus::Superseded,
+            SubmissionStatus::Approved,
+            SubmissionStatus::Rejected,
+        ] {
+            submission.status = status;
+            assert!(matches!(
+                validate_submission(&order_id, &id, 1, &submission),
+                Err(Error::ConflictError(_))
+            ));
+        }
+    }
 
     fn source_line() -> SalesOrderRevisionLine {
         SalesOrderRevisionLine::new(

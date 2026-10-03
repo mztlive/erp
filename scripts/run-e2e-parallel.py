@@ -594,6 +594,7 @@ print('Dropped E2E database: ' + name);
         database_created = False
         env = {
             **self.env, "API_BASE": api_base, "ERP_E2E_CONFIG_PATH": str(config),
+            "ERP_E2E_ISOLATED": "1",
             "ERP_E2E_SOURCE_API_BASE": self.env.get("ERP_E2E_SOURCE_API_BASE", "http://127.0.0.1:10001"),
             "E2E_BASE_URL": self.env.get("E2E_BASE_URL", "http://localhost:3000" if self.env.get("E2E_FRONTEND") == "dev" else f"http://127.0.0.1:{self.env.get('E2E_FRONT_PORT', '3100')}"),
             "ERP_E2E_OUTPUT_DIR": str(report_dir / "test-results"),

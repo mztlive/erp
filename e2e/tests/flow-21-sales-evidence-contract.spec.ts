@@ -1,5 +1,5 @@
 /**
- * 流程: [flow-21] 客户信用代码可空、无合同销售凭证、合同筛选与后补合同。
+ * 流程: [flow-21] 客户信用代码可空、无合同销售凭证、受限采购审批资料与后补合同。
  * 合同: docs/erp-phase-1.md §7.3.6。
  * 账号: xiaoshou（客户、合同、销售）→ caigou（采购责任和销售审批）。
  * 全部业务写入走真实页面或已授权 API；凭证使用真实 PDF/PNG 文件，禁止 mock。
@@ -10,7 +10,14 @@ import path from "node:path"
 import { test, expect, type Page, type Response } from "../helpers/test"
 import { API_BASE, apiGet, apiToken } from "../helpers/api"
 import { createCustomerViaUi } from "../helpers/customers"
-import { openLoggedInWorkspace } from "../helpers/login"
+import { loginViaUi, openLoggedInWorkspace } from "../helpers/login"
+import {
+    expectApprovalMaterialPreviewAndDownload,
+    expectGenericSalesMaterialReadsDenied,
+    openFrozenApprovalMaterials,
+    restrictSalesMaterialReader,
+    type FrozenApprovalMaterials,
+} from "../helpers/purchase-sales-context"
 import {
     ensureDefaultProcurementOwner,
     submitCreatedSalesOrder,
@@ -481,7 +488,7 @@ async function expectContractFilter(
     expect(filtered.items.map((item) => item.id)).toEqual([included.id])
 }
 
-test("[flow-21] 信用代码可空、无合同开单凭证、合同筛选与原单补合同", async ({
+test("[flow-21] 信用代码可空、无合同凭证采购审批、合同筛选与原单补合同", async ({
     browser,
 }, testInfo) => {
     test.setTimeout(10 * 60 * 1000)
@@ -650,7 +657,7 @@ test("[flow-21] 信用代码可空、无合同开单凭证、合同筛选与原�
         )
     })
 
-    await test.step("无合同销售审批生效后补合同保留全部提交和成交版本", async () => {
+    await test.step("采购无销售、合同或通用文件权限仍可核对销售审批凭证，后补合同不得回填", async () => {
         await page.goto(`/sales/orders/${imageDraft.order.id}`)
         await submitCreatedSalesOrder(page)
         const dialog = page.getByRole("dialog", { name: "提交销售单" })
@@ -676,13 +683,105 @@ test("[flow-21] 信用代码可空、无合同开单凭证、合同筛选与原�
             payment_term_code: "POSTPAY_NET15",
             tax_point: "13.00",
         })
-        await openWorkspaceTask(
-            procurementPage,
-            "销售单审批",
-            submitted.order_no,
-            "approval",
+        const evidenceId = imageDraft.order.evidence_file_asset_ids[0]!
+        let originalApproval!: {
+            instanceId: string
+            materials: FrozenApprovalMaterials
+        }
+        const restoreRole = await restrictSalesMaterialReader(
+            "caigou",
+            `FLOW21-${suffix}`,
         )
-        await approveCurrentDocument(procurementPage)
+        try {
+            // 角色变更后用独立上下文重新登录，页面和 API 使用本次受限资格。
+            const restrictedContext = await browser.newContext()
+            try {
+                const restrictedPage = await restrictedContext.newPage()
+                await loginViaUi(restrictedPage, "caigou")
+                const procurementToken = await apiToken("caigou")
+                await expectGenericSalesMaterialReadsDenied(procurementToken, {
+                    salesOrderId: submitted.id,
+                    contractId: firstContract.id,
+                    fileAssetId: evidenceId,
+                })
+                await openWorkspaceTask(
+                    restrictedPage,
+                    "销售单审批",
+                    submitted.order_no,
+                    "approval",
+                )
+                originalApproval =
+                    await openFrozenApprovalMaterials(restrictedPage)
+                expect(originalApproval.materials).toMatchObject({
+                    document_type: "sales_order",
+                    document_id: submitted.id,
+                    subject_version: 1,
+                    display: {
+                        source: {
+                            customer: customer.current_revision.legal_name,
+                            amount_label: "¥274",
+                            lines: [
+                                expect.objectContaining({
+                                    title: expect.stringContaining("龙井"),
+                                    quantity:
+                                        expect.stringMatching(/^2\s+.*¥274$/),
+                                }),
+                            ],
+                        },
+                    },
+                    attachments: [
+                        {
+                            file_asset_id: evidenceId,
+                            file_name: "sales-order-evidence.png",
+                            content_type: "image/png",
+                            byte_size: PNG.byteLength,
+                        },
+                    ],
+                })
+                const materialsDialog = restrictedPage.getByRole("dialog", {
+                    name: /提交资料$/,
+                })
+                await expect(
+                    materialsDialog.getByRole("heading", {
+                        name: "审批提交资料",
+                        exact: true,
+                    }),
+                ).toBeVisible(VISIBLE)
+                await expect(materialsDialog).toContainText("龙井")
+                await expect(materialsDialog).toContainText("¥274")
+                await expect(materialsDialog).toContainText(
+                    "sales-order-evidence.png",
+                )
+                await expect(materialsDialog).not.toContainText(
+                    firstContract.contract_no,
+                )
+                await expectApprovalMaterialPreviewAndDownload(restrictedPage, {
+                    instanceId: originalApproval.instanceId,
+                    file: originalApproval.materials.attachments[0]!,
+                    bytes: PNG,
+                })
+                const foreignFile = await restrictedPage.request.get(
+                    `${API_BASE}/admin/approval-instances/${originalApproval.instanceId}/materials/${pdfDraft.order.evidence_file_asset_ids[0]!}/download`,
+                    {
+                        headers: {
+                            Authorization: `Bearer ${procurementToken}`,
+                        },
+                    },
+                )
+                expect(
+                    foreignFile.status(),
+                    "当前审批实例不得读取另一销售单上传的凭证",
+                ).toBe(404)
+                await restrictedPage
+                    .locator("#workspace-document-paper-dialog-close")
+                    .click()
+                await approveCurrentDocument(restrictedPage)
+            } finally {
+                await restrictedContext.close()
+            }
+        } finally {
+            await restoreRole()
+        }
         await expect
             .poll(
                 async () =>
@@ -710,6 +809,60 @@ test("[flow-21] 信用代码可空、无合同开单凭证、合同筛选与原�
             effective,
             firstContract,
         )
+        // 原发起人按自己的审批读取资格核对历史材料，禁止用超管代替业务授权。
+        const historicalMaterials = await apiGet<FrozenApprovalMaterials>(
+            token,
+            `/admin/approval-instances/${originalApproval.instanceId}/materials`,
+        )
+        expect(historicalMaterials).toEqual(originalApproval.materials)
+        expect(
+            historicalMaterials.attachments.map((file) => file.file_asset_id),
+        ).toEqual([evidenceId])
+        expect(JSON.stringify(historicalMaterials.display)).not.toContain(
+            firstContract.contract_no,
+        )
+        const supplementedContract = await apiGet<
+            Contract & {
+                revisions: Array<{
+                    id: string
+                    contract_pdf_file_id: string
+                }>
+            }
+        >(token, `/admin/contracts/${firstContract.id}`)
+        expect(supplementedContract.customer_id).toBe(
+            imageDraft.order.customer_id,
+        )
+        expect(supplementedContract.id).toBe(imageDraft.order.contract_id)
+        const supplementedPdf = supplementedContract.revisions.find(
+            (revision) => revision.id === firstContract.current_revision_id,
+        )?.contract_pdf_file_id
+        expect(
+            supplementedPdf,
+            "后补合同必须保留实际归档 PDF 引用",
+        ).toBeTruthy()
+        const historicalPath = `${API_BASE}/admin/approval-instances/${originalApproval.instanceId}/materials`
+        for (const action of ["preview", "download"] as const) {
+            const rejectedSupplement = await page.request.get(
+                `${historicalPath}/${supplementedPdf!}/${action}`,
+                { headers: { Authorization: `Bearer ${token}` } },
+            )
+            expect(
+                rejectedSupplement.status(),
+                `旧审批 ${action} 白名单不得接纳后补合同 PDF`,
+            ).toBe(404)
+            const originalEvidence = await page.request.get(
+                `${historicalPath}/${evidenceId}/${action}`,
+                { headers: { Authorization: `Bearer ${token}` } },
+            )
+            expect(originalEvidence.ok()).toBe(true)
+            expect(originalEvidence.headers()["content-type"]).toBe(
+                action === "preview" ? "image/png" : "application/octet-stream",
+            )
+            expect(originalEvidence.headers()["cache-control"]).toContain(
+                "no-store",
+            )
+            expect(await originalEvidence.body()).toEqual(PNG)
+        }
     })
 
     await test.step("作废单不允许补合同且不会改变原单关系", async () => {

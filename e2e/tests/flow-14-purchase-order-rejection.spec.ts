@@ -5,6 +5,9 @@
  * 账号: admin（补采购责任默认调度人）→ xiaoshou（客户/合同/销售单）
  *       → caigou（销售单采购确认、供给分配、原采购单改价重提）→ caiwu（采购单驳回及新提交审批）
  *       → cangchu / fukuan 仅负向断言（驳回未生效前不得履约、不得付款）
+ * 最新业务验收：采购明细显示客户真实成交价；财务从采购单和审批读取关联销售版本、
+ * 合同；采购销售审批读取冻结合同。临时收窄普通销售、合同、文件权限后仍须可操作
+ * 精确上下文，预览 Blob 和浏览器下载均须与真实合同 PDF 原字节相同。
  *
  * 文档-代码差异（以代码为准）:
  * 1. 文档 7.1 把「确认供给分配创建采购单」和「采购提交采购单」分成两步；
@@ -37,6 +40,14 @@ import {
     ensureDefaultProcurementOwner,
     submitCreatedSalesOrder,
 } from "../helpers/procurement"
+import {
+    expectApprovalMaterialPreviewAndDownload,
+    expectGenericSalesMaterialReadsDenied,
+    expectPurchaseSalesContext,
+    openFrozenApprovalMaterials,
+    restrictSalesMaterialReader,
+    uploadUnrelatedSalesMaterial,
+} from "../helpers/purchase-sales-context"
 import { expandSourcingEditor } from "../helpers/sourcing"
 import {
     approveCurrentDocument,
@@ -52,9 +63,9 @@ const VISIBLE = { timeout: 20_000 } as const
 const FLOW_TIMEOUT = 12 * 60 * 1000
 const SKU_KEYWORD = "龙井"
 const SKU_NAME = "狮峰明前龙井礼盒"
-const WAREHOUSE_NAME = "北京通州仓"
 const WAREHOUSE_CODE = "BJ-TZ-01"
 const SALES_QTY = "2"
+const SALES_UNIT_PRICE = "137.00"
 const REJECT_REASON = "供应商报价超预算，本轮采购单不通过"
 
 const CONTRACT_PDF = path.resolve(process.cwd(), "fixtures/sample-contract.pdf")
@@ -293,7 +304,7 @@ function expectSameContent(live: PurchaseCenter, snap: PurchaseSnapshot): void {
 
 test("[flow-14] 采购单审批驳回后修改原单重提，同单号生效并形成应付", async ({
     browser,
-}) => {
+}, testInfo) => {
     test.setTimeout(FLOW_TIMEOUT)
     const stamp = Date.now().toString(36).toUpperCase()
     const customerName = `E2E采购驳回客户${stamp}`
@@ -301,9 +312,17 @@ test("[flow-14] 采购单审批驳回后修改原单重提，同单号生效并�
     const dueDate = plusDaysIso(21)
     let salesOrderId = ""
     let salesOrderNo = ""
+    let salesRevisionId = ""
+    let contractId = ""
+    let contractAssetId = ""
     let purchaseHref = ""
     let snap: PurchaseSnapshot | undefined
     let session: Session | undefined
+    const contractUpload = contractFile()
+    const contractBytes =
+        typeof contractUpload === "string"
+            ? fs.readFileSync(contractUpload)
+            : contractUpload.buffer
 
     const switchTo = async (login: LoginName) => {
         await closeSession(session)
@@ -345,7 +364,7 @@ test("[flow-14] 采购单审批驳回后修改原单重提，同单号生效并�
         await expect(contractDialog).toBeVisible(VISIBLE)
         await contractDialog
             .locator("#card-contracts-upload-pdf-input")
-            .setInputFiles(contractFile())
+            .setInputFiles(contractUpload)
         await contractDialog.getByLabel("合同编号").fill(contractNo)
         await chooseOption(
             page,
@@ -408,6 +427,12 @@ test("[flow-14] 采购单审批驳回后修改原单重提，同单号生效并�
         await expect(skuDialog).toBeHidden(VISIBLE)
         await expect(page.getByText(SKU_NAME).first()).toBeVisible(VISIBLE)
         await page.getByLabel("数量").fill(SALES_QTY)
+        await page
+            .getByLabel("含税成交单价", { exact: true })
+            .fill(SALES_UNIT_PRICE)
+        await expect(page.getByText("手动成交价", { exact: true })).toBeVisible(
+            VISIBLE,
+        )
         await page.locator("#sales-orders-create-batch-due-date-open").click()
         await pickCalendarDay(
             page,
@@ -426,6 +451,13 @@ test("[flow-14] 采购单审批驳回后修改原单重提，同单号生效并�
         salesOrderId =
             page.url().split("/sales/orders/")[1]?.split("?")[0] ?? ""
         expect(salesOrderId).toBeTruthy()
+        contractId = (
+            await helperGet<{ contract_id: string }>(
+                await helperToken("xiaoshou"),
+                `/admin/sales-orders/${salesOrderId}`,
+            )
+        ).contract_id
+        expect(contractId).toBeTruthy()
         await expect(
             page.getByRole("heading", { name: customerName }),
         ).toBeVisible(VISIBLE)
@@ -439,25 +471,69 @@ test("[flow-14] 采购单审批驳回后修改原单重提，同单号生效并�
         ).toContainText("待采购", VISIBLE)
 
         // 2) 采购确认节点：只通过/驳回，不选源
-        page = await switchTo("caigou")
-        await openWorkspaceTask(page, "销售单审批", salesOrderNo, "approval")
-        await expect(page.getByRole("heading", { name: /销售单/ })).toBeVisible(
-            VISIBLE,
+        const restoreProcurementReader = await restrictSalesMaterialReader(
+            "caigou",
+            stamp,
         )
-        await expect(page.getByText("第 1 轮").first()).toBeVisible(VISIBLE)
-        await expect(page.getByText("采购确认").first()).toBeVisible(VISIBLE)
-        await expect(page.getByLabel("供给来源 / 履约责任")).toHaveCount(0)
-        await expect(page.getByLabel("含税成本")).toHaveCount(0)
-        await expect(page.getByLabel("预计交付日")).toHaveCount(0)
-        await expect(
-            approvalPane(page).getByRole("button", {
-                name: "驳回",
-                exact: true,
-            }),
-        ).toBeVisible()
-        await approveCurrentDocument(page)
+        try {
+            page = await switchTo("caigou")
+            await openWorkspaceTask(
+                page,
+                "销售单审批",
+                salesOrderNo,
+                "approval",
+            )
+            await expect(
+                page.getByRole("heading", { name: /销售单/ }),
+            ).toBeVisible(VISIBLE)
+            await expect(page.getByText("第 1 轮").first()).toBeVisible(VISIBLE)
+            await expect(page.getByText("采购确认").first()).toBeVisible(
+                VISIBLE,
+            )
+            await expect(page.getByLabel("供给来源 / 履约责任")).toHaveCount(0)
+            await expect(page.getByLabel("含税成本")).toHaveCount(0)
+            await expect(page.getByLabel("预计交付日")).toHaveCount(0)
+            await expect(
+                approvalPane(page).getByRole("button", {
+                    name: "驳回",
+                    exact: true,
+                }),
+            ).toBeVisible()
+            const frozen = await openFrozenApprovalMaterials(page)
+            expect(frozen.materials.document_id).toBe(salesOrderId)
+            expect(frozen.materials.document_type).toBe("sales_order")
+            expect(frozen.materials.attachments).toHaveLength(1)
+            const contract = frozen.materials.attachments[0]!
+            expect(contract.content_type).toBe("application/pdf")
+            contractAssetId = contract.file_asset_id
+            await expectGenericSalesMaterialReadsDenied(
+                await helperToken("caigou"),
+                {
+                    salesOrderId,
+                    contractId,
+                    fileAssetId: contractAssetId,
+                },
+            )
+            await expectApprovalMaterialPreviewAndDownload(page, {
+                instanceId: frozen.instanceId,
+                file: contract,
+                bytes: contractBytes,
+            })
+            await page.locator("#workspace-document-paper-dialog-close").click()
+            await approveCurrentDocument(page)
+        } finally {
+            await restoreProcurementReader()
+        }
+        salesRevisionId = (
+            await helperGet<{ current_revision_id: string }>(
+                await helperToken("xiaoshou"),
+                `/admin/sales-orders/${salesOrderId}`,
+            )
+        ).current_revision_id
+        expect(salesRevisionId).toBeTruthy()
 
         // 3) 供给分配：创建采购单并立即提交审批
+        await page.reload()
         await page.locator("#workspace-home-refresh").click()
         await openWorkspaceTask(page, "待供给分配", salesOrderNo, "procurement")
         await expect(
@@ -568,13 +644,148 @@ test("[flow-14] 采购单审批驳回后修改原单重提，同单号生效并�
         ).toContainText("已创建 1 张采购单")
 
         // 4) 财务在采购单审批首节点驳回
-        page = await switchTo("caiwu")
-        await openWorkspaceTask(page, "采购单审批", snap.purchaseNo, "approval")
-        const roundOne = approvalPane(page)
-        await expect(roundOne.getByText("第 1 轮")).toBeVisible(VISIBLE)
-        await expect(roundOne.getByText("财务总监审批")).toBeVisible(VISIBLE)
-        await expect(roundOne.getByText(SKU_NAME).first()).toBeVisible()
-        await rejectCurrentDocument(page, REJECT_REASON)
+        const unrelatedAssetId = await uploadUnrelatedSalesMaterial(
+            contractBytes,
+            stamp,
+        )
+        expect(unrelatedAssetId).not.toBe(contractAssetId)
+        const restoreFinanceReader = await restrictSalesMaterialReader(
+            "caiwu",
+            stamp,
+        )
+        try {
+            page = await switchTo("caiwu")
+            const financeToken = await helperToken("caiwu")
+            await expectGenericSalesMaterialReadsDenied(financeToken, {
+                salesOrderId,
+                contractId,
+                fileAssetId: contractAssetId,
+            })
+            const context = await expectPurchaseSalesContext(
+                page,
+                financeToken,
+                {
+                    purchaseOrderId: snap.id,
+                    salesOrderId,
+                    salesOrderNo,
+                    salesRevisionId,
+                    customerName,
+                    contractNo,
+                    skuName: SKU_NAME,
+                    salesUnitPrice: SALES_UNIT_PRICE,
+                    salesQuantity: SALES_QTY,
+                    salesGrossTotal: "274.00",
+                    contractBytes,
+                    contractAssetId,
+                    unrelatedAssetId,
+                },
+            )
+            await openWorkspaceTask(
+                page,
+                "采购单审批",
+                snap.purchaseNo,
+                "approval",
+            )
+            const roundOne = approvalPane(page)
+            await expect(roundOne.getByText("第 1 轮")).toBeVisible(VISIBLE)
+            await expect(roundOne.getByText("财务总监审批")).toBeVisible(
+                VISIBLE,
+            )
+            await expect(roundOne.getByText(SKU_NAME).first()).toBeVisible()
+            const frozen = await openFrozenApprovalMaterials(page)
+            expect(frozen.materials.document_id).toBe(snap.id)
+            expect(frozen.materials.document_type).toBe("purchase_order")
+            const source = frozen.materials.display.source_sales
+            expect(source).toHaveLength(1)
+            expect(source![0]!.document_id).toBe(salesOrderId)
+            expect(source![0]!.document_no).toBe(salesOrderNo)
+            expect(source![0]!.revision_id).toBe(salesRevisionId)
+            expect(source![0]!.source.customer).toBe(customerName)
+            expect(source![0]!.revision_no).toBe(1)
+            expect(source![0]!.source.amount_label).toMatch(/^¥274(?:\.0+)?$/)
+            expect(source![0]!.source.lines).toHaveLength(1)
+            expect(source![0]!.source.extra_sections).toContainEqual({
+                label: "合同",
+                value: contractNo,
+                numeric: false,
+                object_id: null,
+            })
+            expect(source![0]!.source.lines[0]!.quantity).toMatch(
+                /销售单价 ¥137(?:\.0+)?/,
+            )
+            expect(source![0]!.source.lines[0]!.quantity).toMatch(
+                /^2(?:\.0+)? /,
+            )
+            expect(source![0]!.source.lines[0]!.quantity).toMatch(
+                /¥274(?:\.0+)?$/,
+            )
+            await expect(
+                page.getByRole("heading", { name: "关联销售单", exact: true }),
+            ).toBeVisible(VISIBLE)
+            await expect(
+                page.getByRole("dialog").filter({
+                    has: page.getByRole("heading", {
+                        name: "审批提交资料",
+                    }),
+                }),
+            ).toContainText(contractNo)
+            const contract = frozen.materials.attachments.find(
+                (file) => file.file_asset_id === contractAssetId,
+            )
+            expect(contract).toBeTruthy()
+            await expectApprovalMaterialPreviewAndDownload(page, {
+                instanceId: frozen.instanceId,
+                file: contract!,
+                bytes: contractBytes,
+            })
+            await testInfo.attach("purchase-source-sales-contract-acceptance", {
+                contentType: "application/json",
+                body: Buffer.from(
+                    JSON.stringify(
+                        {
+                            purchase_order_id: snap.id,
+                            purchase_submission_id: snap.submissionId,
+                            purchase_approval_instance_id: frozen.instanceId,
+                            sales_order_id: salesOrderId,
+                            sales_revision_id:
+                                context.source_sales_order!.revision_id,
+                            sales_revision_no:
+                                context.source_sales_order!.revision_no,
+                            contract_id: contractId,
+                            contract_file_asset_id: contractAssetId,
+                            unrelated_file_asset_id: unrelatedAssetId,
+                            lines: context.lines.map((line) => ({
+                                sales_revision_line_id:
+                                    line.sales_order_revision_line_id,
+                                purchase_unit_cost_gross: line.unit_cost_gross,
+                                sales_unit_price_gross:
+                                    context.source_sales_order!.lines.find(
+                                        (sales) =>
+                                            sales.sales_order_revision_line_id ===
+                                            line.sales_order_revision_line_id,
+                                    )?.unit_price_gross,
+                            })),
+                            verification: {
+                                generic_sales_contract_file_reads: "403",
+                                procurement_sales_approval_contract_preview_download:
+                                    "200; bytes equal fixture",
+                                finance_purchase_detail_and_contract_preview_download:
+                                    "200; bytes equal fixture",
+                                purchase_unrelated_file_download: "403 or 404",
+                                finance_purchase_approval_source_sales_and_contract:
+                                    "200; bytes equal fixture",
+                            },
+                        },
+                        null,
+                        2,
+                    ),
+                ),
+            })
+            await page.locator("#workspace-document-paper-dialog-close").click()
+            await rejectCurrentDocument(page, REJECT_REASON)
+        } finally {
+            await restoreFinanceReader()
+        }
 
         await page.locator("#workspace-home-refresh").click()
         await openWorkspaceTask(page, "采购单审批", snap.purchaseNo, "approval")
