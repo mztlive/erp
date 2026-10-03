@@ -67,20 +67,35 @@ impl PurchaseAccess {
             .client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let (context, scope) = this.resolve(&actor, "detail", executor).await?;
-                    let order = this
-                        .db
-                        .purchase_orders()
-                        .find_authorized(&id, &scope, executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("采购单不存在或无权查看".into()))?;
-                    let version =
-                        format!("{}:{}:{}", context.scope_version, order.base.id, order.base.version);
-                    Ok((order, version))
-                })
+                Box::pin(async move { this.resolve_detail(&actor, &id, executor).await })
             })
             .await
+    }
+
+    /// 在调用方执行器内证明详情资格，包含详情允许的有界历史参与。
+    ///
+    /// # 参数
+    /// * `actor` / `id` - 当前账号及采购单身份。
+    /// * `executor` - 调用方执行器；文件目录关系证明须使用同一事务。
+    /// # 返回
+    /// 返回授权采购单及绑定范围和对象版本的服务器校验标识。
+    /// # 错误
+    /// 账号、动作、范围或对象资格无效时拒绝，不泄露不可见对象存在性。
+    pub async fn resolve_detail(
+        &self,
+        actor: &AuditActor,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<(PurchaseOrder, String)> {
+        let (context, scope) = self.resolve(actor, "detail", executor).await?;
+        let order = self
+            .db
+            .purchase_orders()
+            .find_authorized(id, &scope, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("采购单不存在或无权查看".into()))?;
+        let version = format!("{}:{}:{}", context.scope_version, order.base.id, order.base.version);
+        Ok((order, version))
     }
 
     /// 在调用方事务内证明范围并读取当前可操作单据。

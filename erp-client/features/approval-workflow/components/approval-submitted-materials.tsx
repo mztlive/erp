@@ -146,8 +146,67 @@ export function ApprovalSubmittedMaterials({
                     </p>
                 )}
             </section>
+            {(display.source_sales ?? []).length > 0 && (
+                <section className="space-y-4 border-t pt-5">
+                    <h3 className="font-medium">关联销售单</h3>
+                    {display.source_sales?.map((sales) => (
+                        <article
+                            key={sales.revision_id}
+                            className="space-y-3 rounded-lg border p-4 text-sm"
+                        >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <p className="font-medium">
+                                    {sales.document_no} · 销售版本{" "}
+                                    {sales.revision_no}
+                                </p>
+                                <p className="num font-semibold">
+                                    {sales.source.amount_label}
+                                </p>
+                            </div>
+                            {sales.source.customer && (
+                                <p>{sales.source.customer}</p>
+                            )}
+                            <dl className="grid gap-3 sm:grid-cols-2">
+                                {sales.source.extra_sections.map((section) => (
+                                    <div key={section.label}>
+                                        <dt className="text-xs text-muted-foreground">
+                                            {section.label}
+                                        </dt>
+                                        <dd className="mt-1 break-words">
+                                            {section.value}
+                                        </dd>
+                                    </div>
+                                ))}
+                            </dl>
+                            <ul className="divide-y">
+                                {sales.source.lines.map((line, index) => (
+                                    <li
+                                        key={`${line.title}:${index}`}
+                                        className="flex flex-wrap justify-between gap-2 py-2"
+                                    >
+                                        <span>{line.title}</span>
+                                        <span className="num text-muted-foreground">
+                                            {line.quantity}
+                                        </span>
+                                    </li>
+                                ))}
+                            </ul>
+                            {sales.source.more_count > 0 && (
+                                <p className="text-muted-foreground">
+                                    另有 {sales.source.more_count}{" "}
+                                    行未展示，请结合销售合同或凭证核对。
+                                </p>
+                            )}
+                        </article>
+                    ))}
+                </section>
+            )}
             <section className="space-y-3 border-t pt-5">
-                <h3 className="font-medium">提交附件</h3>
+                <h3 className="font-medium">
+                    {display.source_sales?.length
+                        ? "采购附件及关联销售合同、凭证"
+                        : "提交合同、凭证及附件"}
+                </h3>
                 {attachments.length ? (
                     <ul className="space-y-2">
                         {attachments.map((file) => (

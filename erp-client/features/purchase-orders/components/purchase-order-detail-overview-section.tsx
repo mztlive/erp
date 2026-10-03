@@ -4,6 +4,7 @@ import type { ReactNode } from "react"
 
 import { MoneyValue } from "@/components/business"
 import { LinesTable } from "@/features/purchase-orders/components/purchase-order-surfaces"
+import { PurchaseOrderSourceSales } from "@/features/purchase-orders/components/purchase-order-source-sales"
 import {
     FULFILLMENT_RESPONSIBILITY_LABEL,
     type PurchaseOrderCenterView,
@@ -58,9 +59,12 @@ export function PurchaseOrderDetailOverviewSection({
             <DetailRecordSection title="交易约定">
                 <dl className="grid gap-x-8 gap-y-4 2xl:grid-cols-2">
                     <OverviewField label="来源销售单">
-                        <span className="num break-all">
-                            {order.header.salesOrderNo}
-                        </span>
+                        <div className="space-y-2">
+                            <p className="num break-all">
+                                {order.header.salesOrderNo}
+                            </p>
+                            <PurchaseOrderSourceSales order={order} />
+                        </div>
                     </OverviewField>
                     <OverviewField label="付款条件">
                         {order.header.paymentTermLabel || "—"}

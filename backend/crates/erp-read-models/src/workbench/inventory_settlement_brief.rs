@@ -68,6 +68,7 @@ pub async fn capture_stock_adjustment_display(
         grouped.remove(&adjustment.base.id).unwrap_or_default(),
     );
     let snapshot = ApprovalDisplaySnapshot {
+        source_sales: Vec::new(),
         root_document_id: fact.display.root_document_id,
         counterparty_label: fact.display.counterparty_label,
         impact_summary: fact.display.impact_summary,

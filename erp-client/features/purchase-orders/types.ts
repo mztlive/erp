@@ -67,6 +67,44 @@ type PurchaseOrderLineView = Readonly<{
     expectedDeliveryDate?: string
     logisticsFeeReason?: string
     salesAllocationLabel?: string
+    /** 精确关联销售版本行的客户成交含税单价；未关联时缺省。 */
+    salesUnitPriceGross?: string
+}>
+
+export type PurchaseSourceSalesMaterialView = Readonly<{
+    fileAssetId: string
+    kind: string
+    fileName: string
+    contentType: string
+    byteSize: number
+}>
+
+/** 采购范围内可读的关联销售版本；不授予普通销售单或合同详情访问。 */
+export type PurchaseSourceSalesOrderView = Readonly<{
+    salesOrderId: string
+    salesOrderNo: string
+    statusLabel: string
+    statusTone: StatusTone
+    revisionId: string
+    revisionNo: number
+    customerName: string
+    salesOwnerName?: string
+    contractNo?: string
+    totals: { gross: string; net: string; tax: string }
+    lines: readonly Readonly<{
+        salesOrderRevisionLineId: string
+        salesOrderLineId: string
+        lineNo: number
+        itemName: string
+        specification?: string
+        quantity: string
+        unit: string
+        unitPriceGross: string
+        grossAmount: string
+    }>[]
+    materials: readonly PurchaseSourceSalesMaterialView[]
+    /** 文件包不可读取时保留销售版本和成交价，材料区独立提示。 */
+    materialsUnavailable?: boolean
 }>
 
 type PrepaymentGateView = Readonly<{
@@ -228,6 +266,7 @@ export type PurchaseOrderCenterView = Readonly<{
         salesOrderLineLabel: string
         allocatedQuantity: string
     }[]
+    sourceSalesOrder?: PurchaseSourceSalesOrderView
     payableSummary?: PayableSummaryView
     fulfillmentSummary: FulfillmentSummaryView
     changes: readonly RelatedChangeView[]

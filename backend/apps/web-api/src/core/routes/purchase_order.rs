@@ -24,6 +24,19 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
         .merge(purchase_workflow_routes(rbac))
         .merge(purchase_change_routes(rbac))
         .merge(purchase_change_draft_routes(rbac))
+        .merge(purchase_sales_material_routes(rbac))
+}
+
+/// 采购关联销售材料下载始终使用采购对象详情资格及其准确销售版本。
+fn purchase_sales_material_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new().route(
+        "/purchase-orders/{id}/sales-materials/{asset_id}/download",
+        with_permission(
+            get(purchase_order::sales_material::purchase_sales_material_download),
+            rbac,
+            purchase_order::sales_material::purchase_sales_material_download_permission_key(),
+        ),
+    )
 }
 
 /// 采购单列表、创建、详情和原单草稿保存入口。

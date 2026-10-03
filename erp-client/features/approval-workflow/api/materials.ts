@@ -9,6 +9,13 @@ export type ApprovalMaterials = {
         root_document_id: string
         counterparty_label: string | null
         impact_summary: string | null
+        source_sales?: {
+            document_id: string
+            document_no: string
+            revision_id: string
+            revision_no: number
+            source: ApprovalMaterials["display"]["source"]
+        }[]
         source: {
             customer: string | null
             amount_label: string | null

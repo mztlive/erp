@@ -9,11 +9,13 @@ pub mod procurement_responsibility;
 mod query;
 pub mod repository;
 mod scope;
+mod source_sales;
 use std::sync::Arc;
 
 pub use change::query::PurchaseChangeListView;
 use erp_procurement::{FailClosedPurchaseDataScopePort, PurchaseDataScopePort};
 pub use scope::{PurchaseListParams, PurchaseListView};
+pub use source_sales::PurchaseSalesMaterialReference;
 
 /// 使用提供方公开事实装配采购视图；构造本身不访问数据库。
 pub struct PurchaseOrderReadService {

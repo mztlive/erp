@@ -1,26 +1,21 @@
 //! 采购单查询与对象中心视图编排。
 
+mod detail;
+
 use std::collections::HashMap;
 
 use application_core::AuditActor;
 use erp_identity::AccessControlExt;
 use erp_identity::repository::prelude::*;
-use erp_procurement::dto::purchase_order::{
-    PageView, PurchaseOrderListParams, PurchaseSalesAllocationView, TotalsView,
-};
+use erp_procurement::dto::purchase_order::{PageView, PurchaseOrderListParams};
 use erp_procurement::entity::purchase_order::{PurchaseOrderRevision, PurchaseOrderSubmission};
 use erp_procurement::repository::purchase_order::PurchaseOrderRow;
-use erp_procurement::service::purchase_order::view_mapping::{
-    revision_line_to_view, revision_totals, submission_line_to_view,
-};
-use erp_workflow::service::document_registry::find_approval_binding;
 use persistence_core::NoTransaction;
 use validator::Validate;
 
 use super::PurchaseOrderReadService;
-use super::approval_query::load_document_approval;
 use super::dto::{PurchaseOrderCenterView, PurchaseOrderListItemView};
-use super::repository::{PurchaseOrderListFacts, load_purchase_order_center_facts};
+use super::repository::PurchaseOrderListFacts;
 use super::scope::PurchaseListView;
 use crate::{Error, Result};
 
@@ -106,127 +101,7 @@ impl PurchaseOrderReadService {
             let (_, version) = self.access().detail(actor, id).await?;
             access_version = Some(version);
         }
-        let facts = load_purchase_order_center_facts(&self.db, id, &mut NoTransaction).await?;
-        let order = facts.order.ok_or_else(|| Error::NotFound("采购单不存在或无权查看".to_string()))?;
-        let supplier_name = supplier_display(
-            order.supplier_id.as_ref(),
-            &facts
-                .supplier_name
-                .clone()
-                .map(|name| (order.supplier_id.to_string(), name))
-                .into_iter()
-                .collect(),
-        );
-        let sales_order_id = order.sales_order_id.to_string();
-        let sales_order_no = sales_no_for(
-            &sales_order_id,
-            &facts.sales_order_no.clone().map(|no| (sales_order_id.clone(), no)).into_iter().collect(),
-        )?;
-        let owner_user_id = order.current_owner_user_id()?.to_string();
-        let (_, owner_name) = owner_display(
-            Some(owner_user_id.clone()),
-            &facts.owner_name.clone().map(|name| (owner_user_id.clone(), name)).into_iter().collect(),
-        );
-
-        let content_source = center_content_source(
-            facts.current_revision.is_some(),
-            facts.current_submission.as_ref().map(|submission| submission.content_source()),
-        );
-        let (lines, totals) = if let Some(revision) = &facts.current_revision {
-            (facts.revision_lines.iter().map(revision_line_to_view).collect(), revision_totals(revision))
-        } else if let Some(submission) = &facts.current_submission {
-            (
-                facts.submission_lines.iter().map(submission_line_to_view).collect(),
-                TotalsView {
-                    gross: submission.gross_amount.to_string(),
-                    net: submission.net_amount.to_string(),
-                    tax: submission.tax_amount.to_string(),
-                },
-            )
-        } else {
-            (
-                Vec::new(),
-                TotalsView { gross: "0.00".to_string(), net: "0.00".to_string(), tax: "0.00".to_string() },
-            )
-        };
-        let allocations = facts
-            .allocations
-            .into_iter()
-            .map(|allocation| PurchaseSalesAllocationView {
-                id: allocation.base.id,
-                purchase_order_revision_line_id: allocation.purchase_order_revision_line_id.to_string(),
-                sales_order_revision_line_id: allocation.sales_order_revision_line_id.to_string(),
-                allocated_quantity: allocation.allocated_quantity.to_string(),
-                allocated_cost_gross: allocation.allocated_cost_gross.to_string(),
-                allocated_cost_net: allocation.allocated_cost_net.to_string(),
-            })
-            .collect();
-        let changes = facts
-            .changes
-            .into_iter()
-            .map(|change| erp_procurement::dto::purchase_order::PurchaseChangeSummaryView {
-                change_id: change.base.id.clone(),
-                status: change.stable.status.as_str().to_string(),
-                base_revision_id: change.base_revision_id.to_string(),
-                effective_revision_id: change.effective_revision_id.as_ref().map(ToString::to_string),
-                reason: change.reason,
-                created_at: change.base.created_at,
-            })
-            .collect();
-
-        let revision_no = facts.current_revision.as_ref().map(|revision| revision.revision.revision_no);
-        let payable_summary =
-            facts.payable.as_ref().map(|account| super::dto::PurchaseOrderPayableSummaryView {
-                payable_open_amount: account.open_total,
-                paid_allocated_amount: account.settled_total,
-                purchase_invoice_allocated_amount: account.invoiced_total,
-            });
-        let binding = match find_approval_binding(&self.db, &order.base.id, &mut NoTransaction)
-            .await
-            .map_err(crate::Error::from)
-        {
-            Ok(binding) => binding,
-            Err(Error::NotFound(_)) => None,
-            Err(error) => return Err(error),
-        };
-
-        let view = PurchaseOrderCenterView {
-            id: order.base.id.clone(),
-            purchase_no: order.purchase_no.clone(),
-            status: order.stable.status,
-            review_status: order.review_status,
-            version: order.base.version,
-            sales_order_id,
-            sales_order_no,
-            supplier_id: order.supplier_id.to_string(),
-            supplier_name,
-            purchase_type: order.purchase_type,
-            payment_term_code: order.payment_term_code.clone(),
-            fulfillment_responsibility: order.fulfillment_responsibility,
-            owner_user_id,
-            owner_name,
-            target_warehouse_id: order.target_warehouse_id.as_ref().map(ToString::to_string),
-            payment_progress: order.payment_progress,
-            invoice_progress: order.invoice_progress,
-            fulfillment_progress: order.fulfillment_progress,
-            current_submission_id: order.current_submission_id.clone(),
-            current_revision_id: order.stable.current_revision_id.clone(),
-            revision_no,
-            content_source,
-            lines,
-            totals,
-            allocations,
-            changes,
-            payable_summary,
-            approval: load_document_approval(
-                &self.db,
-                order.base.id.as_ref(),
-                binding.as_ref(),
-                order.stable.status,
-            )
-            .await?,
-            created_at: order.base.created_at,
-        };
+        let view = self.detail_view(id).await?;
         if let (Some(actor), Some(expected)) = (actor, access_version) {
             let (_, current) = self.access().detail(actor, id).await?;
             if current != expected {

@@ -89,6 +89,7 @@ export type BackendCenter = {
     revision_no?: number | null
     content_source: string
     lines: BackendLine[]
+    source_sales_order?: BackendPurchaseSourceSalesOrder | null
     totals: { gross: string; net: string; tax: string }
     allocations: Array<{
         id: string
@@ -113,6 +114,37 @@ export type BackendCenter = {
     } | null
     approval?: DocumentApprovalViewDto | null
     created_at: number
+}
+
+export type BackendPurchaseSourceSalesOrder = {
+    sales_order_id: string
+    sales_order_no: string
+    status: string
+    revision_id: string
+    revision_no: number
+    customer_name: string
+    sales_owner_name?: string | null
+    contract_no?: string | null
+    totals: { gross: string; net: string; tax: string }
+    lines: {
+        sales_order_revision_line_id: string
+        sales_order_line_id: string
+        line_no: number
+        item_name: string
+        specification?: string | null
+        quantity: string
+        unit: string
+        unit_price_gross: string
+        gross_amount: string
+    }[]
+    materials: {
+        file_asset_id: string
+        kind: string
+        file_name: string
+        content_type: string
+        byte_size: number
+    }[]
+    materials_unavailable?: boolean
 }
 
 export type BackendBasisLine = {

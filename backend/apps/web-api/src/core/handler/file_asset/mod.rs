@@ -20,7 +20,7 @@ use erp_support::{
     FileAssetListParams, FileAssetView, MarkScanResultRequest, PageView, PendingFileAssetRequest,
     RegisterFileAssetRequest,
 };
-pub(crate) use read::{asset_download_response, read_asset, revalidate_asset};
+pub(crate) use read::{asset_download_response, read_asset, revalidate_asset, verify_content};
 use serde::de::DeserializeOwned;
 use tracing::error;
 

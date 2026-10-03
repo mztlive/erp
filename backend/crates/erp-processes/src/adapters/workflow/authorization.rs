@@ -23,8 +23,8 @@ use persistence_core::Executor;
 
 use super::order_access::{approval_readable, readable_sources};
 use super::{account_fact, map_service};
-use crate::adapters::purchase_access;
-use crate::errors::Error;
+use crate::adapters::{contract_access, purchase_access};
+use crate::errors::{Error, Result};
 
 /// Shared RBAC adapter consumed by workflow command and definition services.
 #[derive(Clone)]
@@ -79,6 +79,29 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
         super::approval_source::readable(&self.db, &self.rbac, actor, document_type, document_id, executor)
             .await
             .map_err(map_service)
+    }
+
+    /// 在提交原执行器中复用合同详情授权，来源客户责任由合同领域解释。
+    ///
+    /// # 参数
+    /// * `actor` / `contract_id` - 当前提交者及提交锁定的合同。
+    /// * `executor` - 原业务提交执行器。
+    /// # 返回
+    /// 当前合同动作及来源边界已证明时返回 true；不可见时返回 false。
+    /// # 错误
+    /// 配置、授权版本及基础设施错误保持失败关闭。
+    async fn approval_contract_readable(
+        &self,
+        actor: &AuditActor,
+        contract_id: &str,
+        executor: &mut dyn Executor,
+    ) -> WorkflowResult<bool> {
+        let result = contract_access(self.db.clone(), self.rbac.clone())
+            .require_with(actor.clone(), "detail", contract_id, executor)
+            .await
+            .map(|_| ())
+            .map_err(Error::from);
+        contract_readable_result(result)
     }
 
     async fn resolve_workflow_scope(
@@ -551,9 +574,33 @@ where
 
 impl<E> std::error::Error for PolicyTxnError<E> where E: std::error::Error {}
 
+/// 对象不可见只证明材料转授被拒绝；配置和版本错误不得吞成普通拒绝。
+fn contract_readable_result(result: Result<()>) -> WorkflowResult<bool> {
+    match result {
+        Ok(()) => Ok(true),
+        Err(Error::Forbidden(_) | Error::NotFound(_)) => Ok(false),
+        Err(error) => Err(map_service(error)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn contract_material_authorization_preserves_denial_and_operational_errors() {
+        assert!(contract_readable_result(Ok(())).unwrap());
+        assert!(!contract_readable_result(Err(Error::Forbidden("revoked".into()))).unwrap());
+        assert!(!contract_readable_result(Err(Error::NotFound("outside scope".into()))).unwrap());
+        assert!(matches!(
+            contract_readable_result(Err(Error::ConflictError("DATA_SCOPE_CHANGED".into()))),
+            Err(WorkflowError::ConflictError(message)) if message == "DATA_SCOPE_CHANGED"
+        ));
+        assert!(matches!(
+            contract_readable_result(Err(Error::Internal("unwired source".into()))),
+            Err(WorkflowError::Internal(message)) if message == "unwired source"
+        ));
+    }
 
     #[test]
     fn workflow_error_mapping_preserves_source_variants_and_repository_reclassification() {

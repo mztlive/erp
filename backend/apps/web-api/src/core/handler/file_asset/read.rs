@@ -26,12 +26,27 @@ pub(crate) async fn read_asset(
     Ok((view, bytes))
 }
 
-/// 存储真实字节必须与登记内容、大小及 MIME 一致；被替换对象拒绝传输。
-fn verify_content(view: &FileAssetView, bytes: &[u8], key: &[u8]) -> std::result::Result<(), Error> {
-    let mime_matches = if view.content_type == "application/pdf" {
-        bytes.starts_with(b"%PDF-")
-    } else {
-        detect_image_mime(bytes) == Some(view.content_type.as_str())
+/// 存储真实字节必须匹配登记内容；可预览类型额外校验 MIME。
+///
+/// # 参数
+/// * `view` - 已经通过业务来源授权的当前文件元数据。
+/// * `bytes` / `key` - 存储读取结果及应用内容指纹密钥。
+/// # 返回
+/// 文件大小、内容指纹及支持预览类型的 MIME 均匹配时成功。
+/// # 错误
+/// 内容被替换或大小、类型不符时拒绝；其他类型仍须由调用方限制为下载。
+pub(crate) fn verify_content(
+    view: &FileAssetView,
+    bytes: &[u8],
+    key: &[u8],
+) -> std::result::Result<(), Error> {
+    let mime_matches = match view.content_type.as_str() {
+        "application/pdf" => bytes.starts_with(b"%PDF-"),
+        "image/jpeg" | "image/png" | "image/webp" => {
+            detect_image_mime(bytes) == Some(view.content_type.as_str())
+        },
+        // 其他类型只在审批下载入口传输；不取消内容指纹校验，也不授予在线预览。
+        _ => true,
     };
     let expected_size = u64::try_from(bytes.len()).map_err(|_| Error::Conflict("文件内容大小异常".into()))?;
     let actual_hmac = content_fingerprint(&super::sha256_hex(bytes), key);
@@ -114,6 +129,27 @@ mod tests {
         assert!(verify_content(&view, bytes, key).is_err());
         view.content_type = "application/pdf".into();
         view.destroyed_at = Some(1);
+        assert!(ensure_readable(&view).is_err());
+    }
+
+    #[test]
+    fn download_only_files_still_require_exact_content_and_remain_unpreviewable() {
+        let key = b"test-secret";
+        let bytes = b"<html>submitted attachment</html>";
+        let request = RegisterFileAssetRequest {
+            storage_object_key: "object".into(),
+            file_name: "attachment.html".into(),
+            content_type: "text/html".into(),
+            byte_size: u64::try_from(bytes.len()).unwrap(),
+            content_hmac: content_fingerprint(&super::super::sha256_hex(bytes), key),
+            sensitivity_class: SensitivityClass::Sensitive,
+            retention_class: RetentionClass::LongTerm,
+            expires_at: None,
+        };
+        let asset = FileAsset::new(FileAssetId::new("file"), request.into_data("actor").unwrap()).unwrap();
+        let view = FileAssetView::from(asset);
+        assert!(verify_content(&view, bytes, key).is_ok());
+        assert!(verify_content(&view, b"<html>different attachment</html>", key).is_err());
         assert!(ensure_readable(&view).is_err());
     }
 }

@@ -12,6 +12,7 @@ use erp_workflow::service::approval::execution::runtime_service::ApprovalMateria
 
 use crate::app_state::AppState;
 use crate::core::errors::{Error, Result};
+use crate::core::handler::file_asset::verify_content;
 use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(
@@ -99,6 +100,7 @@ async fn content(
         .read(&file.storage_object_key)
         .await
         .map_err(|_| Error::Internal("附件读取失败，请稍后重试".into()))?;
+    verify_content(&file, &bytes, state.config_snapshot().app.secret.as_bytes())?;
     approval_materials::revalidate(&runtime, &state.file_asset_service(), actor, id, file_id).await?;
     let content_type = if download { "application/octet-stream" } else { &file.content_type };
     let mut response = Response::new(Body::from(bytes));

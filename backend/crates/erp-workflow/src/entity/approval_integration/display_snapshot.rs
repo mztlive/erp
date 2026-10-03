@@ -11,6 +11,47 @@ pub struct ApprovalDisplaySnapshot {
     pub counterparty_label: Option<String>,
     pub impact_summary: Option<String>,
     pub source: ApprovalBriefSource,
+    /// 本次采购提交实际引用的不可变销售版本；历史缺失不读取当前销售单补齐。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_sales: Vec<ApprovalRelatedSalesSnapshot>,
+}
+
+/// 采购审批中冻结的来源销售摘要；只允许单层关联，不形成通用对象读取入口。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ApprovalRelatedSalesSnapshot {
+    pub document_id: String,
+    pub document_no: String,
+    pub revision_id: String,
+    pub revision_no: u32,
+    pub source: ApprovalBriefSource,
+}
+
+impl ApprovalRelatedSalesSnapshot {
+    /// 校验准确销售身份和单层摘要边界。
+    /// # 参数
+    /// 无；读取当前冻结字段。
+    /// # 返回
+    /// 身份、版本和摘要有效时成功。
+    /// # 错误
+    /// 缺失或越界身份、零版本及无界摘要时拒绝。
+    pub fn validate(&self) -> Result<()> {
+        if self.document_no.trim().is_empty()
+            || self.revision_id.trim().is_empty()
+            || self.revision_no == 0
+            || self.document_no.chars().count() > 128
+            || self.revision_id.chars().count() > 128
+        {
+            return Err(Error::from("审批关联销售版本身份无效"));
+        }
+        ApprovalDisplaySnapshot {
+            root_document_id: self.document_id.clone(),
+            counterparty_label: None,
+            impact_summary: None,
+            source: self.source.clone(),
+            source_sales: Vec::new(),
+        }
+        .validate()
+    }
 }
 impl ApprovalDisplaySnapshot {
     /// 以必填根单据构造展示快照；展示维度默认为空。
@@ -29,6 +70,7 @@ impl ApprovalDisplaySnapshot {
             counterparty_label: None,
             impact_summary: None,
             source: ApprovalBriefSource::default(),
+            source_sales: Vec::new(),
         }
     }
 }
@@ -86,6 +128,12 @@ impl ApprovalDisplaySnapshot {
     /// # 错误
     /// 缺失来源身份、超过 128 个字段/100 行或单项超过 8192 字符时返回错误。
     pub fn validate(&self) -> Result<()> {
+        if self.source_sales.len() > 100 {
+            return Err(Error::from("审批关联销售资料超过100个版本"));
+        }
+        for sales in &self.source_sales {
+            sales.validate()?;
+        }
         if self.root_document_id.trim().is_empty()
             || self.source.extra_sections.len() > 128
             || self.source.lines.len() > 100
@@ -142,6 +190,7 @@ mod tests {
                 }],
                 ..Default::default()
             },
+            source_sales: Vec::new(),
         };
         display.validate().unwrap();
         assert_eq!(
@@ -153,6 +202,27 @@ mod tests {
         assert!(display.validate().is_err());
         display.source.extra_sections.clear();
         display.root_document_id.clear();
+        assert!(display.validate().is_err());
+    }
+
+    #[test]
+    fn related_sales_are_bounded_and_legacy_display_keeps_them_missing() {
+        let mut display = ApprovalDisplaySnapshot::new("purchase-1".into());
+        let legacy = serde_json::to_value(&display).unwrap();
+        assert!(legacy.get("source_sales").is_none());
+        assert!(serde_json::from_value::<ApprovalDisplaySnapshot>(legacy).unwrap().source_sales.is_empty());
+        let source = ApprovalRelatedSalesSnapshot {
+            document_id: "sales-1".into(),
+            document_no: "XS-1".into(),
+            revision_id: "revision-1".into(),
+            revision_no: 1,
+            source: ApprovalBriefSource::default(),
+        };
+        display.source_sales.push(source.clone());
+        display.validate().unwrap();
+        display.source_sales[0].revision_no = 0;
+        assert!(display.validate().is_err());
+        display.source_sales = vec![source; 101];
         assert!(display.validate().is_err());
     }
 }

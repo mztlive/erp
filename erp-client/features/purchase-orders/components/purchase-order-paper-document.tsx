@@ -159,6 +159,18 @@ export function PurchaseOrderPaperDocument({
                         ),
                 },
                 {
+                    id: "sales-price",
+                    header: "客户成交含税单价",
+                    align: "end",
+                    numeric: true,
+                    cell: (row) =>
+                        row.salesUnitPriceGross == null ? (
+                            "—"
+                        ) : (
+                            <MoneyValue value={row.salesUnitPriceGross} />
+                        ),
+                },
+                {
                     id: "tax",
                     header: "进项税率",
                     align: "end",

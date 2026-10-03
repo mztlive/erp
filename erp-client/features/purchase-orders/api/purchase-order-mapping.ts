@@ -21,6 +21,7 @@ import {
     purchaseChangeOrderStatusTone,
 } from "@/features/purchase-orders/lib/purchase-change-order-approval"
 import { mapPurchaseOrderApproval } from "@/features/purchase-orders/lib/purchase-order-approval"
+import { mapPurchaseSourceSalesOrder } from "./purchase-source-sales-mapping"
 import {
     deriveAllowedActions,
     fromBackendReviewStatus,
@@ -100,31 +101,59 @@ export function mapCenter(center: BackendCenter): PurchaseOrderCenterView {
             ? center.content_source
             : "DRAFT"
 
-    const lines = (center.lines ?? []).map((line) => ({
-        lineId: line.line_id,
-        lineType:
-            line.line_type === "LOGISTICS_FEE"
-                ? ("LOGISTICS_FEE" as const)
-                : ("ITEM_SERVICE" as const),
-        procurementConfirmationLineId:
-            line.procurement_confirmation_line_id ?? undefined,
-        itemName:
-            line.product_name ??
-            (line.line_type === "LOGISTICS_FEE" ? "物流费用" : "采购明细"),
-        itemSku: line.specification ?? undefined,
-        quantity: line.quantity ?? undefined,
-        unit: line.base_unit_code ?? undefined,
-        unitCostGross: line.unit_cost_gross ?? "0",
-        inputTaxRate: line.input_tax_rate ?? "0",
-        grossAmount: line.gross_amount ?? "0",
-        netAmount: line.net_amount ?? "0",
-        taxAmount: line.tax_amount ?? "0",
-        expectedDeliveryDate: line.expected_delivery_date ?? undefined,
-        logisticsFeeReason: undefined,
-        salesAllocationLabel: line.sales_order_submission_line_id
-            ? "已关联销售明细"
-            : undefined,
-    }))
+    const sourceSalesOrder = mapPurchaseSourceSalesOrder(
+        center.source_sales_order,
+    )
+    const salesLines = new Map(
+        sourceSalesOrder?.lines.map((line) => [
+            line.salesOrderRevisionLineId,
+            line,
+        ]),
+    )
+    const salesLineIdsByPurchaseLine = new Map(
+        center.allocations?.map((allocation) => [
+            allocation.purchase_order_revision_line_id,
+            allocation.sales_order_revision_line_id,
+        ]),
+    )
+
+    const lines = (center.lines ?? []).map((line) => {
+        const salesLineId =
+            line.sales_order_revision_line_id ??
+            salesLineIdsByPurchaseLine.get(line.line_id)
+        const salesLine = salesLineId ? salesLines.get(salesLineId) : undefined
+        return {
+            lineId: line.line_id,
+            lineType:
+                line.line_type === "LOGISTICS_FEE"
+                    ? ("LOGISTICS_FEE" as const)
+                    : ("ITEM_SERVICE" as const),
+            procurementConfirmationLineId:
+                line.procurement_confirmation_line_id ?? undefined,
+            itemName:
+                line.product_name ??
+                (line.line_type === "LOGISTICS_FEE" ? "物流费用" : "采购明细"),
+            itemSku: line.specification ?? undefined,
+            quantity: line.quantity ?? undefined,
+            unit: line.base_unit_code ?? undefined,
+            unitCostGross: line.unit_cost_gross ?? "0",
+            inputTaxRate: line.input_tax_rate ?? "0",
+            grossAmount: line.gross_amount ?? "0",
+            netAmount: line.net_amount ?? "0",
+            taxAmount: line.tax_amount ?? "0",
+            expectedDeliveryDate: line.expected_delivery_date ?? undefined,
+            logisticsFeeReason: undefined,
+            salesAllocationLabel: salesLine
+                ? `销售明细 ${salesLine.lineNo}`
+                : line.sales_order_submission_line_id
+                  ? "已关联销售明细"
+                  : undefined,
+            salesUnitPriceGross:
+                line.line_type === "LOGISTICS_FEE"
+                    ? undefined
+                    : salesLine?.unitPriceGross,
+        }
+    })
 
     const fulfillmentLabel = progressDisplay(
         center.fulfillment_progress,
@@ -207,6 +236,7 @@ export function mapCenter(center: BackendCenter): PurchaseOrderCenterView {
             salesOrderLineLabel: `销售分配 ${index + 1}`,
             allocatedQuantity: a.allocated_quantity,
         })),
+        sourceSalesOrder,
         payableSummary: center.payable_summary
             ? {
                   payableOpenAmount: center.payable_summary.payable_open_amount,

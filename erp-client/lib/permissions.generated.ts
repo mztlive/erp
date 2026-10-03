@@ -3126,6 +3126,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "GET",
+                path: "/admin/purchase-orders/{id}/sales-materials/{asset_id}/download",
+                description: "下载采购关联销售合同及凭证",
+                permission: {
+                    resource: "purchase_order",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
                 path: "/admin/purchase-orders",
                 description: "查询采购单列表",
                 permission: {

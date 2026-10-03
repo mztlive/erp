@@ -41,6 +41,7 @@ pub async fn capture_approval_display(
         counterparty_label: fact.display.counterparty_label,
         impact_summary: fact.display.impact_summary,
         source: fact.display.brief_source.ok_or_else(|| Error::ValidationError("审批单据摘要缺失".into()))?,
+        source_sales: Vec::new(),
     };
     snapshot.validate()?;
     Ok(snapshot)
@@ -235,6 +236,7 @@ mod tests {
                 }],
                 ..Default::default()
             },
+            source_sales: Vec::new(),
         });
         snapshot
     }

@@ -101,9 +101,9 @@ function buildPurchaseOrderLinesColumns(
         {
             id: "unitCost",
             accessorKey: "unitCostGross",
-            header: "含税单价",
+            header: "采购含税单价",
             meta: {
-                label: "含税单价",
+                label: "采购含税单价",
                 width: "amount",
                 align: "end",
                 numeric: true,
@@ -126,6 +126,23 @@ function buildPurchaseOrderLinesColumns(
                             </div>
                         ) : null}
                     </div>
+                ),
+        },
+        {
+            id: "salesUnitPrice",
+            accessorKey: "salesUnitPriceGross",
+            header: "客户成交含税单价",
+            meta: {
+                label: "客户成交含税单价",
+                width: "amount",
+                align: "end",
+                numeric: true,
+            },
+            cell: ({ row }) =>
+                row.original.salesUnitPriceGross == null ? (
+                    "—"
+                ) : (
+                    <MoneyValue value={row.original.salesUnitPriceGross} />
                 ),
         },
         {

@@ -176,6 +176,27 @@ pub trait WorkflowAuthorizationPort: Clone + Send + Sync + 'static {
         async { Err(Error::Internal("审批来源读取授权未装配".into())) }
     }
 
+    /// 在原提交事务内证明提交者可以读取本次锁定的合同。
+    ///
+    /// # 参数
+    /// * `actor` - 当前提交者，不是审批材料的后续读取人。
+    /// * `contract_id` - 本次销售提交锁定的合同身份。
+    /// * `executor` - 业务提交沿用的事务执行器。
+    /// # 返回
+    /// 当前合同详情动作和真实客户来源边界均允许时返回 true。
+    /// # 错误
+    /// 未装配、授权配置或基础设施失败时拒绝；对象不可见时返回 false。
+    /// # 关键业务约束
+    /// 调用方仍须证明锁定修订及唯一 PDF 归属；此事实不授予审批人普通合同或文件读取权。
+    fn approval_contract_readable(
+        &self,
+        _actor: &AuditActor,
+        _contract_id: &str,
+        _executor: &mut dyn Executor,
+    ) -> impl Future<Output = Result<bool>> + Send {
+        async { Err(Error::Internal("审批合同材料读取授权未装配".into())) }
+    }
+
     /// 绑定前按当前或拟创建订单事实独立核对详情范围；未装配时失败关闭。
     fn binding_order_readable(
         &self,
@@ -560,7 +581,18 @@ impl WorkflowAuthorizationPort for FailClosedWorkflowAuthorizationPort {
 
 #[cfg(test)]
 mod permission_tests {
+    use persistence_core::NoTransaction;
+
     use super::*;
+
+    #[tokio::test]
+    async fn unwired_contract_material_authorization_fails_closed() {
+        let actor = AuditActor::new("submitter".into(), "submitter".into(), AccountKind::Admin);
+        let result = FailClosedWorkflowAuthorizationPort
+            .approval_contract_readable(&actor, "contract-1", &mut NoTransaction)
+            .await;
+        assert!(matches!(result, Err(Error::Internal(message)) if message == "审批合同材料读取授权未装配"));
+    }
 
     #[test]
     fn approval_read_and_decide_must_be_granted_by_one_role() {
