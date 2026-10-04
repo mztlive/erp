@@ -276,16 +276,13 @@ impl StockBalanceRepositoryExt for Repository<'_, StockBalance> {
         filter: &StockBalanceFilter,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<StockBalanceRow>> {
-        paged_projection_search(
-            &self.collection(),
-            filter.to_doc(),
-            stock_balance_sort(filter),
-            filter.skip(),
-            filter.limit(),
-            stock_balance_projection(),
-            executor,
-        )
-        .await
+        let options = FindOptions::builder()
+            .sort(stock_balance_sort(filter))
+            .skip(filter.skip())
+            .limit(filter.limit())
+            .projection(stock_balance_projection())
+            .build();
+        paged_projection_search(&self.collection(), filter.to_doc(), options, executor).await
     }
 
     async fn find_by_dimensions(

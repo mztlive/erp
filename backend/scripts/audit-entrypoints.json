@@ -3397,10 +3397,10 @@
       "reason": "用例 bind_sales_order_contract 在自身事务或已声明 run_audited 边界通过 .resource_log、persist_log 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
     },
     {
-      "path": "crates/erp-processes/src/order_to_cash/command/create.rs",
-      "function": "create_sales_order",
+      "path": "crates/erp-processes/src/order_to_cash/command/create/persist.rs",
+      "function": "persist_created_draft",
       "policy": "Audited",
-      "stage": "Transaction",
+      "stage": "Command",
       "boundaries": [
         "audit.persist"
       ],
@@ -3408,7 +3408,21 @@
         "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "用例 create_sales_order 在自身事务或已声明 run_audited 边界通过 audit.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "步骤 persist_created_draft 在销售创建入口持有的同一 Executor 内保存业务记录与审计；保留原幂等恢复和写入顺序，不独立开启事务或重放业务命令。"
+    },
+    {
+      "path": "crates/erp-processes/src/order_to_cash/command/create/persist.rs",
+      "function": "persist_created_submission",
+      "policy": "Audited",
+      "stage": "Command",
+      "boundaries": [
+        "audit.persist"
+      ],
+      "call_counts": {
+        "audit.persist": 2
+      },
+      "location_count": 1,
+      "reason": "步骤 persist_created_submission 在销售创建入口持有的同一 Executor 内保存业务记录与审计；保留原幂等恢复和写入顺序，不独立开启事务或重放业务命令。"
     },
     {
       "path": "crates/erp-processes/src/order_to_cash/command/save.rs",
@@ -3993,10 +4007,10 @@
       "reason": "用例或步骤 apply 通过 persist_log 消费明确审计边界；接收既有 Executor 或委托自身上层事务，不因本登记增加事务、业务重试或重复成功事件。必要业务事实由当前命令显式提供。"
     },
     {
-      "path": "crates/erp-processes/src/procure_to_pay/submission.rs",
-      "function": "submit",
+      "path": "crates/erp-processes/src/procure_to_pay/submission/preparation.rs",
+      "function": "prepare_submit_persistence",
       "policy": "Audited",
-      "stage": "Transaction",
+      "stage": "MetadataFactory",
       "boundaries": [
         ".resource_log_with_id"
       ],
@@ -4004,7 +4018,7 @@
         ".resource_log_with_id": 1
       },
       "location_count": 1,
-      "reason": "用例 submit 在自身事务或已声明 run_audited 边界通过 .resource_log_with_id 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "准备采购提交的审批与审计元数据；正式业务、审批和审计写入由提交入口沿同一 Executor 原子执行。本步骤不独立持久化审计或开启事务。"
     },
     {
       "path": "crates/erp-processes/src/procure_to_pay/void_order.rs",
@@ -5222,19 +5236,31 @@
     },
     {
       "path": "crates/erp-processes/src/supply_settlement/handover.rs",
+      "function": "audit",
+      "policy": "Audited",
+      "stage": "MetadataFactory",
+      "boundaries": [
+        ".resource_log_with_id"
+      ],
+      "call_counts": {
+        ".resource_log_with_id": 1
+      },
+      "location_count": 1,
+      "reason": "按已规范化的责任变更命令身份与业务编号构造审计元数据；正式回执和事件由写入步骤在调用方同一 Executor 内保存，本方法不独立执行数据库写入。"
+    },
+    {
+      "path": "crates/erp-processes/src/supply_settlement/handover.rs",
       "function": "write_audit",
       "policy": "Audited",
       "stage": "Command",
       "boundaries": [
-        ".resource_log_with_id",
         "persist_log"
       ],
       "call_counts": {
-        ".resource_log_with_id": 1,
         "persist_log": 1
       },
       "location_count": 1,
-      "reason": "用例或步骤 write_audit 通过 .resource_log_with_id、persist_log 消费明确审计边界；接收既有 Executor 或委托自身上层事务，不因本登记增加事务、业务重试或重复成功事件。必要业务事实由当前命令显式提供。"
+      "reason": "责任变更步骤先保存独立命令回执，再沿调用方同一 Executor 持久化审计；保留业务更新、回执与审计的原子写入顺序，不独立开启事务。"
     },
     {
       "path": "crates/erp-processes/src/supply_settlement/review.rs",
@@ -5733,7 +5759,7 @@
       "reason": "元数据工厂/准备步骤 decision_audit 通过 PreparedWorkflowAudit::resource_with_message 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
     },
     {
-      "path": "crates/erp-workflow/src/service/approval/execution/runtime_service/resume_apply.rs",
+      "path": "crates/erp-workflow/src/service/approval/execution/runtime_service/resume_apply/persist.rs",
       "function": "persist_resume_writes",
       "policy": "Audited",
       "stage": "Command",
@@ -5747,10 +5773,10 @@
       "reason": "用例或步骤 persist_resume_writes 通过 audit_port.persist 消费明确审计边界；接收既有 Executor 或委托自身上层事务，不因本登记增加事务、业务重试或重复成功事件。必要业务事实由当前命令显式提供。"
     },
     {
-      "path": "crates/erp-workflow/src/service/approval/execution/runtime_service/resume_apply.rs",
-      "function": "resume_current_approver",
+      "path": "crates/erp-workflow/src/service/approval/execution/runtime_service/resume_apply/prepare.rs",
+      "function": "finish_prepared_resume",
       "policy": "Audited",
-      "stage": "Transaction",
+      "stage": "MetadataFactory",
       "boundaries": [
         "PreparedWorkflowAudit::resource_with_message"
       ],
@@ -5758,7 +5784,7 @@
         "PreparedWorkflowAudit::resource_with_message": 1
       },
       "location_count": 1,
-      "reason": "用例 resume_current_approver 在自身事务或已声明 run_audited 边界通过 PreparedWorkflowAudit::resource_with_message 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "根据已验证的恢复命令与冻结任务构造审批审计元数据；正式记录由审批恢复入口的同一 Executor 写入。本步骤不独立持久化事件或开启事务。"
     },
     {
       "path": "crates/erp-workflow/src/service/document_registry/mod.rs",

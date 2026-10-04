@@ -1,42 +1,42 @@
 //! 采购草稿冻结并调用统一 `start_approval`。
 
+mod preparation;
+
 use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
-use erp_core::common::time::Instant;
 use erp_procurement::dto::purchase_order::{
-    PURCHASE_SUBMIT_ACTION, SavePurchaseOrderLinePatch, SubmitPurchaseOrderRequest, SubmitPurchaseOrderResult,
+    PURCHASE_SUBMIT_ACTION, SubmitPurchaseOrderRequest, SubmitPurchaseOrderResult,
 };
 use erp_procurement::entity::purchase_order::{
     PurchaseCommandReceipt, PurchaseCommandReceiptError, PurchaseCommandReceiptIdentity,
     PurchaseSubmitReceipt,
 };
 use erp_procurement::repository::{PurchaseCommandExt, PurchaseOrderExt};
-use erp_procurement::service::purchase_order::draft_edit::map_draft_edit_violation;
-use erp_procurement::service::purchase_order::submission::assign_formal_purchase_no;
 use erp_sales::repository::SalesOrderExt;
-use erp_workflow::service::approval::execution::{command_recovery_delay, prepare_start};
-use erp_workflow::service::approval::policy::ApprovalDomainAction;
-use erp_workflow::service::document_registry::{find_approval_binding, find_registered_document};
-use id_generator::next_id;
+use erp_workflow::service::approval::execution::command_recovery_delay;
+use erp_workflow::service::document_registry::find_approval_binding;
 use persistence_core::{NoTransaction, Transactional};
+use preparation::PreparedPurchaseSubmit;
 use validator::Validate;
 
 use super::PurchaseOrderProcess;
 use super::adapter::{
-    RECENT_HISTORY_LIMIT, build_purchase_order_snapshot, execute_purchase_order_domain_action,
-    purchase_order_adapter, purchase_order_object_readable, purchase_order_responsible_org_id,
-    purchase_order_start_command, purchase_order_subject_ref, require_frozen_binding,
-    start_approval_command_kind,
+    purchase_order_object_readable, purchase_order_responsible_org_id, purchase_order_subject_ref,
+    require_frozen_binding,
 };
-use super::start_approval::{
-    PurchaseOrderStartInput, PurchaseOrderStartPersistInput, PurchaseSubmitProcurementGuard,
-    build_purchase_order_start_input, load_bound_definition_graph, load_start_receipt,
-    persist_purchase_order_start, replay_purchase_order_start_with_executor,
-};
+use super::start_approval::{persist_purchase_order_start, replay_purchase_order_start_with_executor};
 use crate::audit::recover_command;
 use crate::{Error, Result};
 
 const PURCHASE_SUBMIT_RECEIPT_PREFIX: &str = "purchase-submit-command-";
+
+/// 同一次提交的请求、调用人和领域幂等身份；准备、提交与恢复复用同一载荷。
+struct PurchaseSubmitCommand<'a> {
+    purchase_order_id: &'a str,
+    request: &'a SubmitPurchaseOrderRequest,
+    actor: &'a AuditActor,
+    identity: &'a PurchaseCommandReceiptIdentity,
+    fingerprint: &'a str,
+}
 
 /// 采购提交启动恢复入参。
 struct RecoverPurchaseSubmitStartInput<'a> {
@@ -88,148 +88,36 @@ impl PurchaseOrderProcess {
         for patch in &req.line_patches {
             patch.validate()?;
         }
-        let action = PURCHASE_SUBMIT_ACTION;
         let fingerprint = req.request_fingerprint(id);
-        let receipt_identity = PurchaseCommandReceipt::<PurchaseSubmitReceipt>::identity(
+        let identity = PurchaseCommandReceipt::<PurchaseSubmitReceipt>::identity(
             PURCHASE_SUBMIT_RECEIPT_PREFIX,
             actor.id(),
-            action,
+            PURCHASE_SUBMIT_ACTION,
             Some(id),
             &req.idempotency_key,
         )?;
-        if let Some(result) = self.replay_purchase_submit(&receipt_identity, &fingerprint, id, actor).await? {
+        if let Some(result) = self.replay_purchase_submit(&identity, &fingerprint, id, actor).await? {
             return Ok(result);
         }
-        let adapter = purchase_order_adapter()?;
-        let subject = purchase_order_subject_ref(id)?;
-        let mut order = self.command_access(actor, "submit")?.current(id, &mut NoTransaction).await?;
-        order
-            .ensure_expected_version(req.expected_lock_version)
-            .map_err(|_| Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))?;
-        order
-            .ensure_draft_for_submission()
-            .map_err(|_| Error::ConflictError("采购单已提交或已生效，请勿重复提交".to_string()))?;
-        let binding =
-            find_approval_binding(&self.db, id, &mut NoTransaction).await.map_err(crate::Error::from)?;
-        let binding = require_frozen_binding(binding.as_ref())?.clone();
-        let draft_id =
-            order.draft_submission_id().map_err(|error| Error::BusinessLogicError(error.to_string()))?;
-        let mut draft = self
-            .db
-            .purchase_order_submissions()
-            .find_by_id(&draft_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("草稿提交不存在".to_string()))?;
-        draft.ensure_draft().map_err(|_| Error::ConflictError("草稿提交已冻结".to_string()))?;
-        let mut draft_lines =
-            self.db.purchase_order().list_submission_lines(&draft_id, &mut NoTransaction).await?;
-        let sales_order = self
-            .db
-            .sales_orders()
-            .find_by_id(&order.sales_order_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))?;
-        let organization_id = purchase_order_responsible_org_id(&sales_order)?;
-        let _ = purchase_order_object_readable(&organization_id, actor.id())?;
-        assign_formal_purchase_no(&mut order)?;
-        let mut document = find_registered_document(&self.db, id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("业务单据未注册".to_string()))?;
-        let now = Instant::now();
-        if document.document_no.is_empty() {
-            document.assign_document_no(order.purchase_no.clone(), now)?;
-        }
-        let mut superseded_draft = draft.clone();
-        superseded_draft.mark_superseded()?;
-        let procurement_guard = if req.line_patches.is_empty() {
-            None
-        } else {
-            order
-                .ensure_payment_term_unchanged(req.payment_term_code.as_deref())
-                .map_err(map_draft_edit_violation)?;
-            let existing_lines = draft_lines.clone();
-            let requested_lines =
-                SavePurchaseOrderLinePatch::resolve_all(&req.line_patches, &existing_lines)?;
-            let (submission, lines) =
-                self.domain().freeze_submission_from_lines(&order, &draft, &requested_lines, actor).await?;
-            draft_lines = lines;
-            draft = submission;
-            Some(PurchaseSubmitProcurementGuard {
-                requested_lines,
-                existing_lines,
-                actor_id: actor.id().to_string(),
-            })
+        let command = PurchaseSubmitCommand {
+            purchase_order_id: id,
+            request: &req,
+            actor,
+            identity: &identity,
+            fingerprint: &fingerprint,
         };
-        let submission = if procurement_guard.is_some() {
-            draft
-        } else {
-            self.domain().freeze_submission(&mut order, &mut draft, &mut draft_lines, actor).await?
-        };
-        execute_purchase_order_domain_action(
-            &mut order,
-            ApprovalDomainAction::PurchaseOrderSubmit,
-            &submission.base.id,
-            actor.id(),
-        )?;
-        let snapshot =
-            build_purchase_order_snapshot(&order, &sales_order, &submission, &draft_lines, actor.id(), now)?;
-        let start = purchase_order_start_command(
-            id,
-            order.approval_subject_version,
-            actor.id(),
-            &req.idempotency_key,
-        );
-        let owner_role = adapter.owner_role;
-        let _ = (start_approval_command_kind(&start), RECENT_HISTORY_LIMIT);
-        let graph = load_bound_definition_graph(&self.db, &binding).await?;
-        let existing_receipt =
-            load_start_receipt(&self.db, &subject, order.approval_subject_version, &req.idempotency_key)
-                .await?;
-        let start_input = build_purchase_order_start_input(PurchaseOrderStartInput {
-            graph,
-            binding: &binding,
-            subject,
-            subject_version: order.approval_subject_version,
-            actor_id: actor.id(),
-            organization_id: &organization_id,
-            idempotency_key: &req.idempotency_key,
-            receipt: existing_receipt,
-            now,
-        })?;
-        let prepared = prepare_start(start_input)?;
-        let audit = actor
-            .clone()
-            .resource_log_with_id(next_id(), action, "purchase_order", order.base.id.clone(), None)?
-            .with_command_id(Some(receipt_identity.receipt_id().to_string()))?
-            .with_resource_number(Some(order.purchase_no.clone()))?;
+        let prepared = self.prepare_purchase_submit(&command).await?;
+        self.persist_prepared_submit(&command, prepared).await
+    }
+
+    /// 提交既有采购启动写段；仅在结果可能已提交时进入有界回读恢复。
+    async fn persist_prepared_submit(
+        &self,
+        command: &PurchaseSubmitCommand<'_>,
+        prepared: PreparedPurchaseSubmit,
+    ) -> Result<SubmitPurchaseOrderResult> {
+        let PreparedPurchaseSubmit { input, output, purchase_order_id, subject_version } = prepared;
         let db = self.db.clone();
-        let input = PurchaseOrderStartPersistInput {
-            order: order.clone(),
-            document,
-            superseded_draft,
-            submission: submission.clone(),
-            submission_lines: draft_lines,
-            procurement_guard,
-            snapshot_payload: snapshot,
-            prepared,
-            owner_role,
-            organization_id,
-            now,
-            audit,
-            object_scope: Some(self.command_access(actor, "submit")?),
-            receipt: Some((
-                receipt_identity.clone(),
-                fingerprint.clone(),
-                PurchaseSubmitReceipt::new(
-                    order.purchase_no.clone(),
-                    submission.base.id.clone(),
-                    submission.submission_no.clone(),
-                    String::new(),
-                    order.approval_subject_version.to_string(),
-                )
-                .with_versions(0, order.base.version),
-            )),
-        };
         let first_task = self
             .db
             .client()
@@ -242,12 +130,12 @@ impl PurchaseOrderProcess {
             Err(error) if error.command_may_have_committed() => {
                 return self
                     .recover_purchase_submit_start(RecoverPurchaseSubmitStartInput {
-                        purchase_order_id: id,
-                        subject_version: order.approval_subject_version,
-                        idempotency_key: &req.idempotency_key,
-                        actor,
-                        identity: &receipt_identity,
-                        fingerprint: &fingerprint,
+                        purchase_order_id: command.purchase_order_id,
+                        subject_version,
+                        idempotency_key: &command.request.idempotency_key,
+                        actor: command.actor,
+                        identity: command.identity,
+                        fingerprint: command.fingerprint,
                         original_error: error,
                     })
                     .await;
@@ -256,15 +144,15 @@ impl PurchaseOrderProcess {
         };
         let (work_item_id, task_version) = first_task.unwrap_or((String::new(), 0));
         Ok(SubmitPurchaseOrderResult {
-            purchase_order_id: order.base.id.clone(),
-            purchase_no: order.purchase_no.clone(),
-            submission_id: submission.base.id.clone(),
-            submission_no: submission.submission_no.clone(),
+            purchase_order_id,
+            purchase_no: output.purchase_no.clone(),
+            submission_id: output.submission_id,
+            submission_no: output.submission_no,
             work_item_id,
             task_version,
-            subject_version: order.approval_subject_version.to_string(),
-            lock_version: order.base.version,
-            reference: order.purchase_no.clone(),
+            subject_version: output.subject_version,
+            lock_version: output.lock_version,
+            reference: output.purchase_no,
         })
     }
 
@@ -431,7 +319,69 @@ fn decode_submit_receipt(
 
 #[cfg(test)]
 mod tests {
-    use erp_procurement::entity::purchase_order::PurchaseSubmitReceipt;
+    use super::{
+        PURCHASE_SUBMIT_ACTION, PURCHASE_SUBMIT_RECEIPT_PREFIX, PurchaseCommandReceipt,
+        PurchaseCommandReceiptIdentity, PurchaseSubmitReceipt, decode_submit_receipt,
+    };
+    use crate::Error;
+
+    fn receipt_fixture()
+    -> (PurchaseCommandReceiptIdentity, PurchaseCommandReceipt<PurchaseSubmitReceipt>, String) {
+        let identity = PurchaseCommandReceipt::<PurchaseSubmitReceipt>::identity(
+            PURCHASE_SUBMIT_RECEIPT_PREFIX,
+            "actor-1",
+            PURCHASE_SUBMIT_ACTION,
+            Some("po-1"),
+            "submit-key-1",
+        )
+        .unwrap();
+        let result = PurchaseSubmitReceipt::new(
+            "PO-1".into(),
+            "submission-1".into(),
+            "SUB-1".into(),
+            "wi-9".into(),
+            "1".into(),
+        )
+        .with_versions(7, 2);
+        let fingerprint = "a".repeat(64);
+        let record = PurchaseCommandReceipt::new(&identity, &fingerprint, result, "audit-1".into()).unwrap();
+        (identity, record, fingerprint)
+    }
+
+    #[test]
+    fn submit_receipt_decode_preserves_frozen_result() {
+        let (identity, record, fingerprint) = receipt_fixture();
+        let expected = record.payload().clone();
+        let result = decode_submit_receipt(record, &identity, &fingerprint).unwrap();
+        assert_eq!(result, expected);
+        assert_eq!(result.work_item_id, "wi-9");
+        assert_eq!(result.task_version, 7);
+        assert_eq!(result.lock_version, 2);
+    }
+
+    #[test]
+    fn submit_receipt_decode_keeps_identity_and_payload_error_categories() {
+        let (identity, record, fingerprint) = receipt_fixture();
+        let mut other_identity = identity.clone();
+        other_identity.actor_id = "actor-2".into();
+        let identity_error =
+            decode_submit_receipt(record.clone(), &other_identity, &fingerprint).unwrap_err();
+        assert!(
+            matches!(identity_error, Error::Internal(message) if message == "采购提交幂等收据与业务对象不一致")
+        );
+        let payload_error = decode_submit_receipt(record, &identity, &"b".repeat(64)).unwrap_err();
+        assert!(
+            matches!(payload_error, Error::ConflictError(message) if message == "幂等键已用于不同的采购提交命令")
+        );
+    }
+
+    #[test]
+    fn submit_receipt_decode_rejects_corrupted_frozen_result() {
+        let (identity, mut record, fingerprint) = receipt_fixture();
+        record.result.task_version = 0;
+        let error = decode_submit_receipt(record, &identity, &fingerprint).unwrap_err();
+        assert!(matches!(error, Error::Internal(message) if message == "采购命令回执损坏"));
+    }
 
     #[test]
     fn submit_receipt_freezes_first_task_identity() {

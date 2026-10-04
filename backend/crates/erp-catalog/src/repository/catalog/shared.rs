@@ -194,8 +194,9 @@ where
     Row: DeserializeOwned + Send + Sync,
     Entity: Send + Sync,
 {
-    let items = mongo_ops::find_many(rows, filter.to_doc(), options, executor).await?;
-    let total = mongo_ops::count_documents(entities, filter.to_doc(), executor).await?;
+    let query = filter.to_doc();
+    let items = mongo_ops::find_many(rows, query.clone(), options, executor).await?;
+    let total = mongo_ops::count_documents(entities, query, executor).await?;
     Ok(PageResult { items, total: total as i64 })
 }
 

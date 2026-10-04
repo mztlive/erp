@@ -474,6 +474,28 @@ impl SalesOrder {
         Ok(())
     }
 
+    /// 验证最终审批动作可进入销售单形式化。
+    ///
+    /// 本守卫只检查商业主状态与审核轨，不改变订单，也不校验首次生效归属。
+    /// 归属准备与实际生效仍由后续正式化步骤负责。
+    ///
+    /// # 参数
+    /// 无；读取当前销售单状态。
+    ///
+    /// # 返回
+    /// 商业主状态为 `PendingReview` 且审核轨为 `InApproval` 时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 任一状态不满足时返回领域规则错误。
+    pub fn ensure_can_formalize(&self) -> Result<()> {
+        if self.commercial_status != CommercialStatus::PendingReview
+            || self.review_status != ReviewStatus::InApproval
+        {
+            return Err(Error::from("只有审批中的销售单可以由最终通过动作形式化"));
+        }
+        Ok(())
+    }
+
     /// 审批通过并生效（主状态 `PENDING_REVIEW → EFFECTIVE`）。
     ///
     /// 审核轨同时推进到 `Approved`。目标路径只接受 `IN_APPROVAL`。

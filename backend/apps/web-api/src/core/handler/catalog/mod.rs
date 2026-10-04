@@ -19,13 +19,17 @@ use erp_catalog::{
     UnitOfMeasureListParams, UnitOfMeasureView, UpdateProductBrandRequest, UpdateProductCategoryRequest,
     UpdateSkuAttributeRequest, UpdateSkuAttributeValueRequest, UpdateUnitOfMeasureRequest,
 };
+use erp_processes::{
+    create_product_category, create_sku_attribute, create_sku_attribute_value, create_unit_of_measure,
+    product_brand_create_with_assets as create_brand_with_assets,
+    product_brand_update_with_assets as update_brand_with_assets,
+};
 use erp_support::SensitivityClass;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::handler::file_asset::{
-    delete_pending_asset_objects, extract_command_with_asset_files, should_compensate_pending_assets,
-    store_pending_asset_files,
+    extract_command_with_asset_files, finish_asset_command, store_pending_asset_files,
 };
 use crate::core::response::ApiResponse;
 
@@ -74,7 +78,7 @@ pub async fn product_category_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateProductCategoryRequest>,
 ) -> Result<ProductCategoryView> {
-    let view = erp_processes::create_product_category(state.db(), req, actor).await?;
+    let view = create_product_category(state.db(), req, actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -219,6 +223,17 @@ pub async fn product_brand_create(
     action = "create"
 )]
 /// 一次接收品牌创建命令与 Logo，并原子登记文件元数据和品牌。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 当前认证账号
+/// * `multipart` - 品牌 JSON 命令和具名 Logo 文件
+///
+/// # 返回
+/// 返回新建品牌视图。
+///
+/// # 错误
+/// 文件、业务校验或事务失败时返回原错误；提交结果未知时保留对象。
 pub async fn product_brand_create_with_assets(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -226,17 +241,9 @@ pub async fn product_brand_create_with_assets(
 ) -> Result<ProductBrandView> {
     let (req, files) = extract_command_with_asset_files::<CreateProductBrandRequest>(&mut multipart).await?;
     let pending = store_pending_asset_files(&state, files, |_| SensitivityClass::General).await?;
-    let result =
-        erp_processes::product_brand_create_with_assets(state.db(), req, pending.clone(), actor).await;
-    match result {
-        Ok(view) => Ok(ApiResponse::ok_with_data(view)),
-        Err(error) => {
-            if should_compensate_pending_assets(&error) {
-                delete_pending_asset_objects(&state, &pending).await;
-            }
-            Err(error.into())
-        },
-    }
+    let result = create_brand_with_assets(state.db(), req, pending.clone(), actor).await;
+    let view = finish_asset_command(&state, &pending, result, |_| true).await?;
+    Ok(ApiResponse::ok_with_data(view))
 }
 
 #[permission_macros::permission(
@@ -275,6 +282,18 @@ pub async fn product_brand_update(
     action = "update"
 )]
 /// 一次接收品牌更新命令与 Logo，并原子登记文件元数据和品牌变更。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 当前认证账号
+/// * `id` - 品牌 ID
+/// * `multipart` - 品牌 JSON 命令和具名 Logo 文件
+///
+/// # 返回
+/// 返回更新后品牌视图。
+///
+/// # 错误
+/// 文件、版本或事务失败时返回原错误；提交结果未知时保留对象。
 pub async fn product_brand_update_with_assets(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -283,17 +302,9 @@ pub async fn product_brand_update_with_assets(
 ) -> Result<ProductBrandView> {
     let (req, files) = extract_command_with_asset_files::<UpdateProductBrandRequest>(&mut multipart).await?;
     let pending = store_pending_asset_files(&state, files, |_| SensitivityClass::General).await?;
-    let result =
-        erp_processes::product_brand_update_with_assets(state.db(), id, req, pending.clone(), actor).await;
-    match result {
-        Ok(view) => Ok(ApiResponse::ok_with_data(view)),
-        Err(error) => {
-            if should_compensate_pending_assets(&error) {
-                delete_pending_asset_objects(&state, &pending).await;
-            }
-            Err(error.into())
-        },
-    }
+    let result = update_brand_with_assets(state.db(), id, req, pending.clone(), actor).await;
+    let view = finish_asset_command(&state, &pending, result, |_| true).await?;
+    Ok(ApiResponse::ok_with_data(view))
 }
 
 #[permission_macros::permission(
@@ -367,7 +378,7 @@ pub async fn unit_of_measure_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateUnitOfMeasureRequest>,
 ) -> Result<UnitOfMeasureView> {
-    let view = erp_processes::create_unit_of_measure(state.db(), req, actor).await?;
+    let view = create_unit_of_measure(state.db(), req, actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -471,7 +482,7 @@ pub async fn sku_attribute_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateSkuAttributeRequest>,
 ) -> Result<SkuAttributeView> {
-    let view = erp_processes::create_sku_attribute(state.db(), req, actor).await?;
+    let view = create_sku_attribute(state.db(), req, actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -575,7 +586,7 @@ pub async fn sku_attribute_value_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateSkuAttributeValueRequest>,
 ) -> Result<SkuAttributeValueView> {
-    let view = erp_processes::create_sku_attribute_value(state.db(), req, actor).await?;
+    let view = create_sku_attribute_value(state.db(), req, actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }

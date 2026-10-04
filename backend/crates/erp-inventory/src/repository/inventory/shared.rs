@@ -123,7 +123,7 @@ pub(super) fn with_id_tie_breaker(mut sort: Document, sort_ascending: bool) -> D
     sort
 }
 
-/// 执行投影分页查询：组装 `FindOptions`、按行类型投影，并对同一查询文档
+/// 执行投影分页查询：使用调用方的 `FindOptions`、按行类型投影，并对同一查询文档
 /// 先 `find_many` 再 `count_documents`（计数使用原文档，列表使用克隆）。
 ///
 /// 调用方各自构造 `to_doc()`、排序与投影；本函数不合并四套列表字段。
@@ -131,10 +131,7 @@ pub(super) fn with_id_tie_breaker(mut sort: Document, sort_ascending: bool) -> D
 /// # 参数
 /// * `base` - 基集合句柄（用于计数）
 /// * `filter` - 调用方 `to_doc()` 得到的查询文档
-/// * `sort` - 排序文档
-/// * `skip` - 跳过行数
-/// * `limit` - 单页条数
-/// * `projection` - 投影文档
+/// * `options` - 已组装的排序、分页与投影选项
 /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
 ///
 /// # 返回
@@ -145,17 +142,13 @@ pub(super) fn with_id_tie_breaker(mut sort: Document, sort_ascending: bool) -> D
 pub(super) async fn paged_projection_search<Entity, Row>(
     base: &Collection<Entity>,
     filter: Document,
-    sort: Document,
-    skip: u64,
-    limit: i64,
-    projection: Document,
+    options: FindOptions,
     executor: &mut dyn Executor,
 ) -> Result<PageResult<Row>>
 where
     Entity: Send + Sync,
     Row: for<'de> Deserialize<'de> + Serialize + Send + Sync,
 {
-    let options = FindOptions::builder().sort(sort).skip(skip).limit(limit).projection(projection).build();
     let collection = base.clone_with_type::<Row>();
     let items = mongo_ops::find_many(&collection, filter.clone(), options, executor).await?;
     let total = mongo_ops::count_documents(base, filter, executor).await?;

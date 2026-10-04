@@ -10,7 +10,7 @@ use crate::entity::purchase_order::{
 };
 use crate::repository::PurchaseOrderExt;
 use crate::service::purchase_order::PurchaseOrderService;
-use crate::service::purchase_order::line_input::{compute_request_totals, to_line_inputs};
+use crate::service::purchase_order::line_input::compute_request_totals;
 use crate::{Error, Result};
 
 /// 已校验的采购提交金额和待解析付款代码；在外域付款解析前计算。
@@ -32,7 +32,7 @@ pub fn prepare_submission_header(
     base_revision: &PurchaseOrderRevision,
     req: &SubmitPurchaseChangeRequest,
 ) -> Result<ChangeSubmissionHeader> {
-    let inputs = to_line_inputs(&req.lines)?;
+    let inputs = SavePurchaseOrderLine::to_line_inputs(&req.lines)?;
     let (gross, net, tax) = compute_request_totals(&inputs)?;
     let payment_term_code = req
         .payment_term_code

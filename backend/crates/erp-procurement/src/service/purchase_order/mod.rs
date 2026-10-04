@@ -14,7 +14,6 @@ pub mod line_input;
 pub mod shared;
 pub mod start_approval;
 pub mod submission;
-pub mod view_mapping;
 pub mod void_order;
 /// 仅拥有采购领域数据和持久化的应用服务。
 pub struct PurchaseOrderService {

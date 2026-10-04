@@ -2,9 +2,6 @@
 
 use application_core::AuditActor;
 use erp_procurement::dto::purchase_order::PurchaseOrderLineView;
-use erp_procurement::service::purchase_order::view_mapping::{
-    revision_line_to_view, submission_line_to_view,
-};
 use erp_workflow::entity::approval_integration::ApprovalMaterialFile;
 use persistence_core::Transactional;
 
@@ -75,8 +72,8 @@ impl PurchaseOrderReadService {
 /// 文件资格沿采购页面实际展示的版本 > 提交内容优先级解释，不取当前销售草稿。
 fn displayed_lines(facts: &PurchaseOrderCenterFacts) -> Vec<PurchaseOrderLineView> {
     if facts.current_revision.is_some() {
-        facts.revision_lines.iter().map(revision_line_to_view).collect()
+        facts.revision_lines.iter().map(PurchaseOrderLineView::from_revision).collect()
     } else {
-        facts.submission_lines.iter().map(submission_line_to_view).collect()
+        facts.submission_lines.iter().map(PurchaseOrderLineView::from_submission).collect()
     }
 }

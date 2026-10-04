@@ -4,7 +4,7 @@ use erp_core::money::Amount;
 use id_generator::next_id;
 use persistence_core::Executor;
 
-use super::line_input::{build_submission_lines, compute_request_totals, to_line_inputs};
+use super::line_input::{build_submission_lines, compute_request_totals};
 use crate::dto::purchase_order::SavePurchaseOrderLine;
 use crate::entity::purchase_order::{
     DraftLineEditViolation, PurchaseOrder, PurchaseOrderStatus, PurchaseOrderSubmission,
@@ -143,7 +143,7 @@ pub fn build_draft_replacement(
     old_draft: &PurchaseOrderSubmission,
     lines: &[SavePurchaseOrderLine],
 ) -> Result<DraftReplacement> {
-    let inputs = to_line_inputs(lines)?;
+    let inputs = SavePurchaseOrderLine::to_line_inputs(lines)?;
     let (gross, net, tax) = compute_request_totals(&inputs)?;
     let submission = PurchaseOrderSubmission::new(
         PurchaseOrderSubmissionId::new(next_id()),

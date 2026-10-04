@@ -1,5 +1,6 @@
 use std::str::FromStr;
 
+use entity_core::BaseModel;
 use erp_core::common::state::{DocumentState, ensure_transition};
 use erp_core::common::time::Instant;
 use erp_core::ids::{
@@ -32,6 +33,43 @@ fn approval_without_attribution_leaves_order_unchanged() {
     let before = order.clone();
     assert!(order.approve(Instant::from_unix_secs(1_800_000_000), "approver").is_err());
     assert_eq!(order, before);
+}
+
+#[test]
+fn final_approval_guard_accepts_only_the_current_approval_state() {
+    let mut order = SalesOrder::new(SalesOrderId::new("approval-guard"), data(), "admin-1").unwrap();
+    order.base = BaseModel::fake();
+    for commercial in [
+        CommercialStatus::Draft,
+        CommercialStatus::PendingReview,
+        CommercialStatus::Effective,
+        CommercialStatus::Voided,
+    ] {
+        for review in [
+            ReviewStatus::NotSubmitted,
+            ReviewStatus::PendingProcurementConfirmation,
+            ReviewStatus::PendingLowMarginSuperior,
+            ReviewStatus::PendingSalesLeader,
+            ReviewStatus::PendingOperations,
+            ReviewStatus::Approved,
+            ReviewStatus::Rejected,
+            ReviewStatus::InApproval,
+        ] {
+            order.commercial_status = commercial;
+            order.review_status = review;
+            let before = order.clone();
+            assert_eq!(
+                order.ensure_can_formalize().is_ok(),
+                commercial == CommercialStatus::PendingReview && review == ReviewStatus::InApproval,
+                "{commercial:?}/{review:?}",
+            );
+            assert_eq!(order, before);
+        }
+    }
+    order.commercial_status = CommercialStatus::PendingReview;
+    order.review_status = ReviewStatus::InApproval;
+    assert!(order.attribution.is_none());
+    assert!(order.ensure_can_formalize().is_ok());
 }
 
 #[test]

@@ -2,26 +2,31 @@
 //!
 //! 已删除 start-processing / release-to-team / claim。通用写接口拒绝审批任务。
 
+use std::result::Result as StdResult;
+
 use application_core::AuditActor;
 use axum::extract::{Path, Query, State};
 use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Response};
 use axum::{Extension, Json};
+use erp_processes::Error as ProcessError;
 use erp_processes::adapters::workflow::{work_item_service, workflow_auth};
 use erp_read_models::{
-    FulfillmentQueueListParams, FulfillmentQueuePageView, WorkItemListParams, WorkItemPageView,
-    WorkItemStatsParams, WorkItemStatsView, WorkItemView, WorkbenchReadService,
+    Error as ReadModelError, FulfillmentQueueListParams, FulfillmentQueuePageView, WorkItemListParams,
+    WorkItemPageView, WorkItemStatsParams, WorkItemStatsView, WorkItemView, WorkbenchReadService,
 };
 use erp_workflow::entity::work_item::WorkItemType;
 use erp_workflow::service::work_item::{
     CloseWorkItemRequest, ReassignWorkItemRequest, WorkItemConflictKind, WorkItemMutationOutcome,
     WorkItemReassignCandidateView,
 };
+use erp_workflow::{Error as WorkflowError, ErrorCode};
 use serde::Serialize;
+use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::core::errors::{Error as HttpError, Result};
-use crate::core::handler::approval_instance::error::ApprovalHttpError;
+use crate::core::handler::approval_instance::error::{ApprovalHttpError, correlation_id};
 use crate::core::response::ApiResponse;
 
 pub mod finance_responsibility;
@@ -36,12 +41,12 @@ pub enum ResponsibilityKind {
     PersonalBusinessTask,
 }
 
-/// 带 `responsibility_kind` 的任务投影。
+/// 为读模型增加 HTTP 合同要求的 `responsibility_kind`，其余字段沿用安全投影。
 #[derive(Debug, Clone, Serialize)]
 pub struct WorkItemHttpView {
     /// 服务层安全投影。
     #[serde(flatten)]
-    pub inner: serde_json::Value,
+    pub inner: WorkItemView,
     /// 合同冻结的责任类型。
     pub responsibility_kind: ResponsibilityKind,
 }
@@ -74,19 +79,39 @@ pub enum WorkItemActionError {
     Other(HttpError),
 }
 
-impl From<erp_workflow::Error> for WorkItemActionError {
-    fn from(error: erp_workflow::Error) -> Self {
-        erp_processes::Error::from(error).into()
+impl From<WorkflowError> for WorkItemActionError {
+    /// 沿用流程命令的 HTTP 错误分类。
+    ///
+    /// # 参数
+    /// * `error` - 流程领域错误
+    ///
+    /// # 返回
+    /// 返回责任命令错误。
+    ///
+    /// # 错误
+    /// 转换本身不失败。
+    fn from(error: WorkflowError) -> Self {
+        ProcessError::from(error).into()
     }
 }
 
-impl From<erp_read_models::Error> for WorkItemActionError {
-    fn from(error: erp_read_models::Error) -> Self {
-        erp_processes::Error::from(error).into()
+impl From<ReadModelError> for WorkItemActionError {
+    /// 沿用查询错误的统一 HTTP 分类。
+    ///
+    /// # 参数
+    /// * `error` - 已授权任务查询的错误
+    ///
+    /// # 返回
+    /// 返回责任命令错误。
+    ///
+    /// # 错误
+    /// 转换本身不失败。
+    fn from(error: ReadModelError) -> Self {
+        ProcessError::from(error).into()
     }
 }
 
-impl From<erp_processes::Error> for WorkItemActionError {
+impl From<ProcessError> for WorkItemActionError {
     /// 将服务错误映射为责任命令错误。
     ///
     /// # 参数
@@ -94,11 +119,14 @@ impl From<erp_processes::Error> for WorkItemActionError {
     ///
     /// # 返回
     /// 审批任务保护使用稳定码，其余沿用统一映射。
-    fn from(error: erp_processes::Error) -> Self {
-        if error.code() == Some(erp_workflow::ErrorCode::ApprovalGenericWorkItemMutationForbidden) {
+    ///
+    /// # 错误
+    /// 转换本身不失败，保留原服务错误分类。
+    fn from(error: ProcessError) -> Self {
+        if error.code() == Some(ErrorCode::ApprovalGenericWorkItemMutationForbidden) {
             return Self::ApprovalProtected(ApprovalHttpError::coded(
-                erp_workflow::ErrorCode::ApprovalGenericWorkItemMutationForbidden,
-                uuid::Uuid::new_v4().to_string(),
+                ErrorCode::ApprovalGenericWorkItemMutationForbidden,
+                Uuid::new_v4().to_string(),
                 None,
             ));
         }
@@ -109,8 +137,14 @@ impl From<erp_processes::Error> for WorkItemActionError {
 impl IntoResponse for WorkItemActionError {
     /// 将责任命令错误转换为真实 HTTP 状态与稳定 JSON 信封。
     ///
+    /// # 参数
+    /// * `self` - 已分类的责任命令错误
+    ///
     /// # 返回
     /// 冲突返回 409 和权限安全的最新任务摘要；审批保护返回稳定码。
+    ///
+    /// # 错误
+    /// 响应构造不失败。
     fn into_response(self) -> Response {
         match self {
             Self::Conflict(conflict) => {
@@ -133,7 +167,7 @@ impl IntoResponse for WorkItemActionError {
 }
 
 /// 责任命令 HTTP 结果。
-pub type WorkItemActionResult = std::result::Result<ApiResponse<WorkItemHttpView>, WorkItemActionError>;
+pub type WorkItemActionResult = StdResult<ApiResponse<WorkItemHttpView>, WorkItemActionError>;
 
 /// 由任务类型计算责任类型。
 ///
@@ -142,6 +176,9 @@ pub type WorkItemActionResult = std::result::Result<ApiResponse<WorkItemHttpView
 ///
 /// # 返回
 /// `DocumentApproval` 对应 `PERSONAL_APPROVAL`。
+///
+/// # 错误
+/// 无。
 pub fn responsibility_kind_of(work_item_type: WorkItemType) -> ResponsibilityKind {
     if work_item_type == WorkItemType::DocumentApproval {
         ResponsibilityKind::PersonalApproval
@@ -150,21 +187,21 @@ pub fn responsibility_kind_of(work_item_type: WorkItemType) -> ResponsibilityKin
     }
 }
 
-/// 包装单条任务投影。
-///
-/// # 参数
-/// * `view` - 服务层投影
-///
-/// # 返回
-/// 返回带责任类型的 HTTP 投影。
-fn wrap_view<V: serde::Serialize>(view: V) -> WorkItemHttpView {
-    let inner = serde_json::to_value(&view).expect("任务投影可序列化");
-    let work_item_type = inner
-        .get("work_item_type")
-        .cloned()
-        .and_then(|value| serde_json::from_value(value).ok())
-        .expect("任务类型存在");
-    WorkItemHttpView { inner, responsibility_kind: responsibility_kind_of(work_item_type) }
+impl From<WorkItemView> for WorkItemHttpView {
+    /// 保持服务层安全字段的平铺形状，并追加 HTTP 责任类型。
+    ///
+    /// # 参数
+    /// * `inner` - 已授权的强类型任务投影
+    ///
+    /// # 返回
+    /// 返回包含原投影全部字段和责任类型的 HTTP 投影。
+    ///
+    /// # 错误
+    /// 无。
+    fn from(inner: WorkItemView) -> Self {
+        let responsibility_kind = responsibility_kind_of(inner.work_item_type);
+        Self { inner, responsibility_kind }
+    }
 }
 
 /// 包装分页投影。
@@ -176,7 +213,7 @@ fn wrap_view<V: serde::Serialize>(view: V) -> WorkItemHttpView {
 /// 返回带责任类型的分页。
 fn wrap_page(page: WorkItemPageView) -> WorkItemHttpPageView {
     WorkItemHttpPageView {
-        items: page.items.into_iter().map(wrap_view).collect(),
+        items: page.items.into_iter().map(WorkItemHttpView::from).collect(),
         total: page.total,
         page: page.page,
         page_size: page.page_size,
@@ -193,13 +230,13 @@ fn reject_approval_task(
     work_item_type: WorkItemType,
     approval_node_execution_id: Option<&str>,
     headers: &HeaderMap,
-) -> std::result::Result<(), WorkItemActionError> {
+) -> StdResult<(), WorkItemActionError> {
     if work_item_type != WorkItemType::DocumentApproval && approval_node_execution_id.is_none() {
         return Ok(());
     }
     Err(WorkItemActionError::ApprovalProtected(ApprovalHttpError::coded(
-        erp_workflow::ErrorCode::ApprovalGenericWorkItemMutationForbidden,
-        crate::core::handler::approval_instance::error::correlation_id(headers),
+        ErrorCode::ApprovalGenericWorkItemMutationForbidden,
+        correlation_id(headers),
         None,
     )))
 }
@@ -216,7 +253,7 @@ async fn work_item_action_response(
                 .work_item_detail(work_item_id, actor)
                 .await?;
             reject_approval_task(view.work_item_type, view.approval_node_execution_id.as_deref(), &headers)?;
-            Ok(ApiResponse::ok_with_data(wrap_view(view)))
+            Ok(ApiResponse::ok_with_data(view.into()))
         },
         WorkItemMutationOutcome::Conflict(conflict) => {
             let current = match conflict.work_item_id() {
@@ -235,7 +272,7 @@ async fn work_item_action_response(
 }
 
 /// HTTP 409 payload. Query view is assembled by read-models.
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct HttpWorkItemConflict {
     #[serde(skip)]
     kind: WorkItemConflictKind,
@@ -257,8 +294,16 @@ impl HttpWorkItemConflict {
 )]
 /// 查询服务端责任过滤后的待办队列。
 ///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 当前认证账号
+/// * `params` - 责任范围、过滤与分页参数
+///
 /// # 返回
 /// 返回携带 `responsibility_kind` 的分页投影。
+///
+/// # 错误
+/// 查询参数无效、授权版本变化或查询失败时返回错误。
 pub async fn work_item_list(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -279,8 +324,16 @@ pub async fn work_item_list(
 )]
 /// 查询 W09 服务端分页履约责任读模型。
 ///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 当前认证账号
+/// * `params` - 履约责任过滤与分页参数
+///
 /// # 返回
 /// 返回当前账号开放履约责任的分页、指标和仓库筛选项。
+///
+/// # 错误
+/// 查询参数无效、授权版本变化或查询失败时返回错误。
 pub async fn fulfillment_queue_list(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -301,8 +354,16 @@ pub async fn fulfillment_queue_list(
 )]
 /// 查询与正式待办列表复用授权快照的统计。
 ///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 当前认证账号
+/// * `params` - 责任范围和统计过滤参数
+///
 /// # 返回
 /// 返回个人、到期、超期、异常、任务族计数及服务端统计时点。
+///
+/// # 错误
+/// 查询参数无效或授权统计失败时返回错误。
 pub async fn work_item_stats(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -323,8 +384,16 @@ pub async fn work_item_stats(
 )]
 /// 查询单条任务的安全详情。
 ///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 当前认证账号
+/// * `id` - 任务 ID
+///
 /// # 返回
 /// 返回带 `responsibility_kind` 的任务投影。
+///
+/// # 错误
+/// 任务不存在、当前账号不可见或查询失败时返回错误。
 pub async fn work_item_detail(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -333,7 +402,7 @@ pub async fn work_item_detail(
     let view = WorkbenchReadService::new(state.db(), workflow_auth(state.db(), state.rbac()))
         .work_item_detail(id, actor)
         .await?;
-    Ok(ApiResponse::ok_with_data(wrap_view(view)))
+    Ok(ApiResponse::ok_with_data(view.into()))
 }
 
 #[permission_macros::permission(
@@ -345,8 +414,16 @@ pub async fn work_item_detail(
 )]
 /// 查询开放非审批任务当前合格的转交候选人。
 ///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 当前认证账号
+/// * `id` - 任务 ID
+///
 /// # 返回
 /// 返回经账号状态、完整操作权限、管理范围和采购级联约束过滤后的具体账号。
+///
+/// # 错误
+/// 任务不可见、不允许转交或候选查询失败时返回错误。
 pub async fn work_item_reassign_candidates(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -429,11 +506,116 @@ mod tests {
     use axum::body::to_bytes;
     use axum::http::StatusCode;
     use axum::response::IntoResponse;
-    use erp_workflow::entity::work_item::WorkItemType;
+    use erp_workflow::dto::work_item::{ProcessingState, WorkItemAllowedAction, WorkItemPartyView};
+    use erp_workflow::entity::work_item::{AssignmentSource, WorkItemPriority, WorkItemStatus, WorkItemType};
     use erp_workflow::service::work_item::WorkItemConflictKind;
-    use serde_json::{Value, json};
+    use serde_json::{Value, json, to_value};
 
-    use super::{HttpWorkItemConflict, ResponsibilityKind, WorkItemActionError, responsibility_kind_of};
+    use super::{
+        ErrorCode, HttpWorkItemConflict, ProcessError, ResponsibilityKind, WorkItemActionError,
+        WorkItemHttpView, WorkItemPageView, WorkItemView, responsibility_kind_of, wrap_page,
+    };
+
+    fn task_view(work_item_type: WorkItemType) -> WorkItemView {
+        WorkItemView {
+            id: "task-id".to_string(),
+            work_item_type,
+            handler_key: "task-handler".to_string(),
+            destination_workspace_id: "workspace".to_string(),
+            route_context: None,
+            approval_node_execution_id: (work_item_type == WorkItemType::DocumentApproval)
+                .then(|| "node-id".to_string()),
+            approval_context: None,
+            status: WorkItemStatus::Open,
+            assignment_source: AssignmentSource::SystemRule,
+            owner_role: "finance".to_string(),
+            owner_role_label: "财务".to_string(),
+            owner_organization_id: "org-id".to_string(),
+            owner_organization: WorkItemPartyView {
+                id: "org-id".to_string(),
+                display_name: "财务组织".to_string(),
+            },
+            owner_user_id: None,
+            owner_user: None,
+            processing_state: ProcessingState::Ready,
+            processing_blocker: None,
+            business_object_type: "invoice".to_string(),
+            business_object_id: "invoice-id".to_string(),
+            root_business_object_id: "invoice-id".to_string(),
+            business_object_label: "INV-001".to_string(),
+            counterparty_label: Some("客户".to_string()),
+            next_action_hint: "处理".to_string(),
+            summary_sections: Vec::new(),
+            brief_lines: Vec::new(),
+            brief_more_count: None,
+            list_summary: None,
+            subject_version: "2".to_string(),
+            task_version: "3".to_string(),
+            allowed_actions: vec![WorkItemAllowedAction::View],
+            action_blockers: Vec::new(),
+            priority: WorkItemPriority::Normal,
+            due_at: Some(123),
+            reason_code: None,
+            reason_label: "待处理".to_string(),
+            impact_summary: "待处理发票".to_string(),
+            assigned_at: None,
+            started_at: None,
+            current_assignment_at: None,
+            last_activity_at: None,
+            completed_at: None,
+            completed_by: None,
+            closed_at: None,
+            closed_by: None,
+            close_reason: None,
+            created_at: 100,
+            queue_context_id: "queue-id".to_string(),
+        }
+    }
+
+    #[test]
+    fn typed_task_wrapper_keeps_flattened_fields_for_approval_and_business_tasks() {
+        for (task_type, responsibility) in [
+            (WorkItemType::DocumentApproval, "PERSONAL_APPROVAL"),
+            (WorkItemType::BusinessException, "PERSONAL_BUSINESS_TASK"),
+        ] {
+            let view = task_view(task_type);
+            let mut expected = to_value(&view).expect("task view serializes");
+            expected["responsibility_kind"] = json!(responsibility);
+            let actual = to_value(WorkItemHttpView::from(view)).expect("HTTP view serializes");
+
+            assert_eq!(actual, expected);
+            assert!(actual.get("inner").is_none());
+            assert!(actual.get("route_context").is_none());
+            assert_eq!(actual["owner_user"], Value::Null);
+        }
+    }
+
+    #[test]
+    fn typed_task_page_keeps_pagination_and_empty_page_contract() {
+        for items in [Vec::new(), vec![task_view(WorkItemType::BusinessException)]] {
+            let expected_items = items.iter().cloned().map(WorkItemHttpView::from).collect::<Vec<_>>();
+            let page = WorkItemPageView {
+                items,
+                total: 42,
+                page: 3,
+                page_size: 20,
+                queue_context_id: "queue-id".to_string(),
+                scope_version: "scope-v2".to_string(),
+            };
+
+            assert_eq!(
+                to_value(wrap_page(page)).expect("page serializes"),
+                json!({
+                    "items": expected_items,
+                    "total": 42,
+                    "page": 3,
+                    "page_size": 20,
+                    "queue_context_id": "queue-id",
+                    "scope_version": "scope-v2",
+                })
+            );
+        }
+    }
 
     #[tokio::test]
     async fn version_conflict_uses_409_stable_code_and_safe_tombstone() {
@@ -469,8 +651,8 @@ mod tests {
 
     #[tokio::test]
     async fn approval_generic_mutation_maps_to_stable_409() {
-        let response = WorkItemActionError::from(erp_processes::Error::from_approval_code(
-            erp_workflow::ErrorCode::ApprovalGenericWorkItemMutationForbidden,
+        let response = WorkItemActionError::from(ProcessError::from_approval_code(
+            ErrorCode::ApprovalGenericWorkItemMutationForbidden,
         ))
         .into_response();
         assert_eq!(response.status(), StatusCode::CONFLICT);

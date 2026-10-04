@@ -77,10 +77,19 @@ impl From<persistence_core::Error> for Error {
     ///
     /// 唯一键、乐观锁和瞬态事务冲突保留为稳定的业务冲突语义，
     /// 其余错误保持内部仓储错误。
+    ///
+    /// # 参数
+    /// * `error` - 仓储或事务执行返回的错误
+    ///
+    /// # 返回
+    /// 返回保留原错误分类和提示文案的财务领域错误。
+    ///
+    /// # 错误
+    /// 无；本转换不执行数据库操作。
     fn from(error: persistence_core::Error) -> Self {
         match error {
-            error @ persistence_core::Error::DuplicateKey(_) => {
-                Self::ConflictError(duplicate_key_conflict_message(&error))
+            persistence_core::Error::DuplicateKey(_) => {
+                Self::ConflictError("数据已存在，请勿重复提交".to_string())
             },
             persistence_core::Error::OptimisticLockingError => {
                 Self::ConflictError("数据已被其他请求修改，请刷新后重试".to_string())
@@ -94,18 +103,6 @@ impl From<persistence_core::Error> for Error {
     }
 }
 
-/// 将唯一键冲突映射为面向用户的冲突提示。
-fn duplicate_key_conflict_message(error: &persistence_core::Error) -> String {
-    duplicate_index_conflict_message(error.duplicate_index_name())
-}
-
-/// 将财务域唯一索引名称映射为面向用户的冲突提示。
-///
-/// 财务账户、回款与发票唯一索引均保持原通用冲突文案。
-fn duplicate_index_conflict_message(_index_name: Option<&str>) -> String {
-    "数据已存在，请勿重复提交".to_string()
-}
-
 impl From<validator::ValidationErrors> for Error {
     /// 从校验错误构建财务领域错误。
     fn from(err: validator::ValidationErrors) -> Self {
@@ -116,27 +113,36 @@ impl From<validator::ValidationErrors> for Error {
 #[cfg(test)]
 mod tests {
     use application_core::ErrorClass;
-    use mongodb::error::Error as MongoError;
+    use mongodb::bson::{deserialize_from_document, doc};
+    use mongodb::error::{Error as MongoError, ErrorKind, WriteError, WriteFailure};
 
     use super::Error;
 
     #[test]
     fn finance_unique_conflicts_keep_original_messages() {
-        let generic = Error::from(persistence_core::Error::DuplicateKey(MongoError::custom("duplicate key")));
-        assert_eq!(generic.class(), ErrorClass::Conflict);
-        assert_eq!(generic.to_string(), "数据冲突: 数据已存在，请勿重复提交");
-        assert_eq!(
-            super::duplicate_index_conflict_message(Some("uk_customer_receipts_no")),
-            "数据已存在，请勿重复提交"
-        );
-        assert_eq!(
-            super::duplicate_index_conflict_message(Some("uk_receivable_accounts_sales_order")),
-            "数据已存在，请勿重复提交"
-        );
-        assert_eq!(
-            super::duplicate_index_conflict_message(Some("uk_invoices_coded")),
-            "数据已存在，请勿重复提交"
-        );
+        for index in [
+            "uk_customer_receipts_no",
+            "uk_receivable_accounts_sales_order",
+            "uk_invoices_coded",
+            "uk_unknown_index",
+        ] {
+            let write_error: WriteError = deserialize_from_document(doc! {
+                "code": 11000,
+                "codeName": "DuplicateKey",
+                "errmsg": format!("E11000 duplicate key collection: erp.finance index: {index} dup key: {{ id: 1 }}"),
+                "errInfo": null,
+            })
+            .expect("唯一键错误样本应可反序列化");
+            let mongo_error: MongoError = ErrorKind::Write(WriteFailure::WriteError(write_error)).into();
+            let repository_error = persistence_core::Error::from(mongo_error);
+            assert_eq!(repository_error.duplicate_index_name(), Some(index));
+            let error = Error::from(repository_error);
+            assert_eq!(error.class(), ErrorClass::Conflict);
+            assert_eq!(error.to_string(), "数据冲突: 数据已存在，请勿重复提交");
+        }
+        let error = Error::from(persistence_core::Error::DuplicateKey(MongoError::custom("duplicate key")));
+        assert_eq!(error.class(), ErrorClass::Conflict);
+        assert_eq!(error.to_string(), "数据冲突: 数据已存在，请勿重复提交");
     }
 
     #[test]

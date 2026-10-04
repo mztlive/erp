@@ -202,16 +202,13 @@ impl StockMovementRepositoryExt for Repository<'_, StockMovement> {
         filter: &StockMovementFilter,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<StockMovementRow>> {
-        paged_projection_search(
-            &self.collection(),
-            filter.to_doc(),
-            stock_movement_sort(filter),
-            filter.skip(),
-            filter.limit(),
-            stock_movement_projection(),
-            executor,
-        )
-        .await
+        let options = FindOptions::builder()
+            .sort(stock_movement_sort(filter))
+            .skip(filter.skip())
+            .limit(filter.limit())
+            .projection(stock_movement_projection())
+            .build();
+        paged_projection_search(&self.collection(), filter.to_doc(), options, executor).await
     }
 
     async fn find_by_source_document(

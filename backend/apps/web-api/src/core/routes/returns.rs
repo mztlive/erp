@@ -26,249 +26,249 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
         .route(
             "/sales-return-cases",
             with_permission(
-                get(returns::sales_return_case_list),
+                get(returns::sales_return::sales_return_case_list),
                 rbac,
-                returns::sales_return_case_list_permission_key(),
+                returns::sales_return::sales_return_case_list_permission_key(),
             ),
         )
         .route(
             "/sales-return-cases",
             with_permission(
-                post(returns::sales_return_case_create),
+                post(returns::sales_return::sales_return_case_create),
                 rbac,
-                returns::sales_return_case_create_permission_key(),
+                returns::sales_return::sales_return_case_create_permission_key(),
             ),
         )
         .route(
             "/sales-return-cases/{id}",
             with_permission(
-                get(returns::sales_return_case_detail),
+                get(returns::sales_return::sales_return_case_detail),
                 rbac,
-                returns::sales_return_case_detail_permission_key(),
+                returns::sales_return::sales_return_case_detail_permission_key(),
             ),
         )
         .route(
             "/purchase-return-orders",
             with_permission(
-                get(returns::purchase_return_order_list),
+                get(returns::purchase_return::purchase_return_order_list),
                 rbac,
-                returns::purchase_return_order_list_permission_key(),
+                returns::purchase_return::purchase_return_order_list_permission_key(),
             ),
         )
         .route(
             "/purchase-return-orders",
             with_permission(
-                post(returns::purchase_return_order_create),
+                post(returns::purchase_return::purchase_return_order_create),
                 rbac,
-                returns::purchase_return_order_create_permission_key(),
+                returns::purchase_return::purchase_return_order_create_permission_key(),
             ),
         )
         .route(
             "/purchase-return-orders/{id}",
             with_permission(
-                get(returns::purchase_return_order_detail),
+                get(returns::purchase_return::purchase_return_order_detail),
                 rbac,
-                returns::purchase_return_order_detail_permission_key(),
+                returns::purchase_return::purchase_return_order_detail_permission_key(),
             ),
         )
         .route(
             "/customer-refunds",
             with_permission(
-                get(returns::customer_refund_list),
+                get(returns::customer_refund::customer_refund_list),
                 rbac,
-                returns::customer_refund_list_permission_key(),
+                returns::customer_refund::customer_refund_list_permission_key(),
             ),
         )
         .route(
             "/customer-refunds/commit",
             with_permission(
-                post(returns::customer_refund_commit),
+                post(returns::customer_refund::customer_refund_commit),
                 rbac,
-                returns::customer_refund_commit_permission_key(),
+                returns::customer_refund::customer_refund_commit_permission_key(),
             ),
         )
         .route(
             "/customer-refunds",
             with_permission(
-                post(returns::customer_refund_create),
+                post(returns::customer_refund::customer_refund_create),
                 rbac,
-                returns::customer_refund_create_permission_key(),
+                returns::customer_refund::customer_refund_create_permission_key(),
             ),
         )
         .route(
             "/customer-refunds/{id}",
             with_permission(
-                get(returns::customer_refund_detail),
+                get(returns::customer_refund::customer_refund_detail),
                 rbac,
-                returns::customer_refund_detail_permission_key(),
+                returns::customer_refund::customer_refund_detail_permission_key(),
             ),
         )
         .route(
             "/customer-refunds/{id}/submit",
             with_permission(
-                post(returns::customer_refund_submit),
+                post(returns::customer_refund::customer_refund_submit),
                 rbac,
-                returns::customer_refund_submit_permission_key(),
+                returns::customer_refund::customer_refund_submit_permission_key(),
             ),
         )
         .route(
             "/customer-refunds/{id}/cancel-approval",
             with_permission(
-                post(returns::customer_refund_cancel_approval),
+                post(returns::customer_refund::customer_refund_cancel_approval),
                 rbac,
-                returns::customer_refund_cancel_approval_permission_key(),
+                returns::customer_refund::customer_refund_cancel_approval_permission_key(),
             ),
         )
         .route(
             "/customer-refunds/{id}/post",
             with_permission(
-                post(returns::customer_refund_post),
+                post(returns::customer_refund::customer_refund_post),
                 rbac,
-                returns::customer_refund_post_permission_key(),
+                returns::customer_refund::customer_refund_post_permission_key(),
             ),
         )
         .route(
             "/supplier-refunds",
             with_permission(
-                post(returns::supplier_refund_create),
+                post(returns::supplier_refund::supplier_refund_create),
                 rbac,
-                returns::supplier_refund_create_permission_key(),
+                returns::supplier_refund::supplier_refund_create_permission_key(),
             ),
         )
         .route(
             "/supplier-refunds/commit",
             with_permission(
-                post(returns::supplier_refund_commit),
+                post(returns::supplier_refund::supplier_refund_commit),
                 rbac,
-                returns::supplier_refund_commit_permission_key(),
+                returns::supplier_refund::supplier_refund_commit_permission_key(),
             ),
         )
         .route(
             "/supplier-refunds/{id}",
             with_permission(
-                get(returns::supplier_refund_detail),
+                get(returns::supplier_refund::supplier_refund_detail),
                 rbac,
-                returns::supplier_refund_detail_permission_key(),
+                returns::supplier_refund::supplier_refund_detail_permission_key(),
             ),
         )
         .route(
             "/supplier-refunds/{id}/submit",
             with_permission(
-                post(returns::supplier_refund_submit),
+                post(returns::supplier_refund::supplier_refund_submit),
                 rbac,
-                returns::supplier_refund_submit_permission_key(),
+                returns::supplier_refund::supplier_refund_submit_permission_key(),
             ),
         )
         .route(
             "/supplier-refunds/{id}/cancel-approval",
             with_permission(
-                post(returns::supplier_refund_cancel_approval),
+                post(returns::supplier_refund::supplier_refund_cancel_approval),
                 rbac,
-                returns::supplier_refund_cancel_approval_permission_key(),
+                returns::supplier_refund::supplier_refund_cancel_approval_permission_key(),
             ),
         )
         .route(
             "/supplier-refunds/{id}/post",
             with_permission(
-                post(returns::supplier_refund_post),
+                post(returns::supplier_refund::supplier_refund_post),
                 rbac,
-                returns::supplier_refund_post_permission_key(),
+                returns::supplier_refund::supplier_refund_post_permission_key(),
             ),
         )
         .route(
             "/receipt-reversals",
             with_permission(
-                post(returns::receipt_reversal_create),
+                post(returns::receipt_reversal::receipt_reversal_create),
                 rbac,
-                returns::receipt_reversal_create_permission_key(),
+                returns::receipt_reversal::receipt_reversal_create_permission_key(),
             ),
         )
         .route(
             "/receipt-reversals/commit",
             with_permission(
-                post(returns::receipt_reversal_commit),
+                post(returns::receipt_reversal::receipt_reversal_commit),
                 rbac,
-                returns::receipt_reversal_commit_permission_key(),
+                returns::receipt_reversal::receipt_reversal_commit_permission_key(),
             ),
         )
         .route(
             "/receipt-reversals/{id}",
             with_permission(
-                get(returns::receipt_reversal_detail),
+                get(returns::receipt_reversal::receipt_reversal_detail),
                 rbac,
-                returns::receipt_reversal_detail_permission_key(),
+                returns::receipt_reversal::receipt_reversal_detail_permission_key(),
             ),
         )
         .route(
             "/receipt-reversals/{id}/submit",
             with_permission(
-                post(returns::receipt_reversal_submit),
+                post(returns::receipt_reversal::receipt_reversal_submit),
                 rbac,
-                returns::receipt_reversal_submit_permission_key(),
+                returns::receipt_reversal::receipt_reversal_submit_permission_key(),
             ),
         )
         .route(
             "/receipt-reversals/{id}/cancel-approval",
             with_permission(
-                post(returns::receipt_reversal_cancel_approval),
+                post(returns::receipt_reversal::receipt_reversal_cancel_approval),
                 rbac,
-                returns::receipt_reversal_cancel_approval_permission_key(),
+                returns::receipt_reversal::receipt_reversal_cancel_approval_permission_key(),
             ),
         )
         .route(
             "/receipt-reversals/{id}/post",
             with_permission(
-                post(returns::receipt_reversal_post),
+                post(returns::receipt_reversal::receipt_reversal_post),
                 rbac,
-                returns::receipt_reversal_post_permission_key(),
+                returns::receipt_reversal::receipt_reversal_post_permission_key(),
             ),
         )
         .route(
             "/payment-reversals",
             with_permission(
-                post(returns::payment_reversal_create),
+                post(returns::payment_reversal::payment_reversal_create),
                 rbac,
-                returns::payment_reversal_create_permission_key(),
+                returns::payment_reversal::payment_reversal_create_permission_key(),
             ),
         )
         .route(
             "/payment-reversals/commit",
             with_permission(
-                post(returns::payment_reversal_commit),
+                post(returns::payment_reversal::payment_reversal_commit),
                 rbac,
-                returns::payment_reversal_commit_permission_key(),
+                returns::payment_reversal::payment_reversal_commit_permission_key(),
             ),
         )
         .route(
             "/payment-reversals/{id}",
             with_permission(
-                get(returns::payment_reversal_detail),
+                get(returns::payment_reversal::payment_reversal_detail),
                 rbac,
-                returns::payment_reversal_detail_permission_key(),
+                returns::payment_reversal::payment_reversal_detail_permission_key(),
             ),
         )
         .route(
             "/payment-reversals/{id}/submit",
             with_permission(
-                post(returns::payment_reversal_submit),
+                post(returns::payment_reversal::payment_reversal_submit),
                 rbac,
-                returns::payment_reversal_submit_permission_key(),
+                returns::payment_reversal::payment_reversal_submit_permission_key(),
             ),
         )
         .route(
             "/payment-reversals/{id}/cancel-approval",
             with_permission(
-                post(returns::payment_reversal_cancel_approval),
+                post(returns::payment_reversal::payment_reversal_cancel_approval),
                 rbac,
-                returns::payment_reversal_cancel_approval_permission_key(),
+                returns::payment_reversal::payment_reversal_cancel_approval_permission_key(),
             ),
         )
         .route(
             "/payment-reversals/{id}/post",
             with_permission(
-                post(returns::payment_reversal_post),
+                post(returns::payment_reversal::payment_reversal_post),
                 rbac,
-                returns::payment_reversal_post_permission_key(),
+                returns::payment_reversal::payment_reversal_post_permission_key(),
             ),
         )
 }

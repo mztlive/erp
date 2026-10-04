@@ -7,6 +7,7 @@
 //! Service 只编排元数据
 //! （TRANSACTIONS.md：事务闭包内禁止文件 I/O）。
 
+mod compensation;
 mod read;
 use application_core::AuditActor;
 use axum::body::Body;
@@ -15,6 +16,9 @@ use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS};
 use axum::http::{HeaderValue, StatusCode};
 use axum::response::Response;
 use axum::{Extension, Json};
+pub(crate) use compensation::{
+    delete_pending_asset_objects, finish_asset_command, should_compensate_pending_assets,
+};
 use erp_support::{
     AttachToDocumentRequest, DestroyFileAssetRequest, DocumentAttachmentView, FileAssetListItemView,
     FileAssetListParams, FileAssetView, MarkScanResultRequest, PageView, PendingFileAssetRequest,
@@ -479,27 +483,6 @@ pub(crate) async fn store_pending_asset_files(
         requests.push(PendingFileAssetRequest { reference: pending.reference, registration: request });
     }
     Ok(requests)
-}
-
-/// 删除一次尚未登记或事务已回滚的上传批次，作为对象存储补偿。
-pub(crate) async fn delete_pending_asset_objects(state: &AppState, requests: &[PendingFileAssetRequest]) {
-    for request in requests {
-        if let Err(storage_error) = state.storage().delete(&request.registration.storage_object_key).await {
-            error!(
-                error = %storage_error,
-                object_key = %request.registration.storage_object_key,
-                "Failed to compensate unregistered file object"
-            );
-        }
-    }
-}
-
-/// 判断数据库失败是否已经确定回滚，因而可以安全删除刚上传的对象。
-///
-/// 提交结果未知时事务可能已经落库，必须保留对象并等待同一业务命令核对结果；
-/// 其余错误由事务合同保证没有提交，可以立即执行对象存储补偿。
-pub(crate) fn should_compensate_pending_assets(error: &erp_processes::Error) -> bool {
-    !matches!(error, erp_processes::Error::OutcomeUnknown(_))
 }
 
 /// 提取 Multipart 表单中的第一个文件字段并校验大小与 MIME。

@@ -3,15 +3,15 @@ use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
 use erp_identity::SharedRbacService;
 use erp_procurement::dto::purchase_order::{
-    CancelPurchaseChangeApprovalRequest, PurchaseChangeSubmitResult, StartPurchaseChangeRequest,
-    StartPurchaseChangeResult, SubmitPurchaseChangeRequest,
+    CancelPurchaseChangeApprovalRequest, PurchaseChangeSubmitResult, SavePurchaseOrderLine,
+    StartPurchaseChangeRequest, StartPurchaseChangeResult, SubmitPurchaseChangeRequest,
 };
 use erp_procurement::entity::purchase_order::{PurchaseChangeOrder, PurchaseChangeSubmission, PurchaseOrder};
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_procurement::service::purchase_order::change::lock_draft_change;
 use erp_procurement::service::purchase_order::change::mapping::content_fingerprint;
 use erp_procurement::service::purchase_order::change::state::start_purchase_change_approval;
-use erp_procurement::service::purchase_order::line_input::{build_change_submission_lines, to_line_inputs};
+use erp_procurement::service::purchase_order::line_input::build_change_submission_lines;
 use erp_read_models::purchase_center::dto::PurchaseChangeOrderView;
 use erp_sales::repository::SalesOrderExt;
 use erp_workflow::DocumentRegistryExt;
@@ -310,7 +310,7 @@ impl PurchaseOrderProcess {
             .await?;
         let enriched_lines =
             self.enrich_change_lines_with_current_sales_revision(order, &normalized_request.lines).await?;
-        let inputs = to_line_inputs(&enriched_lines)?;
+        let inputs = SavePurchaseOrderLine::to_line_inputs(&enriched_lines)?;
         let lines = build_change_submission_lines(&submission.base.id.clone(), &inputs)?;
         let mut submission_mut = submission.clone();
         submission_mut.submit(Instant::now(), actor.id())?;

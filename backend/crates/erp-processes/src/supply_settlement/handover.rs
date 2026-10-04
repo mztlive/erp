@@ -1,7 +1,8 @@
 //! 结算对账负责人交接与差异处理人改派。
 
 use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
+use erp_audit::{AuditActorLogs, AuditLog};
+use erp_core::AccountKind;
 use erp_identity::repository::prelude::*;
 use erp_identity::{AccessControlExt, Permission, PermissionSet, SharedRbacService};
 use erp_supply::command_receipt::SupplyCommandResult;
@@ -12,6 +13,8 @@ use erp_supply::dto::supplier_settlement::{
 };
 use erp_supply::repository::SupplierSettlementExt;
 use erp_supply::service::supplier_fulfillment::receipt::stable_digest;
+use erp_supply::service::supplier_settlement::SettlementAccess;
+use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use sha2::{Digest, Sha256};
 use validator::Validate;
@@ -21,6 +24,133 @@ use crate::audit::persist_log;
 use crate::handover_common::ensure_org_enabled;
 use crate::supply_execution::receipt::persist_supply_receipt;
 use crate::{Error, Result};
+
+/// 对账交接与差异处理改派保持独立的命令身份及恢复结果。
+#[derive(Clone, Copy)]
+enum ResponsibilityChange {
+    Handover,
+    ReassignDifferenceHandler,
+}
+
+impl ResponsibilityChange {
+    /// 返回当前操作登记的审计与回执动作。
+    fn action(self) -> &'static str {
+        match self {
+            Self::Handover => "supplier_settlement.handover",
+            Self::ReassignDifferenceHandler => "supplier_settlement.reassign_difference_handler",
+        }
+    }
+
+    /// 与动作同时确定成功回执种类，禁止由任意字符串推断结果。
+    fn result(self) -> SupplyCommandResult {
+        match self {
+            Self::Handover => SupplyCommandResult::SettlementHandover,
+            Self::ReassignDifferenceHandler => SupplyCommandResult::DifferenceHandlerReassigned,
+        }
+    }
+
+    /// 损坏或跨操作回执保持原入口的内部错误。
+    fn verify_result(self, result: &SupplyCommandResult) -> Result<()> {
+        if result == &self.result() {
+            return Ok(());
+        }
+        let message = match self {
+            Self::Handover => "结算交接回执类型非法",
+            Self::ReassignDifferenceHandler => "差异处理人改派回执类型非法",
+        };
+        Err(Error::Internal(message.to_string()))
+    }
+}
+
+/// 同一次责任变更沿用的身份、原载荷和幂等键；不包含业务请求字段。
+struct ResponsibilityCommand {
+    actor: AuditActor,
+    statement_id: String,
+    audit_id: String,
+    fingerprint: String,
+    key: String,
+    change: ResponsibilityChange,
+}
+
+impl ResponsibilityCommand {
+    /// 生成与既有入口相同的稳定命令编号，幂等键仅在持久化时保存摘要。
+    fn new(
+        actor: &AuditActor,
+        statement_id: &str,
+        key: &str,
+        change: ResponsibilityChange,
+        fingerprint: String,
+    ) -> Self {
+        let prefix = match change {
+            ResponsibilityChange::Handover => "settlement-handover-",
+            ResponsibilityChange::ReassignDifferenceHandler => "settlement-diff-handler-",
+        };
+        Self {
+            actor: actor.clone(),
+            statement_id: statement_id.to_string(),
+            audit_id: format!("{prefix}{}", digest(&[actor.id(), statement_id, key.trim()])),
+            fingerprint,
+            key: key.to_string(),
+            change,
+        }
+    }
+
+    /// 从本次命令身份构造与业务更新同事务保存的成功事件。
+    fn audit(&self, number: Option<String>) -> Result<AuditLog> {
+        Ok(self
+            .actor
+            .clone()
+            .resource_log_with_id(
+                self.audit_id.clone(),
+                self.change.action(),
+                "supplier_settlement_statement",
+                self.statement_id.clone(),
+                Some("供应商结算责任已更新".to_string()),
+            )?
+            .with_command_id(Some(self.audit_id.clone()))?
+            .with_resource_number(number)?)
+    }
+}
+
+/// 两个责任命令共用的数据库、当前范围授权与人员资格依赖。
+struct SettlementDependencies {
+    db: Database,
+    access: SettlementAccess,
+    rbac: SharedRbacService,
+}
+
+impl SettlementDependencies {
+    /// 捕获事务所需依赖，事务闭包仅消费一次，无需再次复制句柄。
+    fn from_process(process: &SupplierSettlementProcess) -> Result<Self> {
+        Ok(Self {
+            db: process.db.clone(),
+            access: SettlementAccess::new(process.db.clone(), process.data_scope.clone()),
+            rbac: process.require_rbac()?.clone(),
+        })
+    }
+
+    /// 业务更新之后依次保存独立命令回执与展示审计，沿用同一执行器。
+    async fn write_audit(
+        &self,
+        command: &ResponsibilityCommand,
+        number: Option<String>,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let audit = command.audit(number)?;
+        persist_supply_receipt(
+            &self.db,
+            &audit,
+            &command.fingerprint,
+            &command.key,
+            &command.statement_id,
+            command.change.result(),
+            executor,
+        )
+        .await?;
+        persist_log(&self.db, &audit, executor).await?;
+        Ok(())
+    }
+}
 
 impl SupplierSettlementProcess {
     /// 显式交接对账负责人；开放复核任务不改派。
@@ -42,12 +172,14 @@ impl SupplierSettlementProcess {
         actor: &AuditActor,
     ) -> Result<HandoverSettlementView> {
         req.validate()?;
-        let audit_id =
-            format!("settlement-handover-{}", digest(&[actor.id(), id, req.idempotency_key.trim()]));
-        let fingerprint = handover_fingerprint(actor.id(), id, &req)?;
-        if let Some(existing) =
-            self.replay_handover(&audit_id, &fingerprint, id, (actor.id(), &req.idempotency_key)).await?
-        {
+        let command = ResponsibilityCommand::new(
+            actor,
+            id,
+            &req.idempotency_key,
+            ResponsibilityChange::Handover,
+            handover_fingerprint(actor.id(), id, &req),
+        );
+        if let Some(existing) = self.replay_handover(&command).await? {
             return Ok(existing);
         }
         ensure_target_qualified(
@@ -58,36 +190,11 @@ impl SupplierSettlementProcess {
         )
         .await?;
         ensure_org_enabled(&self.db, req.target_org_unit_id.as_deref(), &mut NoTransaction).await?;
-        let db = self.db.clone();
-        let data_scope = self.data_scope.clone();
-        let rbac = self.require_rbac()?.clone();
-        let actor = actor.clone();
-        let id = id.to_string();
-        db.client()
-            .clone()
+        let dependencies = SettlementDependencies::from_process(self)?;
+        let client = dependencies.db.client().clone();
+        client
             .with_transaction(move |executor| {
-                let data_scope = data_scope.clone();
-                let rbac = rbac.clone();
-                let actor = actor.clone();
-                let req = req.clone();
-                let id = id.clone();
-                let audit_id = audit_id.clone();
-                let fingerprint = fingerprint.clone();
-                let db = db.clone();
-                Box::pin(async move {
-                    apply_handover(
-                        &db,
-                        data_scope,
-                        &rbac,
-                        &id,
-                        &req,
-                        &actor,
-                        &audit_id,
-                        &fingerprint,
-                        executor,
-                    )
-                    .await
-                })
+                Box::pin(async move { apply_handover(&dependencies, &command, &req, executor).await })
             })
             .await
     }
@@ -111,12 +218,14 @@ impl SupplierSettlementProcess {
         actor: &AuditActor,
     ) -> Result<ReassignSettlementDifferenceHandlerView> {
         req.validate()?;
-        let audit_id =
-            format!("settlement-diff-handler-{}", digest(&[actor.id(), id, req.idempotency_key.trim()]));
-        let fingerprint = handler_fingerprint(actor.id(), id, &req)?;
-        if let Some(existing) =
-            self.replay_handler(&audit_id, &fingerprint, id, (actor.id(), &req.idempotency_key)).await?
-        {
+        let command = ResponsibilityCommand::new(
+            actor,
+            id,
+            &req.idempotency_key,
+            ResponsibilityChange::ReassignDifferenceHandler,
+            handler_fingerprint(actor.id(), id, &req),
+        );
+        if let Some(existing) = self.replay_handler(&command).await? {
             return Ok(existing);
         }
         ensure_target_qualified(
@@ -126,36 +235,11 @@ impl SupplierSettlementProcess {
             &mut NoTransaction,
         )
         .await?;
-        let db = self.db.clone();
-        let data_scope = self.data_scope.clone();
-        let rbac = self.require_rbac()?.clone();
-        let actor = actor.clone();
-        let id = id.to_string();
-        db.client()
-            .clone()
+        let dependencies = SettlementDependencies::from_process(self)?;
+        let client = dependencies.db.client().clone();
+        client
             .with_transaction(move |executor| {
-                let data_scope = data_scope.clone();
-                let rbac = rbac.clone();
-                let actor = actor.clone();
-                let req = req.clone();
-                let id = id.clone();
-                let audit_id = audit_id.clone();
-                let fingerprint = fingerprint.clone();
-                let db = db.clone();
-                Box::pin(async move {
-                    apply_handler(
-                        &db,
-                        data_scope,
-                        &rbac,
-                        &id,
-                        &req,
-                        &actor,
-                        &audit_id,
-                        &fingerprint,
-                        executor,
-                    )
-                    .await
-                })
+                Box::pin(async move { apply_handler(&dependencies, &command, &req, executor).await })
             })
             .await
     }
@@ -183,28 +267,23 @@ impl SupplierSettlementProcess {
 
     async fn replay_handover(
         &self,
-        audit_id: &str,
-        fingerprint: &str,
-        statement_id: &str,
-        identity: (&str, &str),
+        command: &ResponsibilityCommand,
     ) -> Result<Option<HandoverSettlementView>> {
         let Some(stored) =
-            self.db.supply_command_receipts().find_command(audit_id, &mut NoTransaction).await?
+            self.db.supply_command_receipts().find_command(&command.audit_id, &mut NoTransaction).await?
         else {
             return Ok(None);
         };
         stored.verify_identity(
-            audit_id,
-            identity.0,
-            "supplier_settlement.handover",
-            statement_id,
-            &stable_digest(identity.1.trim()),
+            &command.audit_id,
+            command.actor.id(),
+            command.change.action(),
+            &command.statement_id,
+            &stable_digest(command.key.trim()),
         )?;
-        stored.verify(fingerprint, Some(statement_id), "同一幂等键已用于不同的结算交接")?;
-        if !matches!(stored.result, SupplyCommandResult::SettlementHandover) {
-            return Err(Error::Internal("结算交接回执类型非法".to_string()));
-        }
-        let statement = self.domain().load_statement(statement_id, &mut NoTransaction).await?;
+        stored.verify(&command.fingerprint, Some(&command.statement_id), "同一幂等键已用于不同的结算交接")?;
+        command.change.verify_result(&stored.result)?;
+        let statement = self.domain().load_statement(&command.statement_id, &mut NoTransaction).await?;
         Ok(Some(HandoverSettlementView {
             statement_id: statement.base.id,
             prepared_by: statement.prepared_by,
@@ -215,28 +294,27 @@ impl SupplierSettlementProcess {
 
     async fn replay_handler(
         &self,
-        audit_id: &str,
-        fingerprint: &str,
-        statement_id: &str,
-        identity: (&str, &str),
+        command: &ResponsibilityCommand,
     ) -> Result<Option<ReassignSettlementDifferenceHandlerView>> {
         let Some(stored) =
-            self.db.supply_command_receipts().find_command(audit_id, &mut NoTransaction).await?
+            self.db.supply_command_receipts().find_command(&command.audit_id, &mut NoTransaction).await?
         else {
             return Ok(None);
         };
         stored.verify_identity(
-            audit_id,
-            identity.0,
-            "supplier_settlement.reassign_difference_handler",
-            statement_id,
-            &stable_digest(identity.1.trim()),
+            &command.audit_id,
+            command.actor.id(),
+            command.change.action(),
+            &command.statement_id,
+            &stable_digest(command.key.trim()),
         )?;
-        stored.verify(fingerprint, Some(statement_id), "同一幂等键已用于不同的差异处理人改派")?;
-        if !matches!(stored.result, SupplyCommandResult::DifferenceHandlerReassigned) {
-            return Err(Error::Internal("差异处理人改派回执类型非法".to_string()));
-        }
-        let statement = self.domain().load_statement(statement_id, &mut NoTransaction).await?;
+        stored.verify(
+            &command.fingerprint,
+            Some(&command.statement_id),
+            "同一幂等键已用于不同的差异处理人改派",
+        )?;
+        command.change.verify_result(&stored.result)?;
+        let statement = self.domain().load_statement(&command.statement_id, &mut NoTransaction).await?;
         Ok(Some(ReassignSettlementDifferenceHandlerView {
             statement_id: statement.base.id.clone(),
             difference_handler_user_id: statement.difference_handler().to_string(),
@@ -245,40 +323,27 @@ impl SupplierSettlementProcess {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+/// 交接在事务内重验范围、版本和目标资格，再保存新责任及命令结果。
 async fn apply_handover(
-    db: &mongodb::Database,
-    data_scope: std::sync::Arc<dyn erp_supply::SettlementDataScopePort>,
-    rbac: &SharedRbacService,
-    id: &str,
+    dependencies: &SettlementDependencies,
+    command: &ResponsibilityCommand,
     req: &HandoverSettlementRequest,
-    actor: &AuditActor,
-    audit_id: &str,
-    fingerprint: &str,
     executor: &mut dyn Executor,
 ) -> Result<HandoverSettlementView> {
-    let access = erp_supply::service::supplier_settlement::SettlementAccess::new(db.clone(), data_scope);
-    let mut statement = access.require_statement(actor, "update", id, executor).await?;
+    let mut statement = dependencies
+        .access
+        .require_statement(&command.actor, "update", &command.statement_id, executor)
+        .await?;
     if statement.base.version != req.expected_version {
         return Err(Error::ConflictError("结算单责任或版本已变化，请刷新后重试".into()));
     }
-    ensure_target_qualified(db, rbac, req.target_user_id.trim(), executor).await?;
-    ensure_org_enabled(db, req.target_org_unit_id.as_deref(), executor).await?;
+    ensure_target_qualified(&dependencies.db, &dependencies.rbac, req.target_user_id.trim(), executor)
+        .await?;
+    ensure_org_enabled(&dependencies.db, req.target_org_unit_id.as_deref(), executor).await?;
     let next_org = req.target_org_unit_id.clone().filter(|value| !value.trim().is_empty());
     statement.handover(req.target_user_id.clone(), next_org)?;
-    db.supplier_settlement_statements().update(&mut statement, executor).await?;
-    write_audit(
-        db,
-        actor,
-        audit_id,
-        "supplier_settlement.handover",
-        id,
-        fingerprint,
-        &req.idempotency_key,
-        Some(statement.statement_no.clone()),
-        executor,
-    )
-    .await?;
+    dependencies.db.supplier_settlement_statements().update(&mut statement, executor).await?;
+    dependencies.write_audit(command, Some(statement.statement_no.clone()), executor).await?;
     Ok(HandoverSettlementView {
         statement_id: statement.base.id,
         prepared_by: statement.prepared_by,
@@ -287,38 +352,25 @@ async fn apply_handover(
     })
 }
 
-#[allow(clippy::too_many_arguments)]
+/// 差异处理人独立改派，事务授权与保存顺序和对账责任交接一致。
 async fn apply_handler(
-    db: &mongodb::Database,
-    data_scope: std::sync::Arc<dyn erp_supply::SettlementDataScopePort>,
-    rbac: &SharedRbacService,
-    id: &str,
+    dependencies: &SettlementDependencies,
+    command: &ResponsibilityCommand,
     req: &ReassignSettlementDifferenceHandlerRequest,
-    actor: &AuditActor,
-    audit_id: &str,
-    fingerprint: &str,
     executor: &mut dyn Executor,
 ) -> Result<ReassignSettlementDifferenceHandlerView> {
-    let access = erp_supply::service::supplier_settlement::SettlementAccess::new(db.clone(), data_scope);
-    let mut statement = access.require_statement(actor, "update", id, executor).await?;
+    let mut statement = dependencies
+        .access
+        .require_statement(&command.actor, "update", &command.statement_id, executor)
+        .await?;
     if statement.base.version != req.expected_version {
         return Err(Error::ConflictError("结算单责任或版本已变化，请刷新后重试".into()));
     }
-    ensure_target_qualified(db, rbac, req.target_user_id.trim(), executor).await?;
+    ensure_target_qualified(&dependencies.db, &dependencies.rbac, req.target_user_id.trim(), executor)
+        .await?;
     statement.reassign_difference_handler(req.target_user_id.clone())?;
-    db.supplier_settlement_statements().update(&mut statement, executor).await?;
-    write_audit(
-        db,
-        actor,
-        audit_id,
-        "supplier_settlement.reassign_difference_handler",
-        id,
-        fingerprint,
-        &req.idempotency_key,
-        Some(statement.statement_no.clone()),
-        executor,
-    )
-    .await?;
+    dependencies.db.supplier_settlement_statements().update(&mut statement, executor).await?;
+    dependencies.write_audit(command, Some(statement.statement_no.clone()), executor).await?;
     Ok(ReassignSettlementDifferenceHandlerView {
         statement_id: statement.base.id.clone(),
         difference_handler_user_id: statement.difference_handler().to_string(),
@@ -326,41 +378,8 @@ async fn apply_handler(
     })
 }
 
-#[allow(clippy::too_many_arguments)]
-async fn write_audit(
-    db: &mongodb::Database,
-    actor: &AuditActor,
-    audit_id: &str,
-    action: &str,
-    resource_id: &str,
-    fingerprint: &str,
-    key: &str,
-    number: Option<String>,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    let audit = actor
-        .clone()
-        .resource_log_with_id(
-            audit_id.to_string(),
-            action,
-            "supplier_settlement_statement",
-            resource_id.to_string(),
-            Some("供应商结算责任已更新".to_string()),
-        )?
-        .with_command_id(Some(audit_id.to_string()))?
-        .with_resource_number(number)?;
-    let result = if action == "supplier_settlement.handover" {
-        SupplyCommandResult::SettlementHandover
-    } else {
-        SupplyCommandResult::DifferenceHandlerReassigned
-    };
-    persist_supply_receipt(db, &audit, fingerprint, key, resource_id, result, executor).await?;
-    persist_log(db, &audit, executor).await?;
-    Ok(())
-}
-
 async fn ensure_target_qualified(
-    db: &mongodb::Database,
+    db: &Database,
     rbac: &SharedRbacService,
     target: &str,
     executor: &mut dyn Executor,
@@ -380,12 +399,12 @@ async fn ensure_target_qualified(
 }
 
 async fn list_candidates(
-    db: &mongodb::Database,
+    db: &Database,
     rbac: &SharedRbacService,
     current: &str,
     executor: &mut dyn Executor,
 ) -> Result<Vec<HandoverCandidateView>> {
-    let accounts = db.accounts().list_by_kind(erp_core::AccountKind::Admin, executor).await?;
+    let accounts = db.accounts().list_by_kind(AccountKind::Admin, executor).await?;
     let mut candidates = Vec::new();
     for account in accounts {
         if account.base.id == current || !account.is_active_backoffice() {
@@ -408,8 +427,8 @@ async fn list_candidates(
     Ok(candidates)
 }
 
-fn handover_fingerprint(actor_id: &str, id: &str, req: &HandoverSettlementRequest) -> Result<String> {
-    Ok(digest(&[
+fn handover_fingerprint(actor_id: &str, id: &str, req: &HandoverSettlementRequest) -> String {
+    digest(&[
         actor_id,
         id,
         req.target_user_id.trim(),
@@ -417,22 +436,18 @@ fn handover_fingerprint(actor_id: &str, id: &str, req: &HandoverSettlementReques
         req.reason.trim(),
         &req.expected_version.to_string(),
         req.idempotency_key.trim(),
-    ]))
+    ])
 }
 
-fn handler_fingerprint(
-    actor_id: &str,
-    id: &str,
-    req: &ReassignSettlementDifferenceHandlerRequest,
-) -> Result<String> {
-    Ok(digest(&[
+fn handler_fingerprint(actor_id: &str, id: &str, req: &ReassignSettlementDifferenceHandlerRequest) -> String {
+    digest(&[
         actor_id,
         id,
         req.target_user_id.trim(),
         req.reason.trim(),
         &req.expected_version.to_string(),
         req.idempotency_key.trim(),
-    ]))
+    ])
 }
 
 fn digest(parts: &[&str]) -> String {
@@ -442,4 +457,120 @@ fn digest(parts: &[&str]) -> String {
         hasher.update(part.as_bytes());
     }
     hasher.finalize().iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_core::Error as CoreError;
+
+    use super::*;
+
+    /// 执行生产审计构造，两个动作分别生成自己的回执种类和事件身份。
+    #[test]
+    fn responsibility_commands_keep_distinct_actions_results_and_event_identity() {
+        let actor = AuditActor::new("actor-1".into(), "operator".into(), AccountKind::Admin)
+            .with_request_id(Some("request-1".into()))
+            .unwrap();
+        let cases = [
+            (
+                ResponsibilityChange::Handover,
+                "supplier_settlement.handover",
+                SupplyCommandResult::SettlementHandover,
+            ),
+            (
+                ResponsibilityChange::ReassignDifferenceHandler,
+                "supplier_settlement.reassign_difference_handler",
+                SupplyCommandResult::DifferenceHandlerReassigned,
+            ),
+        ];
+        let mut command_ids = Vec::new();
+        for (change, action, expected_result) in cases {
+            let command =
+                ResponsibilityCommand::new(&actor, "statement-1", " private-key ", change, "a".repeat(64));
+            let audit = command.audit(Some("JS202610040001".into())).unwrap();
+            assert_eq!(audit.action, action);
+            assert_eq!(audit.resource_type, "supplier_settlement_statement");
+            assert_eq!(audit.resource_id.as_deref(), Some("statement-1"));
+            assert_eq!(audit.actor_id, "actor-1");
+            assert_eq!(change.result(), expected_result);
+            let event = audit.structured_event.unwrap();
+            assert_eq!(event.command_id.as_deref(), Some(command.audit_id.as_str()));
+            assert_eq!(event.resource_number_snapshot.as_deref(), Some("JS202610040001"));
+            assert_eq!(event.request_id.as_deref(), Some("request-1"));
+            command_ids.push(command.audit_id);
+        }
+        assert_ne!(command_ids[0], command_ids[1]);
+    }
+
+    /// 重试键去首尾空白，操作人、结算单与操作种类仍属于命令身份。
+    #[test]
+    fn responsibility_command_identity_normalizes_key_and_keeps_actor_and_scope() {
+        let actor = AuditActor::new("actor-1".into(), "operator".into(), AccountKind::Admin);
+        let other_actor = AuditActor::new("actor-2".into(), "operator".into(), AccountKind::Admin);
+        let command = |actor: &AuditActor, id, key| {
+            ResponsibilityCommand::new(actor, id, key, ResponsibilityChange::Handover, "a".repeat(64))
+        };
+        let original = command(&actor, "statement-1", " private-key ");
+        assert_eq!(original.audit_id, command(&actor, "statement-1", "private-key").audit_id);
+        assert_ne!(original.audit_id, command(&other_actor, "statement-1", "private-key").audit_id);
+        assert_ne!(original.audit_id, command(&actor, "statement-2", "private-key").audit_id);
+        assert_ne!(original.audit_id, command(&actor, "statement-1", "other-key").audit_id);
+    }
+
+    /// 两种恢复入口只接受对应回执，跨动作结果保持明确内部错误。
+    #[test]
+    fn responsibility_result_replay_accepts_own_result_and_rejects_other_actions() {
+        for (change, wrong_result, message) in [
+            (
+                ResponsibilityChange::Handover,
+                SupplyCommandResult::DifferenceHandlerReassigned,
+                "结算交接回执类型非法",
+            ),
+            (
+                ResponsibilityChange::ReassignDifferenceHandler,
+                SupplyCommandResult::SettlementHandover,
+                "差异处理人改派回执类型非法",
+            ),
+        ] {
+            change.verify_result(&change.result()).unwrap();
+            assert!(matches!(
+                change.verify_result(&wrong_result),
+                Err(Error::Internal(actual)) if actual == message
+            ));
+            assert!(matches!(
+                change.verify_result(&SupplyCommandResult::CapabilitiesUpdated),
+                Err(Error::Internal(actual)) if actual == message
+            ));
+        }
+    }
+
+    /// 无效审计身份继续失败关闭，不能生成供回执持久化的成功事件。
+    #[test]
+    fn responsibility_audit_rejects_invalid_actor_and_resource_number() {
+        let invalid_actor = AuditActor::new(String::new(), "operator".into(), AccountKind::Admin);
+        let command = ResponsibilityCommand::new(
+            &invalid_actor,
+            "statement-1",
+            "private-key",
+            ResponsibilityChange::Handover,
+            "a".repeat(64),
+        );
+        assert!(matches!(
+            command.audit(None),
+            Err(Error::Logic(CoreError::LogicError(message))) if message == "操作人ID不能为空"
+        ));
+
+        let valid_actor = AuditActor::new("actor-1".into(), "operator".into(), AccountKind::Admin);
+        let command = ResponsibilityCommand::new(
+            &valid_actor,
+            "statement-1",
+            "private-key",
+            ResponsibilityChange::Handover,
+            "a".repeat(64),
+        );
+        assert!(matches!(
+            command.audit(Some("forged\nnumber".into())),
+            Err(Error::ValidationError(message)) if message == "业务编号包含非法字符"
+        ));
+    }
 }

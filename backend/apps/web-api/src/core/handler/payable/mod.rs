@@ -17,6 +17,8 @@ use erp_finance::dto::payable::{
     SupplierPaymentView,
 };
 use erp_finance::dto::payment_merge::{PaymentMergeCandidatesParams, PaymentMergeCandidatesView};
+use erp_processes::adapters::{funds_access_with_rbac, purchase_access};
+use erp_processes::commit_supplier_payment_with_assets;
 use erp_processes::finance_posting::payable::PayableService;
 use erp_read_models::finance::funds_scope::{
     FundsScopedPage, FundsScopedResult, ScopedPayableAccountRow, ScopedPurchaseInvoiceAllocationRow,
@@ -28,8 +30,7 @@ use tracing::error;
 use crate::app_state::AppState;
 use crate::core::errors::{Error, Result};
 use crate::core::handler::file_asset::{
-    PendingAssetFile, delete_pending_asset_objects, extract_command_with_asset_files,
-    should_compensate_pending_assets, store_pending_asset_files,
+    PendingAssetFile, extract_command_with_asset_files, finish_asset_command, store_pending_asset_files,
 };
 use crate::core::response::ApiResponse;
 
@@ -57,8 +58,8 @@ pub async fn payable_account_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<PayableAccountListParams>,
 ) -> Result<FundsScopedPage<ScopedPayableAccountRow>> {
-    let purchase_access = erp_processes::adapters::purchase_access(state.db(), state.rbac());
-    let page = erp_processes::adapters::funds_access_with_rbac(state.db(), state.rbac())
+    let purchase_access = purchase_access(state.db(), state.rbac());
+    let page = funds_access_with_rbac(state.db(), state.rbac())
         .payable_account_list_scoped(&params, &actor, &purchase_access)
         .await?;
 
@@ -86,8 +87,8 @@ pub async fn payable_account_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<FundsScopedResult<ScopedPayableAccountRow>> {
-    let purchase_access = erp_processes::adapters::purchase_access(state.db(), state.rbac());
-    let view = erp_processes::adapters::funds_access_with_rbac(state.db(), state.rbac())
+    let purchase_access = purchase_access(state.db(), state.rbac());
+    let view = funds_access_with_rbac(state.db(), state.rbac())
         .payable_account_detail_scoped(&id, &actor, &purchase_access)
         .await?;
 
@@ -181,8 +182,8 @@ pub async fn supplier_payment_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<SupplierPaymentListParams>,
 ) -> Result<FundsScopedPage<ScopedSupplierPaymentRow>> {
-    let purchase_access = erp_processes::adapters::purchase_access(state.db(), state.rbac());
-    let page = erp_processes::adapters::funds_access_with_rbac(state.db(), state.rbac())
+    let purchase_access = purchase_access(state.db(), state.rbac());
+    let page = funds_access_with_rbac(state.db(), state.rbac())
         .supplier_payment_list_scoped(&params, &actor, &purchase_access)
         .await?;
 
@@ -210,8 +211,8 @@ pub async fn supplier_payment_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<FundsScopedResult<ScopedSupplierPaymentRow>> {
-    let purchase_access = erp_processes::adapters::purchase_access(state.db(), state.rbac());
-    let view = erp_processes::adapters::funds_access_with_rbac(state.db(), state.rbac())
+    let purchase_access = purchase_access(state.db(), state.rbac());
+    let view = funds_access_with_rbac(state.db(), state.rbac())
         .supplier_payment_detail_scoped(&id, &actor, &purchase_access)
         .await?;
 
@@ -259,10 +260,13 @@ pub async fn supplier_payment_merge_candidates(
 /// # 参数
 /// * `state` - 应用状态
 /// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 本次付款事实、冻结分配与幂等键
+/// * `multipart` - 付款 JSON 命令、冻结分配、幂等键和银行回单文件
 ///
 /// # 返回
 /// 返回已过账的付款单视图。
+///
+/// # 错误
+/// 文件、权限、版本或付款失败时返回原错误；提交结果未知时保留本次对象。
 pub async fn supplier_payment_commit(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -272,7 +276,7 @@ pub async fn supplier_payment_commit(
         extract_command_with_asset_files::<CommitSupplierPaymentRequest>(&mut multipart).await?;
     validate_bank_receipt_upload(&req, &files)?;
     let pending = store_pending_asset_files(&state, files, |_| SensitivityClass::Sensitive).await?;
-    let result = erp_processes::commit_supplier_payment_with_assets(
+    let result = commit_supplier_payment_with_assets(
         state.db(),
         state.rbac(),
         state.approval_object_read(),
@@ -281,20 +285,8 @@ pub async fn supplier_payment_commit(
         actor,
     )
     .await;
-    match result {
-        Ok(result) => {
-            if !result.assets_committed {
-                delete_pending_asset_objects(&state, &pending).await;
-            }
-            Ok(ApiResponse::ok_with_data(result.view))
-        },
-        Err(service_error) => {
-            if should_compensate_pending_assets(&service_error) {
-                delete_pending_asset_objects(&state, &pending).await;
-            }
-            Err(service_error.into())
-        },
-    }
+    let result = finish_asset_command(&state, &pending, result, |result| result.assets_committed).await?;
+    Ok(ApiResponse::ok_with_data(result.view))
 }
 
 #[permission_macros::permission(
@@ -431,8 +423,8 @@ pub async fn purchase_invoice_allocation_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<PurchaseInvoiceAllocationListParams>,
 ) -> Result<FundsScopedPage<ScopedPurchaseInvoiceAllocationRow>> {
-    let purchase_access = erp_processes::adapters::purchase_access(state.db(), state.rbac());
-    let page = erp_processes::adapters::funds_access_with_rbac(state.db(), state.rbac())
+    let purchase_access = purchase_access(state.db(), state.rbac());
+    let page = funds_access_with_rbac(state.db(), state.rbac())
         .purchase_invoice_allocation_list_scoped(&params, &actor, &purchase_access)
         .await?;
 

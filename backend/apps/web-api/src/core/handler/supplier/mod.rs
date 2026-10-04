@@ -8,6 +8,10 @@ pub mod import;
 use application_core::AuditActor;
 use axum::extract::{Multipart, Path, Query, State};
 use axum::{Extension, Json};
+use erp_processes::{
+    delete_supplier, supplier_profile_create_with_assets as create_supplier_profile_with_assets,
+    supplier_profile_update_with_assets as update_supplier_profile_with_assets,
+};
 use erp_supplier::{
     HandoverCandidateView, HandoverSupplierCapabilityRequest, HandoverSupplierCapabilityView,
     HandoverSupplierRequest, HandoverSupplierView, RevealSupplierSensitiveRequest,
@@ -19,8 +23,7 @@ use erp_support::SensitivityClass;
 use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::handler::file_asset::{
-    delete_pending_asset_objects, extract_command_with_asset_files, should_compensate_pending_assets,
-    store_pending_asset_files,
+    extract_command_with_asset_files, finish_asset_command, store_pending_asset_files,
 };
 use crate::core::response::ApiResponse;
 
@@ -49,6 +52,17 @@ pub async fn supplier_profile_create(
     action = "create"
 )]
 /// 一次接收供应商根命令与资质文件，并原子登记文件元数据和完整供应商资料。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 当前认证账号
+/// * `multipart` - 供应商 JSON 命令和具名资质文件
+///
+/// # 返回
+/// 返回新建供应商资料；幂等重放返回原结果并清理本次未消费文件。
+///
+/// # 错误
+/// 文件、业务校验或事务失败时返回原错误；提交结果未知时保留对象。
 pub async fn supplier_profile_create_with_assets(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -56,28 +70,11 @@ pub async fn supplier_profile_create_with_assets(
 ) -> Result<SupplierProfileMutationView> {
     let (req, files) = extract_command_with_asset_files::<SaveSupplierProfileRequest>(&mut multipart).await?;
     let pending = store_pending_asset_files(&state, files, supplier_asset_sensitivity).await?;
-    let result = erp_processes::supplier_profile_create_with_assets(
-        state.db(),
-        state.sensitive_data(),
-        req,
-        pending.clone(),
-        actor,
-    )
-    .await;
-    match result {
-        Ok(result) => {
-            if !result.assets_committed {
-                delete_pending_asset_objects(&state, &pending).await;
-            }
-            Ok(ApiResponse::ok_with_data(result.view))
-        },
-        Err(error) => {
-            if should_compensate_pending_assets(&error) {
-                delete_pending_asset_objects(&state, &pending).await;
-            }
-            Err(error.into())
-        },
-    }
+    let result =
+        create_supplier_profile_with_assets(state.db(), state.sensitive_data(), req, pending.clone(), actor)
+            .await;
+    let result = finish_asset_command(&state, &pending, result, |result| result.assets_committed).await?;
+    Ok(ApiResponse::ok_with_data(result.view))
 }
 
 #[permission_macros::permission(
@@ -106,6 +103,18 @@ pub async fn supplier_profile_update(
     action = "update"
 )]
 /// 一次接收供应商修订根命令与资质文件，并原子登记文件元数据和全部资料变化。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 当前认证账号
+/// * `id` - 供应商 ID
+/// * `multipart` - 供应商修订 JSON 命令和具名资质文件
+///
+/// # 返回
+/// 返回修订后的供应商资料；幂等重放返回原结果并清理本次未消费文件。
+///
+/// # 错误
+/// 文件、版本或事务失败时返回原错误；提交结果未知时保留对象。
 pub async fn supplier_profile_update_with_assets(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -114,7 +123,7 @@ pub async fn supplier_profile_update_with_assets(
 ) -> Result<SupplierProfileMutationView> {
     let (req, files) = extract_command_with_asset_files::<SaveSupplierProfileRequest>(&mut multipart).await?;
     let pending = store_pending_asset_files(&state, files, supplier_asset_sensitivity).await?;
-    let result = erp_processes::supplier_profile_update_with_assets(
+    let result = update_supplier_profile_with_assets(
         state.db(),
         state.sensitive_data(),
         id,
@@ -123,20 +132,8 @@ pub async fn supplier_profile_update_with_assets(
         actor,
     )
     .await;
-    match result {
-        Ok(result) => {
-            if !result.assets_committed {
-                delete_pending_asset_objects(&state, &pending).await;
-            }
-            Ok(ApiResponse::ok_with_data(result.view))
-        },
-        Err(error) => {
-            if should_compensate_pending_assets(&error) {
-                delete_pending_asset_objects(&state, &pending).await;
-            }
-            Err(error.into())
-        },
-    }
+    let result = finish_asset_command(&state, &pending, result, |result| result.assets_committed).await?;
+    Ok(ApiResponse::ok_with_data(result.view))
 }
 
 /// 从受控临时引用派生供应商资质文件的最低敏感级别。
@@ -251,7 +248,7 @@ pub async fn supplier_delete(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<()> {
-    erp_processes::delete_supplier(state.db(), id, actor).await?;
+    delete_supplier(state.db(), id, actor).await?;
     Ok(ApiResponse::ok())
 }
 

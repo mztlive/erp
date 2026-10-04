@@ -15,14 +15,18 @@ use erp_catalog::{
     UpdateProductListingRequest, UpdateProductRequest, UpdateSkuListingRequest, UpdateVoucherCategoryRequest,
     VoucherCategoryProfileListParams, VoucherCategoryProfileView,
 };
+use erp_processes::{
+    handover_product, product_create_with_assets as create_product_with_assets,
+    product_handover_candidates as load_product_handover_candidates,
+    product_update_with_assets as update_product_with_assets,
+};
 use erp_support::SensitivityClass;
 use serde::Deserialize;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::handler::file_asset::{
-    delete_pending_asset_objects, extract_command_with_asset_files, should_compensate_pending_assets,
-    store_pending_asset_files,
+    extract_command_with_asset_files, finish_asset_command, store_pending_asset_files,
 };
 use crate::core::response::ApiResponse;
 
@@ -110,7 +114,18 @@ pub async fn product_create(
 /// 一次接收商品创建命令与新增媒体，并原子登记文件元数据和商品聚合。
 ///
 /// 对象存储不具备 MongoDB 事务能力；数据库事务失败时删除本请求刚写入的
-/// 对象作为补偿。
+/// 对象作为补偿；提交结果未知时保留对象。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 当前认证账号
+/// * `multipart` - 商品 JSON 命令和具名媒体文件
+///
+/// # 返回
+/// 返回新建商品视图。
+///
+/// # 错误
+/// 文件校验、权限、业务校验或事务失败时返回原分类错误。
 pub async fn product_create_with_assets(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -118,18 +133,9 @@ pub async fn product_create_with_assets(
 ) -> Result<ProductView> {
     let (req, files) = extract_command_with_asset_files::<CreateProductRequest>(&mut multipart).await?;
     let pending = store_pending_asset_files(&state, files, |_| SensitivityClass::General).await?;
-    let result =
-        erp_processes::product_create_with_assets(state.db(), state.rbac(), req, pending.clone(), actor)
-            .await;
-    match result {
-        Ok(view) => Ok(ApiResponse::ok_with_data(view)),
-        Err(error) => {
-            if should_compensate_pending_assets(&error) {
-                delete_pending_asset_objects(&state, &pending).await;
-            }
-            Err(error.into())
-        },
-    }
+    let result = create_product_with_assets(state.db(), state.rbac(), req, pending.clone(), actor).await;
+    let view = finish_asset_command(&state, &pending, result, |_| true).await?;
+    Ok(ApiResponse::ok_with_data(view))
 }
 
 #[permission_macros::permission(
@@ -170,7 +176,19 @@ pub async fn product_update(
 /// 一次接收商品修订命令与新增媒体，并原子登记文件元数据和商品新修订。
 ///
 /// 对象存储不具备 MongoDB 事务能力；数据库事务失败时删除本请求刚写入的
-/// 对象作为补偿。
+/// 对象作为补偿；提交结果未知时保留对象。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 当前认证账号
+/// * `id` - 商品稳定 ID
+/// * `multipart` - 商品修订 JSON 命令和具名媒体文件
+///
+/// # 返回
+/// 返回修订后的商品视图。
+///
+/// # 错误
+/// 文件校验、权限、版本或事务失败时返回原分类错误。
 pub async fn product_update_with_assets(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -179,18 +197,9 @@ pub async fn product_update_with_assets(
 ) -> Result<ProductView> {
     let (req, files) = extract_command_with_asset_files::<UpdateProductRequest>(&mut multipart).await?;
     let pending = store_pending_asset_files(&state, files, |_| SensitivityClass::General).await?;
-    let result =
-        erp_processes::product_update_with_assets(state.db(), state.rbac(), id, req, pending.clone(), actor)
-            .await;
-    match result {
-        Ok(view) => Ok(ApiResponse::ok_with_data(view)),
-        Err(error) => {
-            if should_compensate_pending_assets(&error) {
-                delete_pending_asset_objects(&state, &pending).await;
-            }
-            Err(error.into())
-        },
-    }
+    let result = update_product_with_assets(state.db(), state.rbac(), id, req, pending.clone(), actor).await;
+    let view = finish_asset_command(&state, &pending, result, |_| true).await?;
+    Ok(ApiResponse::ok_with_data(view))
 }
 
 #[permission_macros::permission(
@@ -482,7 +491,7 @@ pub async fn product_handover(
     Path(id): Path<String>,
     Json(req): Json<HandoverProductRequest>,
 ) -> Result<HandoverProductView> {
-    let view = erp_processes::handover_product(state.db(), state.rbac(), &id, req, &actor).await?;
+    let view = handover_product(state.db(), state.rbac(), &id, req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -507,7 +516,7 @@ pub async fn product_handover_candidates(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<Vec<HandoverCandidateView>> {
-    let view = erp_processes::product_handover_candidates(state.db(), state.rbac(), &id, &actor).await?;
+    let view = load_product_handover_candidates(state.db(), state.rbac(), &id, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 

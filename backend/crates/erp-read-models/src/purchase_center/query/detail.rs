@@ -6,9 +6,6 @@ use erp_procurement::dto::purchase_order::{
 use erp_procurement::entity::purchase_order::{
     PurchaseChangeOrder, PurchaseLineSalesAllocation, PurchaseOrder,
 };
-use erp_procurement::service::purchase_order::view_mapping::{
-    revision_line_to_view, revision_totals, submission_line_to_view,
-};
 use erp_workflow::service::document_registry::find_approval_binding;
 use persistence_core::NoTransaction;
 
@@ -109,10 +106,13 @@ fn center_content(facts: &PurchaseOrderCenterFacts) -> CenterContent {
         facts.current_submission.as_ref().map(|submission| submission.content_source()),
     );
     let (lines, totals) = if let Some(revision) = &facts.current_revision {
-        (facts.revision_lines.iter().map(revision_line_to_view).collect(), revision_totals(revision))
+        (
+            facts.revision_lines.iter().map(PurchaseOrderLineView::from_revision).collect(),
+            TotalsView::from_revision(revision),
+        )
     } else if let Some(submission) = &facts.current_submission {
         (
-            facts.submission_lines.iter().map(submission_line_to_view).collect(),
+            facts.submission_lines.iter().map(PurchaseOrderLineView::from_submission).collect(),
             TotalsView {
                 gross: submission.gross_amount.to_string(),
                 net: submission.net_amount.to_string(),

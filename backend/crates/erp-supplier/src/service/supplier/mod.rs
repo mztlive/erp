@@ -6,22 +6,29 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use erp_core::common::time::BusinessDate;
+use application_core::AuditActor;
+use erp_core::common::time::{BusinessDate, Instant};
+use erp_core::ids::SupplierCapabilityId;
 use list_view::{SupplierViewAssembleInput, assemble_supplier_views};
 use mongodb::Database;
 use persistence_core::NoTransaction;
 
 use crate::dto::supplier::{
     CommercialProfileView, SupplierCapabilityView, SupplierDetailView, SupplierQualificationView,
-    SupplierSensitiveFieldView,
+    SupplierSensitiveFieldView, SupplierView,
 };
-use crate::entity::supplier::{SupplierAccount, SupplierAccountId};
+use crate::entity::supplier::{
+    SupplierAccount, SupplierAccountId, SupplierCommercialProfileRevision, SupplierQualification,
+    SupplierQualificationCapability,
+};
 use crate::error::{Error, Result};
 use crate::ports::{
-    AccountFactPort, FailClosedAccountFactPort, FailClosedSupplierDataScopePort, PartyFactsPort,
-    SensitiveFieldKindFact, SensitiveTokenPort, SupplierDataScopePort, select_current_default,
+    AccountFactPort, FailClosedAccountFactPort, FailClosedSupplierDataScopePort, PartyAddressFact,
+    PartyBankAccountFact, PartyContactFact, PartyFactsPort, PartyListFact, PartyRevisionFact,
+    PartyTaxProfileFact, SensitiveFieldKindFact, SensitiveTokenPort, SupplierDataScopePort,
+    select_current_default,
 };
-use crate::repository::{SupplierAccountRow, SupplierExt};
+use crate::repository::{SupplierAccountRow, SupplierDetailBundle, SupplierExt};
 
 pub mod access;
 pub mod eligibility;
@@ -56,6 +63,9 @@ impl SupplierService {
     ///
     /// # 返回
     /// 返回服务实例。
+    ///
+    /// # 错误
+    /// 无；未注入的账号与范围能力默认拒绝访问。
     pub fn new(db: Database, party: Arc<dyn PartyFactsPort>) -> Self {
         Self {
             db,
@@ -67,6 +77,17 @@ impl SupplierService {
     }
 
     /// 创建可签发敏感字段短时揭示令牌的详情查询服务。
+    ///
+    /// # 参数
+    /// * `db` - 数据库实例
+    /// * `party` - 主体只读事实端口
+    /// * `sensitive_data` - 敏感字段令牌签发端口
+    ///
+    /// # 返回
+    /// 返回具备令牌签发能力的服务；账号与范围能力仍须通过 `with_scope` 注入。
+    ///
+    /// # 错误
+    /// 无；构造过程不读取业务事实。
     pub fn with_sensitive_data(
         db: Database,
         party: Arc<dyn PartyFactsPort>,
@@ -103,6 +124,15 @@ impl SupplierService {
     }
 
     /// 构造供应商对象访问器。
+    ///
+    /// # 参数
+    /// 无额外参数；复用服务已注入的数据库与范围端口。
+    ///
+    /// # 返回
+    /// 返回执行供应商对象权限与责任范围校验的访问器。
+    ///
+    /// # 错误
+    /// 无；权限校验在访问器执行查询时进行。
     pub fn access(&self) -> SupplierAccess {
         SupplierAccess::new(self.db.clone(), self.data_scope.clone())
     }
@@ -111,17 +141,16 @@ impl SupplierService {
     ///
     /// # 参数
     /// * `id` - 供应商角色 ID
+    /// * `actor` - 当前操作人，用于装载前后重验对象访问范围
     ///
     /// # 返回
     /// 返回供应商详情视图。
     ///
     /// # 错误
     /// * `NotFound` - 供应商角色不存在
-    pub async fn supplier_detail(
-        &self,
-        id: &str,
-        actor: &application_core::AuditActor,
-    ) -> Result<SupplierDetailView> {
+    /// * `Forbidden` - 操作人无权访问供应商
+    /// * 范围版本变化或关联事实读取失败时传播相应错误。
+    pub async fn supplier_detail(&self, id: &str, actor: &AuditActor) -> Result<SupplierDetailView> {
         let expected = self.access().require(actor, "detail", id).await?;
         let view = self.load_supplier_detail(id).await?;
         let current = self.access().require(actor, "detail", id).await?;
@@ -130,6 +159,15 @@ impl SupplierService {
     }
 
     /// 装载详情展示字段，不解释数据范围。
+    ///
+    /// # 参数
+    /// * `id` - 供应商角色 ID；调用方须自行完成对象授权
+    ///
+    /// # 返回
+    /// 返回账户、主体、商务资料、能力、资质与评级组成的详情视图。
+    ///
+    /// # 错误
+    /// 供应商或关联主体缺失时返回 `NotFound`，其余事实读取或令牌签发错误向上传播。
     pub async fn load_supplier_detail(&self, id: &str) -> Result<SupplierDetailView> {
         let loaded = self.load_detail_facts(id).await?;
         let current_profiles = current_profile_subset(&loaded.bundle);
@@ -195,9 +233,9 @@ impl SupplierService {
     async fn assemble_detail_account(
         &self,
         loaded: &LoadedSupplierDetail,
-        current_profiles: Vec<crate::entity::supplier::SupplierCommercialProfileRevision>,
-    ) -> Result<crate::dto::supplier::SupplierView> {
-        let row = account_row_from(&loaded.bundle.supplier);
+        current_profiles: Vec<SupplierCommercialProfileRevision>,
+    ) -> Result<SupplierView> {
+        let row = SupplierAccountRow::from_account(&loaded.bundle.supplier);
         let maintainer_names = self
             .accounts
             .names_by_ids(std::slice::from_ref(&loaded.bundle.supplier.maintainer_user_id))
@@ -232,7 +270,7 @@ impl SupplierService {
     async fn finish_detail_view(
         &self,
         loaded: LoadedSupplierDetail,
-        mut account: crate::dto::supplier::SupplierView,
+        mut account: SupplierView,
     ) -> Result<SupplierDetailView> {
         let LoadedSupplierDetail {
             id,
@@ -284,48 +322,21 @@ struct LoadedSupplierDetail {
     /// 供应商角色 ID。
     id: String,
     /// 仓储返回的详情事实束。
-    bundle: crate::repository::SupplierDetailBundle,
+    bundle: SupplierDetailBundle,
     /// 主体列表事实。
-    party: crate::ports::PartyListFact,
+    party: PartyListFact,
     /// 主体当前修订。
-    party_revision: Vec<crate::ports::PartyRevisionFact>,
+    party_revision: Vec<PartyRevisionFact>,
     /// 联系人事实行。
-    contacts: Vec<crate::ports::PartyContactFact>,
+    contacts: Vec<PartyContactFact>,
     /// 地址事实行。
-    addresses: Vec<crate::ports::PartyAddressFact>,
+    addresses: Vec<PartyAddressFact>,
     /// 税务事实行。
-    tax_profiles: Vec<crate::ports::PartyTaxProfileFact>,
+    tax_profiles: Vec<PartyTaxProfileFact>,
     /// 银行账户摘要。
-    bank_accounts: Vec<crate::ports::PartyBankAccountFact>,
+    bank_accounts: Vec<PartyBankAccountFact>,
     /// 商务签约/付款主体名称。
     commercial_party_names: HashMap<String, String>,
-}
-
-/// 由供应商实体构造投影行（erp-supplier-003）。
-///
-/// 生产装配一律从实体取值，避免整束克隆；字段与原内联构造一致。
-///
-/// # 参数
-/// * `supplier` - 供应商角色实体
-///
-/// # 返回
-/// 返回列表投影行。
-fn account_row_from(supplier: &SupplierAccount) -> SupplierAccountRow {
-    SupplierAccountRow {
-        id: supplier.base.id.clone(),
-        party_id: supplier.party_id.to_string(),
-        supplier_no: supplier.supplier_no.clone(),
-        maintainer_user_id: supplier.maintainer_user_id.clone(),
-        business_org_unit_id: supplier.business_org_unit_id.clone(),
-        default_payment_term_id: supplier.default_payment_term_id.clone(),
-        current_commercial_profile_revision_id: supplier
-            .current_commercial_profile_revision_id
-            .as_ref()
-            .map(ToString::to_string),
-        status: supplier.stable.status,
-        version: supplier.base.version,
-        created_at: supplier.base.created_at,
-    }
 }
 
 /// 取出当前商务版本子集（erp-supplier-003）。
@@ -337,9 +348,7 @@ fn account_row_from(supplier: &SupplierAccount) -> SupplierAccountRow {
 ///
 /// # 返回
 /// 返回当前版本（命中时单个元素），未命中时为空。
-fn current_profile_subset(
-    bundle: &crate::repository::SupplierDetailBundle,
-) -> Vec<crate::entity::supplier::SupplierCommercialProfileRevision> {
+fn current_profile_subset(bundle: &SupplierDetailBundle) -> Vec<SupplierCommercialProfileRevision> {
     bundle
         .commercial_profiles
         .iter()
@@ -373,14 +382,14 @@ impl SupplierService {
     fn sensitive_field_views(
         &self,
         supplier_id: &str,
-        contacts: &[crate::ports::PartyContactFact],
-        addresses: &[crate::ports::PartyAddressFact],
-        bank_accounts: &[crate::ports::PartyBankAccountFact],
+        contacts: &[PartyContactFact],
+        addresses: &[PartyAddressFact],
+        bank_accounts: &[PartyBankAccountFact],
     ) -> Result<Vec<SupplierSensitiveFieldView>> {
         let Some(codec) = &self.sensitive_data else {
             return Ok(Vec::new());
         };
-        let expires_at = u64::try_from(erp_core::common::time::Instant::now().unix_secs())
+        let expires_at = u64::try_from(Instant::now().unix_secs())
             .map_err(|_| Error::Internal("系统时间非法".to_string()))?
             + 60;
         let mut fields = Vec::new();
@@ -447,11 +456,10 @@ impl SupplierService {
 
 /// 将详情事实束中的资质与适用能力关联装配为视图（纯 View 映射）。
 fn assemble_qualification_views(
-    qualifications: Vec<crate::entity::supplier::SupplierQualification>,
-    links: Vec<crate::entity::supplier::SupplierQualificationCapability>,
+    qualifications: Vec<SupplierQualification>,
+    links: Vec<SupplierQualificationCapability>,
 ) -> Vec<SupplierQualificationView> {
-    let mut links_by_qualification: HashMap<String, Vec<erp_core::ids::SupplierCapabilityId>> =
-        HashMap::new();
+    let mut links_by_qualification: HashMap<String, Vec<SupplierCapabilityId>> = HashMap::new();
     for link in links {
         links_by_qualification.entry(link.qualification_id.to_string()).or_default().push(link.capability_id);
     }

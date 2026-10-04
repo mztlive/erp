@@ -15,6 +15,27 @@ use persistence_core::NoTransaction;
 use crate::adapters::workflow::workflow_auth;
 use crate::{Error, Result};
 
+/// 首次读取记录敏感审计；对象存储返回后的重验只重新读取元数据。
+enum ReadPhase {
+    Initial,
+    Revalidate,
+}
+
+impl ReadPhase {
+    /// 读取阶段决定是否记录读取事件，审计失败必须向调用方传播。
+    async fn read_asset(
+        self,
+        files: &FileAssetService,
+        actor: &AuditActor,
+        file_id: &str,
+    ) -> Result<FileAssetView> {
+        Ok(match self {
+            Self::Initial => files.file_asset_preview(file_id, actor).await?,
+            Self::Revalidate => files.file_asset_detail(file_id).await?,
+        })
+    }
+}
+
 /// 建立关联前验证文件来源资格，冻结提交时仍须在事务内重新验证。
 /// # 参数
 /// 身份数据库、权限服务、当前账号及目标文件 ID。
@@ -55,7 +76,7 @@ pub async fn readable<A: WorkflowAuthorizationPort>(
     instance_id: &str,
     file_id: &str,
 ) -> Result<FileAssetView> {
-    checked(runtime, files, actor, instance_id, file_id, true).await
+    checked(runtime, files, actor, instance_id, file_id, ReadPhase::Initial).await
 }
 
 /// 存储读取后重验当前文件治理状态和实例资格，不重复写入读取审计。
@@ -72,7 +93,7 @@ pub async fn revalidate<A: WorkflowAuthorizationPort>(
     instance_id: &str,
     file_id: &str,
 ) -> Result<()> {
-    checked(runtime, files, actor, instance_id, file_id, false).await?;
+    checked(runtime, files, actor, instance_id, file_id, ReadPhase::Revalidate).await?;
     Ok(())
 }
 
@@ -83,14 +104,10 @@ async fn checked<A: WorkflowAuthorizationPort>(
     actor: &AuditActor,
     instance_id: &str,
     file_id: &str,
-    audit: bool,
+    phase: ReadPhase,
 ) -> Result<FileAssetView> {
     let frozen = runtime.material_reference(actor, instance_id, file_id).await?;
-    let view = if audit {
-        files.file_asset_preview(file_id, actor).await?
-    } else {
-        files.file_asset_detail(file_id).await?
-    };
+    let view = phase.read_asset(files, actor, file_id).await?;
     let current = ApprovalMaterialFile {
         file_asset_id: FileAssetId::new(&view.id),
         file_name: view.file_name.clone(),

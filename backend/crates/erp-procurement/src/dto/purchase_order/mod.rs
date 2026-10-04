@@ -16,7 +16,9 @@
 mod change_draft;
 mod change_order;
 mod command;
+mod line_input;
 mod query;
+mod view_mapping;
 
 pub(crate) use application_core::normalize_sort;
 pub use application_core::{PageView, SortDir};

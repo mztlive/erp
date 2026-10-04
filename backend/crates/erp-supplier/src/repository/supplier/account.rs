@@ -41,7 +41,36 @@ pub struct SupplierAccountRow {
     pub created_at: u64,
 }
 
-/// 供应商编号窄投影行。
+impl SupplierAccountRow {
+    /// 从供应商账户构造与仓储列表查询一致的投影行。
+    ///
+    /// # 参数
+    /// * `supplier` - 已装载的供应商账户；保留其责任归属与当前商务版本指针
+    ///
+    /// # 返回
+    /// 返回账户当前字段的只读投影，不查询关联事实。
+    ///
+    /// # 错误
+    /// 无；仅映射已有字段。
+    pub(crate) fn from_account(supplier: &SupplierAccount) -> Self {
+        Self {
+            id: supplier.base.id.clone(),
+            party_id: supplier.party_id.to_string(),
+            supplier_no: supplier.supplier_no.clone(),
+            maintainer_user_id: supplier.maintainer_user_id.clone(),
+            business_org_unit_id: supplier.business_org_unit_id.clone(),
+            default_payment_term_id: supplier.default_payment_term_id.clone(),
+            current_commercial_profile_revision_id: supplier
+                .current_commercial_profile_revision_id
+                .as_ref()
+                .map(ToString::to_string),
+            status: supplier.stable.status,
+            version: supplier.base.version,
+            created_at: supplier.base.created_at,
+        }
+    }
+}
+
 /// 供应商编号窄投影行。
 
 #[derive(Debug, Clone, Deserialize)]

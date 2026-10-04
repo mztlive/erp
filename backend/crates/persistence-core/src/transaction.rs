@@ -76,9 +76,9 @@ async fn commit_with_retry(session: &mut ClientSession) -> Result<()> {
 /// 启动带因果一致性的会话并开启统一业务事务选项。
 async fn start_transaction_session(client: &Client) -> Result<ClientSession> {
     let session_options = SessionOptions::builder().causal_consistency(true).build();
-    let mut session = client.start_session().with_options(session_options).await.map_err(Error::from)?;
+    let mut session = client.start_session().with_options(session_options).await?;
     let txn_options = transaction_options();
-    session.start_transaction().with_options(txn_options).await.map_err(Error::from)?;
+    session.start_transaction().with_options(txn_options).await?;
     Ok(session)
 }
 
@@ -92,15 +92,19 @@ async fn abort_quietly(session: &mut ClientSession) {
 /// Trait for executing operations within a transaction context
 #[async_trait]
 pub trait Transactional {
-    /// Executes an async function within a transaction with a custom error type.
+    /// 在同一事务内执行回调，并将持久化错误转换为调用方错误类型。
     ///
-    /// # Arguments
+    /// # 参数
     ///
-    /// * `f` - The async function to execute within the transaction
+    /// * `f` - 使用同一数据访问执行器的异步回调
     ///
-    /// # Returns
+    /// # 返回
     ///
-    /// Result of the function execution with caller-defined error type
+    /// 返回回调成功提交后的结果。
+    ///
+    /// # 错误
+    /// 返回回调错误，或经 `From` 转换的事务初始化、提交错误。
+    /// 回调失败时尝试回滚，回滚失败只记录日志，不覆盖原错误。
     async fn with_transaction<F, R, E>(&self, f: F) -> std::result::Result<R, E>
     where
         F: for<'a> FnOnce(
@@ -127,7 +131,8 @@ impl Transactional for Client {
     /// 返回执行结果，错误类型由调用方决定。
     ///
     /// # 错误
-    /// 当事务初始化、提交、回滚失败时，使用调用方错误类型返回。
+    /// 返回回调错误，或经 `From` 转换的事务初始化、提交错误。
+    /// 回调失败时尝试回滚，回滚失败只记录日志，不覆盖原错误。
     async fn with_transaction<F, R, E>(&self, f: F) -> std::result::Result<R, E>
     where
         F: for<'a> FnOnce(
@@ -138,11 +143,11 @@ impl Transactional for Client {
         R: Send,
         E: From<Error> + Send,
     {
-        let mut session = start_transaction_session(self).await.map_err(E::from)?;
+        let mut session = start_transaction_session(self).await?;
 
         match f(&mut session).await {
             Ok(result) => {
-                commit_with_retry(&mut session).await.map_err(E::from)?;
+                commit_with_retry(&mut session).await?;
                 Ok(result)
             },
             Err(error) => {

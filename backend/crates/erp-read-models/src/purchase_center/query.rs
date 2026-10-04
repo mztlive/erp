@@ -53,7 +53,7 @@ impl PurchaseOrderReadService {
         if expected.is_some_and(|value| value != snapshot.context.scope_version) {
             return Err(crate::support::data_scope_changed("数据范围已变化，请从第一页刷新"));
         }
-        let items = map_list_items(&snapshot.page.items, &snapshot.facts)?;
+        let items = map_list_items(snapshot.page.items, &snapshot.facts)?;
         let current = self.scope_fingerprint(params, actor).await?;
         if current != snapshot.context.scope_version {
             return Err(crate::support::data_scope_changed("数据范围或业务单据已变化，请刷新"));
@@ -185,7 +185,7 @@ fn list_row_totals(
 /// 把当前页投影行映射为列表视图。
 ///
 /// # 参数
-/// * `rows` - 已授权的当前页投影
+/// * `rows` - 已授权的当前页投影；行字段移入返回视图
 /// * `facts` - 同一快照下的关联事实
 ///
 /// # 返回
@@ -197,10 +197,10 @@ fn list_row_totals(
 /// # 关键业务约束
 /// 映射不得改变授权集合；金额取自当前提交或版本指针。
 fn map_list_items(
-    rows: &[PurchaseOrderRow],
+    rows: Vec<PurchaseOrderRow>,
     facts: &PurchaseOrderListFacts,
 ) -> Result<Vec<PurchaseOrderListItemView>> {
-    rows.iter()
+    rows.into_iter()
         .map(|row| -> Result<PurchaseOrderListItemView> {
             let sales_order_id = row.sales_order_id.to_string();
             let sales_order_no = sales_no_for(&sales_order_id, &facts.sales_order_nos)?;
@@ -211,19 +211,18 @@ fn map_list_items(
                 &facts.submissions,
                 &facts.revisions,
             );
-            let raw_owner =
-                row.owner_user_id.as_deref().filter(|owner| !owner.trim().is_empty()).map(str::to_string);
+            let raw_owner = row.owner_user_id.filter(|owner| !owner.trim().is_empty());
             let (owner_user_id, owner_name) = owner_display(raw_owner, &facts.owner_names);
             Ok(PurchaseOrderListItemView {
-                id: row.id.clone(),
-                purchase_no: row.purchase_no.clone(),
+                id: row.id,
+                purchase_no: row.purchase_no,
                 sales_order_id,
                 sales_order_no,
                 supplier_id: row.supplier_id.to_string(),
                 supplier_name,
                 purchase_type: row.purchase_type,
                 fulfillment_responsibility: row.fulfillment_responsibility,
-                payment_term_code: row.payment_term_code.clone(),
+                payment_term_code: row.payment_term_code,
                 owner_name,
                 owner_user_id,
                 status: row.status,
@@ -234,8 +233,8 @@ fn map_list_items(
                 payment_progress: row.payment_progress,
                 invoice_progress: row.invoice_progress,
                 fulfillment_progress: row.fulfillment_progress,
-                current_submission_id: row.current_submission_id.clone(),
-                current_revision_id: row.current_revision_id.clone(),
+                current_submission_id: row.current_submission_id,
+                current_revision_id: row.current_revision_id,
                 version: row.version,
                 created_at: row.created_at,
             })
@@ -331,14 +330,73 @@ mod query_mapping_tests {
     use std::collections::HashMap;
     use std::str::FromStr;
 
-    use erp_core::ids::{PurchaseOrderId, PurchaseOrderSubmissionId, SupplierAccountId};
+    use erp_core::ids::{PurchaseOrderId, PurchaseOrderSubmissionId, SalesOrderId, SupplierAccountId};
     use erp_core::money::Amount;
     use erp_procurement::entity::purchase_order::{
-        FulfillmentResponsibility, PaymentTermSnapshot, PurchaseOrderSubmission, PurchaseOrderSubmissionData,
-        PurchaseType, SupplierSnapshot,
+        FulfillmentResponsibility, PaymentTermSnapshot, ProgressStatus, PurchaseOrderStatus,
+        PurchaseOrderSubmission, PurchaseOrderSubmissionData, PurchaseReviewStatus, PurchaseType,
+        SupplierSnapshot,
     };
 
-    use super::{center_content_source, list_row_totals, owner_display, sales_no_for, supplier_display};
+    use super::{
+        PurchaseOrderListFacts, PurchaseOrderRow, center_content_source, list_row_totals, map_list_items,
+        owner_display, sales_no_for, supplier_display,
+    };
+
+    /// 构造已授权的采购列表行，用于执行实际视图映射。
+    fn list_row(id: &str) -> PurchaseOrderRow {
+        PurchaseOrderRow {
+            id: id.to_string(),
+            purchase_no: format!("PO-{id}"),
+            sales_order_id: SalesOrderId::new("so-1"),
+            supplier_id: SupplierAccountId::new("sup-1"),
+            purchase_type: PurchaseType::Physical,
+            fulfillment_responsibility: FulfillmentResponsibility::Warehouse,
+            payment_term_code: "NET-30".to_string(),
+            created_by: "creator-1".to_string(),
+            owner_user_id: Some("buyer-1".to_string()),
+            status: PurchaseOrderStatus::Effective,
+            review_status: PurchaseReviewStatus::Approved,
+            payment_progress: ProgressStatus::Partial,
+            invoice_progress: ProgressStatus::None,
+            fulfillment_progress: ProgressStatus::Completed,
+            current_submission_id: Some("sub-1".to_string()),
+            current_revision_id: None,
+            version: 2,
+            created_at: 1_700_000_000,
+        }
+    }
+
+    /// 消费投影行后保持授权行序、身份、指针及负责人回退。
+    #[test]
+    fn list_mapping_preserves_row_order_and_owned_fields() {
+        let mut facts = PurchaseOrderListFacts::default();
+        facts.sales_order_nos.insert("so-1".to_string(), "SO-1".to_string());
+        facts.owner_names.insert("buyer-1".to_string(), "张三".to_string());
+        facts.submissions.insert("sub-1".to_string(), submission("sub-1", "10.00"));
+        let mut second = list_row("po-1");
+        second.owner_user_id = Some("  ".to_string());
+        let items = map_list_items(vec![list_row("po-2"), second], &facts).unwrap();
+        assert_eq!(items.iter().map(|item| item.id.as_str()).collect::<Vec<_>>(), ["po-2", "po-1"]);
+        assert_eq!(items[0].purchase_no, "PO-po-2");
+        assert_eq!(items[0].payment_term_code, "NET-30");
+        assert_eq!(items[0].current_submission_id.as_deref(), Some("sub-1"));
+        assert_eq!(items[0].current_revision_id, None);
+        assert_eq!(items[0].gross_amount, "10.00");
+        assert_eq!(items[0].supplier_name, "sup-1");
+        assert_eq!(items[0].owner_user_id.as_deref(), Some("buyer-1"));
+        assert_eq!(items[0].owner_name, "张三");
+        assert_eq!((items[0].version, items[0].created_at), (2, 1_700_000_000));
+        assert_eq!(items[1].owner_user_id, None);
+        assert_eq!(items[1].owner_name, "未指定");
+    }
+
+    /// 非空列表关联销售单缺失时必须停止映射。
+    #[test]
+    fn list_mapping_rejects_missing_sales_order() {
+        let error = map_list_items(vec![list_row("po-1")], &PurchaseOrderListFacts::default()).unwrap_err();
+        assert!(matches!(error, crate::Error::Internal(_)));
+    }
 
     /// 构造最小提交头用于金额映射测试.
     fn submission(id: &str, gross: &str) -> PurchaseOrderSubmission {
@@ -433,12 +491,9 @@ mod query_mapping_tests {
         assert_eq!(center_content_source(false, None), "DRAFT".to_string());
     }
 
-    /// 空分配与空应付保持为空语义.
+    /// 空采购页映射保持为空，不要求关联事实存在。
     #[test]
-    fn empty_center_collections_stay_empty() {
-        let allocations: Vec<String> = Vec::new();
-        assert!(allocations.is_empty());
-        let payable: Option<String> = None;
-        assert!(payable.is_none());
+    fn empty_list_mapping_stays_empty() {
+        assert!(map_list_items(Vec::new(), &PurchaseOrderListFacts::default()).unwrap().is_empty());
     }
 }

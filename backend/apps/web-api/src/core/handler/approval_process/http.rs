@@ -19,7 +19,6 @@ pub struct ReplaceNodesHttpRequest {
     pub idempotency_key: String,
 }
 
-/// 发布或退役草稿的 HTTP 请求。
 impl ReplaceNodesHttpRequest {
     /// 以必填版本与幂等键构造替换请求；节点默认为空。
     ///
@@ -37,8 +36,7 @@ impl ReplaceNodesHttpRequest {
     }
 }
 
-/// 发布或退役草稿的 HTTP 请求。
-
+/// 发布或退役定义的 HTTP 请求；目标定义身份由路径提供。
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct DefinitionLockHttpRequest {
@@ -66,10 +64,16 @@ pub const DEFAULT_ASSIGNEE_LIMIT: u32 = 20;
 pub const MAX_ASSIGNEE_LIMIT: u32 = 50;
 
 impl EligibleAssigneesQuery {
-    /// 规范化候选查询。
+    /// 规范化候选查询的页大小。
+    ///
+    /// # 参数
+    /// * `self` - 含可选页大小的 HTTP 查询
+    ///
+    /// # 返回
+    /// 未传值时返回默认 20，否则返回范围内的原值。
     ///
     /// # 错误
-    /// 页大小超过上限时返回说明。
+    /// 页大小为零或超过 50 时返回字段范围说明。
     pub fn normalized_limit(&self) -> Result<u32, String> {
         let limit = self.limit.unwrap_or(DEFAULT_ASSIGNEE_LIMIT);
         if (1..=MAX_ASSIGNEE_LIMIT).contains(&limit) {

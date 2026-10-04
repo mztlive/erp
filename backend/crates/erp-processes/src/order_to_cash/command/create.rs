@@ -1,47 +1,36 @@
 use application_core::{AuditActor, CommandFingerprint};
-use erp_contract::ContractExt;
-use erp_core::common::time::Instant;
-use erp_core::ids::{
-    BusinessDocumentId, ContractId, CustomerAccountId, SalesOrderId, SalesOrderSubmissionId, WorkflowActionId,
-};
+use erp_contract::{ContractExt, ContractStatus};
+use erp_core::ids::{ContractId, CustomerAccountId, PartyId};
 use erp_read_models::sales_center::order::dto::SalesOrderDetailView;
 use erp_sales::dto::sales_order::{
     CreateSalesOrderRequest, SalesOrderCreateIntent, SalesOrderDraftRequest, SalesOrderEditableDraftRequest,
 };
 use erp_sales::entity::command_receipt::SalesCommandResult;
-use erp_sales::entity::sales_order::{SalesOrder, SalesOrderSubmission};
 use erp_sales::repository::SalesOrderExt;
-use erp_sales::service::sales_order::SalesOrderService;
 use erp_sales::service::sales_order::command::identity::{
-    sales_order_create_audit_id, sales_order_create_fingerprint, sales_submission_audit_id,
+    sales_order_create_audit_id, sales_order_create_fingerprint,
 };
-use erp_sales::service::sales_order::mapper::{build_submission, build_submission_lines};
-use erp_workflow::DocumentRegistryExt;
-use erp_workflow::entity::document_registry::{WorkflowAction, WorkflowActionData, WorkflowActionType};
-use erp_workflow::service::approval::execution::prepare_start;
-use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::super::SalesOrderCommandProcess;
-use super::super::adapter::{
-    RECENT_HISTORY_LIMIT, build_sales_order_snapshot, execute_sales_order_domain_action,
-    sales_approval_ports, sales_order_object_readable, sales_order_responsible_org_id,
-    sales_order_start_command, start_approval_command_kind,
-};
-use super::super::adapters::catalog::CatalogQualificationAdapter;
 use super::super::authorization::SalesCommandAccess;
-use super::super::start_approval::{
-    SalesOrderRuntimeWriteInput, SalesOrderStartInput, build_sales_order_start_input,
-    load_bound_definition_graph_with_executor, persist_runtime_writes,
-};
-use super::create_prepare::PreparedSalesCreation;
-use super::identity::{persist_bound_sales_document, sales_create_bind_command};
-use super::submit::ensure_unified_start_command;
-use crate::business_ownership::ensure_creation_org as ensure_order_creation_org;
 use crate::order_to_cash::command_event::{SalesCommandEvent, finish_receipt_recovery, load_command_receipt};
 use crate::{Error, Result};
+
+mod persist;
+mod submission;
+
+use persist::persist_creation;
+
+/// 同一认证建单请求的完整身份，供事前重放和失败查证共用。
+struct CreationIdentity {
+    idempotency_key: String,
+    audit_id: String,
+    fingerprint: String,
+    key_hash: CommandFingerprint,
+}
 
 impl SalesOrderCommandProcess {
     /// 解析销售命令所选合同的客户身份，供 HTTP 层执行客户数据范围校验。
@@ -49,12 +38,13 @@ impl SalesOrderCommandProcess {
     /// # 参数
     /// * `actor` - 已认证操作人
     /// * `contract_id` - 前端选择的合同稳定身份
+    /// * `customer_id` - 无合同时前端选择的客户身份
     ///
     /// # 返回
-    /// 返回合同所属客户身份。
+    /// 返回所选合同所属客户或无合同命令所选客户的稳定身份。
     ///
     /// # 错误
-    /// 合同不存在或不可见时返回 `NotFound`。
+    /// 合同或客户不存在、不可见时返回 `NotFound`；无合同且未选择客户时返回校验错误。
     ///
     /// # 关键业务约束
     /// 本入口只做事前检查；写入事务仍须 `related` 重验，不得当作唯一凭证。
@@ -98,18 +88,18 @@ impl SalesOrderCommandProcess {
     /// 禁止以无范围 `find_by_id` 作为授权读取；写入事务必须再次 `related`。
     pub(super) async fn resolve_contract_sales_draft(
         &self,
-        access: &super::super::authorization::SalesCommandAccess,
+        access: &SalesCommandAccess,
         contract_id: &ContractId,
         editable: SalesOrderEditableDraftRequest,
         executor: &mut dyn Executor,
-    ) -> Result<(CustomerAccountId, erp_core::ids::PartyId, SalesOrderDraftRequest)> {
+    ) -> Result<(CustomerAccountId, PartyId, SalesOrderDraftRequest)> {
         editable.validate()?;
         let revision_id = editable
             .requested_contract_revision_id
             .as_ref()
             .ok_or_else(|| Error::ValidationError("有关同时必须选择合同版本".into()))?;
         let contract = access.load_contract(contract_id.as_ref(), executor).await?;
-        if contract.stable.status != erp_contract::ContractStatus::Effective {
+        if contract.stable.status != ContractStatus::Effective {
             return Err(Error::BusinessLogicError("合同当前不可用于新销售提交".to_string()));
         }
         if contract.stable.current_revision_id.as_deref() != Some(revision_id.as_ref()) {
@@ -153,8 +143,8 @@ impl SalesOrderCommandProcess {
         Ok((contract.customer_id, contract.settlement_party_id, draft))
     }
 
-    /// 创建销售单（订单 + 稳定明细 + 首次提交工作副本原子形成；`intent=SUBMIT`
-    /// 时随后立即提交）。
+    /// 原子创建销售单、稳定明细及首次工作副本；`intent=SUBMIT` 时在同一写入事务
+    /// 冻结首次提交、审批绑定、运行事实及成功事件。
     ///
     /// 表头金额三元组由服务端按 §4.2 铁律 2 汇总**已舍入**的行金额，客户端不可
     /// 指定；跨域校验客户（D08）与合同（D12）存在性。同一操作人使用同一幂等键
@@ -171,7 +161,13 @@ impl SalesOrderCommandProcess {
     /// * `ValidationError` - 请求体校验失败或行字段组缺失
     /// * `NotFound` - 客户/合同不存在
     /// * `BusinessLogicError` - 客户已停用
-    /// * `ConflictError` - order_no 重复
+    /// * `ConflictError` - 单号重复或同一幂等键绑定不同载荷
+    /// * `Forbidden` - 当前命令、关联对象或数据范围不允许访问
+    /// * `OutcomeUnknown` - 提交结果未知且原命令结果暂无法查证
+    ///
+    /// # 关键业务约束
+    /// 所有决定写入的关联、创建资格和可售引用在同一执行器中重验。重放只读返回
+    /// 原单据；提交结果未知时只查证原回执，不自动重新执行创建。
     #[tracing::instrument(
         name = "sales_order.create",
         skip_all,
@@ -191,275 +187,60 @@ impl SalesOrderCommandProcess {
             return Err(Error::ValidationError("幂等键不能为空".to_string()));
         }
         req.idempotency_key.clone_from(&idempotency_key);
-        let audit_id = sales_order_create_audit_id(actor.id(), &idempotency_key);
-        let fingerprint = sales_order_create_fingerprint(actor.id(), &req)?;
-        let expected_key_hash = CommandFingerprint::from_parts([idempotency_key.clone()]);
+        let identity = CreationIdentity {
+            audit_id: sales_order_create_audit_id(actor.id(), &idempotency_key),
+            fingerprint: sales_order_create_fingerprint(actor.id(), &req)?,
+            key_hash: CommandFingerprint::from_parts([idempotency_key.clone()]),
+            idempotency_key,
+        };
         if let Some(order_id) = self
-            .replay_sales_order_creation(&audit_id, &fingerprint, &expected_key_hash, actor.id(), &access)
+            .replay_sales_order_creation(
+                &identity.audit_id,
+                &identity.fingerprint,
+                &identity.key_hash,
+                actor.id(),
+                &access,
+            )
             .await?
         {
-            return self.read_model().sales_order_detail(&order_id, None).await.map_err(crate::Error::from);
+            return Ok(self.read_model().sales_order_detail(&order_id, None).await?);
         }
-        let PreparedSalesCreation { order, document, stable_lines, working_copy, working_copy_lines } =
-            self.prepare_sales_creation(&req, actor, &access).await?;
-
-        if req.intent == SalesOrderCreateIntent::Submit {
-            let ports = sales_approval_ports(order.business_type)?;
-            let subject =
-                crate::order_to_cash::subject_ref_for_sales_business(order.business_type, &order.base.id)
-                    .map_err(|error| Error::ValidationError(error.to_string()))?;
-            let organization_id = sales_order_responsible_org_id(&order)?;
-            let _ = sales_order_object_readable(&organization_id, actor.id())?;
-            self.ensure_procurement_responsibility_before_submit(&order, &working_copy_lines).await?;
-            let submission = build_submission(&working_copy, &working_copy_lines, 1, actor)?;
-            let submission_lines = build_submission_lines(&submission, &working_copy_lines)?;
-            let mut submitted_working_copy = working_copy;
-            submitted_working_copy.submit()?;
-            let mut submitted_order = order.clone();
-            execute_sales_order_domain_action(&mut submitted_order, ports.on_approval_start, actor.id())?;
-            let now = Instant::now();
-            let snapshot = build_sales_order_snapshot(
-                &submitted_order,
-                &submission,
-                &submission_lines,
-                actor.id(),
-                now,
-            )?;
-            let start = sales_order_start_command(
-                ports.document_type,
-                &submitted_order.base.id,
-                submission.submission_no,
-                actor.id(),
-                &idempotency_key,
-            );
-            ensure_unified_start_command(&start)?;
-            let _ = (start_approval_command_kind(&start), RECENT_HISTORY_LIMIT);
-            let workflow_action = WorkflowAction::new(
-                WorkflowActionId::new(next_id()),
-                WorkflowActionData {
-                    document_id: BusinessDocumentId::new(submitted_order.base.id.clone()),
-                    action_type: WorkflowActionType::Submit,
-                    from_status: "DRAFT".to_string(),
-                    to_status: "PENDING_REVIEW".to_string(),
-                    actor_id: actor.id().to_string(),
-                    actor_role: "role-sales".to_string(),
-                    comment: None,
-                },
-            )?;
-            let (create_audit, submit_audit) = creation_submission_events(
-                audit_id.clone(),
-                actor,
-                &idempotency_key,
-                fingerprint.clone(),
-                &submitted_order,
-                &submission,
-            )?;
-            let bind_command = sales_create_bind_command(&submitted_order, actor)?;
-            let rbac = self.require_rbac().cloned()?;
-            let object_read = std::sync::Arc::clone(&self.object_read);
-            let sellable_refs =
-                erp_sales::service::sales_order::SalesOrderService::sellable_working_copy_refs(
-                    &working_copy_lines,
-                )?;
-            let detail_id = submitted_order.base.id.clone();
-            let db = self.db.clone();
-            let client = db.client().clone();
-            let actor_owned = actor.clone();
-            let mut document = document;
-            let access_for_tx = access.clone();
-            let transaction_result = client
-                .with_transaction(move |executor| {
-                    Box::pin(async move {
-                        ensure_creation_ready(
-                            &db,
-                            &submitted_order,
-                            &sellable_refs,
-                            &access_for_tx,
-                            executor,
-                        )
-                        .await?;
-                        if let Some(order_id) = replay_creation_event(
-                            &db,
-                            &create_audit,
-                            actor_owned.id(),
-                            &access_for_tx,
-                            executor,
-                        )
-                        .await?
-                        {
-                            return Ok::<Option<String>, crate::Error>(Some(order_id));
-                        }
-                        let binding = persist_bound_sales_document(
-                            &db,
-                            &rbac,
-                            object_read.as_ref(),
-                            &mut document,
-                            &bind_command,
-                            &actor_owned,
-                            executor,
-                        )
-                        .await?;
-                        Self::persist_creation_evidence(&db, &rbac, &submitted_order, &actor_owned, executor)
-                            .await?;
-                        let graph =
-                            load_bound_definition_graph_with_executor(&db, &binding, executor).await?;
-                        let start_input = build_sales_order_start_input(SalesOrderStartInput {
-                            graph,
-                            binding: &binding,
-                            document_type: ports.document_type,
-                            subject,
-                            subject_version: submission.submission_no,
-                            actor_id: actor_owned.id(),
-                            organization_id: &organization_id,
-                            idempotency_key: &idempotency_key,
-                            receipt: None,
-                            now,
-                        })?;
-                        let prepared = prepare_start(start_input)?;
-                        ensure_creation_org(&db, &submitted_order, executor).await?;
-                        erp_sales::service::sales_order::SalesOrderService::new(db.clone())
-                            .create_order(&submitted_order, executor)
-                            .await?;
-                        let sales = erp_sales::service::sales_order::SalesOrderService::new(db.clone());
-                        sales
-                            .create_working_copy(
-                                &stable_lines,
-                                &submitted_working_copy,
-                                &working_copy_lines,
-                                executor,
-                            )
-                            .await?;
-                        sales.create_submission(&submission, &submission_lines, executor).await?;
-                        db.workflow_actions().create(&workflow_action, executor).await?;
-                        if let erp_workflow::service::approval::execution::PreparedExecution::Apply(writes) =
-                            prepared
-                        {
-                            persist_runtime_writes(
-                                &db,
-                                &writes,
-                                SalesOrderRuntimeWriteInput {
-                                    document_type: ports.document_type,
-                                    snapshot_payload: &snapshot,
-                                    owner_role: ports.owner_role,
-                                    organization_id: &organization_id,
-                                    now,
-                                },
-                                executor,
-                            )
-                            .await?;
-                        }
-                        create_audit.persist(&db, executor).await?;
-                        submit_audit.persist(&db, executor).await?;
-                        Ok::<Option<String>, crate::Error>(None)
-                    })
-                })
-                .await;
-            let detail_id = match transaction_result {
-                Ok(Some(order_id)) => order_id,
-                Ok(None) => detail_id,
-                Err(error) => {
-                    self.recover_creation(
-                        error,
-                        (&audit_id, &fingerprint, &expected_key_hash),
-                        actor.id(),
-                        &access,
-                    )
-                    .await?
-                },
-            };
-            return self.read_model().sales_order_detail(&detail_id, None).await.map_err(crate::Error::from);
-        }
-
-        let audit = SalesCommandEvent::new(
-            audit_id.clone(),
-            actor,
-            &idempotency_key,
-            fingerprint.clone(),
-            SalesCommandResult::Created { sales_order_id: SalesOrderId::new(order.base.id.clone()) },
-            order.order_no.clone(),
-        )?;
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let order_for_tx = order.clone();
-        let lines_for_tx = stable_lines.clone();
-        let working_copy_for_tx = working_copy.clone();
-        let working_copy_lines_for_tx = working_copy_lines.clone();
-        let mut document_for_tx = document;
-        let bind_command = sales_create_bind_command(&order, actor)?;
-        let rbac_for_tx = self.require_rbac().cloned()?;
-        let object_read = std::sync::Arc::clone(&self.object_read);
-        let actor_for_tx = actor.clone();
-        let sellable_refs_for_tx =
-            erp_sales::service::sales_order::SalesOrderService::sellable_working_copy_refs(
-                &working_copy_lines,
-            )?;
-        let access_for_tx = access.clone();
-        let transaction_result = client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    ensure_creation_ready(
-                        &db,
-                        &order_for_tx,
-                        &sellable_refs_for_tx,
-                        &access_for_tx,
-                        executor,
-                    )
-                    .await?;
-                    if let Some(order_id) =
-                        replay_creation_event(&db, &audit, actor_for_tx.id(), &access_for_tx, executor)
-                            .await?
-                    {
-                        return Ok::<Option<String>, crate::Error>(Some(order_id));
-                    }
-                    ensure_creation_org(&db, &order_for_tx, executor).await?;
-                    Self::persist_creation_evidence(
-                        &db,
-                        &rbac_for_tx,
-                        &order_for_tx,
-                        &actor_for_tx,
-                        executor,
-                    )
-                    .await?;
-                    erp_sales::service::sales_order::SalesOrderService::new(db.clone())
-                        .create_order(&order_for_tx, executor)
-                        .await?;
-                    persist_bound_sales_document(
-                        &db,
-                        &rbac_for_tx,
-                        object_read.as_ref(),
-                        &mut document_for_tx,
-                        &bind_command,
-                        &actor_for_tx,
-                        executor,
-                    )
-                    .await?;
-                    erp_sales::service::sales_order::SalesOrderService::new(db.clone())
-                        .create_working_copy(
-                            &lines_for_tx,
-                            &working_copy_for_tx,
-                            &working_copy_lines_for_tx,
-                            executor,
-                        )
-                        .await?;
-                    audit.persist(&db, executor).await?;
-                    Ok::<Option<String>, crate::Error>(None)
-                })
-            })
+        let creation = self.prepare_sales_creation(&req, actor, &access).await?;
+        let plan = self.prepare_creation_plan(creation, req.intent, &identity, actor).await?;
+        let detail_id = plan.order().base.id.clone();
+        let context = self.creation_write_context(&plan, actor, &access)?;
+        let transaction_result = self
+            .db
+            .client()
+            .with_transaction(move |executor| Box::pin(persist_creation(context, plan, executor)))
             .await;
-        let detail_id = match transaction_result {
-            Ok(Some(order_id)) => order_id,
-            Ok(None) => order.base.id,
+        let detail_id =
+            self.creation_result(transaction_result, detail_id, &identity, actor, &access).await?;
+        Ok(self.read_model().sales_order_detail(&detail_id, None).await?)
+    }
+
+    /// 只读查证失败结果，不因未知提交重新执行创建。
+    async fn creation_result(
+        &self,
+        result: Result<Option<String>>,
+        created_id: String,
+        identity: &CreationIdentity,
+        actor: &AuditActor,
+        access: &SalesCommandAccess,
+    ) -> Result<String> {
+        match result {
+            Ok(Some(order_id)) => Ok(order_id),
+            Ok(None) => Ok(created_id),
             Err(error) => {
                 self.recover_creation(
                     error,
-                    (&audit_id, &fingerprint, &expected_key_hash),
+                    (&identity.audit_id, &identity.fingerprint, &identity.key_hash),
                     actor.id(),
-                    &access,
+                    access,
                 )
-                .await?
+                .await
             },
-        };
-        self.read_model().sales_order_detail(&detail_id, None).await.map_err(crate::Error::from)
+        }
     }
 
     /// 查证失败建单的原命令结果；未知提交查证失败时保留首次错误来源。
@@ -483,7 +264,7 @@ impl SalesOrderCommandProcess {
         expected_fingerprint: &str,
         expected_key_hash: &CommandFingerprint,
         actor_id: &str,
-        access: &super::super::authorization::SalesCommandAccess,
+        access: &SalesCommandAccess,
     ) -> Result<Option<String>> {
         let db = self.db.clone();
         let command_id = audit_id.to_string();
@@ -510,55 +291,6 @@ impl SalesOrderCommandProcess {
     }
 }
 
-/// 按原构造顺序准备创建并提交的两个强类型结果事件。
-fn creation_submission_events(
-    command_id: String,
-    actor: &AuditActor,
-    idempotency_key: &str,
-    fingerprint: String,
-    order: &SalesOrder,
-    submission: &SalesOrderSubmission,
-) -> Result<(SalesCommandEvent, SalesCommandEvent)> {
-    let create = SalesCommandEvent::new(
-        command_id.clone(),
-        actor,
-        idempotency_key,
-        fingerprint.clone(),
-        SalesCommandResult::Created { sales_order_id: SalesOrderId::new(order.base.id.clone()) },
-        order.order_no.clone(),
-    )?
-    .with_command_sequence(&command_id, 1)?;
-    let submit = SalesCommandEvent::new(
-        sales_submission_audit_id(actor.id(), &order.base.id, idempotency_key),
-        actor,
-        idempotency_key,
-        fingerprint,
-        SalesCommandResult::Submitted {
-            sales_order_id: SalesOrderId::new(order.base.id.clone()),
-            submission_id: SalesOrderSubmissionId::new(submission.base.id.clone()),
-        },
-        order.order_no.clone(),
-    )?
-    .with_command_sequence(&command_id, 2)?;
-    Ok((create, submit))
-}
-
-/// 在创建原事务位置依次重验关联、创建资格与可售引用。
-async fn ensure_creation_ready(
-    db: &Database,
-    order: &SalesOrder,
-    sellable_refs: &[(String, String)],
-    access: &SalesCommandAccess,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    access.related_order(order, executor).await?;
-    access.creation(order, executor).await?;
-    SalesOrderService::new(db.clone())
-        .ensure_sellable_refs(sellable_refs, &CatalogQualificationAdapter::new(db.clone()), executor)
-        .await?;
-    Ok(())
-}
-
 /// 从已构造的创建事件读取原命令身份，同执行器查证原结果。
 async fn replay_creation_event(
     db: &Database,
@@ -578,18 +310,13 @@ async fn replay_creation_event(
     .await
 }
 
-/// 在创建原事务位置重验该单责任组织，保持领域归属策略。
-async fn ensure_creation_org(db: &Database, order: &SalesOrder, executor: &mut dyn Executor) -> Result<()> {
-    ensure_order_creation_org(db, &order.sales_owner_user_id, &order.business_org_unit_id, executor).await
-}
-
 /// 用同一执行器查证完整创建身份、原销售单及创建人，然后重验当前访问。
 async fn replay_creation_with_executor(
-    db: &mongodb::Database,
+    db: &Database,
     command_id: &str,
     fingerprint: (&str, &CommandFingerprint),
     actor_id: &str,
-    access: &super::super::authorization::SalesCommandAccess,
+    access: &SalesCommandAccess,
     executor: &mut dyn Executor,
 ) -> Result<Option<String>> {
     let Some(receipt) =

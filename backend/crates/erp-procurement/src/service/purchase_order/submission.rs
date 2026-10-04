@@ -6,7 +6,7 @@ use id_generator::next_id;
 use persistence_core::NoTransaction;
 
 use super::PurchaseOrderService;
-use super::line_input::{build_submission_lines, compute_request_totals, to_line_inputs};
+use super::line_input::{build_submission_lines, compute_request_totals};
 use crate::Result;
 use crate::dto::purchase_order::SavePurchaseOrderLine;
 use crate::entity::purchase_order::{
@@ -50,7 +50,7 @@ impl PurchaseOrderService {
         actor: &AuditActor,
     ) -> Result<(PurchaseOrderSubmission, Vec<PurchaseOrderSubmissionLine>)> {
         let next_no = self.next_submission_no(order).await?;
-        let inputs = to_line_inputs(requested_lines)?;
+        let inputs = SavePurchaseOrderLine::to_line_inputs(requested_lines)?;
         let (gross, net, tax) = compute_request_totals(&inputs)?;
         let mut formal = PurchaseOrderSubmission::new(
             PurchaseOrderSubmissionId::new(next_id()),

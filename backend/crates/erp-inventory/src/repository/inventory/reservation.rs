@@ -213,16 +213,13 @@ impl StockReservationRepositoryExt for Repository<'_, StockReservation> {
         filter: &StockReservationFilter,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<StockReservationRow>> {
-        paged_projection_search(
-            &self.collection(),
-            filter.to_doc(),
-            stock_reservation_sort(filter),
-            filter.skip(),
-            filter.limit(),
-            stock_reservation_projection(),
-            executor,
-        )
-        .await
+        let options = FindOptions::builder()
+            .sort(stock_reservation_sort(filter))
+            .skip(filter.skip())
+            .limit(filter.limit())
+            .projection(stock_reservation_projection())
+            .build();
+        paged_projection_search(&self.collection(), filter.to_doc(), options, executor).await
     }
 
     #[tracing::instrument(

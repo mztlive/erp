@@ -190,16 +190,13 @@ impl StockAdjustmentRepositoryExt for Repository<'_, StockAdjustment> {
         filter: &StockAdjustmentFilter,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<StockAdjustmentRow>> {
-        paged_projection_search(
-            &self.collection(),
-            filter.to_doc(),
-            stock_adjustment_sort(filter),
-            filter.skip(),
-            filter.limit(),
-            stock_adjustment_projection(),
-            executor,
-        )
-        .await
+        let options = FindOptions::builder()
+            .sort(stock_adjustment_sort(filter))
+            .skip(filter.skip())
+            .limit(filter.limit())
+            .projection(stock_adjustment_projection())
+            .build();
+        paged_projection_search(&self.collection(), filter.to_doc(), options, executor).await
     }
 
     async fn find_work_item_stock_adjustment(

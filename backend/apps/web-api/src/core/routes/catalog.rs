@@ -17,14 +17,46 @@ use crate::core::handler::catalog;
 use crate::core::middleware::with_permission;
 use crate::core::upload;
 
-/// 返回本域管理端路由集合。
+/// 返回商品目录管理路由，按资源合并各操作入口。
 ///
 /// # 参数
-/// * `rbac` - 共享 Casbin RBAC 服务
-///
+/// * `rbac` - 共享权限服务
 /// # 返回
-/// 返回挂载了权限校验层的路由集合。
+/// 返回逐路由绑定权限的完整管理端路由集合。
+/// # 错误
+/// 无；业务错误由处理器返回。
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
+        .merge(product_category_routes(rbac))
+        .merge(product_brand_collection_routes(rbac))
+        .merge(product_brand_item_routes(rbac))
+        .merge(unit_of_measure_routes(rbac))
+        .merge(sku_attribute_routes(rbac))
+        .merge(sku_attribute_value_routes(rbac))
+        .merge(product_collection_routes(rbac))
+        .merge(product_import_upload_routes(rbac))
+        .merge(product_import_job_routes(rbac))
+        .merge(product_item_routes(rbac))
+        .merge(product_handover_routes(rbac))
+        .merge(product_revision_query_routes(rbac))
+        .merge(product_asset_routes(rbac))
+        .merge(product_status_routes(rbac))
+        .merge(product_revision_routes(rbac))
+        .merge(sku_routes(rbac))
+        .merge(sellable_sku_routes(rbac))
+        .merge(sku_revision_routes(rbac))
+        .merge(voucher_category_routes(rbac))
+}
+
+/// 商品分类管理路由。
+///
+/// # 参数
+/// * `rbac` - 共享权限服务
+/// # 返回
+/// 返回逐操作保留权限校验与上传限制的路由集合。
+/// # 错误
+/// 无；业务错误由处理器返回。
+fn product_category_routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
             "/product-categories",
@@ -66,6 +98,18 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 catalog::product_category_delete_permission_key(),
             ),
         )
+}
+
+/// 品牌列表与创建管理路由。
+///
+/// # 参数
+/// * `rbac` - 共享权限服务
+/// # 返回
+/// 返回逐操作保留权限校验与上传限制的路由集合。
+/// # 错误
+/// 无；业务错误由处理器返回。
+fn product_brand_collection_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
         .route(
             "/product-brands",
             with_permission(
@@ -93,6 +137,18 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 catalog::product_brand_create_with_assets_permission_key(),
             ),
         )
+}
+
+/// 品牌更新与删除管理路由。
+///
+/// # 参数
+/// * `rbac` - 共享权限服务
+/// # 返回
+/// 返回逐操作保留权限校验与上传限制的路由集合。
+/// # 错误
+/// 无；业务错误由处理器返回。
+fn product_brand_item_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
         .route(
             "/product-brands/{id}",
             with_permission(
@@ -120,6 +176,18 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 catalog::product_brand_delete_permission_key(),
             ),
         )
+}
+
+/// 计量单位管理路由。
+///
+/// # 参数
+/// * `rbac` - 共享权限服务
+/// # 返回
+/// 返回逐操作保留权限校验与上传限制的路由集合。
+/// # 错误
+/// 无；业务错误由处理器返回。
+fn unit_of_measure_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
         .route(
             "/unit-of-measures",
             with_permission(
@@ -152,6 +220,18 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 catalog::unit_of_measure_delete_permission_key(),
             ),
         )
+}
+
+/// 规格属性管理路由。
+///
+/// # 参数
+/// * `rbac` - 共享权限服务
+/// # 返回
+/// 返回逐操作保留权限校验与上传限制的路由集合。
+/// # 错误
+/// 无；业务错误由处理器返回。
+fn sku_attribute_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
         .route(
             "/sku-attributes",
             with_permission(
@@ -184,6 +264,18 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 catalog::sku_attribute_delete_permission_key(),
             ),
         )
+}
+
+/// 规格属性值管理路由。
+///
+/// # 参数
+/// * `rbac` - 共享权限服务
+/// # 返回
+/// 返回逐操作保留权限校验与上传限制的路由集合。
+/// # 错误
+/// 无；业务错误由处理器返回。
+fn sku_attribute_value_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
         .route(
             "/sku-attribute-values",
             with_permission(
@@ -216,6 +308,18 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 catalog::sku_attribute_value_delete_permission_key(),
             ),
         )
+}
+
+/// 商品列表与创建管理路由。
+///
+/// # 参数
+/// * `rbac` - 共享权限服务
+/// # 返回
+/// 返回逐操作保留权限校验与上传限制的路由集合。
+/// # 错误
+/// 无；业务错误由处理器返回。
+fn product_collection_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
         .route(
             "/products",
             with_permission(
@@ -243,6 +347,18 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 catalog::product::product_create_with_assets_permission_key(),
             ),
         )
+}
+
+/// 商品导入上传管理路由。
+///
+/// # 参数
+/// * `rbac` - 共享权限服务
+/// # 返回
+/// 返回逐操作保留权限校验与上传限制的路由集合。
+/// # 错误
+/// 无；业务错误由处理器返回。
+fn product_import_upload_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
         .route(
             "/products/import",
             with_permission(
@@ -286,6 +402,18 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 catalog::import::product_import_direct_upload_abort_permission_key(),
             ),
         )
+}
+
+/// 商品导入任务管理路由。
+///
+/// # 参数
+/// * `rbac` - 共享权限服务
+/// # 返回
+/// 返回逐操作保留权限校验与上传限制的路由集合。
+/// # 错误
+/// 无；业务错误由处理器返回。
+fn product_import_job_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
         .route(
             "/products/import-jobs",
             with_permission(
@@ -310,6 +438,18 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 catalog::import::product_import_job_items_permission_key(),
             ),
         )
+}
+
+/// 商品详情与更新管理路由。
+///
+/// # 参数
+/// * `rbac` - 共享权限服务
+/// # 返回
+/// 返回逐操作保留权限校验与上传限制的路由集合。
+/// # 错误
+/// 无；业务错误由处理器返回。
+fn product_item_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
         .route(
             "/products/{id}",
             with_permission(
@@ -326,6 +466,18 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 catalog::product::product_detail_permission_key(),
             ),
         )
+}
+
+/// 商品维护责任交接管理路由。
+///
+/// # 参数
+/// * `rbac` - 共享权限服务
+/// # 返回
+/// 返回逐操作保留权限校验与上传限制的路由集合。
+/// # 错误
+/// 无；业务错误由处理器返回。
+fn product_handover_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
         .route(
             "/products/{id}/handover",
             with_permission(
@@ -342,6 +494,18 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 catalog::product::product_handover_candidates_permission_key(),
             ),
         )
+}
+
+/// 商品与 SKU 修订查询管理路由。
+///
+/// # 参数
+/// * `rbac` - 共享权限服务
+/// # 返回
+/// 返回逐操作保留权限校验与上传限制的路由集合。
+/// # 错误
+/// 无；业务错误由处理器返回。
+fn product_revision_query_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
         .route(
             "/products/{id}/revisions",
             with_permission(
@@ -366,17 +530,40 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 catalog::product::product_detail_permission_key(),
             ),
         )
-        .route(
-            "/products/{id}/with-assets",
-            with_permission(
-                upload::multipart_route(
-                    put(catalog::product::product_update_with_assets),
-                    upload::MAX_BATCH_MULTIPART_REQUEST_BYTES,
-                ),
-                rbac,
-                catalog::product::product_update_with_assets_permission_key(),
+}
+
+/// 商品与媒体原子更新管理路由。
+///
+/// # 参数
+/// * `rbac` - 共享权限服务
+/// # 返回
+/// 返回逐操作保留权限校验与上传限制的路由集合。
+/// # 错误
+/// 无；业务错误由处理器返回。
+fn product_asset_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new().route(
+        "/products/{id}/with-assets",
+        with_permission(
+            upload::multipart_route(
+                put(catalog::product::product_update_with_assets),
+                upload::MAX_BATCH_MULTIPART_REQUEST_BYTES,
             ),
-        )
+            rbac,
+            catalog::product::product_update_with_assets_permission_key(),
+        ),
+    )
+}
+
+/// 商品状态管理路由。
+///
+/// # 参数
+/// * `rbac` - 共享权限服务
+/// # 返回
+/// 返回逐操作保留权限校验与上传限制的路由集合。
+/// # 错误
+/// 无；业务错误由处理器返回。
+fn product_status_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
         .route(
             "/products/{id}/disable",
             with_permission(
@@ -393,14 +580,37 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 catalog::product::product_listing_update_permission_key(),
             ),
         )
-        .route(
-            "/product-revisions",
-            with_permission(
-                get(catalog::product::product_revision_list),
-                rbac,
-                catalog::product::product_revision_list_permission_key(),
-            ),
-        )
+}
+
+/// 商品修订列表管理路由。
+///
+/// # 参数
+/// * `rbac` - 共享权限服务
+/// # 返回
+/// 返回逐操作保留权限校验与上传限制的路由集合。
+/// # 错误
+/// 无；业务错误由处理器返回。
+fn product_revision_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new().route(
+        "/product-revisions",
+        with_permission(
+            get(catalog::product::product_revision_list),
+            rbac,
+            catalog::product::product_revision_list_permission_key(),
+        ),
+    )
+}
+
+/// SKU 列表与状态管理路由。
+///
+/// # 参数
+/// * `rbac` - 共享权限服务
+/// # 返回
+/// 返回逐操作保留权限校验与上传限制的路由集合。
+/// # 错误
+/// 无；业务错误由处理器返回。
+fn sku_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
         .route(
             "/skus",
             with_permission(
@@ -417,22 +627,56 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 catalog::product::sku_listing_update_permission_key(),
             ),
         )
-        .route(
-            "/sellable-skus",
-            with_permission(
-                get(catalog::product::sellable_sku_list),
-                rbac,
-                catalog::product::sellable_sku_list_permission_key(),
-            ),
-        )
-        .route(
-            "/sku-revisions",
-            with_permission(
-                get(catalog::product::sku_revision_list),
-                rbac,
-                catalog::product::sku_revision_list_permission_key(),
-            ),
-        )
+}
+
+/// 可售 SKU管理路由。
+///
+/// # 参数
+/// * `rbac` - 共享权限服务
+/// # 返回
+/// 返回逐操作保留权限校验与上传限制的路由集合。
+/// # 错误
+/// 无；业务错误由处理器返回。
+fn sellable_sku_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new().route(
+        "/sellable-skus",
+        with_permission(
+            get(catalog::product::sellable_sku_list),
+            rbac,
+            catalog::product::sellable_sku_list_permission_key(),
+        ),
+    )
+}
+
+/// SKU 修订管理路由。
+///
+/// # 参数
+/// * `rbac` - 共享权限服务
+/// # 返回
+/// 返回逐操作保留权限校验与上传限制的路由集合。
+/// # 错误
+/// 无；业务错误由处理器返回。
+fn sku_revision_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new().route(
+        "/sku-revisions",
+        with_permission(
+            get(catalog::product::sku_revision_list),
+            rbac,
+            catalog::product::sku_revision_list_permission_key(),
+        ),
+    )
+}
+
+/// 卡券类目管理路由。
+///
+/// # 参数
+/// * `rbac` - 共享权限服务
+/// # 返回
+/// 返回逐操作保留权限校验与上传限制的路由集合。
+/// # 错误
+/// 无；业务错误由处理器返回。
+fn voucher_category_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
         .route(
             "/voucher-category-profiles",
             with_permission(
