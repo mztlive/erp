@@ -8,6 +8,7 @@ use mongodb::options::IndexOptions;
 use mongodb::{Database, IndexModel};
 use persistence_core::Result;
 
+use crate::repository::policy_receipt::POLICY_RECEIPTS;
 use crate::repository::{AccessControlExt, CASBIN_RULES};
 
 const ACCOUNTS: &str = "accounts";
@@ -84,6 +85,12 @@ pub async fn ensure_authorization(db: &Database) -> Result<()> {
     .await?;
     ensure_person_scopes(db).await?;
     ensure_organizations(db).await?;
+    create_indexes(
+        db,
+        POLICY_RECEIPTS,
+        vec![unique_index("uk_authorization_policy_receipts_id", doc! { "id": 1 })],
+    )
+    .await?;
     Ok(())
 }
 

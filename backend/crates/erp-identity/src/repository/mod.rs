@@ -9,6 +9,7 @@ pub mod organization;
 pub mod owned;
 mod person_directory;
 pub(crate) mod person_directory_query;
+pub(crate) mod policy_receipt;
 pub mod prelude;
 mod role;
 pub use access_control::{

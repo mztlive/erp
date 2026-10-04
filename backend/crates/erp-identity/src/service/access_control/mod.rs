@@ -37,6 +37,7 @@ pub mod consumers;
 mod person_scope;
 pub mod person_scope_migration;
 mod person_scope_query;
+pub mod policy_bundle;
 pub mod resolve;
 
 use application_core::AuditActor;
@@ -57,6 +58,7 @@ type AuditEventFilter = <mongodb::Database as crate::AccessControlExt>::AuditEve
 /// 访问控制服务。
 ///
 /// 提供权限目录、数据范围、用户角色绑定记录与审计事件的增补编排。
+#[derive(Clone)]
 pub struct AccessControlService {
     db: Database,
     rbac: Option<crate::SharedRbacService>,

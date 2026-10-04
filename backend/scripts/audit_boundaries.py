@@ -39,7 +39,7 @@ ENTRY_CALL = re.compile(r"""(?x)
 |(?P<port>\b(?:audit|audit_port|sink)\s*\.\s*(?:persist(?:_attempt)?|validate))\s*\(
 |(?P<owned>\.\s*(?:audit_logs|audit_events|audit_attempts)\s*\(\s*\)\s*\.\s*(?:create|create_many_ordered))\s*\(
 |(?P<identity>\.\s*(?:with_audited_write|build_audit_event|prepare_audit_event|refresh_policy|attempt))\s*\(
-|(?P<lifecycle>\.\s*(?:run_audited|run_audited_event|run_system_policy_transaction|run_authorized_policy_transaction|run_authorized_audited_policy_transaction|run_policy_transaction_at_revision|finish_policy_transaction))\s*(?:::<[^;{}]+>)?\s*\(
+|(?P<lifecycle>\.\s*(?:run_audited|run_audited_event|run_system_policy_transaction|run_authorized_policy_transaction|run_authorized_audited_policy_transaction|run_policy_transaction_at_revision|run_optional_policy_transaction|finish_policy_transaction))\s*(?:::<[^;{}]+>)?\s*\(
 """)
 
 @dataclass(frozen=True, order=True)
@@ -284,6 +284,15 @@ class GateTests(unittest.TestCase):
         )
         self.assertEqual(observed[("sample.rs", "commit")]["call_counts"], {
             ".resource_log": 1, "execute_audited": 1,
+        })
+
+    def test_optional_policy_runner_remains_an_explicit_audit_entry(self):
+        observed = execution_entries(
+            "fn apply() { rbac.run_optional_policy_transaction(version, command); }",
+            "sample.rs",
+        )
+        self.assertEqual(observed[("sample.rs", "apply")]["call_counts"], {
+            ".run_optional_policy_transaction": 1,
         })
 
     def test_legacy_adapter_import_and_identity_display_are_distinct(self):

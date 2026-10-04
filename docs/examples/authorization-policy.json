@@ -1,0 +1,40 @@
+{
+  "version": "1.0",
+  "roles": [
+    {
+      "id": "policy-sales-reader",
+      "name": "销售单只读",
+      "mode": "replace",
+      "permissions": ["sales_order:list", "sales_order:detail"]
+    }
+  ],
+  "bindings": [
+    {
+      "user_id": "REPLACE_WITH_USER_ID",
+      "mode": "merge",
+      "role_ids": ["policy-sales-reader"]
+    }
+  ],
+  "data_scopes": [
+    {
+      "user_id": "REPLACE_WITH_USER_ID",
+      "resource": "sales_order",
+      "actions": ["list", "detail"],
+      "mode": "replace",
+      "grants": [
+        {
+          "actions": ["list", "detail"],
+          "terms": [
+            {
+              "scope_type": "organization",
+              "target_dimension": "internal_org",
+              "target_mode": "explicit",
+              "include_descendants": true,
+              "scope_targets": ["REPLACE_WITH_ORG_ID"]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

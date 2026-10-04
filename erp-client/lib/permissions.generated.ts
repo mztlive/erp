@@ -1066,6 +1066,52 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         ],
     },
     {
+        name: "授权文件",
+        description: "声明式授权配置",
+        permissions: [
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/authorization-policies/validate",
+                description: "校验授权文件",
+                permission: {
+                    resource: "authorization_policy",
+                    action: "preview",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/authorization-policies/preview",
+                description: "预览授权文件",
+                permission: {
+                    resource: "authorization_policy",
+                    action: "preview",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/authorization-policies/apply",
+                description: "应用授权文件",
+                permission: {
+                    resource: "authorization_policy",
+                    action: "apply",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/authorization-policies/export",
+                description: "导出授权文件",
+                permission: {
+                    resource: "authorization_policy",
+                    action: "export",
+                },
+            },
+        ],
+    },
+    {
         name: "人员目录",
         description: "独立人员查询与资格维护",
         permissions: [
@@ -5383,8 +5429,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     },
     {
         name: "财务整账",
-        description:
-            "完整财务台账及无来源记录的读取资格；仍检查业务读取动作和来源边界",
+        description: "完整财务台账及无来源记录的读取资格；仍检查业务读取动作和来源边界",
         permissions: [
             {
                 module: "admin",

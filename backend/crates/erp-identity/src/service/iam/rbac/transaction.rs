@@ -96,6 +96,40 @@ impl RbacService {
             + Send
             + 'static,
     {
+        self.run_optional_policy_transaction(expected_revision, move |executor| {
+            Box::pin(async move { transaction(executor).await.map(|value| (value, true)) })
+        })
+        .await
+    }
+
+    /// 授权命令重放保持零写入；确有授权变更时才推进 policy 版本。
+    /// # 参数
+    /// expected_revision 为变更所需版本，transaction 返回结果及是否发生授权变更。
+    /// # 返回
+    /// 原子提交结果；重放沿用原回执版本。
+    /// # 错误
+    /// 版本冲突、步骤失败、提交失败或所有权任务失败时拒绝。
+    pub(crate) async fn run_optional_policy_transaction<T, E, F>(
+        self: &Arc<Self>,
+        expected_revision: Option<u64>,
+        transaction: F,
+    ) -> std::result::Result<T, E>
+    where
+        T: Send + 'static,
+        E: From<Error>
+            + From<persistence_core::Error>
+            + From<application_core::Error>
+            + std::error::Error
+            + std::fmt::Display
+            + Send
+            + 'static,
+        F: for<'a> FnOnce(
+                &'a mut dyn Executor,
+            )
+                -> Pin<Box<dyn Future<Output = std::result::Result<(T, bool), E>> + Send + 'a>>
+            + Send
+            + 'static,
+    {
         let client = self.db.client().clone();
         self.ensure_policy_consistency_known()?;
         let policy_write = self.policy_write.clone().lock_owned().await;
@@ -107,12 +141,14 @@ impl RbacService {
             let result = client
                 .with_transaction(move |executor| {
                     Box::pin(async move {
-                        let value = transaction(executor).await?;
-                        match expected_revision {
-                            Some(revision) => {
-                                policy_store.bump_policy_revision_if_matches(revision, executor).await?;
-                            },
-                            None => policy_store.bump_policy_revision(executor).await?,
+                        let (value, changed) = transaction(executor).await?;
+                        if changed {
+                            match expected_revision {
+                                Some(revision) => {
+                                    policy_store.bump_policy_revision_if_matches(revision, executor).await?;
+                                },
+                                None => policy_store.bump_policy_revision(executor).await?,
+                            }
                         }
                         Ok::<_, E>(value)
                     })

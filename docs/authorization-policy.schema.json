@@ -1,0 +1,227 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ERP authorization policy 1.0",
+  "description": "服务端仍须验证注册权限、动作、身份、范围维度、目标存在性和授予上限。",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": "1.0"
+    },
+    "roles": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "$ref": "#/$defs/role"
+      }
+    },
+    "bindings": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "$ref": "#/$defs/binding"
+      }
+    },
+    "data_scopes": {
+      "type": "array",
+      "maxItems": 200,
+      "items": {
+        "$ref": "#/$defs/scope"
+      }
+    }
+  },
+  "required": [
+    "version",
+    "roles",
+    "bindings",
+    "data_scopes"
+  ],
+  "$defs": {
+    "mode": {
+      "enum": [
+        "merge",
+        "replace"
+      ]
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "permission": {
+      "type": "string",
+      "pattern": "^(\\*|[a-z0-9_/-]+):(\\*|[a-z0-9_-]+)$",
+      "maxLength": 257
+    },
+    "role": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "mode": {
+          "$ref": "#/$defs/mode"
+        },
+        "permissions": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": {
+            "$ref": "#/$defs/permission"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "mode",
+        "permissions"
+      ]
+    },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "user_id": {
+          "$ref": "#/$defs/id"
+        },
+        "mode": {
+          "$ref": "#/$defs/mode"
+        },
+        "role_ids": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/id"
+          }
+        }
+      },
+      "required": [
+        "user_id",
+        "mode",
+        "role_ids"
+      ]
+    },
+    "actions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9_]+$",
+        "maxLength": 128
+      }
+    },
+    "term": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "scope_type": {
+          "enum": [
+            "company",
+            "organization",
+            "team",
+            "self_owned",
+            "collaborative"
+          ]
+        },
+        "target_dimension": {
+          "enum": [
+            "internal_org",
+            "warehouse",
+            "settlement_party"
+          ]
+        },
+        "target_mode": {
+          "enum": [
+            "explicit",
+            "own_org",
+            null
+          ]
+        },
+        "include_descendants": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "scope_targets": {
+          "type": "array",
+          "maxItems": 128,
+          "items": {
+            "$ref": "#/$defs/id"
+          }
+        }
+      },
+      "required": [
+        "scope_type",
+        "target_dimension",
+        "scope_targets"
+      ]
+    },
+    "grant": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "actions": {
+          "$ref": "#/$defs/actions"
+        },
+        "terms": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/term"
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "actions",
+        "terms"
+      ]
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "user_id": {
+          "$ref": "#/$defs/id"
+        },
+        "resource": {
+          "type": "string",
+          "pattern": "^[a-z0-9_]+$",
+          "maxLength": 128
+        },
+        "actions": {
+          "$ref": "#/$defs/actions"
+        },
+        "mode": {
+          "const": "replace"
+        },
+        "grants": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/grant"
+          }
+        },
+        "replace_legacy": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "user_id",
+        "resource",
+        "actions",
+        "mode",
+        "grants"
+      ]
+    }
+  }
+}

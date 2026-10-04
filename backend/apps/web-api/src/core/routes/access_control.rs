@@ -6,6 +6,7 @@
 //! `#[permission_macros::permission]`。
 
 use axum::Router;
+use axum::extract::DefaultBodyLimit;
 use axum::routing::{delete, get, post, put};
 use erp_identity::SharedRbacService;
 
@@ -25,9 +26,48 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
         .merge(organization_routes(rbac))
         .merge(permission_routes(rbac))
         .merge(person_scope_routes(rbac))
+        .merge(policy_bundle_routes(rbac))
         .merge(binding_routes(rbac))
         .merge(inspection_routes(rbac))
         .merge(people_routes(rbac))
+}
+
+/// 文件入口复用认证链路，应用仍要求底层角色和范围配置资格。
+fn policy_bundle_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
+        .route(
+            "/authorization-policies/validate",
+            with_permission(
+                post(access_control::policy_bundle::validate),
+                rbac,
+                access_control::policy_bundle::validate_permission_key(),
+            ),
+        )
+        .route(
+            "/authorization-policies/preview",
+            with_permission(
+                post(access_control::policy_bundle::preview),
+                rbac,
+                access_control::policy_bundle::preview_permission_key(),
+            ),
+        )
+        .route(
+            "/authorization-policies/apply",
+            with_permission(
+                post(access_control::policy_bundle::apply),
+                rbac,
+                access_control::policy_bundle::apply_permission_key(),
+            ),
+        )
+        .route(
+            "/authorization-policies/export",
+            with_permission(
+                post(access_control::policy_bundle::export),
+                rbac,
+                access_control::policy_bundle::export_permission_key(),
+            ),
+        )
+        .layer(DefaultBodyLimit::max(2 * 1024 * 1024))
 }
 
 /// 组织结构及人员查询资格路由。
