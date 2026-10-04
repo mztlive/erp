@@ -1,47 +1,46 @@
-use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use application_core::{AuditActor, StructuredCommandReceipt};
+use erp_audit::BusinessEventContext;
 use erp_core::common::time::Instant;
+pub(super) use erp_import::entity::command_receipt::ConfirmationCompletionReceipt;
+use erp_import::entity::command_receipt::{
+    ImportCommandReceipt, ImportCommandResult, ImportConfirmationOutcome,
+};
+use erp_import::repository::ImportCommandReceiptExt;
 use erp_import::repository::prelude::*;
 use erp_import::{
-    CompleteImportBusinessConfirmationCommand, ConfirmationDecision, ConfirmationScope,
+    CompleteImportBusinessConfirmationCommand, ConfirmationDecision, ConfirmationScope, ConfirmationStatus,
     ImportBusinessConfirmationNextStep, ImportBusinessConfirmationResultStatus, LegacyImportBatch,
     LegacyImportBatchStatus, LegacyImportCommandIdentity, LegacyImportConfirmation, LegacyImportExt,
-    PreparedConfirmationCompletion, parse_receipt_number,
+    PreparedConfirmationCompletion,
 };
 use erp_workflow::entity::document_registry::WorkflowActionId;
 use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use erp_workflow::{DocumentRegistryExt, WorkItemExt};
 use id_generator::next_id;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
+use super::command_event::{import_event_content, import_event_context};
 use super::confirmation_query::{confirmation_view, work_item_view};
 use super::create_confirmation::{confirmation_next_step, replace_confirmation_in_matrix};
 use super::dto::CompleteImportBusinessConfirmationResult;
 use super::{
-    COMMAND_FINGERPRINT_PREFIX, IMPORT_CONFIRMATION_AUDIT_PREFIX, IMPORT_CONFIRMATION_OBJECT_TYPE,
-    IMPORT_CONFIRMATION_ORGANIZATION, ImportApplyService,
+    IMPORT_CONFIRMATION_COMMAND_PREFIX, IMPORT_CONFIRMATION_OBJECT_TYPE, IMPORT_CONFIRMATION_ORGANIZATION,
+    ImportApplyService,
 };
 use crate::adapters::workflow::work_item_service;
+use crate::audit::{AuditedCommand, AuditedWrite, MongoAuditEventSink, execute_audited};
 use crate::{Error, Result};
 
 impl ImportApplyService {
-    /// 执行 `CompleteImportBusinessConfirmation` 强类型命令。
-    ///
-    /// 确认事实、批次摘要/阶段、`workflow_action`、任务完成与稳定审计
-    /// 收据在同一事务提交。同一幂等键只有在全部命令字段一致时才返回原结果。
-    ///
+    /// 执行确认完成命令，正式事实、任务、独立回执与成功事件原子提交。
     /// # 参数
-    /// * `req` - 强类型完成命令
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
+    /// * `req` - 已认证入口传入的强类型命令。
+    /// * `actor` - 当前操作人。
     /// # 返回
-    /// 返回确认事实、已完成任务、批次新版本、下一步和审计收据。
-    ///
+    /// 返回原确认结果、任务和事件关联号。
     /// # 错误
-    /// * `NotFound` - 任务、确认事实或批次不存在
-    /// * `ConflictError` - 任务/批次/试算版本或幂等指纹不一致
-    /// * `Forbidden` - 当前用户不是任务责任人或已失去责任资格
+    /// 沿用任务责任、授权、版本和幂等冲突；损坏回执不可恢复。
     pub async fn complete_import_business_confirmation(
         &self,
         req: CompleteImportBusinessConfirmationCommand,
@@ -49,181 +48,365 @@ impl ImportApplyService {
     ) -> Result<CompleteImportBusinessConfirmationResult> {
         req.validate()?;
         let prepared = PreparedConfirmationCompletion::try_from(req)?;
-        let action = "legacy_import_confirmation.complete";
-        let identity = confirmation_command_identity(actor.id(), action, &prepared);
-        let fingerprint = identity.fingerprint().to_string();
-        let audit_id = identity.audit_id().to_string();
-        if let Some(result) = self.replay_confirmation_completion(&audit_id, &fingerprint, &prepared).await? {
+        let identity =
+            confirmation_command_identity(actor.id(), "legacy_import_confirmation.complete", &prepared)
+                .structured_receipt("legacy_import_confirmation")?;
+        if let Some(result) = self.replay_confirmation_completion(&identity, &prepared, actor).await? {
             return Ok(result);
         }
-        let decided_at = Instant::now();
-        let workflow_action_id = WorkflowActionId::new(next_id());
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let prepared_for_tx = prepared.clone();
-        let actor_id = actor.id().to_string();
-        let audit_actor = actor.clone();
-        let rbac_for_tx = crate::adapters::identity::shared_rbac_service(self.db.clone());
-        let audit_id_for_tx = audit_id.clone();
-        let fingerprint_for_tx = fingerprint.clone();
-        let transaction_result = client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let mut work_item = db
-                        .work_items()
-                        .find_by_id(prepared_for_tx.work_item_id.as_ref(), executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("导入确认任务不存在".to_string()))?;
-                    let mut confirmation = db
-                        .legacy_import_confirmations()
-                        .find_by_work_item(&prepared_for_tx.work_item_id, executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("导入确认事实不存在".to_string()))?;
-                    let mut batch = db
-                        .legacy_import_batches()
-                        .find_by_id(confirmation.batch_id.as_ref(), executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("导入批次不存在".to_string()))?;
-                    validate_confirmation_completion(
-                        &prepared_for_tx,
-                        &work_item,
-                        &confirmation,
-                        &batch,
-                        &actor_id,
-                    )?;
-                    work_item_service(db.clone(), rbac_for_tx.clone())
-                        .ensure_domain_decision_access(&audit_actor, &work_item, executor)
-                        .await?;
-                    let _ = &work_item;
-                    let mut matrix = db
-                        .legacy_import_confirmations()
-                        .list_by_batch(&confirmation.batch_id, executor)
-                        .await?;
-                    confirmation.decide(
-                        prepared_for_tx.decision,
-                        actor_id.clone(),
-                        decided_at,
-                        prepared_for_tx.reason_code.clone(),
-                        prepared_for_tx.comment.clone(),
-                    )?;
-                    work_item.record_activity(&actor_id, decided_at)?;
-                    work_item.complete_by_domain_command(actor_id.clone(), decided_at)?;
-                    replace_confirmation_in_matrix(&mut matrix, &confirmation);
-                    let current_matrix = LegacyImportConfirmation::current_matrix(
-                        &matrix,
-                        confirmation.batch_version,
-                        confirmation.trial_version,
-                        &confirmation.import_rule_version,
-                    );
-                    let required_scopes = batch.required_confirmation_scopes()?;
-                    let next_step = confirmation_next_step(LegacyImportConfirmation::matrix_decision(
-                        prepared_for_tx.decision,
-                        &current_matrix,
-                        &required_scopes,
-                    ));
-                    batch.update_summaries(
-                        batch.failure_code_summary.clone(),
-                        Some(LegacyImportConfirmation::matrix_summary(
-                            confirmation.trial_version,
-                            &current_matrix,
-                        )),
-                    )?;
-                    if next_step == ImportBusinessConfirmationNextStep::StartApply {
-                        batch.advance(LegacyImportBatchStatus::ReadyToApply)?;
-                    }
-                    let workflow_action = super::factories::confirmation_workflow_action(
-                        workflow_action_id,
-                        &confirmation,
-                        &actor_id,
-                    )?;
-                    db.legacy_import_confirmations().update(&mut confirmation, executor).await?;
-                    db.legacy_import_batches().update(&mut batch, executor).await?;
-                    db.work_items().update(&mut work_item, executor).await?;
-                    db.workflow_actions().create(&workflow_action, executor).await?;
-                    let receipt = ConfirmationCompletionReceipt {
-                        result_status: confirmation_result_status(prepared_for_tx.decision),
-                        task_version: work_item.base.version,
-                        batch_version: batch.base.version,
-                        next_step,
-                    };
-                    let audit = audit_actor.resource_log_with_id(
-                        audit_id_for_tx.clone(),
-                        action,
-                        "legacy_import_confirmation",
-                        confirmation.base.id.clone(),
-                        Some(confirmation_completion_receipt_message(&fingerprint_for_tx, receipt)),
-                    )?;
-                    db.audit_logs().create(&audit, executor).await?;
-                    Ok::<ConfirmationCompletionTransactionResult, crate::Error>(
-                        ConfirmationCompletionTransactionResult { confirmation, work_item, receipt },
-                    )
-                })
-            })
-            .await;
-        let result = match transaction_result {
-            Ok(result) => result,
-            Err(error) => {
-                match self.replay_confirmation_completion(&audit_id, &fingerprint, &prepared).await? {
-                    Some(result) => return Ok(result),
-                    None => return Err(error),
-                }
-            },
-        };
-
-        Ok(completion_result(result, audit_id))
+        let context = import_event_context(
+            actor,
+            "legacy_import_confirmation.complete",
+            "legacy_import_confirmation",
+            "完成导入业务确认",
+            &identity,
+        )?;
+        match self.commit_confirmation_completion(&identity, &prepared, actor, &context).await {
+            Ok(result) => Ok(result),
+            Err(error) => crate::audit::recover_command(
+                error,
+                self.replay_confirmation_completion(&identity, &prepared, actor).await,
+            ),
+        }
     }
 
-    /// 按稳定审计收据重放已提交的导入确认命令。
+    /// 用同一事务执行器读取回执、重验当前责任并恢复原结果。
     async fn replay_confirmation_completion(
         &self,
-        audit_id: &str,
-        expected_fingerprint: &str,
+        identity: &StructuredCommandReceipt,
         prepared: &PreparedConfirmationCompletion,
+        actor: &AuditActor,
     ) -> Result<Option<CompleteImportBusinessConfirmationResult>> {
-        let Some(audit) = self.db.audit_logs().find_by_id(audit_id, &mut NoTransaction).await? else {
-            return Ok(None);
-        };
-        let receipt = parse_confirmation_completion_receipt(
-            audit
-                .message
-                .as_deref()
-                .ok_or_else(|| Error::Internal("导入确认幂等收据缺少结果".to_string()))?,
-            expected_fingerprint,
-        )?;
-        let confirmation = self
-            .db
-            .legacy_import_confirmations()
-            .find_by_work_item(&prepared.work_item_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::Internal("导入确认幂等收据对应事实缺失".to_string()))?;
-        if audit.resource_id.as_deref() != Some(&confirmation.base.id) {
-            return Err(Error::Internal("导入确认幂等收据与业务事实不一致".to_string()));
-        }
-        let work_item = self
-            .db
-            .work_items()
-            .find_by_id(prepared.work_item_id.as_ref(), &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::Internal("导入确认幂等收据对应任务缺失".to_string()))?;
-        if work_item.status != WorkItemStatus::Completed
-            || work_item.base.version != receipt.task_version
-            || confirmation.decision != Some(prepared.decision)
-        {
-            return Err(Error::Internal("导入确认幂等收据对应结果不一致".to_string()));
-        }
-        Ok(Some(completion_result(
-            ConfirmationCompletionTransactionResult { confirmation, work_item, receipt },
-            audit_id.to_string(),
-        )))
+        let db = self.db.clone();
+        let identity = identity.clone();
+        let prepared = prepared.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    replay_confirmation_step(&db, &identity, &prepared, &actor, executor).await
+                })
+            })
+            .await
+    }
+
+    /// 保持原请求生命周期，在已有事务内执行类型化业务边界。
+    async fn commit_confirmation_completion(
+        &self,
+        identity: &StructuredCommandReceipt,
+        prepared: &PreparedConfirmationCompletion,
+        actor: &AuditActor,
+        context: &BusinessEventContext,
+    ) -> Result<CompleteImportBusinessConfirmationResult> {
+        let db = self.db.clone();
+        let identity = identity.clone();
+        let prepared = prepared.clone();
+        let actor = actor.clone();
+        let context = context.clone();
+        let decided_at = Instant::now();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let command = ConfirmationWrite {
+                        db: &db,
+                        identity: &identity,
+                        prepared: &prepared,
+                        actor: &actor,
+                        event_id: context.event_id(),
+                        at: decided_at,
+                    };
+                    execute_audited(&context, &MongoAuditEventSink::new(&db), executor, &command).await
+                })
+            })
+            .await
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) struct ConfirmationCompletionReceipt {
-    pub(super) result_status: ImportBusinessConfirmationResultStatus,
-    pub(super) task_version: u64,
-    pub(super) batch_version: u64,
-    pub(super) next_step: ImportBusinessConfirmationNextStep,
+/// 导入确认的类型化正式命令边界。
+struct ConfirmationWrite<'a> {
+    db: &'a mongodb::Database,
+    identity: &'a StructuredCommandReceipt,
+    prepared: &'a PreparedConfirmationCompletion,
+    actor: &'a AuditActor,
+    event_id: &'a str,
+    at: Instant,
+}
+
+#[async_trait::async_trait]
+impl AuditedCommand for ConfirmationWrite<'_> {
+    type Output = CompleteImportBusinessConfirmationResult;
+
+    async fn execute(&self, executor: &mut dyn Executor) -> Result<AuditedWrite<Self::Output>> {
+        if let Some(result) =
+            replay_confirmation_step(self.db, self.identity, self.prepared, self.actor, executor).await?
+        {
+            return Ok(AuditedWrite::Replayed(result));
+        }
+        let source = load_confirmation_source(self, executor).await?;
+        let result = apply_confirmation_completion(self, source, executor).await?;
+        Ok(AuditedWrite::Fresh { content: import_event_content(result.confirmation.id.clone()), result })
+    }
+}
+
+struct ConfirmationSource {
+    confirmation: LegacyImportConfirmation,
+    work_item: WorkItem,
+    batch: LegacyImportBatch,
+}
+
+/// 原任务、确认和批次版本校验完成后重验当前责任资格。
+async fn load_confirmation_source(
+    command: &ConfirmationWrite<'_>,
+    executor: &mut dyn Executor,
+) -> Result<ConfirmationSource> {
+    let db = command.db;
+    let work_item = db
+        .work_items()
+        .find_by_id(command.prepared.work_item_id.as_ref(), executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("导入确认任务不存在".into()))?;
+    let confirmation = db
+        .legacy_import_confirmations()
+        .find_by_work_item(&command.prepared.work_item_id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("导入确认事实不存在".into()))?;
+    let batch = db
+        .legacy_import_batches()
+        .find_by_id(confirmation.batch_id.as_ref(), executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("导入批次不存在".into()))?;
+    validate_confirmation_completion(
+        command.prepared,
+        &work_item,
+        &confirmation,
+        &batch,
+        command.actor.id(),
+    )?;
+    work_item_service(db.clone(), crate::adapters::identity::shared_rbac_service(db.clone()))
+        .ensure_domain_decision_access(command.actor, &work_item, executor)
+        .await?;
+    Ok(ConfirmationSource { confirmation, work_item, batch })
+}
+
+/// 按原确认矩阵和状态规则形成内存变更，再统一持久化。
+async fn apply_confirmation_completion(
+    command: &ConfirmationWrite<'_>,
+    mut source: ConfirmationSource,
+    executor: &mut dyn Executor,
+) -> Result<CompleteImportBusinessConfirmationResult> {
+    let prepared = command.prepared;
+    let mut matrix = command
+        .db
+        .legacy_import_confirmations()
+        .list_by_batch(&source.confirmation.batch_id, executor)
+        .await?;
+    source.confirmation.decide(
+        prepared.decision,
+        command.actor.id().to_string(),
+        command.at,
+        prepared.reason_code.clone(),
+        prepared.comment.clone(),
+    )?;
+    source.work_item.record_activity(command.actor.id(), command.at)?;
+    source.work_item.complete_by_domain_command(command.actor.id().to_string(), command.at)?;
+    replace_confirmation_in_matrix(&mut matrix, &source.confirmation);
+    let current = LegacyImportConfirmation::current_matrix(
+        &matrix,
+        source.confirmation.batch_version,
+        source.confirmation.trial_version,
+        &source.confirmation.import_rule_version,
+    );
+    let next_step = confirmation_next_step(LegacyImportConfirmation::matrix_decision(
+        prepared.decision,
+        &current,
+        &source.batch.required_confirmation_scopes()?,
+    ));
+    source.batch.update_summaries(
+        source.batch.failure_code_summary.clone(),
+        Some(LegacyImportConfirmation::matrix_summary(source.confirmation.trial_version, &current)),
+    )?;
+    if next_step == ImportBusinessConfirmationNextStep::StartApply {
+        source.batch.advance(LegacyImportBatchStatus::ReadyToApply)?;
+    }
+    persist_confirmation_result(command, source, next_step, executor).await
+}
+
+/// 事实、任务、动作及独立回执使用唯一执行器；成功事件由外层边界写入。
+async fn persist_confirmation_result(
+    command: &ConfirmationWrite<'_>,
+    mut source: ConfirmationSource,
+    next_step: ImportBusinessConfirmationNextStep,
+    executor: &mut dyn Executor,
+) -> Result<CompleteImportBusinessConfirmationResult> {
+    let db = command.db;
+    let workflow_action = super::factories::confirmation_workflow_action(
+        WorkflowActionId::new(next_id()),
+        &source.confirmation,
+        command.actor.id(),
+    )?;
+    db.legacy_import_confirmations().update(&mut source.confirmation, executor).await?;
+    db.legacy_import_batches().update(&mut source.batch, executor).await?;
+    db.work_items().update(&mut source.work_item, executor).await?;
+    db.workflow_actions().create(&workflow_action, executor).await?;
+    let receipt = ConfirmationCompletionReceipt {
+        result_status: confirmation_result_status(command.prepared.decision),
+        task_version: source.work_item.base.version,
+        batch_version: source.batch.base.version,
+        next_step,
+    };
+    let outcome = ImportConfirmationOutcome {
+        confirmation_id: source.confirmation.base.id.clone(),
+        confirmation_version: source.confirmation.base.version,
+        batch_id: source.batch.base.id,
+        work_item_id: source.work_item.base.id.clone(),
+        subject_version: source.work_item.subject_version.clone(),
+        confirmation_scope: source.confirmation.confirmation_scope.clone(),
+        decision: command.prepared.decision,
+        decided_at: command.at,
+        receipt,
+    };
+    let fact = ImportCommandReceipt::new(
+        command.identity.clone(),
+        ImportCommandResult::Confirmation(Box::new(outcome)),
+        command.event_id.to_string(),
+    )?;
+    db.import_command_receipts().create(&fact, executor).await?;
+    Ok(completion_result(
+        ConfirmationCompletionTransactionResult {
+            confirmation: source.confirmation,
+            work_item: source.work_item,
+            receipt,
+        },
+        command.event_id.to_string(),
+    ))
+}
+
+/// 回放只接受确认事实和正式任务共同证明的原提交结果。
+async fn replay_confirmation_step(
+    db: &mongodb::Database,
+    identity: &StructuredCommandReceipt,
+    prepared: &PreparedConfirmationCompletion,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<Option<CompleteImportBusinessConfirmationResult>> {
+    let Some(fact) = db.import_command_receipts().find_by_id(&identity.command_id, executor).await? else {
+        return Ok(None);
+    };
+    fact.ensure_identity(identity)?;
+    let ImportCommandResult::Confirmation(outcome) = &fact.result else {
+        return Err(Error::ConflictError("导入确认回执结果类型不一致".into()));
+    };
+    let confirmation = db
+        .legacy_import_confirmations()
+        .find_by_work_item(&prepared.work_item_id, executor)
+        .await?
+        .ok_or_else(|| Error::Internal("导入确认回执对应事实缺失".into()))?;
+    let work_item = db
+        .work_items()
+        .find_by_id(prepared.work_item_id.as_ref(), executor)
+        .await?
+        .ok_or_else(|| Error::Internal("导入确认回执对应任务缺失".into()))?;
+    validate_confirmation_replay(outcome, &confirmation, &work_item, prepared, actor.id())?;
+    work_item_service(db.clone(), crate::adapters::identity::shared_rbac_service(db.clone()))
+        .ensure_domain_decision_access(actor, &work_item, executor)
+        .await?;
+    Ok(Some(completion_result(
+        ConfirmationCompletionTransactionResult { confirmation, work_item, receipt: outcome.receipt },
+        fact.audit_event_id,
+    )))
+}
+
+/// 原决定、责任、任务主体、版本和完成时间必须交叉证明，不能只凭回执恢复。
+/// # 参数
+/// * `outcome` - 回执冻结的原确认结果。
+/// * `confirmation` - 当前正式确认事实。
+/// * `task` - 当前正式任务终态。
+/// * `prepared` - 完整规范化原命令。
+/// * `actor_id` - 当前认证操作人。
+/// # 返回
+/// 所有原提交事实和任务引用一致时返回空值。
+/// # 错误
+/// 缺失或不匹配事实时拒绝恢复。
+pub(super) fn validate_confirmation_replay(
+    outcome: &ImportConfirmationOutcome,
+    confirmation: &LegacyImportConfirmation,
+    task: &WorkItem,
+    prepared: &PreparedConfirmationCompletion,
+    actor_id: &str,
+) -> Result<()> {
+    let scope = ConfirmationScope::parse(&prepared.confirmation_scope)?;
+    if !confirmation_replay_fact_matches(outcome, confirmation, prepared, actor_id, scope.owner_role())
+        || !confirmation_replay_task_matches(outcome, task, prepared, actor_id, scope.owner_role())
+    {
+        return Err(Error::ConflictError("导入确认回执与正式确认或任务终态不一致".into()));
+    }
+    Ok(())
+}
+
+/// 核对原确认决定和不可变回执，不依赖后续批次推进状态。
+fn confirmation_replay_fact_matches(
+    outcome: &ImportConfirmationOutcome,
+    confirmation: &LegacyImportConfirmation,
+    prepared: &PreparedConfirmationCompletion,
+    actor_id: &str,
+    owner_role: &str,
+) -> bool {
+    let expected_status = match prepared.decision {
+        ConfirmationDecision::ConfirmScope => ConfirmationStatus::Confirmed,
+        ConfirmationDecision::ReturnForFix => ConfirmationStatus::Rejected,
+    };
+    outcome.confirmation_id == confirmation.base.id
+        && outcome.confirmation_version == confirmation.base.version
+        && outcome.batch_id == prepared.batch_id.as_ref()
+        && confirmation.batch_id == prepared.batch_id
+        && !confirmation.base.is_deleted()
+        && confirmation.trial_version == prepared.expected_trial_version
+        && confirmation.owner_role == owner_role
+        && LegacyImportConfirmation::subject_version(
+            confirmation.batch_version,
+            confirmation.trial_version,
+            &confirmation.import_rule_version,
+        ) == outcome.subject_version
+        && confirmation.work_item_id == prepared.work_item_id
+        && outcome.subject_version == prepared.expected_subject_version
+        && outcome.confirmation_scope == prepared.confirmation_scope
+        && confirmation.confirmation_scope == prepared.confirmation_scope
+        && outcome.decision == prepared.decision
+        && confirmation.decision == Some(prepared.decision)
+        && confirmation.status == expected_status
+        && confirmation.decided_by.as_deref() == Some(actor_id)
+        && confirmation.decided_at == Some(outcome.decided_at)
+        && confirmation.reason_code == prepared.reason_code
+        && confirmation.comment == prepared.comment
+        && Some(outcome.receipt.batch_version) == prepared.expected_batch_version.checked_add(1)
+}
+
+/// 完成后的任务仍须保留原责任人；开放任务资格不适用于终态重放。
+fn confirmation_replay_task_matches(
+    outcome: &ImportConfirmationOutcome,
+    task: &WorkItem,
+    prepared: &PreparedConfirmationCompletion,
+    actor_id: &str,
+    owner_role: &str,
+) -> bool {
+    !task.base.is_deleted()
+        && outcome.work_item_id == task.base.id
+        && task.base.id == prepared.work_item_id.as_ref()
+        && task.subject_version == outcome.subject_version
+        && task.status == WorkItemStatus::Completed
+        && task.base.version == outcome.receipt.task_version
+        && Some(outcome.receipt.task_version) == prepared.expected_task_version.checked_add(1)
+        && task.completed_by.as_deref() == Some(actor_id)
+        && task.completed_at == Some(outcome.decided_at)
+        && task.work_item_type == WorkItemType::ImportBusinessConfirmation
+        && task.business_object_type == IMPORT_CONFIRMATION_OBJECT_TYPE
+        && task.business_object_id == outcome.batch_id
+        && task.responsibility_key() == Some(prepared.confirmation_scope.as_str())
+        && task.owner_role == owner_role
+        && task.owner_organization_id == IMPORT_CONFIRMATION_ORGANIZATION
+        && task.owner_user_id.as_deref() == Some(actor_id)
 }
 
 struct ConfirmationCompletionTransactionResult {
@@ -313,11 +496,11 @@ pub(super) fn confirmation_result_status(
 ///
 /// # 参数
 /// * `actor_id` - 当前确认人
-/// * `action` - 稳定审计动作
+/// * `action` - 稳定命令动作
 /// * `command` - 已解析并规范化的确认命令
 ///
 /// # 返回
-/// 返回不暴露原始幂等键的审计 ID 与完整命令指纹。
+/// 返回不暴露原始幂等键的命令 ID 与完整命令指纹。
 pub(super) fn confirmation_command_identity(
     actor_id: &str,
     action: &str,
@@ -327,7 +510,7 @@ pub(super) fn confirmation_command_identity(
     let batch_version = command.expected_batch_version.to_string();
     let trial_version = command.expected_trial_version.to_string();
     LegacyImportCommandIdentity::new(
-        IMPORT_CONFIRMATION_AUDIT_PREFIX,
+        IMPORT_CONFIRMATION_COMMAND_PREFIX,
         actor_id,
         action,
         command.work_item_id.as_ref(),
@@ -345,61 +528,4 @@ pub(super) fn confirmation_command_identity(
             command.comment.as_deref().unwrap_or_default(),
         ],
     )
-}
-
-/// 将导入确认的最小结果收据编码到审计消息。
-pub(super) fn confirmation_completion_receipt_message(
-    fingerprint: &str,
-    receipt: ConfirmationCompletionReceipt,
-) -> String {
-    let result = match receipt.result_status {
-        ImportBusinessConfirmationResultStatus::Confirmed => "C",
-        ImportBusinessConfirmationResultStatus::Rejected => "R",
-        ImportBusinessConfirmationResultStatus::Unknown => "U",
-    };
-    let next = match receipt.next_step {
-        ImportBusinessConfirmationNextStep::AwaitOtherConfirmations => "W",
-        ImportBusinessConfirmationNextStep::StartApply => "A",
-        ImportBusinessConfirmationNextStep::FixAndRevalidate => "F",
-    };
-    format!(
-        "{COMMAND_FINGERPRINT_PREFIX}{fingerprint};result={result}|{}|{}|{next}",
-        receipt.task_version, receipt.batch_version
-    )
-}
-
-/// 解析并核对导入确认审计收据。
-pub(super) fn parse_confirmation_completion_receipt(
-    message: &str,
-    expected_fingerprint: &str,
-) -> Result<ConfirmationCompletionReceipt> {
-    let (fingerprint, encoded) = message
-        .strip_prefix(COMMAND_FINGERPRINT_PREFIX)
-        .and_then(|value| value.split_once(";result="))
-        .ok_or_else(|| Error::Internal("导入确认幂等收据格式非法".to_string()))?;
-    if fingerprint != expected_fingerprint {
-        return Err(Error::ConflictError("幂等键已用于不同的导入确认命令".to_string()));
-    }
-    let fields = encoded.split('|').collect::<Vec<_>>();
-    let [result, task_version, batch_version, next] = fields.as_slice() else {
-        return Err(Error::Internal("导入确认幂等收据结果非法".to_string()));
-    };
-    let result_status = match *result {
-        "C" => ImportBusinessConfirmationResultStatus::Confirmed,
-        "R" => ImportBusinessConfirmationResultStatus::Rejected,
-        "U" => ImportBusinessConfirmationResultStatus::Unknown,
-        _ => return Err(Error::Internal("导入确认幂等收据状态非法".to_string())),
-    };
-    let next_step = match *next {
-        "W" => ImportBusinessConfirmationNextStep::AwaitOtherConfirmations,
-        "A" => ImportBusinessConfirmationNextStep::StartApply,
-        "F" => ImportBusinessConfirmationNextStep::FixAndRevalidate,
-        _ => return Err(Error::Internal("导入确认幂等收据下一步非法".to_string())),
-    };
-    Ok(ConfirmationCompletionReceipt {
-        result_status,
-        task_version: parse_receipt_number(task_version, "任务版本")?,
-        batch_version: parse_receipt_number(batch_version, "批次版本")?,
-        next_step,
-    })
 }

@@ -1,7 +1,7 @@
 //! 供应商资料敏感字段令牌校验与解密。
 
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
 use erp_core::ids::SupplierAccountId;
 use erp_party::{PartyExt, SensitiveFieldKind};
@@ -11,6 +11,7 @@ use validator::Validate;
 
 use super::SupplierProfileService;
 use super::validation::ensure_sensitive_party;
+use crate::audit::persist_log;
 use crate::{Error, Result};
 
 impl SupplierProfileService {
@@ -68,7 +69,7 @@ impl SupplierProfileService {
         let value = self.sensitive_data.decrypt(&ciphertext)?;
         let audit =
             actor.clone().resource_log("supplier_sensitive.reveal", "supplier_sensitive", scope.record_id)?;
-        self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
+        persist_log(&self.db, &audit, &mut NoTransaction).await?;
         Ok(SupplierSensitiveRevealView { value })
     }
 }

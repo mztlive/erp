@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
 use erp_core::ids::ElectronicDeliveryId;
 use erp_fulfillment::dto::{ConfirmElectronicDeliveryRequest, ElectronicDeliveryView};
@@ -19,6 +19,7 @@ use validator::Validate;
 use super::FulfillmentProcess;
 use super::fulfillment_actual_cost::{ActualCostSource, post as post_actual_cost};
 use super::purchase_context::{ensure_allocation_valid, ensure_po_fulfillable, ensure_prepay_gate};
+use crate::audit::persist_log;
 use crate::{Error, Result};
 
 struct Confirmation {
@@ -177,7 +178,7 @@ async fn finish(
         "electronic_delivery",
         record.base.id.clone(),
     )?;
-    db.audit_logs().create(&audit, executor).await?;
+    persist_log(db, &audit, executor).await?;
     Ok(())
 }
 

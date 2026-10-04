@@ -3,7 +3,6 @@
 use bpm::engine::{CancelPlan, CancelPlanInput, DefinitionGraph, plan_cancel};
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance, ParticipantId, Timestamp};
-use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_procurement::entity::purchase_order::PurchaseChangeOrder;
 use erp_procurement::repository::PurchaseOrderExt;
@@ -23,6 +22,7 @@ use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::change_start::load_bound_definition_graph;
+use crate::audit::persist_log;
 use crate::{Error, Result};
 
 /// 已加载的可撤回运行事实。
@@ -259,7 +259,7 @@ pub(super) async fn persist_purchase_change_cancel(
                         .await?;
                 }
                 db.purchase_change_orders().update(&mut change_order, executor).await?;
-                db.audit_logs().create(&audit, executor).await?;
+                persist_log(&db, &audit, executor).await?;
                 Ok::<(), crate::Error>(())
             })
         })

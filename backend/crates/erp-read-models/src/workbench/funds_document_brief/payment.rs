@@ -40,13 +40,6 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             return Ok(());
         }
         let payments = self.funds_reader().read_supplier_payments(&ids, executor).await?;
-        let created_by = self
-            .load_created_by_from_audit(
-                "supplier_payment",
-                &ids.iter().cloned().collect::<HashSet<_>>(),
-                executor,
-            )
-            .await?;
         let supplier_ids = payments.iter().map(|item| item.supplier_id.to_string()).collect::<Vec<_>>();
         let supplier_names = self.supplier_display_names(&supplier_ids, executor).await?;
         let allocation_lines = self.payment_allocation_lines(&payments, executor).await?;
@@ -55,7 +48,6 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             let lines = allocation_lines.get(&payment.base.id).cloned().unwrap_or_default();
             let mut fact = WorkbenchObjectFact::from_authority(authority_mapping::supplier_payment_fact(
                 &payment,
-                created_by.get(&payment.base.id),
                 supplier.clone(),
             ));
 
@@ -120,13 +112,6 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             return Ok(());
         }
         let refunds = self.funds_reader().read_supplier_refunds(&ids, executor).await?;
-        let created_by = self
-            .load_created_by_from_audit(
-                "supplier_refund",
-                &ids.iter().cloned().collect::<HashSet<_>>(),
-                executor,
-            )
-            .await?;
         let supplier_ids = refunds.iter().map(|item| item.supplier_id.to_string()).collect::<Vec<_>>();
         let supplier_names = self.supplier_display_names(&supplier_ids, executor).await?;
         let payment_ids = refunds
@@ -150,7 +135,6 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             let mut fact = funds_fact_display(
                 authority_mapping::supplier_refund_fact(
                     &refund,
-                    created_by.get(&refund.base.id),
                     supplier.clone(),
                     &payment_origins.counterparties,
                     &entry_origins.counterparties,
@@ -208,13 +192,6 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             return Ok(());
         }
         let reversals = self.funds_reader().read_payment_reversals(&ids, executor).await?;
-        let created_by = self
-            .load_created_by_from_audit(
-                "payment_reversal",
-                &ids.iter().cloned().collect::<HashSet<_>>(),
-                executor,
-            )
-            .await?;
         let payment_ids = reversals
             .iter()
             .map(|reversal| reversal.original_supplier_payment_id.to_string())
@@ -223,11 +200,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         for reversal in reversals {
             let origin = origins.briefs.get(&reversal.original_supplier_payment_id.to_string());
             let mut fact = funds_fact_display(
-                authority_mapping::payment_reversal_fact(
-                    &reversal,
-                    created_by.get(&reversal.base.id),
-                    &origins.counterparties,
-                ),
+                authority_mapping::payment_reversal_fact(&reversal, &origins.counterparties),
                 origin.and_then(|item| item.counterparty.clone()),
             );
             let mut brief = amount_reason_brief(

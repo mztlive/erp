@@ -1,5 +1,5 @@
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
 use erp_core::ids::{InboxMessageId, WorkItemId};
 use erp_integration::entity::integration_ops::{
@@ -19,6 +19,7 @@ use validator::Validate;
 
 use super::SupplierFulfillmentProcess;
 use crate::Result;
+use crate::audit::persist_log;
 
 impl SupplierFulfillmentProcess {
     /// 供应商下单（幂等键：`fulfillment_order_no`，§6.19）。
@@ -83,7 +84,7 @@ impl SupplierFulfillmentProcess {
                 Box::pin(async move {
                     persist_place_facts(&db, &order_for_tx, &items_for_tx, &action_for_tx, executor).await?;
                     db.inbox_messages().create(&message_for_tx, executor).await?;
-                    db.audit_logs().create(&audit_for_tx, executor).await?;
+                    persist_log(&db, &audit_for_tx, executor).await?;
                     Ok::<(), crate::Error>(())
                 })
             }), || async {

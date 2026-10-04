@@ -32,10 +32,7 @@ mod profile;
 mod scope;
 
 pub use access::{SupplierAccess, supplier_scope};
-pub use handover_identity::{
-    capability_handover_audit_id, capability_handover_fingerprint, supplier_handover_audit_id,
-    supplier_handover_audit_message, supplier_handover_fingerprint, supplier_handover_fingerprint_matches,
-};
+pub use handover_identity::{capability_handover_fingerprint, supplier_handover_fingerprint};
 pub use profile::command_view;
 pub use scope::SupplierListView;
 

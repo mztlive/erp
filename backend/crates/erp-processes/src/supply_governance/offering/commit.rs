@@ -1,6 +1,6 @@
 //! 跨域写入根的实际provider：领域命令持久化后写同一审计。
 use async_trait::async_trait;
-use erp_audit::{AuditExt, AuditLog};
+use erp_audit::AuditLog;
 use erp_supply::dto::supplier_offering::{
     ReviseSupplierOfferingResult, UpdateSupplierOfferingAvailabilityResult,
 };
@@ -11,6 +11,7 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use crate::Result;
+use crate::audit::persist_log;
 #[async_trait]
 trait CommitPort: Send {
     type Output: Send;
@@ -38,7 +39,7 @@ impl CommitPort for MongoCreated<'_> {
             .map_err(Into::into)
     }
     async fn audit(&mut self, executor: &mut dyn Executor) -> Result<()> {
-        self.db.audit_logs().create(self.audit, executor).await.map_err(Into::into)
+        persist_log(self.db, self.audit, executor).await.map_err(Into::into)
     }
 }
 /// 提交供给单域事实与原审计，复用传入的同一事务执行器。
@@ -65,7 +66,7 @@ impl CommitPort for MongoRevised<'_> {
             .map_err(Into::into)
     }
     async fn audit(&mut self, executor: &mut dyn Executor) -> Result<()> {
-        self.db.audit_logs().create(self.audit, executor).await.map_err(Into::into)
+        persist_log(self.db, self.audit, executor).await.map_err(Into::into)
     }
 }
 /// 提交供给单域事实与原审计，复用传入的同一事务执行器。
@@ -92,7 +93,7 @@ impl CommitPort for MongoAvailability<'_> {
             .map_err(Into::into)
     }
     async fn audit(&mut self, executor: &mut dyn Executor) -> Result<()> {
-        self.db.audit_logs().create(self.audit, executor).await.map_err(Into::into)
+        persist_log(self.db, self.audit, executor).await.map_err(Into::into)
     }
 }
 /// 提交供给单域事实与原审计，复用传入的同一事务执行器。

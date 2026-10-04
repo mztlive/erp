@@ -1,5 +1,7 @@
 //! 回款冲正最终过账：退货状态、财务逆向核销、成功审计及销售进度共享事务。
 
+use crate::audit::persist_log;
+
 mod approval;
 mod commit;
 mod context;
@@ -8,7 +10,7 @@ mod sales_refresh;
 
 use application_core::AuditActor;
 use async_trait::async_trait;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_core::ids::SalesOrderId;
 use erp_finance::entity::receivable::CustomerReceipt;
 use erp_finance::service::receivable::receipt_reversal::{
@@ -147,7 +149,7 @@ impl ReceiptReversalPosting for DatabasePosting<'_> {
             "receipt_reversal",
             self.reversal.base.id.clone(),
         )?;
-        self.db.audit_logs().create(&audit, executor).await?;
+        persist_log(self.db, &audit, executor).await?;
         Ok(())
     }
     async fn refresh_sales(&mut self, executor: &mut dyn Executor) -> Result<()> {

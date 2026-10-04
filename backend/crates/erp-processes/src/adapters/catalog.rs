@@ -1,12 +1,13 @@
 //! Catalog audit, file-asset and pending-attachment adapters.
 
 use std::collections::HashSet;
+use std::num::NonZeroU32;
 use std::sync::Arc;
 
 use application_core::AuditActor;
 use async_trait::async_trait;
 use entity_core::BaseModel;
-use erp_audit::{AuditActorLogs, AuditExt, AuditLog, AuditLogData};
+use erp_audit::{AuditActorLogs, AuditLog, AuditLogData, prepare_business_log};
 use erp_catalog::{
     CatalogAuditPort, CatalogService, FileAssetFact, FileAssetFactsPort, PendingAttachmentBatch,
     PreparedCatalogAudit,
@@ -16,6 +17,8 @@ use erp_support::FileAssetExt;
 use erp_support::repository::prelude::*;
 use mongodb::Database;
 use persistence_core::Executor;
+
+use crate::audit::persist_log;
 
 /// MongoDB adapter that converts catalog audit facts into `erp-audit` writes.
 #[derive(Clone)]
@@ -68,7 +71,7 @@ impl CatalogAuditPort for MongoCatalogAudit {
         executor: &mut dyn Executor,
     ) -> erp_catalog::Result<()> {
         let log = audit_log_from_catalog(audit).map_err(map_audit_to_catalog)?;
-        self.db.audit_logs().create(&log, executor).await.map_err(erp_catalog::Error::from)?;
+        persist_log(&self.db, &log, executor).await.map_err(map_audit_to_catalog)?;
         Ok(())
     }
 }
@@ -174,6 +177,13 @@ fn prepared_catalog_audit(log: &AuditLog) -> PreparedCatalogAudit {
         log.success,
         log.message.clone(),
     )
+    .with_actor_name_snapshot(
+        log.structured_event.as_ref().and_then(|event| event.actor_name_snapshot.clone()),
+    )
+    .with_request_id(log.structured_event.as_ref().and_then(|event| event.request_id.clone()))
+    .with_event_sequence(
+        log.structured_event.as_ref().map(|event| event.event_sequence).unwrap_or(NonZeroU32::MIN),
+    )
 }
 
 fn audit_log_from_catalog(audit: &PreparedCatalogAudit) -> erp_audit::Result<AuditLog> {
@@ -197,7 +207,10 @@ fn audit_log_from_catalog(audit: &PreparedCatalogAudit) -> erp_audit::Result<Aud
         updated_at: audit.updated_at,
         deleted_at: audit.deleted_at,
     };
-    Ok(log)
+    prepare_business_log(&log)?
+        .with_actor_name_snapshot(audit.actor_name_snapshot.clone())?
+        .with_request_id(audit.request_id.clone())?
+        .with_event_sequence(audit.event_sequence.get())
 }
 
 fn map_audit_to_catalog(error: erp_audit::Error) -> erp_catalog::Error {
@@ -231,5 +244,90 @@ fn map_support_to_catalog(error: erp_support::Error) -> erp_catalog::Error {
         erp_support::Error::Logic(error) => erp_catalog::Error::Logic(error),
         erp_support::Error::OutcomeUnknown(error) => erp_catalog::Error::OutcomeUnknown(error),
         erp_support::Error::RepositoryError(error) => erp_catalog::Error::RepositoryError(error),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_core::AccountKind;
+
+    use super::*;
+
+    fn actor() -> AuditActor {
+        AuditActor::new("actor".into(), "login".into(), AccountKind::Admin)
+    }
+
+    #[test]
+    fn prepared_audit_round_trip_freezes_name_and_original_event_metadata() {
+        let mut log = actor()
+            .with_actor_name_snapshot(Some("周晓彤".into()))
+            .unwrap()
+            .with_request_id(Some("request-original".into()))
+            .unwrap()
+            .resource_log("product.update", "product", "object-1".into())
+            .unwrap()
+            .with_event_sequence(7)
+            .unwrap();
+        log.base = BaseModel {
+            id: "audit-original".into(),
+            version: 7,
+            created_at: 11,
+            updated_at: 19,
+            deleted_at: 23,
+        };
+        log.structured_event.as_mut().unwrap().occurred_at = log.base.created_at;
+        let log = prepare_business_log(&log).unwrap();
+        let prepared = prepared_catalog_audit(&log);
+        assert_eq!(prepared.actor_name_snapshot.as_deref(), Some("周晓彤"));
+        assert_eq!(prepared.request_id.as_deref(), Some("request-original"));
+        assert_eq!(prepared.event_sequence.get(), 7);
+        let renamed_actor = actor()
+            .with_actor_name_snapshot(Some("新名称".into()))
+            .unwrap()
+            .with_request_id(Some("request-next".into()))
+            .unwrap();
+        assert_eq!(renamed_actor.actor_name_snapshot(), Some("新名称"));
+        assert_eq!(renamed_actor.request_id(), Some("request-next"));
+        let restored = audit_log_from_catalog(&prepared).unwrap();
+        assert_eq!(restored, log);
+        assert!(restored.message.as_deref().unwrap().contains("周晓彤"));
+        assert!(restored.message.as_deref().unwrap().contains("商品"));
+    }
+
+    #[test]
+    fn prepared_audit_preserves_unknown_name_and_discards_private_body() {
+        let log = actor().resource_log("product.update", "product", "object-1".into()).unwrap();
+        let mut prepared = prepared_catalog_audit(&log);
+        prepared.message = Some("password bank-account ciphertext private-request".into());
+        let restored = audit_log_from_catalog(&prepared).unwrap();
+        let event = restored.structured_event.as_ref().unwrap();
+        assert_eq!(event.actor_name_snapshot, None);
+        assert_eq!(event.request_id, None);
+        assert_eq!(event.event_sequence, NonZeroU32::MIN);
+        assert_eq!(event.actor_account, "login");
+        let serialized = serde_json::to_string(&restored).unwrap();
+        assert!(!serialized.contains("password"));
+        assert!(!serialized.contains("bank-account"));
+        assert!(!serialized.contains("ciphertext"));
+        assert!(!serialized.contains("private-request"));
+        assert!(!serialized.contains("actor_name_snapshot"));
+        assert!(!serialized.contains("request_id"));
+        assert!(restored.message.as_deref().unwrap().contains("login"));
+    }
+
+    #[test]
+    fn prepared_audit_rejects_invalid_request_id() {
+        let log = actor().resource_log("product.update", "product", "object-1".into()).unwrap();
+        for request_id in ["unsafe\nrequest".into(), "x".repeat(129)] {
+            let prepared = prepared_catalog_audit(&log).with_request_id(Some(request_id));
+            assert!(audit_log_from_catalog(&prepared).unwrap_err().to_string().contains("请求编号"));
+        }
+    }
+
+    #[test]
+    fn prepared_audit_rejects_invalid_name_snapshot() {
+        let log = actor().resource_log("product.update", "product", "object-1".into()).unwrap();
+        let prepared = prepared_catalog_audit(&log).with_actor_name_snapshot(Some("unsafe\nname".into()));
+        assert!(audit_log_from_catalog(&prepared).is_err());
     }
 }

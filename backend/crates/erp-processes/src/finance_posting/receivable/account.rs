@@ -1,7 +1,7 @@
 //! Receivable account creation coordinating finance, workflow tasks and audit.
 
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
 use erp_core::ids::{ReceivableAccountId, ReceivableEntryId, SalesOrderRevisionId};
 use erp_finance::dto::receivable::CreateReceivableAccountRequest;
@@ -18,6 +18,7 @@ use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::ReceivableProcess;
+use crate::audit::persist_log;
 use crate::{Error, Result};
 
 impl ReceivableProcess {
@@ -118,7 +119,7 @@ impl ReceivableProcess {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     db.receivable().create_receivable_with_entry(&account, &entry, executor).await?;
-                    db.audit_logs().create(&audit, executor).await?;
+                    persist_log(&db, &audit, executor).await?;
                     Ok::<(), crate::Error>(())
                 })
             })

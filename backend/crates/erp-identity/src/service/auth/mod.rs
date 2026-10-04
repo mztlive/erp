@@ -20,6 +20,7 @@ pub struct BackofficeAuthResult {
     account: String,
     account_kind: DomainAccountKind,
     account_version: u64,
+    name: String,
 }
 
 impl BackofficeAuthResult {
@@ -37,6 +38,14 @@ impl BackofficeAuthResult {
     /// 返回认证成功的登录账号。
     pub fn account(&self) -> &str {
         self.account.as_str()
+    }
+
+    /// 返回本次认证已读取的账号名称，不增加额外账号查询。
+    ///
+    /// # 返回值
+    /// 返回认证成功时的名称。
+    pub fn name(&self) -> &str {
+        &self.name
     }
 
     /// 返回后台账号类型。
@@ -63,6 +72,7 @@ impl From<&AccountCore> for BackofficeAuthResult {
             account: account.secret.account().to_string(),
             account_kind: account.kind,
             account_version: account.base.version,
+            name: account.name.clone(),
         }
     }
 }
@@ -258,6 +268,7 @@ mod tests {
 
         assert_eq!(result.account_id(), "account-1");
         assert_eq!(result.account(), "admin01");
+        assert_eq!(result.name(), "测试账号");
         assert_eq!(result.account_kind(), AccountKind::Admin);
         assert_eq!(result.account_version(), 1);
         assert!(!debug.contains("$argon2"));

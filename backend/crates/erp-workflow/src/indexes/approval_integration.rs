@@ -5,7 +5,7 @@ use mongodb::options::IndexOptions;
 use mongodb::{Database, IndexModel};
 use persistence_core::Result;
 
-use crate::repository::ApprovalIntegrationExt;
+use crate::repository::{ApprovalCancellationExt, ApprovalIntegrationExt};
 
 const SNAPSHOTS: &str = <mongodb::Database as ApprovalIntegrationExt>::APPROVAL_SUBJECT_SNAPSHOTS;
 const OUTBOX: &str = <mongodb::Database as ApprovalIntegrationExt>::APPROVAL_NOTIFICATION_OUTBOX;
@@ -22,6 +22,15 @@ const OUTBOX: &str = <mongodb::Database as ApprovalIntegrationExt>::APPROVAL_NOT
 pub async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, SNAPSHOTS, snapshot_indexes()).await?;
     create_indexes(db, OUTBOX, outbox_indexes()).await?;
+    create_indexes(
+        db,
+        Database::APPROVAL_CANCELLATION_FACTS,
+        vec![
+            unique_index("uk_approval_cancellation_facts_id", doc! { "id": 1 }),
+            unique_index("uk_approval_cancellation_facts_receipt", doc! { "receipt.id": 1 }),
+        ],
+    )
+    .await?;
     Ok(())
 }
 

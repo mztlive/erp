@@ -11,7 +11,7 @@
 //! `CostExt` 直接写入）。
 
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_core::ids::CostEntryId;
 use erp_finance::dto::cost::{CostEntryView, CreateCostEntryRequest};
 use erp_finance::service::cost::{
@@ -21,6 +21,7 @@ use erp_sales::repository::SalesOrderExt;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 
+use crate::audit::persist_log;
 use crate::{Error, Result};
 /// 手工成本登记的根流程服务。
 pub struct CostService {
@@ -76,7 +77,7 @@ impl CostService {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     persist_cost_entry(&db, prepared, executor).await?;
-                    db.audit_logs().create(&audit, executor).await?;
+                    persist_log(&db, &audit, executor).await?;
                     Ok::<(), crate::Error>(())
                 })
             })

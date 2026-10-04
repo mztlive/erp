@@ -3,25 +3,28 @@
 //! 开放验收任务随交接原子转交；开放审批任务保持不变；已完成验收与历史
 //! 归属快照不改写。业务组织不随接收人部门隐式变化，必须显式传入。
 
-use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use application_core::{AuditActor, CommandFingerprint};
+use erp_core::ids::SalesOrderId;
 use erp_identity::repository::prelude::*;
 use erp_identity::{AccessControlExt, Permission, PermissionSet, SharedRbacService};
 use erp_sales::dto::sales_order::{HandoverCandidateView, HandoverSalesOrderRequest, HandoverSalesOrderView};
+use erp_sales::entity::command_receipt::SalesCommandResult;
 use erp_sales::repository::SalesOrderExt;
 use erp_sales::service::sales_order::command::identity::{
-    sales_handover_audit_id, sales_handover_audit_message, sales_handover_fingerprint,
-    sales_handover_fingerprint_matches,
+    sales_handover_audit_id, sales_handover_fingerprint,
 };
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{WorkItem, WorkItemType};
 use erp_workflow::repository::prelude::*;
 use erp_workflow::service::approval::business_adapter::ensure_separation_of_duties;
 use erp_workflow::service::approval::policy::SeparationOfDutiesPolicy;
+use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::SalesOrderCommandProcess;
+use super::authorization::SalesCommandAccess;
+use super::command_event::{SalesCommandEvent, finish_receipt_recovery, load_command_receipt};
 use crate::handover_common::ensure_org_enabled;
 use crate::{Error, Result};
 
@@ -67,7 +70,10 @@ impl SalesOrderCommandProcess {
         }
         let audit_id = sales_handover_audit_id(actor.id(), id, &idempotency_key);
         let fingerprint = sales_handover_fingerprint(actor.id(), id, &req)?;
-        if let Some(existing) = self.replay_sales_handover(&audit_id, &fingerprint, id, actor).await? {
+        let expected_key_hash = CommandFingerprint::from_parts([idempotency_key.clone()]);
+        if let Some(existing) =
+            self.replay_sales_handover(&audit_id, &fingerprint, &expected_key_hash, id, actor).await?
+        {
             return Ok(existing);
         }
         let access = self.command_access(actor, "update")?;
@@ -84,38 +90,33 @@ impl SalesOrderCommandProcess {
         .await?;
         self.ensure_handover_org(req.target_business_org_unit_id.as_deref(), &mut NoTransaction).await?;
 
-        let db = self.db.clone();
-        let actor_owned = actor.clone();
-        let req_owned = req.clone();
-        let id_owned = id.to_string();
-        let fingerprint_owned = fingerprint.clone();
-        let audit_id_owned = audit_id.clone();
-        let target_owned = target.clone();
-        let access_for_tx = access.clone();
-        let expected_version = req.expected_version;
-        db.client()
-            .clone()
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    access_for_tx.revalidate(&id_owned, expected_version, executor).await?;
-                    apply_handover(
-                        &db,
-                        &id_owned,
-                        &req_owned,
-                        &target_owned,
-                        &reason,
-                        &actor_owned,
-                        &audit_id_owned,
-                        &fingerprint_owned,
-                        executor,
-                    )
-                    .await
-                })
-            })
-            .await?;
-        self.replay_sales_handover(&audit_id, &fingerprint, id, actor)
-            .await?
-            .ok_or_else(|| Error::Internal("销售交接幂等收据缺失".to_string()))
+        let transaction_result = handover_transaction(
+            self.db.clone(),
+            SalesHandoverWrite {
+                actor: actor.clone(),
+                request: req.clone(),
+                order_id: id.to_string(),
+                fingerprint: fingerprint.clone(),
+                command_id: audit_id.clone(),
+                target: target.clone(),
+                access: access.clone(),
+                expected_version: req.expected_version,
+                expected_key_hash: expected_key_hash.clone(),
+                reason,
+            },
+        )
+        .await;
+        match transaction_result {
+            Ok(Some(view)) => Ok(view),
+            Ok(None) => self
+                .replay_sales_handover(&audit_id, &fingerprint, &expected_key_hash, id, actor)
+                .await?
+                .ok_or_else(|| Error::Internal("销售交接幂等收据缺失".to_string())),
+            Err(error) => finish_receipt_recovery(
+                error,
+                self.replay_sales_handover(&audit_id, &fingerprint, &expected_key_hash, id, actor).await,
+            ),
+        }
     }
 
     /// 查询当前销售单可交接的合格目标候选。
@@ -178,40 +179,39 @@ impl SalesOrderCommandProcess {
         Ok(candidates)
     }
 
-    /// 按稳定审计收据重放已交接的销售责任。
+    /// 查证独立回执并返回当前责任与开放任务，不执行第二次交接。
     async fn replay_sales_handover(
         &self,
         audit_id: &str,
         expected_fingerprint: &str,
+        expected_key_hash: &CommandFingerprint,
         sales_order_id: &str,
         actor: &AuditActor,
     ) -> Result<Option<HandoverSalesOrderView>> {
-        let Some(audit) = self.db.audit_logs().find_by_id(audit_id, &mut NoTransaction).await? else {
-            return Ok(None);
-        };
-        if !sales_handover_fingerprint_matches(audit.message.as_deref(), expected_fingerprint) {
-            return Err(Error::ConflictError("同一幂等键已用于不同的销售交接".to_string()));
-        }
-        let order_id = audit
-            .resource_id
-            .as_deref()
-            .ok_or_else(|| Error::Internal("销售交接幂等收据缺少结果引用".to_string()))?;
-        if order_id != sales_order_id {
-            return Err(Error::Internal("销售交接幂等收据与业务对象不一致".to_string()));
-        }
+        let db = self.db.clone();
+        let command_id = audit_id.to_string();
+        let fingerprint = expected_fingerprint.to_string();
+        let expected_key_hash = expected_key_hash.clone();
+        let order_id = sales_order_id.to_string();
+        let actor_id = actor.id().to_string();
         let access = self.command_access(actor, "update")?;
-        let order = access.current(sales_order_id, &mut NoTransaction).await?;
-        let acceptance_ids = open_acceptance_task_ids(&self.db, &order.base.id, &mut NoTransaction).await?;
-        let approval_assignees =
-            open_approval_assignees(&self.db, &order.base.id, &mut NoTransaction).await?;
-        Ok(Some(HandoverSalesOrderView {
-            sales_order_id: order.base.id.clone(),
-            sales_owner_user_id: order.sales_owner_user_id.clone(),
-            business_org_unit_id: order.business_org_unit_id.clone(),
-            version: order.base.version,
-            transferred_acceptance_task_ids: acceptance_ids,
-            kept_approval_task_count: approval_assignees.len(),
-        }))
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    replay_handover_with_executor(
+                        &db,
+                        &command_id,
+                        (&fingerprint, &expected_key_hash),
+                        &order_id,
+                        &actor_id,
+                        &access,
+                        executor,
+                    )
+                    .await
+                })
+            })
+            .await
     }
 
     /// 在事务外预检目标账号有效性、完整执行资格与审批岗位分离。
@@ -260,6 +260,61 @@ impl SalesOrderCommandProcess {
 /// 版本、资格或组织任一失败时整事务回滚。
 ///
 /// # 关键业务约束
+/// 收拢原销售交接事务已有的请求、身份与授权上下文。
+struct SalesHandoverWrite {
+    actor: AuditActor,
+    request: HandoverSalesOrderRequest,
+    order_id: String,
+    fingerprint: String,
+    command_id: String,
+    target: String,
+    access: SalesCommandAccess,
+    expected_version: u64,
+    expected_key_hash: CommandFingerprint,
+    reason: String,
+}
+
+/// 保持原事务先查证回执，再重验版本、交接与保存结果的顺序。
+async fn handover_transaction(
+    db: Database,
+    input: SalesHandoverWrite,
+) -> Result<Option<HandoverSalesOrderView>> {
+    db.client()
+        .clone()
+        .with_transaction(move |executor| {
+            Box::pin(async move {
+                if let Some(view) = replay_handover_with_executor(
+                    &db,
+                    &input.command_id,
+                    (&input.fingerprint, &input.expected_key_hash),
+                    &input.order_id,
+                    input.actor.id(),
+                    &input.access,
+                    executor,
+                )
+                .await?
+                {
+                    return Ok::<Option<HandoverSalesOrderView>, crate::Error>(Some(view));
+                }
+                input.access.revalidate(&input.order_id, input.expected_version, executor).await?;
+                apply_handover(
+                    &db,
+                    &input.order_id,
+                    &input.request,
+                    &input.target,
+                    &input.reason,
+                    &input.actor,
+                    &input.command_id,
+                    &input.fingerprint,
+                    executor,
+                )
+                .await?;
+                Ok::<Option<HandoverSalesOrderView>, crate::Error>(None)
+            })
+        })
+        .await
+}
+
 /// 只更新销售单负责人／组织与开放验收任务；审批、已完成与快照不变。
 #[allow(clippy::too_many_arguments)]
 async fn apply_handover(
@@ -267,7 +322,7 @@ async fn apply_handover(
     id: &str,
     req: &HandoverSalesOrderRequest,
     target: &str,
-    reason: &str,
+    _reason: &str,
     actor: &AuditActor,
     audit_id: &str,
     fingerprint: &str,
@@ -307,15 +362,64 @@ async fn apply_handover(
     erp_sales::service::sales_order::SalesOrderService::new(db.clone())
         .persist_order(&mut order, executor)
         .await?;
-    let audit = actor.clone().resource_log_with_id(
+    let audit = SalesCommandEvent::new(
         audit_id.to_string(),
-        "sales_order.handover",
-        "sales_order",
-        order.base.id.clone(),
-        Some(sales_handover_audit_message(fingerprint, target, reason, &transferred)),
+        actor,
+        &req.idempotency_key,
+        fingerprint.to_string(),
+        SalesCommandResult::HandedOver { sales_order_id: SalesOrderId::new(order.base.id.clone()) },
+        order.order_no.clone(),
     )?;
-    db.audit_logs().create(&audit, executor).await?;
+    audit.persist(db, executor).await?;
     Ok(transferred)
+}
+
+/// 同执行器验证交接命令的完整身份，再读取当前责任及开放任务。
+async fn replay_handover_with_executor(
+    db: &mongodb::Database,
+    command_id: &str,
+    fingerprint: (&str, &CommandFingerprint),
+    sales_order_id: &str,
+    actor_id: &str,
+    access: &super::authorization::SalesCommandAccess,
+    executor: &mut dyn persistence_core::Executor,
+) -> Result<Option<HandoverSalesOrderView>> {
+    let Some(receipt) = load_command_receipt(
+        db,
+        command_id,
+        actor_id,
+        "sales_order.handover",
+        Some(sales_order_id),
+        fingerprint,
+        executor,
+    )
+    .await?
+    else {
+        return Ok(None);
+    };
+    if !matches!(receipt.result, SalesCommandResult::HandedOver { .. }) {
+        return Err(Error::Internal("销售交接回执结果种类无效".to_string()));
+    }
+    let order = access.current(sales_order_id, executor).await?;
+    let acceptance_ids = open_acceptance_task_ids(db, &order.base.id, executor).await?;
+    let approval_assignees = open_approval_assignees(db, &order.base.id, executor).await?;
+    Ok(Some(handover_view(&order, acceptance_ids, approval_assignees.len())))
+}
+
+/// 回放视图沿当前销售责任与开放任务构建，不冻结首次交接目标。
+fn handover_view(
+    order: &erp_sales::entity::sales_order::SalesOrder,
+    acceptance_ids: Vec<String>,
+    approval_task_count: usize,
+) -> HandoverSalesOrderView {
+    HandoverSalesOrderView {
+        sales_order_id: order.base.id.clone(),
+        sales_owner_user_id: order.sales_owner_user_id.clone(),
+        business_org_unit_id: order.business_org_unit_id.clone(),
+        version: order.base.version,
+        transferred_acceptance_task_ids: acceptance_ids,
+        kept_approval_task_count: approval_task_count,
+    }
 }
 
 /// 校验目标账号有效且具备验收完整执行资格。
@@ -506,9 +610,6 @@ mod tests {
     use erp_sales::entity::sales_order::{
         BusinessType, CommercialStatus, OriginSystem, SalesOrder, SalesOrderData,
     };
-    use erp_sales::service::sales_order::command::identity::{
-        sales_handover_audit_message, sales_handover_fingerprint_matches,
-    };
 
     use super::{SeparationOfDutiesPolicy, ensure_separation_of_duties, is_handover_transferable_type};
 
@@ -532,36 +633,21 @@ mod tests {
         .expect("销售单应合法")
     }
 
-    /// 交接审计收据必须绑定本次载荷指纹：同载荷重放放行，异载荷同键拒绝。
-    ///
-    /// 直接驱动生产收据构造与回放判定；若回放改回精确字符串相等，
-    /// 本用例失败（写入的扩展格式含目标／原因／随转清单，精确相等永不命中）。
+    /// 实际回放视图保持当前责任和开放任务，不回写首次交接人。
     #[test]
-    fn handover_receipt_binds_fingerprint_and_rejects_alien_payload() {
-        let transferred = vec!["accept-1".to_string(), "accept-2".to_string()];
-        let stored = sales_handover_audit_message("fp-same", "sales-b", "轮换", &transferred);
-        assert!(stored.contains("command_sha256=fp-same"));
-        assert!(stored.contains("sales-b"));
-        assert!(stored.contains("accept-1"));
-        assert!(sales_handover_fingerprint_matches(Some(&stored), "fp-same"));
-        assert!(!sales_handover_fingerprint_matches(Some(&stored), "fp-other"));
-        assert!(!sales_handover_fingerprint_matches(None, "fp-same"));
-        assert!(!sales_handover_fingerprint_matches(Some(""), "fp-same"));
-    }
-
-    /// 前缀伪造不得蒙混：指纹 `abc` 的收据不能冒充 `abc-def` 的回放。
-    #[test]
-    fn handover_receipt_rejects_fingerprint_prefix_forgery() {
-        let stored = sales_handover_audit_message("abc-def", "sales-b", "轮换", &[]);
-        assert!(!sales_handover_fingerprint_matches(Some(&stored), "abc"));
-        assert!(sales_handover_fingerprint_matches(Some(&stored), "abc-def"));
-    }
-
-    /// 仅指纹的旧格式收据仍可回放，保证已写入收据的兼容性。
-    #[test]
-    fn handover_replay_accepts_legacy_fingerprint_only_receipt() {
-        assert!(sales_handover_fingerprint_matches(Some("command_sha256=fp-old"), "fp-old"));
-        assert!(!sales_handover_fingerprint_matches(Some("command_sha256=fp-old"), "fp-new"));
+    fn handover_replay_view_tracks_current_responsibility_and_open_tasks() {
+        let mut order = sales_order_owned_by("sales-a", "org-a");
+        order.handover("sales-b".into(), Some("org-b".into()), "manager").unwrap();
+        let view = super::handover_view(&order, vec!["open-acceptance".into()], 2);
+        assert_eq!(view.sales_owner_user_id, "sales-b");
+        assert_eq!(view.business_org_unit_id, "org-b");
+        assert_eq!(view.transferred_acceptance_task_ids, vec!["open-acceptance"]);
+        assert_eq!(view.kept_approval_task_count, 2);
+        assert_eq!(order.stable.created_by, "sales-a");
+        order.handover("sales-c".into(), None, "manager").unwrap();
+        let view = super::handover_view(&order, vec![], 1);
+        assert_eq!(view.sales_owner_user_id, "sales-c");
+        assert!(view.transferred_acceptance_task_ids.is_empty());
     }
 
     /// 仅开放验收任务随交接转交；审批与其他任务类型保持不变。

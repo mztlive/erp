@@ -2,7 +2,7 @@ use application_core::AuditActor;
 use bpm::engine::{DefinitionGraph, TaskIntent};
 use bpm::ids::ApprovalProcessInstanceId;
 use bpm::model::SubjectRef;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
 use erp_core::ids::{ApprovalSubjectSnapshotId, WorkItemId};
 use erp_identity::SharedRbacService;
@@ -26,6 +26,7 @@ use super::common::{ReverseStartContracts, ReverseStartInput, build_reverse_star
 use super::mapping::list_projection_from_execution;
 use super::prepare::load_start_receipt_for_document_type;
 use crate::adapters::freeze_approval_materials;
+use crate::audit::persist_log;
 use crate::{Error, Result};
 
 /// 读取供应商退款同载荷启动收据；不存在时返回 `None`。
@@ -256,7 +257,7 @@ async fn persist_start(
         executor,
     )
     .await?;
-    db.audit_logs().create(&audit, executor).await?;
+    persist_log(&db, &audit, executor).await?;
     Ok::<SupplierRefund, crate::Error>(refund)
 }
 

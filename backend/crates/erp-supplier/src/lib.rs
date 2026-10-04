@@ -59,8 +59,6 @@ pub use repository::{
 };
 pub use service::supplier::eligibility::ensure_capability_qualified;
 pub use service::supplier::{
-    SupplierAccess, SupplierListView, SupplierService, capability_handover_audit_id,
-    capability_handover_fingerprint, command_view, supplier_handover_audit_id,
-    supplier_handover_audit_message, supplier_handover_fingerprint, supplier_handover_fingerprint_matches,
-    supplier_scope,
+    SupplierAccess, SupplierListView, SupplierService, capability_handover_fingerprint, command_view,
+    supplier_handover_fingerprint, supplier_scope,
 };

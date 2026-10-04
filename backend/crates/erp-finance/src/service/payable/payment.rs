@@ -18,6 +18,8 @@ use crate::{Error, Result};
 /// 组合层必须先同步这些账户的付款任务，然后用同一 Executor 完成付款写入。
 pub struct PaymentSettlement {
     ledger: PaymentAllocationLedger,
+    /// 本次已认证核销/过账执行人，不能由后续完成步骤替换为创建人。
+    actor_id: String,
     /// 已变更应付余额的账户；保持仓储返回顺序。
     pub applied_account_ids: Vec<PayableAccountId>,
 }
@@ -150,7 +152,7 @@ async fn apply_payment_settlement(
     if !settlement.rejected.is_empty() {
         return Err(Error::BusinessLogicError("子账剩余开放余额不足，核销被拒绝".to_string()));
     }
-    Ok(PaymentSettlement { ledger, applied_account_ids: settlement.applied })
+    Ok(PaymentSettlement { ledger, actor_id: actor_id.to_string(), applied_account_ids: settlement.applied })
 }
 
 /// 使用财务领域账本按请求顺序校验分录、子账与供应商并构造分配。
@@ -185,7 +187,20 @@ fn apply_payment_ledger(
 
     Ok(())
 }
-/// 在任务同步成功后落付款状态与分配事实；必须复用余额更新时的 Executor。
+/// 在任务同步成功后落付款状态、不可变执行身份与分配事实。
+///
+/// # 参数
+/// * `db` - 财务领域数据库
+/// * `payment` - 同一次执行的付款单
+/// * `pending` - 本次核销分配
+/// * `settlement` - 已写余额并冻结本次执行人的核销结果
+/// * `session` - 余额更新时使用的调用方执行器
+///
+/// # 返回
+/// 返回已经持久化过账身份、时间与核销分配的付款单。
+///
+/// # 错误
+/// 付款状态、分配、执行身份或持久化失败时返回错误。
 pub async fn finish_supplier_payment(
     db: &Database,
     payment: &mut SupplierPayment,
@@ -193,7 +208,7 @@ pub async fn finish_supplier_payment(
     settlement: &PaymentSettlement,
     session: &mut dyn Executor,
 ) -> Result<()> {
-    payment.post_from_execution(pending)?;
+    payment.post_from_execution(pending, &settlement.actor_id, Instant::now())?;
     db.supplier_payments().update(payment, session).await?;
     db.payable().create_payment_allocations_many(settlement.ledger.new_allocations(), session).await?;
     Ok(())
@@ -303,6 +318,7 @@ mod tests {
                 bank_reference: None,
                 bank_receipt_asset_id: FileAssetId::new("asset-1"),
             },
+            "creator",
         )
         .unwrap()
     }

@@ -1,10 +1,13 @@
-use application_core::{AuditActor, CommandReceipt, CommandReceiptFact, CommandReceiptMatch};
+use std::num::NonZeroU32;
+
+use application_core::AuditActor;
 use entity_core::BaseModel;
 use entity_macros::Entity;
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{AccountKind, Result};
 use serde::{Deserialize, Serialize};
 
+use super::business_event::BusinessAuditEvent;
 use crate::error::{Error as AuditError, Result as AuditResult};
 
 /// 操作人ID最大长度。
@@ -46,9 +49,109 @@ pub struct AuditLog {
     pub resource_id: Option<String>,
     pub success: bool,
     pub message: Option<String>,
+    /// 类型化业务事件；历史日志缺失时保持缺失。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub structured_event: Option<BusinessAuditEvent>,
 }
 
 impl AuditLog {
+    /// 保存同一命令内已预检的写入序号，不改变事件身份和发生时间。
+    /// # 参数
+    /// * `sequence` - 从1开始的事件序号。
+    /// # 返回
+    /// 返回带序号的结构化业务事件。
+    /// # 错误
+    /// 序号为零或缺少结构化事件时拒绝。
+    pub fn with_event_sequence(mut self, sequence: u32) -> AuditResult<Self> {
+        let sequence = NonZeroU32::new(sequence)
+            .ok_or_else(|| AuditError::ValidationError("审计事件序号必须为正整数".into()))?;
+        self.structured_event
+            .as_mut()
+            .ok_or_else(|| AuditError::ValidationError("审计缺少结构化事件".into()))?
+            .event_sequence = sequence;
+        Ok(self)
+    }
+
+    /// 关联入口已经捕获的安全请求编号，内部命令不生成请求号。
+    /// # 参数
+    /// * `request_id` - 当前请求的追踪编号；无请求时保持缺失。
+    /// # 返回
+    /// 返回带请求关联的结构化事件。
+    /// # 错误
+    /// 缺少结构化事件、编号超长或包含控制字符时拒绝。
+    pub fn with_request_id(mut self, request_id: Option<String>) -> AuditResult<Self> {
+        let value = normalize_optional_text(request_id, "请求编号", 128)?;
+        if value.as_ref().is_some_and(|value| value.chars().any(char::is_control)) {
+            return Err(AuditError::ValidationError("请求编号包含非法字符".into()));
+        }
+        self.structured_event
+            .as_mut()
+            .ok_or_else(|| AuditError::ValidationError("审计缺少结构化事件".into()))?
+            .request_id = value;
+        Ok(self)
+    }
+
+    /// 保存认证时已取得的安全操作人名称，不读取当前账户补齐快照。
+    /// # 参数
+    /// * `name` - 发生时的操作人名称；未知保持缺失。
+    /// # 返回
+    /// 返回保留名称快照并更新中文摘要的结构化事件。
+    /// # 错误
+    /// 缺少结构化事件、名称过长或包含控制字符时拒绝。
+    pub fn with_actor_name_snapshot(mut self, name: Option<String>) -> AuditResult<Self> {
+        let value = normalize_optional_text(name, "操作人名称", 128)?;
+        if value.as_ref().is_some_and(|value| value.chars().any(char::is_control)) {
+            return Err(AuditError::ValidationError("操作人名称包含非法字符".into()));
+        }
+        let event = self
+            .structured_event
+            .as_mut()
+            .ok_or_else(|| AuditError::ValidationError("审计缺少结构化事件".into()))?;
+        event.actor_name_snapshot = value;
+        self.message = Some(event.message());
+        Ok(self)
+    }
+
+    /// 关联独立命令身份，不将幂等键或指纹写入展示事件。
+    /// # 参数
+    /// * `command_id` - 服务端稳定命令编号。
+    /// # 返回
+    /// 返回带命令关联的结构化事件。
+    /// # 错误
+    /// 缺少结构化事件或编号非法时拒绝。
+    pub fn with_command_id(mut self, command_id: Option<String>) -> AuditResult<Self> {
+        let value = normalize_optional_text(command_id, "命令编号", 128)?;
+        if value.as_ref().is_some_and(|value| value.chars().any(char::is_control)) {
+            return Err(AuditError::ValidationError("命令编号包含非法字符".into()));
+        }
+        self.structured_event
+            .as_mut()
+            .ok_or_else(|| AuditError::ValidationError("审计缺少结构化事件".into()))?
+            .command_id = value;
+        Ok(self)
+    }
+
+    /// 保存发生时已明确的安全业务编号，不查询当前对象补齐快照。
+    /// # 参数
+    /// * `number` - 当时的业务编号；未知保持缺失。
+    /// # 返回
+    /// 返回带编号快照的结构化事件。
+    /// # 错误
+    /// 缺少结构化事件或编号非法时拒绝。
+    pub fn with_resource_number(mut self, number: Option<String>) -> AuditResult<Self> {
+        let value = normalize_optional_text(number, "业务编号", 128)?;
+        if value.as_ref().is_some_and(|value| value.chars().any(char::is_control)) {
+            return Err(AuditError::ValidationError("业务编号包含非法字符".into()));
+        }
+        let event = self
+            .structured_event
+            .as_mut()
+            .ok_or_else(|| AuditError::ValidationError("审计缺少结构化事件".into()))?;
+        event.resource_number_snapshot = value;
+        self.message = Some(event.message());
+        Ok(self)
+    }
+
     /// 由已鉴权操作人构造成功资源审计的数据。
     ///
     /// 资源 ID 空白视为缺失，调用方仍需传入业务资源 ID。
@@ -86,85 +189,6 @@ impl AuditLog {
             success: true,
             message,
         })
-    }
-
-    /// 由命令收据构造必须与业务写入同事务持久化的成功收据审计数据。
-    ///
-    /// # 参数
-    /// * `receipt` - 已提交的业务命令收据
-    /// * `actor` - 已通过鉴权的审计操作人
-    /// * `resource_id` - 资源业务 ID，空白视为缺失
-    ///
-    /// # 返回
-    /// 返回已组装的成功收据审计创建数据。
-    ///
-    /// # 错误
-    /// 当前账号与收据操作人不一致，或资源 ID 为空时返回错误。
-    pub fn receipt_audit_data(
-        receipt: &CommandReceipt,
-        actor: AuditActor,
-        resource_id: String,
-    ) -> AuditResult<AuditLogData> {
-        if actor.id() != receipt.actor_id() {
-            return Err(AuditError::Forbidden("当前账号不能复用其他账号的操作号".to_string()));
-        }
-        Self::success_resource_data(
-            actor,
-            receipt.action(),
-            receipt.resource_type(),
-            resource_id,
-            Some(receipt.message(None)),
-        )
-    }
-
-    /// 按候选顺序选择已提交命令收据。
-    ///
-    /// 不依赖数据库：调用方先批量读取最小事实，本函数只做按序查找与载荷比对。
-    ///
-    /// # 参数
-    /// * `receipt` - 待匹配的命令收据
-    /// * `candidates` - 按优先级排序的候选 ID
-    /// * `facts` - 已读取的最小收据事实
-    ///
-    /// # 返回
-    /// 载荷一致时返回已提交资源 ID；无命中返回 `None`。
-    ///
-    /// # 错误
-    /// 同一操作号被不同载荷占用时返回冲突；事实损坏时返回内部错误。
-    pub fn pick_committed_resource_id(
-        receipt: &CommandReceipt,
-        candidates: &[String],
-        facts: &[CommandReceiptFact],
-    ) -> AuditResult<Option<String>> {
-        for candidate in candidates {
-            let Some(fact) = facts.iter().find(|fact| &fact.id == candidate) else {
-                continue;
-            };
-            return match receipt.match_fact(fact) {
-                CommandReceiptMatch::SamePayload(resource_id) => Ok(Some(resource_id)),
-                CommandReceiptMatch::DifferentPayload => {
-                    Err(AuditError::ConflictError("同一操作号已用于不同提交，请重新发起操作".to_string()))
-                },
-                CommandReceiptMatch::Corrupted => {
-                    Err(AuditError::Internal("业务命令收据格式无效".to_string()))
-                },
-            };
-        }
-        Ok(None)
-    }
-
-    /// 从审计日志构造命令收据比对所需的最小事实。
-    ///
-    /// # 参数
-    /// 无额外参数，消费审计日志实体。
-    ///
-    /// # 返回
-    /// 返回收据回放比对使用的最小事实。
-    pub fn receipt_fact(self) -> CommandReceiptFact {
-        CommandReceiptFact::new(self.base.id, self.actor_id, self.action, self.resource_type)
-            .with_resource_id_opt(self.resource_id)
-            .with_success(self.success)
-            .with_message_opt(self.message)
     }
 
     /// 创建新的审计日志。
@@ -209,6 +233,7 @@ impl AuditLog {
             resource_id,
             success: data.success,
             message,
+            structured_event: None,
         })
     }
 }
@@ -217,31 +242,12 @@ impl AuditLog {
 mod tests {
     use application_core::AuditActor;
     use erp_core::AccountKind;
-    use serde::Serialize;
 
     use super::{AuditLog, AuditLogData};
-
-    #[derive(Serialize)]
-    struct CommandPayload {
-        amount: u32,
-        idempotency_key: String,
-    }
+    use crate::AuditActorLogs;
 
     fn audit_actor() -> AuditActor {
         AuditActor::new("admin-1".to_string(), "root".to_string(), AccountKind::Admin)
-    }
-
-    fn receipt_for(actor: &AuditActor, key: &str, amount: u32) -> application_core::CommandReceipt {
-        let payload = CommandPayload { amount, idempotency_key: key.to_string() };
-        application_core::CommandReceipt::from_payload(
-            "receipt-command-",
-            actor.id(),
-            "customer_receipt.commit",
-            "customer_receipt",
-            &payload.idempotency_key,
-            &payload,
-        )
-        .expect("收据构造必须成功")
     }
 
     fn audit_data() -> AuditLogData {
@@ -286,72 +292,76 @@ mod tests {
     }
 
     #[test]
-    fn receipt_audit_data_rejects_foreign_actor() {
-        let owner = audit_actor();
-        let receipt = receipt_for(&owner, "foreign-actor-key", 100);
-        let other = AuditActor::new("admin-2".to_string(), "other".to_string(), AccountKind::Admin);
+    fn actor_name_snapshot_keeps_event_identity_and_safe_chinese_message() {
+        let log = audit_actor()
+            .resource_log_with_message(
+                "customer.create",
+                "customer",
+                "customer-1".to_string(),
+                Some("password=private-body".to_string()),
+            )
+            .unwrap();
+        let base = log.base.clone();
+        let restored = log.with_actor_name_snapshot(Some("  周晓彤  ".to_string())).unwrap();
 
-        assert!(AuditLog::receipt_audit_data(&receipt, other, "receipt-1".to_string()).is_err());
-    }
-
-    #[test]
-    fn pick_committed_resource_id_returns_none_without_match() {
-        let actor = audit_actor();
-        let receipt = receipt_for(&actor, "pick-none-key", 100);
-
+        assert_eq!(restored.base, base);
         assert_eq!(
-            AuditLog::pick_committed_resource_id(&receipt, &["missing-1".to_string()], &[]).unwrap(),
-            None
+            restored.structured_event.as_ref().unwrap().actor_name_snapshot.as_deref(),
+            Some("周晓彤")
         );
+        assert!(restored.message.as_ref().unwrap().contains("周晓彤"));
+        assert!(restored.message.as_ref().unwrap().contains("创建客户"));
+        assert!(!serde_json::to_string(&restored).unwrap().contains("private-body"));
     }
 
     #[test]
-    fn pick_committed_resource_id_replays_matching_resource() {
-        let actor = audit_actor();
-        let receipt = receipt_for(&actor, "pick-hit-key", 100);
-        let audit = AuditLog::new(
-            receipt.id().to_string(),
-            AuditLog::receipt_audit_data(&receipt, actor, "receipt-1".to_string()).unwrap(),
-        )
-        .unwrap();
-        let candidates = vec![audit.base.id.clone()];
-        let facts = vec![audit.receipt_fact()];
+    fn request_and_sequence_setters_preserve_identity_and_safe_projection() {
+        let log = audit_actor()
+            .resource_log("customer.create", "customer", "customer-1".into())
+            .unwrap()
+            .with_actor_name_snapshot(Some("周晓彤".into()))
+            .unwrap()
+            .with_command_id(Some("command-1".into()))
+            .unwrap();
+        let base = log.base.clone();
+        let message = log.message.clone();
+        let log = log.with_request_id(Some("  trace-1  ".into())).unwrap().with_event_sequence(7).unwrap();
+        let event = log.structured_event.as_ref().unwrap();
+        assert_eq!(log.base, base);
+        assert_eq!(log.message, message);
+        assert_eq!(event.event_sequence.get(), 7);
+        assert_eq!(event.request_id.as_deref(), Some("trace-1"));
+        assert_eq!(event.actor_name_snapshot.as_deref(), Some("周晓彤"));
+        assert_eq!(event.command_id.as_deref(), Some("command-1"));
+        let internal = log.with_request_id(None).unwrap();
+        assert!(internal.structured_event.unwrap().request_id.is_none());
+    }
 
-        assert_eq!(
-            AuditLog::pick_committed_resource_id(&receipt, &candidates, &facts).unwrap(),
-            Some("receipt-1".to_string())
+    #[test]
+    fn request_and_sequence_setters_reject_unsafe_or_unstructured_values() {
+        let log = audit_actor().resource_log("customer.create", "customer", "customer-1".into()).unwrap();
+        assert!(log.clone().with_event_sequence(0).is_err());
+        assert!(log.clone().with_request_id(Some("x".repeat(129))).is_err());
+        assert!(log.with_request_id(Some("trace\nsecret".into())).is_err());
+        let raw = AuditLog::new("audit-1".into(), audit_data()).unwrap();
+        assert!(raw.clone().with_event_sequence(1).is_err());
+        assert!(raw.with_request_id(Some("trace-1".into())).is_err());
+    }
+
+    #[test]
+    fn actor_name_snapshot_keeps_missing_name_and_rejects_unsafe_input() {
+        let log =
+            audit_actor().resource_log("customer.create", "customer", "customer-1".to_string()).unwrap();
+        let unknown = log.clone().with_actor_name_snapshot(None).unwrap();
+
+        assert_eq!(unknown.structured_event.as_ref().unwrap().actor_name_snapshot, None);
+        assert!(log.clone().with_actor_name_snapshot(Some("x".repeat(129))).is_err());
+        assert!(log.with_actor_name_snapshot(Some("name\nsecret".to_string())).is_err());
+        assert!(
+            AuditLog::new("audit-1".to_string(), audit_data())
+                .unwrap()
+                .with_actor_name_snapshot(Some("周晓彤".to_string()))
+                .is_err()
         );
-    }
-
-    #[test]
-    fn pick_committed_resource_id_conflicts_on_same_id_different_payload() {
-        let actor = audit_actor();
-        let receipt = receipt_for(&actor, "pick-conflict-key", 100);
-        let audit = AuditLog::new(
-            receipt.id().to_string(),
-            AuditLog::receipt_audit_data(&receipt, actor.clone(), "receipt-1".to_string()).unwrap(),
-        )
-        .unwrap();
-        let changed = receipt_for(&actor, "pick-conflict-key", 200);
-        let candidates = vec![audit.base.id.clone()];
-        let facts = vec![audit.receipt_fact()];
-
-        assert!(AuditLog::pick_committed_resource_id(&changed, &candidates, &facts).is_err());
-    }
-
-    #[test]
-    fn pick_committed_resource_id_rejects_corrupted_fact() {
-        let actor = audit_actor();
-        let receipt = receipt_for(&actor, "pick-corrupted-key", 100);
-        let audit = AuditLog::new(
-            receipt.id().to_string(),
-            AuditLog::receipt_audit_data(&receipt, actor, "receipt-1".to_string()).unwrap(),
-        )
-        .unwrap();
-        let candidates = vec![audit.base.id.clone()];
-        let mut fact = audit.receipt_fact();
-        fact.success = false;
-
-        assert!(AuditLog::pick_committed_resource_id(&receipt, &candidates, &[fact]).is_err());
     }
 }

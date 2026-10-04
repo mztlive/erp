@@ -45,7 +45,7 @@
 | [src/demo_master_data](src/demo_master_data) | JSON 演示种子、实际 ID 登记与仅保留 admin 的全库重置；执行要求见[演示主数据合同](../../../docs/demo-master-data-contract.md) |
 | [src/adapters/mod.rs](src/adapters/mod.rs) | 实际消费方适配器 |
 | [src/approval_dispatch/mod.rs](src/approval_dispatch/mod.rs) | ApprovalActionRegistry 与审批分派 |
-| [src/audit/mod.rs](src/audit/mod.rs) | run_audited |
+| [src/audit/mod.rs](src/audit/mod.rs) | execute_audited、run_audited_event 与现有 run_audited；类型化动作和执行后安全投影 |
 | [src/order_to_cash/mod.rs](src/order_to_cash/mod.rs) | 销售到收款流程 |
 | [src/procure_to_pay/mod.rs](src/procure_to_pay/mod.rs) | 采购到付款流程 |
 | [src/fulfillment_execution/mod.rs](src/fulfillment_execution/mod.rs) | 履约执行 |

@@ -1,15 +1,19 @@
 "use client"
 
+import type { ReactNode } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { DownloadIcon, ShieldCheckIcon, TriangleAlertIcon } from "lucide-react"
 
 import {
     BusinessFailureState,
+    BusinessEmptyState,
     FormalActionResult,
     PageScaffold,
 } from "@/components/business"
 import {
     ListWorkSurface,
     ListWorkspaceHeader,
+    ListWorkspaceViews,
     listWorkspaceStyles as styles,
 } from "@/components/business/list-workspace"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -21,6 +25,101 @@ import { useAccessAuditPage } from "@/features/access-audit/pages/hooks/use-acce
 import { AccessViewTable } from "@/features/access-audit/pages/components/access-view-table"
 import type { AuditEventRow } from "@/features/access-audit/types"
 import { formatDateTime } from "@/lib/datetime"
+import { hasPermission } from "@/lib/permissions"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { BusinessAuditPage } from "@/features/audit/pages/business-audit-page"
+
+/** 身份与业务记录分别使用各自的目录和查询权限。 */
+export function AuditPage() {
+    const account = useAccountProfileQuery()
+    const router = useRouter()
+    const searchParams = useSearchParams()
+    const canBusiness = hasPermission(
+        account.data?.permissions,
+        "audit_log:list",
+    )
+    const canIdentity = hasPermission(
+        account.data?.permissions,
+        "audit_event:list",
+    )
+    const source =
+        canBusiness &&
+        (searchParams.get("source") === "business" || !canIdentity)
+            ? "business"
+            : "identity"
+    const selectSource = (next: "business" | "identity") => {
+        const params = new URLSearchParams(searchParams.toString())
+        params.set("source", next)
+        router.replace(`/system/audit?${params}`, { scroll: false })
+    }
+    const views = (
+        <ListWorkspaceViews
+            ariaLabel="审计记录类型"
+            items={[
+                ...(canBusiness
+                    ? [
+                          {
+                              id: "operations-audit-source-business",
+                              label: "业务操作",
+                              active: source === "business",
+                              onClick: () => selectSource("business"),
+                          },
+                      ]
+                    : []),
+                ...(canIdentity
+                    ? [
+                          {
+                              id: "operations-audit-source-identity",
+                              label: "权限变更",
+                              active: source === "identity",
+                              onClick: () => selectSource("identity"),
+                          },
+                      ]
+                    : []),
+            ]}
+        />
+    )
+
+    if (account.isPending) {
+        return (
+            <PageScaffold density="compact" className={styles.page}>
+                <div className="h-10 w-48 animate-pulse rounded-lg bg-muted" />
+                <div className="h-[32rem] animate-pulse rounded-lg bg-muted" />
+            </PageScaffold>
+        )
+    }
+    if (account.isError || (!canBusiness && !canIdentity)) {
+        return (
+            <PageScaffold density="compact" className={styles.page}>
+                <ListWorkspaceHeader eyebrow="系统" title="审计查询" />
+                {account.isError ? (
+                    <BusinessFailureState
+                        error={account.error}
+                        action={
+                            <Button
+                                id="operations-audit-account-retry"
+                                onClick={() => void account.refetch()}
+                            >
+                                重试
+                            </Button>
+                        }
+                    />
+                ) : (
+                    <BusinessEmptyState
+                        kind="no-scope"
+                        title="暂无审计查询权限"
+                        description="请联系管理员配置业务操作或权限变更的查询权限。"
+                    />
+                )}
+            </PageScaffold>
+        )
+    }
+    return source === "business" ? (
+        <BusinessAuditPage views={views} />
+    ) : (
+        <IdentityAuditPage views={views} />
+    )
+}
 
 /**
  * 审计查询：追加式事件的只读查询页。
@@ -28,7 +127,7 @@ import { formatDateTime } from "@/lib/datetime"
  * 与权限配置分开：查询词、筛选维度、时间语义与导出策略都不同，
  * 进入时默认落最近 7 天，不再以空列表迎客。
  */
-export function AuditPage() {
+function IdentityAuditPage({ views }: { views: ReactNode }) {
     const page = useAccessAuditPage("audit")
 
     if (page.pageQuery.isPending) {
@@ -131,6 +230,7 @@ export function AuditPage() {
 
             <ListWorkSurface
                 ariaLabel="审计事件列表"
+                views={views}
                 toolbar={
                     <AccessListToolbar
                         isAudit

@@ -3,11 +3,12 @@
 use std::sync::Arc;
 
 use application_core::{AuditActor, CommandReceipt};
-use erp_audit::{AuditActorLogs, AuditExt, CommandReceiptServiceExt as _};
+use erp_audit::AuditActorLogs;
 use erp_core::ids::{FileAssetId, InvoiceId};
-use erp_finance::entity::receivable::{Invoice, InvoiceData};
+use erp_finance::entity::receivable::{Invoice, InvoiceData, InvoiceStatus};
 use erp_finance::repository::ReceivableExt;
 use erp_finance::repository::prelude::*;
+use erp_finance::service::command_receipt::FinanceCommandReceiptService;
 use erp_finance::service::receivable::invoice_commit::{convert_post_allocations, ensure_sales_invoice};
 use erp_finance::service::receivable::mapping::zero_amount;
 use erp_identity::SharedRbacService;
@@ -22,12 +23,14 @@ use erp_workflow::service::approval::policy::{DocumentApprovalPolicy, policy_of}
 use erp_workflow::service::document_registry::{new_registered_document, persist_registered_document};
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, Transactional};
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::ReceivableProcess;
 use super::dto::{CommitInvoiceRequest, CreateInvoiceRequest, InvoiceView, PostInvoiceRequest};
 use super::invoice_commit::InvoiceCommitTransaction;
+use crate::audit::persist_log;
+use crate::finance_posting::command_recovery::{recovered_resource, recovered_view};
 use crate::{Error, Result};
 
 /// 发票文件批次是否已随业务命令提交，供存储补偿判断。
@@ -149,7 +152,10 @@ impl ReceivableProcess {
     ) -> Result<InvoiceWithAssetsResult> {
         req.validate()?;
         let command_receipt = super::invoice_attachments::receipt(&req, actor.id(), pending.as_ref())?;
-        if let Some(invoice_id) = command_receipt.committed_resource_id(&self.db).await? {
+        if let Some(invoice_id) = FinanceCommandReceiptService::new(self.db.clone())
+            .committed_resource_id(&command_receipt, &mut NoTransaction)
+            .await?
+        {
             return Ok(InvoiceWithAssetsResult {
                 view: self.finance.invoice_detail(&invoice_id).await?,
                 assets_committed: false,
@@ -188,36 +194,28 @@ impl ReceivableProcess {
     /// 结果恢复保留未知提交语义；已提交附件后读取失败不能触发存储补偿。
     async fn committed_invoice_view(
         &self,
-        result: Result<String>,
+        result: Result<(String, bool)>,
         receipt: &CommandReceipt,
         has_pending: bool,
     ) -> Result<InvoiceWithAssetsResult> {
-        let (detail_id, assets_committed) = match result {
-            Ok(id) => (id, has_pending),
+        let (detail_id, assets_committed, original_unknown) = match result {
+            Ok((id, fresh)) => (id, has_pending && fresh, None),
             Err(error) => {
-                let recovered = match receipt.committed_resource_id(&self.db).await {
-                    Ok(result) => result,
-                    Err(recovery_error) => {
-                        if matches!(error, Error::OutcomeUnknown(_)) {
-                            return Err(error);
-                        }
-                        return Err(recovery_error.into());
-                    },
-                };
-                match recovered {
-                    Some(id) => (id, has_pending && matches!(error, Error::OutcomeUnknown(_))),
-                    None => return Err(error),
-                }
+                let unknown = matches!(error, Error::OutcomeUnknown(_));
+                let lookup = FinanceCommandReceiptService::new(self.db.clone())
+                    .committed_resource_id(receipt, &mut NoTransaction)
+                    .await
+                    .map_err(Error::from);
+                let recovered = recovered_resource(error, lookup)?;
+                (recovered.id, has_pending && unknown, recovered.original_unknown)
             },
         };
-        Ok(InvoiceWithAssetsResult {
-            view: self
-                .finance
-                .invoice_detail(&detail_id)
-                .await
-                .map_err(|error| committed_read_error(error, assets_committed))?,
-            assets_committed,
-        })
+        let view = self
+            .finance
+            .invoice_detail(&detail_id)
+            .await
+            .map_err(|error| committed_read_error(error, assets_committed));
+        Ok(InvoiceWithAssetsResult { view: recovered_view(view, original_unknown)?, assets_committed })
     }
 
     /// 发票登记过账并分配（§8.3-2 事务不变量）。
@@ -259,28 +257,7 @@ impl ReceivableProcess {
         let plan_lines = convert_post_allocations(&req.allocations);
         rbac.run_authorized_policy_transaction(policy_revision, move |executor| {
             Box::pin(async move {
-                let mut invoice = db
-                    .invoices()
-                    .find_by_id(&invoice_id, executor)
-                    .await?
-                    .ok_or_else(|| Error::NotFound("发票不存在".to_string()))?;
-                ensure_sales_invoice(&invoice)?;
-                if invoice.stable.status() != erp_finance::entity::receivable::InvoiceStatus::Draft {
-                    return Err(Error::ConflictError("发票已登记，请勿重复提交".to_string()));
-                }
-                let duplicate = db
-                    .invoices()
-                    .find_by_direction_and_normalized_no(
-                        invoice.invoice_direction,
-                        &invoice.normalized_no,
-                        executor,
-                    )
-                    .await?;
-                if let Some(other) = duplicate
-                    && other.base.id != invoice.base.id
-                {
-                    return Err(Error::ConflictError("发票号码已登记，请勿重复提交".to_string()));
-                }
+                let mut invoice = load_postable_invoice(&db, &invoice_id, executor).await?;
 
                 super::invoice_posting::post_invoice_apply(
                     &db,
@@ -303,6 +280,26 @@ impl ReceivableProcess {
 
         self.finance.invoice_detail(&detail_id).await.map_err(Error::from)
     }
+}
+
+async fn load_postable_invoice(db: &Database, id: &str, executor: &mut dyn Executor) -> Result<Invoice> {
+    let invoice = db
+        .invoices()
+        .find_by_id(id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("发票不存在".to_string()))?;
+    ensure_sales_invoice(&invoice)?;
+    if invoice.stable.status() != InvoiceStatus::Draft {
+        return Err(Error::ConflictError("发票已登记，请勿重复提交".to_string()));
+    }
+    let duplicate = db
+        .invoices()
+        .find_by_direction_and_normalized_no(invoice.invoice_direction, &invoice.normalized_no, executor)
+        .await?;
+    if duplicate.as_ref().is_some_and(|other| other.base.id != invoice.base.id) {
+        return Err(Error::ConflictError("发票号码已登记，请勿重复提交".to_string()));
+    }
+    Ok(invoice)
 }
 
 /// 已提交文件后的响应读取失败必须保留对象，由同操作号重试核对已完成结果。
@@ -515,7 +512,7 @@ async fn persist_created_invoice(
                     executor,
                 )
                 .await?;
-                db.audit_logs().create(&audit, executor).await?;
+                persist_log(&db, &audit, executor).await?;
                 Ok::<(), crate::Error>(())
             })
         })

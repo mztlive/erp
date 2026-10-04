@@ -65,6 +65,7 @@ pub struct IntegrationCommandIdentity {
     resource_type: String,
     resource_id: String,
     fingerprint: String,
+    idempotency_key_hash: String,
 }
 
 impl IntegrationCommandIdentity {
@@ -104,6 +105,7 @@ impl IntegrationCommandIdentity {
             resource_type: resource_type.to_string(),
             resource_id: resource_id.to_string(),
             fingerprint: sha256_hex(payload),
+            idempotency_key_hash: sha256_hex(idempotency_key.as_bytes()),
         }
     }
 
@@ -113,6 +115,17 @@ impl IntegrationCommandIdentity {
     /// 返回不含原始幂等键的 SHA-256 派生收据 ID。
     pub fn receipt_id(&self) -> &str {
         &self.receipt_id
+    }
+
+    /// 返回规范化原始幂等键摘要，不记录原始键。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 返回SHA256摘要。
+    /// # 错误
+    /// 无。
+    pub fn idempotency_key_hash(&self) -> &str {
+        &self.idempotency_key_hash
     }
 
     /// 返回完整命令载荷指纹。
@@ -209,3 +222,9 @@ mod command_identity_tests {
         assert!(!identity.matches_receipt("actor-2", "integration.task_action", "work_item", Some("wi-1")));
     }
 }
+
+mod command_receipt;
+pub use command_receipt::{
+    ActionReceiptResult, CompletionReceiptResult, DirectReceiptResult, IntegrationCommandReceipt,
+    IntegrationCommandResult, IntegrationReceiptPayload,
+};

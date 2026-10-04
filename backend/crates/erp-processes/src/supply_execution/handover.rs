@@ -1,14 +1,17 @@
 //! 供应商履约订单跟进人交接：目标资格、可选转交开放 W26 任务。
 
-use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use application_core::{AuditActor, CommandFingerprint};
+use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
 use erp_identity::repository::prelude::*;
 use erp_identity::{AccessControlExt, Permission, SharedRbacService};
+use erp_supply::command_receipt::SupplyCommandResult;
+use erp_supply::command_receipt::repository::{SupplyCommandReceiptExt, SupplyCommandReceiptReadExt};
 use erp_supply::dto::{
     FulfillmentHandoverCandidateView, HandoverFulfillmentOrderRequest, HandoverFulfillmentOrderView,
 };
 use erp_supply::service::supplier_fulfillment::W26_BUSINESS_OBJECT_TYPE;
+use erp_supply::service::supplier_fulfillment::receipt::stable_digest;
 use erp_workflow::repository::prelude::*;
 use erp_workflow::{WorkItem, WorkItemExt, WorkItemType};
 use persistence_core::{NoTransaction, Transactional};
@@ -16,8 +19,10 @@ use validator::Validate;
 
 use super::SupplierFulfillmentProcess;
 use super::follow_up::reject_company_org;
+use super::receipt::persist_supply_receipt;
 use crate::adapters::identity::shared_rbac_service;
 use crate::adapters::{fulfillment_order_access, scoped_fulfillment_service};
+use crate::audit::persist_log;
 use crate::{Error, Result};
 
 impl SupplierFulfillmentProcess {
@@ -38,9 +43,15 @@ impl SupplierFulfillmentProcess {
             reject_company_org(org)?;
         }
         let rbac = shared_rbac_service(self.db.clone());
-        let audit_id = format!("fulfillment-handover-{}-{}-{key}", actor.id(), id);
+        let audit_id = format!(
+            "fulfillment-handover-{}",
+            CommandFingerprint::from_parts([actor.id().to_string(), id.to_string(), key.clone()])
+                .digest_hex()
+        );
         let fingerprint = handover_fingerprint(actor.id(), id, &req, &key)?;
-        if let Some(existing) = replay(&self.db, &rbac, &audit_id, &fingerprint, id, actor).await? {
+        if let Some(existing) =
+            replay(&self.db, &rbac, &audit_id, &fingerprint, id, actor, &req.idempotency_key).await?
+        {
             return Ok(existing);
         }
         ensure_target_qualified(&self.db, &rbac, req.target_user_id.trim(), &mut NoTransaction).await?;
@@ -132,19 +143,27 @@ async fn persist_handover(
         Vec::new()
     };
     view.transferred_work_item_ids = transferred.clone();
-    let audit = actor.clone().resource_log_with_id(
-        audit_id.to_string(),
-        "supplier_fulfillment.handover",
-        "supplier_fulfillment_order",
-        view.order_id.clone(),
-        Some(format!(
-            "command_sha256={fingerprint};target={};transfer={};reason={}",
-            req.target_user_id.trim(),
-            req.transfer_open_exception_tasks,
-            req.reason.trim()
-        )),
-    )?;
-    db.audit_logs().create(&audit, executor).await?;
+    let audit = actor
+        .clone()
+        .resource_log_with_id(
+            audit_id.to_string(),
+            "supplier_fulfillment.handover",
+            "supplier_fulfillment_order",
+            view.order_id.clone(),
+            Some("供应商履约订单跟进责任已交接".to_string()),
+        )?
+        .with_command_id(Some(audit_id.to_string()))?;
+    persist_supply_receipt(
+        db,
+        &audit,
+        fingerprint,
+        &req.idempotency_key,
+        id,
+        SupplyCommandResult::FulfillmentHandover,
+        executor,
+    )
+    .await?;
+    persist_log(db, &audit, executor).await?;
     Ok(view)
 }
 
@@ -203,14 +222,21 @@ async fn replay(
     expected_fingerprint: &str,
     order_id: &str,
     actor: &AuditActor,
+    key: &str,
 ) -> Result<Option<HandoverFulfillmentOrderView>> {
-    let Some(audit) = db.audit_logs().find_by_id(audit_id, &mut NoTransaction).await? else {
+    let Some(stored) = db.supply_command_receipts().find_command(audit_id, &mut NoTransaction).await? else {
         return Ok(None);
     };
-    let expected = format!("command_sha256={expected_fingerprint}");
-    let message = audit.message.as_deref().unwrap_or("");
-    if message != expected && !message.starts_with(&format!("{expected};")) {
-        return Err(Error::ConflictError("同一幂等键已用于不同的供应商订单交接".into()));
+    stored.verify_identity(
+        audit_id,
+        actor.id(),
+        "supplier_fulfillment.handover",
+        order_id,
+        &stable_digest(key.trim()),
+    )?;
+    stored.verify(expected_fingerprint, Some(order_id), "同一幂等键已用于不同的供应商订单交接")?;
+    if !matches!(stored.result, SupplyCommandResult::FulfillmentHandover) {
+        return Err(Error::Internal("供应商订单交接回执类型非法".to_string()));
     }
     let handler = current_handler(db, order_id, &mut NoTransaction).await?;
     let order = fulfillment_order_access(db.clone(), rbac.clone())

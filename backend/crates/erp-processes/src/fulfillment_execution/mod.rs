@@ -11,6 +11,7 @@ mod purchase_context;
 mod purchase_receipt;
 mod purchase_receipt_posting;
 mod service_confirm;
+mod service_confirm_audit;
 pub(crate) mod service_crypto;
 mod service_fulfillment;
 pub mod task;

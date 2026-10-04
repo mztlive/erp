@@ -1,7 +1,7 @@
 //! 应付往来子账列表、详情与创建编排。
 
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_core::ids::{PartyBankAccountId, PayableAccountId};
 use erp_finance::repository::PayableExt;
 use erp_party::SensitiveDataCodec;
@@ -15,6 +15,7 @@ use super::dto::{
 };
 use super::mapping::resolve_current_payment_recipient;
 use super::{PayableService, payment_task};
+use crate::audit::persist_log;
 use crate::{Error, Result};
 
 impl PayableService {
@@ -69,7 +70,7 @@ impl PayableService {
             "party_bank_account",
             recipient.base.id.clone(),
         )?;
-        self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
+        persist_log(&self.db, &audit, &mut NoTransaction).await?;
         Ok(PaymentRecipientRevealView { bank_account_id: recipient.base.id, account_number })
     }
     /// 建立应付往来子账与原始应付分录（跨集合事务写入）。
@@ -115,7 +116,7 @@ impl PayableService {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     db.payable().create_payable_with_entry(&account, &entry, executor).await?;
-                    db.audit_logs().create(&audit, executor).await?;
+                    persist_log(&db, &audit, executor).await?;
                     Ok::<(), crate::Error>(())
                 })
             })

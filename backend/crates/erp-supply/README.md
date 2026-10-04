@@ -39,8 +39,9 @@
 | [src/service/supplier_api/mod.rs](src/service/supplier_api/mod.rs) | 连接、能力和命令意图 |
 | [src/service/supplier_fulfillment/mod.rs](src/service/supplier_fulfillment/mod.rs) | 供应商侧订单与结果回执 |
 | [src/service/supplier_settlement/mod.rs](src/service/supplier_settlement/mod.rs) | 结算单、差异和复核 |
+| [src/command_receipt/mod.rs](src/command_receipt/mod.rs) | 供应链命令身份、原载荷指纹与强类型结果 |
 | [src/ports/mod.rs](src/ports/mod.rs) | 供给资格、网关及引用登记合同 |
-| [src/indexes/mod.rs](src/indexes/mod.rs) | 四组索引入口 |
+| [src/indexes/mod.rs](src/indexes/mod.rs) | 四组业务索引与独立命令回执唯一索引 |
 | [src/entity/mod.rs](src/entity/mod.rs) | 本域实体、值对象和确定性规则 |
 | [src/repository/mod.rs](src/repository/mod.rs) | 本域 MongoDB 仓储与集合访问器 |
 
@@ -51,6 +52,7 @@
 3. 新增或调整集合查询时同步评估索引；组合根复用本域公开索引入口，保持既有逐集合注册顺序。
 4. HTTP 请求和响应优先复用本域 DTO；扩展公开合同须同步检查 Process、ReadModel 和应用调用方。
 5. 业务改动补充本域库单元测试，覆盖成功、失败、边界及相关幂等或版本冲突路径。
+6. 供应链命令去重与原结果恢复只读取本域命令回执。`supply_command_receipts` 以稳定命令 ID 唯一保护；供给交接使用 `supplier_offering_handover_command_receipts`。回执必须与业务事实及对应业务事件共用事务；审计展示删除或归档不得影响回执，不得从展示消息解析请求指纹、版本或结果。未知 schema、缺失引用及软删除回执必须失败关闭，不得当作未执行命令重跑。
 
 ## 验证要求
 

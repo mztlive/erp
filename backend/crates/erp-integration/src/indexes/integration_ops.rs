@@ -19,7 +19,7 @@ use mongodb::options::IndexOptions;
 use mongodb::{Database, IndexModel};
 use persistence_core::Result;
 
-use crate::repository::IntegrationOpsExt;
+use crate::repository::{IntegrationCommandExt, IntegrationOpsExt};
 
 /// `inbox_message` 集合名。
 pub(crate) const INBOX_MESSAGES: &str = <mongodb::Database as IntegrationOpsExt>::INBOX_MESSAGES;
@@ -50,6 +50,19 @@ pub async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, INTEGRATION_ERROR_TASKS, integration_error_task_indexes()).await?;
     create_indexes(db, RECONCILIATION_DIFFERENCES, reconciliation_difference_indexes()).await?;
     create_indexes(db, RECONCILIATION_DIFFERENCE_RESOLUTIONS, reconciliation_difference_resolution_indexes())
+        .await?;
+    db.collection::<Document>(Database::INTEGRATION_COMMAND_RECEIPTS)
+        .create_index(
+            IndexModel::builder()
+                .keys(doc! { "id": 1 })
+                .options(
+                    IndexOptions::builder()
+                        .name("uk_integration_command_receipts_id".to_string())
+                        .unique(true)
+                        .build(),
+                )
+                .build(),
+        )
         .await?;
     Ok(())
 }

@@ -455,7 +455,7 @@ pub(crate) mod tests {
             ReconciliationDifferenceId::new("diff-1"),
             2,
             ResolutionAction::ConfirmNoError,
-            W29EvidenceReference::parse("work_item:wi-1;audit_log:audit-1").unwrap(),
+            W29EvidenceReference::parse("work_item:wi-1;command_receipt:audit-1").unwrap(),
             "ops-1".to_string(),
             Instant::from_unix_secs(1_700_000_001),
         );
@@ -470,7 +470,7 @@ pub(crate) mod tests {
             ReconciliationDifferenceId::new("diff-1"),
             2,
             ResolutionAction::CloseDuplicate,
-            W29EvidenceReference::parse("work_item:wi-1;audit_log:audit-1").unwrap(),
+            W29EvidenceReference::parse("work_item:wi-1;command_receipt:audit-1").unwrap(),
             "ops-1".to_string(),
             Instant::from_unix_secs(1_700_000_001),
         );
@@ -493,7 +493,7 @@ pub(crate) mod tests {
 
         let mut input = data(ResolutionAction::ConfirmNoError);
         input.resolution_no = 7;
-        input.evidence_reference = Some("audit_log:a-1".to_string());
+        input.evidence_reference = Some("command_receipt:a-1".to_string());
         let terminal = ReconciliationDifferenceResolution::new(
             ReconciliationDifferenceResolutionId::new("res-terminal"),
             input,
@@ -527,7 +527,7 @@ pub(crate) mod tests {
             ReconciliationDifferenceId::new("diff-1"),
             Some(&first),
             ResolutionAction::ConfirmValidDifference,
-            Some("audit_log:a-9".to_string()),
+            Some("command_receipt:a-9".to_string()),
             "ops-2".to_string(),
             Instant::from_unix_secs(1_700_000_001),
         )

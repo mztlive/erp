@@ -1,7 +1,7 @@
 //! 付款过账跨域步骤；统一传递调用方 Executor 并在首个失败处停止。
 use application_core::AuditActor;
 use async_trait::async_trait;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::{AuditFact, AuditValue, BusinessEventContent, BusinessEventContext, BusinessEventResult};
 use erp_finance::entity::payable::{PendingPaymentAllocation, SupplierPayment};
 use erp_finance::service::payable::{
     PaymentSettlement, PaymentSettlementFacts, finish_supplier_payment, settle_supplier_payment_with_facts,
@@ -10,14 +10,8 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use super::payment_task;
+use crate::audit::persist_log;
 use crate::{Error, Result};
-/// 付款过账授权来源。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum PaymentPostSource {
-    /// 当前开放付款执行任务。
-    ExecutionTask,
-}
-
 /// 在调用方事务内写入付款核销、应付余额、任务进度与审计。
 ///
 /// 数据面职责归位（FIN-E02/FIN-R05）：分录/子账事实一次批量装载并去重，
@@ -32,11 +26,11 @@ pub(super) async fn post_supplier_payment(
     payment: &mut SupplierPayment,
     pending: &[PendingPaymentAllocation],
     facts: PaymentSettlementFacts<'_>,
-    source: PaymentPostSource,
+    audit: &BusinessEventContext,
     actor: &AuditActor,
     session: &mut dyn Executor,
 ) -> Result<()> {
-    let mut steps = MongoPaymentPosting { db, payment, pending, facts, source, actor, settlement: None };
+    let mut steps = MongoPaymentPosting { db, payment, pending, facts, audit, actor, settlement: None };
     execute_posting(&mut steps, session).await
 }
 
@@ -66,7 +60,7 @@ struct MongoPaymentPosting<'a> {
     payment: &'a mut SupplierPayment,
     pending: &'a [PendingPaymentAllocation],
     facts: PaymentSettlementFacts<'a>,
-    source: PaymentPostSource,
+    audit: &'a BusinessEventContext,
     actor: &'a AuditActor,
     settlement: Option<PaymentSettlement>,
 }
@@ -110,22 +104,23 @@ impl PaymentPostingSteps for MongoPaymentPosting<'_> {
             .settlement
             .as_ref()
             .ok_or_else(|| Error::Internal("付款过账缺少应付核销结果".to_string()))?;
-        match self.source {
-            PaymentPostSource::ExecutionTask => {
-                finish_supplier_payment(self.db, self.payment, self.pending, settlement, executor).await?
-            },
-        }
+        finish_supplier_payment(self.db, self.payment, self.pending, settlement, executor).await?;
         Ok(())
     }
 
     /// 为成功过账记录最后一条业务审计。
     async fn write_audit(&mut self, executor: &mut dyn Executor) -> Result<()> {
-        let audit = self.actor.clone().resource_log(
-            "supplier_payment.post",
-            "supplier_payment",
-            self.payment.base.id.clone(),
-        )?;
-        self.db.audit_logs().create(&audit, executor).await?;
+        let audit = self.audit.log(BusinessEventContent {
+            target_id: self.payment.base.id.clone(),
+            target_number: Some(self.payment.payment_no.clone()),
+            result: BusinessEventResult::Succeeded,
+            field_changes: vec![],
+            facts: vec![AuditFact {
+                field: "amount".to_string(),
+                value: AuditValue::Amount { value: self.payment.amount },
+            }],
+        })?;
+        persist_log(self.db, &audit, executor).await?;
         Ok(())
     }
 }

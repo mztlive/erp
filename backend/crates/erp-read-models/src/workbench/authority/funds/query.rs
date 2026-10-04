@@ -2,8 +2,6 @@
 
 use std::collections::{HashMap, HashSet};
 
-use erp_audit::AuditExt;
-use erp_audit::repository::prelude::*;
 use erp_customer::CustomerExt;
 use erp_finance::entity::payable::PayableAccount;
 use erp_finance::entity::receivable::ReceivableAccount;
@@ -15,27 +13,6 @@ use super::super::amount::non_empty;
 use crate::errors::Result;
 
 impl super::super::WorkItemFactsReader {
-    /// Recover document creators from create-audit facts.
-    pub(in crate::workbench) async fn load_created_by_from_audit(
-        &self,
-        resource_type: &str,
-        ids: &HashSet<String>,
-        executor: &mut dyn Executor,
-    ) -> Result<HashMap<String, String>> {
-        if ids.is_empty() {
-            return Ok(HashMap::new());
-        }
-        let resource_ids = ids.iter().cloned().collect::<Vec<_>>();
-        let audits = self
-            .db
-            .audit_logs()
-            .list_work_item_creation_audits(resource_type, &resource_ids, executor)
-            .await?;
-        Ok(first_created_by(
-            audits.iter().map(|audit| (audit.resource_id.as_deref(), audit.actor_id.as_str())),
-        ))
-    }
-
     /// Load payable supplier display names.
     pub(in crate::workbench) async fn payable_supplier_names(
         &self,
@@ -172,33 +149,5 @@ impl super::super::WorkItemFactsReader {
         }
         let revisions = self.read_sales_revisions(&revision_ids, executor).await?;
         Ok(super::mapping::voucher_revision_ids(&revisions))
-    }
-}
-
-/// 仅使用仓储既有返回顺序，每个 resource 保留首个 create actor。
-fn first_created_by<'a>(
-    audits: impl IntoIterator<Item = (Option<&'a str>, &'a str)>,
-) -> HashMap<String, String> {
-    let mut created_by = HashMap::new();
-    for (resource_id, actor_id) in audits {
-        if let Some(resource_id) = resource_id {
-            created_by.entry(resource_id.to_string()).or_insert_with(|| actor_id.to_string());
-        }
-    }
-    created_by
-}
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn first_created_by_keeps_first_actor_and_ignores_missing_resource() {
-        let result = super::first_created_by([
-            (Some("r-1"), "first"),
-            (None, "orphan"),
-            (Some("r-1"), "last"),
-            (Some("r-2"), ""),
-        ]);
-        assert_eq!(result.len(), 2);
-        assert_eq!(result.get("r-1").map(String::as_str), Some("first"));
-        assert_eq!(result.get("r-2").map(String::as_str), Some(""));
     }
 }

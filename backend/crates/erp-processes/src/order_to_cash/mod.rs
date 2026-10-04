@@ -1,5 +1,7 @@
 //! Sales lifecycle, approval and financial formalization processes.
 
+use crate::audit::persist_log;
+
 mod adapter;
 pub mod adapters;
 mod authorization;
@@ -91,7 +93,7 @@ pub async fn cancel_approval(
     actor: &application_core::AuditActor,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<()> {
-    use erp_audit::{AuditActorLogs, AuditExt};
+    use erp_audit::AuditActorLogs;
     use erp_sales::repository::SalesOrderExt;
     let mut order = db
         .sales_orders()
@@ -101,6 +103,7 @@ pub async fn cancel_approval(
     adapter::execute_sales_order_domain_action(&mut order, action, actor.id())?;
     SalesOrderService::new(db.clone()).persist_order(&mut order, executor).await?;
     let audit = actor.clone().resource_log("sales_order.cancel_approval", "sales_order", id.to_string())?;
-    db.audit_logs().create(&audit, executor).await?;
+    persist_log(db, &audit, executor).await?;
     Ok(())
 }
+mod command_event;

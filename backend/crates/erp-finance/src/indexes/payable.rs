@@ -101,6 +101,10 @@ fn supplier_payment_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_supplier_payments_no", doc! { "payment_no": 1 }),
         named_index("idx_supplier_payments_supplier_status", doc! { "supplier_id": 1, "status": 1 }),
+        named_index(
+            "idx_supplier_payments_operator_page",
+            doc! { "posted_by": 1, "deleted_at": 1, "created_at": 1, "id": 1 },
+        ),
     ]
 }
 

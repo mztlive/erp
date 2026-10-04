@@ -60,7 +60,7 @@ impl SubmitPaymentReversalRequest {
 
 #[cfg(test)]
 mod tests {
-    use application_core::{CommandReceiptFact, CommandReceiptMatch};
+    use application_core::{StructuredCommandReceipt, StructuredReceiptMatch};
 
     use super::*;
 
@@ -85,17 +85,13 @@ mod tests {
                     .unwrap(),
             ),
         ] {
-            let fact =
-                CommandReceiptFact::new(receipt.id(), "handler", receipt.action(), receipt.resource_type())
-                    .with_resource_id("reversal-1")
-                    .with_success(true)
-                    .with_message(receipt.message(None));
-            assert_eq!(receipt.match_fact(&fact), CommandReceiptMatch::SamePayload("reversal-1".into()));
+            let fact = StructuredCommandReceipt::from_command(&receipt).unwrap();
+            assert_eq!(receipt.match_structured(&fact), StructuredReceiptMatch::SamePayload);
             assert_eq!(changed_version.id(), receipt.id());
-            assert_eq!(changed_version.match_fact(&fact), CommandReceiptMatch::DifferentPayload);
+            assert_eq!(changed_version.match_structured(&fact), StructuredReceiptMatch::DifferentPayload);
             let mut other_actor = fact.clone();
             other_actor.actor_id = "other".into();
-            assert_eq!(receipt.match_fact(&other_actor), CommandReceiptMatch::Corrupted);
+            assert_eq!(receipt.match_structured(&other_actor), StructuredReceiptMatch::Corrupted);
         }
         assert_ne!(
             receipt_request.command_receipt("reversal-1", "handler").unwrap().id(),

@@ -1,7 +1,7 @@
 //! 客户资料创建用例与事务载荷。
 
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_core::ids::{PartyId, PartyRevisionId};
 use erp_customer::{
     AssignmentRole, CustomerAccount, CustomerAccountData, CustomerAccountId, CustomerAccountStatus,
@@ -21,6 +21,7 @@ use super::facts::PartyFacts;
 use super::idempotency::{checked_command_view, command_view};
 use super::numbering::business_no;
 use crate::adapters::customer_access;
+use crate::audit::persist_log;
 use crate::{Error, Result};
 
 impl CustomerProfileService {
@@ -200,7 +201,7 @@ impl PreparedCreate {
         db.customer_assignments().create(&self.assignment, executor).await?;
         self.facts.persist(db, executor).await?;
         db.customer_profile_commands().create(&self.command, executor).await?;
-        db.audit_logs().create(&self.audit, executor).await?;
+        persist_log(db, &self.audit, executor).await?;
         Ok(())
     }
 }

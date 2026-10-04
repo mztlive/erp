@@ -6,7 +6,7 @@ use bpm::model::types::{
     ApprovalCommandKind, ApprovalExecutionAssignmentSource, ApprovalNodeExecutionStatus,
     ApprovalProcessInstanceStatus,
 };
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
 use erp_core::ids::{ApprovalNotificationOutboxId, ApprovalSubjectSnapshotId, WorkItemId};
 use erp_identity::SharedRbacService;
@@ -40,6 +40,7 @@ use super::approval_prepare::{
 use super::approval_query::load_approval_binding;
 use super::mapping::{list_projection_from_execution, stock_adjustment_start_scopes};
 use crate::adapters::freeze_approval_materials;
+use crate::audit::persist_log;
 use crate::{Error, Result};
 
 /// 库存调整启动事务写入集合。
@@ -135,7 +136,7 @@ pub async fn persist_stock_adjustment_start(
                     executor,
                 )
                 .await?;
-                db.audit_logs().create(&audit, executor).await?;
+                persist_log(&db, &audit, executor).await?;
                 Ok::<StockAdjustment, Error>(input.adjustment)
             })
         })

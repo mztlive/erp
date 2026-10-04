@@ -1,7 +1,7 @@
 //! 回款冲正草稿创建的注册、绑定和审计根事务。
 
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_identity::SharedRbacService;
 use erp_read_models::returns_center::dto::ReceiptReversalView;
 use erp_returns::dto::CreateReceiptReversalRequest;
@@ -19,6 +19,7 @@ use validator::Validate;
 use super::super::ReturnsProcess;
 use super::context::{load_receipt_reversal_context, persist_bound_receipt_reversal_document};
 use crate::Result;
+use crate::audit::persist_log;
 
 impl ReturnsProcess {
     /// 登记回款冲正草稿，并在同一事务绑定已发布审批定义。
@@ -105,7 +106,7 @@ async fn persist_created_receipt_reversal(
                 )
                 .await?;
                 ReturnsService::persist_created_receipt_reversal(&db, &reversal, executor).await?;
-                db.audit_logs().create(&audit, executor).await?;
+                persist_log(&db, &audit, executor).await?;
                 Ok::<(), crate::Error>(())
             })
         })

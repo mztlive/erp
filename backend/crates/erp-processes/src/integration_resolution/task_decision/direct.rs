@@ -1,17 +1,17 @@
 //! 无正式任务对账的任务关联闸门、事务与回执。
 use application_core::AuditActor;
+use erp_identity::{Permission, subject};
 use erp_integration::dto::{
     DirectReconciliationCommand, DirectReconciliationResult, DirectReconciliationStatus,
-    IntegrationActionOutcome, PreparedDirectDecisionTarget,
+    PreparedDirectDecisionTarget,
 };
-use erp_integration::entity::integration_ops::IntegrationCommandIdentity;
+use erp_integration::entity::integration_ops::{DirectReceiptResult, IntegrationCommandIdentity};
 use erp_integration::service::task_decision::DirectFact;
 use erp_integration::service::task_decision::direct::execute_direct_decision;
 use erp_workflow::WorkItemExt;
 use erp_workflow::repository::prelude::*;
 use mongodb::Database;
 use persistence_core::Executor;
-use serde::{Deserialize, Serialize};
 
 use super::super::IntegrationResolutionProcess;
 use super::guard::command_identity;
@@ -59,18 +59,6 @@ impl super::execution::DirectCommandPort for DirectCommand<'_> {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct DirectReceiptMessage {
-    #[serde(rename = "s")]
-    resulting_status: DirectReconciliationStatus,
-    #[serde(rename = "t")]
-    is_terminal: bool,
-    #[serde(rename = "o")]
-    outcome: IntegrationActionOutcome,
-    #[serde(rename = "b", skip_serializing_if = "Option::is_none")]
-    business_result_reference: Option<String>,
-}
-
 impl IntegrationResolutionProcess {
     /// 对未关联任何正式任务的差异提交 decision-only 命令。
     ///
@@ -83,6 +71,7 @@ impl IntegrationResolutionProcess {
         actor: &AuditActor,
     ) -> Result<DirectReconciliationResult> {
         command.validate()?;
+        self.ensure_direct_permission(actor).await?;
         if command.difference_id != path_id {
             return Err(Error::ValidationError("路径差异 ID 与命令不一致".to_string()));
         }
@@ -101,30 +90,48 @@ impl IntegrationResolutionProcess {
         .await
     }
 
+    /// 独立决定与重放统一检验当前静态权限，任务关联由各自读取闸门拒绝。
+    async fn ensure_direct_permission(&self, actor: &AuditActor) -> Result<()> {
+        let rbac = crate::adapters::identity::shared_rbac_service(self.db.clone());
+        let permission = Permission::parse("reconciliation_difference:decide")?;
+        if !rbac.enforce(&subject(actor.kind(), actor.id()), &permission).await? {
+            return Err(Error::Forbidden("当前账号已不具备对账差异决定权限".into()));
+        }
+        Ok(())
+    }
+
     async fn transact_direct_decision(
         &self,
         command: DirectReconciliationCommand,
         actor: AuditActor,
         receipt: IntegrationCommandIdentity,
     ) -> Result<DirectReconciliationResult> {
+        let attempt_context = super::audit_context(&actor, &receipt)?;
         let evidence = std::sync::Arc::clone(&self.evidence);
-        self.run_audited(move |db, executor| {
-            Box::pin(async move {
-                let prepared = PreparedDirectDecisionTarget::try_from(&command)?;
-                super::execution::run_direct(
-                    &mut DirectCommand {
-                        db,
-                        evidence: evidence.as_ref(),
-                        prepared: &prepared,
-                        command: &command,
-                        actor: &actor,
-                        receipt: &receipt,
-                    },
-                    executor,
-                )
-                .await
+        let result = self
+            .run_audited(move |db, executor| {
+                Box::pin(async move {
+                    let prepared = PreparedDirectDecisionTarget::try_from(&command)?;
+                    super::execution::run_direct(
+                        &mut DirectCommand {
+                            db,
+                            evidence: evidence.as_ref(),
+                            prepared: &prepared,
+                            command: &command,
+                            actor: &actor,
+                            receipt: &receipt,
+                        },
+                        executor,
+                    )
+                    .await
+                })
             })
-        })
+            .await;
+        crate::audit::finish_attempt(
+            result,
+            &attempt_context,
+            &crate::audit::MongoAuditAttemptSink::new(&self.db),
+        )
         .await
     }
 
@@ -134,9 +141,11 @@ impl IntegrationResolutionProcess {
         command: &DirectReconciliationCommand,
         actor: &AuditActor,
     ) -> Result<Option<DirectReconciliationResult>> {
-        let Some(message) = self.replay_receipt::<DirectReceiptMessage>(receipt, actor).await? else {
+        let Some(message) = self.replay_receipt::<DirectReceiptResult>(receipt, actor).await? else {
             return Ok(None);
         };
+        self.ensure_direct_permission(actor).await?;
+        ensure_no_work_item(&self.db, &command.difference_id, &mut persistence_core::NoTransaction).await?;
         Ok(Some(DirectReconciliationResult {
             difference_id: command.difference_id.clone(),
             operation_id: command.operation_id.clone(),
@@ -188,7 +197,7 @@ async fn store_direct_receipt(
         db,
         actor,
         receipt,
-        DirectReceiptMessage {
+        DirectReceiptResult {
             resulting_status: fact.resulting_status,
             is_terminal: fact.resulting_status == DirectReconciliationStatus::ConfirmedNoError
                 || fact.resulting_status == DirectReconciliationStatus::ConfirmedValidDifference,

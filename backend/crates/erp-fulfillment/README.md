@@ -17,6 +17,7 @@
 
 - 采购入库、实物发货、客户验收及其明细和过账规则。
 - 电子交付、服务履约、凭证处理和数量资格规则。
+- 客户验收登记及反向验收的独立结构化命令回执。
 
 ## 依赖与协作边界
 
@@ -32,6 +33,7 @@
 | 入口 | 用途 |
 | --- | --- |
 | [src/service/mod.rs](src/service/mod.rs) | FulfillmentService 与各类履约入口 |
+| [src/service/command_receipt.rs](src/service/command_receipt.rs) | 验收独立回执查证与同 Executor 写入 |
 | [src/entity/facts.rs](src/entity/facts.rs) | 外域消费事实 |
 | [src/ports/service_crypto.rs](src/ports/service_crypto.rs) | 服务履约加密合同 |
 | [src/entity/mod.rs](src/entity/mod.rs) | 本域实体、值对象和确定性规则 |
@@ -45,6 +47,7 @@
 3. 新增或调整集合查询时同步评估索引；组合根复用本域公开索引入口，保持既有逐集合注册顺序。
 4. HTTP 请求和响应优先复用本域 DTO；扩展公开合同须同步检查 Process、ReadModel 和应用调用方。
 5. 业务改动补充本域库单元测试，覆盖成功、失败、边界及相关幂等或版本冲突路径。
+6. fulfillment_command_receipts 的客户验收结果引用必须与履约分配、销售进度、责任任务及成功事件同事务提交。登记命令恢复原验收单当前视图和销售关系；反向命令恢复原反向验收单 ID。普通过账不因共用完成器获得新增幂等语义。成功事件与回执分别保存，重放不再次写入；回执不读取审计正文，不设置 TTL。
 
 ## 验证要求
 

@@ -3,7 +3,7 @@ use erp_core::AccountKind;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use crate::entity::AuditLog;
+use crate::entity::{AuditLog, BusinessAuditEvent, BusinessEventResult};
 
 /// 审计日志列表查询参数。
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
@@ -12,6 +12,8 @@ pub struct AuditLogListParams {
     pub action: Option<String>,
     pub resource_type: Option<String>,
     pub success: Option<bool>,
+    pub event_result: Option<BusinessEventResult>,
+    pub resource_number: Option<String>,
     #[validate(range(min = 1, message = "页码必须大于0"))]
     pub page: Option<u64>,
     #[validate(range(min = 1, max = 100, message = "分页大小必须在1-100之间"))]
@@ -34,6 +36,8 @@ impl From<&AuditLogListParams> for crate::repository::AuditLogFilter {
             action: normalized_text(params.action.as_deref()),
             resource_type: normalized_text(params.resource_type.as_deref()),
             success: params.success,
+            event_result: params.event_result,
+            resource_number: normalized_text(params.resource_number.as_deref()),
             page: page_or_default(params.page),
             page_size: page_size_or_default(params.page_size),
         }
@@ -52,6 +56,8 @@ pub struct AuditLogItem {
     pub success: bool,
     pub message: Option<String>,
     pub created_at: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub structured_event: Option<BusinessAuditEvent>,
 }
 
 impl From<AuditLog> for AuditLogItem {
@@ -74,6 +80,7 @@ impl From<AuditLog> for AuditLogItem {
             success: log.success,
             message: log.message,
             created_at: log.base.created_at,
+            structured_event: log.structured_event,
         }
     }
 }
@@ -120,6 +127,7 @@ mod tests {
             success: true,
             message: None,
             created_at: 42,
+            structured_event: None,
         };
 
         assert_eq!(
@@ -146,9 +154,24 @@ mod tests {
         assert_eq!(params.action, None);
         assert_eq!(params.resource_type, None);
         assert_eq!(params.success, None);
+        assert_eq!(params.event_result, None);
+        assert_eq!(params.resource_number, None);
         assert_eq!(params.page, None);
         assert_eq!(params.page_size, None);
         assert!(params.validate().is_ok());
+    }
+
+    #[test]
+    fn structured_result_and_number_filters_keep_typed_semantics() {
+        let params = AuditLogListParams {
+            event_result: Some(super::BusinessEventResult::Unknown),
+            resource_number: Some("  FW202610040001  ".to_string()),
+            ..Default::default()
+        };
+        let filter = AuditLogFilter::from(&params);
+        assert_eq!(filter.event_result, Some(super::BusinessEventResult::Unknown));
+        assert_eq!(filter.resource_number.as_deref(), Some("FW202610040001"));
+        assert_eq!(filter.success, None);
     }
 
     #[test]

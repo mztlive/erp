@@ -34,7 +34,7 @@ mod handover;
 mod investigate;
 mod list;
 mod place;
-mod receipt;
+pub(crate) mod receipt;
 mod refund;
 mod refund_result;
 mod refund_writes;

@@ -17,6 +17,7 @@
 
 - 销售退货、采购退货及退货数量和审批规则。
 - 客户退款、供应商退款、回款冲正和付款冲正事实。
+- 六类退款/冲正创建与提交命令的独立结构化成功回执，使用本域唯一命令身份约束。
 
 ## 依赖与协作边界
 
@@ -32,6 +33,7 @@
 | 入口 | 用途 |
 | --- | --- |
 | [src/service/mod.rs](src/service/mod.rs) | ReturnsService 与各类逆向入口 |
+| [src/service/command_receipt.rs](src/service/command_receipt.rs) | 独立退款/冲正命令回执查证与同 Executor 写入 |
 | [src/entity/returns/mod.rs](src/entity/returns/mod.rs) | 退货、退款及冲正规则 |
 | [src/ports/mod.rs](src/ports/mod.rs) | 当前端口边界说明 |
 | [src/entity/mod.rs](src/entity/mod.rs) | 本域实体、值对象和确定性规则 |
@@ -45,6 +47,7 @@
 3. 新增或调整集合查询时同步评估索引；组合根复用本域公开索引入口，保持既有逐集合注册顺序。
 4. HTTP 请求和响应优先复用本域 DTO；扩展公开合同须同步检查 Process、ReadModel 和应用调用方。
 5. 业务改动补充本域库单元测试，覆盖成功、失败、边界及相关幂等或版本冲突路径。
+6. returns_command_receipts 的命令身份、版本化指纹与强类型结果引用必须与正式业务、审批和成功审计同事务提交。冲正提交结果必须指向原冲正单，指纹必须包含原请求版本。回放仍执行当前账号、静态权限、资金来源和经办职责检查，不新增业务效果或成功事件；未知结果只能查证原命令。回执不读取审计正文，不随日志归档删除，不设置 TTL。
 
 ## 验证要求
 

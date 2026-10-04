@@ -5,6 +5,8 @@ use mongodb::options::IndexOptions;
 use mongodb::{Database, IndexModel};
 use persistence_core::Result;
 
+use crate::repository::AuditAttemptExt;
+
 const AUDIT_LOGS: &str = "audit_logs";
 
 /// 创建审计日志集合的幂等命名索引。
@@ -16,6 +18,12 @@ const AUDIT_LOGS: &str = "audit_logs";
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {
     db.collection::<Document>(AUDIT_LOGS).create_indexes(audit_log_indexes()).await?;
+    db.collection::<Document>(<Database as AuditAttemptExt>::AUDIT_ATTEMPTS)
+        .create_indexes(vec![
+            unique_index("uk_audit_attempts_id", doc! { "id": 1 }),
+            named_index("idx_audit_attempts_command_created", doc! { "command_id": 1, "created_at": -1 }),
+        ])
+        .await?;
     Ok(())
 }
 

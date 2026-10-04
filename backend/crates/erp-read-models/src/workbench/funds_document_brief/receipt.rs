@@ -19,8 +19,7 @@ use crate::workbench::authority::funds::mapping as authority_mapping;
 impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     /// 回款审批任务的对象事实：任务对象是回款单本身。
     ///
-    /// 回款单实体不记录创建人，创建操作人从 `customer_receipt.create` 审计事实取，
-    /// 缺失时为空参与权（创建人无管理权限时不得仅凭创建事实看到任务）。
+    /// 创建人直接读取不可变领域字段；缺失身份不授予创建人参与资格。
     ///
     /// # 参数
     /// * `keys` - 本批任务引用的对象键
@@ -47,13 +46,6 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         if receipts.is_empty() {
             return Ok(());
         }
-        let created_by = self
-            .load_created_by_from_audit(
-                "customer_receipt",
-                &ids.iter().cloned().collect::<HashSet<_>>(),
-                executor,
-            )
-            .await?;
         let party_ids =
             receipts.iter().map(|item| item.counterparty_party_id.to_string()).collect::<Vec<_>>();
         let party_names = self.party_legal_names(&party_ids, executor).await?;
@@ -63,7 +55,6 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             let lines = allocation_lines.get(&receipt.base.id).cloned().unwrap_or_default();
             let mut fact = WorkbenchObjectFact::from_authority(authority_mapping::customer_receipt_fact(
                 &receipt,
-                created_by.get(&receipt.base.id),
                 counterparty.clone(),
             ));
 
@@ -98,13 +89,6 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             return Ok(());
         }
         let refunds = self.funds_reader().read_customer_refunds(&ids, executor).await?;
-        let created_by = self
-            .load_created_by_from_audit(
-                "customer_refund",
-                &ids.iter().cloned().collect::<HashSet<_>>(),
-                executor,
-            )
-            .await?;
         let customer_ids = refunds.iter().map(|refund| refund.customer_id.to_string()).collect::<Vec<_>>();
         let customer_names = self.customer_display_names(&customer_ids, executor).await?;
         let receipt_ids = refunds
@@ -128,7 +112,6 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             let mut fact = funds_fact_display(
                 authority_mapping::customer_refund_fact(
                     &refund,
-                    created_by.get(&refund.base.id),
                     customer.clone(),
                     &receipt_origins.counterparties,
                     &entry_origins.counterparties,
@@ -186,13 +169,6 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             return Ok(());
         }
         let reversals = self.funds_reader().read_receipt_reversals(&ids, executor).await?;
-        let created_by = self
-            .load_created_by_from_audit(
-                "receipt_reversal",
-                &ids.iter().cloned().collect::<HashSet<_>>(),
-                executor,
-            )
-            .await?;
         let receipt_ids = reversals
             .iter()
             .map(|reversal| reversal.original_customer_receipt_id.to_string())
@@ -201,11 +177,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         for reversal in reversals {
             let origin = origins.briefs.get(&reversal.original_customer_receipt_id.to_string());
             let mut fact = funds_fact_display(
-                authority_mapping::receipt_reversal_fact(
-                    &reversal,
-                    created_by.get(&reversal.base.id),
-                    &origins.counterparties,
-                ),
+                authority_mapping::receipt_reversal_fact(&reversal, &origins.counterparties),
                 origin.and_then(|item| item.counterparty.clone()),
             );
             let mut brief = amount_reason_brief(

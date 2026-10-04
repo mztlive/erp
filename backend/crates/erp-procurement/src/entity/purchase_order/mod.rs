@@ -20,6 +20,7 @@ mod allocation;
 mod cancelled_draft;
 mod change_order;
 mod command_receipt;
+mod command_result;
 mod coverage;
 mod coverage_summary;
 mod creation_basis;
@@ -44,8 +45,8 @@ pub use change_order::{
     PurchaseChangeSubmissionLineData,
 };
 pub use command_receipt::{
-    LegacyReceiptIdScheme, PurchaseCommandReceipt, PurchaseCommandReceiptError,
-    PurchaseCommandReceiptIdentity, PurchaseReceiptWire, digest_parts, payload_fingerprint,
+    PurchaseCommandFingerprint, PurchaseCommandReceipt, PurchaseCommandReceiptError,
+    PurchaseCommandReceiptIdentity, PurchaseReceiptResult, digest_parts, payload_fingerprint,
 };
 pub use coverage::{
     ProcurementCoverageFacts, SalesProcurementCoverage, SalesProcurementCoverageLine,
@@ -82,4 +83,8 @@ pub use sourcing_plan::{
 pub use types::{FulfillmentResponsibility, PurchaseLineType, PurchaseType};
 
 mod sourcing_quantity;
+pub use command_result::{
+    CreationReceipt, PurchaseSubmitReceipt, SaveDraftReceipt, SourcingOrderReceipt, SourcingReceipt,
+    SourcingTaskStatus, VoidDraftReceipt,
+};
 pub use sourcing_quantity::ensure_sourcing_quantity;

@@ -1,24 +1,27 @@
-use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use application_core::{AuditActor, CommandFingerprint};
 use erp_core::common::time::Instant;
 use erp_core::ids::{
     BusinessDocumentId, SalesOrderId, SalesOrderSubmissionId, SalesOrderWorkingCopyId, WorkflowActionId,
 };
 use erp_sales::dto::sales_order::{SubmissionView, SubmitSalesOrderRequest};
+use erp_sales::entity::command_receipt::SalesCommandResult;
 use erp_sales::entity::sales_order::{
-    SalesOrder, SalesOrderWorkingCopy, SalesOrderWorkingCopyLine, WorkingPurpose,
+    SalesOrder, SalesOrderSubmission, SalesOrderWorkingCopy, SalesOrderWorkingCopyLine, WorkingPurpose,
 };
 use erp_sales::repository::SalesOrderExt;
 use erp_sales::repository::prelude::*;
+use erp_sales::service::sales_order::SalesOrderService;
 use erp_sales::service::sales_order::command::identity::{
     sales_submission_audit_id, sales_submission_fingerprint,
 };
 use erp_sales::service::sales_order::mapper::{build_submission, build_submission_lines, submission_view};
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::document_registry::{WorkflowAction, WorkflowActionData, WorkflowActionType};
 use erp_workflow::service::approval::execution::{command_recovery_delay, prepare_start};
 use erp_workflow::service::document_registry::find_approval_binding;
 use id_generator::next_id;
-use persistence_core::{NoTransaction, Transactional};
+use mongodb::Database;
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::super::SalesOrderCommandProcess;
@@ -28,10 +31,14 @@ use super::super::adapter::{
     require_frozen_binding, sales_approval_ports, sales_order_object_readable,
     sales_order_responsible_org_id, sales_order_start_command, start_approval_command_kind,
 };
+use super::super::adapters::catalog::CatalogQualificationAdapter;
 use super::super::start_approval::{
     ReplaySalesOrderStartInput, SalesOrderStartInput, SalesOrderStartPersistInput,
     SalesOrderWorkingCopyPersistPlan, build_sales_order_start_input, load_bound_definition_graph,
     load_start_receipt, persist_sales_order_start, replay_sales_order_start_with_executor,
+};
+use crate::order_to_cash::command_event::{
+    SalesCommandEvent, finish_receipt_recovery, replay_submission_with_executor,
 };
 use crate::{Error, Result};
 
@@ -150,7 +157,10 @@ impl SalesOrderCommandProcess {
         }
         let audit_id = sales_submission_audit_id(actor.id(), id, &idempotency_key);
         let fingerprint = sales_submission_fingerprint(actor.id(), id, &req)?;
-        if let Some(existing) = self.replay_sales_submission(&audit_id, &fingerprint, id, actor).await? {
+        let expected_key_hash = CommandFingerprint::from_parts([idempotency_key.clone()]);
+        if let Some(existing) =
+            self.replay_sales_submission(&audit_id, &fingerprint, &expected_key_hash, id, actor).await?
+        {
             return Ok(existing);
         }
         let (order, draft) = self
@@ -176,22 +186,8 @@ impl SalesOrderCommandProcess {
             .prepare_submission_copy(&order, active_working_copy, stable, &draft, req.version, actor)
             .await?;
 
-        if let Some(existing) = self
-            .db
-            .sales_order_submissions()
-            .find_by_working_copy(
-                &SalesOrderWorkingCopyId::new(working_copy.base.id.clone()),
-                &mut NoTransaction,
-            )
-            .await?
-        {
-            let existing_id = SalesOrderSubmissionId::new(existing.base.id.clone());
-            let existing_lines = self
-                .db
-                .sales_order_submission_lines()
-                .list_lines_by_submissions(&[existing_id], &mut NoTransaction)
-                .await?;
-            return Ok(submission_view(existing, existing_lines));
+        if let Some(existing) = self.submission_for_copy(&working_copy).await? {
+            return Ok(existing);
         }
         self.sales().ensure_sellable_working_copy_lines(&copy_lines, &self.catalog()).await?;
         self.ensure_procurement_responsibility_before_submit(&order, &copy_lines).await?;
@@ -223,6 +219,31 @@ impl SalesOrderCommandProcess {
             fingerprint,
         )
         .await
+    }
+
+    /// 按原读取顺序回读工作副本已冻结的提交头与原行。
+    async fn submission_for_copy(
+        &self,
+        working_copy: &SalesOrderWorkingCopy,
+    ) -> Result<Option<SubmissionView>> {
+        let existing = self
+            .db
+            .sales_order_submissions()
+            .find_by_working_copy(
+                &SalesOrderWorkingCopyId::new(working_copy.base.id.clone()),
+                &mut NoTransaction,
+            )
+            .await?;
+        let Some(existing) = existing else {
+            return Ok(None);
+        };
+        let existing_id = SalesOrderSubmissionId::new(existing.base.id.clone());
+        let existing_lines = self
+            .db
+            .sales_order_submission_lines()
+            .list_lines_by_submissions(&[existing_id], &mut NoTransaction)
+            .await?;
+        Ok(Some(submission_view(existing, existing_lines)))
     }
 
     /// 销售单提交并启动统一审批。
@@ -314,19 +335,19 @@ impl SalesOrderCommandProcess {
                 comment: None,
             },
         )?;
-        let audit = actor.clone().resource_log_with_id(
+        let audit = submission_event(
             audit_id.clone(),
-            "sales_order.submit",
-            "sales_order_submission",
-            submission.base.id.clone(),
-            Some(format!("command_sha256={fingerprint}")),
+            actor,
+            idempotency_key,
+            fingerprint.clone(),
+            &order,
+            &submission,
         )?;
-        let sellable_refs =
-            erp_sales::service::sales_order::SalesOrderService::sellable_working_copy_refs(&copy_lines)?;
-        erp_sales::service::sales_order::SalesOrderService::new(self.db.clone())
+        let sellable_refs = SalesOrderService::sellable_working_copy_refs(&copy_lines)?;
+        SalesOrderService::new(self.db.clone())
             .ensure_sellable_refs(
                 &sellable_refs,
-                &crate::order_to_cash::adapters::catalog::CatalogQualificationAdapter::new(self.db.clone()),
+                &CatalogQualificationAdapter::new(self.db.clone()),
                 &mut NoTransaction,
             )
             .await?;
@@ -372,47 +393,39 @@ impl SalesOrderCommandProcess {
         }
     }
 
-    /// 按稳定审计收据重放已提交的销售快照。
+    /// 从独立回执恢复原提交快照及行，再重验当前提交访问资格。
     async fn replay_sales_submission(
         &self,
         audit_id: &str,
         expected_fingerprint: &str,
+        expected_key_hash: &CommandFingerprint,
         sales_order_id: &str,
         actor: &AuditActor,
     ) -> Result<Option<SubmissionView>> {
-        let Some(audit) = self.db.audit_logs().find_by_id(audit_id, &mut NoTransaction).await? else {
-            return Ok(None);
-        };
-        if audit.message.as_deref() != Some(&format!("command_sha256={expected_fingerprint}")) {
-            return Err(Error::ConflictError("同一幂等键已用于不同的销售提交".to_string()));
-        }
-        let submission_id = audit
-            .resource_id
-            .as_deref()
-            .ok_or_else(|| Error::Internal("销售提交幂等收据缺少结果引用".to_string()))?;
-        let submission = self
-            .db
-            .sales_order_submissions()
-            .find_by_id(submission_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::Internal("销售提交幂等收据对应快照缺失".to_string()))?;
-        if !submission.matches_receipt_identity(sales_order_id, actor.id()) {
-            return Err(Error::Internal("销售提交幂等收据与业务对象不一致".to_string()));
-        }
-        let submission_id = SalesOrderSubmissionId::new(submission.base.id.clone());
-        let lines = self
-            .db
-            .sales_order_submission_lines()
-            .list_lines_by_submissions(&[submission_id], &mut NoTransaction)
-            .await?;
+        let db = self.db.clone();
+        let command_id = audit_id.to_string();
+        let fingerprint = expected_fingerprint.to_string();
+        let expected_key_hash = expected_key_hash.clone();
+        let sales_order_id = sales_order_id.to_string();
+        let actor_id = actor.id().to_string();
         let access = self.command_access(actor, "submit")?;
-        let id = sales_order_id.to_string();
         self.db
             .client()
-            .clone()
-            .with_transaction(move |executor| Box::pin(async move { access.current(&id, executor).await }))
-            .await?;
-        Ok(Some(submission_view(submission, lines)))
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    replay_submission_with_executor(
+                        &db,
+                        &command_id,
+                        (&fingerprint, &expected_key_hash),
+                        &sales_order_id,
+                        &actor_id,
+                        &access,
+                        executor,
+                    )
+                    .await
+                })
+            })
+            .await
     }
 
     /// receipt 唯一竞争、瞬态事务或提交结果未知后，以 fresh session 有界回读。
@@ -440,63 +453,62 @@ impl SalesOrderCommandProcess {
             let actor_id = input.actor.id().to_string();
             let document_type = input.document_type;
             let subject_version = input.subject_version;
-            let access = self.command_access(input.actor, "submit")?;
-            let recovered = self
-                .db
-                .client()
-                .with_transaction(move |executor| {
-                    Box::pin(async move {
-                        let order = access.current(&sales_order_id_owned, executor).await?;
-                        let current_ports = sales_approval_ports(order.business_type)?;
-                        if current_ports.document_type != document_type {
-                            return Err(Error::ConflictError(
-                                "销售单业务类型在提交恢复期间已变化".to_string(),
-                            ));
-                        }
-                        let organization_id = sales_order_responsible_org_id(&order)?;
-                        let _ = sales_order_object_readable(&organization_id, &actor_id)?;
-                        let binding = find_approval_binding(&db, &sales_order_id_owned, executor)
+            let recovered = async {
+                let access = self.command_access(input.actor, "submit")?;
+                let started = self
+                    .db
+                    .client()
+                    .with_transaction(move |executor| {
+                        Box::pin(async move {
+                            let order = access.current(&sales_order_id_owned, executor).await?;
+                            let current_ports = sales_approval_ports(order.business_type)?;
+                            if current_ports.document_type != document_type {
+                                return Err(Error::ConflictError(
+                                    "销售单业务类型在提交恢复期间已变化".to_string(),
+                                ));
+                            }
+                            let organization_id = sales_order_responsible_org_id(&order)?;
+                            let _ = sales_order_object_readable(&organization_id, &actor_id)?;
+                            let binding = load_frozen_binding(&db, &sales_order_id_owned, executor).await?;
+                            let subject = crate::order_to_cash::subject_ref_for_sales_business(
+                                order.business_type,
+                                &sales_order_id_owned,
+                            )
+                            .map_err(|error| Error::ValidationError(error.to_string()))?;
+                            replay_sales_order_start_with_executor(
+                                &db,
+                                ReplaySalesOrderStartInput {
+                                    document_type,
+                                    subject: &subject,
+                                    subject_version,
+                                    idempotency_key: &idempotency_key_owned,
+                                    binding: &binding,
+                                    actor_id: &actor_id,
+                                },
+                                executor,
+                            )
                             .await
-                            .map_err(crate::Error::from)?;
-                        let binding = require_frozen_binding(binding.as_ref())?;
-                        let subject = crate::order_to_cash::subject_ref_for_sales_business(
-                            order.business_type,
-                            &sales_order_id_owned,
-                        )
-                        .map_err(|error| Error::ValidationError(error.to_string()))?;
-                        replay_sales_order_start_with_executor(
-                            &db,
-                            ReplaySalesOrderStartInput {
-                                document_type,
-                                subject: &subject,
-                                subject_version,
-                                idempotency_key: &idempotency_key_owned,
-                                binding,
-                                actor_id: &actor_id,
-                            },
-                            executor,
-                        )
-                        .await
+                        })
                     })
-                })
-                .await;
+                    .await?;
+                if started.is_none() {
+                    return Ok(None);
+                }
+                self.replay_sales_submission(
+                    input.audit_id,
+                    input.fingerprint,
+                    &CommandFingerprint::from_parts([input.idempotency_key.trim().to_string()]),
+                    input.sales_order_id,
+                    input.actor,
+                )
+                .await
+            }
+            .await;
             match recovered {
-                Ok(Some(_)) => {
-                    if let Some(view) = self
-                        .replay_sales_submission(
-                            input.audit_id,
-                            input.fingerprint,
-                            input.sales_order_id,
-                            input.actor,
-                        )
-                        .await?
-                    {
-                        return Ok(view);
-                    }
-                },
+                Ok(Some(view)) => return Ok(view),
                 Ok(None) => {},
                 Err(error) if error.command_may_have_committed() => {},
-                Err(error) => return Err(error),
+                Err(error) => return finish_receipt_recovery(input.original_error, Err(error)),
             }
             if attempt + 1 < RECOVERY_ATTEMPTS {
                 tokio::time::sleep(command_recovery_delay(attempt)).await;
@@ -504,4 +516,36 @@ impl SalesOrderCommandProcess {
         }
         Err(input.original_error)
     }
+}
+
+/// 在原恢复读取位置加载并验证冻结审批绑定。
+async fn load_frozen_binding(
+    db: &Database,
+    order_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<ApprovalDefinitionBinding> {
+    let binding = find_approval_binding(db, order_id, executor).await.map_err(crate::Error::from)?;
+    Ok(require_frozen_binding(binding.as_ref())?.clone())
+}
+
+/// 构造原销售单与精确提交快照关联的单个成功事件。
+fn submission_event(
+    command_id: String,
+    actor: &AuditActor,
+    idempotency_key: &str,
+    fingerprint: String,
+    order: &SalesOrder,
+    submission: &SalesOrderSubmission,
+) -> Result<SalesCommandEvent> {
+    SalesCommandEvent::new(
+        command_id,
+        actor,
+        idempotency_key,
+        fingerprint,
+        SalesCommandResult::Submitted {
+            sales_order_id: SalesOrderId::new(order.base.id.clone()),
+            submission_id: SalesOrderSubmissionId::new(submission.base.id.clone()),
+        },
+        order.order_no.clone(),
+    )
 }

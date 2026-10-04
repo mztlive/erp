@@ -1,6 +1,6 @@
 //! 不可变来源证据的审计、根事务与原失败恢复。
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_supply::dto::supplier_settlement::*;
 use erp_supply::service::supplier_settlement::SupplierSettlementService;
 use erp_supply::service::supplier_settlement::source::source_request_hash;
@@ -9,6 +9,7 @@ use validator::Validate;
 
 use super::SupplierSettlementProcess;
 use crate::Result;
+use crate::audit::persist_log;
 impl SupplierSettlementProcess {
     /// 录入一个经服务端逐行核验、不可变且可幂等恢复的来源证据批次。
     ///
@@ -55,7 +56,7 @@ impl SupplierSettlementProcess {
                     SupplierSettlementService::new(db.clone())
                         .persist_source_evidence(&evidence_for_tx, executor)
                         .await?;
-                    db.audit_logs().create(&audit, executor).await?;
+                    persist_log(&db, &audit, executor).await?;
                     Ok::<(), crate::Error>(())
                 })
             })

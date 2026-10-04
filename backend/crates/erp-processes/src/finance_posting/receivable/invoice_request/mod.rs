@@ -1,5 +1,6 @@
 //! 开票申请正式用例；应收写锁串行化提交、撤回、审批与开票额度变更。
 mod cancel;
+mod command;
 mod execution;
 mod submit;
 pub(crate) use cancel::cancel;

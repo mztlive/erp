@@ -7,7 +7,7 @@
 use std::collections::{BTreeMap, HashSet};
 
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::{AuditActorLogs, AuditLog};
 use erp_core::ids::{DeliveryId, DeliveryLineId, SalesOrderId, WarehouseId};
 use erp_fulfillment::entity::fulfillment::{
     Delivery, DeliveryData, DeliveryLine, DeliveryLineData, DeliveryType,
@@ -21,16 +21,18 @@ use erp_procurement::dto::purchase_order::{
     CreatePurchaseOrdersFromSourcingResult, ExistingStockReservationResult,
 };
 use erp_procurement::entity::purchase_order::{
-    LegacyReceiptIdScheme, PurchaseCommandReceipt, PurchaseCommandReceiptError, SourcingAssignmentSet,
-    SourcingPlan, SourcingPlanError, StockBasisGroup, basis_id_for,
+    PurchaseCommandReceipt, PurchaseCommandReceiptError, PurchaseCommandReceiptIdentity,
+    SourcingAssignmentSet, SourcingOrderReceipt, SourcingPlan, SourcingPlanError, SourcingReceipt,
+    SourcingTaskStatus, StockBasisGroup, basis_id_for,
 };
+use erp_procurement::repository::PurchaseCommandExt;
 use erp_read_models::purchase_center::repository::{sales_order_basis_fact, sourcing_groups_for_order};
+use erp_sales::entity::sales_order::SalesOrder;
 use erp_sales::repository::SalesOrderExt;
 use erp_workflow::WorkItemExt;
-use erp_workflow::entity::work_item::{WorkItemStatus, WorkItemType};
+use erp_workflow::entity::work_item::WorkItemStatus;
 use id_generator::next_id;
 use persistence_core::{Executor, NoTransaction};
-use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use super::PurchaseOrderProcess;
@@ -43,39 +45,33 @@ use super::creation_basis::{
 use super::procurement_task_sync::{
     load_owned_open_procurement_task, sync_procurement_tasks_for_sales_order,
 };
+use crate::audit::{persist_log, recover_command};
 use crate::{Error, Result};
 
 mod apply;
+pub(super) mod sequence;
 mod stock_posting;
 use apply::create_from_sourcing_apply;
+use sequence::{PurchaseCreationEventSequence, SourcingEventSequencePlan};
 use stock_posting::{PersistedStockAllocation, persist_stock_allocations};
 
 const CREATE_PERMISSION: &str = "purchase_order:create";
 const CREATE_SOURCING_RECEIPT_PREFIX: &str = "purchase-order-sourcing-command-";
 const CREATE_SOURCING_ITEM_PREFIX: &str = "purchase-order-sourcing-item-";
 
-/// 选源命令中单张已提交采购单的幂等收据。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-struct SourcingOrderReceipt {
-    /// 采购单主键。
-    purchase_order_id: String,
-    /// 采购单号。
-    purchase_no: String,
-    /// 创建完成时乐观锁版本。
-    lock_version: u64,
-}
-
-/// 选源命令幂等收据。
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
-struct SourcingReceipt {
-    /// 本次创建并已提交审批的全部采购单。
-    orders: Vec<SourcingOrderReceipt>,
-    /// 本次建立的现有库存预占。
-    #[serde(default)]
-    stock_reservations: Vec<ExistingStockReservationResult>,
-    /// 本次命令同步完成时的原任务状态。
-    #[serde(default)]
-    work_item_status: Option<WorkItemStatus>,
+/// 原命令入口向授权事务传递的完整输入。
+#[derive(Clone, Copy)]
+struct SourcingTransactionInput<'a> {
+    /// 原请求，克隆时机保持在事务准备阶段。
+    req: &'a CreatePurchaseOrdersFromSourcingRequest,
+    /// 已解析的来源销售单。
+    sales_order_id: &'a SalesOrderId,
+    /// 原命令稳定收据身份。
+    receipt_identity: &'a PurchaseCommandReceiptIdentity,
+    /// 原规范化请求指纹。
+    request_fingerprint: &'a str,
+    /// 已鉴权操作人。
+    actor: &'a AuditActor,
 }
 
 impl PurchaseOrderProcess {
@@ -111,69 +107,85 @@ impl PurchaseOrderProcess {
             CREATE_SOURCING_ACTION,
             Some(sales_order_id.as_ref()),
             &req.idempotency_key,
-            LegacyReceiptIdScheme::None,
         )?;
-        let audit_id = receipt_identity.receipt_id().to_string();
-        let PurchaseOrderAuthorization { rbac, policy_revision } =
-            self.authorize_actor_permission(actor, CREATE_PERMISSION).await?;
-        if let Some(result) = replay_sourcing(
-            &self.db,
-            &audit_id,
-            &request_fingerprint,
+        let authorization = self.authorize_actor_permission(actor, CREATE_PERMISSION).await?;
+        let command = SourcingTransactionInput {
+            req: &req,
+            sales_order_id: &sales_order_id,
+            receipt_identity: &receipt_identity,
+            request_fingerprint: &request_fingerprint,
             actor,
-            sales_order_id.as_ref(),
-            &req.work_item_id,
-            &mut NoTransaction,
-        )
-        .await?
-        {
+        };
+        if let Some(result) = replay_sourcing_command(&self.db, command, &mut NoTransaction).await? {
             return Ok(result);
         }
+        let transaction_result = self.sourcing_transaction(command, assignments, authorization).await;
+        match transaction_result {
+            Ok(result) => Ok(result),
+            Err(error) => {
+                recover_command(error, replay_sourcing_command(&self.db, command, &mut NoTransaction).await)
+            },
+        }
+    }
+
+    /// 保留授权事务的原克隆、账号复验和实际业务写入顺序。
+    async fn sourcing_transaction(
+        &self,
+        input: SourcingTransactionInput<'_>,
+        assignments: SourcingAssignmentSet,
+        authorization: PurchaseOrderAuthorization,
+    ) -> Result<CreatePurchaseOrdersFromSourcingResult> {
+        let PurchaseOrderAuthorization { rbac, policy_revision } = authorization;
+        let SourcingTransactionInput { req, sales_order_id, receipt_identity, request_fingerprint, actor } =
+            input;
         let db = self.db.clone();
         let binding_rbac = rbac.clone();
         let object_read = std::sync::Arc::clone(&self.object_read);
         let transaction_actor = actor.clone();
         let transaction_req = req.clone();
-        let transaction_fingerprint = request_fingerprint.clone();
-        let transaction_audit_id = audit_id.clone();
+        let transaction_fingerprint = request_fingerprint.to_string();
+        let transaction_receipt_identity = receipt_identity.clone();
         let transaction_sales_order_id = sales_order_id.clone();
-        let transaction_result = rbac
-            .run_authorized_policy_transaction(policy_revision, move |executor| {
-                Box::pin(async move {
-                    ensure_purchase_order_actor_account(&db, &transaction_actor, executor).await?;
-                    create_from_sourcing_apply(
-                        &db,
-                        CreateFromSourcingApplyInput {
-                            rbac: &binding_rbac,
-                            object_read: object_read.as_ref(),
-                            req: &transaction_req,
-                            assignments: &assignments,
-                            sales_order_id: &transaction_sales_order_id,
-                            audit_id: &transaction_audit_id,
-                            request_fingerprint: &transaction_fingerprint,
-                            actor: &transaction_actor,
-                        },
-                        executor,
-                    )
-                    .await
-                })
+        rbac.run_authorized_policy_transaction(policy_revision, move |executor| {
+            Box::pin(async move {
+                ensure_purchase_order_actor_account(&db, &transaction_actor, executor).await?;
+                create_from_sourcing_apply(
+                    &db,
+                    CreateFromSourcingApplyInput {
+                        rbac: &binding_rbac,
+                        object_read: object_read.as_ref(),
+                        req: &transaction_req,
+                        assignments: &assignments,
+                        sales_order_id: &transaction_sales_order_id,
+                        receipt_identity: &transaction_receipt_identity,
+                        request_fingerprint: &transaction_fingerprint,
+                        actor: &transaction_actor,
+                    },
+                    executor,
+                )
+                .await
             })
-            .await;
-        match transaction_result {
-            Ok(result) => Ok(result),
-            Err(error) => replay_sourcing(
-                &self.db,
-                &audit_id,
-                &request_fingerprint,
-                actor,
-                sales_order_id.as_ref(),
-                &req.work_item_id,
-                &mut NoTransaction,
-            )
-            .await?
-            .ok_or(error),
-        }
+        })
+        .await
     }
+}
+
+/// 保持入口与提交结果查证共用相同资源身份和任务引用。
+async fn replay_sourcing_command(
+    db: &mongodb::Database,
+    command: SourcingTransactionInput<'_>,
+    executor: &mut dyn Executor,
+) -> Result<Option<CreatePurchaseOrdersFromSourcingResult>> {
+    replay_sourcing(
+        db,
+        command.receipt_identity,
+        command.request_fingerprint,
+        command.actor,
+        command.sales_order_id.as_ref(),
+        &command.req.work_item_id,
+        executor,
+    )
+    .await
 }
 
 /// 选源建单事务内写入所需上下文。
@@ -189,7 +201,7 @@ struct CreateFromSourcingApplyInput<'a> {
     /// 来源销售单。
     sales_order_id: &'a SalesOrderId,
     /// 整批命令收据 ID。
-    audit_id: &'a str,
+    receipt_identity: &'a PurchaseCommandReceiptIdentity,
     /// 整批命令载荷指纹。
     request_fingerprint: &'a str,
     /// 审计操作人。
@@ -361,11 +373,10 @@ fn build_stock_delivery_lines(
 ///
 /// # 参数
 /// * `db` - MongoDB 数据库
-/// * `audit_id` - 稳定收据 ID
-/// * `request_fingerprint` - 当前命令载荷指纹
-/// * `sales_order_id` - 来源销售单，作为收据资源身份
+/// * `input` - 当前稳定命令身份、载荷指纹及操作人
+/// * `sales_order` - 原事务读取的来源销售单及真实编号，作为收据资源身份
 /// * `receipt` - 采购单与库存预留的完整命令结果
-/// * `actor` - 审计操作人
+/// * `event_sequence` - 业务首写前验证的主事件序号
 /// * `executor` - 数据访问执行器
 ///
 /// # 返回
@@ -378,29 +389,67 @@ fn build_stock_delivery_lines(
 /// 收据与全部采购单及库存预留必须同事务提交。
 async fn write_sourcing_receipt(
     db: &mongodb::Database,
-    audit_id: &str,
-    request_fingerprint: &str,
-    sales_order_id: &str,
+    input: &CreateFromSourcingApplyInput<'_>,
+    sales_order: &SalesOrder,
     receipt: &SourcingReceipt,
-    actor: &AuditActor,
+    event_sequence: u32,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let audit = actor.clone().resource_log_with_id(
-        audit_id.to_string(),
-        CREATE_SOURCING_ACTION,
-        "purchase_order",
-        sales_order_id.to_string(),
-        Some(PurchaseCommandReceipt::new(request_fingerprint.to_string(), receipt.clone()).encode_message()?),
+    let audit = sourcing_audit(
+        input.actor,
+        input.receipt_identity.receipt_id(),
+        &sales_order.base.id,
+        &sales_order.order_no,
+        event_sequence,
     )?;
-    db.audit_logs().create(&audit, executor).await?;
+    let record = PurchaseCommandReceipt::new(
+        input.receipt_identity,
+        input.request_fingerprint,
+        receipt.clone(),
+        audit.base.id.clone(),
+    )?;
+    db.purchase_command_receipts::<SourcingReceipt>().create(&record, executor).await?;
+    persist_log(db, &audit, executor).await?;
     Ok(())
+}
+
+/// 投影批次命令的最后主事件，保留发生时销售单编号。
+/// # 参数
+/// * `actor` - 已鉴权操作人。
+/// * `command_id` - 整批稳定命令关联。
+/// * `sales_order_id` - 来源销售单 ID。
+/// * `sales_order_no` - 来源销售单真实编号。
+/// * `event_sequence` - 首次业务写入前验证的主事件序号。
+/// # 返回
+/// 返回保留安全快照和事件顺序的批次日志。
+/// # 错误
+/// 审计身份、动作、编号或序号非法时拒绝。
+pub(super) fn sourcing_audit(
+    actor: &AuditActor,
+    command_id: &str,
+    sales_order_id: &str,
+    sales_order_no: &str,
+    event_sequence: u32,
+) -> Result<AuditLog> {
+    Ok(actor
+        .clone()
+        .resource_log_with_id(
+            next_id(),
+            CREATE_SOURCING_ACTION,
+            "sales_order",
+            sales_order_id.to_string(),
+            None,
+        )?
+        .with_command_id(Some(command_id.to_string()))?
+        .with_resource_number(Some(sales_order_no.to_string()))?
+        .with_event_sequence(event_sequence)?)
 }
 
 /// 查询并校验选源创建幂等收据。
 ///
 /// # 参数
 /// * `db` - MongoDB 数据库
-/// * `audit_id` - 稳定收据 ID
+/// * `receipt_identity` - 稳定收据 ID
 /// * `expected_fingerprint` - 当前命令载荷指纹
 /// * `actor` - 当前操作人
 /// * `sales_order_id` - 来源销售单
@@ -417,21 +466,23 @@ async fn write_sourcing_receipt(
 /// 事务前、事务内和事务失败后均复用同一校验逻辑。
 async fn replay_sourcing(
     db: &mongodb::Database,
-    audit_id: &str,
+    receipt_identity: &PurchaseCommandReceiptIdentity,
     expected_fingerprint: &str,
-    actor: &AuditActor,
+    _actor: &AuditActor,
     sales_order_id: &str,
-    work_item_id: &str,
+    _work_item_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<Option<CreatePurchaseOrdersFromSourcingResult>> {
-    let Some(audit) = db.audit_logs().find_by_id(audit_id, executor).await? else {
+    let Some(record) = db
+        .purchase_command_receipts::<SourcingReceipt>()
+        .find_by_id_including_deleted(receipt_identity.receipt_id(), executor)
+        .await?
+    else {
         return Ok(None);
     };
     let receipt = match PurchaseCommandReceipt::<SourcingReceipt>::decode(
-        &crate::procure_to_pay::adapters::audit::audit_receipt_fact(&audit),
-        actor.id(),
-        CREATE_SOURCING_ACTION,
-        Some(sales_order_id),
+        record,
+        receipt_identity,
         expected_fingerprint,
     ) {
         Ok(receipt) => receipt,
@@ -443,14 +494,7 @@ async fn replay_sourcing(
         },
     }
     .into_payload();
-    let work_item_status = sourcing_receipt_work_item_status(
-        db,
-        receipt.work_item_status,
-        work_item_id,
-        sales_order_id,
-        executor,
-    )
-    .await?;
+    let work_item_status = receipt.work_item_status.as_str().to_string();
     Ok(Some(CreatePurchaseOrdersFromSourcingResult {
         orders: receipt
             .orders
@@ -472,71 +516,11 @@ async fn replay_sourcing(
     }))
 }
 
-/// 解析新旧选源收据中的工作项状态。
-///
-/// 新收据冻结命令提交时的状态。旧收据没有该字段，优先按收据指向的同一工作项
-/// 读取当前事实；历史任务不存在时，已提交成功的旧命令按终态返回。
-async fn sourcing_receipt_work_item_status(
-    db: &mongodb::Database,
-    frozen_status: Option<WorkItemStatus>,
-    work_item_id: &str,
-    sales_order_id: &str,
-    executor: &mut dyn Executor,
-) -> Result<String> {
-    if let Some(status) = frozen_status {
-        return sourcing_work_item_status(status, false);
-    }
-    let Some(item) = db.work_items().find_by_id(work_item_id, executor).await? else {
-        return Ok(WorkItemStatus::Completed.as_str().to_string());
-    };
-    if item.work_item_type != WorkItemType::ProcurementOrderCreation
-        || item.business_object_type != "sales_order"
-        || item.business_object_id != sales_order_id
-    {
-        return Err(Error::Internal("旧版选源幂等收据对应的工作项身份非法".to_string()));
-    }
-    sourcing_work_item_status(item.status, true)
-}
-
-/// 将供给分配任务状态投影为客户端结果合同。
-fn sourcing_work_item_status(status: WorkItemStatus, legacy: bool) -> Result<String> {
+/// 将工作流任务状态显式转换为采购拥有的命令结果状态。
+fn sourcing_work_item_status(status: WorkItemStatus) -> Result<SourcingTaskStatus> {
     match status {
-        WorkItemStatus::Open => Ok(WorkItemStatus::Open.as_str().to_string()),
-        WorkItemStatus::Completed => Ok(WorkItemStatus::Completed.as_str().to_string()),
-        WorkItemStatus::Closed if legacy => Ok(WorkItemStatus::Completed.as_str().to_string()),
+        WorkItemStatus::Open => Ok(SourcingTaskStatus::Open),
+        WorkItemStatus::Completed => Ok(SourcingTaskStatus::Completed),
         WorkItemStatus::Closed => Err(Error::Internal("选源幂等收据中的任务状态非法".to_string())),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use erp_workflow::entity::work_item::WorkItemStatus;
-
-    use super::{SourcingReceipt, sourcing_work_item_status};
-
-    /// 幂等回放必须保留同步后的任务状态，不能把部分分配误报为任务完成。
-    #[test]
-    fn sourcing_receipt_freezes_work_item_status() {
-        let receipt = SourcingReceipt {
-            orders: Vec::new(),
-            stock_reservations: Vec::new(),
-            work_item_status: Some(WorkItemStatus::Open),
-        };
-
-        let encoded = serde_json::to_string(&receipt).expect("选源回执必须可序列化");
-        let replayed: SourcingReceipt = serde_json::from_str(&encoded).expect("选源回执必须可回放");
-
-        assert_eq!(replayed.work_item_status, Some(WorkItemStatus::Open));
-    }
-
-    /// 旧版收据缺少任务状态时必须可解码，并由回放路径恢复其生命周期结果。
-    #[test]
-    fn legacy_sourcing_receipt_without_work_item_status_decodes() {
-        let replayed: SourcingReceipt =
-            serde_json::from_str(r#"{"orders":[],"stock_reservations":[]}"#).expect("旧版选源回执必须可回放");
-
-        assert_eq!(replayed.work_item_status, None);
-        assert_eq!(sourcing_work_item_status(WorkItemStatus::Closed, true).unwrap(), "COMPLETED");
-        assert!(sourcing_work_item_status(WorkItemStatus::Closed, false).is_err());
     }
 }

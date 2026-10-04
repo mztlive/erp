@@ -1,5 +1,6 @@
 //! 销售集合索引注册。
 
+mod command_receipt;
 mod sales_order;
 mod sales_review;
 mod sales_selection;
@@ -11,5 +12,6 @@ mod sales_selection;
 pub async fn ensure(db: &mongodb::Database) -> persistence_core::Result<()> {
     sales_order::ensure(db).await?;
     sales_review::ensure(db).await?;
-    sales_selection::ensure(db).await
+    sales_selection::ensure(db).await?;
+    command_receipt::ensure(db).await
 }

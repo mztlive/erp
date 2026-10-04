@@ -1,7 +1,7 @@
 //! 按原蓝票一次开具红票并红冲分配。
 
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_core::ids::{InvoiceId, ReceivableAccountId};
 use erp_finance::entity::receivable::{
     AllocationAction, Invoice, InvoiceData, InvoiceDirection, InvoiceKind,
@@ -20,6 +20,7 @@ use validator::Validate;
 use super::dto::{CommitRedInvoiceRequest, InvoiceView};
 use super::invoice::register_created_invoice_document;
 use super::{ReceivableProcess, invoice_task};
+use crate::audit::persist_log;
 use crate::{Error, Result};
 
 impl ReceivableProcess {
@@ -186,7 +187,7 @@ async fn apply_red_invoice(
         red_mut.base.id.clone(),
         Some(command.reason.clone()),
     )?;
-    db.audit_logs().create(&audit, executor).await?;
+    persist_log(db, &audit, executor).await?;
     if original_mut.invoice_direction == InvoiceDirection::Sales {
         apply_red_invoice_fanout(db, &sales_ids, &command.actor_id, executor).await?;
     }

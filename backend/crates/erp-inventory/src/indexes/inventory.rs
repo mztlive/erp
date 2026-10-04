@@ -21,6 +21,7 @@ use mongodb::options::IndexOptions;
 use mongodb::{Database, IndexModel};
 use persistence_core::Result;
 
+use crate::repository::StockAdjustmentCancellationExt;
 use crate::repository::extensions::InventoryExt;
 
 /// `stock_movement` 集合名。
@@ -52,6 +53,15 @@ pub async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, STOCK_RESERVATION_ENTRIES, stock_reservation_entry_indexes()).await?;
     create_indexes(db, STOCK_ADJUSTMENTS, stock_adjustment_indexes()).await?;
     create_indexes(db, STOCK_ADJUSTMENT_LINES, stock_adjustment_line_indexes()).await?;
+    create_indexes(
+        db,
+        Database::STOCK_ADJUSTMENT_CANCELLATIONS,
+        vec![
+            unique_index("uk_stock_adjustment_cancellations_id", doc! { "id": 1 }),
+            unique_index("uk_stock_adjustment_cancellations_receipt", doc! { "command.receipt_id": 1 }),
+        ],
+    )
+    .await?;
     Ok(())
 }
 

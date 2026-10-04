@@ -1,5 +1,5 @@
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_core::ids::WorkItemId;
 use erp_identity::AccessControlExt;
 use erp_identity::repository::prelude::*;
@@ -18,6 +18,7 @@ use validator::Validate;
 use super::confirmation_query::confirmation_view;
 use super::dto::LegacyImportConfirmationView;
 use super::{IMPORT_CONFIRMATION_OBJECT_TYPE, IMPORT_CONFIRMATION_ORGANIZATION, ImportApplyService};
+use crate::audit::persist_log;
 use crate::{Error, Result};
 
 impl ImportApplyService {
@@ -165,7 +166,7 @@ impl ImportApplyService {
                     db.legacy_import_confirmations().create(&confirmation_for_tx, executor).await?;
                     db.work_items().create(&work_item_for_tx, executor).await?;
                     db.legacy_import_batches().update(&mut batch, executor).await?;
-                    db.audit_logs().create(&audit, executor).await?;
+                    persist_log(&db, &audit, executor).await?;
                     Ok::<(LegacyImportConfirmation, WorkItem), crate::Error>((
                         confirmation_for_tx,
                         work_item_for_tx,

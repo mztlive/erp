@@ -642,10 +642,8 @@ mod tests {
                 FundsOriginBrief { counterparty: Some("分录主体".into()), ..Default::default() },
             )]),
         };
-        let actor = "audit-actor".to_string();
         let authority = crate::workbench::authority::funds::mapping::customer_refund_fact(
             &refund,
-            Some(&actor),
             None,
             &origins.counterparties,
             &entries.counterparties,
@@ -658,7 +656,7 @@ mod tests {
         );
         let fact = funds_fact_display(authority, origin.and_then(|row| row.counterparty.clone()));
         assert_eq!(fact.authority.root_document_id, "refund-1");
-        assert_eq!(fact.authority.created_by, "audit-actor");
+        assert_eq!(fact.authority.created_by, "entity-creator");
         assert_eq!(fact.authority.counterparty_label.as_deref(), Some("分录主体"));
         assert_eq!(fact.display.counterparty_label, None);
         assert_eq!(origin.unwrap().original_document.as_deref(), Some("回款单 CR-1"));
@@ -691,12 +689,11 @@ mod tests {
         let authority = crate::workbench::authority::funds::mapping::supplier_refund_fact(
             &refund,
             None,
-            None,
             &origins,
             &HashMap::new(),
         );
         let fact = funds_fact_display(authority, None);
-        assert_eq!(fact.authority.created_by, "");
+        assert_eq!(fact.authority.created_by, "entity-creator");
         assert_eq!(fact.authority.counterparty_label.as_deref(), Some("来源供应商"));
         assert_eq!(fact.display.counterparty_label, None);
         assert_eq!(fact.authority.root_document_id, "refund-2");

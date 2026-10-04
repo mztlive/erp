@@ -1,7 +1,7 @@
 //! 采购责任规则管理和预览用例编排.
 
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt, AuditLog};
+use erp_audit::{AuditActorLogs, AuditLog};
 use erp_core::ids::ProcurementResponsibilityRuleId;
 use erp_procurement::dto::procurement_responsibility::{
     CreateProcurementResponsibilityRuleRequest, ProcurementResponsibilityResolveLineView,
@@ -22,6 +22,7 @@ use persistence_core::{Executor, NoTransaction};
 use super::ProcurementResponsibilityProcess;
 use super::adapter::ResponsibilityFactsAdapter;
 use super::resolver::{ResolutionInput, load_owner_account};
+use crate::audit::persist_log;
 use crate::{Error, Result};
 
 impl ProcurementResponsibilityProcess {
@@ -123,7 +124,7 @@ impl ProcurementResponsibilityProcess {
                 validation.validate_selector_reference(&data, executor).await?;
                 load_owner_account(&db, data.owner_user_id.as_str(), executor).await?;
                 ProcurementResponsibilityService::new(db.clone()).create_rule(&rule, executor).await?;
-                db.audit_logs().create(&audit, executor).await?;
+                persist_log(&db, &audit, executor).await?;
                 Ok(rule)
             })
         })
@@ -166,7 +167,7 @@ impl ProcurementResponsibilityProcess {
                 let rule = ProcurementResponsibilityService::new(db.clone())
                     .update_rule(&id, version, data, &updated_by, executor)
                     .await?;
-                db.audit_logs().create(&audit, executor).await?;
+                persist_log(&db, &audit, executor).await?;
                 Ok(rule)
             })
         })

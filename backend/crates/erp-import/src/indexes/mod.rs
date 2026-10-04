@@ -1,5 +1,6 @@
 //! Import collection indexes.
 
+mod command_receipt;
 mod legacy_import;
 
 use mongodb::Database;
@@ -13,5 +14,6 @@ use persistence_core::Result;
 /// # Errors
 /// Unique-constraint violations or MongoDB index creation failures.
 pub async fn ensure(db: &Database) -> Result<()> {
-    legacy_import::ensure(db).await
+    legacy_import::ensure(db).await?;
+    command_receipt::ensure(db).await
 }

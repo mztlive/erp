@@ -1,7 +1,7 @@
 //! 客户资料修订用例与事务载荷。
 
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_core::field_update::FieldUpdate;
 use erp_core::ids::{PartyId, PartyRevisionId};
 use erp_customer::{
@@ -19,6 +19,7 @@ use super::CustomerProfileService;
 use super::facts::PartyFactChanges;
 use super::idempotency::{checked_command_view, command_view};
 use crate::adapters::customer_access;
+use crate::audit::persist_log;
 use crate::{Error, Result};
 
 impl CustomerProfileService {
@@ -185,7 +186,7 @@ impl PreparedUpdate {
         db.customer_accounts().update(&mut self.account, executor).await?;
         self.facts.persist(db, executor).await?;
         db.customer_profile_commands().create(&self.command, executor).await?;
-        db.audit_logs().create(&self.audit, executor).await?;
+        persist_log(db, &self.audit, executor).await?;
         Ok(())
     }
 }

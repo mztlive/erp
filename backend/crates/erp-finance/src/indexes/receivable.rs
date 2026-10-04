@@ -129,6 +129,10 @@ fn customer_receipt_indexes() -> Vec<IndexModel> {
             doc! { "pending_allocations.receivable_entry_id": 1, "deleted_at": 1 },
         ),
         named_index("idx_customer_receipts_party_status", doc! { "counterparty_party_id": 1, "status": 1 }),
+        named_index(
+            "idx_customer_receipts_creator_page",
+            doc! { "created_by": 1, "deleted_at": 1, "created_at": 1, "id": 1 },
+        ),
     ]
 }
 

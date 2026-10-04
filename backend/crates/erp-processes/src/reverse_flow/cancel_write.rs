@@ -1,6 +1,6 @@
 //! 审批取消的同事务写入：Apply 更新运行事实，Replay 仍执行本域 CAS 和审计。
 use async_trait::async_trait;
-use erp_audit::{AuditExt, AuditLog};
+use erp_audit::AuditLog;
 use erp_core::common::time::Instant;
 use erp_returns::entity::returns::{CustomerRefund, PaymentReversal, ReceiptReversal, SupplierRefund};
 use erp_returns::service::ReturnsService;
@@ -12,6 +12,7 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use crate::Result;
+use crate::audit::persist_log;
 
 pub(super) enum CancelledReturn<'a> {
     CustomerRefund(&'a mut CustomerRefund),
@@ -86,7 +87,7 @@ impl CancelWritePort for MongoCancelWrite<'_> {
         Ok(())
     }
     async fn audit(&mut self, executor: &mut dyn Executor) -> Result<()> {
-        self.db.audit_logs().create(&self.audit, executor).await?;
+        persist_log(self.db, &self.audit, executor).await?;
         Ok(())
     }
 }

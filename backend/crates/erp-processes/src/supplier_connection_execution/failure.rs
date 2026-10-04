@@ -1,6 +1,6 @@
 //! 在原结果事务中登记连接失败的 W29 事实、工作项和审计。
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
 use erp_core::ids::IntegrationErrorTaskId;
 use erp_identity::repository::OrganizationRepository;
@@ -17,6 +17,7 @@ use erp_workflow::WorkItemExt;
 
 use crate::Result;
 use crate::adapters::supplier_failure::integration_class;
+use crate::audit::persist_log;
 use crate::integration_resolution::producer::error_work_item;
 
 pub(super) fn settle_health_failure(
@@ -133,7 +134,7 @@ impl FailureWritePort for MongoFailureWrite<'_> {
         Ok(())
     }
     async fn audit(&self, audit: &Self::Audit, executor: &mut dyn persistence_core::Executor) -> Result<()> {
-        self.0.audit_logs().create(audit, executor).await?;
+        persist_log(self.0, audit, executor).await?;
         Ok(())
     }
 }

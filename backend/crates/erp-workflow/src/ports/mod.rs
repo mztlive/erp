@@ -7,8 +7,11 @@ mod object_facts;
 mod object_read;
 mod upgrade_subject;
 
+#[cfg(test)]
+pub use audit::WorkflowAuditFact;
 pub use audit::{
-    FailClosedAuditPort, PreparedWorkflowAudit, WorkflowAuditFact, WorkflowAuditPort, committed_resource_id,
+    FailClosedAuditPort, PreparedWorkflowAudit, WorkflowAuditAttemptResult, WorkflowAuditOperation,
+    WorkflowAuditPort,
 };
 pub use authorization::{
     FailClosedWorkflowAuthorizationPort, RolePermissionSnapshotFact, WorkflowAccountFact,

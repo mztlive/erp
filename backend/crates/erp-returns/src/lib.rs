@@ -8,4 +8,7 @@ pub mod ports;
 pub mod repository;
 pub mod service;
 
+pub use entity::command_receipt::{ReturnsCommandReceipt, ReturnsCommandResult};
 pub use error::{Error, Result};
+pub use repository::ReturnsCommandExt;
+pub use service::command_receipt::ReturnsCommandReceiptService;

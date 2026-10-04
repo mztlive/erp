@@ -1,7 +1,10 @@
 //! 退货、退款和资金冲正的跨域事务、审批与审计组合入口。
+use crate::audit::persist_log;
+
 mod adapter;
 mod cancel_approval;
 mod cancel_write;
+pub(crate) mod command_recovery;
 mod customer_refund;
 mod draft_update;
 mod payment_posting;
@@ -16,7 +19,7 @@ pub use adapter::{
     customer_refund_object_readable, payment_reversal_object_readable, receipt_reversal_object_readable,
     supplier_refund_object_readable,
 };
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_identity::SharedRbacService;
 use erp_read_models::returns_center::ReturnsReadService;
 use erp_returns::repository::ReturnsExt;
@@ -168,6 +171,6 @@ pub async fn cancel_approval(
     }
     let audit =
         actor.clone().resource_log("returns.cancel_approval", document_type.as_str(), id.to_string())?;
-    db.audit_logs().create(&audit, executor).await?;
+    persist_log(db, &audit, executor).await?;
     Ok(())
 }

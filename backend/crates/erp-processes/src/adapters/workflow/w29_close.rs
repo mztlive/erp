@@ -377,9 +377,9 @@ mod tests {
             item,
             decision,
             evidence_reference: if decision.replacement_work_item_id.is_some() {
-                "work_item:work-item-1;replacement_work_item:replacement;audit_log:receipt-1"
+                "work_item:work-item-1;replacement_work_item:replacement;command_receipt:receipt-1"
             } else {
-                "work_item:work-item-1;audit_log:receipt-1"
+                "work_item:work-item-1;command_receipt:receipt-1"
             },
             actor_id: "operator",
             receipt_id: "receipt-1",
@@ -415,7 +415,7 @@ mod tests {
             assert_eq!(task.status, ErrorTaskStatus::Closed);
             assert_eq!(task.resolution_type, Some(ResolutionType::Close));
             assert_eq!(task.resolved_at, Some(Instant::from_unix_secs(200)));
-            assert_eq!(task.resolution.as_deref(), Some("work_item:work-item-1;audit_log:receipt-1"));
+            assert_eq!(task.resolution.as_deref(), Some("work_item:work-item-1;command_receipt:receipt-1"));
             assert_eq!(task.base, port.task.as_ref().unwrap().base);
         }
     }

@@ -1,40 +1,57 @@
 //! 正式任务绑定、权限前置与审计回执重放。
 use application_core::AuditActor;
-use erp_audit::AuditExt;
 use erp_integration::dto::{IntegrationItemType, IntegrationNonTerminalTaskAction, PreparedWorkItemTarget};
-use erp_integration::entity::integration_ops::IntegrationCommandIdentity;
+use erp_integration::entity::integration_ops::{IntegrationCommandIdentity, IntegrationReceiptPayload};
+use erp_integration::repository::{IntegrationCommandExt, IntegrationCommandRepositoryExt};
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 use serde::Serialize;
-use serde::de::DeserializeOwned;
 
 use super::super::IntegrationResolutionProcess;
-use super::ReceiptEnvelope;
 use crate::{Error, Result};
 
 impl IntegrationResolutionProcess {
-    pub(super) async fn replay_receipt<T: DeserializeOwned>(
+    /// 重放仍校验当前账号、责任、完整执行权限和对象绑定，不再套原写版本。
+    pub(super) async fn ensure_replay_task_access(
+        &self,
+        work_item_id: &str,
+        action: &IntegrationNonTerminalTaskAction,
+        actor: &AuditActor,
+    ) -> Result<()> {
+        let mut executor = NoTransaction;
+        let item = self
+            .db
+            .work_items()
+            .find_by_id(work_item_id, &mut executor)
+            .await?
+            .ok_or_else(|| Error::Internal("W29 命令回执对应任务缺失".into()))?;
+        if !item.is_owned_by(actor.id()) {
+            return Err(Error::Forbidden("当前账号不是任务的当前责任人".into()));
+        }
+        ensure_work_item_association(&self.db, &item, action, &mut executor).await?;
+        let rbac = crate::adapters::identity::shared_rbac_service(self.db.clone());
+        crate::adapters::workflow::work_item_service(self.db.clone(), rbac)
+            .ensure_domain_decision_access(actor, &item, &mut executor)
+            .await?;
+        Ok(())
+    }
+
+    pub(super) async fn replay_receipt<T: IntegrationReceiptPayload>(
         &self,
         receipt: &IntegrationCommandIdentity,
         actor: &AuditActor,
     ) -> Result<Option<T>> {
-        let Some(audit) = self.db.audit_logs().find_by_id(receipt.receipt_id(), &mut NoTransaction).await?
+        let Some(committed) = self
+            .db
+            .integration_command_receipts()
+            .find_command(receipt.receipt_id(), &mut NoTransaction)
+            .await?
         else {
             return Ok(None);
         };
-        Ok(Some(decode_receipt(
-            receipt,
-            actor.id(),
-            ReceiptAudit {
-                actor_id: &audit.actor_id,
-                action: &audit.action,
-                resource_type: &audit.resource_type,
-                resource_id: audit.resource_id.as_deref(),
-                message: audit.message.as_deref(),
-            },
-        )?))
+        Ok(Some(committed.recover(receipt, actor.id())?))
     }
 }
 
@@ -162,35 +179,3 @@ async fn ensure_work_item_association(
     }
     Ok(())
 }
-
-/// 已读取回执的窄字段；身份先于消息和 JSON 检查。
-struct ReceiptAudit<'a> {
-    actor_id: &'a str,
-    action: &'a str,
-    resource_type: &'a str,
-    resource_id: Option<&'a str>,
-    message: Option<&'a str>,
-}
-
-/// 解码真实读取路径的回执，不查询当前 WorkItem 状态。
-fn decode_receipt<T: DeserializeOwned>(
-    receipt: &IntegrationCommandIdentity,
-    actor_id: &str,
-    audit: ReceiptAudit<'_>,
-) -> Result<T> {
-    if !receipt.matches_receipt(audit.actor_id, audit.action, audit.resource_type, audit.resource_id)
-        || actor_id != audit.actor_id
-    {
-        return Err(Error::ConflictError("幂等键已用于不同命令".to_string()));
-    }
-    let message = audit.message.ok_or_else(|| Error::Internal("W29 幂等收据缺少结果".to_string()))?;
-    let envelope: ReceiptEnvelope<T> =
-        serde_json::from_str(message).map_err(|_| Error::Internal("W29 幂等收据不可解析".to_string()))?;
-    if envelope.fingerprint != receipt.fingerprint() {
-        return Err(Error::ConflictError("幂等键已用于不同命令".to_string()));
-    }
-    Ok(envelope.result)
-}
-
-#[cfg(test)]
-mod tests;

@@ -1,28 +1,29 @@
 //! 人工保存采购草稿。
 
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_procurement::dto::purchase_order::{
     SAVE_ACTION, SavePurchaseOrderDraftRequest, SavePurchaseOrderDraftResult, SavePurchaseOrderLine,
-    TotalsView,
 };
 use erp_procurement::entity::purchase_order::{
-    LegacyReceiptIdScheme, PurchaseCommandReceipt, PurchaseCommandReceiptError, PurchaseOrder,
-    PurchaseOrderSubmission, SalesProcurementCoverage, validate_draft_line_edits,
+    PurchaseCommandReceipt, PurchaseCommandReceiptError, PurchaseCommandReceiptIdentity, PurchaseOrder,
+    PurchaseOrderSubmission, SalesProcurementCoverage, SaveDraftReceipt, validate_draft_line_edits,
 };
+use erp_procurement::repository::PurchaseCommandExt;
 use erp_procurement::service::purchase_order::draft_edit::{
     DraftReplacement, build_draft_replacement, ensure_save_target, load_current_draft, load_purchase_order,
     map_draft_edit_violation, persist_replacement,
 };
 use erp_read_models::purchase_center::repository::load_sales_procurement_coverage;
 use erp_sales::repository::SalesOrderExt;
+use id_generator::next_id;
 use persistence_core::{Executor, NoTransaction};
-use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use super::PurchaseOrderProcess;
 use super::authorization::{PurchaseOrderAuthorization, ensure_purchase_order_actor_account};
 use super::procurement_task_sync::sync_procurement_tasks_for_sales_order;
+use crate::audit::{persist_log, recover_command};
 use crate::{Error, Result};
 
 const SAVE_PERMISSION: &str = "purchase_order:update";
@@ -35,28 +36,11 @@ struct SaveDraftCommand<'a> {
     /// 原始保存请求。
     request: &'a SavePurchaseOrderDraftRequest,
     /// 稳定命令收据 ID。
-    receipt_id: &'a str,
+    receipt_id: &'a PurchaseCommandReceiptIdentity,
     /// 已排除幂等键的请求指纹。
     request_fingerprint: &'a str,
     /// 已认证审计操作人。
     actor: &'a AuditActor,
-}
-
-/// 保存草稿命令收据载荷。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-struct SaveDraftReceipt {
-    /// 采购单主键。
-    purchase_order_id: String,
-    /// 保存完成时的乐观锁版本。
-    lock_version: u64,
-    /// 保存完成时的含税金额。
-    gross: String,
-    /// 保存完成时的不含税金额。
-    net: String,
-    /// 保存完成时的税额。
-    tax: String,
-    /// 首次成功响应的业务引用。
-    reference: String,
 }
 
 impl PurchaseOrderProcess {
@@ -93,9 +77,8 @@ impl PurchaseOrderProcess {
             SAVE_ACTION,
             Some(id),
             &req.idempotency_key,
-            LegacyReceiptIdScheme::None,
         )?;
-        let receipt_id = receipt_identity.receipt_id().to_string();
+        let receipt_id = receipt_identity;
         if let Some(result) =
             replay_saved_draft(&self.db, &receipt_id, &fingerprint, id, actor, &mut NoTransaction).await?
         {
@@ -129,7 +112,7 @@ async fn execute_save_draft_transaction(
     service: &PurchaseOrderProcess,
     purchase_order_id: &str,
     request: SavePurchaseOrderDraftRequest,
-    receipt_id: String,
+    receipt_id: PurchaseCommandReceiptIdentity,
     fingerprint: String,
     actor: &AuditActor,
     authorization: PurchaseOrderAuthorization,
@@ -291,7 +274,7 @@ pub(super) async fn advance_guard_and_load_coverage(
 /// 返回首次成功响应中需要稳定回放的结果。
 ///
 /// # 错误
-/// 任一仓储写入、任务同步、收据编码或审计写入失败时返回错误。
+/// 任一仓储写入、任务同步、回执构造或审计写入失败时返回错误。
 ///
 /// # 关键业务约束
 /// 采购单更新后取得的新版本必须写入同事务命令收据。
@@ -305,18 +288,26 @@ async fn persist_draft_replacement(
 ) -> Result<SavePurchaseOrderDraftResult> {
     persist_replacement(db, order, old_draft, replacement, executor).await?;
     sync_procurement_tasks_for_sales_order(db, &order.sales_order_id, executor).await?;
-    let receipt = SaveDraftReceipt::from_saved(order, replacement);
-    let audit = command.actor.clone().resource_log_with_id(
-        command.receipt_id.to_string(),
-        SAVE_ACTION,
-        "purchase_order",
-        order.base.id.clone(),
-        Some(
-            PurchaseCommandReceipt::new(command.request_fingerprint.to_string(), receipt.clone())
-                .encode_message()?,
-        ),
+    let receipt = SaveDraftReceipt::from_saved(
+        order,
+        replacement.gross.to_string(),
+        replacement.net.to_string(),
+        replacement.tax.to_string(),
+    );
+    let audit = command
+        .actor
+        .clone()
+        .resource_log_with_id(next_id(), SAVE_ACTION, "purchase_order", order.base.id.clone(), None)?
+        .with_command_id(Some(command.receipt_id.receipt_id().to_string()))?
+        .with_resource_number(Some(order.purchase_no.clone()))?;
+    let record = PurchaseCommandReceipt::new(
+        command.receipt_id,
+        command.request_fingerprint,
+        receipt.clone(),
+        audit.base.id.clone(),
     )?;
-    db.audit_logs().create(&audit, executor).await?;
+    db.purchase_command_receipts::<SaveDraftReceipt>().create(&record, executor).await?;
+    persist_log(db, &audit, executor).await?;
     Ok(receipt.into_result())
 }
 
@@ -340,30 +331,31 @@ async fn persist_draft_replacement(
 /// 事务前、事务内和事务失败后必须复用同一回放校验。
 async fn replay_saved_draft(
     db: &mongodb::Database,
-    receipt_id: &str,
+    receipt_id: &PurchaseCommandReceiptIdentity,
     expected_fingerprint: &str,
     purchase_order_id: &str,
-    actor: &AuditActor,
+    _actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<Option<SavePurchaseOrderDraftResult>> {
-    let Some(audit) = db.audit_logs().find_by_id(receipt_id, executor).await? else {
+    let Some(record) = db
+        .purchase_command_receipts::<SaveDraftReceipt>()
+        .find_by_id_including_deleted(receipt_id.receipt_id(), executor)
+        .await?
+    else {
         return Ok(None);
     };
-    let receipt = match PurchaseCommandReceipt::<SaveDraftReceipt>::decode(
-        &crate::procure_to_pay::adapters::audit::audit_receipt_fact(&audit),
-        actor.id(),
-        SAVE_ACTION,
-        Some(purchase_order_id),
-        expected_fingerprint,
-    ) {
-        Ok(receipt) => receipt,
-        Err(PurchaseCommandReceiptError::IdentityMismatch | PurchaseCommandReceiptError::PayloadConflict) => {
-            return Err(Error::ConflictError("幂等键已用于不同采购命令".to_string()));
-        },
-        Err(PurchaseCommandReceiptError::Corrupted(message)) => {
-            return Err(Error::Internal(message));
-        },
-    };
+    let receipt =
+        match PurchaseCommandReceipt::<SaveDraftReceipt>::decode(record, receipt_id, expected_fingerprint) {
+            Ok(receipt) => receipt,
+            Err(
+                PurchaseCommandReceiptError::IdentityMismatch | PurchaseCommandReceiptError::PayloadConflict,
+            ) => {
+                return Err(Error::ConflictError("幂等键已用于不同采购命令".to_string()));
+            },
+            Err(PurchaseCommandReceiptError::Corrupted(message)) => {
+                return Err(Error::Internal(message));
+            },
+        };
     if receipt.payload().purchase_order_id != purchase_order_id {
         return Err(Error::ConflictError("采购草稿保存收据与业务资源不一致".to_string()));
     }
@@ -395,66 +387,18 @@ async fn replay_saved_draft(
 async fn recover_saved_draft(
     transaction_result: Result<SavePurchaseOrderDraftResult>,
     db: &mongodb::Database,
-    receipt_id: &str,
+    receipt_id: &PurchaseCommandReceiptIdentity,
     fingerprint: &str,
     purchase_order_id: &str,
     actor: &AuditActor,
 ) -> Result<SavePurchaseOrderDraftResult> {
     match transaction_result {
         Ok(result) => Ok(result),
-        Err(error) => {
+        Err(error) => recover_command(
+            error,
             replay_saved_draft(db, receipt_id, fingerprint, purchase_order_id, actor, &mut NoTransaction)
-                .await?
-                .ok_or(error)
-        },
-    }
-}
-
-impl SaveDraftReceipt {
-    /// 从已持久化采购单和新草稿金额构造稳定收据。
-    ///
-    /// # 参数
-    /// * `order` - Repository 更新后带新版本的采购单
-    /// * `replacement` - 新草稿提交和金额
-    ///
-    /// # 返回
-    /// 返回可持久化并稳定回放的保存结果载荷。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 版本和业务引用必须与首次成功响应完全一致。
-    fn from_saved(order: &PurchaseOrder, replacement: &DraftReplacement) -> Self {
-        Self {
-            purchase_order_id: order.base.id.clone(),
-            lock_version: order.base.version,
-            gross: replacement.gross.to_string(),
-            net: replacement.net.to_string(),
-            tax: replacement.tax.to_string(),
-            reference: format!("SAVED-V{}", order.base.version),
-        }
-    }
-
-    /// 转换为保存草稿 API 结果。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回首次执行与后续回放共享的原始结果。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 回放不得使用采购单当前版本或重新计算金额覆盖收据结果。
-    fn into_result(self) -> SavePurchaseOrderDraftResult {
-        SavePurchaseOrderDraftResult {
-            lock_version: self.lock_version,
-            totals: TotalsView { gross: self.gross, net: self.net, tax: self.tax },
-            reference: self.reference,
-        }
+                .await,
+        ),
     }
 }
 
@@ -501,7 +445,7 @@ mod tests {
         }
     }
 
-    /// 验证保存请求拒绝超过审计收据边界的幂等键。
+    /// 验证保存请求拒绝超过命令身份边界的幂等键。
     ///
     /// # 参数
     /// 无。

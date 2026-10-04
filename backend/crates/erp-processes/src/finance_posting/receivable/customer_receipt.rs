@@ -1,17 +1,19 @@
 //! 客户回款单查询、创建、提交审批、撤回与过账编排。
 
 use application_core::{AuditActor, CommandReceipt};
-use erp_audit::{AuditActorLogs, CommandReceiptServiceExt as _};
+use async_trait::async_trait;
+use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
 use erp_core::ids::CustomerReceiptId;
 use erp_finance::entity::receivable::{CustomerReceipt, CustomerReceiptData};
 use erp_finance::repository::ReceivableExt;
+use erp_finance::service::command_receipt::FinanceCommandReceiptService;
 use erp_finance::service::receivable::mapping::ensure_expected_version;
 use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
 use erp_workflow::service::approval::execution::prepare_cancel;
 use erp_workflow::service::document_registry::find_approval_binding;
 use id_generator::next_id;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::ReceivableProcess;
@@ -23,6 +25,7 @@ use super::cancel_approval::{
     CustomerReceiptCancelPersistInput, build_customer_receipt_cancel_input, load_cancel_runtime,
     persist_customer_receipt_cancel,
 };
+use super::customer_receipt_command::{ReceiptReplayPort, recover_receipt_command, replay_receipt_command};
 use super::customer_receipt_posting::{
     CommitTransactionRequest, persist_created_customer_receipt, prepare_customer_receipt_commit_candidate,
     run_commit_transaction,
@@ -157,12 +160,7 @@ impl ReceivableProcess {
         &self,
         command_receipt: &CommandReceipt,
     ) -> Result<Option<CustomerReceiptView>> {
-        match command_receipt.committed_resource_id(&self.db).await? {
-            Some(receipt_id) => {
-                Ok(Some(self.read.customer_receipt_detail(&receipt_id).await.map_err(crate::Error::from)?))
-            },
-            None => Ok(None),
-        }
+        replay_receipt_command(&ReceiptCommitRecovery(self), command_receipt, None, &mut NoTransaction).await
     }
 
     /// 事务失败后以幂等收据有界回读已提交回款，避免重复提交产生两条事实。
@@ -178,12 +176,8 @@ impl ReceivableProcess {
         command_receipt: &CommandReceipt,
         error: Error,
     ) -> Result<CustomerReceiptView> {
-        match command_receipt.committed_resource_id(&self.db).await? {
-            Some(receipt_id) => {
-                self.read.customer_receipt_detail(&receipt_id).await.map_err(crate::Error::from)
-            },
-            None => Err(error),
-        }
+        recover_receipt_command(&ReceiptCommitRecovery(self), command_receipt, error, &mut NoTransaction)
+            .await
     }
 
     /// 提交客户回款并调用统一 `start_approval`。
@@ -380,5 +374,27 @@ impl ReceivableProcess {
             .await?;
 
         self.read.customer_receipt_detail(&detail_id).await.map_err(crate::Error::from)
+    }
+}
+
+/// 新建提交入口沿用原财务详情当前视图的恢复语义。
+struct ReceiptCommitRecovery<'a>(&'a ReceivableProcess);
+
+#[async_trait]
+impl ReceiptReplayPort for ReceiptCommitRecovery<'_> {
+    type Output = CustomerReceiptView;
+
+    async fn committed_resource_id(
+        &self,
+        command: &CommandReceipt,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<String>> {
+        Ok(FinanceCommandReceiptService::new(self.0.db.clone())
+            .committed_resource_id(command, executor)
+            .await?)
+    }
+
+    async fn current_result(&self, id: &str, _executor: &mut dyn Executor) -> Result<CustomerReceiptView> {
+        Ok(self.0.read.customer_receipt_detail(id).await?)
     }
 }

@@ -104,7 +104,7 @@ where
 
         Box::pin(async move {
             let Some(subject) = subject else {
-                warn!(permission = %permission, "RBAC denied request without authenticated subject");
+                warn!(event_kind = "authorization_attempt", result = "rejected", permission = %permission, "RBAC denied request without authenticated subject");
                 return Ok(ApiResponse::<()>::unauthorized().into_response());
             };
 
@@ -115,6 +115,8 @@ where
                 },
                 Ok(false) => {
                     warn!(
+                        event_kind = "authorization_attempt",
+                        result = "rejected",
                         subject = %subject.0,
                         permission = %permission,
                         "RBAC denied request"
@@ -123,6 +125,8 @@ where
                 },
                 Err(err) => {
                     error!(
+                        event_kind = "authorization_attempt",
+                        result = "unknown",
                         subject = %subject.0,
                         permission = %permission,
                         error = %err,

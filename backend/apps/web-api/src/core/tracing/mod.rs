@@ -3,5 +3,5 @@
 mod middleware;
 mod setup;
 
-pub(crate) use middleware::trace_middleware;
+pub(crate) use middleware::{RequestId, trace_middleware};
 pub use setup::{TracingConfig, init_tracing};

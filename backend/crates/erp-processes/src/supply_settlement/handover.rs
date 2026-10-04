@@ -1,20 +1,25 @@
 //! 结算对账负责人交接与差异处理人改派。
 
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_identity::repository::prelude::*;
 use erp_identity::{AccessControlExt, Permission, PermissionSet, SharedRbacService};
+use erp_supply::command_receipt::SupplyCommandResult;
+use erp_supply::command_receipt::repository::{SupplyCommandReceiptExt, SupplyCommandReceiptReadExt};
 use erp_supply::dto::supplier_settlement::{
     HandoverCandidateView, HandoverSettlementRequest, HandoverSettlementView,
     ReassignSettlementDifferenceHandlerRequest, ReassignSettlementDifferenceHandlerView,
 };
 use erp_supply::repository::SupplierSettlementExt;
+use erp_supply::service::supplier_fulfillment::receipt::stable_digest;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use sha2::{Digest, Sha256};
 use validator::Validate;
 
 use super::SupplierSettlementProcess;
+use crate::audit::persist_log;
 use crate::handover_common::ensure_org_enabled;
+use crate::supply_execution::receipt::persist_supply_receipt;
 use crate::{Error, Result};
 
 impl SupplierSettlementProcess {
@@ -37,9 +42,12 @@ impl SupplierSettlementProcess {
         actor: &AuditActor,
     ) -> Result<HandoverSettlementView> {
         req.validate()?;
-        let audit_id = format!("settlement-handover-{}-{}-{}", actor.id(), id, req.idempotency_key.trim());
+        let audit_id =
+            format!("settlement-handover-{}", digest(&[actor.id(), id, req.idempotency_key.trim()]));
         let fingerprint = handover_fingerprint(actor.id(), id, &req)?;
-        if let Some(existing) = self.replay_handover(&audit_id, &fingerprint, id).await? {
+        if let Some(existing) =
+            self.replay_handover(&audit_id, &fingerprint, id, (actor.id(), &req.idempotency_key)).await?
+        {
             return Ok(existing);
         }
         ensure_target_qualified(
@@ -104,9 +112,11 @@ impl SupplierSettlementProcess {
     ) -> Result<ReassignSettlementDifferenceHandlerView> {
         req.validate()?;
         let audit_id =
-            format!("settlement-diff-handler-{}-{}-{}", actor.id(), id, req.idempotency_key.trim());
+            format!("settlement-diff-handler-{}", digest(&[actor.id(), id, req.idempotency_key.trim()]));
         let fingerprint = handler_fingerprint(actor.id(), id, &req)?;
-        if let Some(existing) = self.replay_handler(&audit_id, &fingerprint, id).await? {
+        if let Some(existing) =
+            self.replay_handler(&audit_id, &fingerprint, id, (actor.id(), &req.idempotency_key)).await?
+        {
             return Ok(existing);
         }
         ensure_target_qualified(
@@ -176,11 +186,24 @@ impl SupplierSettlementProcess {
         audit_id: &str,
         fingerprint: &str,
         statement_id: &str,
+        identity: (&str, &str),
     ) -> Result<Option<HandoverSettlementView>> {
-        let Some(audit) = self.db.audit_logs().find_by_id(audit_id, &mut NoTransaction).await? else {
+        let Some(stored) =
+            self.db.supply_command_receipts().find_command(audit_id, &mut NoTransaction).await?
+        else {
             return Ok(None);
         };
-        ensure_fingerprint(audit.message.as_deref(), fingerprint, "结算交接")?;
+        stored.verify_identity(
+            audit_id,
+            identity.0,
+            "supplier_settlement.handover",
+            statement_id,
+            &stable_digest(identity.1.trim()),
+        )?;
+        stored.verify(fingerprint, Some(statement_id), "同一幂等键已用于不同的结算交接")?;
+        if !matches!(stored.result, SupplyCommandResult::SettlementHandover) {
+            return Err(Error::Internal("结算交接回执类型非法".to_string()));
+        }
         let statement = self.domain().load_statement(statement_id, &mut NoTransaction).await?;
         Ok(Some(HandoverSettlementView {
             statement_id: statement.base.id,
@@ -195,11 +218,24 @@ impl SupplierSettlementProcess {
         audit_id: &str,
         fingerprint: &str,
         statement_id: &str,
+        identity: (&str, &str),
     ) -> Result<Option<ReassignSettlementDifferenceHandlerView>> {
-        let Some(audit) = self.db.audit_logs().find_by_id(audit_id, &mut NoTransaction).await? else {
+        let Some(stored) =
+            self.db.supply_command_receipts().find_command(audit_id, &mut NoTransaction).await?
+        else {
             return Ok(None);
         };
-        ensure_fingerprint(audit.message.as_deref(), fingerprint, "差异处理人改派")?;
+        stored.verify_identity(
+            audit_id,
+            identity.0,
+            "supplier_settlement.reassign_difference_handler",
+            statement_id,
+            &stable_digest(identity.1.trim()),
+        )?;
+        stored.verify(fingerprint, Some(statement_id), "同一幂等键已用于不同的差异处理人改派")?;
+        if !matches!(stored.result, SupplyCommandResult::DifferenceHandlerReassigned) {
+            return Err(Error::Internal("差异处理人改派回执类型非法".to_string()));
+        }
         let statement = self.domain().load_statement(statement_id, &mut NoTransaction).await?;
         Ok(Some(ReassignSettlementDifferenceHandlerView {
             statement_id: statement.base.id.clone(),
@@ -231,7 +267,18 @@ async fn apply_handover(
     let next_org = req.target_org_unit_id.clone().filter(|value| !value.trim().is_empty());
     statement.handover(req.target_user_id.clone(), next_org)?;
     db.supplier_settlement_statements().update(&mut statement, executor).await?;
-    write_audit(db, actor, audit_id, "supplier_settlement.handover", id, fingerprint, executor).await?;
+    write_audit(
+        db,
+        actor,
+        audit_id,
+        "supplier_settlement.handover",
+        id,
+        fingerprint,
+        &req.idempotency_key,
+        Some(statement.statement_no.clone()),
+        executor,
+    )
+    .await?;
     Ok(HandoverSettlementView {
         statement_id: statement.base.id,
         prepared_by: statement.prepared_by,
@@ -267,6 +314,8 @@ async fn apply_handler(
         "supplier_settlement.reassign_difference_handler",
         id,
         fingerprint,
+        &req.idempotency_key,
+        Some(statement.statement_no.clone()),
         executor,
     )
     .await?;
@@ -277,6 +326,7 @@ async fn apply_handler(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn write_audit(
     db: &mongodb::Database,
     actor: &AuditActor,
@@ -284,16 +334,28 @@ async fn write_audit(
     action: &str,
     resource_id: &str,
     fingerprint: &str,
+    key: &str,
+    number: Option<String>,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let audit = actor.clone().resource_log_with_id(
-        audit_id.to_string(),
-        action,
-        "supplier_settlement_statement",
-        resource_id.to_string(),
-        Some(format!("command_sha256={fingerprint}")),
-    )?;
-    db.audit_logs().create(&audit, executor).await?;
+    let audit = actor
+        .clone()
+        .resource_log_with_id(
+            audit_id.to_string(),
+            action,
+            "supplier_settlement_statement",
+            resource_id.to_string(),
+            Some("供应商结算责任已更新".to_string()),
+        )?
+        .with_command_id(Some(audit_id.to_string()))?
+        .with_resource_number(number)?;
+    let result = if action == "supplier_settlement.handover" {
+        SupplyCommandResult::SettlementHandover
+    } else {
+        SupplyCommandResult::DifferenceHandlerReassigned
+    };
+    persist_supply_receipt(db, &audit, fingerprint, key, resource_id, result, executor).await?;
+    persist_log(db, &audit, executor).await?;
     Ok(())
 }
 
@@ -371,16 +433,6 @@ fn handler_fingerprint(
         &req.expected_version.to_string(),
         req.idempotency_key.trim(),
     ]))
-}
-
-fn ensure_fingerprint(message: Option<&str>, expected: &str, command: &str) -> Result<()> {
-    let Some(message) = message else {
-        return Err(Error::ConflictError(format!("同一幂等键已用于不同的{command}")));
-    };
-    if !message.contains(expected) {
-        return Err(Error::ConflictError(format!("同一幂等键已用于不同的{command}")));
-    }
-    Ok(())
 }
 
 fn digest(parts: &[&str]) -> String {

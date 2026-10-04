@@ -9,12 +9,12 @@ use super::reconciliation_difference_resolution::RESOLUTION_NO_OVERFLOW_MESSAGE;
 
 /// W29 关闭证据的强类型引用。
 ///
-/// 持久化继续使用历史分号格式，以保证存量记录可读且无需迁移。
+/// 证据引用领域命令回执，不以展示审计作为关闭依据。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct W29EvidenceReference {
     work_item_id: String,
     replacement_work_item_id: Option<String>,
-    audit_log_id: String,
+    command_receipt_id: String,
 }
 
 impl W29EvidenceReference {
@@ -25,12 +25,12 @@ impl W29EvidenceReference {
             [work_item, audit] => Ok(Self {
                 work_item_id: reference_value(work_item, "work_item:")?,
                 replacement_work_item_id: None,
-                audit_log_id: reference_value(audit, "audit_log:")?,
+                command_receipt_id: reference_value(audit, "command_receipt:")?,
             }),
             [work_item, replacement, audit] => Ok(Self {
                 work_item_id: reference_value(work_item, "work_item:")?,
                 replacement_work_item_id: Some(reference_value(replacement, "replacement_work_item:")?),
-                audit_log_id: reference_value(audit, "audit_log:")?,
+                command_receipt_id: reference_value(audit, "command_receipt:")?,
             }),
             _ => Err(Error::from("领域关闭证据引用格式非法")),
         }
@@ -55,9 +55,9 @@ impl W29EvidenceReference {
         self.replacement_work_item_id.as_deref()
     }
 
-    /// 返回审计日志 ID。
-    pub fn audit_log_id(&self) -> &str {
-        &self.audit_log_id
+    /// 返回命令回执 ID。
+    pub fn command_receipt_id(&self) -> &str {
+        &self.command_receipt_id
     }
 }
 
@@ -66,10 +66,14 @@ impl fmt::Display for W29EvidenceReference {
         match &self.replacement_work_item_id {
             Some(replacement) => write!(
                 formatter,
-                "work_item:{};replacement_work_item:{};audit_log:{}",
-                self.work_item_id, replacement, self.audit_log_id
+                "work_item:{};replacement_work_item:{};command_receipt:{}",
+                self.work_item_id, replacement, self.command_receipt_id
             ),
-            None => write!(formatter, "work_item:{};audit_log:{}", self.work_item_id, self.audit_log_id),
+            None => write!(
+                formatter,
+                "work_item:{};command_receipt:{}",
+                self.work_item_id, self.command_receipt_id
+            ),
         }
     }
 }
@@ -134,16 +138,20 @@ impl W29CloseDecision {
     }
 
     /// 构造与本决策一致的强类型证据引用。
-    pub fn evidence_reference(&self, work_item_id: &str, audit_log_id: &str) -> Result<W29EvidenceReference> {
+    pub fn evidence_reference(
+        &self,
+        work_item_id: &str,
+        command_receipt_id: &str,
+    ) -> Result<W29EvidenceReference> {
         let work_item_id = required_reference(Some(work_item_id), "工作项 ID 不能为空")?;
-        let audit_log_id = required_reference(Some(audit_log_id), "审计日志 ID 不能为空")?;
+        let command_receipt_id = required_reference(Some(command_receipt_id), "命令回执 ID 不能为空")?;
         if self.replacement_work_item_id.as_deref() == Some(work_item_id.as_str()) {
             return Err(Error::from("替代任务不能引用自身"));
         }
         Ok(W29EvidenceReference {
             work_item_id,
             replacement_work_item_id: self.replacement_work_item_id.clone(),
-            audit_log_id,
+            command_receipt_id,
         })
     }
 
@@ -180,7 +188,7 @@ mod tests {
         assert_eq!(decision.close_reason(), "DUPLICATE replacement=wi-2: 已有有效替代");
         let evidence = decision.evidence_reference("wi-1", "audit-1").unwrap();
         let encoded = evidence.to_string();
-        assert_eq!(encoded, "work_item:wi-1;replacement_work_item:wi-2;audit_log:audit-1");
+        assert_eq!(encoded, "work_item:wi-1;replacement_work_item:wi-2;command_receipt:audit-1");
         assert_eq!(W29EvidenceReference::parse(&encoded).unwrap(), evidence);
     }
 
@@ -192,7 +200,7 @@ mod tests {
         assert_eq!(decision.resolution_action(), ResolutionAction::CloseMisrouted);
         assert_eq!(
             decision.evidence_reference("wi-1", "audit-2").unwrap().to_string(),
-            "work_item:wi-1;audit_log:audit-2"
+            "work_item:wi-1;command_receipt:audit-2"
         );
     }
 
@@ -202,7 +210,7 @@ mod tests {
         assert!(W29CloseDecision::new("UNKNOWN", Some("原因"), None).is_err());
         let decision = W29CloseDecision::new("DUPLICATE", None, Some("wi-1")).unwrap();
         assert!(decision.evidence_reference("wi-1", "audit-1").is_err());
-        assert!(W29EvidenceReference::parse("work_item:wi-1;audit_log:").is_err());
+        assert!(W29EvidenceReference::parse("work_item:wi-1;command_receipt:").is_err());
         assert_eq!(W29CloseDecision::next_resolution_no(None).unwrap(), 1);
         assert_eq!(W29CloseDecision::next_resolution_no(Some(7)).unwrap(), 8);
         assert!(W29CloseDecision::next_resolution_no(Some(u32::MAX)).is_err());

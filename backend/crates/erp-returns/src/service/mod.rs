@@ -1,5 +1,6 @@
 //! 退货与资金纠错的本域规则、构造和事务内持久化。
 pub mod approval;
+pub mod command_receipt;
 pub mod customer_refund;
 pub mod payment_reversal;
 pub mod purchase_return;

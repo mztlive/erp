@@ -7,7 +7,7 @@ use mongodb::options::IndexOptions;
 use mongodb::{Database, IndexModel};
 use persistence_core::Result;
 
-use crate::repository::WorkItemExt;
+use crate::repository::{WorkItemCommandExt, WorkItemExt};
 
 /// `work_items` 集合名。
 pub const WORK_ITEMS: &str = <mongodb::Database as WorkItemExt>::WORK_ITEMS;
@@ -24,6 +24,19 @@ pub async fn ensure(db: &Database) -> Result<()> {
     db.collection::<Document>(WORK_ITEMS).create_indexes(work_item_indexes()).await?;
     db.collection::<Document>(FINANCE_RESPONSIBILITY_RULES)
         .create_indexes(finance_responsibility_indexes())
+        .await?;
+    db.collection::<Document>(Database::WORK_ITEM_COMMAND_RECEIPTS)
+        .create_index(
+            IndexModel::builder()
+                .keys(doc! { "id": 1 })
+                .options(
+                    IndexOptions::builder()
+                        .name("uk_work_item_command_receipts_id".to_string())
+                        .unique(true)
+                        .build(),
+                )
+                .build(),
+        )
         .await?;
     Ok(())
 }

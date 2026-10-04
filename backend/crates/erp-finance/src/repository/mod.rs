@@ -2,6 +2,7 @@
 
 use mongodb::bson::{Document, doc};
 
+pub mod command_receipt;
 pub mod cost;
 pub mod extensions;
 mod fulfillment_facts;
@@ -13,8 +14,9 @@ pub mod prelude;
 mod progress;
 pub mod receivable;
 
+pub use command_receipt::{FinanceCommandReceiptRepository, FinanceCommandReceiptRepositoryExt};
 pub use cost::{CostAllocationFilter, CostAllocationRow, CostEntryFilter, CostEntryRow, CostRepository};
-pub use extensions::{CostExt, PayableExt, ReceivableExt};
+pub use extensions::{CostExt, FinanceCommandExt, PayableExt, ReceivableExt};
 pub use funds_summary::{FinancialSummaryLink, FundsSummaryRepository};
 pub use invoice_summary_facts::{InvoiceSummaryLink, InvoiceSummaryRepository};
 pub use owned::{

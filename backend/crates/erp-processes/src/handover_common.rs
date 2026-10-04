@@ -1,9 +1,10 @@
-//! 交接命令共用的幂等键、回放指纹与目标组织检查。
-//!
-//! 商品、供给等显式交接在不同文件中重复实现同一机械逻辑；本模块只收敛
-//! “去空白幂等键、审计指纹前缀匹配、组织链路启用”三段无领域分支的检查。
-//! 目标账号资格、审计动作与指纹载荷仍由各交接调用方决定。
+//! 交接命令的规范化、目标组织检查和安全中文事件事实。
 
+use application_core::{AuditActor, CommandReceipt};
+use erp_audit::{
+    AuditAction, AuditCode, AuditFact, AuditField, AuditFieldKind, AuditValue, BusinessEventContent,
+    BusinessEventContext, BusinessEventResult,
+};
 use erp_identity::entity::organization::OrgTree;
 use erp_identity::repository::OrganizationRepository;
 use mongodb::Database;
@@ -32,46 +33,71 @@ pub(crate) fn trimmed_idempotency_key(raw: &str) -> Result<String> {
     Ok(key)
 }
 
-/// 判断审计留言是否属于同一交接命令指纹。
-///
-/// # 参数
-/// * `message` - 已提交审计留言
-/// * `expected_fingerprint` - 本次命令指纹
-///
-/// # 返回
-/// 精确一致或以 `{expected};` 开头时为 true。
-///
-/// # 错误
-/// 无。
-pub(crate) fn replay_fingerprint_matches(message: Option<&str>, expected_fingerprint: &str) -> bool {
-    let Some(message) = message else {
-        return false;
-    };
-    let expected = format!("command_sha256={expected_fingerprint}");
-    message == expected || message.starts_with(&format!("{expected};"))
+/// 交接事件只记录明确的已完成结果，不序列化原因、请求或人员资料。
+pub(crate) const HANDOVER_AUDIT_FIELDS: &[AuditField] = &[
+    AuditField {
+        code: "handover_result",
+        label: "交接结果",
+        kind: AuditFieldKind::Code(&[AuditCode { code: "completed", label: "已交接" }]),
+    },
+    AuditField { code: "responsibility", label: "责任人", kind: AuditFieldKind::Changed },
+    AuditField { code: "business_org", label: "业务组织", kind: AuditFieldKind::Changed },
+];
+
+/// 由实际业务执行形成的白名单事实，不携带自由文本或人员敏感资料。
+pub(crate) struct HandoverEventFacts {
+    pub target_id: String,
+    pub target_number: Option<String>,
+    pub responsibility_changed: bool,
+    pub organization_changed: bool,
 }
 
-/// 同一幂等键用于不同载荷时拒绝。
+/// 预先验证明确登记的交接动作及命令关联。
 ///
 /// # 参数
-/// * `message` - 已提交审计留言
-/// * `expected_fingerprint` - 本次命令指纹
-/// * `conflict` - 异载荷时的冲突文案
-///
+/// * `actor` - 认证操作人。
+/// * `command` - 独立回执的稳定命令身份。
+/// * `action` - 调用方明确登记的领域动作。
 /// # 返回
-/// 指纹一致时成功。
-///
+/// 返回提交前使用的安全事件上下文。
 /// # 错误
-/// 指纹不一致时返回冲突错误。
-pub(crate) fn ensure_replay_fingerprint(
-    message: Option<&str>,
-    expected_fingerprint: &str,
-    conflict: &str,
-) -> Result<()> {
-    if replay_fingerprint_matches(message, expected_fingerprint) {
-        return Ok(());
+/// 静态元数据或身份非法时拒绝。
+pub(crate) fn handover_context(
+    actor: &AuditActor,
+    command: &CommandReceipt,
+    action: AuditAction,
+) -> Result<BusinessEventContext> {
+    Ok(BusinessEventContext::new(actor.clone(), action)?
+        .with_command_id(Some(command.id().to_string()))?
+        .with_target(command.scope_id().map(str::to_string), None)?)
+}
+
+/// 提供执行后明确的交接完成事实，回放分支不调用本函数。
+///
+/// # 参数
+/// * `value` - 实际目标、业务编号及允许记录的真实变更标记。
+/// # 返回
+/// 返回安全的成功事件投影。
+/// # 错误
+/// 无；提交前由统一审计边界校验。
+pub(crate) fn handover_content(value: HandoverEventFacts) -> BusinessEventContent {
+    let mut facts = vec![AuditFact {
+        field: "handover_result".into(),
+        value: AuditValue::Code { code: "completed".into(), label: "已交接".into() },
+    }];
+    if value.responsibility_changed {
+        facts.push(AuditFact { field: "responsibility".into(), value: AuditValue::Changed });
     }
-    Err(Error::ConflictError(conflict.to_string()))
+    if value.organization_changed {
+        facts.push(AuditFact { field: "business_org".into(), value: AuditValue::Changed });
+    }
+    BusinessEventContent {
+        target_id: value.target_id,
+        target_number: value.target_number,
+        result: BusinessEventResult::Succeeded,
+        field_changes: Vec::new(),
+        facts,
+    }
 }
 
 /// 校验显式目标组织整条路径均启用。
@@ -118,23 +144,41 @@ mod tests {
     }
 
     #[test]
-    fn replay_accepts_exact_and_suffixed_fingerprint() {
-        assert!(replay_fingerprint_matches(Some("command_sha256=abc"), "abc"));
-        assert!(replay_fingerprint_matches(Some("command_sha256=abc;target=user-2"), "abc"));
-        assert!(!replay_fingerprint_matches(Some("command_sha256=def"), "abc"));
-        assert!(!replay_fingerprint_matches(Some("command_sha256=abc-def"), "abc"));
-        assert!(!replay_fingerprint_matches(None, "abc"));
-        assert!(!replay_fingerprint_matches(Some(""), "abc"));
-    }
-
-    #[test]
-    fn replay_conflict_keeps_caller_message() {
-        assert!(ensure_replay_fingerprint(Some("command_sha256=abc"), "abc", "冲突").is_ok());
-        let error =
-            ensure_replay_fingerprint(Some("command_sha256=def"), "abc", "同一幂等键已用于不同的商品交接")
-                .unwrap_err();
-        assert!(
-            matches!(error, Error::ConflictError(message) if message == "同一幂等键已用于不同的商品交接")
-        );
+    fn handover_event_keeps_typed_completion_and_command_without_machine_message() {
+        let actor = AuditActor::new("actor".into(), "maintainer".into(), erp_core::AccountKind::Admin);
+        let command = CommandReceipt::from_resource_parts(
+            "handover-",
+            "actor",
+            "product.handover",
+            "product",
+            "product-1",
+            "key",
+            ["payload".into()],
+        )
+        .unwrap();
+        let context = handover_context(
+            &actor,
+            &command,
+            AuditAction {
+                code: "product.handover",
+                resource_type: "product",
+                label: "商品交接",
+                version: 1,
+                allowed_fields: HANDOVER_AUDIT_FIELDS,
+            },
+        )
+        .unwrap();
+        let log = context
+            .log(handover_content(HandoverEventFacts {
+                target_id: "product-1".into(),
+                target_number: Some("CP-001".into()),
+                responsibility_changed: true,
+                organization_changed: false,
+            }))
+            .unwrap();
+        let event = log.structured_event.unwrap();
+        assert_eq!(event.command_id.as_deref(), Some(command.id()));
+        assert_eq!(event.facts[0].field_label, "交接结果");
+        assert!(log.message.unwrap().contains("已交接"));
     }
 }

@@ -1,6 +1,6 @@
 //! 客户验收草稿创建根事务：注册、履约头行写入、审计。
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_core::ids::CustomerAcceptanceId;
 use erp_fulfillment::dto::{CreateCustomerAcceptanceRequest, CustomerAcceptanceView};
 use erp_fulfillment::entity::fulfillment::{CustomerAcceptance, CustomerAcceptanceLine};
@@ -15,6 +15,7 @@ use super::CustomerAcceptanceProcess;
 use super::evidence::ensure_evidence;
 use super::registration::register_created_customer_acceptance_document;
 use crate::Result;
+use crate::audit::persist_log;
 impl CustomerAcceptanceProcess {
     /// 创建客户验收单（草稿，跨集合：表头 + 行 + 审计）。
     ///
@@ -103,7 +104,7 @@ async fn persist_created_customer_acceptance(
                 )
                 .await?;
                 db.fulfillment().create_customer_acceptance_with_lines(&acceptance, &lines, executor).await?;
-                db.audit_logs().create(&audit, executor).await?;
+                persist_log(&db, &audit, executor).await?;
                 Ok::<(), crate::Error>(())
             })
         })

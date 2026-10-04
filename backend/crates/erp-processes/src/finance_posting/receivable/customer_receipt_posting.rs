@@ -1,12 +1,14 @@
 //! 客户回款过账与创建持久化：审批运行时持有的事务内过账/撤回与创建绑定写入。
 
 use application_core::{AuditActor, CommandReceipt};
-use erp_audit::{AuditActorLogs, AuditExt, CommandReceiptServiceExt as _};
+use async_trait::async_trait;
+use erp_audit::{AuditActorLogs, BusinessEventContext};
 use erp_core::common::time::Instant;
 use erp_core::ids::{CustomerReceiptId, SalesOrderId};
 use erp_finance::entity::receivable::{CustomerReceipt, CustomerReceiptData, CustomerReceiptStatus};
 use erp_finance::repository::ReceivableExt;
 use erp_finance::repository::prelude::*;
+use erp_finance::service::command_receipt::FinanceCommandReceiptService;
 use erp_finance::service::receivable::customer_receipt_commit::PreparedCustomerReceiptCommit;
 use erp_finance::service::receivable::mapping::ensure_expected_version;
 use erp_identity::SharedRbacService;
@@ -27,11 +29,16 @@ use super::adapter::{
     customer_receipt_subject_ref, ensure_final_approve_posting, execute_customer_receipt_domain_action,
     require_frozen_binding, start_customer_receipt_approval,
 };
+use super::customer_receipt_command::{
+    MongoReceiptCommandWrites, ReceiptReplayPort, persist_receipt_command_success, receipt_command_context,
+    replay_receipt_command,
+};
 use super::start_approval::{
     CustomerReceiptStartPersistInput, DocumentStartInput, build_document_start_input,
     load_bound_definition_graph, load_bound_definition_graph_with_executor, load_start_receipt,
     load_start_receipt_with_executor, persist_customer_receipt_start_apply,
 };
+use crate::audit::persist_log;
 use crate::{Error, Result};
 
 /// 提交事务的已捆绑输入：待提交候选、冻结分配与幂等身份。
@@ -80,9 +87,16 @@ pub(super) async fn run_commit_transaction(
     let db = db.clone();
     let rbac = rbac.clone();
     let client = db.client().clone();
+    let context = receipt_command_context(&command_receipt, &actor)?;
     client
         .with_transaction(move |executor| {
             Box::pin(async move {
+                let replay = MongoReceiptCommitReplay { db: &db };
+                if let Some(receipt) =
+                    replay_receipt_command(&replay, &command_receipt, None, executor).await?
+                {
+                    return Ok(receipt);
+                }
                 let (receipt, binding) =
                     load_commit_receipt(&db, &rbac, object_read.as_ref(), pending, &actor, executor).await?;
                 persist_loaded_commit_start(
@@ -96,6 +110,7 @@ pub(super) async fn run_commit_transaction(
                         actor: actor.clone(),
                     },
                     &command_receipt,
+                    &context,
                     executor,
                 )
                 .await
@@ -145,12 +160,9 @@ pub async fn post_customer_receipt_apply(
             executor,
         )
         .await?;
-    let audit = actor.clone().resource_log(
-        &format!("customer_receipt.post:{receipt_id}"),
-        "customer_receipt",
-        receipt.base.id.clone(),
-    )?;
-    db.audit_logs().create(&audit, executor).await?;
+    let audit =
+        actor.clone().resource_log("customer_receipt.post", "customer_receipt", receipt.base.id.clone())?;
+    persist_log(db, &audit, executor).await?;
     sales_order_ids.sort();
     sales_order_ids.dedup();
     for sales_order_id in sales_order_ids {
@@ -196,7 +208,7 @@ pub async fn cancel_customer_receipt_approval_apply(
         "customer_receipt",
         receipt_id.to_string(),
     )?;
-    db.audit_logs().create(&audit, executor).await?;
+    persist_log(db, &audit, executor).await?;
     Ok(())
 }
 
@@ -250,7 +262,7 @@ pub(super) async fn persist_created_customer_receipt(
                 )
                 .await?;
                 db.customer_receipts().create(&receipt, executor).await?;
-                db.audit_logs().create(&audit, executor).await?;
+                persist_log(&db, &audit, executor).await?;
                 Ok::<(), crate::Error>(())
             })
         })
@@ -363,7 +375,7 @@ pub(super) fn prepare_customer_receipt_commit_candidate(
     }
 }
 
-/// 在调用方事务内落盘新建回款的注册行、绑定、实体与创建审计。
+/// 在调用方事务内落盘新建回款的注册行、绑定与实体；主命令统一记录成功事件。
 ///
 /// # 参数
 /// * `db` - 数据库
@@ -413,12 +425,6 @@ async fn create_new_commit_records(
     )
     .await?;
     db.customer_receipts().create(&candidate, executor).await?;
-    let audit = actor.clone().resource_log(
-        "customer_receipt.create",
-        "customer_receipt",
-        candidate.base.id.clone(),
-    )?;
-    db.audit_logs().create(&audit, executor).await?;
     Ok((candidate, binding))
 }
 
@@ -512,6 +518,7 @@ pub(super) async fn load_commit_receipt(
 /// * `db` - 数据库
 /// * `request` - 已加载的回款、绑定、分配与身份
 /// * `command_receipt` - 提交幂等收据
+/// * `context` - 业务写入前已校验的命令事件上下文
 /// * `executor` - 调用方执行器
 ///
 /// # 返回
@@ -523,6 +530,7 @@ pub(super) async fn persist_loaded_commit_start(
     db: &Database,
     mut request: LoadedCommitStart,
     command_receipt: &CommandReceipt,
+    context: &BusinessEventContext,
     executor: &mut dyn Executor,
 ) -> Result<CustomerReceipt> {
     let binding = require_frozen_binding(Some(&request.binding))?.clone();
@@ -570,9 +578,37 @@ pub(super) async fn persist_loaded_commit_start(
         executor,
     )
     .await?;
-    let command_audit = command_receipt.audit(request.actor.clone(), committed.base.id.clone())?;
-    db.audit_logs().create(&command_audit, executor).await?;
+    let writes = MongoReceiptCommandWrites { db };
+    persist_receipt_command_success(&writes, command_receipt, context, &committed, executor).await?;
     Ok(committed)
+}
+
+/// 事务内命中财务回执时只回读原单，禁止创建候选或启动审批。
+struct MongoReceiptCommitReplay<'a> {
+    db: &'a Database,
+}
+
+#[async_trait]
+impl ReceiptReplayPort for MongoReceiptCommitReplay<'_> {
+    type Output = CustomerReceipt;
+
+    async fn committed_resource_id(
+        &self,
+        command: &CommandReceipt,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<String>> {
+        Ok(FinanceCommandReceiptService::new(self.db.clone())
+            .committed_resource_id(command, executor)
+            .await?)
+    }
+
+    async fn current_result(&self, id: &str, executor: &mut dyn Executor) -> Result<CustomerReceipt> {
+        self.db
+            .customer_receipts()
+            .find_by_id(id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("客户回款单不存在".into()))
+    }
 }
 
 /// 由绑定与快照装配分发路径的统一启动输入。

@@ -6,7 +6,6 @@ use bpm::model::{
     ApprovalCancellationTaskPolicy, ApprovalNodeExecution, ApprovalProcessInstance, IdempotencyKey,
     ParticipantId, Timestamp,
 };
-use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_sales::entity::sales_order::SalesOrder;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
@@ -23,6 +22,7 @@ use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 
 use super::start_approval::load_bound_definition_graph;
+use crate::audit::persist_log;
 use crate::{Error, Result};
 
 /// 已加载的可撤回运行事实。
@@ -230,7 +230,7 @@ pub(super) async fn persist_sales_order_cancel(
                 erp_sales::service::sales_order::SalesOrderService::new(db.clone())
                     .persist_order(&mut order, executor)
                     .await?;
-                db.audit_logs().create(&audit, executor).await?;
+                persist_log(&db, &audit, executor).await?;
                 Ok::<(), crate::Error>(())
             })
         })

@@ -1,13 +1,14 @@
 //! 正式复核事务的生产步骤与同一执行器合同。
 use application_core::AuditActor;
 use async_trait::async_trait;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_core::money::Amount;
 use erp_finance::entity::cost::CostEntry;
 use erp_finance::entity::payable::{PayableAccount, PayableEntry};
 use erp_finance::service::cost::supplier_settlement::persist_settlement_costs;
 use erp_finance::service::payable::supplier_settlement::persist_settlement_payable;
 use erp_identity::SharedRbacService;
+use erp_supply::command_receipt::{ReviewDecisionReceipt, SupplyCommandResult};
 use erp_supply::dto::supplier_settlement::SettlementReviewDecisionStatus;
 use erp_supply::entity::supplier_settlement::{
     SupplierSettlementDifference, SupplierSettlementItem, SupplierSettlementStatement,
@@ -22,7 +23,8 @@ use erp_workflow::entity::work_item::WorkItem;
 use mongodb::Database;
 use persistence_core::Executor;
 
-use super::review::{ReviewDecisionReceipt, review_decision_receipt_message};
+use crate::audit::persist_log;
+use crate::supply_execution::receipt::persist_supply_receipt;
 use crate::{Error, Result};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Step {
@@ -35,9 +37,10 @@ enum Step {
     Task,
     Payable,
     Costs,
+    Receipt,
     Audit,
 }
-const ORDER: [Step; 10] = [
+const ORDER: [Step; 11] = [
     Step::Authorize,
     Step::Separation,
     Step::Items,
@@ -47,6 +50,7 @@ const ORDER: [Step; 10] = [
     Step::Task,
     Step::Payable,
     Step::Costs,
+    Step::Receipt,
     Step::Audit,
 ];
 #[async_trait]
@@ -74,6 +78,7 @@ pub(super) struct Posting<'a> {
     pub operation_id: String,
     pub fingerprint: String,
     pub audit_id: String,
+    pub idempotency_key: String,
     pub action: String,
 }
 struct MongoPosting<'a> {
@@ -87,20 +92,7 @@ impl PostingSteps for MongoPosting<'_> {
     async fn apply(&mut self, step: Step, ex: &mut dyn Executor) -> Result<()> {
         let input = &mut self.input;
         match step {
-            Step::Authorize => {
-                crate::adapters::workflow::work_item_service(input.db.clone(), input.rbac.clone())
-                    .ensure_domain_decision_access(input.actor, input.work_item, ex)
-                    .await?;
-                let auth = crate::adapters::workflow::workflow_auth(input.db.clone(), input.rbac.clone());
-                super::reviewers::ensure_reviewer(
-                    &auth,
-                    input.actor_id,
-                    &input.statement.prepared_by,
-                    &input.statement.business_org_unit_id,
-                    ex,
-                )
-                .await?;
-            },
+            Step::Authorize => authorize_posting(input, ex).await?,
             Step::Separation => ensure_reviewer_separation(input.statement, input.actor_id)?,
             Step::Items => self.items = load_statement_items(input.db, &input.statement.base.id, ex).await?,
             Step::Differences => {
@@ -121,28 +113,67 @@ impl PostingSteps for MongoPosting<'_> {
                 }
             },
             Step::Costs => persist_settlement_costs(input.db, input.cost_entries, ex).await?,
+            Step::Receipt => self.receipt = Some(persist_review_result(input, ex).await?),
             Step::Audit => {
-                let receipt = ReviewDecisionReceipt {
-                    operation_id: input.operation_id.clone(),
-                    result_status: input.result_status,
-                    statement_version: input.statement.base.version,
-                    task_version: input.work_item.base.version,
-                    payable_account_id: input.payable.map(|account| account.base.id.clone()),
-                    cost_delta: input.cost_delta,
-                };
-                let audit = input.actor.clone().resource_log_with_id(
-                    input.audit_id.clone(),
-                    &input.action,
-                    "supplier_settlement_statement",
-                    input.statement.base.id.clone(),
-                    Some(review_decision_receipt_message(&input.fingerprint, &receipt)),
-                )?;
-                input.db.audit_logs().create(&audit, ex).await?;
-                self.receipt = Some(receipt);
+                persist_log(input.db, &review_audit(input)?, ex).await?;
             },
         }
         Ok(())
     }
+}
+/// 复核权限和任务访问分别校验，保持制单人分离步骤仍在其后。
+async fn authorize_posting(input: &Posting<'_>, ex: &mut dyn Executor) -> Result<()> {
+    crate::adapters::workflow::work_item_service(input.db.clone(), input.rbac.clone())
+        .ensure_domain_decision_access(input.actor, input.work_item, ex)
+        .await?;
+    let auth = crate::adapters::workflow::workflow_auth(input.db.clone(), input.rbac.clone());
+    super::reviewers::ensure_reviewer(
+        &auth,
+        input.actor_id,
+        &input.statement.prepared_by,
+        &input.statement.business_org_unit_id,
+        ex,
+    )
+    .await
+}
+
+/// 在应付、成本写入之后登记原复核结果，审计仍由后续步骤保存。
+async fn persist_review_result(input: &Posting<'_>, ex: &mut dyn Executor) -> Result<ReviewDecisionReceipt> {
+    let receipt = ReviewDecisionReceipt {
+        operation_id: input.operation_id.clone(),
+        result_status: input.result_status,
+        statement_version: input.statement.base.version,
+        task_version: input.work_item.base.version,
+        payable_account_id: input.payable.map(|account| account.base.id.clone()),
+        cost_delta: input.cost_delta,
+    };
+    persist_supply_receipt(
+        input.db,
+        &review_audit(input)?,
+        &input.fingerprint,
+        &input.idempotency_key,
+        &input.statement.base.id,
+        SupplyCommandResult::ReviewDecision(receipt.clone()),
+        ex,
+    )
+    .await?;
+    Ok(receipt)
+}
+
+/// 构造单次中文复核事件；原结果只保存在领域回执。
+fn review_audit(input: &Posting<'_>) -> Result<erp_audit::AuditLog> {
+    Ok(input
+        .actor
+        .clone()
+        .resource_log_with_id(
+            input.audit_id.clone(),
+            &input.action,
+            "supplier_settlement_statement",
+            input.statement.base.id.clone(),
+            Some("供应商结算财务复核决定已登记".to_string()),
+        )?
+        .with_command_id(Some(input.audit_id.clone()))?
+        .with_resource_number(Some(input.statement.statement_no.clone()))?)
 }
 pub(super) async fn post(input: Posting<'_>, ex: &mut dyn Executor) -> Result<ReviewDecisionReceipt> {
     let mut posting = MongoPosting { input, items: Vec::new(), differences: Vec::new(), receipt: None };

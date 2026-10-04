@@ -5,12 +5,13 @@ use std::future::Future;
 use application_core::{AuditActor, CommandReceipt};
 use persistence_core::NoTransaction;
 
-use super::access::detail_scope;
+use super::access::{detail_scope, ensure_generic_work_item_mutation, ensure_item_in_managed_scope};
 use super::{WorkItemConflict, WorkItemConflictKind, WorkItemMutationOutcome, WorkItemService};
 use crate::entity::work_item::WorkItem;
 use crate::error::{Error, Result};
-use crate::repository::WorkItemExt;
+use crate::ports::{PreparedWorkflowAudit, WorkflowAuditAttemptResult, WorkflowAuditPort};
 use crate::repository::prelude::*;
+use crate::repository::{WorkItemCommandExt, WorkItemCommandRepositoryExt, WorkItemExt};
 
 pub(super) const IDEMPOTENCY_AUDIT_PREFIX: &str = "work-item-command-";
 
@@ -51,6 +52,32 @@ pub(super) fn work_item_update_error(error: persistence_core::Error) -> WorkItem
     }
 }
 
+/// 原事务已结束后记录安全尝试；持久化失败不覆盖业务错误。
+pub(super) async fn record_command_attempt(
+    audit: &dyn WorkflowAuditPort,
+    prepared: &PreparedWorkflowAudit,
+    error: &Error,
+) {
+    let result = match error {
+        Error::OutcomeUnknown(_) => WorkflowAuditAttemptResult::Unknown,
+        _ if error.class() == application_core::ErrorClass::Internal => WorkflowAuditAttemptResult::Failed,
+        _ => WorkflowAuditAttemptResult::Rejected,
+    };
+    if audit.persist_attempt(prepared, result).await.is_err() {
+        tracing::warn!(event_kind = "command_attempt", action_code = %prepared.action, "工作流命令尝试审计写入失败");
+    }
+}
+
+/// 查证失败不得替换首次未知提交的来源；其他恢复冲突沿原幂等合同。
+pub(super) fn recover_command_error<T>(original: Error, recovery: Result<Option<T>>) -> Result<T> {
+    match recovery {
+        Ok(Some(value)) => Ok(value),
+        Ok(None) => Err(original),
+        Err(_) if matches!(original, Error::OutcomeUnknown(_)) => Err(original),
+        Err(error) => Err(error),
+    }
+}
+
 impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkItemService<A> {
     /// Load a work item by id.
     pub fn load(&self, id: String) -> impl Future<Output = Result<WorkItem>> + Send + 'static {
@@ -68,15 +95,26 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         &self,
         receipt: &CommandReceipt,
         item_id: &str,
+        actor: &AuditActor,
     ) -> Result<Option<WorkItem>> {
-        let Some(resource_id) = crate::ports::committed_resource_id(self.audit.as_ref(), receipt).await?
+        let Some(committed) =
+            self.db.work_item_command_receipts().find_command(receipt.id(), &mut NoTransaction).await?
         else {
             return Ok(None);
         };
+        let (resource_id, version) = committed.committed_task(receipt)?;
         if resource_id != item_id {
-            return Err(Error::Internal("幂等审计资源与命令不一致".to_string()));
+            return Err(Error::Internal("幂等回执资源与命令不一致".to_string()));
         }
-        self.load(item_id.to_string()).await.map(Some)
+        let item = self.load(item_id.to_string()).await?;
+        if item.base.version < version {
+            return Err(Error::Internal("幂等回执任务版本与事实不一致".to_string()));
+        }
+        ensure_generic_work_item_mutation(&item)?;
+        let access = self.managed_access(actor).await?;
+        ensure_item_in_managed_scope(&item, &access)?;
+        self.ensure_object_participation(actor, &item).await?;
+        Ok(Some(item))
     }
 
     /// 将成功写入的实体映射为命令结果。
@@ -159,4 +197,34 @@ pub fn expected_task_version(value: &str) -> Result<u64> {
         return Err(Error::ValidationError("任务版本必须为正整数字符串".to_string()));
     }
     Ok(version)
+}
+
+#[cfg(test)]
+mod receipt_recovery_tests {
+    use super::*;
+    #[test]
+    fn unverified_recovery_keeps_original_unknown_commit_source() {
+        for recovery in [Ok(None), Err(Error::Internal("receipt read failed".into()))] {
+            let original = Error::OutcomeUnknown(persistence_core::Error::CommitOutcomeUnknown(
+                mongodb::error::Error::custom("original work item commit"),
+            ));
+            let result: Result<()> = recover_command_error(original, recovery);
+            match result.unwrap_err() {
+                Error::OutcomeUnknown(persistence_core::Error::CommitOutcomeUnknown(source)) => {
+                    assert_eq!(source.get_custom::<&str>(), Some(&"original work item commit"));
+                },
+                error => panic!("未知提交来源被替换: {error:?}"),
+            }
+        }
+    }
+    #[test]
+    fn exact_committed_receipt_recovers_without_a_second_write() {
+        let result = recover_command_error(Error::Internal("first write".into()), Ok(Some(7)));
+        assert_eq!(result.unwrap(), 7);
+        let conflict: Result<()> = recover_command_error(
+            Error::Internal("first write".into()),
+            Err(Error::ConflictError("same key different payload".into())),
+        );
+        assert!(matches!(conflict, Err(Error::ConflictError(_))));
+    }
 }

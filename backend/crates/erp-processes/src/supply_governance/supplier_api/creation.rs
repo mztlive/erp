@@ -1,5 +1,5 @@
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_supplier::SupplierExt;
 use erp_supply::dto::supplier_api::*;
 use erp_supply::entity::supplier_api::PreparedSupplierConnectionCreate;
@@ -8,6 +8,7 @@ use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::SupplierApiGovernanceProcess;
+use crate::audit::persist_log;
 use crate::{Error, Result};
 impl SupplierApiGovernanceProcess {
     /// 创建供应商 API 连接及其能力声明（跨集合事务写入）。
@@ -63,7 +64,7 @@ impl SupplierApiGovernanceProcess {
                     SupplierApiService::new(db.clone())
                         .persist_created_connection(&connection_tx, executor)
                         .await?;
-                    db.audit_logs().create(&audit, executor).await?;
+                    persist_log(&db, &audit, executor).await?;
                     Ok::<(), Error>(())
                 })
             })

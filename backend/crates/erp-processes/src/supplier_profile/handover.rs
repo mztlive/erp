@@ -1,22 +1,46 @@
 //! 供应商维护人与能力负责人显式交接。
 
-use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use application_core::{AuditActor, CommandReceipt};
+use async_trait::async_trait;
+use erp_audit::{AuditAction, BusinessEventContent};
 use erp_core::ids::{SupplierAccountId, SupplierCapabilityRevisionId};
 use erp_identity::repository::prelude::*;
 use erp_identity::{AccessControlExt, Permission, PermissionSet, SharedRbacService};
+use erp_supplier::entity::handover_receipt::{
+    CAPABILITY_HANDOVER_ACTION, SUPPLIER_HANDOVER_ACTION, SupplierHandoverReceipt, SupplierHandoverResult,
+};
+use erp_supplier::repository::handover_receipt::SupplierHandoverReceiptExt;
 use erp_supplier::{
     HandoverCandidateView, HandoverSupplierCapabilityRequest, HandoverSupplierCapabilityView,
-    HandoverSupplierRequest, HandoverSupplierView, SupplierExt, capability_handover_audit_id,
-    capability_handover_fingerprint, supplier_handover_audit_id, supplier_handover_audit_message,
-    supplier_handover_fingerprint, supplier_handover_fingerprint_matches,
+    HandoverSupplierRequest, HandoverSupplierView, SupplierExt, capability_handover_fingerprint,
+    supplier_handover_fingerprint,
 };
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
 
 use super::SupplierProfileService;
-use crate::handover_common::ensure_org_enabled;
+use crate::audit::{AuditedCommand, AuditedWrite, run_audited_event};
+use crate::handover_common::{
+    HANDOVER_AUDIT_FIELDS, HandoverEventFacts, ensure_org_enabled, handover_content, handover_context,
+};
 use crate::{Error, Result};
+
+/// 供应商交接明确登记的安全动作。
+const SUPPLIER_ACTION: AuditAction = AuditAction {
+    code: SUPPLIER_HANDOVER_ACTION,
+    resource_type: "supplier",
+    label: "供应商交接",
+    version: 1,
+    allowed_fields: HANDOVER_AUDIT_FIELDS,
+};
+/// 能力交接明确登记的安全动作，与供应商账户目标区分。
+const CAPABILITY_ACTION: AuditAction = AuditAction {
+    code: CAPABILITY_HANDOVER_ACTION,
+    resource_type: "supplier_capability",
+    label: "能力负责人交接",
+    version: 1,
+    allowed_fields: HANDOVER_AUDIT_FIELDS,
+};
 
 impl SupplierProfileService {
     /// 显式交接供应商整体维护人；开放审批任务不改派。
@@ -38,39 +62,35 @@ impl SupplierProfileService {
         actor: &AuditActor,
     ) -> Result<HandoverSupplierView> {
         req.validate()?;
-        let target = req.target_user_id.trim().to_string();
-        let reason = req.reason.trim().to_string();
-        let audit_id = supplier_handover_audit_id(actor.id(), id, &req.idempotency_key);
         let fingerprint = supplier_handover_fingerprint(actor.id(), id, &req)?;
-        if let Some(existing) = self.replay_supplier_handover(&audit_id, &fingerprint, id).await? {
-            return Ok(existing);
-        }
-        self.ensure_target_qualified(&target, &mut NoTransaction).await?;
-        self.ensure_org_enabled(req.target_org_unit_id.as_deref(), &mut NoTransaction).await?;
+        let command = CommandReceipt::from_resource_parts(
+            "supplier-handover-",
+            actor.id(),
+            SUPPLIER_HANDOVER_ACTION,
+            "supplier",
+            id,
+            &req.idempotency_key,
+            [fingerprint],
+        )?;
         let rbac = self.require_rbac()?.clone();
-        let actor = actor.clone();
-        let id = id.to_string();
-        let db = self.db.clone();
-        db.client()
-            .clone()
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    apply_supplier_handover(
-                        &db,
-                        &rbac,
-                        &id,
-                        &req,
-                        &target,
-                        &reason,
-                        &actor,
-                        &audit_id,
-                        &fingerprint,
-                        executor,
-                    )
-                    .await
-                })
-            })
-            .await
+        if let Some(view) = replay_supplier(&self.db, &rbac, &command, id, actor, &mut NoTransaction).await? {
+            return Ok(view);
+        }
+        self.ensure_target_qualified(req.target_user_id.trim(), &mut NoTransaction).await?;
+        self.ensure_org_enabled(req.target_org_unit_id.as_deref(), &mut NoTransaction).await?;
+        let context = handover_context(actor, &command, SUPPLIER_ACTION)?;
+        let operation = SupplierHandoverCommand {
+            db: self.db.clone(),
+            rbac,
+            actor: actor.clone(),
+            command,
+            event_id: context.event_id().to_string(),
+            request: HandoverRequest::Supplier { id: id.to_string(), req },
+        };
+        match run_audited_event(&self.db, context, operation).await? {
+            HandoverOutput::Supplier(view) => Ok(view),
+            HandoverOutput::Capability(_) => Err(Error::Internal("供应商交接结果类型无效".into())),
+        }
     }
 
     /// 显式交接供给能力负责人；开放审批任务不改派。
@@ -94,42 +114,48 @@ impl SupplierProfileService {
         actor: &AuditActor,
     ) -> Result<HandoverSupplierCapabilityView> {
         req.validate()?;
-        let target = req.target_user_id.trim().to_string();
-        let reason = req.reason.trim().to_string();
-        let audit_id = capability_handover_audit_id(actor.id(), capability_id, &req.idempotency_key);
         let fingerprint = capability_handover_fingerprint(actor.id(), capability_id, &req)?;
-        if let Some(existing) =
-            self.replay_capability_handover(&audit_id, &fingerprint, supplier_id, capability_id).await?
-        {
-            return Ok(existing);
-        }
-        self.ensure_target_qualified(&target, &mut NoTransaction).await?;
+        let command = CommandReceipt::from_resource_parts(
+            "supplier-capability-handover-",
+            actor.id(),
+            CAPABILITY_HANDOVER_ACTION,
+            "supplier_capability",
+            capability_id,
+            &req.idempotency_key,
+            [supplier_id.to_string(), fingerprint],
+        )?;
         let rbac = self.require_rbac()?.clone();
-        let actor = actor.clone();
-        let supplier_id = supplier_id.to_string();
-        let capability_id = capability_id.to_string();
-        let db = self.db.clone();
-        db.client()
-            .clone()
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    apply_capability_handover(
-                        &db,
-                        &rbac,
-                        &supplier_id,
-                        &capability_id,
-                        &req,
-                        &target,
-                        &reason,
-                        &actor,
-                        &audit_id,
-                        &fingerprint,
-                        executor,
-                    )
-                    .await
-                })
-            })
-            .await
+        if let Some(view) = replay_capability(
+            &self.db,
+            &rbac,
+            &command,
+            supplier_id,
+            capability_id,
+            actor,
+            &mut NoTransaction,
+        )
+        .await?
+        {
+            return Ok(view);
+        }
+        self.ensure_target_qualified(req.target_user_id.trim(), &mut NoTransaction).await?;
+        let context = handover_context(actor, &command, CAPABILITY_ACTION)?;
+        let operation = SupplierHandoverCommand {
+            db: self.db.clone(),
+            rbac,
+            actor: actor.clone(),
+            command,
+            event_id: context.event_id().to_string(),
+            request: HandoverRequest::Capability {
+                supplier_id: supplier_id.to_string(),
+                capability_id: capability_id.to_string(),
+                req,
+            },
+        };
+        match run_audited_event(&self.db, context, operation).await? {
+            HandoverOutput::Capability(view) => Ok(view),
+            HandoverOutput::Supplier(_) => Err(Error::Internal("能力交接结果类型无效".into())),
+        }
     }
 
     /// 查询可交接的合格有效人员。
@@ -160,59 +186,6 @@ impl SupplierProfileService {
         list_candidates(&self.db, self.require_rbac()?, &current.maintainer_user_id, &mut NoTransaction).await
     }
 
-    async fn replay_supplier_handover(
-        &self,
-        audit_id: &str,
-        fingerprint: &str,
-        supplier_id: &str,
-    ) -> Result<Option<HandoverSupplierView>> {
-        let Some(audit) = self.db.audit_logs().find_by_id(audit_id, &mut NoTransaction).await? else {
-            return Ok(None);
-        };
-        if !supplier_handover_fingerprint_matches(audit.message.as_deref(), fingerprint) {
-            return Err(Error::ConflictError("同一幂等键已用于不同的供应商交接".into()));
-        }
-        let account = self
-            .db
-            .supplier()
-            .account(&SupplierAccountId::new(supplier_id), &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
-        Ok(Some(HandoverSupplierView {
-            supplier_id: account.base.id,
-            maintainer_user_id: account.maintainer_user_id,
-            business_org_unit_id: account.business_org_unit_id,
-            version: account.base.version,
-        }))
-    }
-
-    async fn replay_capability_handover(
-        &self,
-        audit_id: &str,
-        fingerprint: &str,
-        supplier_id: &str,
-        capability_id: &str,
-    ) -> Result<Option<HandoverSupplierCapabilityView>> {
-        let Some(audit) = self.db.audit_logs().find_by_id(audit_id, &mut NoTransaction).await? else {
-            return Ok(None);
-        };
-        if !supplier_handover_fingerprint_matches(audit.message.as_deref(), fingerprint) {
-            return Err(Error::ConflictError("同一幂等键已用于不同的能力交接".into()));
-        }
-        let capability = self
-            .db
-            .supplier_capabilities()
-            .find_by_id(capability_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("供给能力不存在".to_string()))?;
-        Ok(Some(HandoverSupplierCapabilityView {
-            supplier_id: supplier_id.to_string(),
-            capability_id: capability.base.id,
-            owner_user_id: capability.owner_user_id,
-            version: capability.base.version,
-        }))
-    }
-
     async fn ensure_target_qualified(&self, target: &str, executor: &mut dyn Executor) -> Result<()> {
         ensure_target_qualified(&self.db, self.require_rbac()?, target, executor).await
     }
@@ -229,12 +202,9 @@ async fn apply_supplier_handover(
     id: &str,
     req: &HandoverSupplierRequest,
     target: &str,
-    reason: &str,
     actor: &AuditActor,
-    audit_id: &str,
-    fingerprint: &str,
     executor: &mut dyn Executor,
-) -> Result<HandoverSupplierView> {
+) -> Result<(HandoverSupplierView, BusinessEventContent)> {
     crate::adapters::supplier_access(db.clone(), rbac.clone())
         .require_with(actor, "update", id, executor)
         .await?;
@@ -254,27 +224,25 @@ async fn apply_supplier_handover(
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_string);
+    let old_owner = account.maintainer_user_id.clone();
+    let old_org = account.business_org_unit_id.clone();
     account.handover(target.to_string(), next_org, actor.id())?;
     db.supplier_accounts().update(&mut account, executor).await?;
-    write_audit(
-        db,
-        actor,
-        audit_id,
-        "supplier.handover",
-        "supplier",
-        &account.base.id,
-        fingerprint,
-        target,
-        reason,
-        executor,
-    )
-    .await?;
-    Ok(HandoverSupplierView {
-        supplier_id: account.base.id,
-        maintainer_user_id: account.maintainer_user_id,
-        business_org_unit_id: account.business_org_unit_id,
-        version: account.base.version,
-    })
+    let content = handover_content(HandoverEventFacts {
+        target_id: account.base.id.clone(),
+        target_number: Some(account.supplier_no.clone()),
+        responsibility_changed: old_owner != account.maintainer_user_id,
+        organization_changed: old_org != account.business_org_unit_id,
+    });
+    Ok((
+        HandoverSupplierView {
+            supplier_id: account.base.id,
+            maintainer_user_id: account.maintainer_user_id,
+            business_org_unit_id: account.business_org_unit_id,
+            version: account.base.version,
+        },
+        content,
+    ))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -285,12 +253,9 @@ async fn apply_capability_handover(
     capability_id: &str,
     req: &HandoverSupplierCapabilityRequest,
     target: &str,
-    reason: &str,
     actor: &AuditActor,
-    audit_id: &str,
-    fingerprint: &str,
     executor: &mut dyn Executor,
-) -> Result<HandoverSupplierCapabilityView> {
+) -> Result<(HandoverSupplierCapabilityView, BusinessEventContent)> {
     crate::adapters::supplier_access(db.clone(), rbac.clone())
         .require_with(actor, "update", supplier_id, executor)
         .await?;
@@ -306,6 +271,7 @@ async fn apply_capability_handover(
     if capability.base.version != req.expected_version {
         return Err(Error::ConflictError("能力责任或版本已变化，请刷新后重试".into()));
     }
+    let old_owner = capability.owner_user_id.clone();
     capability.handover(target.to_string(), actor.id())?;
     let revision_no = db
         .supplier()
@@ -316,49 +282,199 @@ async fn apply_capability_handover(
     let revision = capability.snapshot_revision(revision_id, revision_no)?;
     db.supplier_capability_revisions().create(&revision, executor).await?;
     db.supplier_capabilities().update(&mut capability, executor).await?;
-    write_audit(
-        db,
-        actor,
-        audit_id,
-        "supplier_capability.handover",
-        "supplier_capability",
-        &capability.base.id,
-        fingerprint,
-        target,
-        reason,
-        executor,
-    )
-    .await?;
-    Ok(HandoverSupplierCapabilityView {
+    let content = handover_content(HandoverEventFacts {
+        target_id: capability.base.id.clone(),
+        target_number: None,
+        responsibility_changed: old_owner != capability.owner_user_id,
+        organization_changed: false,
+    });
+    Ok((
+        HandoverSupplierCapabilityView {
+            supplier_id: supplier_id.to_string(),
+            capability_id: capability.base.id,
+            owner_user_id: capability.owner_user_id,
+            version: capability.base.version,
+        },
+        content,
+    ))
+}
+
+/// 当前命令可提交的两类交接，目标类型由 enum 和核心身份共同约束。
+enum HandoverRequest {
+    Supplier { id: String, req: HandoverSupplierRequest },
+    Capability { supplier_id: String, capability_id: String, req: HandoverSupplierCapabilityRequest },
+}
+
+/// 供应商命名 Process 的原子执行边界。
+struct SupplierHandoverCommand {
+    db: mongodb::Database,
+    rbac: SharedRbacService,
+    actor: AuditActor,
+    command: CommandReceipt,
+    event_id: String,
+    request: HandoverRequest,
+}
+
+#[async_trait]
+impl AuditedCommand for SupplierHandoverCommand {
+    type Output = HandoverOutput;
+
+    /// 同执行器查证和交接，成功回执与正式事实共同提交。
+    async fn execute(&self, executor: &mut dyn Executor) -> Result<AuditedWrite<Self::Output>> {
+        let outcome = match &self.request {
+            HandoverRequest::Supplier { id, req } => self.execute_supplier(id, req, executor).await?,
+            HandoverRequest::Capability { supplier_id, capability_id, req } => {
+                self.execute_capability(supplier_id, capability_id, req, executor).await?
+            },
+        };
+        match outcome {
+            AuditedWrite::Replayed(view) => Ok(AuditedWrite::Replayed(view)),
+            AuditedWrite::Fresh { result: output, content } => {
+                let result = match &output {
+                    HandoverOutput::Supplier(view) => SupplierHandoverResult::Supplier(view.clone()),
+                    HandoverOutput::Capability(view) => SupplierHandoverResult::Capability(view.clone()),
+                };
+                let receipt = SupplierHandoverReceipt::new(&self.command, result, self.event_id.clone())?;
+                self.db.supplier_handover_receipts().create(&receipt, executor).await?;
+                Ok(AuditedWrite::Fresh { result: output, content })
+            },
+        }
+    }
+}
+
+impl SupplierHandoverCommand {
+    /// 执行供应商分支；回执命中时只返回当前授权视图。
+    async fn execute_supplier(
+        &self,
+        id: &str,
+        req: &HandoverSupplierRequest,
+        executor: &mut dyn Executor,
+    ) -> Result<AuditedWrite<HandoverOutput>> {
+        if let Some(view) =
+            replay_supplier(&self.db, &self.rbac, &self.command, id, &self.actor, executor).await?
+        {
+            return Ok(AuditedWrite::Replayed(HandoverOutput::Supplier(view)));
+        }
+        let (view, content) = apply_supplier_handover(
+            &self.db,
+            &self.rbac,
+            id,
+            req,
+            req.target_user_id.trim(),
+            &self.actor,
+            executor,
+        )
+        .await?;
+        Ok(AuditedWrite::Fresh { result: HandoverOutput::Supplier(view), content })
+    }
+
+    /// 执行能力分支；原请求始终绑定供应商和能力目标。
+    async fn execute_capability(
+        &self,
+        supplier_id: &str,
+        capability_id: &str,
+        req: &HandoverSupplierCapabilityRequest,
+        executor: &mut dyn Executor,
+    ) -> Result<AuditedWrite<HandoverOutput>> {
+        if let Some(view) = replay_capability(
+            &self.db,
+            &self.rbac,
+            &self.command,
+            supplier_id,
+            capability_id,
+            &self.actor,
+            executor,
+        )
+        .await?
+        {
+            return Ok(AuditedWrite::Replayed(HandoverOutput::Capability(view)));
+        }
+        let (view, content) = apply_capability_handover(
+            &self.db,
+            &self.rbac,
+            supplier_id,
+            capability_id,
+            req,
+            req.target_user_id.trim(),
+            &self.actor,
+            executor,
+        )
+        .await?;
+        Ok(AuditedWrite::Fresh { result: HandoverOutput::Capability(view), content })
+    }
+}
+
+/// Process 内部结果类型，入口严格取各自分支。
+enum HandoverOutput {
+    Supplier(HandoverSupplierView),
+    Capability(HandoverSupplierCapabilityView),
+}
+
+/// 独立回执命中后重验当前供应商访问，返回当前责任视图。
+async fn replay_supplier(
+    db: &mongodb::Database,
+    rbac: &SharedRbacService,
+    command: &CommandReceipt,
+    id: &str,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<Option<HandoverSupplierView>> {
+    let Some(receipt) =
+        db.supplier_handover_receipts().find_by_id_including_deleted(command.id(), executor).await?
+    else {
+        return Ok(None);
+    };
+    receipt.ensure_matches(command)?;
+    crate::adapters::supplier_access(db.clone(), rbac.clone())
+        .require_with(actor, "update", id, executor)
+        .await?;
+    let account = db
+        .supplier()
+        .account(&SupplierAccountId::new(id), executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("供应商不存在".into()))?;
+    Ok(Some(HandoverSupplierView {
+        supplier_id: account.base.id,
+        maintainer_user_id: account.maintainer_user_id,
+        business_org_unit_id: account.business_org_unit_id,
+        version: account.base.version,
+    }))
+}
+
+/// 能力回放保留当前访问和供应商所属核验，不跨目标返回结果。
+#[allow(clippy::too_many_arguments)]
+async fn replay_capability(
+    db: &mongodb::Database,
+    rbac: &SharedRbacService,
+    command: &CommandReceipt,
+    supplier_id: &str,
+    capability_id: &str,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<Option<HandoverSupplierCapabilityView>> {
+    let Some(receipt) =
+        db.supplier_handover_receipts().find_by_id_including_deleted(command.id(), executor).await?
+    else {
+        return Ok(None);
+    };
+    receipt.ensure_matches(command)?;
+    crate::adapters::supplier_access(db.clone(), rbac.clone())
+        .require_with(actor, "update", supplier_id, executor)
+        .await?;
+    let capability = db
+        .supplier_capabilities()
+        .find_by_id(capability_id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("供给能力不存在".into()))?;
+    if capability.supplier_id.as_ref() != supplier_id {
+        return Err(Error::NotFound("供给能力不存在".into()));
+    }
+    Ok(Some(HandoverSupplierCapabilityView {
         supplier_id: supplier_id.to_string(),
         capability_id: capability.base.id,
         owner_user_id: capability.owner_user_id,
         version: capability.base.version,
-    })
-}
-
-#[allow(clippy::too_many_arguments)]
-async fn write_audit(
-    db: &mongodb::Database,
-    actor: &AuditActor,
-    audit_id: &str,
-    action: &str,
-    resource: &str,
-    resource_id: &str,
-    fingerprint: &str,
-    target: &str,
-    reason: &str,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    let audit = actor.clone().resource_log_with_id(
-        audit_id.to_string(),
-        action,
-        resource,
-        resource_id.to_string(),
-        Some(supplier_handover_audit_message(fingerprint, target, reason)),
-    )?;
-    db.audit_logs().create(&audit, executor).await?;
-    Ok(())
+    }))
 }
 
 async fn ensure_target_qualified(

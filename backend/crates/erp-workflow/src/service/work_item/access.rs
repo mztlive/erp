@@ -583,13 +583,27 @@ pub fn has_item_participation(
         || has_object_participation(access, owner_role, owner_organization_id, fact)
 }
 
+/// 按领域创建人或根单据参与名单判断对象参与关系。
+///
+/// # 参数
+/// * `access` - 当前账号访问事实
+/// * `_owner_role` - 责任角色标识，保留调用合同，不用于对象参与判断
+/// * `_owner_organization_id` - 责任组织 ID，保留调用合同，不用于对象参与判断
+/// * `fact` - 业务对象的领域创建人和根单据事实
+///
+/// # 返回
+/// 非空创建人与当前账号精确匹配，或账号参与根单据时返回 `true`。
+///
+/// # 错误
+/// 无；空白创建人不授予创建人资格，调用方须独立验证权限及任务责任。
 pub fn has_object_participation(
     access: &ActorAccess,
     _owner_role: &str,
     _owner_organization_id: &str,
     fact: &ObjectFact,
 ) -> bool {
-    fact.created_by == access.actor_id || access.participant_document_ids.contains(&fact.root_document_id)
+    (!fact.created_by.trim().is_empty() && fact.created_by == access.actor_id)
+        || access.participant_document_ids.contains(&fact.root_document_id)
 }
 
 pub struct ViewAccess {
@@ -743,6 +757,35 @@ fn apply_object_display(fields: &mut dto::WorkItemFields, fact: &ObjectFact) {
 #[cfg(test)]
 mod task_policy_tests {
     use super::*;
+
+    #[test]
+    fn object_creator_participation_requires_exact_nonblank_identity() {
+        let fact = ObjectFact::new("root", "资金单据", "creator");
+        let creator = ActorAccess::new("creator".into());
+        assert!(has_object_participation(&creator, "finance", "organization", &fact));
+        for actor_id in ["", "another", " creator "] {
+            let access = ActorAccess::new(actor_id.into());
+            assert!(!has_object_participation(&access, "finance", "organization", &fact));
+        }
+        for identity in ["", " ", "\t\n"] {
+            let fact = ObjectFact::new("root", "资金单据", identity);
+            let access = ActorAccess::new(identity.into());
+            assert!(!has_object_participation(&access, "finance", "organization", &fact));
+        }
+    }
+
+    #[test]
+    fn root_participant_qualifies_independently_of_missing_creator() {
+        let participant =
+            ActorAccess::new("reader".into()).with_participant_document_ids(HashSet::from(["root".into()]));
+        let unrelated = ActorAccess::new("reader".into())
+            .with_participant_document_ids(HashSet::from(["other-root".into()]));
+        for identity in ["", " ", "\t\n", "another-creator"] {
+            let fact = ObjectFact::new("root", "资金单据", identity);
+            assert!(has_object_participation(&participant, "finance", "organization", &fact));
+            assert!(!has_object_participation(&unrelated, "finance", "organization", &fact));
+        }
+    }
 
     #[test]
     fn fulfillment_exception_owner_is_limited_to_exact_task_type_and_object() {

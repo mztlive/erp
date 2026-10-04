@@ -45,31 +45,29 @@ pub(in crate::workbench) fn payable_account_fact(
     fact.impact_summary = Some(format!("未付金额 {}", format_yuan(&account.open_total)));
     fact
 }
-/// 使用原创建审计首个 actor 与已读名称，缺 actor 保持空串。
+/// 创建人直接来自不可变领域事实，缺失身份不授予创建人参与资格。
 pub(in crate::workbench) fn customer_receipt_fact(
     receipt: &CustomerReceipt,
-    created_by: Option<&String>,
     counterparty: Option<String>,
 ) -> ObjectFact {
     let mut fact = ObjectFact::new(
         receipt.base.id.clone(),
         format!("回款单 {}", receipt.receipt_no),
-        created_by.cloned().unwrap_or_default(),
+        receipt.created_by.clone(),
     );
     fact.counterparty_label = counterparty;
     fact.impact_summary = Some("不审批则回款不能过账、不能核销应收".to_string());
     fact
 }
-/// 使用原创建审计首个 actor 与已读名称，缺 actor 保持空串。
+/// 创建人直接来自不可变领域事实，缺失身份不授予创建人参与资格。
 pub(in crate::workbench) fn supplier_payment_fact(
     payment: &SupplierPayment,
-    created_by: Option<&String>,
     counterparty: Option<String>,
 ) -> ObjectFact {
     let mut fact = ObjectFact::new(
         payment.base.id.clone(),
         format!("供应商付款 {}", payment.payment_no),
-        created_by.cloned().unwrap_or_default(),
+        payment.created_by.clone(),
     );
     fact.counterparty_label = counterparty;
     fact.impact_summary = Some("付款已登记并过账；纠错须走付款冲正或供应商退款".to_string());
@@ -78,7 +76,6 @@ pub(in crate::workbench) fn supplier_payment_fact(
 /// 命令名称优先直接往来，再首选来源，再分录来源；传入的来源 map 必须丢弃缺名称条目。
 pub(in crate::workbench) fn customer_refund_fact(
     refund: &CustomerRefund,
-    created_by: Option<&String>,
     customer: Option<String>,
     origins: &HashMap<String, String>,
     entry_origins: &HashMap<String, String>,
@@ -90,7 +87,7 @@ pub(in crate::workbench) fn customer_refund_fact(
     let mut fact = ObjectFact::new(
         refund.base.id.clone(),
         format!("客户退款 {}", refund.refund_no),
-        created_by.cloned().unwrap_or_default(),
+        refund.created_by.clone(),
     );
     fact.counterparty_label = customer.or_else(|| origin.cloned());
     fact.impact_summary = Some("不审批则客户退款不能过账".to_string());
@@ -99,7 +96,6 @@ pub(in crate::workbench) fn customer_refund_fact(
 /// 命令名称优先直接往来，再首选来源，再分录来源；传入的来源 map 必须丢弃缺名称条目。
 pub(in crate::workbench) fn supplier_refund_fact(
     refund: &SupplierRefund,
-    created_by: Option<&String>,
     supplier: Option<String>,
     origins: &HashMap<String, String>,
     entry_origins: &HashMap<String, String>,
@@ -111,7 +107,7 @@ pub(in crate::workbench) fn supplier_refund_fact(
     let mut fact = ObjectFact::new(
         refund.base.id.clone(),
         format!("供应商退款 {}", refund.refund_no),
-        created_by.cloned().unwrap_or_default(),
+        refund.created_by.clone(),
     );
     fact.counterparty_label = supplier.or_else(|| origin.cloned());
     fact.impact_summary = Some("不审批则供应商退款不能过账".to_string());
@@ -120,13 +116,12 @@ pub(in crate::workbench) fn supplier_refund_fact(
 /// 冲正对象以自身为参与根，名称仅消费命令 counterpart-only 来源。
 pub(in crate::workbench) fn receipt_reversal_fact(
     reversal: &ReceiptReversal,
-    created_by: Option<&String>,
     origins: &HashMap<String, String>,
 ) -> ObjectFact {
     let mut fact = ObjectFact::new(
         reversal.base.id.clone(),
         format!("回款冲正 {}", reversal.reversal_no),
-        created_by.cloned().unwrap_or_default(),
+        reversal.created_by.clone(),
     );
     fact.counterparty_label = origins.get(&reversal.original_customer_receipt_id.to_string()).cloned();
     fact.impact_summary = Some("不审批则回款冲正不能过账".to_string());
@@ -135,13 +130,12 @@ pub(in crate::workbench) fn receipt_reversal_fact(
 /// 冲正对象以自身为参与根，名称仅消费命令 counterpart-only 来源。
 pub(in crate::workbench) fn payment_reversal_fact(
     reversal: &PaymentReversal,
-    created_by: Option<&String>,
     origins: &HashMap<String, String>,
 ) -> ObjectFact {
     let mut fact = ObjectFact::new(
         reversal.base.id.clone(),
         format!("付款冲正 {}", reversal.reversal_no),
-        created_by.cloned().unwrap_or_default(),
+        reversal.created_by.clone(),
     );
     fact.counterparty_label = origins.get(&reversal.original_supplier_payment_id.to_string()).cloned();
     fact.impact_summary = Some("不审批则付款冲正不能过账".to_string());
@@ -169,4 +163,83 @@ pub(in crate::workbench) fn invoice_request_fact(
     fact.counterparty_label = Some(request.data.invoice_title.clone());
     fact.impact_summary = Some(format!("申请开票 {} 元，审批通过后交财务开票", request.data.amount));
     fact
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use entity_core::BaseModel;
+    use erp_workflow::ports::ObjectFact;
+    use erp_workflow::service::work_item::access::{ActorAccess, has_object_participation};
+    use serde::de::DeserializeOwned;
+    use serde_json::json;
+
+    use super::{
+        customer_receipt_fact, customer_refund_fact, payment_reversal_fact, receipt_reversal_fact,
+        supplier_payment_fact, supplier_refund_fact,
+    };
+    use crate::workbench::facts::WorkbenchObjectFact;
+
+    /// 构造用于读取投影的六类领域文档；经办人与创建人故意不同。
+    fn document<T: DeserializeOwned>(creator: Option<&str>) -> T {
+        let mut value = json!({
+            "status": "draft",
+            "receipt_no": "CR-1", "payment_no": "SP-1", "refund_no": "RF-1", "reversal_no": "RV-1",
+            "counterparty_party_id": "party", "customer_id": "customer", "supplier_id": "supplier",
+            "amount": "10.00", "received_at": 1, "paid_at": 1, "occurred_at": 1,
+            "bank_reference": null, "payee_bank_account_id": "bank", "bank_receipt_asset_id": "asset",
+            "original_receipt_id": "receipt", "original_payment_id": "payment",
+            "original_customer_receipt_id": "receipt", "original_supplier_payment_id": "payment",
+            "original_receivable_entry_id": null, "original_payable_entry_id": null,
+            "reason_code": null, "reason_text": "纠错原因", "handled_by": "current-handler",
+            "reviewed_by": "current-reviewer", "evidence_attachment_id": null
+        });
+        let object = value.as_object_mut().unwrap();
+        object.extend(serde_json::to_value(BaseModel::fake()).unwrap().as_object().unwrap().clone());
+        if let Some(creator) = creator {
+            object.insert("created_by".into(), json!(creator));
+        }
+        serde_json::from_value(value).unwrap()
+    }
+
+    /// 执行生产权威映射，与显示共用同一身份来源。
+    fn facts(creator: Option<&str>) -> [ObjectFact; 6] {
+        let origins = HashMap::new();
+        [
+            customer_receipt_fact(&document(creator), None),
+            supplier_payment_fact(&document(creator), None),
+            customer_refund_fact(&document(creator), None, &origins, &origins),
+            supplier_refund_fact(&document(creator), None, &origins, &origins),
+            receipt_reversal_fact(&document(creator), &origins),
+            payment_reversal_fact(&document(creator), &origins),
+        ]
+    }
+
+    #[test]
+    fn six_funds_projections_use_domain_creator_and_keep_handlers_separate() {
+        let creator = ActorAccess::new("domain-creator".into());
+        let handler = ActorAccess::new("current-handler".into());
+        for authority in facts(Some("domain-creator")) {
+            assert_eq!(authority.created_by, "domain-creator");
+            assert!(has_object_participation(&creator, "", "", &authority));
+            assert!(!has_object_participation(&handler, "", "", &authority));
+            let brief = WorkbenchObjectFact::from_authority(authority.clone());
+            assert_eq!(brief.authority.created_by, authority.created_by);
+            assert_eq!(brief.authority.root_document_id, authority.root_document_id);
+        }
+    }
+
+    #[test]
+    fn missing_domain_identity_never_grants_creator_participation() {
+        let creator = ActorAccess::new("domain-creator".into());
+        let handler = ActorAccess::new("current-handler".into());
+        for authority in facts(None) {
+            assert!(authority.created_by.is_empty());
+            assert!(!has_object_participation(&creator, "", "", &authority));
+            assert!(!has_object_participation(&handler, "", "", &authority));
+            let brief = WorkbenchObjectFact::from_authority(authority);
+            assert!(brief.authority.created_by.is_empty());
+        }
+    }
 }

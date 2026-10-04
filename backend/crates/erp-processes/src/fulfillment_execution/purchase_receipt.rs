@@ -1,5 +1,5 @@
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_fulfillment::dto::{CreatePurchaseReceiptRequest, PurchaseReceiptView, UpdatePurchaseReceiptRequest};
 use erp_fulfillment::entity::fulfillment::{PurchaseReceipt, PurchaseReceiptLine};
 use erp_identity::SharedRbacService;
@@ -15,6 +15,7 @@ use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
 use super::FulfillmentProcess;
+use crate::audit::persist_log;
 use crate::{Error, Result};
 impl FulfillmentProcess {
     /// 创建采购入库单（草稿，跨集合：表头 + 行 + 审计）。
@@ -100,7 +101,7 @@ impl FulfillmentProcess {
                         executor,
                     )
                     .await?;
-                    db.audit_logs().create(&audit, executor).await?;
+                    persist_log(&db, &audit, executor).await?;
                     Ok::<PurchaseReceipt, crate::Error>(receipt)
                 })
             })
@@ -310,7 +311,7 @@ async fn persist_created_purchase_receipt(
                     executor,
                 )
                 .await?;
-                db.audit_logs().create(&audit, executor).await?;
+                persist_log(&db, &audit, executor).await?;
                 Ok::<(), crate::Error>(())
             })
         })

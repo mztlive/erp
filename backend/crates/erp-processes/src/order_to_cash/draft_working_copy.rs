@@ -1,7 +1,7 @@
 //! 草稿工作副本补开：驳回回草稿后没有 `Editing` 副本时，按本次草稿新建一份。
 
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_core::ids::SalesOrderId;
 use erp_sales::dto::sales_order::SalesOrderDraftRequest;
 use erp_sales::entity::sales_order::{
@@ -13,6 +13,7 @@ use erp_sales::service::sales_order::draft_working_copy::DraftStableLines;
 use persistence_core::{NoTransaction, Transactional};
 
 use super::SalesOrderCommandProcess;
+use crate::audit::persist_log;
 use crate::{Error, Result};
 impl SalesOrderCommandProcess {
     /// 查找有效首次提交工作副本；草稿且没有有效副本时新开一份并落库。
@@ -136,7 +137,7 @@ impl SalesOrderCommandProcess {
                             executor,
                         )
                         .await?;
-                    db.audit_logs().create(&audit, executor).await?;
+                    persist_log(&db, &audit, executor).await?;
                     Ok::<SalesOrderWorkingCopy, crate::Error>(working_copy)
                 })
             })

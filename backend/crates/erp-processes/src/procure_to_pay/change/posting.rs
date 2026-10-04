@@ -1,6 +1,6 @@
 //! 采购变更生效真实步骤，统一使用调用方执行器；失败不得推进后继写入。
 use async_trait::async_trait;
-use erp_audit::{AuditExt, AuditLog};
+use erp_audit::AuditLog;
 use erp_core::ids::PayableAccountId;
 use erp_procurement::entity::purchase_order::PurchaseOrder;
 use erp_procurement::service::purchase_order::allocation_maintenance::{
@@ -13,6 +13,7 @@ use persistence_core::Executor;
 use super::super::allocation_maintenance::prepare_current_sales_allocations;
 use super::super::procurement_task_sync::sync_procurement_tasks_for_sales_order;
 use super::effect::EffectiveChangePosting;
+use crate::audit::persist_log;
 use crate::finance_posting::payable::payment_task::sync_purchase_payment_task_after_change;
 use crate::{Error, Result};
 
@@ -134,7 +135,7 @@ impl EffectSteps for MongoEffect<'_> {
             Submission => purchase.persist_approved_submission(self.db, executor).await?,
             Change => purchase.persist_change(self.db, executor).await?,
             Audit => {
-                self.db.audit_logs().create(&self.audit, executor).await?;
+                persist_log(self.db, &self.audit, executor).await?;
             },
         }
         Ok(())

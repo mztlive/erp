@@ -1,5 +1,5 @@
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_fulfillment::dto::{CreateServiceFulfillmentRequest, ServiceFulfillmentView};
 use erp_fulfillment::entity::fulfillment::ServiceFulfillment;
 use erp_fulfillment::service::FulfillmentService;
@@ -19,6 +19,7 @@ use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::FulfillmentProcess;
+use crate::audit::persist_log;
 use crate::{Error, Result};
 
 impl FulfillmentProcess {
@@ -240,7 +241,7 @@ async fn persist_created_service_fulfillment(
                     executor,
                 )
                 .await?;
-                db.audit_logs().create(&audit, executor).await?;
+                persist_log(&db, &audit, executor).await?;
                 Ok::<(), crate::Error>(())
             })
         })

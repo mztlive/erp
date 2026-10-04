@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
 use erp_import::repository::prelude::*;
 use erp_import::{
@@ -24,6 +24,7 @@ use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::ImportApplyService;
+use crate::audit::persist_log;
 use crate::{Error, Result};
 
 /// 本批实际发生合法状态迁移的行与计数。
@@ -501,7 +502,7 @@ async fn persist_apply_transaction(
         write.now,
     )?;
     write.db.background_jobs().update(write.job, executor).await?;
-    write.db.audit_logs().create(write.audit, executor).await?;
+    persist_log(write.db, write.audit, executor).await?;
     Ok(write.batch.clone())
 }
 

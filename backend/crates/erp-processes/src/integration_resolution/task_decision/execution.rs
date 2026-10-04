@@ -5,7 +5,7 @@ use std::future::Future;
 use async_trait::async_trait;
 use persistence_core::Executor;
 
-use crate::Result;
+use crate::{Error, Result};
 
 /// 首次回放命中时不准备事务；任意事务错误只做一次全新回放。
 pub(super) async fn execute_with_receipt<T, R, RF, W, WF>(mut replay: R, write: W) -> Result<T>
@@ -20,9 +20,11 @@ where
     }
     match write().await {
         Ok(result) => Ok(result),
-        Err(error) => match replay().await? {
-            Some(result) => Ok(result),
-            None => Err(error),
+        Err(error) => match replay().await {
+            Ok(Some(result)) => Ok(result),
+            Ok(None) => Err(error),
+            Err(_) if matches!(error, Error::OutcomeUnknown(_)) => Err(error),
+            Err(recovery_error) => Err(recovery_error),
         },
     }
 }

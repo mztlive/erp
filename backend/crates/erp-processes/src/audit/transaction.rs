@@ -6,10 +6,12 @@
 use std::future::Future;
 use std::pin::Pin;
 
-use erp_audit::{AuditExt, AuditLog};
+use erp_audit::{AuditLog, BusinessEventContext, attempt_context, prepare_business_log};
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
+use super::attempt::{MongoAuditAttemptSink, finish_attempt};
+use super::execution::{AuditedCommand, MongoAuditEventSink, execute_audited, execute_prepared};
 use crate::Result;
 
 /// 在单个 MongoDB 事务中执行业务写入并追加成功审计。
@@ -35,15 +37,58 @@ where
         + Send
         + 'static,
 {
+    let audit = prepare_business_log(&audit)?;
+    let context = attempt_context(&audit)?;
+    let attempts_db = db.clone();
     let db = db.clone();
     let client = db.client().clone();
-    client
+    let result = client
         .with_transaction(move |executor| {
             Box::pin(async move {
-                let result = write(&db, executor).await?;
-                db.audit_logs().create(&audit, executor).await?;
-                Ok(result)
+                let write_db = db.clone();
+                execute_prepared(&audit, &MongoAuditEventSink::new(&db), executor, move |executor| {
+                    Box::pin(async move { write(&write_db, executor).await })
+                })
+                .await
             })
         })
-        .await
+        .await;
+    finish_attempt(result, &context, &MongoAuditAttemptSink::new(&attempts_db)).await
+}
+
+/// 为类型化命令建立唯一事务并记录执行后的安全事实。
+///
+/// 已有调用方事务时使用 `execute_audited`，不得再次调用本入口。
+///
+/// # 参数
+/// * `db` - 当前业务用例数据库。
+/// * `context` - 事务开始前已验证的身份、动作及关联快照。
+/// * `command` - 只执行当前数据库业务规则和写入的命令。
+///
+/// # 返回
+/// 返回首次执行或领域恢复的原命令结果。
+///
+/// # 错误
+/// 业务、结果校验、审计或提交失败时沿用原错误，未知提交不得自动重放。
+pub async fn run_audited_event<C>(
+    db: &Database,
+    context: BusinessEventContext,
+    command: C,
+) -> Result<C::Output>
+where
+    C: AuditedCommand + 'static,
+    C::Output: 'static,
+{
+    let attempt_context = context.clone();
+    let attempts_db = db.clone();
+    let db = db.clone();
+    let client = db.client().clone();
+    let result = client
+        .with_transaction(move |executor| {
+            Box::pin(async move {
+                execute_audited(&context, &MongoAuditEventSink::new(&db), executor, &command).await
+            })
+        })
+        .await;
+    finish_attempt(result, &attempt_context, &MongoAuditAttemptSink::new(&attempts_db)).await
 }

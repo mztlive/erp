@@ -1,5 +1,5 @@
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_core::ids::BackgroundJobId;
 use erp_import::repository::prelude::*;
 use erp_import::{
@@ -13,6 +13,7 @@ use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::ImportApplyService;
+use crate::audit::persist_log;
 use crate::{Error, Result};
 
 impl ImportApplyService {
@@ -98,7 +99,7 @@ impl ImportApplyService {
                 Box::pin(async move {
                     db.legacy_import().create_batch_with_rows(&batch_for_tx, &rows_for_tx, executor).await?;
                     db.background_jobs().create(&job_for_tx, executor).await?;
-                    db.audit_logs().create(&audit, executor).await?;
+                    persist_log(&db, &audit, executor).await?;
                     Ok::<(), crate::Error>(())
                 })
             })

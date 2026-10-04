@@ -21,3 +21,5 @@ pub use supplier::{
     SupplierQualificationCapabilityRepositoryExt, SupplierQualificationFilter,
     SupplierQualificationHealthFilter, SupplierQualificationRepositoryExt, SupplierRepository,
 };
+
+pub mod handover_receipt;

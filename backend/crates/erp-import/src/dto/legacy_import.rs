@@ -5,12 +5,12 @@
 //! 为 `YYYY-MM-DD` 字符串；本域无金额字段。
 
 use application_core::{page_or_default, page_size_or_default};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::error::Result;
 
 /// Background-job status snapshot; wire code matches support `JobStatus`.
-#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ImportJobStatus {
     /// 等待执行。

@@ -96,7 +96,7 @@ impl StockAllocationPort for StockAllocationAdapter<'_> {
 /// * `plans` - 已校验的库存分配计划
 /// * `latest_groups` - 同一事务内重验的库存依据
 /// * `sales_order_id` - 来源销售单
-/// * `audit_id` - 命令收据 ID
+/// * `command_id` - 命令收据 ID
 /// * `request_fingerprint` - 命令载荷指纹
 /// * `executor` - 调用方事务执行器
 ///
@@ -110,7 +110,7 @@ pub(super) async fn persist_stock_allocations(
     plans: &[StockAllocationPlan],
     latest_groups: &[StockBasisGroup],
     sales_order_id: &SalesOrderId,
-    audit_id: &str,
+    command_id: &str,
     request_fingerprint: &str,
     executor: &mut dyn Executor,
 ) -> Result<Vec<PersistedStockAllocation>> {
@@ -119,7 +119,7 @@ pub(super) async fn persist_stock_allocations(
         plans,
         latest_groups,
         sales_order_id,
-        audit_id,
+        command_id,
         request_fingerprint,
         executor,
     )
@@ -132,12 +132,12 @@ async fn persist_with_port(
     plans: &[StockAllocationPlan],
     latest_groups: &[StockBasisGroup],
     sales_order_id: &SalesOrderId,
-    audit_id: &str,
+    command_id: &str,
     request_fingerprint: &str,
     executor: &mut dyn Executor,
 ) -> Result<Vec<PersistedStockAllocation>> {
     let pending =
-        build_pending_allocations(plans, latest_groups, sales_order_id, audit_id, request_fingerprint)?;
+        build_pending_allocations(plans, latest_groups, sales_order_id, command_id, request_fingerprint)?;
     for (balance_id, total) in &pending.totals {
         if !port.reserve_quantity(balance_id, *total, executor).await? {
             return Err(procurement_quantity_changed());
@@ -166,7 +166,7 @@ struct PendingAllocations {
 /// * `plans` - 现有库存分配计划
 /// * `latest_groups` - 最新库存余额依据
 /// * `sales_order_id` - 来源销售单
-/// * `audit_id` - 命令收据 ID
+/// * `command_id` - 命令收据 ID
 /// * `request_fingerprint` - 命令载荷指纹
 ///
 /// # 返回
@@ -178,7 +178,7 @@ fn build_pending_allocations(
     plans: &[StockAllocationPlan],
     latest_groups: &[StockBasisGroup],
     sales_order_id: &SalesOrderId,
-    audit_id: &str,
+    command_id: &str,
     request_fingerprint: &str,
 ) -> Result<PendingAllocations> {
     let zero = Quantity::from_str("0").map_err(Error::Logic)?;
@@ -192,8 +192,14 @@ fn build_pending_allocations(
     for plan in plans {
         let latest = latest_stock_group(latest_groups, &plan.group.balance.base.id)?;
         for requested in &plan.requested_lines {
-            let built =
-                build_pending_line(latest, requested, &zero, sales_order_id, audit_id, request_fingerprint)?;
+            let built = build_pending_line(
+                latest,
+                requested,
+                &zero,
+                sales_order_id,
+                command_id,
+                request_fingerprint,
+            )?;
             sums.insert(built.0.clone(), sum_quantity(sums.get(&built.0).copied().unwrap_or(zero), built.1)?);
             pending.reservations.push(built.2);
             pending.entries.push(built.3);
@@ -213,7 +219,7 @@ fn build_pending_allocations(
 /// * `requested` - 本余额逐销售行分配数量
 /// * `zero` - 零数量
 /// * `sales_order_id` - 来源销售单
-/// * `audit_id` - 命令收据 ID
+/// * `command_id` - 命令收据 ID
 /// * `request_fingerprint` - 命令载荷指纹
 ///
 /// # 返回
@@ -226,7 +232,7 @@ fn build_pending_line(
     requested: &RequestedStockLine,
     zero: &Quantity,
     sales_order_id: &SalesOrderId,
-    audit_id: &str,
+    command_id: &str,
     request_fingerprint: &str,
 ) -> Result<(String, Quantity, StockReservation, StockReservationEntry, PersistedStockAllocation)> {
     let line = latest.line_for(&requested.sales_order_line_id).ok_or_else(procurement_quantity_changed)?;
@@ -262,7 +268,7 @@ fn build_pending_line(
             reservation_id: reservation.base.id.clone().into(),
             entry_type: ReservationEntryType::Establish,
             quantity: requested.quantity,
-            source_document_id: audit_id.to_string(),
+            source_document_id: command_id.to_string(),
         },
     )?;
     let result = ExistingStockReservationResult {
@@ -382,7 +388,7 @@ mod tests {
             assert_eq!(ids.len(), 2);
             for entry in entries {
                 assert_eq!(entry.entry_type, ReservationEntryType::Establish);
-                assert_eq!(entry.source_document_id, "audit-1");
+                assert_eq!(entry.source_document_id, "purchase-command-1");
                 assert!(ids.iter().any(|id| Some(id.as_str()) == Some(entry.reservation_id.as_ref())));
             }
             Ok(())
@@ -459,7 +465,7 @@ mod tests {
             &[plan],
             &latest,
             &SalesOrderId::new("sales-1"),
-            "audit-1",
+            "purchase-command-1",
             "fingerprint-1",
             &mut executor,
         )

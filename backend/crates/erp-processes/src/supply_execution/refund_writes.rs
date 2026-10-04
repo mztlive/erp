@@ -1,6 +1,6 @@
 //! 退款回调的原三组跨域写入，在一个调用方执行器内按序完成。
 use async_trait::async_trait;
-use erp_audit::{AuditExt, AuditLog};
+use erp_audit::AuditLog;
 use erp_integration::entity::integration_ops::InboxMessage;
 use erp_integration::repository::IntegrationOpsExt;
 use erp_supply::entity::supplier_fulfillment::{
@@ -11,6 +11,7 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use crate::Result;
+use crate::audit::persist_log;
 
 #[async_trait]
 trait RefundWrites: Send {
@@ -42,7 +43,7 @@ impl RefundWrites for MongoWrites<'_> {
         Ok(())
     }
     async fn audit(&mut self, executor: &mut dyn Executor) -> Result<()> {
-        self.db.audit_logs().create(self.audit, executor).await?;
+        persist_log(self.db, self.audit, executor).await?;
         Ok(())
     }
 }

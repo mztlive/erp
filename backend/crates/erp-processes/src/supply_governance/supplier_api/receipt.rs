@@ -1,6 +1,6 @@
 //! 回执先写、审计后写、最后读取任务编号；复用同一调用方 Executor。
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_supply::dto::supplier_api::SupplierConnectionCommandResult;
 use erp_supply::entity::supplier_api::{
     SupplierApiConnection, SupplierCommandOutcome, SupplierConnectionAction, SupplierConnectionCommandReceipt,
@@ -11,6 +11,7 @@ use erp_support::BulkJobExt;
 use persistence_core::Executor;
 
 use crate::Result;
+use crate::audit::persist_log;
 
 pub(super) struct CommandReceiptWrite<'a> {
     pub(super) connection: &'a SupplierApiConnection,
@@ -94,7 +95,7 @@ impl ReceiptWritePort for MongoReceiptWrite<'_> {
         Ok(SupplierApiService::new(self.0.clone()).persist_command_receipt(receipt, executor).await?)
     }
     async fn audit(&self, audit: &Self::Audit, executor: &mut dyn Executor) -> Result<()> {
-        self.0.audit_logs().create(audit, executor).await?;
+        persist_log(self.0, audit, executor).await?;
         Ok(())
     }
     async fn job_no(&self, job_id: &str, executor: &mut dyn Executor) -> Result<Option<String>> {

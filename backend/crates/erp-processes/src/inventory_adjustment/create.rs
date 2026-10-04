@@ -1,5 +1,5 @@
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
 use erp_core::ids::{StockAdjustmentId, StockAdjustmentLineId};
 use erp_identity::SharedRbacService;
@@ -22,6 +22,7 @@ use validator::Validate;
 use super::adapter::document_approval_view_with_history;
 use super::{InventoryAdjustmentService, approval_prepare as start_approval};
 use crate::adapters::authorize_inventory;
+use crate::audit::persist_log;
 use crate::{Error, Result};
 
 impl InventoryAdjustmentService {
@@ -229,7 +230,7 @@ async fn persist_created_adjustment(
                     executor,
                 )
                 .await?;
-                db.audit_logs().create(&audit, executor).await?;
+                persist_log(&db, &audit, executor).await?;
                 created_adjustment_detail(adjustment, lines, binding, can_submit)
             })
         })

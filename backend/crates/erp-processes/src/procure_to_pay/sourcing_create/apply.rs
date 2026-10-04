@@ -9,13 +9,13 @@ use super::{
     CREATE_SOURCING_ACTION, CREATE_SOURCING_ITEM_PREFIX, CreateBasisCommand, CreateFromSourcingApplyInput,
     CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderLineRequest, CreatePurchaseOrderResult,
     CreatePurchaseOrdersFromSourcingResult, Error, Executor, ExistingStockReservationResult,
-    LegacyReceiptIdScheme, PurchaseCommandReceipt, Result, SalesOrderExt, SourcingOrderReceipt, SourcingPlan,
-    SourcingReceipt, VerifiedBasisInput, WorkItemExt, basis_groups_and_facts, basis_id_for,
-    create_stock_delivery_drafts, load_effective_sales_order, load_owned_open_procurement_task,
-    map_sourcing_plan_error, persist_basis_draft, persist_stock_allocations, procurement_quantity_changed,
-    replay_sourcing, sales_order_basis_fact, sourcing_groups_for_order, sourcing_work_item_status,
-    stock_basis_groups_for_order, sync_procurement_tasks_for_sales_order, validate_requested_quantities,
-    write_sourcing_receipt,
+    PurchaseCommandReceipt, PurchaseCreationEventSequence, Result, SalesOrderExt, SourcingEventSequencePlan,
+    SourcingOrderReceipt, SourcingPlan, SourcingReceipt, VerifiedBasisInput, WorkItemExt,
+    basis_groups_and_facts, basis_id_for, create_stock_delivery_drafts, load_effective_sales_order,
+    load_owned_open_procurement_task, map_sourcing_plan_error, persist_basis_draft,
+    persist_stock_allocations, procurement_quantity_changed, replay_sourcing, sales_order_basis_fact,
+    sourcing_groups_for_order, sourcing_work_item_status, stock_basis_groups_for_order,
+    sync_procurement_tasks_for_sales_order, validate_requested_quantities, write_sourcing_receipt,
 };
 
 /// 按任务、计划、guard、库存、采购和收据的原顺序执行事务内命令。
@@ -35,7 +35,7 @@ pub(super) async fn create_from_sourcing_apply(
 ) -> Result<CreatePurchaseOrdersFromSourcingResult> {
     if let Some(result) = replay_sourcing(
         db,
-        input.audit_id,
+        input.receipt_identity,
         input.request_fingerprint,
         input.actor,
         input.sales_order_id.as_ref(),
@@ -46,10 +46,10 @@ pub(super) async fn create_from_sourcing_apply(
     {
         return Ok(result);
     }
-    let (task, order, plan) = prepare_plan(db, &input, executor).await?;
+    let (task, order, plan, sequences) = prepare_plan(db, &input, executor).await?;
     let stock_reservations = reserve_stock(db, &input, &task, &order, &plan, executor).await?;
-    let orders = create_orders(db, &input, &task, &order, &plan, executor).await?;
-    finish_sourcing(db, &input, orders, stock_reservations, executor).await
+    let orders = create_orders(db, &input, &task, &order, &plan, sequences, executor).await?;
+    finish_sourcing(db, &input, &order, orders, stock_reservations, sequences, executor).await
 }
 
 /// guard 前形成计划，再按原顺序推进一次销售单供给 guard。
@@ -57,7 +57,7 @@ async fn prepare_plan(
     db: &Database,
     input: &CreateFromSourcingApplyInput<'_>,
     executor: &mut dyn Executor,
-) -> Result<(WorkItem, SalesOrder, SourcingPlan)> {
+) -> Result<(WorkItem, SalesOrder, SourcingPlan, SourcingEventSequencePlan)> {
     let task = load_owned_open_procurement_task(
         db,
         &input.req.work_item_id,
@@ -77,9 +77,10 @@ async fn prepare_plan(
         input.assignments,
     )
     .map_err(map_sourcing_plan_error)?;
+    let sequences = SourcingEventSequencePlan::new(plan.purchase_plans().len())?;
     order.advance_procurement_guard(input.actor.id())?;
     db.sales_orders().update(&mut order, executor).await?;
-    Ok((task, order, plan))
+    Ok((task, order, plan, sequences))
 }
 
 /// guard 后重新取库存依据，预占并生成仓发草稿，再返回实际登记的结果。
@@ -99,7 +100,7 @@ async fn reserve_stock(
         plan.stock_plans(),
         &latest_stock_groups,
         input.sales_order_id,
-        input.audit_id,
+        input.receipt_identity.receipt_id(),
         input.request_fingerprint,
         executor,
     )
@@ -115,13 +116,14 @@ async fn create_orders(
     task: &WorkItem,
     order: &SalesOrder,
     plan: &SourcingPlan,
+    sequences: SourcingEventSequencePlan,
     executor: &mut dyn Executor,
 ) -> Result<Vec<CreatePurchaseOrderResult>> {
     let (latest_groups, latest_facts) =
         basis_groups_and_facts(db, order, task.responsibility_scope_ids(), executor).await?;
     plan.validate_against_latest_sourcing(&latest_groups).map_err(map_sourcing_plan_error)?;
     let mut orders = Vec::with_capacity(plan.purchase_plans().len());
-    for draft in plan.purchase_plans() {
+    for (draft, sequence) in plan.purchase_plans().iter().zip(sequences.orders()) {
         let latest = latest_groups
             .iter()
             .find(|group| group.scope == draft.group.scope)
@@ -133,7 +135,7 @@ async fn create_orders(
             selected_lines: &selected_lines,
             facts: &latest_facts,
         };
-        orders.push(persist_order(db, input, &verified, draft, executor).await?);
+        orders.push(persist_order(db, input, &verified, draft, sequence?, executor).await?);
     }
     Ok(orders)
 }
@@ -144,6 +146,7 @@ async fn persist_order(
     input: &CreateFromSourcingApplyInput<'_>,
     verified: &VerifiedBasisInput<'_>,
     plan: &SourcingDraftPlan,
+    audit_event_sequence: PurchaseCreationEventSequence,
     executor: &mut dyn Executor,
 ) -> Result<CreatePurchaseOrderResult> {
     let basis_id = basis_id_for(
@@ -159,14 +162,14 @@ async fn persist_order(
         CREATE_SOURCING_ACTION,
         Some(basis_id.as_str()),
         &input.req.idempotency_key,
-        LegacyReceiptIdScheme::None,
     )?;
-    let audit_id = identity.receipt_id().to_string();
     let command = CreateBasisCommand {
         sales_order_id: input.sales_order_id,
         req: &item_req,
         requested_lines: &plan.requested_lines,
-        audit_id: &audit_id,
+        receipt_identity: &identity,
+        audit_command_id: input.receipt_identity.receipt_id(),
+        audit_event_sequence,
         request_fingerprint: input.request_fingerprint,
         actor: input.actor,
     };
@@ -203,8 +206,10 @@ fn item_request(
 async fn finish_sourcing(
     db: &Database,
     input: &CreateFromSourcingApplyInput<'_>,
+    sales_order: &SalesOrder,
     orders: Vec<CreatePurchaseOrderResult>,
     stock_reservations: Vec<ExistingStockReservationResult>,
+    sequences: SourcingEventSequencePlan,
     executor: &mut dyn Executor,
 ) -> Result<CreatePurchaseOrdersFromSourcingResult> {
     sync_procurement_tasks_for_sales_order(db, input.sales_order_id, executor).await?;
@@ -214,7 +219,8 @@ async fn finish_sourcing(
         .await?
         .ok_or_else(|| Error::ConflictError("供给分配任务在同步后不存在".to_string()))?
         .status;
-    let response_status = sourcing_work_item_status(status, false)?;
+    let frozen_status = sourcing_work_item_status(status)?;
+    let response_status = frozen_status.as_str().to_string();
     let receipt = SourcingReceipt {
         orders: orders
             .iter()
@@ -225,18 +231,9 @@ async fn finish_sourcing(
             })
             .collect(),
         stock_reservations: stock_reservations.clone(),
-        work_item_status: Some(status),
+        work_item_status: frozen_status,
     };
-    write_sourcing_receipt(
-        db,
-        input.audit_id,
-        input.request_fingerprint,
-        input.sales_order_id.as_ref(),
-        &receipt,
-        input.actor,
-        executor,
-    )
-    .await?;
+    write_sourcing_receipt(db, input, sales_order, &receipt, sequences.main(), executor).await?;
     Ok(CreatePurchaseOrdersFromSourcingResult {
         orders,
         stock_reservations,

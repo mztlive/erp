@@ -198,12 +198,12 @@ pub struct W29CloseFact {
 
 impl W29CloseFact {
     /// Historical evidence reference persisted on the domain object.
-    pub fn evidence_reference(&self, work_item_id: &str, audit_log_id: &str) -> String {
+    pub fn evidence_reference(&self, work_item_id: &str, command_receipt_id: &str) -> String {
         match &self.replacement_work_item_id {
             Some(replacement) => format!(
-                "work_item:{work_item_id};replacement_work_item:{replacement};audit_log:{audit_log_id}"
+                "work_item:{work_item_id};replacement_work_item:{replacement};command_receipt:{command_receipt_id}"
             ),
-            None => format!("work_item:{work_item_id};audit_log:{audit_log_id}"),
+            None => format!("work_item:{work_item_id};command_receipt:{command_receipt_id}"),
         }
     }
 }

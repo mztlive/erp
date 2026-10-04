@@ -1,9 +1,10 @@
 //! 幂等登记根事务：草稿/正式事实、销售进度、任务和命令收据按原顺序组合。
 use application_core::{AuditActor, CommandReceipt};
-use erp_audit::CommandReceiptServiceExt;
-use erp_core::ids::CustomerAcceptanceId;
+use erp_core::ids::{CustomerAcceptanceId, SalesOrderId};
+use erp_fulfillment::FulfillmentCommandReceiptService;
 use erp_fulfillment::dto::CommitCustomerAcceptanceRequest;
 use erp_fulfillment::entity::fulfillment::CustomerAcceptance;
+use erp_fulfillment::repository::extensions::FulfillmentExt;
 use erp_fulfillment::service::FulfillmentService;
 use erp_fulfillment::service::document_number::next_customer_acceptance_no;
 use erp_identity::SharedRbacService;
@@ -12,7 +13,7 @@ use erp_sales::repository::SalesOrderExt;
 use erp_workflow::ApprovalObjectReadPort;
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, Transactional};
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::CustomerAcceptanceProcess;
@@ -20,6 +21,7 @@ use super::completion::{CompletionKind, complete_acceptance};
 use super::evidence::ensure_evidence;
 use super::registration::register_created_customer_acceptance_document;
 use super::task::prepare_customer_acceptance_task_command;
+use crate::reverse_flow::command_recovery::recovered_resource;
 use crate::{Error, Result};
 impl CustomerAcceptanceProcess {
     /// 原子登记并过账客户验收。
@@ -69,12 +71,11 @@ impl CustomerAcceptanceProcess {
             &req.idempotency_key,
             &req,
         )?;
-        if let Some(acceptance_id) = command_receipt.committed_resource_id(&self.db).await? {
-            return self
-                .read
-                .committed_customer_acceptance_view(&acceptance_id, &req.sales_order_id)
-                .await
-                .map_err(crate::Error::from);
+        if let Some(acceptance_id) = FulfillmentCommandReceiptService::new(self.db.clone())
+            .committed_resource_id(&command_receipt, &mut NoTransaction)
+            .await?
+        {
+            return self.committed_view(&acceptance_id, &req.sales_order_id).await;
         }
 
         let generated_acceptance_no = if req.acceptance_id.is_none() {
@@ -99,6 +100,14 @@ impl CustomerAcceptanceProcess {
         let transaction_result = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    erp_read_models::sales_center::access::SalesAccess::new(db.clone(), rbac.clone())
+                        .require_object(&actor, "detail", &req.sales_order_id, &[], executor)
+                        .await?;
+                    if let Some(persisted) =
+                        replay_commit(&db, &command_receipt_for_tx, &req, executor).await?
+                    {
+                        return Ok::<CustomerAcceptance, crate::Error>(persisted);
+                    }
                     let existing =
                         FulfillmentService::load_customer_acceptance_commit_draft(&db, &req, executor)
                             .await?;
@@ -140,7 +149,7 @@ impl CustomerAcceptanceProcess {
                         &db,
                         &acceptance,
                         &actor,
-                        CompletionKind::Commit { task, receipt: command_receipt_for_tx },
+                        CompletionKind::Commit { task, receipt: Box::new(command_receipt_for_tx) },
                         executor,
                     )
                     .await?;
@@ -151,20 +160,63 @@ impl CustomerAcceptanceProcess {
 
         let posted = match transaction_result {
             Ok(posted) => posted,
-            Err(error) => match command_receipt.committed_resource_id(&self.db).await? {
-                Some(acceptance_id) => {
-                    return self
-                        .read
-                        .committed_customer_acceptance_view(&acceptance_id, &sales_order_id)
-                        .await
-                        .map_err(crate::Error::from);
-                },
-                None => return Err(error),
-            },
+            Err(error) => return self.recover_commit(error, &command_receipt, &sales_order_id).await,
         };
         let remaining_eligibility = self.read.acceptance_eligibility(sales_order_id.as_ref()).await?;
         Ok(CommitCustomerAcceptanceView { acceptance: posted.into(), remaining_eligibility })
     }
+
+    /// 只读查询命令收据并返回既有过账视图，未确认结果时保留原错误。
+    async fn recover_commit(
+        &self,
+        error: Error,
+        receipt: &CommandReceipt,
+        sales_order_id: &SalesOrderId,
+    ) -> Result<CommitCustomerAcceptanceView> {
+        let acceptance_id = recovered_resource(
+            error,
+            FulfillmentCommandReceiptService::new(self.db.clone())
+                .committed_resource_id(receipt, &mut NoTransaction)
+                .await
+                .map_err(Error::from),
+        )?;
+        self.committed_view(&acceptance_id, sales_order_id).await
+    }
+
+    /// 从已过账验收事实生成同一销售单的剩余可验收视图。
+    async fn committed_view(
+        &self,
+        acceptance_id: &str,
+        sales_order_id: &SalesOrderId,
+    ) -> Result<CommitCustomerAcceptanceView> {
+        self.read
+            .committed_customer_acceptance_view(acceptance_id, sales_order_id)
+            .await
+            .map_err(crate::Error::from)
+    }
+}
+
+/// 在同一执行器上读取已提交命令结果，并核对其销售单归属。
+async fn replay_commit(
+    db: &Database,
+    receipt: &CommandReceipt,
+    req: &CommitCustomerAcceptanceRequest,
+    executor: &mut dyn Executor,
+) -> Result<Option<CustomerAcceptance>> {
+    let Some(result_id) =
+        FulfillmentCommandReceiptService::new(db.clone()).committed_resource_id(receipt, executor).await?
+    else {
+        return Ok(None);
+    };
+    let persisted = db
+        .customer_acceptances()
+        .find_by_id(&result_id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("验收单不存在".to_string()))?;
+    if persisted.sales_order_id != req.sales_order_id {
+        return Err(Error::ConflictError("验收命令结果与销售单不一致".to_string()));
+    }
+    Ok(Some(persisted))
 }
 
 /// 先校验签收凭证，再按原顺序登记新验收单据。
@@ -226,7 +278,7 @@ mod tests {
             &request,
         )
         .unwrap();
-        assert_ne!(first.fingerprints().0, changed.fingerprints().0);
+        assert_ne!(first.fingerprint(), changed.fingerprint());
         request.evidence_attachment_id = None;
         let missing = CommandReceipt::from_payload(
             "customer-acceptance-commit-",
@@ -237,6 +289,6 @@ mod tests {
             &request,
         )
         .unwrap();
-        assert_ne!(first.fingerprints().0, missing.fingerprints().0);
+        assert_ne!(first.fingerprint(), missing.fingerprint());
     }
 }

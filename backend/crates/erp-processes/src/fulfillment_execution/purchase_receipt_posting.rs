@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::str::FromStr;
 
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
 use erp_core::ids::{
     PurchaseOrderRevisionLineId, PurchaseReceiptId, PurchaseReceiptLineId, SalesOrderId, SalesOrderLineId,
@@ -31,6 +31,7 @@ use validator::Validate;
 
 use super::FulfillmentProcess;
 use super::purchase_context::{ensure_po_fulfillable, ensure_prepay_gate, load_po_current_revision};
+use crate::audit::persist_log;
 use crate::{Error, Result};
 impl FulfillmentProcess {
     /// 过账采购入库（草稿 → 已过账；§8.2 第 1 条跨集合事务）。
@@ -261,7 +262,7 @@ impl ReceiptPostingSteps for MongoReceiptPosting<'_> {
                     "purchase_receipt",
                     receipt_id.to_string(),
                 )?;
-                db.audit_logs().create(&audit, session).await?;
+                persist_log(db, &audit, session).await?;
             },
         }
         Ok(())

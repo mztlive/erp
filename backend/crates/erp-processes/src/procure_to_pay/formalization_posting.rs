@@ -1,11 +1,12 @@
 //! 采购正式化生产步骤与调用方唯一执行器的顺序合同。
 use application_core::AuditActor;
 use async_trait::async_trait;
-use erp_audit::{AuditExt, AuditLog};
+use erp_audit::AuditLog;
 use mongodb::Database;
 use persistence_core::Executor;
 
 use super::review::{FormalizedOrderPersist, FormalizedPurchaseEffects};
+use crate::audit::persist_log;
 use crate::{Error, Result};
 
 /// 采购正式化与跨域后续写入的既有边界。
@@ -85,7 +86,7 @@ impl PostingSteps for MongoPosting<'_> {
                 effects.persist_fulfillment(self.db, self.actor.id(), executor).await?;
             },
             Step::Audit => {
-                self.db.audit_logs().create(self.audit, executor).await?;
+                persist_log(self.db, self.audit, executor).await?;
             },
         }
         Ok(())

@@ -20,12 +20,30 @@ pub fn serialized_fingerprint<T: Serialize>(command: &T) -> Result<String> {
     Ok(hex::encode(Sha256::digest(bytes)))
 }
 
-pub fn stable_evidence_id(prefix: &str, audit_id: &str) -> String {
-    format!("{prefix}-{}", stable_digest(audit_id))
+/// 由稳定领域命令身份派生证据 ID，保留既有字节算法。
+///
+/// # 参数
+/// * `prefix` - 证据类型前缀。
+/// * `command_id` - 稳定领域命令身份，独立于展示事件。
+/// # 返回
+/// 返回确定性证据 ID。
+/// # 错误
+/// 无。
+pub fn stable_evidence_id(prefix: &str, command_id: &str) -> String {
+    format!("{prefix}-{}", stable_digest(command_id))
 }
 
-pub fn stable_internal_idempotency_key(prefix: &str, audit_id: &str) -> String {
-    format!("{prefix}:{}", stable_digest(audit_id))
+/// 由稳定领域命令身份派生内部幂等键，保留既有字节算法。
+///
+/// # 参数
+/// * `prefix` - 证据类型前缀。
+/// * `command_id` - 稳定领域命令身份。
+/// # 返回
+/// 返回领域内部去重键。
+/// # 错误
+/// 无。
+pub fn stable_internal_idempotency_key(prefix: &str, command_id: &str) -> String {
+    format!("{prefix}:{}", stable_digest(command_id))
 }
 
 pub fn stable_digest(value: &str) -> String {

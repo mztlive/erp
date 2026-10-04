@@ -1,14 +1,14 @@
 //! 开票申请原子创建、额度占用、定义绑定与审批启动。
 use application_core::{AuditActor, CommandReceipt};
-use erp_audit::{AuditExt, CommandReceiptServiceExt};
 use erp_core::common::time::Instant;
 use erp_core::ids::SalesInvoiceRequestId;
 use erp_finance::dto::receivable::SubmitInvoiceRequest;
+use erp_finance::service::command_receipt::FinanceCommandReceiptService;
 use erp_finance::service::receivable::mapping::ensure_expected_version;
 use erp_read_models::finance::receivable::invoice_request::InvoiceRequestView;
 use erp_sales::repository::SalesOrderExt;
 use erp_workflow::entity::approval_integration::{
-    ApprovalSubjectCounterparty, ApprovalSubjectSnapshotPayload,
+    ApprovalSubjectCounterparty, ApprovalSubjectSnapshotPayload, subject_ref_for,
 };
 use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
 use erp_workflow::repository::prelude::*;
@@ -18,12 +18,19 @@ use erp_workflow::service::approval::execution::{PreparedExecution, prepare_star
 use erp_workflow::service::document_registry::{find_registered_document, new_registered_document};
 use erp_workflow::{BpmExt, DocumentRegistryExt};
 use id_generator::next_id;
+use persistence_core::NoTransaction;
 
 use super::super::{ReceivableProcess, start_approval};
 use super::*;
+use crate::audit::persist_log;
 
 impl ReceivableProcess {
     /// 原子创建或重新提交开票申请，冻结资料及额度后启动已发布流程。
+    /// # 参数
+    /// * `req` - 新申请或带版本的原申请、金额资料与幂等键。
+    /// * `actor` - 当前已认证申请人。
+    /// # 返回
+    /// 返回首次提交申请的当前视图；重放不重复占用额度或启动审批。
     /// # 错误
     /// 未发布流程、来源非法、重复申请超额、权限和版本冲突时整体回滚。
     pub async fn submit_invoice_request(
@@ -39,7 +46,10 @@ impl ReceivableProcess {
             &req.idempotency_key,
             &req,
         )?;
-        if let Some(id) = command.committed_resource_id(&self.db).await? {
+        if let Some(id) = FinanceCommandReceiptService::new(self.db.clone())
+            .committed_resource_id(&command, &mut NoTransaction)
+            .await?
+        {
             return Ok(self.read.invoice_request_detail(&id).await?);
         }
         let db = self.db.clone();
@@ -52,6 +62,10 @@ impl ReceivableProcess {
             .clone()
             .run_authorized_policy_transaction(revision, move |executor| {
                 Box::pin(async move {
+                    let receipts = FinanceCommandReceiptService::new(db.clone());
+                    if let Some(id) = receipts.committed_resource_id(&command, executor).await? {
+                        return Ok::<String, Error>(id);
+                    }
                     let account = lock_account(&db, &req.receivable_account_id, executor).await?;
                     ensure_effective_source(&db, &account, executor).await?;
                     let mut request = candidate(&db, &account, &req, &actor, executor).await?;
@@ -62,18 +76,15 @@ impl ReceivableProcess {
                     let binding = bind(&db, &rbac, object_read.as_ref(), &request, &actor, executor).await?;
                     let id = request.base.id.clone();
                     start(&db, &mut request, &binding, &req.idempotency_key, &actor, executor).await?;
-                    db.audit_logs().create(&command.audit(actor, id.clone())?, executor).await?;
+                    let audit =
+                        super::command::event(&actor, &request, super::command::SUBMIT, Some(&command))?;
+                    receipts.save_resource(&command, id.clone(), audit.base.id.clone(), executor).await?;
+                    persist_log(&db, &audit, executor).await?;
                     Ok::<String, Error>(id)
                 })
             })
             .await;
-        match result {
-            Ok(id) => Ok(self.read.invoice_request_detail(&id).await?),
-            Err(error) => match recover.committed_resource_id(&self.db).await? {
-                Some(id) => Ok(self.read.invoice_request_detail(&id).await?),
-                None => Err(error),
-            },
-        }
+        self.finish_invoice_request_command(result, &recover).await
     }
 }
 /// 固定销售应收来源；草稿修改仅限原申请人且必须提交版本。
@@ -182,10 +193,7 @@ async fn start(
 ) -> Result<()> {
     let now = Instant::now();
     let graph = start_approval::load_bound_definition_graph_with_executor(db, binding, executor).await?;
-    let subject = erp_workflow::entity::approval_integration::subject_ref_for(
-        DocumentType::SalesInvoiceRequest,
-        &request.base.id,
-    )?;
+    let subject = subject_ref_for(DocumentType::SalesInvoiceRequest, &request.base.id)?;
     let input = start_approval::build_document_start_input(start_approval::DocumentStartInput {
         document_type: DocumentType::SalesInvoiceRequest,
         graph,
@@ -217,18 +225,7 @@ async fn start(
         return Err(Error::ConflictError("申请审批状态已变化，请刷新后重试".into()));
     }
     db.sales_invoice_requests().update(request, executor).await?;
-    let snapshot = ApprovalSubjectSnapshotPayload {
-        document_no: request.request_no.clone(),
-        responsible_org_id: request.counterparty_party_id.to_string(),
-        submitted_by: actor.id().into(),
-        submitted_at: now,
-        counterparty: Some(ApprovalSubjectCounterparty::Customer {
-            customer_id: request.customer_id.clone(),
-        }),
-        total_amount: Some(request.data.amount),
-        total_quantity: None,
-        line_count: 1,
-    };
+    let snapshot = request_start_snapshot(request, actor, now);
     let spec = adapter_spec_of(DocumentType::SalesInvoiceRequest)?;
     start_approval::persist_runtime_writes(
         db,
@@ -243,6 +240,25 @@ async fn start(
         executor,
     )
     .await
+}
+
+fn request_start_snapshot(
+    request: &SalesInvoiceRequest,
+    actor: &AuditActor,
+    now: Instant,
+) -> ApprovalSubjectSnapshotPayload {
+    ApprovalSubjectSnapshotPayload {
+        document_no: request.request_no.clone(),
+        responsible_org_id: request.counterparty_party_id.to_string(),
+        submitted_by: actor.id().into(),
+        submitted_at: now,
+        counterparty: Some(ApprovalSubjectCounterparty::Customer {
+            customer_id: request.customer_id.clone(),
+        }),
+        total_amount: Some(request.data.amount),
+        total_quantity: None,
+        line_count: 1,
+    }
 }
 
 /// 申请只能来自已生效销售单形成的当前应收来源。

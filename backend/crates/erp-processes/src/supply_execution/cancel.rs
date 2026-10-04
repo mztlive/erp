@@ -1,5 +1,5 @@
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_core::ids::SupplierOrderActionId;
 use erp_integration::entity::integration_ops::InboxMessageStatus;
 use erp_integration::repository::IntegrationOpsExt;
@@ -15,6 +15,7 @@ use validator::Validate;
 
 use super::SupplierFulfillmentProcess;
 use super::place::build_action_message;
+use crate::audit::persist_log;
 use crate::{Error, Result};
 
 impl SupplierFulfillmentProcess {
@@ -143,7 +144,7 @@ impl SupplierFulfillmentProcess {
                     )
                     .await?;
                     db.inbox_messages().create(&message_for_tx, executor).await?;
-                    db.audit_logs().create(&audit_for_tx, executor).await?;
+                    persist_log(&db, &audit_for_tx, executor).await?;
                     Ok::<(), crate::Error>(())
                 })
             }), || async {

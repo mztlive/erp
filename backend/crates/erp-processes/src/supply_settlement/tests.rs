@@ -5,12 +5,14 @@ use erp_core::AccountKind;
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{SupplierAccountId, SupplierSettlementStatementId, WorkItemId};
 use erp_core::money::Amount;
+use erp_supply::command_receipt::{
+    DifferenceDecisionReceipt, ReviewDecisionReceipt, ReviewSubmissionReceipt, SupplyCommandResult,
+};
 use erp_supply::entity::supplier_settlement::{SupplierSettlementStatement, SupplierSettlementStatementData};
 use erp_workflow::entity::work_item::{
     AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
 };
 
-use super::difference::*;
 use super::review::*;
 use super::*;
 
@@ -68,37 +70,33 @@ pub(super) fn sample_work_item(statement: &SupplierSettlementStatement) -> WorkI
 }
 
 #[test]
-fn command_receipts_roundtrip_and_reject_fingerprint_reuse() {
-    let fingerprint = "f".repeat(64);
-    let submission = ReviewSubmissionReceipt {
-        operation_id: "op-submit".to_string(),
-        statement_version: 2,
-        work_item_id: "work-item-1".to_string(),
-        task_version: 1,
-    };
-    let message = review_submission_receipt_message(&fingerprint, &submission);
-    assert_eq!(parse_review_submission_receipt(&message, &fingerprint).unwrap(), submission);
-    assert!(parse_review_submission_receipt(&message, &"0".repeat(64)).is_err());
-
-    let decision = ReviewDecisionReceipt {
-        operation_id: "op-review".to_string(),
-        result_status: dto::SettlementReviewDecisionStatus::Confirmed,
-        statement_version: 3,
-        task_version: 2,
-        payable_account_id: Some("payable-1".to_string()),
-        cost_delta: Some(Amount::from_str("1.00").unwrap()),
-    };
-    let message = review_decision_receipt_message(&fingerprint, &decision);
-    assert_eq!(parse_review_decision_receipt(&message, &fingerprint).unwrap(), decision);
-
-    let difference = DifferenceDecisionReceipt {
-        operation_id: "op-difference".to_string(),
-        statement_id: "statement-1".to_string(),
-        statement_version: 2,
-        difference_version: 2,
-    };
-    let message = difference_decision_receipt_message(&fingerprint, &difference);
-    assert_eq!(parse_difference_decision_receipt(&message, &fingerprint).unwrap(), difference);
+fn typed_results_preserve_original_versions_and_cost_delta() {
+    let results = [
+        SupplyCommandResult::ReviewSubmission(ReviewSubmissionReceipt {
+            operation_id: "op-submit".to_string(),
+            statement_version: 2,
+            work_item_id: "work-item-1".to_string(),
+            task_version: 1,
+        }),
+        SupplyCommandResult::ReviewDecision(ReviewDecisionReceipt {
+            operation_id: "op-review".to_string(),
+            result_status: dto::SettlementReviewDecisionStatus::Confirmed,
+            statement_version: 3,
+            task_version: 2,
+            payable_account_id: Some("payable-1".to_string()),
+            cost_delta: Some(Amount::from_str("1.00").unwrap()),
+        }),
+        SupplyCommandResult::DifferenceDecision(DifferenceDecisionReceipt {
+            operation_id: "op-difference".to_string(),
+            statement_id: "statement-1".to_string(),
+            statement_version: 2,
+            difference_version: 2,
+        }),
+    ];
+    for result in results {
+        let encoded = serde_json::to_string(&result).unwrap();
+        assert_eq!(serde_json::from_str::<SupplyCommandResult>(&encoded).unwrap(), result);
+    }
 }
 
 #[test]

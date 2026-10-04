@@ -2,7 +2,7 @@
 use std::time::Instant as MonotonicInstant;
 
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
 use erp_supply::entity::failure::SupplierFailureClass;
 use erp_supply::entity::supplier_api::{HealthCheckResult, SupplierApiConnection, SupplierHealthCheckRun};
@@ -16,6 +16,7 @@ use persistence_core::Transactional;
 use super::SupplierConnectionExecutionProcess;
 use super::execution::{ConnectionJobExecutionPort, execute};
 use super::failure::{persist_health_failure_task, settle_health_failure};
+use crate::audit::persist_log;
 use crate::{Error, Result};
 
 impl SupplierConnectionExecutionProcess {
@@ -127,7 +128,7 @@ impl SupplierConnectionExecutionProcess {
                         connection.base.id,
                         Some(format!("job_id={};status={}", job.base.id, job.status.as_str())),
                     )?;
-                    db.audit_logs().create(&audit, executor).await?;
+                    persist_log(&db, &audit, executor).await?;
                     Ok(())
                 })
             })

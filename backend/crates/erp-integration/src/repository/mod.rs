@@ -16,3 +16,6 @@ pub use scope::{IntegrationReadScope, IntegrationScopeClause};
 
 #[cfg(test)]
 mod serialization_contract;
+
+mod command_receipt;
+pub use command_receipt::{IntegrationCommandExt, IntegrationCommandRepositoryExt};

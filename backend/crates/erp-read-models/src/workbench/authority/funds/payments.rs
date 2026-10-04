@@ -22,19 +22,11 @@ impl super::super::WorkItemFactsReader {
             return Ok(());
         }
         let payments = self.read_supplier_payments(&ids, executor).await?;
-        let created_by = self
-            .load_created_by_from_audit(
-                "supplier_payment",
-                &ids.iter().cloned().collect::<HashSet<_>>(),
-                executor,
-            )
-            .await?;
         let supplier_ids = payments.iter().map(|item| item.supplier_id.to_string()).collect::<Vec<_>>();
         let supplier_names = self.supplier_display_names(&supplier_ids, executor).await?;
         for payment in payments {
             let fact = mapping::supplier_payment_fact(
                 &payment,
-                created_by.get(&payment.base.id),
                 supplier_names.get(&payment.supplier_id.to_string()).cloned(),
             );
             facts.insert((ObjectKind::SupplierPayment, payment.base.id.clone()), fact);
@@ -54,13 +46,6 @@ impl super::super::WorkItemFactsReader {
             return Ok(());
         }
         let refunds = self.read_supplier_refunds(&ids, executor).await?;
-        let created_by = self
-            .load_created_by_from_audit(
-                "supplier_refund",
-                &ids.iter().cloned().collect::<HashSet<_>>(),
-                executor,
-            )
-            .await?;
         let supplier_ids = refunds.iter().map(|item| item.supplier_id.to_string()).collect::<Vec<_>>();
         let supplier_names = self.supplier_display_names(&supplier_ids, executor).await?;
         let payment_ids = refunds
@@ -76,7 +61,6 @@ impl super::super::WorkItemFactsReader {
         for refund in refunds {
             let fact = mapping::supplier_refund_fact(
                 &refund,
-                created_by.get(&refund.base.id),
                 supplier_names.get(&refund.supplier_id.to_string()).cloned(),
                 &payment_origins,
                 &entry_origins,
@@ -98,20 +82,13 @@ impl super::super::WorkItemFactsReader {
             return Ok(());
         }
         let reversals = self.read_payment_reversals(&ids, executor).await?;
-        let created_by = self
-            .load_created_by_from_audit(
-                "payment_reversal",
-                &ids.iter().cloned().collect::<HashSet<_>>(),
-                executor,
-            )
-            .await?;
         let payment_ids = reversals
             .iter()
             .map(|reversal| reversal.original_supplier_payment_id.to_string())
             .collect::<Vec<_>>();
         let origins = self.supplier_payment_origins(&payment_ids, executor).await?;
         for reversal in reversals {
-            let fact = mapping::payment_reversal_fact(&reversal, created_by.get(&reversal.base.id), &origins);
+            let fact = mapping::payment_reversal_fact(&reversal, &origins);
             facts.insert((ObjectKind::PaymentReversal, reversal.base.id.clone()), fact);
         }
         Ok(())

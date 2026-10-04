@@ -4,13 +4,15 @@
 //! 入口 [`cancel_approval`] 只做 `with_transaction` 包裹与回放恢复。
 
 use application_core::AuditActor;
-use bpm::ids::ApprovalProcessInstanceId;
+use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance};
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::{AuditActorLogs, AuditLog};
 use erp_core::common::time::Instant;
 use erp_core::ids::{ApprovalNotificationOutboxId, StockAdjustmentId};
 use erp_identity::SharedRbacService;
-use erp_inventory::{InventoryExt, StockAdjustment};
+use erp_inventory::entity::cancellation::{StockAdjustmentCancellation, StockAdjustmentCancellationData};
+use erp_inventory::repository::StockAdjustmentCancellationExt;
+use erp_inventory::{InventoryExt, StockAdjustment, StockAdjustmentState};
 use erp_workflow::entity::approval_integration::{
     ApprovalNotificationEventKind, ApprovalNotificationOutbox, ApprovalNotificationTemplateParams,
 };
@@ -25,12 +27,14 @@ use persistence_core::{Executor, Transactional};
 
 use super::adapter::{execute_stock_adjustment_domain_action, require_frozen_binding};
 use super::approval_query::load_approval_binding;
+use super::cancel_facts::{cancellation_identity, historical_task_facts};
 use super::cancel_runtime::{
     CancelAuthority, CancelAuthorization, STOCK_ADJUSTMENT_AUDIT_RESOURCE,
-    STOCK_ADJUSTMENT_CANCEL_AUDIT_ACTION, cancel_audit_message_prefix,
-    ensure_cancel_authorized_with_executor, ensure_cancel_execution_identity, ensure_cancel_instance_binding,
-    ensure_cancel_instance_subject, ensure_stock_adjustment_open_task_identity,
+    STOCK_ADJUSTMENT_CANCEL_AUDIT_ACTION, ensure_cancel_authorized_with_executor,
+    ensure_cancel_execution_identity, ensure_cancel_instance_binding, ensure_cancel_instance_subject,
+    ensure_stock_adjustment_open_task_identity,
 };
+use crate::audit::persist_log;
 use crate::{Error, Result};
 
 /// 库存调整撤回事务写入集合。
@@ -50,122 +54,182 @@ pub(crate) struct StockAdjustmentCancelPersistInput {
     pub(crate) now: Instant,
 }
 /// 在同一事务内应用取消计划、关闭全部开放任务并写回库存调整单。
+/// # 参数
+/// * `db` - 组合层数据库句柄。
+/// * `input` - 已准备的领域变更、审批计划及认证操作人。
+/// # 返回
+/// 返回全部事实和成功事件共同提交后的调整单。
+/// # 错误
+/// 事务内授权、版本或终态验证失败，或任一持久化步骤失败。
 pub(crate) async fn persist_stock_adjustment_cancel(
     db: &Database,
     input: StockAdjustmentCancelPersistInput,
 ) -> Result<StockAdjustment> {
-    let StockAdjustmentCancelPersistInput {
-        rbac,
-        mut adjustment,
-        writes,
-        open_tasks,
-        authorization_instance,
-        authorization_execution,
-        binding,
-        actor,
-        reason,
-        current_approver_id,
-        current_approver_name,
-        document_no,
-        now,
-    } = input;
     let db = db.clone();
     let client = db.client().clone();
     client
         .with_transaction(move |executor| {
-            Box::pin(async move {
-                let persisted_adjustment = db
-                    .inventory()
-                    .stock_adjustment(&adjustment.base.id, executor)
-                    .await?
-                    .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
-                if persisted_adjustment.base.version != adjustment.base.version
-                    || persisted_adjustment.approval_subject_version != authorization_instance.subject_version
-                    || persisted_adjustment.status != erp_inventory::StockAdjustmentState::InApproval
-                {
-                    return Err(Error::ConflictError("库存调整单事务内版本或审批状态已变化".to_string()));
-                }
-                let persisted_instance = db
-                    .bpm_workflow()
-                    .find_instance_by_id(
-                        &ApprovalProcessInstanceId::new(authorization_instance.base.id.clone()),
-                        executor,
-                    )
-                    .await?
-                    .ok_or_else(|| Error::ConflictError("库存调整审批实例不存在".to_string()))?;
-                ensure_cancel_instance_subject(
-                    &persisted_instance,
-                    &adjustment.base.id,
-                    authorization_instance.subject_version,
-                )?;
-                let persisted_binding = load_approval_binding(&db, &adjustment.base.id, executor).await?;
-                let persisted_binding = require_frozen_binding(persisted_binding.as_ref())?;
-                ensure_cancel_instance_binding(&persisted_instance, persisted_binding)?;
-                if persisted_binding != &binding || persisted_instance != authorization_instance {
-                    return Err(Error::ConflictError("库存调整撤回事务内运行事实已变化".to_string()));
-                }
-                let authorization =
-                    ensure_cancel_authorized_with_executor(&db, &rbac, &persisted_instance, &actor, executor)
-                        .await?;
-                let current_open_tasks = revalidate_cancel_open_tasks(
-                    &db,
-                    &persisted_instance,
-                    &authorization_execution,
-                    &open_tasks,
-                    &authorization,
-                    executor,
-                )
-                .await?;
-                let closed_tasks = WorkItem::close_all_for_approval_cancellation(
-                    current_open_tasks,
-                    actor.id(),
-                    &reason,
-                    now,
-                )?;
-                // 唯一收据必须是事务内第一笔写入：并发同键只有一个事务获得
-                // 命令所有权；失败事务退出后由外层使用新会话回读并分类回放。
-                db.bpm_workflow()
-                    .insert_command_receipt(&writes.receipt, executor)
-                    .await
-                    .map_err(map_receipt_first_write_error)?;
-                db.stock_adjustments().update(&mut adjustment, executor).await?;
-                db.bpm_workflow()
-                    .persist_cancelled_runtime_after_receipt(
-                        &writes.instance,
-                        &writes.updated_executions,
-                        executor,
-                    )
-                    .await?;
-                db.work_items().persist_cancelled_approval_tasks(&closed_tasks, executor).await?;
-                persist_stock_adjustment_cancel_notifications(
-                    &db,
-                    StockAdjustmentCancelNotificationInput {
-                        writes: &writes,
-                        authorization: &authorization,
-                        actor_id: actor.id(),
-                        current_approver_id: &current_approver_id,
-                        current_approver_name: &current_approver_name,
-                        document_no: &document_no,
-                        now,
-                    },
-                    executor,
-                )
-                .await?;
-                let audit = actor.clone().resource_log_with_message(
-                    STOCK_ADJUSTMENT_CANCEL_AUDIT_ACTION,
-                    STOCK_ADJUSTMENT_AUDIT_RESOURCE,
-                    adjustment.base.id.clone(),
-                    Some(format!(
-                        "{}authority={} reason={reason}",
-                        cancel_audit_message_prefix(&authorization_instance.base.id),
-                        authorization.authority.as_str()
-                    )),
-                )?;
-                db.audit_logs().create(&audit, executor).await?;
-                Ok::<StockAdjustment, crate::Error>(adjustment)
-            })
+            Box::pin(async move { persist_cancel_step(&db, input, executor).await })
         })
         .await
+}
+
+/// 重验原目标并构造不可变取消事实，沿用调用方的唯一事务。
+async fn persist_cancel_step(
+    db: &Database,
+    input: StockAdjustmentCancelPersistInput,
+    executor: &mut dyn Executor,
+) -> Result<StockAdjustment> {
+    let authorization = revalidate_cancel_source(db, &input, executor).await?;
+    let open_tasks = revalidate_cancel_open_tasks(
+        db,
+        &input.authorization_instance,
+        &input.authorization_execution,
+        &input.open_tasks,
+        &authorization,
+        executor,
+    )
+    .await?;
+    let closed_tasks = WorkItem::close_all_for_approval_cancellation(
+        open_tasks,
+        input.actor.id(),
+        &input.reason,
+        input.now,
+    )?;
+    let audit = cancel_audit(&input, &authorization)?;
+    let fact = prepare_cancellation_fact(db, &input, &closed_tasks, &audit.base.id, executor).await?;
+    apply_cancel_writes(db, input, authorization, closed_tasks, fact, audit, executor).await
+}
+
+/// 决定写入的单据与实例读取必须仍处于同一事务快照。
+async fn revalidate_cancel_source(
+    db: &Database,
+    input: &StockAdjustmentCancelPersistInput,
+    executor: &mut dyn Executor,
+) -> Result<CancelAuthorization> {
+    let adjustment = db
+        .inventory()
+        .stock_adjustment(&input.adjustment.base.id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("库存调整单不存在".into()))?;
+    if adjustment.base.version != input.adjustment.base.version
+        || adjustment.approval_subject_version != input.authorization_instance.subject_version
+        || adjustment.status != StockAdjustmentState::InApproval
+    {
+        return Err(Error::ConflictError("库存调整单事务内版本或审批状态已变化".into()));
+    }
+    let instance = db
+        .bpm_workflow()
+        .find_instance_by_id(&ApprovalProcessInstanceId::new(&input.authorization_instance.base.id), executor)
+        .await?
+        .ok_or_else(|| Error::ConflictError("库存调整审批实例不存在".into()))?;
+    ensure_cancel_instance_subject(
+        &instance,
+        &input.adjustment.base.id,
+        input.authorization_instance.subject_version,
+    )?;
+    let binding = load_approval_binding(db, &input.adjustment.base.id, executor).await?;
+    let binding = require_frozen_binding(binding.as_ref())?;
+    ensure_cancel_instance_binding(&instance, binding)?;
+    if binding != &input.binding || instance != input.authorization_instance {
+        return Err(Error::ConflictError("库存调整撤回事务内运行事实已变化".into()));
+    }
+    ensure_cancel_authorized_with_executor(db, &input.rbac, &instance, &input.actor, executor).await
+}
+
+/// 从原命令和全部历史任务形成库存领域拥有的事实。
+async fn prepare_cancellation_fact(
+    db: &Database,
+    input: &StockAdjustmentCancelPersistInput,
+    closed_tasks: &[WorkItem],
+    audit_event_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<StockAdjustmentCancellation> {
+    let historical_tasks = db
+        .work_items()
+        .approval_tasks_for_execution(
+            &ApprovalNodeExecutionId::new(&input.authorization_execution.base.id),
+            executor,
+        )
+        .await?;
+    Ok(StockAdjustmentCancellation::new(StockAdjustmentCancellationData {
+        schema_version: 1,
+        audit_event_id: audit_event_id.to_string(),
+        stock_adjustment_id: input.adjustment.base.id.clone(),
+        instance_id: input.authorization_instance.base.id.clone(),
+        execution_id: input.authorization_execution.base.id.clone(),
+        subject_version: input.authorization_instance.subject_version,
+        actor_id: input.actor.id().to_string(),
+        reason: input.reason.clone(),
+        command: cancellation_identity(&input.writes.receipt),
+        document_version: input.adjustment.base.version,
+        instance_version: input.authorization_instance.base.version,
+        execution_version: input.authorization_execution.base.version,
+        task_id: closed_tasks.first().map(|task| task.base.id.clone()),
+        task_version: closed_tasks.first().map(|task| task.base.version),
+        cancelled_at: input.now,
+        historical_tasks: historical_task_facts(&historical_tasks)?,
+        blocker_code: input.authorization_execution.blocker_code.map(|code| code.as_str().to_string()),
+    })?)
+}
+
+/// 保持审批回执为首笔物理写；业务、事实、通知和审计缺一即整体失败。
+async fn apply_cancel_writes(
+    db: &Database,
+    mut input: StockAdjustmentCancelPersistInput,
+    authorization: CancelAuthorization,
+    closed_tasks: Vec<WorkItem>,
+    fact: StockAdjustmentCancellation,
+    audit: AuditLog,
+    executor: &mut dyn Executor,
+) -> Result<StockAdjustment> {
+    db.bpm_workflow()
+        .insert_command_receipt(&input.writes.receipt, executor)
+        .await
+        .map_err(map_receipt_first_write_error)?;
+    db.stock_adjustments().update(&mut input.adjustment, executor).await?;
+    db.bpm_workflow()
+        .persist_cancelled_runtime_after_receipt(
+            &input.writes.instance,
+            &input.writes.updated_executions,
+            executor,
+        )
+        .await?;
+    db.work_items().persist_cancelled_approval_tasks(&closed_tasks, executor).await?;
+    db.stock_adjustment_cancellations().create(&fact, executor).await?;
+    persist_stock_adjustment_cancel_notifications(
+        db,
+        StockAdjustmentCancelNotificationInput {
+            writes: &input.writes,
+            authorization: &authorization,
+            actor_id: input.actor.id(),
+            current_approver_id: &input.current_approver_id,
+            current_approver_name: &input.current_approver_name,
+            document_no: &input.document_no,
+            now: input.now,
+        },
+        executor,
+    )
+    .await?;
+    persist_log(db, &audit, executor).await?;
+    Ok(input.adjustment)
+}
+
+/// 取消成功事件仅记录安全的中文说明；事件 ID 由业务事实保存关联。
+fn cancel_audit(
+    input: &StockAdjustmentCancelPersistInput,
+    authorization: &CancelAuthorization,
+) -> Result<AuditLog> {
+    input
+        .actor
+        .clone()
+        .resource_log_with_message(
+            STOCK_ADJUSTMENT_CANCEL_AUDIT_ACTION,
+            STOCK_ADJUSTMENT_AUDIT_RESOURCE,
+            input.adjustment.base.id.clone(),
+            Some(format!("撤回审批：{}；撤回身份：{}", input.reason, authorization.authority.label())),
+        )
+        .map_err(Into::into)
 }
 
 /// 在同一事务快照内重读并校验普通撤回需要关闭的开放任务。
@@ -332,7 +396,7 @@ pub async fn cancel_stock_adjustment_approval_apply(
         "stock_adjustment",
         adjustment_id.to_string(),
     )?;
-    db.audit_logs().create(&audit, executor).await?;
+    persist_log(db, &audit, executor).await?;
     Ok(())
 }
 

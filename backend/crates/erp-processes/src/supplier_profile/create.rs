@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_core::ids::{
     PartyAddressId, PartyBankAccountId, PartyContactId, PartyId, PartyRevisionId, PartyTaxProfileId,
     SupplierAccountId, SupplierCapabilityId, SupplierCapabilityRevisionId,
@@ -30,6 +30,7 @@ use persistence_core::{Executor, Transactional};
 
 use super::validation::resolve_supplier_file_references;
 use super::{SupplierProfileService, SupplierProfileWithAssetsResult};
+use crate::audit::persist_log;
 use crate::{Error, Result};
 
 impl SupplierProfileService {
@@ -351,7 +352,7 @@ impl PreparedCreate {
             db.supplier_rating_revisions().create(rating, executor).await?;
         }
         db.supplier_profile_commands().create(&self.command, executor).await?;
-        db.audit_logs().create(&self.audit, executor).await?;
+        persist_log(db, &self.audit, executor).await?;
         Ok(())
     }
 }

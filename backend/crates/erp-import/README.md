@@ -16,6 +16,7 @@
 ## 负责的数据与能力
 
 - 历史导入批次、明细行、确认记录与应用结果事实。
+- `CompleteImportBusinessConfirmation` 和导入执行命令的独立结构化回执；保存原动作结果、任务身份、版本及成功事件关联号。
 - 导入批次和行查询，以及依赖后台任务事实的查询合同。
 
 ## 依赖与协作边界
@@ -34,6 +35,7 @@
 | [src/service/legacy_import/mod.rs](src/service/legacy_import/mod.rs) | LegacyImportService |
 | [src/ports/mod.rs](src/ports/mod.rs) | BulkJobFactsPort |
 | [src/entity/legacy_import/mod.rs](src/entity/legacy_import/mod.rs) | 导入实体与结果合同 |
+| [src/entity/command_receipt.rs](src/entity/command_receipt.rs) | 确认和执行命令的不可变强类型回执 |
 | [src/entity/mod.rs](src/entity/mod.rs) | 本域实体、值对象和确定性规则 |
 | [src/repository/mod.rs](src/repository/mod.rs) | 本域 MongoDB 仓储与集合访问器 |
 | [src/indexes/mod.rs](src/indexes/mod.rs) | 公开索引注册入口 |
@@ -45,6 +47,8 @@
 3. 新增或调整集合查询时同步评估索引；组合根复用本域公开索引入口，保持既有逐集合注册顺序。
 4. HTTP 请求和响应优先复用本域 DTO；扩展公开合同须同步检查 Process、ReadModel 和应用调用方。
 5. 业务改动补充本域库单元测试，覆盖成功、失败、边界及相关幂等或版本冲突路径。
+6. 命令结果恢复只读取 `import_command_receipts`。未知 schema、同键异参、错误动作或不匹配任务必须拒绝；不得读取展示审计消息或建立旧回执别名。
+7. 确认回放必须重验原决定、确认人、正式任务完成身份与当前责任资格。执行回放必须核对批次和冻结后台任务 ID，返回原命令结果；允许后台任务及批次版本继续推进。
 
 ## 验证要求
 

@@ -2,18 +2,16 @@
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_integration::dto::{
-    ControlledEvidenceRef, IntegrationActionOutcome, IntegrationTaskActionCommand,
-    IntegrationTaskActionEvidence, IntegrationTaskActionResult, IntegrationWorkItemStatus,
-    PreparedWorkItemTarget,
+    IntegrationTaskActionCommand, IntegrationTaskActionEvidence, IntegrationTaskActionResult,
+    IntegrationWorkItemStatus, PreparedWorkItemTarget,
 };
-use erp_integration::entity::integration_ops::IntegrationCommandIdentity;
+use erp_integration::entity::integration_ops::{ActionReceiptResult, IntegrationCommandIdentity};
 use erp_integration::service::task_decision::action::{
-    ActionFact, audit_log_reference, execute_task_action, next_allowed_actions,
+    ActionFact, command_receipt_reference, execute_task_action, next_allowed_actions,
 };
 use erp_workflow::WorkItemExt;
 use mongodb::Database;
 use persistence_core::Executor;
-use serde::{Deserialize, Serialize};
 
 use super::super::IntegrationResolutionProcess;
 use super::guard::{command_identity, load_bound_work_item};
@@ -83,16 +81,6 @@ impl super::execution::TaskCommandPort for ActionCommand<'_> {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct ActionReceiptMessage {
-    #[serde(rename = "o")]
-    outcome: IntegrationActionOutcome,
-    #[serde(rename = "b", skip_serializing_if = "Option::is_none")]
-    business_result_reference: Option<String>,
-    #[serde(rename = "e", default, skip_serializing_if = "Vec::is_empty")]
-    verified_evidence: Vec<ControlledEvidenceRef>,
-}
-
 impl IntegrationResolutionProcess {
     /// 执行 W29 非终结任务动作，并保证任务仍为 `OPEN`。
     ///
@@ -125,26 +113,34 @@ impl IntegrationResolutionProcess {
         actor: AuditActor,
         receipt: IntegrationCommandIdentity,
     ) -> Result<IntegrationTaskActionResult> {
+        let attempt_context = super::audit_context(&actor, &receipt)?;
         let rbac = crate::adapters::identity::shared_rbac_service(self.db.clone());
         let prepared = PreparedWorkItemTarget::try_from(&command)?;
         let evidence = std::sync::Arc::clone(&self.evidence);
-        self.run_audited(move |db, executor| {
-            Box::pin(async move {
-                super::execution::run_action(
-                    &mut ActionCommand {
-                        db,
-                        evidence: evidence.as_ref(),
-                        rbac: &rbac,
-                        prepared: &prepared,
-                        command: &command,
-                        actor: &actor,
-                        receipt: &receipt,
-                    },
-                    executor,
-                )
-                .await
+        let result = self
+            .run_audited(move |db, executor| {
+                Box::pin(async move {
+                    super::execution::run_action(
+                        &mut ActionCommand {
+                            db,
+                            evidence: evidence.as_ref(),
+                            rbac: &rbac,
+                            prepared: &prepared,
+                            command: &command,
+                            actor: &actor,
+                            receipt: &receipt,
+                        },
+                        executor,
+                    )
+                    .await
+                })
             })
-        })
+            .await;
+        crate::audit::finish_attempt(
+            result,
+            &attempt_context,
+            &crate::audit::MongoAuditAttemptSink::new(&self.db),
+        )
         .await
     }
 
@@ -154,9 +150,10 @@ impl IntegrationResolutionProcess {
         command: &IntegrationTaskActionCommand,
         actor: &AuditActor,
     ) -> Result<Option<IntegrationTaskActionResult>> {
-        let Some(message) = self.replay_receipt::<ActionReceiptMessage>(receipt, actor).await? else {
+        let Some(message) = self.replay_receipt::<ActionReceiptResult>(receipt, actor).await? else {
             return Ok(None);
         };
+        self.ensure_replay_task_access(&command.work_item_id, &command.action, actor).await?;
         let fact = ActionFact {
             outcome: message.outcome,
             business_result_reference: message.business_result_reference,
@@ -179,7 +176,7 @@ fn task_action_result(
             operation_id: command.action.operation_id.clone(),
             outcome: fact.outcome,
             business_result_reference: fact.business_result_reference,
-            evidence_reference: Some(audit_log_reference(receipt_id)?),
+            evidence_reference: Some(command_receipt_reference(receipt_id)?),
         },
         next_allowed_actions: next_allowed_actions(command.action.item_type, fact.outcome),
     })
@@ -192,7 +189,7 @@ async fn store_action_receipt(
     fact: &ActionFact,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let message = ActionReceiptMessage {
+    let message = ActionReceiptResult {
         outcome: fact.outcome,
         business_result_reference: fact.business_result_reference.clone(),
         verified_evidence: fact.verified_evidence.clone(),

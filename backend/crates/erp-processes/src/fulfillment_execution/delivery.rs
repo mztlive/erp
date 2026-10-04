@@ -1,7 +1,7 @@
 //! 发货创建、更新与无审批注册的跨域事务编排。
 
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_fulfillment::dto::{CreateDeliveryRequest, DeliveryView, UpdateDeliveryRequest};
 use erp_fulfillment::entity::fulfillment::{Delivery, DeliveryLine};
 use erp_identity::SharedRbacService;
@@ -18,6 +18,7 @@ use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
 use super::FulfillmentProcess;
+use crate::audit::persist_log;
 use crate::{Error, Result};
 
 impl FulfillmentProcess {
@@ -107,7 +108,7 @@ impl FulfillmentProcess {
                         executor,
                     )
                     .await?;
-                    db.audit_logs().create(&audit, executor).await?;
+                    persist_log(&db, &audit, executor).await?;
                     Ok::<Delivery, crate::Error>(delivery)
                 })
             })
@@ -275,7 +276,7 @@ async fn persist_created_delivery(
                     executor,
                 )
                 .await?;
-                db.audit_logs().create(&audit, executor).await?;
+                persist_log(&db, &audit, executor).await?;
                 Ok::<(), crate::Error>(())
             })
         })

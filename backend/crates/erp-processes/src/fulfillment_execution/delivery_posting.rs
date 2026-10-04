@@ -2,7 +2,7 @@
 
 use application_core::AuditActor;
 use async_trait::async_trait;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
 use erp_core::ids::DeliveryId;
 use erp_fulfillment::dto::{DeliveryView, PostDeliveryRequest};
@@ -15,6 +15,7 @@ use validator::Validate;
 
 use super::FulfillmentProcess;
 use super::purchase_context::{ensure_po_fulfillable, ensure_prepay_gate};
+use crate::audit::persist_log;
 use crate::{Error, Result};
 
 impl FulfillmentProcess {
@@ -194,7 +195,7 @@ impl PostingSteps for DeliveryPosting<'_> {
                     "delivery",
                     self.delivery_id.to_string(),
                 )?;
-                self.db.audit_logs().create(&audit, executor).await?;
+                persist_log(self.db, &audit, executor).await?;
             },
         }
         Ok(())

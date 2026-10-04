@@ -1,12 +1,15 @@
+use crate::audit::persist_log;
+
 mod commit_source;
 use application_core::{AuditActor, CommandReceipt};
-use erp_audit::{AuditActorLogs, AuditExt, CommandReceiptServiceExt};
+use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
 use erp_core::ids::{SupplierAccountId, SupplierPaymentId};
 use erp_finance::entity::payable::SupplierPaymentStatus;
 use erp_finance::repository::PayableExt;
 use erp_identity::SharedRbacService;
 use erp_read_models::returns_center::dto::SupplierRefundView;
+use erp_returns::ReturnsCommandReceiptService;
 use erp_returns::dto::{
     CancelSupplierRefundApprovalRequest, CommitSupplierRefundRequest, CreateSupplierRefundRequest,
     SubmitSupplierRefundRequest,
@@ -49,6 +52,7 @@ use super::start_approval::{
     persist_supplier_refund_runtime, persist_supplier_refund_start, replay_return_start_with_executor,
     replay_subject_versions,
 };
+use crate::reverse_flow::command_recovery::{commit_audits, recovered_resource, save_commit};
 use crate::{Error, Result};
 
 impl ReturnsProcess {
@@ -127,11 +131,8 @@ impl ReturnsProcess {
         };
         let document = new_registered_document(&id, DocumentType::SupplierRefund, refund.refund_no.clone())
             .map_err(crate::Error::from)?;
-        let create_audit =
-            actor.clone().resource_log("supplier_refund.create", "supplier_refund", id.clone())?;
-        let submit_audit =
-            actor.clone().resource_log("supplier_refund.submit", "supplier_refund", id.clone())?;
-        let command_audit = command_receipt.audit(actor.clone(), id.clone())?;
+        let (create_audit, submit_audit) = commit_audits(actor, &command_receipt, &id)?;
+        let command = command_receipt.clone();
         let db = self.db.clone();
         let rbac = self.rbac.clone();
         let object_read = std::sync::Arc::clone(&self.object_read);
@@ -142,17 +143,18 @@ impl ReturnsProcess {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     refund.ensure_submitter(actor_owned.id())?;
-                    ensure_return_start_replay_authorized(
+                    if let Some(existing_id) = replay_supplier_commit(
                         &db,
                         &rbac,
                         &actor_owned,
-                        DocumentType::SupplierPayment,
-                        "supplier_refund:submit",
-                        source_fact_id.as_ref(),
+                        (&source_fact_id, source_version),
+                        &command,
                         executor,
                     )
-                    .await?;
-                    validate_supplier_refund_source(&db, &source_fact_id, source_version, executor).await?;
+                    .await?
+                    {
+                        return Ok::<Option<String>, crate::Error>(Some(existing_id));
+                    }
                     let binding = persist_bound_supplier_refund_document(
                         &db,
                         &rbac,
@@ -191,18 +193,17 @@ impl ReturnsProcess {
                         )
                         .await?;
                     }
-                    db.audit_logs().create(&create_audit, executor).await?;
-                    db.audit_logs().create(&submit_audit, executor).await?;
-                    db.audit_logs().create(&command_audit, executor).await?;
-                    Ok::<(), crate::Error>(())
+                    save_commit(&db, &command, &refund.base.id, (&create_audit, &submit_audit), executor)
+                        .await?;
+                    Ok::<Option<String>, crate::Error>(None)
                 })
             })
             .await;
         let detail_id = match transaction_result {
-            Ok(()) => id,
-            Err(error) => match self.supplier_refund_commit_replay(&command_receipt, actor).await? {
-                Some(refund_id) => refund_id,
-                None => return Err(error),
+            Ok(Some(existing_id)) => existing_id,
+            Ok(None) => id,
+            Err(error) => {
+                recovered_resource(error, self.supplier_refund_commit_replay(&command_receipt, actor).await)?
             },
         };
         self.reads().supplier_refund_detail(&detail_id).await.map_err(crate::Error::from)
@@ -627,7 +628,7 @@ async fn persist_created_supplier_refund(
                 )
                 .await?;
                 ReturnsService::new(db.clone()).create_supplier_refund(&refund, executor).await?;
-                db.audit_logs().create(&audit, executor).await?;
+                persist_log(&db, &audit, executor).await?;
                 Ok::<(), crate::Error>(())
             })
         })
@@ -645,6 +646,43 @@ async fn load_supplier_refund_org_id(db: &Database, supplier_id: &SupplierAccoun
         .await?
         .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
     supplier_refund_responsible_org_id(supplier.party_id.as_ref())
+}
+
+/// 按原顺序重验原付款权限、版本及既有命令结果的退款权限。
+async fn replay_supplier_commit(
+    db: &Database,
+    rbac: &SharedRbacService,
+    actor: &AuditActor,
+    source: (&SupplierPaymentId, u64),
+    receipt: &CommandReceipt,
+    executor: &mut dyn Executor,
+) -> Result<Option<String>> {
+    ensure_return_start_replay_authorized(
+        db,
+        rbac,
+        actor,
+        DocumentType::SupplierPayment,
+        "supplier_refund:submit",
+        source.0.as_ref(),
+        executor,
+    )
+    .await?;
+    validate_supplier_refund_source(db, source.0, source.1, executor).await?;
+    let result =
+        ReturnsCommandReceiptService::new(db.clone()).committed_resource_id(receipt, executor).await?;
+    if let Some(existing_id) = &result {
+        ensure_return_start_replay_authorized(
+            db,
+            rbac,
+            actor,
+            DocumentType::SupplierRefund,
+            "supplier_refund:submit",
+            existing_id,
+            executor,
+        )
+        .await?;
+    }
+    Ok(result)
 }
 
 /// 在创建退款的同一事务中重读并校验原供应商付款事实。
@@ -723,7 +761,7 @@ pub(super) async fn apply_supplier_refund_final_post(
     ReturnsService::new(db.clone()).persist_supplier_refund_post(&mut refund, executor).await?;
     let audit =
         actor.clone().resource_log("supplier_refund.post", "supplier_refund", refund.base.id.clone())?;
-    db.audit_logs().create(&audit, executor).await?;
+    persist_log(db, &audit, executor).await?;
     Ok(())
 }
 

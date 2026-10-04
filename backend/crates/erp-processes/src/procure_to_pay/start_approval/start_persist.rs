@@ -7,14 +7,14 @@ use async_trait::async_trait;
 use bpm::engine::TaskIntent;
 use bpm::ids::ApprovalProcessInstanceId;
 use bpm::model::ApprovalNodeExecution;
-use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{ApprovalSubjectSnapshotId, WorkItemId};
 use erp_procurement::dto::purchase_order::SavePurchaseOrderLine;
 use erp_procurement::entity::purchase_order::{
-    PurchaseCommandReceipt, PurchaseOrder, PurchaseOrderSubmission, PurchaseOrderSubmissionLine,
-    validate_draft_line_edits,
+    PurchaseCommandReceipt, PurchaseCommandReceiptIdentity, PurchaseOrder, PurchaseOrderSubmission,
+    PurchaseOrderSubmissionLine, PurchaseSubmitReceipt, validate_draft_line_edits,
 };
+use erp_procurement::repository::PurchaseCommandExt;
 use erp_workflow::entity::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
 use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
 use erp_workflow::entity::work_item::{DocumentApprovalWorkItemData, WorkItem, WorkItemPriority};
@@ -27,6 +27,7 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use crate::adapters::freeze_approval_materials;
+use crate::audit::persist_log;
 use crate::{Error, Result};
 
 /// 采购单提交事务内需要一并写入的冻结提交。
@@ -68,10 +69,10 @@ pub(crate) struct PurchaseOrderStartPersistInput {
     pub organization_id: String,
     /// 调用方时间。
     pub now: Instant,
-    /// 已构造审计（结果消息留空，事务内任务写入后回填）。
+    /// 已构造独立审计事件。
     pub audit: erp_audit::AuditLog,
-    /// 采购提交收据：请求指纹与结果载荷；任务身份在事务内回填后编码进审计消息。
-    pub receipt: Option<(String, super::super::submission::PurchaseSubmitReceipt)>,
+    /// 采购提交独立回执：身份、请求指纹与结果；首个任务写入后同事务持久化。
+    pub receipt: Option<(PurchaseCommandReceiptIdentity, String, PurchaseSubmitReceipt)>,
     /// 提交写事务内重验的对象范围；创建并提交路径已在同一事务检查建单范围。
     pub object_scope: Option<super::super::authorization::PurchaseCommandAccess>,
 }
@@ -130,6 +131,7 @@ pub(super) enum StartStep {
     Submission,
     SupersededDraft,
     Runtime,
+    CommandReceipt,
     Audit,
 }
 
@@ -153,6 +155,7 @@ pub(super) async fn execute_start_steps(
         Submission,
         SupersededDraft,
         Runtime,
+        CommandReceipt,
         Audit,
     ] {
         steps.apply(step, executor).await?;
@@ -259,17 +262,34 @@ impl StartSteps for StartPosting<'_> {
                 )
                 .await?;
             },
+            StartStep::CommandReceipt => {
+                persist_submit_command_receipt(self.db, input, self.first_task.as_ref(), executor).await?;
+            },
             StartStep::Audit => {
-                if let Some((fingerprint, receipt)) = input.receipt.take() {
-                    let receipt = receipt.with_first_task(self.first_task.as_ref());
-                    input.audit.message =
-                        Some(PurchaseCommandReceipt::new(fingerprint, receipt).encode_message()?);
-                }
-                self.db.audit_logs().create(&input.audit, executor).await?;
+                persist_log(self.db, &input.audit, executor).await?;
             },
         }
         Ok(())
     }
+}
+
+/// 首个任务形成后保存原采购提交结果，复用正式提交的执行器。
+async fn persist_submit_command_receipt(
+    db: &Database,
+    input: &mut PurchaseOrderStartPersistInput,
+    first_task: Option<&(String, u64)>,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    if let Some((identity, fingerprint, receipt)) = input.receipt.take() {
+        let record = PurchaseCommandReceipt::new(
+            &identity,
+            &fingerprint,
+            receipt.with_first_task(first_task),
+            input.audit.base.id.clone(),
+        )?;
+        db.purchase_command_receipts::<PurchaseSubmitReceipt>().create(&record, executor).await?;
+    }
+    Ok(())
 }
 
 /// 将启动计划写入 BPM 集合、不可变快照和入口 WorkItem。

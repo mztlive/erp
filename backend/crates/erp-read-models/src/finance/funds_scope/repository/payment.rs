@@ -1,6 +1,5 @@
 //! 付款按采购或供应商结算真实来源完成授权后执行数据库分页。
 
-use erp_audit::AuditExt;
 use erp_finance::dto::payable::SupplierPaymentListQuery;
 use erp_finance::repository::{
     FinancialSummaryLink, FundsSummaryRepository, PayableExt, SupplierPaymentFilter, SupplierPaymentRow,
@@ -220,17 +219,15 @@ fn source_id(kind: &str) -> Bson {
     doc! { "$cond": [{ "$eq": ["$scope_source_type", kind] }, "$scope_source_id", Bson::Null] }.into()
 }
 
-/// 付款经办人只采用当前成功创建或提交审计，不把采购负责人混作经办人。
+/// 付款经办人来自已提交的不可变过账执行事实，不使用创建人或采购负责人替代。
 fn operator_stages(condition: &FundsLinkedCondition) -> Vec<Document> {
     let Some(operators) = &condition.operator_user_ids else {
         return Vec::new();
     };
-    let filter = doc! { "resource_type": "supplier_payment", "success": true,
-    "action": { "$in": ["supplier_payment.create", "supplier_payment.commit"] }, "actor_id": { "$in": operators } };
-    vec![
-        lookup(Database::AUDIT_LOGS, "id", "resource_id", "scope_operators", filter, doc! { "id": 1 }),
-        doc! { "$match": { "scope_operators.0": { "$exists": true } } },
-    ]
+    vec![doc! { "$match": {
+        "posted_by": { "$in": operators }, "posted_at": { "$exists": true, "$ne": Bson::Null },
+        "status": { "$in": ["posted", "reversed"] }
+    } }]
 }
 
 /// 页内付款行仅装载正式裁剪所需主表字段。
@@ -286,27 +283,21 @@ mod tests {
         assert!(matches!(full_read_version("scope", vec![row(3, 4), row(3, 4)]), Err(Error::Internal(_))));
     }
 
-    /// 经办审计先收窄父单，成功创建和提交资格均保留，再读取核销真实来源。
+    /// 过账执行事实先收窄父单，再读取核销真实来源，不改变未筛选集合。
     #[test]
     fn payment_operator_filter_precedes_allocation_sources() {
         let condition =
             FundsLinkedCondition { operator_user_ids: Some(vec!["operator".into()]), ..Default::default() };
         let stages = pipeline(&SupplierPaymentFilter::default(), &authorization(), &condition);
-        let lookup = stages[1].get_document("$lookup").unwrap();
-        assert_eq!(lookup.get_str("from").unwrap(), Database::AUDIT_LOGS);
-        let filter = lookup.get_array("pipeline").unwrap()[0].as_document().unwrap();
-        let conjunction = filter.get_document("$match").unwrap().get_array("$and").unwrap();
         assert_eq!(
-            conjunction[1].as_document().unwrap(),
-            &doc! {
-                "resource_type": "supplier_payment", "success": true,
-                "action": { "$in": ["supplier_payment.create", "supplier_payment.commit"] },
-                "actor_id": { "$in": ["operator"] },
-            }
+            stages[1],
+            doc! { "$match": {
+                "posted_by": { "$in": ["operator"] }, "posted_at": { "$exists": true, "$ne": Bson::Null },
+                "status": { "$in": ["posted", "reversed"] }
+            } }
         );
-        assert_eq!(stages[2], doc! { "$match": { "scope_operators.0": { "$exists": true } } });
         assert_eq!(
-            stages[3].get_document("$lookup").unwrap().get_str("from").unwrap(),
+            stages[2].get_document("$lookup").unwrap().get_str("from").unwrap(),
             Database::PAYMENT_ALLOCATIONS
         );
         let unrestricted =

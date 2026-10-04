@@ -1,6 +1,5 @@
 //! 回款的最终来源授权、经办筛选及数据库分页查询。
 
-use erp_audit::AuditExt;
 use erp_finance::dto::receivable::{CustomerReceiptListQuery, ReceiptOperatorKind, SortDir};
 use erp_finance::repository::{
     CustomerReceiptFilter, CustomerReceiptRow, FundsSummaryRepository, ReceivableExt,
@@ -168,31 +167,28 @@ fn pending_lookup(query: &CustomerReceiptListQuery) -> Document {
     "pipeline": stages, "as": "scope_pending" } }
 }
 
-/// 经办人沿用成功审计和提交快照，避免把创建人当作核销经办人。
+/// 登记人直接来自不可变领域创建人，核销人仍来自已提交审批快照。
 fn operator_stages(query: &CustomerReceiptListQuery, condition: &FundsLinkedCondition) -> Vec<Document> {
     let Some(operators) = &condition.operator_user_ids else {
         return Vec::new();
     };
-    let (collection, reference, mut filter) = match query.operator_kind {
-        Some(ReceiptOperatorKind::Register) => (
-            Database::AUDIT_LOGS,
-            "resource_id",
-            doc! {
-                "resource_type": "customer_receipt", "action": "customer_receipt.create", "success": true, "actor_id": { "$in": operators }
-            },
-        ),
-        Some(ReceiptOperatorKind::Settle) => (
-            Database::APPROVAL_SUBJECT_SNAPSHOTS,
-            "business_object_id",
-            doc! {
-                "document_type": "customer_receipt", "payload.submitted_by": { "$in": operators }
-            },
-        ),
+    match query.operator_kind {
+        Some(ReceiptOperatorKind::Register) => {
+            return vec![doc! { "$match": { "created_by": { "$in": operators } } }];
+        },
+        Some(ReceiptOperatorKind::Settle) => {},
         None => return vec![doc! { "$match": { "$expr": false } }],
-    };
-    filter.insert("deleted_at", 0_i64);
+    }
+    let filter = doc! { "document_type": "customer_receipt", "payload.submitted_by": { "$in": operators }, "deleted_at": 0_i64 };
     vec![
-        lookup(collection, "id", reference, "scope_operators", filter, doc! { "id": 1 }),
+        lookup(
+            Database::APPROVAL_SUBJECT_SNAPSHOTS,
+            "id",
+            "business_object_id",
+            "scope_operators",
+            filter,
+            doc! { "id": 1 },
+        ),
         doc! { "$match": { "scope_operators.0": { "$exists": true } } },
     ]
 }
@@ -215,41 +211,34 @@ mod tests {
     use super::super::tests::authorization;
     use super::*;
 
-    /// 登记使用成功创建审计，核销使用提交快照，两类经办身份不互相替代。
+    /// 登记使用领域创建人，核销使用提交快照，两类经办身份不互相替代。
     #[test]
     fn receipt_operator_filters_keep_registration_and_settlement_facts_distinct() {
         let mut query = CustomerReceiptListParams::default().normalized().unwrap();
         let condition =
             FundsLinkedCondition { operator_user_ids: Some(vec!["operator".into()]), ..Default::default() };
-        for (kind, collection, reference, expected) in [
-            (
-                ReceiptOperatorKind::Register,
-                Database::AUDIT_LOGS,
-                "resource_id",
-                doc! { "resource_type": "customer_receipt", "action": "customer_receipt.create",
-                "success": true, "actor_id": { "$in": ["operator"] }, "deleted_at": 0_i64 },
-            ),
-            (
-                ReceiptOperatorKind::Settle,
-                Database::APPROVAL_SUBJECT_SNAPSHOTS,
-                "business_object_id",
-                doc! { "document_type": "customer_receipt", "payload.submitted_by": { "$in": ["operator"] },
-                "deleted_at": 0_i64 },
-            ),
-        ] {
-            query.operator_kind = Some(kind);
-            let stages = operator_stages(&query, &condition);
-            let lookup = stages[0].get_document("$lookup").unwrap();
-            assert_eq!(lookup.get_str("from").unwrap(), collection);
-            let filter = lookup.get_array("pipeline").unwrap()[0].as_document().unwrap();
-            let conjunction = filter.get_document("$match").unwrap().get_array("$and").unwrap();
-            assert_eq!(conjunction[1].as_document().unwrap(), &expected);
-            assert_eq!(
-                conjunction[0].as_document().unwrap().get_document("$expr").unwrap(),
-                &doc! { "$eq": [format!("${reference}"), "$$linked"] },
-            );
-            assert_eq!(stages[1], doc! { "$match": { "scope_operators.0": { "$exists": true } } });
-        }
+        query.operator_kind = Some(ReceiptOperatorKind::Register);
+        assert_eq!(
+            operator_stages(&query, &condition),
+            [doc! { "$match": { "created_by": { "$in": ["operator"] } } }]
+        );
+        query.operator_kind = Some(ReceiptOperatorKind::Settle);
+        let stages = operator_stages(&query, &condition);
+        let lookup = stages[0].get_document("$lookup").unwrap();
+        assert_eq!(lookup.get_str("from").unwrap(), Database::APPROVAL_SUBJECT_SNAPSHOTS);
+        let filter = lookup.get_array("pipeline").unwrap()[0].as_document().unwrap();
+        let conjunction = filter.get_document("$match").unwrap().get_array("$and").unwrap();
+        assert_eq!(
+            conjunction[1].as_document().unwrap(),
+            &doc! {
+                "document_type": "customer_receipt", "payload.submitted_by": { "$in": ["operator"] }, "deleted_at": 0_i64
+            }
+        );
+        assert_eq!(
+            conjunction[0].as_document().unwrap().get_document("$expr").unwrap(),
+            &doc! { "$eq": ["$business_object_id", "$$linked"] }
+        );
+        assert_eq!(stages[1], doc! { "$match": { "scope_operators.0": { "$exists": true } } });
     }
 
     /// 未提供经办条件不加限制，提供经办条件但无动作类型时保持失败关闭。
@@ -271,9 +260,9 @@ mod tests {
             query.operator_kind = Some(kind);
             let stages =
                 pipeline(&query, &CustomerReceiptFilter::default(), &authorization(), &condition, false);
-            assert_eq!(stages[2], doc! { "$match": { "scope_operators.0": { "$exists": true } } });
+            let source_index = if kind == ReceiptOperatorKind::Register { 2 } else { 3 };
             assert_eq!(
-                stages[3].get_document("$lookup").unwrap().get_str("from").unwrap(),
+                stages[source_index].get_document("$lookup").unwrap().get_str("from").unwrap(),
                 Database::RECEIPT_ALLOCATIONS
             );
         }

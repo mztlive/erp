@@ -1,7 +1,7 @@
 //! 销售变更创建、启动、作废及撤回的跨域根流程。
 
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
 use erp_core::ids::BusinessDocumentId;
 use erp_identity::SharedRbacService;
@@ -42,6 +42,7 @@ use super::start_approval::{
     load_bound_definition_graph, load_start_receipt, persist_sales_change_start,
     replay_sales_change_start_with_executor,
 };
+use crate::audit::persist_log;
 use crate::{Error, Result};
 
 impl SalesChangeProcess {
@@ -198,7 +199,7 @@ impl SalesChangeProcess {
                         .await
                         .map_err(crate::Error::from)?;
                     sales_write.persist(&db, executor).await?;
-                    db.audit_logs().create(&audit, executor).await?;
+                    persist_log(&db, &audit, executor).await?;
                     Ok::<(), crate::Error>(())
                 })
             })
@@ -515,7 +516,7 @@ async fn persist_created_change_order(
                 )
                 .await?;
                 sales_write.persist(&db, executor).await?;
-                db.audit_logs().create(&audit, executor).await?;
+                persist_log(&db, &audit, executor).await?;
                 Ok::<(), crate::Error>(())
             })
         })

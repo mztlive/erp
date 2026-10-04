@@ -16,6 +16,10 @@ use uuid::Uuid;
 
 pub(crate) const TRACE_ID_HEADER: &str = "X-Trace-Id";
 
+/// 当前 HTTP 请求已确定的安全追踪号，与请求头和响应头使用同一值。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RequestId(pub(crate) String);
+
 /// 记录请求追踪信息并继续处理。
 ///
 /// # 参数
@@ -29,10 +33,7 @@ pub(crate) const TRACE_ID_HEADER: &str = "X-Trace-Id";
 /// 当验证失败或底层操作失败时返回错误。
 pub(crate) async fn trace_middleware(mut request: Request, next: Next) -> Result<Response, StatusCode> {
     let parent_context = extract_remote_context(request.headers());
-    let trace_id = extract_or_generate_trace_id(request.headers());
-
-    let trace_value: HeaderValue = trace_id.parse().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    request.headers_mut().insert(TRACE_ID_HEADER, trace_value.clone());
+    let (trace_id, trace_value) = prepare_trace(&mut request)?;
 
     let method = request.method().clone();
     let uri = request.uri().clone();
@@ -94,6 +95,22 @@ pub(crate) async fn trace_middleware(mut request: Request, next: Next) -> Result
     Ok(response)
 }
 
+/// 冻结当前 HTTP 追踪号，并按原顺序写入请求头和审计请求扩展。
+///
+/// # 参数
+/// * `request` - 已提取远程父上下文的原请求。
+/// # 返回
+/// 返回同一追踪号及供响应头复用的值。
+/// # 错误
+/// 无法构造安全 HTTP 头时沿原路径返回内部错误。
+fn prepare_trace(request: &mut Request) -> Result<(String, HeaderValue), StatusCode> {
+    let trace_id = extract_or_generate_trace_id(request.headers());
+    let trace_value: HeaderValue = trace_id.parse().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    request.headers_mut().insert(TRACE_ID_HEADER, trace_value.clone());
+    request.extensions_mut().insert(RequestId(trace_id.clone()));
+    Ok((trace_id, trace_value))
+}
+
 /// 从标准 W3C `traceparent`/`tracestate` 请求头提取远程父上下文。
 ///
 /// 无有效传播头时返回空上下文，由当前进程创建新的根 trace。
@@ -117,6 +134,12 @@ fn extract_or_generate_trace_id(headers: &HeaderMap) -> String {
     headers
         .get(TRACE_ID_HEADER)
         .and_then(|v| v.to_str().ok())
+        .filter(|value| {
+            !value.is_empty()
+                && *value == value.trim()
+                && value.chars().count() <= 128
+                && !value.chars().any(char::is_control)
+        })
         .map(|s| s.to_string())
         .unwrap_or_else(|| Uuid::new_v4().to_string())
 }
@@ -139,6 +162,7 @@ impl Extractor for HeaderExtractor<'_> {
 #[cfg(test)]
 mod tests {
     use axum::body::Body;
+    use axum::extract::Request as ExtractRequest;
     use axum::http::{HeaderMap, HeaderValue, Request};
     use axum::routing::get;
     use axum::{Router, middleware};
@@ -147,7 +171,7 @@ mod tests {
     use uuid::Uuid;
 
     use super::{
-        TRACE_ID_HEADER, extract_or_generate_trace_id, extract_remote_context, http_span_name,
+        RequestId, TRACE_ID_HEADER, extract_or_generate_trace_id, extract_remote_context, http_span_name,
         trace_middleware,
     };
 
@@ -175,6 +199,18 @@ mod tests {
         let trace_id = extract_or_generate_trace_id(&headers);
 
         assert!(Uuid::parse_str(&trace_id).is_ok());
+    }
+
+    /// 无效的客户端追踪值走原 UUID 生成路径，防止审计入口读取不安全关联。
+    #[test]
+    fn trace_id_generates_uuid_when_header_is_empty_unbounded_or_not_normalized() {
+        for invalid in
+            [String::new(), "  ".into(), " client-id ".into(), "trace\tforged".into(), "r".repeat(129)]
+        {
+            let mut headers = HeaderMap::new();
+            headers.insert(TRACE_ID_HEADER, HeaderValue::from_str(&invalid).unwrap());
+            assert!(Uuid::parse_str(&extract_or_generate_trace_id(&headers)).is_ok());
+        }
     }
 
     #[test]
@@ -212,8 +248,16 @@ mod tests {
 
     #[tokio::test]
     async fn trace_id_is_returned_in_response_header() {
-        let app =
-            Router::new().route("/", get(|| async { "ok" })).layer(middleware::from_fn(trace_middleware));
+        let app = Router::new()
+            .route(
+                "/",
+                get(|request: ExtractRequest| async move {
+                    let request_id = request.extensions().get::<RequestId>().unwrap();
+                    assert_eq!(request.headers().get(TRACE_ID_HEADER).unwrap(), request_id.0.as_str());
+                    "ok"
+                }),
+            )
+            .layer(middleware::from_fn(trace_middleware));
         let request = Request::builder()
             .uri("/")
             .header(TRACE_ID_HEADER, "client-trace-id")

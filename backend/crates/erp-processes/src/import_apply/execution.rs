@@ -1,44 +1,40 @@
 use std::collections::BTreeSet;
 
-use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt, AuditLog};
+use application_core::{AuditActor, StructuredCommandReceipt};
+use erp_audit::BusinessEventContext;
 use erp_core::common::time::Instant;
+use erp_import::entity::command_receipt::{
+    ImportCommandReceipt, ImportCommandResult, ImportExecutionReceipt,
+};
+use erp_import::repository::ImportCommandReceiptExt;
 use erp_import::repository::prelude::*;
 use erp_import::{
     ImportExecutionAction, ImportExecutionCommand, ImportExecutionNextStep, ImportExecutionResult,
     ImportExecutionResultStatus, ImportStatus, LegacyImportBatch, LegacyImportBatchStatus,
     LegacyImportCommandIdentity, LegacyImportConfirmation, LegacyImportExt, LegacyImportRow,
-    PreparedImportExecution, parse_receipt_number,
+    PreparedImportExecution,
 };
 use erp_support::repository::prelude::*;
 use erp_support::{BackgroundJob, BulkJobExt, JobStatus};
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
-use super::{COMMAND_FINGERPRINT_PREFIX, IMPORT_EXECUTION_AUDIT_PREFIX, ImportApplyService};
+use super::command_event::{import_event_content, import_event_context};
+use super::{IMPORT_EXECUTION_COMMAND_PREFIX, ImportApplyService};
+use crate::audit::{AuditedCommand, AuditedWrite, MongoAuditEventSink, execute_audited};
 use crate::{Error, Result};
 
 impl ImportApplyService {
-    /// 执行 W18 导入应用阶段强命令。
-    ///
-    /// `START_APPLY` 是唯一能将批次推进到 `Importing` 并启动后台
-    /// 任务的命令；`CANCEL_PENDING` 只停止未应用项；`RETRY_FAILED`
-    /// 只重新准备失败行，仍需后续显式提交应用。批次、行、后台任务、
-    /// 审计与幂等收据在同一事务提交。
-    ///
+    /// 执行 W18 应用阶段命令，行、批次、后台任务、独立回执及事件原子提交。
     /// # 参数
-    /// * `batch_id` - HTTP 路径中的导入批次 ID
-    /// * `command` - 带批次/试算版本和请求幂等身份的强命令
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
+    /// * `batch_id` - 路径导入批次身份。
+    /// * `command` - 完整版本化执行命令。
+    /// * `actor` - 当前认证操作人。
     /// # 返回
-    /// 返回已提交的批次/后台任务状态、影响项数、下一步与审计收据。
-    ///
+    /// 返回命令原提交结果；后台进度可以继续推进。
     /// # 错误
-    /// * `ValidationError` - 命令形状、版本或动作必填原因非法
-    /// * `ConflictError` - 批次/试算版本过期，或同一请求身份被不同载荷复用
-    /// * `BusinessLogicError` - 批次、行或后台任务状态不允许动作
+    /// 命令、版本、状态或同键载荷冲突时拒绝执行。
     pub async fn execute_import_command(
         &self,
         batch_id: &str,
@@ -48,97 +44,137 @@ impl ImportApplyService {
         command.validate()?;
         let prepared = PreparedImportExecution::try_from(command)?;
         if prepared.batch_id.as_ref() != batch_id {
-            return Err(Error::ValidationError("路径批次与执行命令批次不一致".to_string()));
+            return Err(Error::ValidationError("路径批次与执行命令批次不一致".into()));
         }
-        let action_name = "legacy_import_batch.execute";
-        let identity = import_execution_command_identity(actor.id(), action_name, &prepared);
-        let fingerprint = identity.fingerprint().to_string();
-        let audit_id = identity.audit_id().to_string();
-        if let Some(result) = self.replay_import_execution(&audit_id, &fingerprint, &prepared).await? {
+        let identity =
+            import_execution_command_identity(actor.id(), "legacy_import_batch.execute", &prepared)
+                .structured_receipt("legacy_import_batch")?;
+        if let Some(result) = self.replay_import_execution(&identity, &prepared).await? {
             return Ok(result);
         }
-
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let prepared_for_tx = prepared.clone();
-        let audit_actor = actor.clone();
-        let audit_id_for_tx = audit_id.clone();
-        let fingerprint_for_tx = fingerprint.clone();
-        let transaction_result = client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    execute_import_command_transaction(
-                        &db,
-                        &prepared_for_tx,
-                        &audit_actor,
-                        &audit_id_for_tx,
-                        &fingerprint_for_tx,
-                        action_name,
-                        executor,
-                    )
-                    .await
-                })
-            })
-            .await;
-        let result = match transaction_result {
-            Ok(result) => result,
-            Err(error) => match self.replay_import_execution(&audit_id, &fingerprint, &prepared).await? {
-                Some(result) => return Ok(result),
-                None => return Err(error),
+        let context = import_event_context(
+            actor,
+            "legacy_import_batch.execute",
+            "legacy_import_batch",
+            "执行导入应用命令",
+            &identity,
+        )?;
+        match self.commit_import_execution(&identity, &prepared, &context).await {
+            Ok(result) => Ok(result),
+            Err(error) => {
+                crate::audit::recover_command(error, self.replay_import_execution(&identity, &prepared).await)
             },
-        };
-
-        Ok(import_execution_result(result, audit_id))
+        }
     }
 
-    /// 按稳定审计收据重放已提交的导入执行命令。
+    /// 同一只读事务核对领域回执、批次和后台任务身份。
     async fn replay_import_execution(
         &self,
-        audit_id: &str,
-        expected_fingerprint: &str,
+        identity: &StructuredCommandReceipt,
         prepared: &PreparedImportExecution,
     ) -> Result<Option<ImportExecutionResult>> {
-        let Some(audit) = self.db.audit_logs().find_by_id(audit_id, &mut NoTransaction).await? else {
-            return Ok(None);
-        };
-        let receipt = parse_import_execution_receipt(
-            audit
-                .message
-                .as_deref()
-                .ok_or_else(|| Error::Internal("导入执行幂等收据缺少结果".to_string()))?,
-            expected_fingerprint,
-        )?;
-        let batch = self
-            .db
-            .legacy_import_batches()
-            .find_by_id(prepared.batch_id.as_ref(), &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::Internal("导入执行收据对应批次缺失".to_string()))?;
-        let job = self
-            .db
-            .background_jobs()
-            .find_by_request_id(&batch.batch_no, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::Internal("导入执行收据对应后台任务缺失".to_string()))?;
-        validate_import_execution_replay(&audit, &batch, &job, &receipt, prepared.action)?;
-        Ok(Some(import_execution_result(
-            ImportExecutionTransactionResult { batch, job, receipt },
-            audit_id.to_string(),
-        )))
+        let db = self.db.clone();
+        let identity = identity.clone();
+        let prepared = prepared.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { replay_execution_step(&db, &identity, &prepared, executor).await })
+            })
+            .await
+    }
+
+    /// 在原事务内执行类型化边界，不启动外部任务或改变后台生命周期。
+    async fn commit_import_execution(
+        &self,
+        identity: &StructuredCommandReceipt,
+        prepared: &PreparedImportExecution,
+        context: &BusinessEventContext,
+    ) -> Result<ImportExecutionResult> {
+        let db = self.db.clone();
+        let identity = identity.clone();
+        let prepared = prepared.clone();
+        let context = context.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let command = ImportExecutionWrite {
+                        db: &db,
+                        identity: &identity,
+                        prepared: &prepared,
+                        event_id: context.event_id(),
+                    };
+                    execute_audited(&context, &MongoAuditEventSink::new(&db), executor, &command).await
+                })
+            })
+            .await
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct ImportExecutionReceipt {
-    action: ImportExecutionAction,
-    result_status: ImportExecutionResultStatus,
-    batch_version: u64,
-    batch_status: LegacyImportBatchStatus,
-    trial_version: Option<u32>,
-    job_version: u64,
-    job_status: JobStatus,
-    affected_items: u64,
-    next_step: ImportExecutionNextStep,
+/// 当前应用动作的实际业务执行边界。
+struct ImportExecutionWrite<'a> {
+    db: &'a Database,
+    identity: &'a StructuredCommandReceipt,
+    prepared: &'a PreparedImportExecution,
+    event_id: &'a str,
+}
+
+#[async_trait::async_trait]
+impl AuditedCommand for ImportExecutionWrite<'_> {
+    type Output = ImportExecutionResult;
+
+    async fn execute(&self, executor: &mut dyn Executor) -> Result<AuditedWrite<Self::Output>> {
+        if let Some(result) = replay_execution_step(self.db, self.identity, self.prepared, executor).await? {
+            return Ok(AuditedWrite::Replayed(result));
+        }
+        let result = execute_import_command_transaction(self.db, self.prepared, executor).await?;
+        let fact = ImportCommandReceipt::new(
+            self.identity.clone(),
+            ImportCommandResult::Execution {
+                batch_id: result.batch.base.id.clone(),
+                background_job_id: result.job.base.id.clone(),
+                receipt: result.receipt,
+            },
+            self.event_id.to_string(),
+        )?;
+        self.db.import_command_receipts().create(&fact, executor).await?;
+        Ok(AuditedWrite::Fresh {
+            content: import_event_content(result.batch.base.id.clone()),
+            result: import_execution_result(result, self.event_id.to_string()),
+        })
+    }
+}
+
+/// 只读恢复命令原结果；版本进展不能被误判为收据损坏。
+async fn replay_execution_step(
+    db: &Database,
+    identity: &StructuredCommandReceipt,
+    prepared: &PreparedImportExecution,
+    executor: &mut dyn Executor,
+) -> Result<Option<ImportExecutionResult>> {
+    let Some(fact) = db.import_command_receipts().find_by_id(&identity.command_id, executor).await? else {
+        return Ok(None);
+    };
+    fact.ensure_identity(identity)?;
+    let ImportCommandResult::Execution { receipt, .. } = &fact.result else {
+        return Err(Error::ConflictError("导入执行回执结果类型不一致".into()));
+    };
+    let batch = db
+        .legacy_import_batches()
+        .find_by_id(prepared.batch_id.as_ref(), executor)
+        .await?
+        .ok_or_else(|| Error::Internal("导入执行回执对应批次缺失".into()))?;
+    let job = db
+        .background_jobs()
+        .find_by_request_id(&batch.batch_no, executor)
+        .await?
+        .ok_or_else(|| Error::Internal("导入执行回执对应后台任务缺失".into()))?;
+    validate_import_execution_replay(&fact, &batch, &job, receipt, prepared)?;
+    Ok(Some(import_execution_result(
+        ImportExecutionTransactionResult { batch, job, receipt: *receipt },
+        fact.audit_event_id,
+    )))
 }
 
 struct ImportExecutionTransactionResult {
@@ -157,10 +193,6 @@ struct ImportExecutionActionOutcome {
 async fn execute_import_command_transaction(
     db: &Database,
     prepared: &PreparedImportExecution,
-    audit_actor: &AuditActor,
-    audit_id: &str,
-    fingerprint: &str,
-    action_name: &str,
     executor: &mut dyn Executor,
 ) -> Result<ImportExecutionTransactionResult> {
     let mut batch = db
@@ -197,18 +229,10 @@ async fn execute_import_command_transaction(
         batch_status: batch.status,
         trial_version,
         job_version: job.base.version,
-        job_status: job.status,
+        job_status: import_job_status(job.status),
         affected_items: outcome.affected_items,
         next_step: outcome.next_step,
     };
-    let audit = audit_actor.clone().resource_log_with_id(
-        audit_id.to_string(),
-        action_name,
-        "legacy_import_batch",
-        batch.base.id.clone(),
-        Some(import_execution_receipt_message(fingerprint, receipt)),
-    )?;
-    db.audit_logs().create(&audit, executor).await?;
     Ok(ImportExecutionTransactionResult { batch, job, receipt })
 }
 
@@ -395,7 +419,7 @@ fn import_execution_result(
         batch_version: result.receipt.batch_version.to_string(),
         trial_version: result.receipt.trial_version.map(|value| value.to_string()),
         background_job_id: result.job.base.id,
-        background_job_status: import_job_status(result.receipt.job_status),
+        background_job_status: result.receipt.job_status,
         background_job_version: result.receipt.job_version.to_string(),
         affected_items: result.receipt.affected_items,
         next_step: result.receipt.next_step,
@@ -407,11 +431,11 @@ fn import_execution_result(
 ///
 /// # 参数
 /// * `actor_id` - 当前操作人
-/// * `action` - 稳定审计动作
+/// * `action` - 稳定命令动作
 /// * `command` - 已解析并规范化的执行命令
 ///
 /// # 返回
-/// 返回不暴露原始请求 ID 的审计 ID 与完整命令指纹。
+/// 返回不暴露原始请求 ID 的命令 ID 与完整命令指纹。
 fn import_execution_command_identity(
     actor_id: &str,
     action: &str,
@@ -420,7 +444,7 @@ fn import_execution_command_identity(
     let batch_version = command.expected_batch_version.to_string();
     let trial_version = command.expected_trial_version.map(|value| value.to_string()).unwrap_or_default();
     LegacyImportCommandIdentity::new(
-        IMPORT_EXECUTION_AUDIT_PREFIX,
+        IMPORT_EXECUTION_COMMAND_PREFIX,
         actor_id,
         action,
         command.batch_id.as_ref(),
@@ -436,127 +460,32 @@ fn import_execution_command_identity(
     )
 }
 
-/// 将导入执行最小结果收据编码到审计消息。
-fn import_execution_receipt_message(fingerprint: &str, receipt: ImportExecutionReceipt) -> String {
-    let result = match receipt.result_status {
-        ImportExecutionResultStatus::Started => "S",
-        ImportExecutionResultStatus::Cancelled => "C",
-        ImportExecutionResultStatus::RetryPrepared => "R",
-        ImportExecutionResultStatus::Unknown => "U",
-    };
-    let next = match receipt.next_step {
-        ImportExecutionNextStep::MonitorProgress => "M",
-        ImportExecutionNextStep::ReviewResult => "V",
-        ImportExecutionNextStep::StartApply => "A",
-    };
-    let trial = receipt.trial_version.map(|value| value.to_string()).unwrap_or_else(|| "-".to_string());
-    format!(
-        "{COMMAND_FINGERPRINT_PREFIX}{fingerprint};execution={}|{result}|{}|{}|{trial}|{}|{}|{}|{next}",
-        receipt.action.as_str(),
-        receipt.batch_version,
-        receipt.batch_status.as_str(),
-        receipt.job_version,
-        receipt.job_status.as_str(),
-        receipt.affected_items,
-    )
-}
-
-/// 解析并核对导入执行审计收据。
-fn parse_import_execution_receipt(
-    message: &str,
-    expected_fingerprint: &str,
-) -> Result<ImportExecutionReceipt> {
-    let (fingerprint, encoded) = message
-        .strip_prefix(COMMAND_FINGERPRINT_PREFIX)
-        .and_then(|value| value.split_once(";execution="))
-        .ok_or_else(|| Error::Internal("导入执行幂等收据格式非法".to_string()))?;
-    if fingerprint != expected_fingerprint {
-        return Err(Error::ConflictError("请求身份已用于不同的导入执行命令".to_string()));
-    }
-    let fields = encoded.split('|').collect::<Vec<_>>();
-    let [action, result, batch_version, batch_status, trial, job_version, job_status, affected, next] =
-        fields.as_slice()
-    else {
-        return Err(Error::Internal("导入执行幂等收据结果非法".to_string()));
-    };
-    Ok(ImportExecutionReceipt {
-        action: parse_import_execution_action(action)?,
-        result_status: parse_import_execution_result_status(result)?,
-        batch_version: parse_receipt_number(batch_version, "批次版本")?,
-        batch_status: parse_import_batch_status(batch_status)?,
-        trial_version: if *trial == "-" { None } else { Some(parse_receipt_number(trial, "试算版本")?) },
-        job_version: parse_receipt_number(job_version, "后台任务版本")?,
-        job_status: parse_background_job_status(job_status)?,
-        affected_items: parse_receipt_number(affected, "影响项数")?,
-        next_step: parse_import_execution_next_step(next)?,
-    })
-}
-
 /// 核对幂等收据与当前批次/后台任务的稳定身份关联。
 ///
 /// 当前版本与状态可能已被后台进度继续推进，重放必须返回收据记录的
 /// 原始结果，不能要求当前快照仍停留在命令提交时刻。
 fn validate_import_execution_replay(
-    audit: &AuditLog,
+    fact: &ImportCommandReceipt,
     batch: &LegacyImportBatch,
     job: &BackgroundJob,
     receipt: &ImportExecutionReceipt,
-    expected_action: ImportExecutionAction,
+    prepared: &PreparedImportExecution,
 ) -> Result<()> {
-    let exact = audit.resource_id.as_deref() == Some(batch.base.id.as_str())
-        && receipt.action == expected_action
-        && job.domain_job_id.as_deref() == Some(batch.base.id.as_str())
-        && job.request_id == batch.batch_no;
-    if exact {
-        return Ok(());
+    let ImportCommandResult::Execution { batch_id, background_job_id, .. } = &fact.result else {
+        return Err(Error::ConflictError("导入执行回执结果类型不一致".into()));
+    };
+    validate_import_background_job(batch, job)?;
+    if batch_id != &batch.base.id
+        || background_job_id != &job.base.id
+        || receipt.action != prepared.action
+        || Some(receipt.batch_version) != prepared.expected_batch_version.checked_add(1)
+        || receipt.trial_version != prepared.expected_trial_version
+        || batch.base.version < receipt.batch_version
+        || job.base.version < receipt.job_version
+    {
+        return Err(Error::ConflictError("导入执行回执与当前批次或后台任务身份不一致".into()));
     }
-    Err(Error::Internal("导入执行幂等收据与当前业务事实不一致".to_string()))
-}
-
-/// 解析导入执行动作 wire code。
-fn parse_import_execution_action(value: &str) -> Result<ImportExecutionAction> {
-    match value {
-        "START_APPLY" => Ok(ImportExecutionAction::StartApply),
-        "CANCEL_PENDING" => Ok(ImportExecutionAction::CancelPending),
-        "RETRY_FAILED" => Ok(ImportExecutionAction::RetryFailed),
-        _ => Err(Error::Internal("导入执行收据动作非法".to_string())),
-    }
-}
-
-/// 解析导入执行结果 wire code。
-fn parse_import_execution_result_status(value: &str) -> Result<ImportExecutionResultStatus> {
-    match value {
-        "S" => Ok(ImportExecutionResultStatus::Started),
-        "C" => Ok(ImportExecutionResultStatus::Cancelled),
-        "R" => Ok(ImportExecutionResultStatus::RetryPrepared),
-        "U" => Ok(ImportExecutionResultStatus::Unknown),
-        _ => Err(Error::Internal("导入执行收据结果非法".to_string())),
-    }
-}
-
-/// 解析导入执行下一步 wire code。
-fn parse_import_execution_next_step(value: &str) -> Result<ImportExecutionNextStep> {
-    match value {
-        "M" => Ok(ImportExecutionNextStep::MonitorProgress),
-        "V" => Ok(ImportExecutionNextStep::ReviewResult),
-        "A" => Ok(ImportExecutionNextStep::StartApply),
-        _ => Err(Error::Internal("导入执行收据下一步非法".to_string())),
-    }
-}
-
-/// 解析导入批次状态稳定码。
-fn parse_import_batch_status(value: &str) -> Result<LegacyImportBatchStatus> {
-    match value {
-        "pending_validation" => Ok(LegacyImportBatchStatus::PendingValidation),
-        "validating" => Ok(LegacyImportBatchStatus::Validating),
-        "pending_confirmation" => Ok(LegacyImportBatchStatus::PendingConfirmation),
-        "ready_to_apply" => Ok(LegacyImportBatchStatus::ReadyToApply),
-        "importing" => Ok(LegacyImportBatchStatus::Importing),
-        "completed" => Ok(LegacyImportBatchStatus::Completed),
-        "partial_failed" => Ok(LegacyImportBatchStatus::PartialFailed),
-        "failed" => Ok(LegacyImportBatchStatus::Failed),
-        _ => Err(Error::Internal("导入执行收据批次状态非法".to_string())),
-    }
+    Ok(())
 }
 
 /// 解析后台任务状态稳定码。
@@ -568,18 +497,6 @@ fn import_job_status(status: JobStatus) -> erp_import::ImportJobStatus {
         JobStatus::Succeeded => erp_import::ImportJobStatus::Succeeded,
         JobStatus::Failed => erp_import::ImportJobStatus::Failed,
         JobStatus::Cancelled => erp_import::ImportJobStatus::Cancelled,
-    }
-}
-
-fn parse_background_job_status(value: &str) -> Result<JobStatus> {
-    match value {
-        "pending" => Ok(JobStatus::Pending),
-        "running" => Ok(JobStatus::Running),
-        "partially_succeeded" => Ok(JobStatus::PartiallySucceeded),
-        "succeeded" => Ok(JobStatus::Succeeded),
-        "failed" => Ok(JobStatus::Failed),
-        "cancelled" => Ok(JobStatus::Cancelled),
-        _ => Err(Error::Internal("导入执行收据后台任务状态非法".to_string())),
     }
 }
 
@@ -825,67 +742,80 @@ mod tests {
         assert_eq!(import_batch.failed_rows, 2);
     }
 
-    #[test]
-    fn execution_receipt_is_stable_and_rejects_request_reuse() {
-        let command = execution_command(ImportExecutionAction::StartApply);
-        let identity = import_execution_command_identity("user-1", "execute", &command);
-        let fingerprint = identity.fingerprint().to_string();
-        let receipt = ImportExecutionReceipt {
+    fn execution_fact(
+        command: &PreparedImportExecution,
+        receipt: ImportExecutionReceipt,
+        job_id: &str,
+    ) -> ImportCommandReceipt {
+        ImportCommandReceipt::new(
+            import_execution_command_identity("user-1", "legacy_import_batch.execute", command)
+                .structured_receipt("legacy_import_batch")
+                .unwrap(),
+            ImportCommandResult::Execution {
+                batch_id: command.batch_id.to_string(),
+                background_job_id: job_id.to_string(),
+                receipt,
+            },
+            "event-1".into(),
+        )
+        .unwrap()
+    }
+
+    fn started_receipt() -> ImportExecutionReceipt {
+        ImportExecutionReceipt {
             action: ImportExecutionAction::StartApply,
             result_status: ImportExecutionResultStatus::Started,
             batch_version: 5,
             batch_status: LegacyImportBatchStatus::Importing,
             trial_version: Some(2),
             job_version: 2,
-            job_status: JobStatus::Running,
+            job_status: erp_import::ImportJobStatus::Running,
             affected_items: 1,
             next_step: ImportExecutionNextStep::MonitorProgress,
-        };
-        let message = import_execution_receipt_message(&fingerprint, receipt);
-
-        assert_eq!(parse_import_execution_receipt(&message, &fingerprint).unwrap(), receipt);
-        assert!(parse_import_execution_receipt(&message, &"0".repeat(64)).is_err());
-        assert!(!identity.audit_id().contains("execution-1"));
+        }
     }
 
     #[test]
-    fn execution_receipt_replay_allows_later_background_progress() {
+    fn execution_receipt_is_stable_and_rejects_request_reuse() {
+        let command = execution_command(ImportExecutionAction::StartApply);
+        let fact = execution_fact(&command, started_receipt(), "job-1");
+        assert!(fact.ensure_identity(&fact.identity).is_ok());
+        let mut changed = command;
+        changed.expected_batch_version += 1;
+        let identity = import_execution_command_identity("user-1", "legacy_import_batch.execute", &changed)
+            .structured_receipt("legacy_import_batch")
+            .unwrap();
+        assert!(fact.ensure_identity(&identity).is_err());
+        assert!(!fact.identity.command_id.contains("execution-1"));
+        let decoded: ImportCommandReceipt =
+            serde_json::from_str(&serde_json::to_string(&fact).unwrap()).unwrap();
+        assert_eq!(decoded, fact);
+        let mut damaged = decoded;
+        damaged.schema_version = 99;
+        assert!(damaged.ensure_identity(&identity).is_err());
+    }
+
+    #[test]
+    fn execution_receipt_replay_allows_later_progress_but_rejects_different_job() {
+        let command = execution_command(ImportExecutionAction::StartApply);
         let mut import_batch = batch();
         import_batch.status = LegacyImportBatchStatus::Completed;
         import_batch.base.version = 99;
         let mut job = test_background_job(&import_batch, "admin-1");
         job.base.version = 42;
         job.start(Instant::from_unix_secs(1_700_000_000)).unwrap();
-        let receipt = ImportExecutionReceipt {
-            action: ImportExecutionAction::StartApply,
-            result_status: ImportExecutionResultStatus::Started,
-            batch_version: 5,
-            batch_status: LegacyImportBatchStatus::Importing,
-            trial_version: Some(2),
-            job_version: 2,
-            job_status: JobStatus::Running,
-            affected_items: 1,
-            next_step: ImportExecutionNextStep::MonitorProgress,
-        };
-        let audit = AuditActor::new("admin-1".to_string(), "admin".to_string(), erp_core::AccountKind::Admin)
-            .resource_log_with_id(
-                "audit-1".to_string(),
-                "legacy_import_batch.execute",
-                "legacy_import_batch",
-                import_batch.base.id.clone(),
-                Some("receipt".to_string()),
-            )
-            .unwrap();
-
+        let receipt = started_receipt();
+        let fact = execution_fact(&command, receipt, &job.base.id);
+        assert!(validate_import_execution_replay(&fact, &import_batch, &job, &receipt, &command).is_ok());
+        let mut foreign_job = job.clone();
+        foreign_job.base.id = "different-job".into();
         assert!(
-            validate_import_execution_replay(
-                &audit,
-                &import_batch,
-                &job,
-                &receipt,
-                ImportExecutionAction::StartApply,
-            )
-            .is_ok()
+            validate_import_execution_replay(&fact, &import_batch, &foreign_job, &receipt, &command).is_err()
+        );
+        let mut regressed = job;
+        regressed.base.version = 1;
+        assert!(
+            validate_import_execution_replay(&fact, &import_batch, &regressed, &receipt, &command).is_err()
         );
     }
 }

@@ -207,10 +207,3 @@ pub fn capability_update_fingerprint(id: &str, command: &UpdateSupplierCapabilit
     let payload = serde_json::to_string(command).unwrap_or_default();
     digest(&[id, &payload])
 }
-
-pub fn ensure_audit_fingerprint(message: Option<&str>, fingerprint: &str) -> Result<()> {
-    if message == Some(format!("request_sha256={fingerprint}").as_str()) {
-        return Ok(());
-    }
-    Err(Error::ConflictError("同一幂等键不能提交不同参数".to_string()))
-}

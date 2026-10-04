@@ -18,6 +18,7 @@
 - 应收、客户回款及销项发票事实。
 - 应付、供应商付款及进项发票事实。
 - 成本条目、分摊及相关金额规则和本域持久化。
+- 财务命令的独立结构化回执、强类型结果引用和唯一命令身份约束。
 
 ## 依赖与协作边界
 
@@ -35,6 +36,7 @@
 | [src/service/receivable.rs](src/service/receivable.rs) | 应收与客户回款服务 |
 | [src/service/payable.rs](src/service/payable.rs) | 应付与供应商付款服务 |
 | [src/service/cost.rs](src/service/cost.rs) | 成本与分摊服务 |
+| [src/service/command_receipt.rs](src/service/command_receipt.rs) | 财务命令结果恢复与同 Executor 回执写入 |
 | [src/entity/mod.rs](src/entity/mod.rs) | 本域实体、值对象和确定性规则 |
 | [src/repository/mod.rs](src/repository/mod.rs) | 本域 MongoDB 仓储与集合访问器 |
 | [src/indexes/mod.rs](src/indexes/mod.rs) | 公开索引注册入口 |
@@ -46,6 +48,7 @@
 3. 新增或调整集合查询时同步评估索引；组合根复用本域公开索引入口，保持既有逐集合注册顺序。
 4. HTTP 请求和响应优先复用本域 DTO；扩展公开合同须同步检查 Process、ReadModel 和应用调用方。
 5. 业务改动补充本域库单元测试，覆盖成功、失败、边界及相关幂等或版本冲突路径。
+6. 进项发票登记、供应商付款、客户回款登记与分配、销项发票登记和开票申请提交或撤销命令，必须将 finance_command_receipts 与正式财务事实及成功审计在同一事务提交。回放按原命令身份、定位及版本化指纹校验强类型结果后读取原对象当前视图；异载荷和损坏回执必须明确失败，不反查审计，不追加第二次成功事件。回执不得按日志归档规则删除或设置 TTL。
 
 ## 验证要求
 

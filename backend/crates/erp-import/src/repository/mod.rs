@@ -1,6 +1,8 @@
 //! Import MongoDB repositories and accessors.
 
+mod command_receipt;
 pub mod extensions;
+pub use command_receipt::ImportCommandReceiptExt;
 pub mod legacy_import;
 pub mod owned;
 pub mod prelude;

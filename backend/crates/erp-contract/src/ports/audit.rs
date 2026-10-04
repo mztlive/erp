@@ -1,5 +1,7 @@
 //! Consumer port for cross-domain audit persistence from contract commands.
 
+use std::num::NonZeroU32;
+
 use application_core::AuditActor;
 use async_trait::async_trait;
 use entity_core::BaseModel;
@@ -30,6 +32,12 @@ pub struct PreparedContractAudit {
     pub actor_account: String,
     /// Actor kind.
     pub actor_type: AccountKind,
+    /// Safe actor display-name snapshot captured when the command was authenticated.
+    pub actor_name_snapshot: Option<String>,
+    /// Request correlation captured at invocation; absent outside a request.
+    pub request_id: Option<String>,
+    /// Positive event order within one business command.
+    pub event_sequence: NonZeroU32,
     /// Business action name.
     pub action: String,
     /// Resource type.
@@ -79,12 +87,60 @@ impl PreparedContractAudit {
             actor_id,
             actor_account,
             actor_type,
+            actor_name_snapshot: None,
+            request_id: None,
+            event_sequence: NonZeroU32::MIN,
             action,
             resource_type,
             resource_id,
             success,
             message,
         }
+    }
+
+    /// Carry an already validated safe actor name without reading current account data.
+    ///
+    /// # 参数
+    /// * `name` - 认证时已经校验的安全名称快照；缺失时保持 `None`。
+    ///
+    /// # 返回
+    /// 返回保留原持久化元数据并携带名称快照的审计事实。
+    ///
+    /// # 错误
+    /// 无；组合层在构造结构化事件时再次校验该快照。
+    pub fn with_actor_name_snapshot(mut self, name: Option<String>) -> Self {
+        self.actor_name_snapshot = name;
+        self
+    }
+
+    /// Carry an already validated request correlation without generating one.
+    ///
+    /// # 参数
+    /// * `request_id` - 调用时的安全请求编号；缺失时保持 `None`。
+    ///
+    /// # 返回
+    /// 返回保留原持久化元数据并携带请求关联的审计事实。
+    ///
+    /// # 错误
+    /// 无；组合层在构造结构化事件时再次校验编号。
+    pub fn with_request_id(mut self, request_id: Option<String>) -> Self {
+        self.request_id = request_id;
+        self
+    }
+
+    /// Preserve the positive order of an already prepared event.
+    ///
+    /// # 参数
+    /// * `event_sequence` - 命令内从一开始的非零事件序号。
+    ///
+    /// # 返回
+    /// 返回保留原事件顺序的审计事实。
+    ///
+    /// # 错误
+    /// 无；参数类型保证序号非零。
+    pub fn with_event_sequence(mut self, event_sequence: NonZeroU32) -> Self {
+        self.event_sequence = event_sequence;
+        self
     }
 
     /// Build a success resource audit from an authenticated actor.
@@ -100,6 +156,8 @@ impl PreparedContractAudit {
         if resource_id.trim().is_empty() {
             return Err(Error::ValidationError("资源ID不能为空".to_string()));
         }
+        let actor_name_snapshot = actor.actor_name_snapshot().map(str::to_string);
+        let request_id = actor.request_id().map(str::to_string);
         let (actor_id, actor_account, actor_type) = actor.into_parts();
         let id = id_generator::next_id();
         let base = BaseModel::new(id);
@@ -113,7 +171,9 @@ impl PreparedContractAudit {
             Some(resource_id),
             true,
             None,
-        ))
+        )
+        .with_actor_name_snapshot(actor_name_snapshot)
+        .with_request_id(request_id))
     }
 }
 

@@ -33,18 +33,22 @@ pub use legacy_import_row::{ImportStatus, LegacyImportRow, LegacyImportRowData, 
 /// W18 导入强命令的稳定幂等身份。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LegacyImportCommandIdentity {
-    audit_id: String,
+    command_id: String,
     fingerprint: String,
+    actor_id: String,
+    action: String,
+    scope_id: String,
+    key_hash: application_core::CommandFingerprint,
 }
 
 impl LegacyImportCommandIdentity {
     /// 从命令身份字段与规范化载荷片段构造不可逆收据身份。
     ///
-    /// 审计主键只保存幂等键参与计算后的摘要；载荷指纹对每个字段加长度前缀，
+    /// 命令主键只保存幂等键参与计算后的摘要；载荷指纹对每个字段加长度前缀，
     /// 避免简单拼接产生歧义并拒绝同键异参。
     ///
     /// # 参数
-    /// * `prefix` - 审计 ID 固定前缀
+    /// * `prefix` - 命令 ID 固定前缀
     /// * `actor_id` - 命令操作人
     /// * `action` - 稳定动作名
     /// * `resource_id` - 命令资源 ID
@@ -52,7 +56,7 @@ impl LegacyImportCommandIdentity {
     /// * `parts` - 已规范化的完整命令字段序列
     ///
     /// # 返回
-    /// 返回不暴露原始幂等键的审计 ID 与命令指纹。
+    /// 返回不暴露原始幂等键的命令 ID 与命令指纹。
     pub fn new(
         prefix: &str,
         actor_id: &str,
@@ -61,7 +65,7 @@ impl LegacyImportCommandIdentity {
         idempotency_key: &str,
         parts: &[&str],
     ) -> Self {
-        let audit_id = format!(
+        let command_id = format!(
             "{prefix}{}",
             sha256_hex(format!("{actor_id}|{action}|{resource_id}|{idempotency_key}").as_bytes())
         );
@@ -70,15 +74,22 @@ impl LegacyImportCommandIdentity {
             digest.update((part.len() as u64).to_be_bytes());
             digest.update(part.as_bytes());
         }
-        Self { audit_id, fingerprint: encode_digest(digest.finalize()) }
+        Self {
+            command_id,
+            fingerprint: encode_digest(digest.finalize()),
+            actor_id: actor_id.to_string(),
+            action: action.to_string(),
+            scope_id: resource_id.to_string(),
+            key_hash: application_core::CommandFingerprint::from_parts([idempotency_key.to_string()]),
+        }
     }
 
-    /// 返回稳定审计收据 ID。
+    /// 返回稳定命令 ID。
     ///
     /// # 返回
     /// 返回不含原始幂等键的 SHA-256 派生 ID。
-    pub fn audit_id(&self) -> &str {
-        &self.audit_id
+    pub fn command_id(&self) -> &str {
+        &self.command_id
     }
 
     /// 返回完整命令指纹。
@@ -87,6 +98,31 @@ impl LegacyImportCommandIdentity {
     /// 返回用于拒绝同键异参的长度前缀 SHA-256 指纹。
     pub fn fingerprint(&self) -> &str {
         &self.fingerprint
+    }
+
+    /// 将原稳定命令身份投影到独立领域回执，不查询旧审计。
+    /// # 参数
+    /// * `resource_type` - 本命令固定拥有的结果资源类型。
+    /// # 返回
+    /// 返回保留原稳定 ID、覆盖原完整载荷摘要的 v1 结构化身份。
+    /// # 错误
+    /// 身份字段不完整时拒绝构造回执。
+    pub fn structured_receipt(
+        &self,
+        resource_type: &str,
+    ) -> crate::Result<application_core::StructuredCommandReceipt> {
+        let header = application_core::StructuredCommandReceipt {
+            schema_version: 1,
+            command_id: self.command_id.clone(),
+            actor_id: self.actor_id.clone(),
+            action: self.action.clone(),
+            resource_type: resource_type.to_string(),
+            scope_id: Some(self.scope_id.clone()),
+            idempotency_key_hash: self.key_hash.clone(),
+            fingerprint: application_core::CommandFingerprint::from_parts([self.fingerprint.clone()]),
+        };
+        header.validate()?;
+        Ok(header)
     }
 }
 
@@ -181,7 +217,7 @@ mod command_identity_tests {
         );
 
         assert_eq!(identity, same);
-        assert!(!identity.audit_id().contains("raw-secret-key"));
+        assert!(!identity.command_id().contains("raw-secret-key"));
         assert_eq!(identity.fingerprint().len(), 64);
     }
 

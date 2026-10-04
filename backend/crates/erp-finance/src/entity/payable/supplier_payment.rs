@@ -14,6 +14,8 @@ use serde::{Deserialize, Serialize};
 const PAYMENT_NO_MAX_LEN: usize = 64;
 /// 银行流水号最大长度。
 const BANK_REFERENCE_MAX_LEN: usize = 256;
+/// 创建人标识最大长度。
+const CREATOR_ID_MAX_LEN: usize = 128;
 
 /// 付款单状态。
 ///
@@ -121,6 +123,15 @@ pub struct SupplierPaymentData {
 pub struct SupplierPayment {
     #[serde(flatten)]
     pub base: BaseModel,
+    /// 不可变创建人；缺失身份为空，不授予创建人参与资格。
+    #[serde(default)]
+    pub created_by: String,
+    /// 不可变过账执行人；草稿及缺失事实为 `None`，不得使用创建人补齐。
+    #[serde(default)]
+    pub posted_by: Option<String>,
+    /// 不可变过账发生时间；区别于实际付款业务时间 `paid_at`。
+    #[serde(default)]
+    pub posted_at: Option<Instant>,
     /// 付款单状态。
     pub status: SupplierPaymentStatus,
     /// 付款单号。
@@ -149,21 +160,35 @@ impl SupplierPayment {
     /// # 参数
     /// * `id` - 实体主键（`erp_core::ids::SupplierPaymentId`）
     /// * `data` - 创建数据
+    /// * `created_by` - 已认证命令操作人，禁止使用可变的付款执行人替代
     ///
     /// # 返回
     /// 返回新建的付款单实体。
     ///
     /// # 错误
-    /// 当付款单号为空/超长、银行流水号超长或金额非正时返回错误。
-    pub fn new(id: SupplierPaymentId, data: SupplierPaymentData) -> Result<Self> {
+    /// 当付款单号或创建人为空/超长、银行流水号超长或金额非正时返回错误。
+    pub fn new(
+        id: SupplierPaymentId,
+        data: SupplierPaymentData,
+        created_by: impl Into<String>,
+    ) -> Result<Self> {
         let payment_no =
             normalize_required_text(data.payment_no, "付款单号不能为空", PAYMENT_NO_MAX_LEN, "付款单号过长")?;
         let bank_reference =
             normalize_optional_text(data.bank_reference, "银行流水号", BANK_REFERENCE_MAX_LEN)?;
         ensure_positive_amount(&data.amount)?;
+        let created_by = normalize_required_text(
+            created_by.into(),
+            "创建人不能为空",
+            CREATOR_ID_MAX_LEN,
+            "创建人标识过长",
+        )?;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
+            created_by,
+            posted_by: None,
+            posted_at: None,
             status: SupplierPaymentStatus::Draft,
             payment_no,
             supplier_id: data.supplier_id,
@@ -194,9 +219,13 @@ impl SupplierPayment {
     /// 迁移成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 目标状态不在邻接矩阵中时返回 [`Error::InvalidStateTransition`]。
+    /// 目标状态不在邻接矩阵中时返回 [`Error::InvalidStateTransition`]；
+    /// 草稿过账必须通过付款执行入口，禁止跳过执行身份事实。
     pub fn transition(&mut self, to: SupplierPaymentStatus) -> Result<()> {
         ensure_transition(self.status, to)?;
+        if self.status == SupplierPaymentStatus::Draft && to == SupplierPaymentStatus::Posted {
+            return Err(Error::from("供应商付款须通过付款执行入口过账"));
+        }
         self.status = to;
         Ok(())
     }
@@ -205,15 +234,38 @@ impl SupplierPayment {
     ///
     /// # 参数
     /// * `allocations` - 本次原子写入的付款核销分配
+    /// * `actor_id` - 本次已认证的付款执行人，与创建人各自保留语义
+    /// * `posted_at` - 本次实际过账发生时间
+    ///
+    /// # 返回
+    /// 返回带不可变执行身份与时间的已过账付款单。
     ///
     /// # 错误
-    /// 非草稿或分配非法时返回冲突。
-    pub fn post_from_execution(&mut self, allocations: &[PendingPaymentAllocation]) -> Result<()> {
+    /// 非草稿、分配非法、执行人无效或已有过账事实时返回错误，不改写原事实。
+    pub fn post_from_execution(
+        &mut self,
+        allocations: &[PendingPaymentAllocation],
+        actor_id: &str,
+        posted_at: Instant,
+    ) -> Result<()> {
         if self.status != SupplierPaymentStatus::Draft {
             return Err(Error::from("只有草稿状态的供应商付款单可以由付款任务过账"));
         }
         ensure_execution_allocations(&self.amount, allocations)?;
-        self.transition(SupplierPaymentStatus::Posted)
+        let actor_id = normalize_required_text(
+            actor_id.to_string(),
+            "付款执行人不能为空",
+            CREATOR_ID_MAX_LEN,
+            "付款执行人标识过长",
+        )?;
+        if self.posted_by.is_some() || self.posted_at.is_some() {
+            return Err(Error::from("供应商付款已存在过账身份事实，禁止覆盖"));
+        }
+        ensure_transition(self.status, SupplierPaymentStatus::Posted)?;
+        self.status = SupplierPaymentStatus::Posted;
+        self.posted_by = Some(actor_id);
+        self.posted_at = Some(posted_at);
+        Ok(())
     }
 
     /// 判断付款单是否已过账。
@@ -274,19 +326,37 @@ mod tests {
 
     #[test]
     fn new_trims_text_fields_and_starts_as_draft() {
-        let payment = SupplierPayment::new(SupplierPaymentId::new("sp-1"), data()).unwrap();
+        let payment = SupplierPayment::new(SupplierPaymentId::new("sp-1"), data(), " creator ").unwrap();
 
+        assert_eq!(payment.created_by, "creator");
         assert_eq!(payment.payment_no, "SP-2026-001");
         assert_eq!(payment.bank_reference.as_deref(), Some("BANK-1"));
         assert_eq!(payment.bank_receipt_asset_id.as_ref().map(AsRef::as_ref), Some("asset-receipt-1"));
         assert_eq!(payment.status, SupplierPaymentStatus::Draft);
+        assert!(payment.posted_by.is_none());
+        assert!(payment.posted_at.is_none());
         assert_eq!(payment.payee_bank_account_id.as_ref().map(AsRef::as_ref), Some("bank-1"));
         assert!(!payment.is_posted());
     }
 
     #[test]
+    fn new_rejects_missing_or_overlong_creator() {
+        assert!(SupplierPayment::new(SupplierPaymentId::new("sp-1"), data(), "   ").is_err());
+        assert!(SupplierPayment::new(SupplierPaymentId::new("sp-1"), data(), "x".repeat(129)).is_err());
+    }
+
+    #[test]
+    fn payment_without_creator_deserializes_without_inventing_identity() {
+        let payment = SupplierPayment::new(SupplierPaymentId::new("sp-1"), data(), "creator").unwrap();
+        let mut value = serde_json::to_value(payment).unwrap();
+        value.as_object_mut().unwrap().remove("created_by");
+        let incomplete: SupplierPayment = serde_json::from_value(value).unwrap();
+        assert!(incomplete.created_by.is_empty());
+    }
+
+    #[test]
     fn legacy_payment_without_bank_receipt_stays_readable_but_cannot_submit() {
-        let payment = SupplierPayment::new(SupplierPaymentId::new("sp-legacy"), data()).unwrap();
+        let payment = SupplierPayment::new(SupplierPaymentId::new("sp-legacy"), data(), "creator").unwrap();
         let mut value = serde_json::to_value(payment).unwrap();
         value.as_object_mut().unwrap().remove("bank_receipt_asset_id");
 
@@ -298,33 +368,44 @@ mod tests {
     #[test]
     fn new_rejects_blank_no_overlong_reference_and_non_positive() {
         let blank_no = SupplierPaymentData { payment_no: "   ".to_string(), ..data() };
-        assert!(SupplierPayment::new(SupplierPaymentId::new("sp-2"), blank_no).is_err());
+        assert!(SupplierPayment::new(SupplierPaymentId::new("sp-2"), blank_no, "creator").is_err());
 
         let overlong = SupplierPaymentData { bank_reference: Some("b".repeat(257)), ..data() };
-        assert!(SupplierPayment::new(SupplierPaymentId::new("sp-3"), overlong).is_err());
+        assert!(SupplierPayment::new(SupplierPaymentId::new("sp-3"), overlong, "creator").is_err());
 
         let non_positive = SupplierPaymentData { amount: Amount::from_str("0.00").unwrap(), ..data() };
-        assert!(SupplierPayment::new(SupplierPaymentId::new("sp-4"), non_positive).is_err());
+        assert!(SupplierPayment::new(SupplierPaymentId::new("sp-4"), non_positive, "creator").is_err());
     }
 
     #[test]
     fn payment_is_posted_once_from_execution() {
-        let mut payment = SupplierPayment::new(SupplierPaymentId::new("sp-1"), data()).unwrap();
+        let mut payment = SupplierPayment::new(SupplierPaymentId::new("sp-1"), data(), "creator").unwrap();
         payment
-            .post_from_execution(&[PendingPaymentAllocation::new(
-                PayableEntryId::new("pe-1"),
-                Amount::from_str("1000.00").unwrap(),
-            )
-            .unwrap()])
-            .unwrap();
-        assert!(payment.is_posted());
-        assert!(
-            payment
-                .post_from_execution(&[PendingPaymentAllocation::new(
+            .post_from_execution(
+                &[PendingPaymentAllocation::new(
                     PayableEntryId::new("pe-1"),
                     Amount::from_str("1000.00").unwrap(),
                 )
-                .unwrap()])
+                .unwrap()],
+                "executor",
+                Instant::from_unix_secs(2),
+            )
+            .unwrap();
+        assert!(payment.is_posted());
+        assert_eq!(payment.created_by, "creator");
+        assert_eq!(payment.posted_by.as_deref(), Some("executor"));
+        assert_eq!(payment.posted_at, Some(Instant::from_unix_secs(2)));
+        assert!(
+            payment
+                .post_from_execution(
+                    &[PendingPaymentAllocation::new(
+                        PayableEntryId::new("pe-1"),
+                        Amount::from_str("1000.00").unwrap(),
+                    )
+                    .unwrap()],
+                    "executor",
+                    Instant::from_unix_secs(2)
+                )
                 .is_err()
         );
     }
@@ -343,43 +424,104 @@ mod tests {
         assert!(tr(S::Reversed, S::Posted).is_err());
         assert!(tr(S::Reversed, S::Draft).is_err());
 
-        let mut payment = SupplierPayment::new(SupplierPaymentId::new("sp-1"), data()).unwrap();
+        let mut payment = SupplierPayment::new(SupplierPaymentId::new("sp-1"), data(), "creator").unwrap();
         assert!(payment.transition(S::Reversed).is_err(), "实体迁移拒绝跨级");
     }
 
     #[test]
     fn direct_post_requires_allocations_and_cannot_repeat() {
-        let mut payment = SupplierPayment::new(SupplierPaymentId::new("sp-1"), data()).unwrap();
+        let mut payment = SupplierPayment::new(SupplierPaymentId::new("sp-1"), data(), "creator").unwrap();
         let allocations = [PendingPaymentAllocation::new(
             PayableEntryId::new("pe-1"),
             Amount::from_str("1000.00").unwrap(),
         )
         .unwrap()];
-        payment.post_from_execution(&allocations).unwrap();
+        payment.post_from_execution(&allocations, "executor", Instant::from_unix_secs(2)).unwrap();
         assert_eq!(payment.status, SupplierPaymentStatus::Posted);
-        assert!(payment.post_from_execution(&allocations).is_err());
+        assert!(payment.post_from_execution(&allocations, "executor", Instant::from_unix_secs(2)).is_err());
+    }
+
+    #[test]
+    fn execution_identity_is_distinct_and_cannot_be_overwritten_by_retry_or_reversal() {
+        let mut payment = SupplierPayment::new(SupplierPaymentId::new("sp-1"), data(), "creator").unwrap();
+        let allocations = [PendingPaymentAllocation::new(
+            PayableEntryId::new("pe-1"),
+            Amount::from_str("1000.00").unwrap(),
+        )
+        .unwrap()];
+        assert!(payment.transition(SupplierPaymentStatus::Posted).is_err());
+        payment.post_from_execution(&allocations, "first-executor", Instant::from_unix_secs(2)).unwrap();
+        let before = payment.clone();
+        assert!(
+            payment.post_from_execution(&allocations, "other-executor", Instant::from_unix_secs(3)).is_err()
+        );
+        assert_eq!(payment, before);
+        payment.transition(SupplierPaymentStatus::Reversed).unwrap();
+        assert_eq!(payment.created_by, "creator");
+        assert_eq!(payment.posted_by.as_deref(), Some("first-executor"));
+        assert_eq!(payment.posted_at, Some(Instant::from_unix_secs(2)));
+        assert_ne!(payment.posted_at, Some(payment.paid_at));
+    }
+
+    #[test]
+    fn invalid_executor_and_partial_existing_facts_leave_draft_unchanged() {
+        let allocations = [PendingPaymentAllocation::new(
+            PayableEntryId::new("pe-1"),
+            Amount::from_str("1000.00").unwrap(),
+        )
+        .unwrap()];
+        for executor in ["   ".to_string(), "x".repeat(129)] {
+            let mut payment =
+                SupplierPayment::new(SupplierPaymentId::new("sp-1"), data(), "creator").unwrap();
+            let before = payment.clone();
+            assert!(
+                payment.post_from_execution(&allocations, &executor, Instant::from_unix_secs(2)).is_err()
+            );
+            assert_eq!(payment, before);
+        }
+        for (posted_by, posted_at) in
+            [(Some("old".to_string()), None), (None, Some(Instant::from_unix_secs(1)))]
+        {
+            let mut payment =
+                SupplierPayment::new(SupplierPaymentId::new("sp-1"), data(), "creator").unwrap();
+            payment.posted_by = posted_by;
+            payment.posted_at = posted_at;
+            let before = payment.clone();
+            assert!(
+                payment.post_from_execution(&allocations, "executor", Instant::from_unix_secs(2)).is_err()
+            );
+            assert_eq!(payment, before);
+        }
     }
 
     #[test]
     fn direct_post_rejects_empty_under_or_over_allocated_lines() {
-        let mut payment = SupplierPayment::new(SupplierPaymentId::new("sp-1"), data()).unwrap();
-        assert!(payment.post_from_execution(&[]).is_err());
+        let mut payment = SupplierPayment::new(SupplierPaymentId::new("sp-1"), data(), "creator").unwrap();
+        assert!(payment.post_from_execution(&[], "executor", Instant::from_unix_secs(2)).is_err());
         assert!(
             payment
-                .post_from_execution(&[PendingPaymentAllocation::new(
-                    PayableEntryId::new("pe-1"),
-                    Amount::from_str("999.99").unwrap(),
+                .post_from_execution(
+                    &[PendingPaymentAllocation::new(
+                        PayableEntryId::new("pe-1"),
+                        Amount::from_str("999.99").unwrap(),
+                    )
+                    .unwrap()],
+                    "executor",
+                    Instant::from_unix_secs(2)
                 )
-                .unwrap()])
                 .is_err()
         );
         assert!(
             payment
-                .post_from_execution(&[PendingPaymentAllocation::new(
-                    PayableEntryId::new("pe-1"),
-                    Amount::from_str("1000.01").unwrap(),
+                .post_from_execution(
+                    &[PendingPaymentAllocation::new(
+                        PayableEntryId::new("pe-1"),
+                        Amount::from_str("1000.01").unwrap(),
+                    )
+                    .unwrap()],
+                    "executor",
+                    Instant::from_unix_secs(2)
                 )
-                .unwrap()])
                 .is_err()
         );
     }

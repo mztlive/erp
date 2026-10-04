@@ -192,8 +192,10 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
                 &idempotency_key,
                 [version, target_user_id.clone(), reason.clone()],
             )?;
-            if let Some(replayed) = self.idempotent_replay(&receipt, &id).await? {
+            if let Some(replayed) = self.idempotent_replay(&receipt, &id, &actor).await? {
                 ensure_generic_work_item_mutation(&replayed)?;
+                ensure_item_in_managed_scope(&replayed, &managed_access)?;
+                self.ensure_object_participation(&actor, &replayed).await?;
                 return self.applied_outcome(replayed, &actor).await;
             }
             if item.base.version != expected_task_version {

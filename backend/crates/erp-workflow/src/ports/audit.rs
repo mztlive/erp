@@ -1,12 +1,15 @@
 //! Audit persistence consumed by workflow; adapters live at the composition root.
 
-use application_core::{AuditActor, CommandReceipt, CommandReceiptFact};
+use std::num::NonZeroU32;
+
+use application_core::AuditActor;
 use async_trait::async_trait;
 use persistence_core::Executor;
 
 use crate::error::{Error, Result};
 
 /// Read-side audit fact consumed by workflow without depending on the audit domain.
+#[cfg(test)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorkflowAuditFact {
     /// Actor account id.
@@ -23,6 +26,7 @@ pub struct WorkflowAuditFact {
     pub message: Option<String>,
 }
 
+#[cfg(test)]
 impl WorkflowAuditFact {
     /// Construct a successful resource audit fact for tests and adapters.
     pub fn successful(
@@ -42,6 +46,22 @@ impl WorkflowAuditFact {
     }
 }
 
+/// 允许提交的工作项业务动作；内容只携带安全变更标记。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkflowAuditOperation {
+    Reassigned,
+    PurchaseOwnerReassigned,
+    Closed,
+}
+
+/// 事务外尝试的最小结果，不包含错误正文。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkflowAuditAttemptResult {
+    Failed,
+    Rejected,
+    Unknown,
+}
+
 /// Prepared success audit that workflow can persist through [`WorkflowAuditPort`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PreparedWorkflowAudit {
@@ -53,17 +73,63 @@ pub struct PreparedWorkflowAudit {
     pub actor_account: String,
     /// Actor kind wire value.
     pub actor_type: String,
+    /// 本次已鉴权操作人名称；历史缺失不补齐。
+    pub actor_name_snapshot: Option<String>,
+    /// 当前请求关联；内部命令明确保持缺失。
+    pub request_id: Option<String>,
+    /// 同一命令内从一开始的事件序号。
+    pub event_sequence: NonZeroU32,
     /// Business action.
     pub action: String,
     /// Resource type.
     pub resource_type: String,
     /// Resource id.
     pub resource_id: String,
-    /// Optional message, including command fingerprints.
+    /// 可读说明；不得携带命令摘要。
     pub message: Option<String>,
+    /// 已登记的安全业务动作。
+    pub operation: Option<WorkflowAuditOperation>,
+    /// 独立命令收据关联。
+    pub command_id: Option<String>,
 }
 
 impl PreparedWorkflowAudit {
+    /// 保留同一命令内安全事件的非零顺序。
+    /// # 参数
+    /// * `event_sequence` - 原命令确定的事件序号。
+    /// # 返回
+    /// 返回保留操作人、请求及命令关联的事件输入。
+    /// # 错误
+    /// 无；参数类型保证序号非零。
+    pub fn with_event_sequence(mut self, event_sequence: NonZeroU32) -> Self {
+        self.event_sequence = event_sequence;
+        self
+    }
+
+    /// 将动作绑定到独立回执，禁止错配动作与资源。
+    /// # 参数
+    /// * `command_id` - 原命令身份。
+    /// * `operation` - 本域登记的安全动作。
+    /// # 返回
+    /// 返回安全投影完成的事件输入。
+    /// # 错误
+    /// 动作、资源或命令身份无效时拒绝。
+    pub fn for_command(mut self, command_id: String, operation: WorkflowAuditOperation) -> Result<Self> {
+        let (action, resource) = match operation {
+            WorkflowAuditOperation::Reassigned => ("work_item.reassign", "work_item"),
+            WorkflowAuditOperation::PurchaseOwnerReassigned => {
+                ("purchase_order.owner_reassign", "purchase_order")
+            },
+            WorkflowAuditOperation::Closed => ("work_item.close", "work_item"),
+        };
+        if self.action != action || self.resource_type != resource || command_id.trim().is_empty() {
+            return Err(Error::ValidationError("工作流审计动作或命令身份无效".to_string()));
+        }
+        self.operation = Some(operation);
+        self.command_id = Some(command_id);
+        Ok(self)
+    }
+
     /// Build a success resource audit from an authenticated actor.
     ///
     /// # Errors
@@ -106,58 +172,46 @@ impl PreparedWorkflowAudit {
         if resource_id.trim().is_empty() {
             return Err(Error::ValidationError("资源ID不能为空".to_string()));
         }
+        let actor_name_snapshot = actor.actor_name_snapshot().map(str::to_string);
+        let request_id = actor.request_id().map(str::to_string);
         let (actor_id, actor_account, actor_type) = actor.into_parts();
         Ok(Self {
             id,
             actor_id,
             actor_account,
             actor_type: actor_type.as_str().to_string(),
+            actor_name_snapshot,
+            request_id,
+            event_sequence: NonZeroU32::MIN,
             action: action.to_string(),
             resource_type: resource_type.to_string(),
             resource_id,
             message,
+            operation: None,
+            command_id: None,
         })
-    }
-
-    /// Build the success receipt audit that must share the business write transaction.
-    ///
-    /// # Errors
-    /// Actor mismatch or empty resource id.
-    pub fn from_receipt(receipt: &CommandReceipt, actor: AuditActor, resource_id: String) -> Result<Self> {
-        if actor.id() != receipt.actor_id() {
-            return Err(Error::Forbidden("当前账号不能复用其他账号的操作号".to_string()));
-        }
-        Self::resource_with_id(
-            receipt.id().to_string(),
-            actor,
-            receipt.action(),
-            receipt.resource_type(),
-            resource_id,
-            Some(receipt.message(None)),
-        )
     }
 }
 
 /// Persist and query workflow audits without depending on the audit domain crate.
 #[async_trait]
 pub trait WorkflowAuditPort: Send + Sync {
+    /// 在事务开始前校验静态动作和操作人。
+    fn validate(&self, _audit: &PreparedWorkflowAudit) -> Result<()> {
+        Ok(())
+    }
+
+    /// 在原事务已结束后保存独立尝试，禁止用于业务回放。
+    async fn persist_attempt(
+        &self,
+        _audit: &PreparedWorkflowAudit,
+        _result: WorkflowAuditAttemptResult,
+    ) -> Result<()> {
+        Err(Error::Internal("工作流尝试审计端口未接线".into()))
+    }
+
     /// Persist a prepared success audit using the caller executor.
     async fn persist(&self, audit: &PreparedWorkflowAudit, executor: &mut dyn Executor) -> Result<()>;
-
-    /// Load command-receipt facts for the given ids.
-    async fn find_command_receipts_by_ids(
-        &self,
-        ids: &[String],
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<CommandReceiptFact>>;
-
-    /// Load successful audits for one resource without exposing the audit aggregate.
-    async fn list_successful_resource_audits(
-        &self,
-        resource_type: &str,
-        resource_id: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<WorkflowAuditFact>>;
 }
 
 /// Fail-closed audit port used when composition has not injected an adapter.
@@ -169,45 +223,4 @@ impl WorkflowAuditPort for FailClosedAuditPort {
     async fn persist(&self, _audit: &PreparedWorkflowAudit, _executor: &mut dyn Executor) -> Result<()> {
         Err(Error::Internal("审计端口未接线".to_string()))
     }
-
-    async fn find_command_receipts_by_ids(
-        &self,
-        _ids: &[String],
-        _executor: &mut dyn Executor,
-    ) -> Result<Vec<CommandReceiptFact>> {
-        Ok(Vec::new())
-    }
-
-    async fn list_successful_resource_audits(
-        &self,
-        _resource_type: &str,
-        _resource_id: &str,
-        _executor: &mut dyn Executor,
-    ) -> Result<Vec<WorkflowAuditFact>> {
-        Ok(Vec::new())
-    }
-}
-
-/// Resolve a committed command receipt without holding a workflow session over I/O.
-pub async fn committed_resource_id(
-    port: &dyn WorkflowAuditPort,
-    receipt: &CommandReceipt,
-) -> Result<Option<String>> {
-    let candidates = receipt.id_candidates();
-    let facts = port.find_command_receipts_by_ids(&candidates, &mut persistence_core::NoTransaction).await?;
-    for candidate in candidates {
-        let Some(fact) = facts.iter().find(|fact| fact.id == candidate) else {
-            continue;
-        };
-        return match receipt.match_fact(fact) {
-            application_core::CommandReceiptMatch::SamePayload(resource_id) => Ok(Some(resource_id)),
-            application_core::CommandReceiptMatch::DifferentPayload => {
-                Err(Error::ConflictError("同一操作号已用于不同提交，请重新发起操作".to_string()))
-            },
-            application_core::CommandReceiptMatch::Corrupted => {
-                Err(Error::Internal("业务命令收据格式无效".to_string()))
-            },
-        };
-    }
-    Ok(None)
 }

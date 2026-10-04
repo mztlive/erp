@@ -6,7 +6,6 @@ use bpm::model::{
     ApprovalCancellationTaskPolicy, ApprovalNodeExecution, ApprovalProcessInstance, IdempotencyKey,
     ParticipantId, Timestamp,
 };
-use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_finance::entity::receivable::CustomerReceipt;
 use erp_finance::repository::ReceivableExt;
@@ -24,6 +23,7 @@ use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 
 use super::start_approval::load_bound_definition_graph;
+use crate::audit::persist_log;
 use crate::{Error, Result};
 
 /// 已加载的可撤回运行事实。
@@ -218,7 +218,7 @@ pub(super) async fn persist_customer_receipt_cancel(
             Box::pin(async move {
                 claim_and_persist_document_cancel_runtime(&db, &writes, &closed_tasks, executor).await?;
                 db.customer_receipts().update(&mut receipt, executor).await?;
-                db.audit_logs().create(&audit, executor).await?;
+                persist_log(&db, &audit, executor).await?;
                 Ok::<(), crate::Error>(())
             })
         })

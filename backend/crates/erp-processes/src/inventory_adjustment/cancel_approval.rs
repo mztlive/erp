@@ -74,14 +74,10 @@ impl InventoryAdjustmentService {
         let result = persist_stock_adjustment_cancel(&self.db, input).await;
         match result {
             Ok(adjustment) => Ok(adjustment.into()),
-            Err(error) => {
-                if let Some(view) =
-                    recover_cancel_replay(self, id, &req, &reason, &idempotency_key, actor).await?
-                {
-                    return Ok(view);
-                }
-                Err(error)
-            },
+            Err(error) => crate::audit::recover_command(
+                error,
+                recover_cancel_replay(self, id, &req, &reason, &idempotency_key, actor).await,
+            ),
         }
     }
 }
@@ -156,16 +152,14 @@ struct LoadedCancelTarget {
 }
 
 #[cfg(test)]
-pub(crate) use super::cancel_runtime::{
-    cancel_audit_matches_instance, cancel_audit_message_prefix, cancel_replay_actor_mismatch,
-};
+pub(crate) use super::cancel_runtime::cancel_replay_actor_mismatch;
 
 #[cfg(test)]
 mod tests {
     use bpm::ids::{ApprovalProcessDefinitionId, ApprovalProcessInstanceId};
     use bpm::model::{NewProcessInstance, ParticipantId, ProcessKind, SubjectRef, Timestamp};
 
-    use super::{cancel_audit_matches_instance, cancel_audit_message_prefix, cancel_replay_actor_mismatch};
+    use super::cancel_replay_actor_mismatch;
     use crate::Error;
 
     fn cancelled_instance() -> bpm::model::ApprovalProcessInstance {
@@ -182,18 +176,6 @@ mod tests {
         .unwrap();
         instance.cancel(Timestamp::from_unix_secs(2).unwrap()).unwrap();
         instance
-    }
-
-    #[test]
-    fn cancel_audit_instance_prefix_has_unambiguous_boundaries() {
-        let instance_id = "instance:1";
-        let message = format!(
-            "{}authority=runtime_admin reason=instance=8:spoofed ",
-            cancel_audit_message_prefix(instance_id)
-        );
-        assert!(cancel_audit_matches_instance(&message, instance_id));
-        assert!(!cancel_audit_matches_instance(&message, "instance"));
-        assert!(!cancel_audit_matches_instance(&message, "instance:10"));
     }
 
     #[test]

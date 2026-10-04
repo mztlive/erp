@@ -5,12 +5,11 @@ use erp_integration::dto::{
     IntegrationTaskCompletionCommand, IntegrationTaskCompletionResult, IntegrationWorkItemStatus,
     PreparedWorkItemTarget,
 };
-use erp_integration::entity::integration_ops::IntegrationCommandIdentity;
+use erp_integration::entity::integration_ops::{CompletionReceiptResult, IntegrationCommandIdentity};
 use erp_integration::service::task_decision::complete::complete_domain_item;
 use erp_workflow::WorkItemExt;
 use mongodb::Database;
 use persistence_core::Executor;
-use serde::{Deserialize, Serialize};
 
 use super::super::IntegrationResolutionProcess;
 use super::guard::{command_identity, load_bound_work_item};
@@ -79,12 +78,6 @@ impl super::execution::TaskCommandPort for CompletionCommand<'_> {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct CompletionReceiptMessage {
-    #[serde(rename = "e")]
-    terminal_evidence_reference: String,
-}
-
 impl IntegrationResolutionProcess {
     /// 执行 W29 任务完成强命令。
     ///
@@ -117,26 +110,34 @@ impl IntegrationResolutionProcess {
         actor: AuditActor,
         receipt: IntegrationCommandIdentity,
     ) -> Result<IntegrationTaskCompletionResult> {
+        let attempt_context = super::audit_context(&actor, &receipt)?;
         let rbac = crate::adapters::identity::shared_rbac_service(self.db.clone());
         let prepared = PreparedWorkItemTarget::try_from(&command)?;
         let evidence = std::sync::Arc::clone(&self.evidence);
-        self.run_audited(move |db, executor| {
-            Box::pin(async move {
-                super::execution::run_completion(
-                    &mut CompletionCommand {
-                        db,
-                        evidence: evidence.as_ref(),
-                        rbac: &rbac,
-                        prepared: &prepared,
-                        command: &command,
-                        actor: &actor,
-                        receipt: &receipt,
-                    },
-                    executor,
-                )
-                .await
+        let result = self
+            .run_audited(move |db, executor| {
+                Box::pin(async move {
+                    super::execution::run_completion(
+                        &mut CompletionCommand {
+                            db,
+                            evidence: evidence.as_ref(),
+                            rbac: &rbac,
+                            prepared: &prepared,
+                            command: &command,
+                            actor: &actor,
+                            receipt: &receipt,
+                        },
+                        executor,
+                    )
+                    .await
+                })
             })
-        })
+            .await;
+        crate::audit::finish_attempt(
+            result,
+            &attempt_context,
+            &crate::audit::MongoAuditAttemptSink::new(&self.db),
+        )
         .await
     }
 
@@ -146,9 +147,11 @@ impl IntegrationResolutionProcess {
         command: &IntegrationTaskCompletionCommand,
         actor: &AuditActor,
     ) -> Result<Option<IntegrationTaskCompletionResult>> {
-        let Some(message) = self.replay_receipt::<CompletionReceiptMessage>(receipt, actor).await? else {
+        let Some(message) = self.replay_receipt::<CompletionReceiptResult>(receipt, actor).await? else {
             return Ok(None);
         };
+        self.ensure_replay_task_access(&command.work_item_id, &command.as_non_terminal_action(), actor)
+            .await?;
         Ok(Some(completion_result(command, receipt.receipt_id(), message.terminal_evidence_reference)))
     }
 }
@@ -178,7 +181,7 @@ async fn store_completion_receipt(
         db,
         actor,
         receipt,
-        CompletionReceiptMessage { terminal_evidence_reference: terminal_reference.to_string() },
+        CompletionReceiptResult { terminal_evidence_reference: terminal_reference.to_string() },
         executor,
     )
     .await

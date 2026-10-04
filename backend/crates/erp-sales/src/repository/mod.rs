@@ -10,7 +10,7 @@ pub mod sales_order;
 pub mod sales_review;
 pub mod sales_selection;
 
-pub use extensions::{SalesOrderExt, SalesReviewExt, SalesSelectionExt};
+pub use extensions::{SalesCommandExt, SalesOrderExt, SalesReviewExt, SalesSelectionExt};
 pub use prelude::{
     SalesChangeOrderRepositoryExt, SalesChangeSubmissionLineRepositoryExt,
     SalesChangeSubmissionRepositoryExt, SalesOrderGoodsServiceLineRevisionRepositoryExt,

@@ -1,5 +1,5 @@
-use erp_audit::CommandReceiptServiceExt as _;
 use erp_finance::service::receivable::customer_refund::load_customer_refund_source;
+use erp_returns::ReturnsCommandReceiptService;
 use erp_returns::service::ReturnsService;
 
 use super::*;
@@ -11,7 +11,10 @@ impl ReturnsProcess {
         receipt: &CommandReceipt,
         actor: &AuditActor,
     ) -> Result<Option<String>> {
-        let Some(id) = receipt.committed_resource_id(&self.db).await? else {
+        let Some(id) = ReturnsCommandReceiptService::new(self.db.clone())
+            .committed_resource_id(receipt, &mut NoTransaction)
+            .await?
+        else {
             return Ok(None);
         };
         self.authorize_refund_replay(DocumentType::CustomerRefund, "customer_refund:submit", &id, actor)

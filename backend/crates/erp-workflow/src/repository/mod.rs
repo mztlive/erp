@@ -1,6 +1,8 @@
 //! Workflow MongoDB repositories and accessors.
 
+mod approval_cancellation;
 pub mod approval_integration;
+pub use approval_cancellation::ApprovalCancellationExt;
 pub mod bpm;
 pub mod document_registry;
 pub mod extensions;
@@ -27,3 +29,5 @@ pub use work_item::{
     WorkItemRepositoryExt, WorkItemRepositoryFinanceExt, WorkItemRepositoryFulfillmentExt,
     WorkItemRepositoryIntegrationTaskBindingExt, WorkItemRow,
 };
+mod work_item_command;
+pub use work_item_command::{WorkItemCommandExt, WorkItemCommandRepositoryExt};

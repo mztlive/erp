@@ -345,7 +345,8 @@ where
 /// 回放命中胜者收据时返回其命令视图。
 ///
 /// # 错误
-/// 回放明确失败时返回该错误；重试耗尽时返回原始提交错误。
+/// 回放明确失败时返回该错误；首次未知提交的查证失败始终保留原错误和来源；
+/// 重试耗尽时返回原始提交错误。
 pub(super) async fn recover_by_replay<T, Replay, ReplayFut>(
     original_error: Error,
     mut replay: Replay,
@@ -359,6 +360,7 @@ where
             Ok(Some(view)) => return Ok(view),
             Ok(None) => {},
             Err(error) if command_may_have_committed(&error) => {},
+            Err(_) if matches!(&original_error, Error::OutcomeUnknown(_)) => return Err(original_error),
             Err(error) => return Err(error),
         }
         if attempt + 1 < COMMAND_RECOVERY_ATTEMPTS {
@@ -975,6 +977,36 @@ mod tests {
         assert!(matches!(fatal, Err(Error::ValidationError(_))));
     }
 
+    #[tokio::test]
+    async fn unknown_cancel_recovery_keeps_original_source_when_view_cannot_be_proved() {
+        for lookup_error in [
+            Error::ConflictError("取消事实损坏或 schema 不支持".into()),
+            Error::Forbidden("当前操作人已失去原结果读取资格".into()),
+            Error::Internal("原取消结果视图读取失败".into()),
+        ] {
+            let original = Error::OutcomeUnknown(persistence_core::Error::CommitOutcomeUnknown(
+                MongoError::custom("first unknown cancellation commit"),
+            ));
+            let mut failure = Some(lookup_error);
+            let recovered: crate::error::Result<String> = super::recover_by_replay(original, || {
+                let error = failure.take().expect("明确查证失败不应重复执行业务或查证");
+                async move { Err(error) }
+            })
+            .await;
+            let Error::OutcomeUnknown(persistence_core::Error::CommitOutcomeUnknown(source)) =
+                recovered.unwrap_err()
+            else {
+                panic!("查证失败不得覆盖首次未知提交来源");
+            };
+            assert_eq!(source.get_custom::<&str>(), Some(&"first unknown cancellation commit"));
+        }
+        let original = Error::OutcomeUnknown(persistence_core::Error::CommitOutcomeUnknown(
+            MongoError::custom("proved cancellation commit"),
+        ));
+        let recovered = super::recover_by_replay(original, || async { Ok(Some("proved view")) }).await;
+        assert_eq!(recovered.unwrap(), "proved view");
+    }
+
     fn decided_fixture(
         reason: Option<&str>,
         expected_task_version: u64,
@@ -1066,6 +1098,7 @@ mod tests {
         assert_same_error_semantics(existing_status, missing_status);
 
         let facts = CancelBlockedTerminalFacts {
+            receipt_id: "receipt".into(),
             blocker: ApprovalBlockerCode::DefinitionGraphCorrupted,
             actor_id: "runtime-admin".to_string(),
             reason: command.reason.clone(),

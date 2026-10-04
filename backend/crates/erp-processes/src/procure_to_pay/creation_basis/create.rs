@@ -1,16 +1,16 @@
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::{AuditActorLogs, AuditLog};
 use erp_core::ids::{PurchaseOrderId, PurchaseOrderSubmissionId, SalesOrderId, WarehouseId};
 use erp_identity::SharedRbacService;
 use erp_procurement::dto::purchase_order::{
     CREATE_ACTION, CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderResult,
 };
 use erp_procurement::entity::purchase_order::{
-    BasisGroup, CreationBasisFacts, FulfillmentResponsibility, LegacyReceiptIdScheme, PurchaseCommandReceipt,
-    PurchaseCommandReceiptError, PurchaseOrder, PurchaseOrderData, PurchaseOrderSubmission,
-    PurchaseOrderSubmissionLine, RequestedLine, basis_id_for,
+    BasisGroup, CreationBasisFacts, CreationReceipt, FulfillmentResponsibility, PurchaseCommandReceipt,
+    PurchaseCommandReceiptError, PurchaseCommandReceiptIdentity, PurchaseOrder, PurchaseOrderData,
+    PurchaseOrderSubmission, PurchaseOrderSubmissionLine, RequestedLine, basis_id_for,
 };
-use erp_procurement::repository::PurchaseOrderExt;
+use erp_procurement::repository::{PurchaseCommandExt, PurchaseOrderExt};
 use erp_procurement::service::purchase_order::creation_basis::{
     SelectedLine, build_draft_submission, build_submission_line, compute_selected_lines,
     ensure_request_scope, find_requested_group, parse_basis_sales_order_id,
@@ -30,7 +30,6 @@ use erp_workflow::{ApprovalObjectReadPort, DocumentRegistryExt};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
-use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use super::super::PurchaseOrderProcess;
@@ -41,25 +40,16 @@ use super::super::create_submit::{CreatedDraftBundle, submit_created_draft};
 use super::super::procurement_task_sync::{
     load_owned_open_procurement_task, sync_procurement_tasks_for_sales_order,
 };
+use super::super::sourcing_create::sequence::PurchaseCreationEventSequence;
 use super::supplier::CreationBasisSupplierAdapter;
 use super::{procurement_quantity_changed, validate_requested_quantities};
 use crate::adapters::purchase_access;
+use crate::audit::{persist_log, recover_command};
 use crate::business_ownership::required_business_org;
 use crate::{Error, Result};
 
 const CREATE_PERMISSION: &str = "purchase_order:create";
 const CREATE_RECEIPT_PREFIX: &str = "purchase-order-create-command-";
-
-/// 幂等命令收据载荷。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-struct CreationReceipt {
-    /// 采购单主键。
-    purchase_order_id: String,
-    /// 采购单号。
-    purchase_no: String,
-    /// 创建完成时乐观锁版本。
-    lock_version: u64,
-}
 
 /// 事务内采购创建命令上下文。
 pub struct CreateBasisCommand<'a> {
@@ -70,7 +60,11 @@ pub struct CreateBasisCommand<'a> {
     /// 已规范化逐行数量。
     pub requested_lines: &'a [RequestedLine],
     /// 稳定命令收据 ID。
-    pub audit_id: &'a str,
+    pub receipt_identity: &'a PurchaseCommandReceiptIdentity,
+    /// 整批审计关联；独立建单时为本命令，选源子建单时为原批次命令。
+    pub audit_command_id: &'a str,
+    /// 业务首写前已校验的提交与创建事件序号。
+    pub(crate) audit_event_sequence: PurchaseCreationEventSequence,
     /// 命令载荷指纹。
     pub request_fingerprint: &'a str,
     /// 审计操作人。
@@ -96,6 +90,22 @@ struct PreparedBasisDraft {
     order: PurchaseOrder,
     submission: PurchaseOrderSubmission,
     lines: Vec<PurchaseOrderSubmissionLine>,
+}
+
+/// 原命令入口向授权事务传递的完整输入。
+struct BasisTransactionInput<'a> {
+    /// 原请求，克隆时机保持在事务准备阶段。
+    req: &'a CreatePurchaseOrderFromBasisRequest,
+    /// 入口已经规范化的采购行。
+    requested_lines: Vec<RequestedLine>,
+    /// 已解析的来源销售单。
+    sales_order_id: SalesOrderId,
+    /// 原命令稳定收据身份。
+    receipt_identity: &'a PurchaseCommandReceiptIdentity,
+    /// 原规范化请求指纹。
+    request_fingerprint: &'a str,
+    /// 已鉴权操作人。
+    actor: &'a AuditActor,
 }
 
 impl PurchaseOrderProcess {
@@ -129,49 +139,77 @@ impl PurchaseOrderProcess {
             CREATE_ACTION,
             None,
             &req.idempotency_key,
-            LegacyReceiptIdScheme::None,
         )?;
-        let audit_id = receipt_identity.receipt_id().to_string();
-        let PurchaseOrderAuthorization { rbac, policy_revision } =
-            self.authorize_actor_permission(actor, CREATE_PERMISSION).await?;
+        let authorization = self.authorize_actor_permission(actor, CREATE_PERMISSION).await?;
         if let Some(result) =
-            replay_creation(&self.db, &audit_id, &request_fingerprint, actor, &mut NoTransaction).await?
+            replay_creation(&self.db, &receipt_identity, &request_fingerprint, actor, &mut NoTransaction)
+                .await?
         {
             return Ok(result);
         }
         let sales_order_id = parse_basis_sales_order_id(&req.basis_id)?;
+        let transaction_result = self
+            .basis_transaction(
+                BasisTransactionInput {
+                    req: &req,
+                    requested_lines,
+                    sales_order_id,
+                    receipt_identity: &receipt_identity,
+                    request_fingerprint: &request_fingerprint,
+                    actor,
+                },
+                authorization,
+            )
+            .await;
+        match transaction_result {
+            Ok(result) => Ok(result),
+            Err(error) => recover_command(
+                error,
+                replay_creation(&self.db, &receipt_identity, &request_fingerprint, actor, &mut NoTransaction)
+                    .await,
+            ),
+        }
+    }
+
+    /// 保留授权事务的原克隆、账号复验和实际业务写入顺序。
+    async fn basis_transaction(
+        &self,
+        input: BasisTransactionInput<'_>,
+        authorization: PurchaseOrderAuthorization,
+    ) -> Result<CreatePurchaseOrderResult> {
+        let PurchaseOrderAuthorization { rbac, policy_revision } = authorization;
+        let BasisTransactionInput {
+            req,
+            requested_lines,
+            sales_order_id,
+            receipt_identity,
+            request_fingerprint,
+            actor,
+        } = input;
         let db = self.db.clone();
         let binding_rbac = rbac.clone();
         let object_read = std::sync::Arc::clone(&self.object_read);
         let transaction_actor = actor.clone();
         let transaction_req = req.clone();
-        let transaction_fingerprint = request_fingerprint.clone();
-        let transaction_audit_id = audit_id.clone();
-        let transaction_result = rbac
-            .run_authorized_policy_transaction(policy_revision, move |executor| {
-                Box::pin(async move {
-                    ensure_purchase_order_actor_account(&db, &transaction_actor, executor).await?;
-                    let command = CreateBasisCommand {
-                        sales_order_id: &sales_order_id,
-                        req: &transaction_req,
-                        requested_lines: &requested_lines,
-                        audit_id: &transaction_audit_id,
-                        request_fingerprint: &transaction_fingerprint,
-                        actor: &transaction_actor,
-                    };
-                    create_from_basis_apply(&db, &binding_rbac, object_read.as_ref(), &command, executor)
-                        .await
-                })
+        let transaction_fingerprint = request_fingerprint.to_string();
+        let transaction_receipt_identity = receipt_identity.clone();
+        rbac.run_authorized_policy_transaction(policy_revision, move |executor| {
+            Box::pin(async move {
+                ensure_purchase_order_actor_account(&db, &transaction_actor, executor).await?;
+                let command = CreateBasisCommand {
+                    sales_order_id: &sales_order_id,
+                    req: &transaction_req,
+                    requested_lines: &requested_lines,
+                    receipt_identity: &transaction_receipt_identity,
+                    audit_command_id: transaction_receipt_identity.receipt_id(),
+                    audit_event_sequence: PurchaseCreationEventSequence::standalone(),
+                    request_fingerprint: &transaction_fingerprint,
+                    actor: &transaction_actor,
+                };
+                create_from_basis_apply(&db, &binding_rbac, object_read.as_ref(), &command, executor).await
             })
-            .await;
-        match transaction_result {
-            Ok(result) => Ok(result),
-            Err(error) => {
-                replay_creation(&self.db, &audit_id, &request_fingerprint, actor, &mut NoTransaction)
-                    .await?
-                    .ok_or(error)
-            },
-        }
+        })
+        .await
     }
 }
 
@@ -199,7 +237,8 @@ async fn create_from_basis_apply(
     executor: &mut dyn Executor,
 ) -> Result<CreatePurchaseOrderResult> {
     if let Some(result) =
-        replay_creation(db, command.audit_id, command.request_fingerprint, command.actor, executor).await?
+        replay_creation(db, command.receipt_identity, command.request_fingerprint, command.actor, executor)
+            .await?
     {
         return Ok(result);
     }
@@ -296,7 +335,14 @@ pub async fn persist_basis_draft(
     };
     let document = write_prepared_draft(db, rbac, object_read, &write, executor).await?;
     let purchase_order_id = order.base.id.clone();
-    let bundle = CreatedDraftBundle { order, draft: submission, draft_lines: lines, document };
+    let bundle = CreatedDraftBundle {
+        order,
+        draft: submission,
+        draft_lines: lines,
+        document,
+        audit_command_id: command.audit_command_id.to_string(),
+        audit_event_sequence: command.audit_event_sequence,
+    };
     let submitted = submit_created_draft(
         db,
         input.sales_order,
@@ -504,18 +550,38 @@ async fn write_creation_receipt(
 ) -> Result<CreatePurchaseOrderResult> {
     let receipt =
         CreationReceipt { purchase_order_id: purchase_order_id.to_string(), purchase_no, lock_version };
-    let audit = command.actor.clone().resource_log_with_id(
-        command.audit_id.to_string(),
-        CREATE_ACTION,
-        "purchase_order",
-        purchase_order_id.to_string(),
-        Some(
-            PurchaseCommandReceipt::new(command.request_fingerprint.to_string(), receipt.clone())
-                .encode_message()?,
-        ),
+    let audit =
+        creation_audit(command.actor, command.audit_command_id, &receipt, command.audit_event_sequence)?;
+    let record = PurchaseCommandReceipt::new(
+        command.receipt_identity,
+        command.request_fingerprint,
+        receipt.clone(),
+        audit.base.id.clone(),
     )?;
-    db.audit_logs().create(&audit, executor).await?;
+    db.purchase_command_receipts::<CreationReceipt>().create(&record, executor).await?;
+    persist_log(db, &audit, executor).await?;
     Ok(receipt.into_result(false))
+}
+
+/// 从首次创建结果投影随后写入的创建事件。
+fn creation_audit(
+    actor: &AuditActor,
+    command_id: &str,
+    receipt: &CreationReceipt,
+    sequence: PurchaseCreationEventSequence,
+) -> Result<AuditLog> {
+    Ok(actor
+        .clone()
+        .resource_log_with_id(
+            next_id(),
+            CREATE_ACTION,
+            "purchase_order",
+            receipt.purchase_order_id.clone(),
+            None,
+        )?
+        .with_command_id(Some(command_id.to_string()))?
+        .with_resource_number(Some(receipt.purchase_no.clone()))?
+        .with_event_sequence(sequence.created())?)
 }
 
 /// 校验采购单初始责任人可以完成其责任类型对应的后续履约操作。
@@ -631,7 +697,7 @@ fn contextualize_fulfillment_owner_error(error: Error, message: &str) -> Error {
 ///
 /// # 参数
 /// * `db` - MongoDB 数据库
-/// * `audit_id` - 稳定收据 ID
+/// * `receipt_identity` - 稳定收据 ID
 /// * `expected_fingerprint` - 当前命令载荷指纹
 /// * `actor` - 当前操作人
 /// * `executor` - 数据访问执行器
@@ -646,19 +712,21 @@ fn contextualize_fulfillment_owner_error(error: Error, message: &str) -> Error {
 /// 事务前、事务内和事务失败后均复用同一校验逻辑。
 async fn replay_creation(
     db: &mongodb::Database,
-    audit_id: &str,
+    receipt_identity: &PurchaseCommandReceiptIdentity,
     expected_fingerprint: &str,
-    actor: &AuditActor,
+    _actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<Option<CreatePurchaseOrderResult>> {
-    let Some(audit) = db.audit_logs().find_by_id(audit_id, executor).await? else {
+    let Some(record) = db
+        .purchase_command_receipts::<CreationReceipt>()
+        .find_by_id_including_deleted(receipt_identity.receipt_id(), executor)
+        .await?
+    else {
         return Ok(None);
     };
     let receipt = match PurchaseCommandReceipt::<CreationReceipt>::decode(
-        &crate::procure_to_pay::adapters::audit::audit_receipt_fact(&audit),
-        actor.id(),
-        CREATE_ACTION,
-        None,
+        record,
+        receipt_identity,
         expected_fingerprint,
     ) {
         Ok(receipt) => receipt,
@@ -669,9 +737,6 @@ async fn replay_creation(
             return Err(Error::Internal(message));
         },
     };
-    if audit.resource_id.as_deref() != Some(receipt.payload().purchase_order_id.as_str()) {
-        return Err(Error::ConflictError("采购创建幂等收据与业务资源不一致".to_string()));
-    }
     let order = db
         .purchase_orders()
         .find_by_id(&receipt.payload().purchase_order_id, executor)
@@ -683,27 +748,132 @@ async fn replay_creation(
     Ok(Some(receipt.into_payload().into_result(true)))
 }
 
-impl CreationReceipt {
-    /// 转换为采购创建响应。
-    ///
-    /// # 参数
-    /// * `replayed` - 是否来自幂等收据回放
-    ///
-    /// # 返回
-    /// 返回 API 创建结果。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 业务引用恒为原采购单 ID。
-    fn into_result(self, replayed: bool) -> CreatePurchaseOrderResult {
-        CreatePurchaseOrderResult::new(
-            self.purchase_order_id.clone(),
-            self.purchase_no,
-            self.purchase_order_id,
+#[cfg(test)]
+mod tests {
+    use erp_audit::prepare_business_log;
+    use erp_core::AccountKind;
+    use erp_core::ids::{SalesOrderRevisionId, SupplierAccountId};
+    use erp_procurement::dto::purchase_order::CREATE_SOURCING_ACTION;
+    use erp_procurement::entity::purchase_order::PurchaseType;
+
+    use super::super::super::create_submit::create_submit_audit;
+    use super::super::super::sourcing_create::sequence::SourcingEventSequencePlan;
+    use super::super::super::sourcing_create::sourcing_audit;
+    use super::*;
+
+    fn actor() -> AuditActor {
+        AuditActor::new("buyer-id".into(), "buyer-account".into(), AccountKind::Admin)
+            .with_actor_name_snapshot(Some("陈国平".into()))
+            .unwrap()
+            .with_request_id(Some("request-sourcing".into()))
+            .unwrap()
+    }
+
+    fn created_order(receipt: &CreationReceipt) -> PurchaseOrder {
+        PurchaseOrder::new(
+            PurchaseOrderId::new(receipt.purchase_order_id.clone()),
+            PurchaseOrderData {
+                business_org_unit_id: "org-purchase".into(),
+                purchase_no: receipt.purchase_no.clone(),
+                sales_order_id: SalesOrderId::new("so-source"),
+                sales_order_revision_id: SalesOrderRevisionId::new("sales-revision"),
+                creation_basis_id: format!("basis-{}", receipt.purchase_order_id),
+                supplier_id: SupplierAccountId::new("supplier"),
+                purchase_type: PurchaseType::Physical,
+                payment_term_code: "NET-30".into(),
+                fulfillment_responsibility: FulfillmentResponsibility::SupplierDirect,
+                owner_user_id: "buyer-id".into(),
+                target_warehouse_id: None,
+            },
+            "buyer-id",
+            parse,
         )
-        .with_lock_version(self.lock_version)
-        .with_replayed(replayed)
+        .unwrap()
+    }
+
+    /// 执行生产投影工厂，按逐单提交、创建和最终批次主事件形成完整序号。
+    #[test]
+    fn sourcing_factories_preserve_batch_order_command_and_immutable_snapshots() {
+        let actor = actor();
+        let command_id = "purchase-order-sourcing-command-batch";
+        let receipts = [
+            CreationReceipt {
+                purchase_order_id: "po-1".into(),
+                purchase_no: "PO-001".into(),
+                lock_version: 4,
+            },
+            CreationReceipt {
+                purchase_order_id: "po-2".into(),
+                purchase_no: "PO-002".into(),
+                lock_version: 4,
+            },
+        ];
+        let sequences = SourcingEventSequencePlan::new(receipts.len()).unwrap();
+        let mut logs = Vec::new();
+        for (receipt, sequence) in receipts.iter().zip(sequences.orders()) {
+            let sequence = sequence.unwrap();
+            logs.push(create_submit_audit(&actor, &created_order(receipt), command_id, sequence).unwrap());
+            logs.push(creation_audit(&actor, command_id, receipt, sequence).unwrap());
+        }
+        logs.push(sourcing_audit(&actor, command_id, "so-source", "SO-001", sequences.main()).unwrap());
+        let logs = logs.iter().map(|log| prepare_business_log(log).unwrap()).collect::<Vec<_>>();
+        let encoded = serde_json::to_string(&logs).unwrap();
+        let decoded: Vec<AuditLog> = serde_json::from_str(&encoded).unwrap();
+        let events = decoded.iter().map(|log| log.structured_event.as_ref().unwrap()).collect::<Vec<_>>();
+        assert_eq!(
+            events.iter().map(|event| event.event_sequence.get()).collect::<Vec<_>>(),
+            [1, 2, 3, 4, 5]
+        );
+        assert_eq!(
+            events.iter().map(|event| event.action_code.as_str()).collect::<Vec<_>>(),
+            [
+                "purchase_order.submit",
+                CREATE_ACTION,
+                "purchase_order.submit",
+                CREATE_ACTION,
+                CREATE_SOURCING_ACTION
+            ]
+        );
+        assert_eq!(
+            events.iter().map(|event| event.resource_id.as_str()).collect::<Vec<_>>(),
+            ["po-1", "po-1", "po-2", "po-2", "so-source"]
+        );
+        assert_eq!(
+            events.iter().map(|event| event.resource_number_snapshot.as_deref()).collect::<Vec<_>>(),
+            [Some("PO-001"), Some("PO-001"), Some("PO-002"), Some("PO-002"), Some("SO-001")]
+        );
+        assert!(events.iter().all(|event| event.command_id.as_deref() == Some(command_id)));
+        assert!(events.iter().all(|event| event.request_id.as_deref() == Some("request-sourcing")));
+        assert!(events.iter().all(|event| event.actor_name_snapshot.as_deref() == Some("陈国平")));
+        assert_eq!(decoded[0].base.id, "purchase-create-submit-po-1");
+        assert_eq!(decoded[2].base.id, "purchase-create-submit-po-2");
+        assert!(decoded.iter().all(|log| log.message.as_deref().unwrap().contains("陈国平")));
+    }
+
+    /// 独立建单复用同一生产工厂，只有提交与创建；纯库存批次只有主事件。
+    #[test]
+    fn standalone_and_stock_only_factories_keep_exact_event_sequences() {
+        let actor = actor();
+        let receipt = CreationReceipt {
+            purchase_order_id: "po-only".into(),
+            purchase_no: "PO-ONLY".into(),
+            lock_version: 4,
+        };
+        let sequence = PurchaseCreationEventSequence::standalone();
+        let submit =
+            create_submit_audit(&actor, &created_order(&receipt), "standalone-command", sequence).unwrap();
+        let created = creation_audit(&actor, "standalone-command", &receipt, sequence).unwrap();
+        assert_eq!(submit.structured_event.as_ref().unwrap().event_sequence.get(), 1);
+        assert_eq!(created.structured_event.as_ref().unwrap().event_sequence.get(), 2);
+        assert_eq!(
+            submit.structured_event.as_ref().unwrap().command_id,
+            created.structured_event.as_ref().unwrap().command_id
+        );
+        let stock_only = SourcingEventSequencePlan::new(0).unwrap();
+        let batch =
+            sourcing_audit(&actor, "stock-command", "so-source", "SO-ONLY", stock_only.main()).unwrap();
+        let event = batch.structured_event.unwrap();
+        assert_eq!(event.event_sequence.get(), 1);
+        assert_eq!(event.resource_number_snapshot.as_deref(), Some("SO-ONLY"));
     }
 }

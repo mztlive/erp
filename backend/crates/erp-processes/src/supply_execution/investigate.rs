@@ -1,6 +1,8 @@
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
+use erp_supply::command_receipt::SupplyCommandResult;
+use erp_supply::command_receipt::repository::{SupplyCommandReceiptExt, SupplyCommandReceiptReadExt};
 use erp_supply::dto::supplier_fulfillment::{
     SupplierOrderActionBlockerView, SupplierOrderInvestigationAction, SupplierOrderInvestigationEvidenceView,
     SupplierOrderInvestigationOutcome, SupplierOrderInvestigationResultStatus,
@@ -19,14 +21,15 @@ use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::receipt::{
-    InvestigationReceipt, investigation_receipt_message, parse_investigation_receipt, parse_positive_version,
-    serialized_fingerprint, stable_digest, stable_evidence_id, stable_internal_idempotency_key,
+    InvestigationReceipt, parse_positive_version, persist_supply_receipt, serialized_fingerprint,
+    stable_digest, stable_evidence_id, stable_internal_idempotency_key,
 };
 use super::{SupplierFulfillmentProcess, W26_BUSINESS_OBJECT_TYPE};
 use crate::adapters::workflow::work_item_service;
+use crate::audit::persist_log;
 use crate::{Error, Result};
 
-const INVESTIGATION_AUDIT_PREFIX: &str = "w26-investigation-";
+const INVESTIGATION_COMMAND_PREFIX: &str = "w26-investigation-";
 
 #[derive(Debug, Clone)]
 struct InvestigationCommandContext {
@@ -36,6 +39,7 @@ struct InvestigationCommandContext {
     operation_id: String,
     target_action_id: String,
     task: Option<InvestigationTaskContext>,
+    idempotency_key: String,
 }
 
 #[derive(Debug, Clone)]
@@ -64,14 +68,22 @@ impl SupplierFulfillmentProcess {
         self.require_scoped_order(command.order_id.as_ref(), actor, "investigate", &mut NoTransaction)
             .await?;
         let fingerprint = serialized_fingerprint(&command)?;
-        let audit_id = investigation_audit_id(
+        let command_id = investigation_command_id(
             actor.id(),
             "supplier_fulfillment.investigate",
             command.order_id.as_ref(),
             &command.idempotency_key,
         );
-        if let Some(result) =
-            self.replay_investigation(&audit_id, &fingerprint, &command.operation_id, None).await?
+        if let Some(result) = self
+            .replay_investigation(
+                &command_id,
+                &fingerprint,
+                &command.operation_id,
+                None,
+                command.order_id.as_ref(),
+                (actor.id(), &command.idempotency_key),
+            )
+            .await?
         {
             return Ok(result);
         }
@@ -82,8 +94,9 @@ impl SupplierFulfillmentProcess {
             operation_id: command.operation_id,
             target_action_id: command.target_supplier_action_id.to_string(),
             task: None,
+            idempotency_key: command.idempotency_key,
         };
-        self.execute_investigation(context, audit_id, fingerprint, actor).await
+        self.execute_investigation(context, command_id, fingerprint, actor).await
     }
 
     /// 从 W26 正式任务入口查询原结果或执行已证明安全的重放。
@@ -104,7 +117,7 @@ impl SupplierFulfillmentProcess {
         self.require_task_permissions(actor, &mut NoTransaction).await?;
         let expected_task_version = parse_positive_version(&command.expected_task_version, "任务版本")?;
         let fingerprint = serialized_fingerprint(&command)?;
-        let audit_id = investigation_audit_id(
+        let command_id = investigation_command_id(
             actor.id(),
             "supplier_fulfillment.task_investigate",
             command.work_item_id.as_ref(),
@@ -116,7 +129,14 @@ impl SupplierFulfillmentProcess {
             expected_subject_version: command.expected_subject_version,
         };
         if let Some(result) = self
-            .replay_investigation(&audit_id, &fingerprint, &command.action.operation_id, Some(&task_context))
+            .replay_investigation(
+                &command_id,
+                &fingerprint,
+                &command.action.operation_id,
+                Some(&task_context),
+                command.work_item_id.as_ref(),
+                (actor.id(), &command.idempotency_key),
+            )
             .await?
         {
             return Ok(result);
@@ -128,19 +148,20 @@ impl SupplierFulfillmentProcess {
             operation_id: command.action.operation_id,
             target_action_id: command.action.target_supplier_action_id.to_string(),
             task: Some(task_context),
+            idempotency_key: command.idempotency_key,
         };
-        self.execute_investigation(context, audit_id, fingerprint, actor).await
+        self.execute_investigation(context, command_id, fingerprint, actor).await
     }
 
     async fn execute_investigation(
         &self,
         context: InvestigationCommandContext,
-        audit_id: String,
+        command_id: String,
         fingerprint: String,
         actor: &AuditActor,
     ) -> Result<SupplierOrderInvestigationResultView> {
-        let evidence_id = stable_evidence_id("w26e", &audit_id);
-        let evidence_idempotency_key = stable_internal_idempotency_key("w26e", &audit_id);
+        let evidence_id = stable_evidence_id("w26e", &command_id);
+        let evidence_idempotency_key = stable_internal_idempotency_key("w26e", &command_id);
         let existing_prepared = self
             .ensure_investigation_intent(&context, &evidence_id, &evidence_idempotency_key, actor)
             .await?;
@@ -155,7 +176,7 @@ impl SupplierFulfillmentProcess {
         let actor_id = actor.id().to_string();
         let actor_for_tx = actor.clone();
         let rbac_for_tx = crate::adapters::identity::shared_rbac_service(self.db.clone());
-        let audit_id_for_tx = audit_id.clone();
+        let command_id_for_tx = command_id.clone();
         let fingerprint_for_tx = fingerprint.clone();
         let evidence_id_for_tx = evidence_id.clone();
         let evidence_idempotency_key_for_tx = evidence_idempotency_key.clone();
@@ -203,13 +224,8 @@ impl SupplierFulfillmentProcess {
                         persist_action(&db, &mut target_action, executor).await?;
                     }
 
-                    let evidence_record = investigation_evidence_record(
-                        &context_for_tx.subject(),
-                        target_action.base.id.clone(),
-                        &finding,
-                    );
-                    let response_summary = serde_json::to_string(&evidence_record)
-                        .map_err(|error| Error::Internal(format!("调查证据序列化失败: {error}")))?;
+                    let (evidence_record, response_summary) =
+                        serialize_investigation_record(&context_for_tx.subject(), &target_action, &finding)?;
                     let mut evidence = db
                         .supplier_order_actions()
                         .find_by_id(&evidence_id_for_tx, executor)
@@ -258,22 +274,20 @@ impl SupplierFulfillmentProcess {
                     } else {
                         None
                     };
-                    let receipt = InvestigationReceipt {
-                        evidence_id: evidence.base.id.clone(),
-                        order_version: order.base.version,
-                        task_version,
-                    };
-                    let audit = actor_for_tx.resource_log_with_id(
-                        audit_id_for_tx,
-                        match context_for_tx.task {
-                            Some(_) => "supplier_fulfillment.task_investigate",
-                            None => "supplier_fulfillment.investigate",
+                    persist_investigation_result(
+                        InvestigationWrite {
+                            db: &db,
+                            order: &order,
+                            evidence: &evidence,
+                            context: &context_for_tx,
+                            actor: &actor_for_tx,
+                            command_id: &command_id_for_tx,
+                            fingerprint: &fingerprint_for_tx,
+                            task_version,
                         },
-                        W26_BUSINESS_OBJECT_TYPE,
-                        order.base.id.clone(),
-                        Some(investigation_receipt_message(&fingerprint_for_tx, &receipt)),
-                    )?;
-                    db.audit_logs().create(&audit, executor).await?;
+                        executor,
+                    )
+                    .await?;
                     Ok::<
                         (
                             SupplierFulfillmentOrder,
@@ -299,10 +313,15 @@ impl SupplierFulfillmentProcess {
             }),
             || {
                 self.replay_investigation(
-                    &audit_id,
+                    &command_id,
                     &fingerprint,
                     &context.operation_id,
                     context.task.as_ref(),
+                    context
+                        .task
+                        .as_ref()
+                        .map_or(context.order_id.as_str(), |task| task.work_item_id.as_str()),
+                    (actor.id(), &context.idempotency_key),
                 )
             },
         )
@@ -517,27 +536,35 @@ impl SupplierFulfillmentProcess {
 
     async fn replay_investigation(
         &self,
-        audit_id: &str,
+        command_id: &str,
         expected_fingerprint: &str,
         expected_operation_id: &str,
         task: Option<&InvestigationTaskContext>,
+        scope_id: &str,
+        identity: (&str, &str),
     ) -> Result<Option<SupplierOrderInvestigationResultView>> {
-        let Some(audit) = self.db.audit_logs().find_by_id(audit_id, &mut NoTransaction).await? else {
+        let Some(stored) =
+            self.db.supply_command_receipts().find_command(command_id, &mut NoTransaction).await?
+        else {
             return Ok(None);
         };
-        if !audit.success
-            || audit.resource_type != W26_BUSINESS_OBJECT_TYPE
-            || !matches!(
-                audit.action.as_str(),
-                "supplier_fulfillment.investigate" | "supplier_fulfillment.task_investigate"
-            )
-        {
-            return Err(Error::Internal("W26 调查幂等收据身份非法".to_string()));
-        }
-        let receipt = parse_investigation_receipt(
-            audit.message.as_deref().ok_or_else(|| Error::Internal("W26 调查幂等收据为空".to_string()))?,
-            expected_fingerprint,
+        let action = if task.is_some() {
+            "supplier_fulfillment.task_investigate"
+        } else {
+            "supplier_fulfillment.investigate"
+        };
+        stored.verify_identity(
+            command_id,
+            identity.0,
+            action,
+            scope_id,
+            &stable_digest(identity.1.trim()),
         )?;
+        stored.verify(expected_fingerprint, None, "请求标识已用于不同的调查命令")?;
+        let resource_id = stored.resource_id;
+        let SupplyCommandResult::Investigation(receipt) = stored.result else {
+            return Err(Error::Internal("W26 调查幂等收据身份非法".to_string()));
+        };
         if task.is_some() != receipt.task_version.is_some() {
             return Err(Error::ConflictError("请求标识已用于不同的调查入口".to_string()));
         }
@@ -552,7 +579,7 @@ impl SupplierFulfillmentProcess {
             return Err(Error::ConflictError("请求标识已用于不同的调查命令".to_string()));
         }
         let order = self.load_order(evidence.supplier_fulfillment_order_id.as_ref()).await?;
-        if audit.resource_id.as_deref() != Some(order.base.id.as_str()) {
+        if resource_id != order.base.id {
             return Err(Error::Internal("W26 调查幂等收据对象不一致".to_string()));
         }
         Ok(Some(investigation_result(
@@ -678,9 +705,9 @@ fn investigation_result(
     }
 }
 
-fn investigation_audit_id(actor_id: &str, action: &str, object_id: &str, key: &str) -> String {
+fn investigation_command_id(actor_id: &str, action: &str, object_id: &str, key: &str) -> String {
     format!(
-        "{INVESTIGATION_AUDIT_PREFIX}{}",
+        "{INVESTIGATION_COMMAND_PREFIX}{}",
         stable_digest(&format!("{actor_id}|{action}|{object_id}|{key}"))
     )
 }
@@ -699,4 +726,71 @@ impl InvestigationCommandContext {
             target_action_id: self.target_action_id.clone(),
         }
     }
+}
+
+/// 调查完成时同一执行器保存的事件与原结果输入。
+struct InvestigationWrite<'a> {
+    db: &'a Database,
+    order: &'a SupplierFulfillmentOrder,
+    evidence: &'a SupplierOrderAction,
+    context: &'a InvestigationCommandContext,
+    actor: &'a AuditActor,
+    command_id: &'a str,
+    fingerprint: &'a str,
+    task_version: Option<u64>,
+}
+
+/// 在业务证据及可选任务之后登记独立回执，再登记单次事件。
+async fn persist_investigation_result(
+    input: InvestigationWrite<'_>,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let receipt = InvestigationReceipt {
+        evidence_id: input.evidence.base.id.clone(),
+        order_version: input.order.base.version,
+        task_version: input.task_version,
+    };
+    let audit = input
+        .actor
+        .clone()
+        .resource_log_with_id(
+            input.command_id.to_string(),
+            match input.context.task {
+                Some(_) => "supplier_fulfillment.task_investigate",
+                None => "supplier_fulfillment.investigate",
+            },
+            W26_BUSINESS_OBJECT_TYPE,
+            input.order.base.id.clone(),
+            Some("供应商履约调查结果已登记".to_string()),
+        )?
+        .with_command_id(Some(input.command_id.to_string()))?
+        .with_resource_number(Some(input.order.fulfillment_order_no.clone()))?;
+    persist_supply_receipt(
+        input.db,
+        &audit,
+        input.fingerprint,
+        &input.context.idempotency_key,
+        input
+            .context
+            .task
+            .as_ref()
+            .map_or(input.context.order_id.as_str(), |task| task.work_item_id.as_str()),
+        SupplyCommandResult::Investigation(receipt),
+        executor,
+    )
+    .await?;
+    persist_log(input.db, &audit, executor).await?;
+    Ok(())
+}
+
+/// 使用原领域证据结构及错误映射准备不可变结果正文。
+fn serialize_investigation_record(
+    subject: &InvestigationSubject,
+    target: &SupplierOrderAction,
+    finding: &InvestigationFinding,
+) -> Result<(InvestigationEvidenceRecord, String)> {
+    let record = investigation_evidence_record(subject, target.base.id.clone(), finding);
+    let response = serde_json::to_string(&record)
+        .map_err(|error| Error::Internal(format!("调查证据序列化失败: {error}")))?;
+    Ok((record, response))
 }

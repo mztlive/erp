@@ -1,5 +1,5 @@
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_supply::dto::supplier_fulfillment::{RecordSupplierRejectRequest, SupplierOrderStatusHistoryView};
 use erp_supply::repository::SupplierFulfillmentExt;
 use erp_supply::repository::prelude::*;
@@ -8,6 +8,7 @@ use validator::Validate;
 
 use super::SupplierFulfillmentProcess;
 use crate::Result;
+use crate::audit::persist_log;
 
 impl SupplierFulfillmentProcess {
     /// 登记供应商拒单结果（回调幂等键 `(connection_id, external_event_id)`，§6.19）。
@@ -68,7 +69,7 @@ impl SupplierFulfillmentProcess {
                         executor,
                     )
                     .await?;
-                    db.audit_logs().create(&audit_for_tx, executor).await?;
+                    persist_log(&db, &audit_for_tx, executor).await?;
                     Ok::<(), crate::Error>(())
                 })
             })

@@ -1,7 +1,7 @@
 //! 销售单后补合同：仅变更稳定关联，不改动已冻结销售内容。
 
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_contract::{ContractExt, ContractStatus};
 use erp_read_models::sales_center::order::dto::SalesOrderDetailView;
 use erp_sales::dto::sales_order::BindSalesOrderContractRequest;
@@ -13,6 +13,7 @@ use validator::Validate;
 
 use super::super::SalesOrderCommandProcess;
 use super::super::authorization::SalesCommandAccess;
+use crate::audit::persist_log;
 use crate::{Error, Result};
 
 impl SalesOrderCommandProcess {
@@ -75,7 +76,7 @@ impl SalesOrderCommandProcess {
                     verify_and_bind_contract(&db, &access, &mut order, &req, &actor, executor).await?;
                     db.sales_orders().update(&mut order, executor).await?;
                     let audit = actor.resource_log("sales_order.bind_contract", "sales_order", id_owned)?;
-                    db.audit_logs().create(&audit, executor).await?;
+                    persist_log(&db, &audit, executor).await?;
                     Ok::<(), Error>(())
                 })
             })

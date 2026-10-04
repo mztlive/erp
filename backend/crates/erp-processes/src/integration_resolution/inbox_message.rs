@@ -3,7 +3,7 @@
 //! 消息层/业务事实层幂等由唯一索引保证，服务层不做「先查后插」重复性判断；
 //! 所有业务写入与审计日志在同一 MongoDB 事务原子提交（模板见 `super::transaction`）。
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
 use erp_integration::dto::*;
 use erp_integration::entity::integration_ops::InboxMessageId;
@@ -17,6 +17,7 @@ use validator::Validate;
 use super::IntegrationResolutionProcess;
 use super::creation_writes::{CreatedFact, persist_created};
 use super::producer::error_work_item;
+use crate::audit::persist_log;
 use crate::{Error, Result};
 
 impl IntegrationResolutionProcess {
@@ -56,7 +57,7 @@ impl IntegrationResolutionProcess {
         self.run_audited(move |db, executor| {
             Box::pin(async move {
                 persist_inbox_message(db, &stored, executor).await?;
-                db.audit_logs().create(&audit, executor).await?;
+                persist_log(db, &audit, executor).await?;
                 Ok(())
             })
         })
@@ -111,7 +112,7 @@ impl IntegrationResolutionProcess {
                         let mut stored = message;
                         Box::pin(async move {
                             update_inbox_message(db, &mut stored, executor).await?;
-                            db.audit_logs().create(&audit, executor).await?;
+                            persist_log(db, &audit, executor).await?;
                             Ok(stored)
                         })
                     })

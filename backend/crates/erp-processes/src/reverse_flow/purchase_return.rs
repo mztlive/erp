@@ -1,6 +1,6 @@
 //! PurchaseReturnOrder 无审批登记、业务创建与审计的原子流程。
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_identity::SharedRbacService;
 use erp_read_models::returns_center::ReturnsReadService;
 use erp_read_models::returns_center::dto::PurchaseReturnOrderView;
@@ -22,6 +22,7 @@ use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::ReturnsProcess;
+use crate::audit::persist_log;
 use crate::{Error, Result};
 
 impl ReturnsProcess {
@@ -319,7 +320,7 @@ impl CreationSteps for MongoCreation<'_> {
         Ok(())
     }
     async fn audit(&mut self, executor: &mut dyn Executor) -> Result<()> {
-        self.db.audit_logs().create(self.audit, executor).await?;
+        persist_log(self.db, self.audit, executor).await?;
         Ok(())
     }
 }

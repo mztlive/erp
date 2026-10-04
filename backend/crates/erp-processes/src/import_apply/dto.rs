@@ -118,6 +118,6 @@ pub struct CompleteImportBusinessConfirmationResult {
     pub batch_version: u64,
     /// 服务端确定的下一步。
     pub next_step: ImportBusinessConfirmationNextStep,
-    /// 不含原始幂等键的稳定审计收据 ID。
+    /// 与独立命令回执关联的同次成功审计事件 ID。
     pub audit_receipt: String,
 }

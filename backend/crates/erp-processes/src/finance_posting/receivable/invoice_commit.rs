@@ -8,6 +8,7 @@ use erp_finance::entity::receivable::sales_invoice_allocation_plan::SalesInvoice
 use erp_finance::entity::receivable::{Invoice, InvoiceData, InvoiceStatus};
 use erp_finance::repository::ReceivableExt;
 use erp_finance::repository::prelude::*;
+use erp_finance::service::command_receipt::FinanceCommandReceiptService;
 use erp_finance::service::receivable::invoice_commit::{PreparedInvoiceCommit, ensure_sales_invoice};
 use erp_finance::service::receivable::mapping::{ensure_expected_version, zero_amount};
 use erp_identity::SharedRbacService;
@@ -37,7 +38,20 @@ pub(super) struct InvoiceCommitTransaction {
 
 impl InvoiceCommitTransaction {
     /// 在入口已开启的事务内读取、过账及关联全部发票事实。
-    pub async fn execute(self, executor: &mut dyn Executor) -> Result<String> {
+    ///
+    /// # 参数
+    /// * `executor` - 入口授权事务使用的同一执行器。
+    /// # 返回
+    /// 返回原发票 ID 与本事务是否首次执行；重放不会消费新上传对象。
+    /// # 错误
+    /// 回执、授权、版本、发票、金额、任务或附件失败时停止并返回原错误。
+    pub async fn execute(self, executor: &mut dyn Executor) -> Result<(String, bool)> {
+        if let Some(id) = FinanceCommandReceiptService::new(self.db.clone())
+            .committed_resource_id(&self.receipt, executor)
+            .await?
+        {
+            return Ok((id, false));
+        }
         let (mut invoice, lines) = self.load_invoice(executor).await?;
         self.ensure_draft(&invoice, executor).await?;
         post_invoice_apply(
@@ -63,7 +77,7 @@ impl InvoiceCommitTransaction {
             executor,
         )
         .await?;
-        Ok(invoice.base.id)
+        Ok((invoice.base.id, true))
     }
 
     /// 新建路径登记无审批单据；已有草稿路径重验版本及销项方向。

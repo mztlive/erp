@@ -8,10 +8,10 @@ use bpm::ids::{
     ApprovalCommandReceiptId, ApprovalInstanceAssigneeId, ApprovalNodeExecutionId, ApprovalProcessInstanceId,
 };
 use bpm::model::{ApprovalNodeExecution, ParticipantId, SubjectRef, Timestamp};
-use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{ApprovalSubjectSnapshotId, WorkItemId};
 use erp_sales::dto::sales_order::SubmissionView;
+use erp_sales::entity::command_receipt::SalesCommandReceipt;
 use erp_sales::entity::sales_order::SalesOrder;
 use erp_workflow::entity::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
 use erp_workflow::entity::document_registry::DocumentType;
@@ -25,7 +25,8 @@ use erp_workflow::service::approval::execution::idempotency::{
     start_scope_candidates,
 };
 use erp_workflow::service::approval::execution::{
-    ExecutionCommandInput, PreparedExecution, StartExecutionInput, map_receipt_first_write_error,
+    ExecutionCommandInput, PlannedWrites, PreparedExecution, StartExecutionInput,
+    map_receipt_first_write_error,
 };
 use erp_workflow::service::approval::process_kind::process_kind_of;
 use erp_workflow::{ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, WorkItemExt};
@@ -34,7 +35,9 @@ use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::adapter::sales_order_object_readable;
+use super::authorization::SalesCommandAccess;
 use crate::adapters::freeze_approval_materials;
+use crate::order_to_cash::command_event::{SalesCommandEvent, replay_submission_with_executor};
 use crate::{Error, Result};
 
 /// 加载绑定定义图。缺失时失败关闭，不得用空图启动。
@@ -394,7 +397,7 @@ pub(super) struct SalesOrderStartPersistInput {
     /// 调用方时间。
     pub now: Instant,
     /// 已构造审计。
-    pub audit: erp_audit::AuditLog,
+    pub audit: SalesCommandEvent,
     /// 本次提交附带的草稿替换写入计划。
     pub working_copy_plan: SalesOrderWorkingCopyPersistPlan,
     /// 事务内必须重新确认的商品池精确引用。
@@ -452,40 +455,38 @@ pub(super) async fn persist_sales_order_start(
         submission.clone(),
         submission_lines.clone(),
     );
-    let check = access.clone();
-    let check_id = order.base.id.clone();
-    db.client()
-        .clone()
-        .with_transaction(move |executor| {
-            Box::pin(async move { check.revalidate(&check_id, expected_order_version, executor).await })
-        })
-        .await?;
+    let replayed =
+        check_sales_submission_start(&db, &access, &audit.receipt, &order.base.id, expected_order_version)
+            .await?;
+    if let Some(view) = replayed {
+        return Ok(view);
+    }
     let PreparedExecution::Apply(writes) = prepared else {
-        return Ok(submission_view);
+        return Err(Error::Internal("销售提交启动收据缺少领域命令结果".to_string()));
     };
-    client
+    let replayed = client
         .with_transaction(move |executor| {
             Box::pin(async move {
                 access.related_order(&order, executor).await?;
+                if let Some(view) = replay_submission_with_executor(
+                    &db,
+                    &audit.receipt.base.id,
+                    (&audit.receipt.fingerprint, &audit.receipt.idempotency_key_hash),
+                    &order.base.id,
+                    &audit.receipt.actor_id,
+                    &access,
+                    executor,
+                )
+                .await?
+                {
+                    return Ok::<Option<SubmissionView>, crate::Error>(Some(view));
+                }
                 access.revalidate(&order.base.id, expected_order_version, executor).await?;
                 db.bpm_workflow()
                     .insert_command_receipt(&writes.receipt, executor)
                     .await
                     .map_err(map_receipt_first_write_error)?;
-                let guarded = db
-                    .business_documents()
-                    .mark_approval_started(
-                        writes.instance.subject.subject_id(),
-                        document_type,
-                        &writes.instance.process_definition_id,
-                        writes.instance.definition_version,
-                        now,
-                        executor,
-                    )
-                    .await?;
-                if guarded.is_none() {
-                    return Err(Error::ConflictError("销售单审批启动守卫冲突，请刷新后重试".to_string()));
-                }
+                guard_sales_approval_start(&db, &writes, document_type, now, executor).await?;
                 erp_sales::service::sales_order::SalesOrderService::new(db.clone())
                     .ensure_sellable_refs(
                         &sellable_refs,
@@ -519,12 +520,73 @@ pub(super) async fn persist_sales_order_start(
                     executor,
                 )
                 .await?;
-                db.audit_logs().create(&audit, executor).await?;
-                Ok::<(), crate::Error>(())
+                audit.persist(&db, executor).await?;
+                Ok::<Option<SubmissionView>, crate::Error>(None)
             })
         })
         .await?;
-    Ok(submission_view)
+    Ok(replayed.unwrap_or(submission_view))
+}
+
+/// 在原只读事务内先查证提交回执，未命中才校验待写销售版本。
+async fn check_sales_submission_start(
+    db: &Database,
+    access: &SalesCommandAccess,
+    receipt: &SalesCommandReceipt,
+    order_id: &str,
+    expected_order_version: u64,
+) -> Result<Option<SubmissionView>> {
+    let check = access.clone();
+    let check_id = order_id.to_string();
+    let check_db = db.clone();
+    let receipt = receipt.clone();
+    db.client()
+        .clone()
+        .with_transaction(move |executor| {
+            Box::pin(async move {
+                if let Some(view) = replay_submission_with_executor(
+                    &check_db,
+                    &receipt.base.id,
+                    (&receipt.fingerprint, &receipt.idempotency_key_hash),
+                    &check_id,
+                    &receipt.actor_id,
+                    &check,
+                    executor,
+                )
+                .await?
+                {
+                    return Ok::<Option<SubmissionView>, crate::Error>(Some(view));
+                }
+                check.revalidate(&check_id, expected_order_version, executor).await?;
+                Ok(None)
+            })
+        })
+        .await
+}
+
+/// 在原写入位置登记审批启动守卫，保留守卫冲突语义。
+async fn guard_sales_approval_start(
+    db: &Database,
+    writes: &PlannedWrites,
+    document_type: DocumentType,
+    now: Instant,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let guarded = db
+        .business_documents()
+        .mark_approval_started(
+            writes.instance.subject.subject_id(),
+            document_type,
+            &writes.instance.process_definition_id,
+            writes.instance.definition_version,
+            now,
+            executor,
+        )
+        .await?;
+    if guarded.is_none() {
+        return Err(Error::ConflictError("销售单审批启动守卫冲突，请刷新后重试".to_string()));
+    }
+    Ok(())
 }
 
 /// 销售单启动运行事实写入上下文。

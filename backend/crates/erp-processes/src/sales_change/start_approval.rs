@@ -5,7 +5,6 @@ use bpm::ids::{
     ApprovalCommandReceiptId, ApprovalInstanceAssigneeId, ApprovalNodeExecutionId, ApprovalProcessInstanceId,
 };
 use bpm::model::{ApprovalNodeExecution, ParticipantId, SubjectRef, Timestamp};
-use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{ApprovalSubjectSnapshotId, WorkItemId};
 use erp_sales::service::sales_review::SalesChangeSubmissionWrite;
@@ -31,6 +30,7 @@ use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::adapter::sales_change_order_object_readable;
 use crate::adapters::freeze_approval_materials;
+use crate::audit::persist_log;
 use crate::{Error, Result};
 
 /// 加载绑定定义图。缺失时失败关闭，不得用空图启动。
@@ -432,7 +432,7 @@ pub(super) async fn persist_sales_change_start(
                     executor,
                 )
                 .await?;
-                db.audit_logs().create(&audit, executor).await?;
+                persist_log(&db, &audit, executor).await?;
                 Ok::<(), crate::Error>(())
             })
         })

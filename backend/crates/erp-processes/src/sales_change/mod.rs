@@ -9,6 +9,7 @@ use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 
 use crate::Result;
+use crate::audit::persist_log;
 
 mod adapter;
 mod authorization;
@@ -143,7 +144,6 @@ pub async fn cancel_approval(
     actor: &AuditActor,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<()> {
-    use erp_audit::AuditExt;
     use erp_sales::repository::SalesReviewExt;
     let mut change = db
         .sales_change_orders()
@@ -157,6 +157,6 @@ pub async fn cancel_approval(
         "sales_change_order",
         id.to_string(),
     )?;
-    db.audit_logs().create(&audit, executor).await?;
+    persist_log(db, &audit, executor).await?;
     Ok(())
 }

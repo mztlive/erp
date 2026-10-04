@@ -24,3 +24,7 @@ pub type PurchaseOrderSubmissionRepository<'a> =
     persistence_core::Repository<'a, crate::entity::purchase_order::PurchaseOrderSubmission>;
 pub type PurchaseOrderSubmissionLineRepository<'a> =
     persistence_core::Repository<'a, crate::entity::purchase_order::PurchaseOrderSubmissionLine>;
+
+/// 采购领域强类型独立命令回执仓储。
+pub type PurchaseCommandReceiptRepository<'a, T> =
+    crate::repository::command_receipt::PurchaseCommandReceiptRepository<'a, T>;

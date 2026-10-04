@@ -1,8 +1,6 @@
 //! 供给维护人交接：范围重验、CAS 与责任字段。
 
 use application_core::AuditActor;
-use persistence_core::Transactional;
-use validator::Validate;
 
 use super::SupplierOfferingService;
 use crate::dto::{HandoverSupplierOfferingRequest, HandoverSupplierOfferingView};
@@ -11,40 +9,6 @@ use crate::error::{Error, Result};
 use crate::repository::SupplierOfferingExt;
 
 impl SupplierOfferingService {
-    /// 显式交接供给维护人与可选业务组织。
-    ///
-    /// # 参数
-    /// * `id` - 供给稳定 ID
-    /// * `req` - 交接请求
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回交接后的维护人、组织与版本。
-    ///
-    /// # 错误
-    /// 版本冲突、目标为空、对象不可见或缺少责任事实时拒绝。
-    ///
-    /// # 关键业务约束
-    /// 开放审批任务不改派；组织不随接收人部门隐式变化。
-    pub async fn handover_offering(
-        &self,
-        id: &str,
-        req: HandoverSupplierOfferingRequest,
-        actor: &AuditActor,
-    ) -> Result<HandoverSupplierOfferingView> {
-        req.validate()?;
-        let db = self.db.clone();
-        let access = self.access();
-        let actor = actor.clone();
-        let id = id.to_string();
-        db.client()
-            .clone()
-            .with_transaction(move |executor| {
-                Box::pin(async move { persist_handover(&db, &access, &id, &req, &actor, executor).await })
-            })
-            .await
-    }
-
     /// 在调用方事务内交接；供组合层与幂等收据共用执行器。
     ///
     /// # 参数

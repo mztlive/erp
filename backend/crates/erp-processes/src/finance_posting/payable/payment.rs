@@ -4,11 +4,12 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use application_core::{AuditActor, CommandReceipt};
-use erp_audit::{AuditActorLogs, AuditExt, CommandReceiptServiceExt as _};
+use erp_audit::{AuditAction, AuditActorLogs, AuditField, AuditFieldKind, BusinessEventContext};
 use erp_core::ids::{FileAssetId, PartyBankAccountId, PartyId, SupplierPaymentId, WorkItemId};
 use erp_finance::entity::payable::{PendingPaymentAllocation, SupplierPayment, SupplierPaymentData};
 use erp_finance::repository::PayableExt;
 use erp_finance::repository::prelude::*;
+use erp_finance::service::command_receipt::FinanceCommandReceiptService;
 use erp_finance::service::payable::PaymentSettlementFacts;
 use erp_identity::SharedRbacService;
 use erp_party::PartyExt;
@@ -29,12 +30,22 @@ use validator::Validate;
 
 use super::dto::{CommitSupplierPaymentRequest, SupplierPaymentView};
 use super::mapping::resolve_current_party_payment_recipient;
-use super::posting::{PaymentPostSource, post_supplier_payment};
+use super::posting::post_supplier_payment;
 use super::{
     PayableService, SupplierPaymentBankReceiptSnapshot, SupplierPaymentWithAssetsResult, payment_task,
 };
 use crate::adapters::{funds_access_with_rbac, purchase_access};
+use crate::audit::persist_log;
+use crate::finance_posting::command_recovery::{recovered_resource, recovered_view};
 use crate::{Error, Result};
+
+const PAYMENT_COMMIT: AuditAction = AuditAction {
+    code: "supplier_payment.commit",
+    resource_type: "supplier_payment",
+    label: "登记并过账供应商付款",
+    version: 1,
+    allowed_fields: &[AuditField { code: "amount", label: "付款金额", kind: AuditFieldKind::Amount }],
+};
 
 impl PayableService {
     /// 读取付款单归属的银行回单元数据，并记录受控预览审计。
@@ -55,7 +66,7 @@ impl PayableService {
             "supplier_payment",
             id.to_string(),
         )?;
-        self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
+        persist_log(&self.db, &audit, &mut NoTransaction).await?;
         Ok(snapshot)
     }
 
@@ -177,14 +188,17 @@ impl PayableService {
             &req.idempotency_key,
             &req,
         )?;
-        if let Some(payment_id) = command_receipt.committed_resource_id(&self.db).await? {
+        if let Some(payment_id) = FinanceCommandReceiptService::new(self.db.clone())
+            .committed_resource_id(&command_receipt, &mut NoTransaction)
+            .await?
+        {
             return Ok(SupplierPaymentWithAssetsResult {
                 view: self.read().supplier_payment_detail(&payment_id).await?,
                 assets_committed: false,
             });
         }
         let has_pending_assets = !pending_assets.is_empty();
-        let prepared = PreparedSupplierPayment::prepare(req, pending_assets.as_ref())?;
+        let prepared = PreparedSupplierPayment::prepare(req, pending_assets.as_ref(), actor.id())?;
         let policy_revision = self.authorization_rbac.current_policy_revision().await?;
         let transaction = SupplierPaymentTransaction {
             db: self.db.clone(),
@@ -207,28 +221,28 @@ impl PayableService {
     /// 按原命令收据恢复与未知提交规则回读付款结果。
     async fn committed_payment_view(
         &self,
-        transaction_result: Result<SupplierPayment>,
+        transaction_result: Result<(SupplierPayment, bool)>,
         command_receipt: &CommandReceipt,
         has_pending_assets: bool,
     ) -> Result<SupplierPaymentWithAssetsResult> {
-        let payment = match transaction_result {
+        let (payment, fresh) = match transaction_result {
             Ok(payment) => payment,
             Err(error) => {
                 let assets_may_be_committed = matches!(&error, Error::OutcomeUnknown(_));
-                match command_receipt.committed_resource_id(&self.db).await? {
-                    Some(payment_id) => {
-                        return Ok(SupplierPaymentWithAssetsResult {
-                            view: self.read().supplier_payment_detail(&payment_id).await?,
-                            assets_committed: has_pending_assets && assets_may_be_committed,
-                        });
-                    },
-                    None => return Err(error),
-                }
+                let recovered = FinanceCommandReceiptService::new(self.db.clone())
+                    .committed_resource_id(command_receipt, &mut NoTransaction)
+                    .await;
+                let recovered = recovered_resource(error, recovered.map_err(Error::from))?;
+                let view = self.read().supplier_payment_detail(&recovered.id).await.map_err(Error::from);
+                return Ok(SupplierPaymentWithAssetsResult {
+                    view: recovered_view(view, recovered.original_unknown)?,
+                    assets_committed: has_pending_assets && assets_may_be_committed,
+                });
             },
         };
         Ok(SupplierPaymentWithAssetsResult {
             view: self.read().supplier_payment_detail(&payment.base.id).await?,
-            assets_committed: has_pending_assets,
+            assets_committed: has_pending_assets && fresh,
         })
     }
 }
@@ -249,6 +263,7 @@ impl PreparedSupplierPayment {
     fn prepare(
         mut req: CommitSupplierPaymentRequest,
         pending_assets: &dyn PendingAttachmentBatch,
+        created_by: &str,
     ) -> Result<Self> {
         let used_assets = resolve_payment_receipt_references(&mut req, pending_assets)?;
         pending_assets.ensure_all_used(&used_assets)?;
@@ -269,6 +284,7 @@ impl PreparedSupplierPayment {
                 bank_reference: req.payment.bank_reference,
                 bank_receipt_asset_id: req.payment.bank_receipt_asset_id,
             },
+            created_by,
         )?;
         Ok(Self {
             payment,
@@ -295,7 +311,19 @@ struct SupplierPaymentTransaction {
 
 impl SupplierPaymentTransaction {
     /// 在同一 Executor 按原首错顺序完成注册、资产、账户占用、任务和过账。
-    async fn execute(mut self, executor: &mut dyn Executor) -> Result<SupplierPayment> {
+    async fn execute(mut self, executor: &mut dyn Executor) -> Result<(SupplierPayment, bool)> {
+        let receipts = FinanceCommandReceiptService::new(self.db.clone());
+        if let Some(id) = receipts.committed_resource_id(&self.command_receipt, executor).await? {
+            let payment = self
+                .db
+                .supplier_payments()
+                .find_by_id(&id, executor)
+                .await?
+                .ok_or_else(|| Error::Internal("付款命令回执引用不存在".to_string()))?;
+            return Ok((payment, false));
+        }
+        let context = BusinessEventContext::new(self.actor.clone(), PAYMENT_COMMIT)?
+            .with_command_id(Some(self.command_receipt.id().to_string()))?;
         let supplier = self.load_supplier(executor).await?;
         self.persist_document(&supplier, executor).await?;
         self.persist_payment(executor).await?;
@@ -307,6 +335,24 @@ impl SupplierPaymentTransaction {
             executor,
         )
         .await?;
+        self.finish_payment(&context, executor).await?;
+        receipts
+            .save_resource(
+                &self.command_receipt,
+                self.prepared.payment.base.id.clone(),
+                context.event_id().to_string(),
+                executor,
+            )
+            .await?;
+        Ok((self.prepared.payment, true))
+    }
+
+    /// 保持付款任务记录、财务过账及单次业务事件的原执行顺序。
+    async fn finish_payment(
+        &mut self,
+        context: &BusinessEventContext,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
         let facts = payment_task::record_payment_execution(
             &self.db,
             &self.rbac,
@@ -326,15 +372,12 @@ impl SupplierPaymentTransaction {
             &mut self.prepared.payment,
             &self.prepared.allocations,
             PaymentSettlementFacts::new(&facts.entries, &facts.accounts),
-            PaymentPostSource::ExecutionTask,
+            context,
             &self.actor,
             executor,
         )
         .await?;
-        let command_audit =
-            self.command_receipt.audit(self.actor.clone(), self.prepared.payment.base.id.clone())?;
-        self.db.audit_logs().create(&command_audit, executor).await?;
-        Ok(self.prepared.payment)
+        Ok(())
     }
 
     /// 保持付款单号冲突先于供应商缺失的读取错误次序。
@@ -385,19 +428,13 @@ impl SupplierPaymentTransaction {
         .await
     }
 
-    /// 保持回单验证、资产登记、付款创建及创建审计的原写入次序。
+    /// 保持回单验证、资产登记及付款创建次序，完整命令统一记录一次事件。
     async fn persist_payment(&self, executor: &mut dyn Executor) -> Result<()> {
         let payment = &self.prepared.payment;
         ensure_bank_receipt_asset(&self.db, payment.require_bank_receipt()?, &self.pending_assets, executor)
             .await?;
         self.pending_assets.persist(&self.db, executor).await?;
         self.db.supplier_payments().create(payment, executor).await?;
-        let audit = self.actor.clone().resource_log(
-            "supplier_payment.create",
-            "supplier_payment",
-            payment.base.id.clone(),
-        )?;
-        self.db.audit_logs().create(&audit, executor).await?;
         Ok(())
     }
 }

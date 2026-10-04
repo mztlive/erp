@@ -1,7 +1,7 @@
 //! 派发结果在同一执行器中依次写回本域、集成信封、正式责任。
 use application_core::AuditActor;
 use async_trait::async_trait;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_core::ids::WorkItemId;
 use erp_integration::entity::integration_ops::{ErrorClass, InboxMessage, IntegrationErrorTask};
 use erp_integration::repository::IntegrationOpsExt;
@@ -14,6 +14,7 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use crate::Result;
+use crate::audit::persist_log;
 #[async_trait]
 trait DispatchWrites: Send {
     async fn domain(&mut self, executor: &mut dyn Executor) -> Result<()>;
@@ -80,7 +81,7 @@ impl DispatchWrites for MongoWrites<'_> {
                         "work_item",
                         work_item.base.id.clone(),
                     )?;
-                    self.db.audit_logs().create(&audit, executor).await?;
+                    persist_log(self.db, &audit, executor).await?;
                 }
             } else {
                 let work_item =
@@ -91,7 +92,7 @@ impl DispatchWrites for MongoWrites<'_> {
                     "work_item",
                     work_item.base.id.clone(),
                 )?;
-                self.db.audit_logs().create(&audit, executor).await?;
+                persist_log(self.db, &audit, executor).await?;
             }
         }
         Ok(())

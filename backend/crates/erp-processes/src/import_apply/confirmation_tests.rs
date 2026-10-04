@@ -1,5 +1,8 @@
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{LegacyImportBatchId, LegacyImportConfirmationId, SourceSystemId, WorkItemId};
+use erp_import::entity::command_receipt::{
+    ImportCommandReceipt, ImportCommandResult, ImportConfirmationOutcome,
+};
 use erp_import::{
     ConfirmationDecision, ConfirmationMatrixDecision, ConfirmationStatus,
     CreateLegacyImportConfirmationRequest, ImportBusinessConfirmationNextStep,
@@ -7,12 +10,12 @@ use erp_import::{
     LegacyImportBatchStatus, LegacyImportConfirmation, LegacyImportConfirmationData,
     PreparedConfirmationCompletion,
 };
-use erp_workflow::entity::work_item::{WorkItem, WorkItemCloseData};
+use erp_workflow::entity::work_item::{WorkItem, WorkItemCloseData, WorkItemStatus};
 use erp_workflow::service::work_item::WorkItemAllowedAction;
 
 use super::complete::{
-    ConfirmationCompletionReceipt, confirmation_command_identity, confirmation_completion_receipt_message,
-    confirmation_result_status, parse_confirmation_completion_receipt, validate_confirmation_completion,
+    ConfirmationCompletionReceipt, confirmation_command_identity, confirmation_result_status,
+    validate_confirmation_completion, validate_confirmation_replay,
 };
 use super::confirmation_query::{append_confirmation_actions, read_only_work_item_view};
 use super::create_confirmation::confirmation_next_step;
@@ -293,19 +296,89 @@ fn superseded_closable_skips_closed_and_fails_closed_on_missing() {
     assert!(collect_superseded_closable_work_items(&confirmations, 3, &mut empty, &replacement).is_err());
 }
 
+fn confirmation_outcome() -> (ImportConfirmationOutcome, LegacyImportConfirmation, WorkItem) {
+    let prepared = completion_command();
+    let mut fact = confirmation();
+    let mut task = work_item();
+    let at = Instant::from_unix_secs(20);
+    fact.decide(prepared.decision, "user-1".to_string(), at, prepared.reason_code, prepared.comment).unwrap();
+    task.complete_by_domain_command("user-1", at).unwrap();
+    fact.base.version += 1;
+    task.base.version += 1;
+    let result = ImportConfirmationOutcome {
+        confirmation_id: fact.base.id.clone(),
+        confirmation_version: fact.base.version,
+        batch_id: fact.batch_id.to_string(),
+        work_item_id: task.base.id.clone(),
+        subject_version: task.subject_version.clone(),
+        confirmation_scope: fact.confirmation_scope.clone(),
+        decision: ConfirmationDecision::ConfirmScope,
+        decided_at: at,
+        receipt: ConfirmationCompletionReceipt {
+            result_status: ImportBusinessConfirmationResultStatus::Confirmed,
+            task_version: 4,
+            batch_version: 5,
+            next_step: ImportBusinessConfirmationNextStep::AwaitOtherConfirmations,
+        },
+    };
+    (result, fact, task)
+}
+
 #[test]
 fn idempotency_receipt_rejects_same_key_with_different_command() {
-    let identity = confirmation_command_identity("user-1", "complete", &completion_command());
-    let fingerprint = identity.fingerprint().to_string();
-    let receipt = ConfirmationCompletionReceipt {
-        result_status: ImportBusinessConfirmationResultStatus::Confirmed,
-        task_version: 4,
-        batch_version: 5,
-        next_step: ImportBusinessConfirmationNextStep::AwaitOtherConfirmations,
-    };
-    let message = confirmation_completion_receipt_message(&fingerprint, receipt);
+    let prepared = completion_command();
+    let identity = confirmation_command_identity("user-1", "legacy_import_confirmation.complete", &prepared)
+        .structured_receipt("legacy_import_confirmation")
+        .unwrap();
+    let (outcome, _, _) = confirmation_outcome();
+    let fact = ImportCommandReceipt::new(
+        identity.clone(),
+        ImportCommandResult::Confirmation(Box::new(outcome)),
+        "event-1".into(),
+    )
+    .unwrap();
+    assert!(fact.ensure_identity(&identity).is_ok());
+    let mut changed = prepared;
+    changed.comment = Some("不同确认".into());
+    let identity = confirmation_command_identity("user-1", "legacy_import_confirmation.complete", &changed)
+        .structured_receipt("legacy_import_confirmation")
+        .unwrap();
+    assert!(fact.ensure_identity(&identity).is_err());
+    assert!(!fact.identity.command_id.contains("request-1"));
+    let decoded: ImportCommandReceipt = serde_json::from_str(&serde_json::to_string(&fact).unwrap()).unwrap();
+    assert_eq!(fact, decoded);
+}
 
-    assert_eq!(parse_confirmation_completion_receipt(&message, &fingerprint).unwrap(), receipt);
-    assert!(parse_confirmation_completion_receipt(&message, &"0".repeat(64)).is_err());
-    assert!(!identity.audit_id().contains("request-1"));
+#[test]
+fn confirmation_replay_requires_original_decision_actor_and_task_terminal() {
+    let prepared = completion_command();
+    let (outcome, confirmation, task) = confirmation_outcome();
+    assert!(validate_confirmation_replay(&outcome, &confirmation, &task, &prepared, "user-1").is_ok());
+    assert!(validate_confirmation_replay(&outcome, &confirmation, &task, &prepared, "other").is_err());
+    for case in 0..8 {
+        let mut wrong = task.clone();
+        match case {
+            0 => wrong.base.version += 1,
+            1 => wrong.completed_by = Some("other".into()),
+            2 => wrong.status = WorkItemStatus::Open,
+            3 => wrong.business_object_id = "other".into(),
+            4 => wrong.subject_version = "foreign".into(),
+            5 => wrong.owner_user_id = Some("other".into()),
+            6 => wrong.owner_user_id = None,
+            _ => wrong.completed_at = Some(Instant::from_unix_secs(21)),
+        }
+        assert!(validate_confirmation_replay(&outcome, &confirmation, &wrong, &prepared, "user-1").is_err());
+    }
+    for case in 0..6 {
+        let mut wrong = confirmation.clone();
+        match case {
+            0 => wrong.decision = Some(ConfirmationDecision::ReturnForFix),
+            1 => wrong.base.version += 1,
+            2 => wrong.decided_by = Some("other".into()),
+            3 => wrong.decided_at = Some(Instant::from_unix_secs(21)),
+            4 => wrong.comment = Some("更改原决定".into()),
+            _ => wrong.status = ConfirmationStatus::Pending,
+        }
+        assert!(validate_confirmation_replay(&outcome, &wrong, &task, &prepared, "user-1").is_err());
+    }
 }

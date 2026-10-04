@@ -29,3 +29,5 @@ pub use prelude::{
     UnitOfMeasureRepositoryExt, UnitOfMeasureRepositoryImportLookupExt,
     VoucherCategoryProfileRevisionRepositoryExt,
 };
+
+pub mod handover_receipt;

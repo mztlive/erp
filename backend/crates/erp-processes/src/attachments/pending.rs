@@ -5,8 +5,7 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use async_trait::async_trait;
-use erp_audit::repository::prelude::*;
-use erp_audit::{AuditActorLogs, AuditExt, AuditLog};
+use erp_audit::{AuditActorLogs, AuditLog};
 use erp_core::ids::FileAssetId;
 use erp_support::repository::prelude::*;
 use erp_support::{
@@ -19,6 +18,8 @@ use persistence_core::Executor;
 use validator::Validate;
 
 use crate::Result;
+use crate::adapters::map_audit_to_support;
+use crate::audit::persist_logs;
 
 /// Files constructed before a business transaction, waiting to persist with that aggregate.
 #[derive(Debug)]
@@ -93,7 +94,7 @@ impl PendingAttachmentBatch for PendingFileAssets {
 
     async fn persist(&self, db: &Database, executor: &mut dyn Executor) -> erp_support::Result<()> {
         db.file_assets().create_many_ordered(&self.assets, executor).await?;
-        db.audit_logs().create_many_ordered(&self.audits, executor).await?;
+        persist_logs(db, &self.audits, executor).await.map_err(map_audit_to_support)?;
         Ok(())
     }
 

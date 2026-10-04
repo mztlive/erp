@@ -64,7 +64,7 @@ pub(super) async fn persist(
     Ok(())
 }
 
-/// 文件内容清单与业务请求共同构成幂等指纹；无新上传保留历史指纹。
+/// 文件内容清单与业务请求共同构成精确幂等指纹。
 pub(super) fn receipt(
     req: &CommitInvoiceRequest,
     actor_id: &str,
@@ -143,15 +143,13 @@ mod tests {
         let first = receipt(&req, actor.id(), &batch("a", "object-first")).unwrap();
         let retry = receipt(&req, actor.id(), &batch("a", "object-retry")).unwrap();
         let changed = receipt(&req, actor.id(), &batch("b", "object-changed")).unwrap();
-        assert_eq!(first.fingerprints().0, retry.fingerprints().0);
-        assert_ne!(first.fingerprints().0, changed.fingerprints().0);
-        use application_core::{CommandReceiptFact, CommandReceiptMatch};
-        let fact = CommandReceiptFact::new(first.id(), actor.id(), "invoice.commit", "invoice")
-            .with_resource_id("invoice")
-            .with_success(true)
-            .with_message(first.message(None));
-        assert!(matches!(retry.match_fact(&fact), CommandReceiptMatch::SamePayload(_)));
-        assert_eq!(changed.match_fact(&fact), CommandReceiptMatch::DifferentPayload);
+        assert_eq!(first.fingerprint(), retry.fingerprint());
+        assert_ne!(first.fingerprint(), changed.fingerprint());
+        use erp_finance::{Error as FinanceError, FinanceCommandReceipt};
+        let fact =
+            FinanceCommandReceipt::resource(&first, "invoice".to_string(), "event-1".to_string()).unwrap();
+        assert_eq!(fact.resource_id(&retry).unwrap(), "invoice");
+        assert!(matches!(fact.resource_id(&changed), Err(FinanceError::ConflictError(_))));
 
         let mut legacy = req.clone();
         legacy.attachment_asset_ids.clear();
@@ -165,8 +163,8 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            receipt(&legacy, actor.id(), &EmptyPendingAttachments).unwrap().fingerprints().0,
-            old.fingerprints().0
+            receipt(&legacy, actor.id(), &EmptyPendingAttachments).unwrap().fingerprint(),
+            old.fingerprint()
         );
     }
 }

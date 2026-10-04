@@ -1,6 +1,7 @@
 //! 履约本域查询、草稿准备与事务内事实写入。
 
 pub mod acceptance_eligibility;
+pub mod command_receipt;
 pub mod customer_acceptance;
 pub mod customer_acceptance_lines;
 pub mod customer_acceptance_posting;

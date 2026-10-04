@@ -2,16 +2,21 @@
 
 use application_core::{AuditActor, CommandReceipt};
 use async_trait::async_trait;
-use erp_audit::{AuditActorLogs, AuditExt, CommandReceiptServiceExt};
+use erp_audit::{
+    AuditAction, AuditFact, AuditField, AuditFieldKind, AuditValue, BusinessEventContent,
+    BusinessEventContext, BusinessEventResult,
+};
 use erp_core::ids::{ReceivableAccountId, SalesOrderId, WorkItemId};
 use erp_finance::entity::receivable::sales_invoice_allocation_plan::SalesInvoiceAllocationLine;
 use erp_finance::entity::receivable::{Invoice, ReceivableAccount};
+use erp_finance::service::command_receipt::FinanceCommandReceiptService;
 use erp_finance::service::receivable::invoice_posting::persist_sales_invoice_allocations;
 use mongodb::Database;
 use persistence_core::Executor;
 
 use super::invoice_task::{self, SalesInvoiceTaskChange};
-use crate::Result;
+use crate::audit::persist_log;
+use crate::{Error, Result};
 
 /// 扇出分片大小：同事务内按片顺序推进，首错短路。
 pub(crate) const FANOUT_SHARD: usize = 50;
@@ -52,7 +57,14 @@ pub(super) async fn post_invoice_apply(
     input: InvoicePostingInput<'_>,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let mut steps = MongoInvoicePosting { db, invoice, input, accounts: Vec::new(), account_ids: Vec::new() };
+    let mut steps = MongoInvoicePosting {
+        db,
+        invoice,
+        input,
+        accounts: Vec::new(),
+        account_ids: Vec::new(),
+        audit_event_id: None,
+    };
     execute_posting(&mut steps, executor).await
 }
 
@@ -88,6 +100,7 @@ struct MongoInvoicePosting<'a> {
     input: InvoicePostingInput<'a>,
     accounts: Vec<ReceivableAccount>,
     account_ids: Vec<String>,
+    audit_event_id: Option<String>,
 }
 
 #[async_trait]
@@ -131,12 +144,41 @@ impl InvoicePostingSteps for MongoInvoicePosting<'_> {
     }
 
     async fn write_posting_audit(&mut self, executor: &mut dyn Executor) -> Result<()> {
-        let audit = self.input.actor.clone().resource_log(
-            self.input.action,
-            "invoice",
-            self.invoice.base.id.clone(),
-        )?;
-        self.db.audit_logs().create(&audit, executor).await?;
+        let action = AuditAction {
+            code: self.input.action,
+            resource_type: "invoice",
+            label: "登记并过账销项发票",
+            version: 1,
+            allowed_fields: &[
+                AuditField { code: "gross_amount", label: "含税金额", kind: AuditFieldKind::Amount },
+                AuditField { code: "net_amount", label: "不含税金额", kind: AuditFieldKind::Amount },
+                AuditField { code: "tax_amount", label: "税额", kind: AuditFieldKind::Amount },
+            ],
+        };
+        let context = BusinessEventContext::new(self.input.actor.clone(), action)?
+            .with_command_id(self.input.command_receipt.map(|command| command.id().to_string()))?;
+        let audit = context.log(BusinessEventContent {
+            target_id: self.invoice.base.id.clone(),
+            target_number: Some(self.invoice.invoice_no.clone()),
+            result: BusinessEventResult::Succeeded,
+            field_changes: vec![],
+            facts: vec![
+                AuditFact {
+                    field: "gross_amount".to_string(),
+                    value: AuditValue::Amount { value: self.invoice.gross_amount },
+                },
+                AuditFact {
+                    field: "net_amount".to_string(),
+                    value: AuditValue::Amount { value: self.invoice.net_amount },
+                },
+                AuditFact {
+                    field: "tax_amount".to_string(),
+                    value: AuditValue::Amount { value: self.invoice.tax_amount },
+                },
+            ],
+        })?;
+        self.audit_event_id = Some(audit.base.id.clone());
+        persist_log(self.db, &audit, executor).await?;
         Ok(())
     }
 
@@ -177,8 +219,13 @@ impl InvoicePostingSteps for MongoInvoicePosting<'_> {
 
     async fn write_command_receipt(&mut self, executor: &mut dyn Executor) -> Result<()> {
         if let Some(receipt) = self.input.command_receipt {
-            let audit = receipt.audit(self.input.actor.clone(), self.invoice.base.id.clone())?;
-            self.db.audit_logs().create(&audit, executor).await?;
+            let event_id = self
+                .audit_event_id
+                .clone()
+                .ok_or_else(|| Error::Internal("发票过账缺少业务事件引用".to_string()))?;
+            FinanceCommandReceiptService::new(self.db.clone())
+                .save_resource(receipt, self.invoice.base.id.clone(), event_id, executor)
+                .await?;
         }
         Ok(())
     }

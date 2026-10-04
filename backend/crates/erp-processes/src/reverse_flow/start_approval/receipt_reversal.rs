@@ -2,10 +2,11 @@ use application_core::{AuditActor, CommandReceipt};
 use bpm::engine::{DefinitionGraph, TaskIntent};
 use bpm::ids::ApprovalProcessInstanceId;
 use bpm::model::SubjectRef;
-use erp_audit::{AuditExt, CommandReceiptServiceExt as _};
+use erp_audit::{AuditActorLogs, AuditLog};
 use erp_core::common::time::Instant;
 use erp_core::ids::{ApprovalSubjectSnapshotId, WorkItemId};
 use erp_identity::SharedRbacService;
+use erp_returns::ReturnsCommandReceiptService;
 use erp_returns::entity::returns::ReceiptReversal;
 use erp_returns::repository::ReturnsExt;
 use erp_returns::service::ReturnsService;
@@ -28,6 +29,7 @@ use super::mapping::list_projection_from_execution;
 use super::prepare::{ensure_return_start_replay_authorized, load_start_receipt_for_document_type};
 use super::reversal_submit::{committed_reversal_submit, mark_reversal_started};
 use crate::adapters::freeze_approval_materials;
+use crate::audit::persist_log;
 use crate::{Error, Result};
 
 /// 读取回款冲正同载荷启动收据；不存在时返回 `None`。
@@ -235,6 +237,9 @@ async fn persist_receipt_reversal_start_apply(
         executor,
     )
     .await?;
+    if committed_reversal_submit(db, &input.id, &input.command_receipt, executor).await?.is_some() {
+        return replay_persisted_receipt_reversal(db, &input.id, &input.command_receipt, executor).await;
+    }
     let ReceiptReversalStartPersistInput {
         reversal,
         command_receipt,
@@ -249,7 +254,10 @@ async fn persist_receipt_reversal_start_apply(
     let PreparedExecution::Apply(writes) = prepared else {
         return replay_persisted_receipt_reversal(db, &id, &command_receipt, executor).await;
     };
-    let audit = command_receipt.audit(actor, id)?;
+    if command_receipt.actor_id() != actor.id() {
+        return Err(Error::Forbidden("当前账号不能复用其他账号的操作号".to_string()));
+    }
+    let audit = actor.resource_log("receipt_reversal.submit", "receipt_reversal", id.clone())?;
     db.bpm_workflow()
         .insert_command_receipt(&writes.receipt, executor)
         .await
@@ -267,8 +275,23 @@ async fn persist_receipt_reversal_start_apply(
         executor,
     )
     .await?;
-    db.audit_logs().create(&audit, executor).await?;
+    persist_submit_receipt(db, &command_receipt, id, &audit, executor).await?;
     Ok(reversal)
+}
+
+/// 在原写入位置按顺序保存业务审计与同事务提交回执。
+async fn persist_submit_receipt(
+    db: &Database,
+    command_receipt: &CommandReceipt,
+    id: String,
+    audit: &AuditLog,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    persist_log(db, audit, executor).await?;
+    ReturnsCommandReceiptService::new(db.clone())
+        .save_resource(command_receipt, id, audit.base.id.clone(), executor)
+        .await?;
+    Ok(())
 }
 
 /// 引擎回放必须存在精确原版本请求收据，否则不能把历史 BPM 收据当作原提交。

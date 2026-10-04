@@ -2,6 +2,7 @@
 use std::future::Future;
 
 use crate::Result;
+use crate::audit::recover_command;
 
 /// 原意图失败时禁止进入供应商步骤，保留最先返回的错误。
 pub(super) async fn after_intent<I, N, F, T>(intent: I, next: N) -> Result<T>
@@ -25,7 +26,7 @@ where
         None => fresh().await,
     }
 }
-/// 仅接收最终事务结果；任意事务错误后只回读一次，回读错误优先透出。
+/// 仅接收最终事务结果；任意事务错误后只查证一次并保留首次未知提交来源。
 pub(super) async fn recover_final_result<T, N, F>(result: Result<T>, replay: N) -> Result<T>
 where
     N: FnOnce() -> F,
@@ -33,12 +34,7 @@ where
 {
     match result {
         Ok(result) => Ok(result),
-        Err(error) => {
-            if let Some(result) = replay().await? {
-                return Ok(result);
-            }
-            Err(error)
-        },
+        Err(error) => recover_command(error, replay().await),
     }
 }
 
@@ -152,5 +148,34 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(result, 9);
+    }
+
+    #[tokio::test]
+    async fn unknown_final_commit_keeps_first_source_when_single_proof_read_or_view_fails() {
+        use mongodb::error::Error as MongoError;
+        use persistence_core::Error as PersistenceError;
+
+        let calls = Arc::new(Mutex::new(0));
+        for proof in [
+            Ok(None),
+            Err(Error::Internal("receipt read".into())),
+            Err(Error::ConflictError("damaged receipt".into())),
+            Err(Error::Forbidden("current view".into())),
+        ] {
+            let original = Error::OutcomeUnknown(PersistenceError::CommitOutcomeUnknown(MongoError::custom(
+                "first supply commit",
+            )));
+            let result = recover_final_result::<u8, _, _>(Err(original), || async {
+                *calls.lock().unwrap() += 1;
+                proof
+            })
+            .await;
+            let Error::OutcomeUnknown(PersistenceError::CommitOutcomeUnknown(source)) = result.unwrap_err()
+            else {
+                panic!("首次未知提交必须保留")
+            };
+            assert_eq!(source.get_custom::<&str>(), Some(&"first supply commit"));
+        }
+        assert_eq!(*calls.lock().unwrap(), 4);
     }
 }

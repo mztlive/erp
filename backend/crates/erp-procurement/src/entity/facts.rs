@@ -381,23 +381,6 @@ impl IdentityOwnerFact {
     }
 }
 
-/// 审计记录中采购幂等回放所需字段。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AuditReceiptFact {
-    /// 原记录执行结果。
-    pub success: bool,
-    /// 原操作人。
-    pub actor_id: String,
-    /// 原动作。
-    pub action: String,
-    /// 原资源类型。
-    pub resource_type: String,
-    /// 原目标资源。
-    pub resource_id: Option<String>,
-    /// 原收据消息。
-    pub message: Option<String>,
-}
-
 /// 供应商受控付款条件解析后的采购消费事实。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PaymentTermFact {

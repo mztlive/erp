@@ -1,13 +1,13 @@
-use std::str::FromStr;
-
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
 use erp_core::ids::WorkItemId;
-use erp_core::money::Amount;
+use erp_supply::command_receipt::repository::{SupplyCommandReceiptExt, SupplyCommandReceiptReadExt};
+use erp_supply::command_receipt::{ReviewDecisionReceipt, ReviewSubmissionReceipt, SupplyCommandResult};
 use erp_supply::entity::supplier_settlement::{
     SettlementReviewResult, SettlementStatus, SupplierSettlementStatement,
 };
+use erp_supply::service::supplier_fulfillment::receipt::stable_digest;
 use erp_supply::service::supplier_settlement::SupplierSettlementService;
 use erp_supply::service::supplier_settlement::review::{
     ensure_current_subject_and_resolved_differences, ensure_review_submission_ready,
@@ -19,15 +19,17 @@ use erp_workflow::entity::work_item::{
 };
 use erp_workflow::ports::WorkflowAuthorizationPort;
 use id_generator::next_id;
-use persistence_core::{NoTransaction, Transactional};
+use mongodb::Database;
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::{
-    COMMAND_FINGERPRINT_PREFIX, SETTLEMENT_REVIEW_OWNER_ROLE, SettlementReviewCommand,
-    SettlementReviewDecisionResult, SubmitSettlementReviewRequest, SubmitSettlementReviewResult,
-    SupplierSettlementProcess, command_audit_id, digest_parts, dto, ensure_audit_resource, ensure_same_id,
-    parse_receipt_number, receipt_result,
+    SETTLEMENT_REVIEW_OWNER_ROLE, SettlementReviewCommand, SettlementReviewDecisionResult,
+    SubmitSettlementReviewRequest, SubmitSettlementReviewResult, SupplierSettlementProcess, command_audit_id,
+    digest_parts, dto, ensure_same_id,
 };
+use crate::audit::{persist_log, recover_command};
+use crate::supply_execution::receipt::persist_supply_receipt;
 use crate::{Error, Result};
 
 impl SupplierSettlementProcess {
@@ -45,23 +47,20 @@ impl SupplierSettlementProcess {
         actor: &AuditActor,
     ) -> Result<SubmitSettlementReviewResult> {
         req.validate()?;
+        let replay_key = req.idempotency_key.clone();
         ensure_same_id(id, &req.statement_id, "结算单")?;
         self.domain().access().require_statement(actor, "submit", id, &mut NoTransaction).await?;
         let fingerprint = submit_review_fingerprint(&req);
         let audit_id =
             command_audit_id(actor.id(), "supplier_settlement.submit_review", id, &req.idempotency_key);
-        if let Some(result) = self.replay_review_submission(&audit_id, &fingerprint, id).await? {
+        if let Some(result) =
+            self.replay_review_submission(&audit_id, &fingerprint, id, (actor.id(), &replay_key)).await?
+        {
             return Ok(result);
         }
         let statement =
             self.domain().access().require_statement(actor, "submit", id, &mut NoTransaction).await?;
-        if !statement.is_prepared_by(actor.id()) {
-            return Err(Error::Forbidden("只有当前对账负责人可以提交财务复核".to_string()));
-        }
-        statement
-            .ensure_version(req.expected_lock_version)
-            .map_err(|_| Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))?;
-        validate_review_submission_snapshot(&statement, &req)?;
+        validate_submission_command(&statement, &req, actor)?;
         let auth = crate::adapters::workflow::workflow_auth(
             self.db.clone(),
             crate::adapters::identity::shared_rbac_service(self.db.clone()),
@@ -77,7 +76,6 @@ impl SupplierSettlementProcess {
         let expected_subject_hash = statement.subject_hash.clone();
         let audit_actor = actor.clone();
         let operation_id = req.operation_id.clone();
-        let operation_id_for_tx = operation_id.clone();
         let fingerprint_for_tx = fingerprint.clone();
         let audit_id_for_tx = audit_id.clone();
         let auth_for_tx = auth.clone();
@@ -106,20 +104,19 @@ impl SupplierSettlementProcess {
                         .persist_statement(&mut current, executor)
                         .await?;
                     db.work_items().create(&work_item, executor).await?;
-                    let receipt = ReviewSubmissionReceipt {
-                        operation_id: operation_id_for_tx,
-                        statement_version: current.base.version,
-                        work_item_id: work_item.base.id.clone(),
-                        task_version: work_item.base.version,
-                    };
-                    let audit = audit_actor.resource_log_with_id(
-                        audit_id_for_tx,
-                        "supplier_settlement.submit_review",
-                        "supplier_settlement_statement",
-                        current.base.id.clone(),
-                        Some(review_submission_receipt_message(&fingerprint_for_tx, &receipt)),
-                    )?;
-                    db.audit_logs().create(&audit, executor).await?;
+                    persist_review_submission(
+                        ReviewSubmissionWrite {
+                            db: &db,
+                            actor: &audit_actor,
+                            statement: &current,
+                            work_item: &work_item,
+                            command_id: &audit_id_for_tx,
+                            fingerprint: &fingerprint_for_tx,
+                            request: &req,
+                        },
+                        executor,
+                    )
+                    .await?;
                     Ok::<(SupplierSettlementStatement, WorkItem), crate::Error>((current, work_item))
                 })
             })
@@ -127,10 +124,11 @@ impl SupplierSettlementProcess {
         let (statement, work_item) = match transaction_result {
             Ok(result) => result,
             Err(error) => {
-                if let Some(result) = self.replay_review_submission(&audit_id, &fingerprint, id).await? {
-                    return Ok(result);
-                }
-                return Err(error);
+                return recover_command(
+                    error,
+                    self.replay_review_submission(&audit_id, &fingerprint, id, (actor.id(), &replay_key))
+                        .await,
+                );
             },
         };
         Ok(SubmitSettlementReviewResult {
@@ -157,37 +155,28 @@ impl SupplierSettlementProcess {
         actor: &AuditActor,
     ) -> Result<SettlementReviewDecisionResult> {
         req.validate()?;
+        let replay_key = req.idempotency_key.clone();
         ensure_same_id(id, &req.decision.statement_id, "结算单")?;
         let reject_reason = req.decision.parsed_reject_reason()?;
         let expected_task_version = parse_expected_version(&req.expected_task_version, "待办版本")?;
-        let action = match req.decision.action {
-            dto::SettlementReviewAction::Reject => "supplier_settlement.review_reject",
-            dto::SettlementReviewAction::Confirm => "supplier_settlement.review_confirm",
-        };
+        let action = review_action(req.decision.action);
         let fingerprint = review_decision_fingerprint(&req);
         let audit_id = command_audit_id(actor.id(), action, id, &req.idempotency_key);
-        if let Some(result) =
-            self.replay_review_decision(&audit_id, &fingerprint, id, &req.work_item_id, actor).await?
+        if let Some(result) = self
+            .replay_review_decision(
+                &audit_id,
+                &fingerprint,
+                id,
+                &req.work_item_id,
+                actor,
+                (&replay_key, action),
+            )
+            .await?
         {
             return Ok(result);
         }
-        let mut statement = self.domain().load_statement(id, &mut NoTransaction).await?;
-        statement
-            .ensure_version(req.decision.expected_lock_version)
-            .map_err(|_| Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))?;
-        let mut work_item = self
-            .db
-            .work_items()
-            .find_by_id(&req.work_item_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("供应商结算复核待办不存在".to_string()))?;
-        validate_settlement_review_work_item(
-            &work_item,
-            &statement,
-            expected_task_version,
-            &req.expected_subject_version,
-            actor,
-        )?;
+        let (mut statement, mut work_item) =
+            self.load_review_decision_state(id, &req, actor, expected_task_version).await?;
         let items = self.domain().load_statement_items(id, &mut NoTransaction).await?;
         let differences = self.domain().load_statement_differences(&items, &mut NoTransaction).await?;
         ensure_current_subject_and_resolved_differences(&statement, &differences)?;
@@ -241,6 +230,7 @@ impl SupplierSettlementProcess {
                             operation_id: operation_id_for_tx,
                             fingerprint: fingerprint_for_tx,
                             audit_id: audit_id_for_tx,
+                            idempotency_key: req.idempotency_key.clone(),
                             action: action_for_tx,
                         },
                         executor,
@@ -255,15 +245,49 @@ impl SupplierSettlementProcess {
         let (statement, work_item, receipt) = match transaction_result {
             Ok(result) => result,
             Err(error) => {
-                if let Some(result) =
-                    self.replay_review_decision(&audit_id, &fingerprint, id, &req.work_item_id, actor).await?
-                {
-                    return Ok(result);
-                }
-                return Err(error);
+                return recover_command(
+                    error,
+                    self.replay_review_decision(
+                        &audit_id,
+                        &fingerprint,
+                        id,
+                        &req.work_item_id,
+                        actor,
+                        (&replay_key, action),
+                    )
+                    .await,
+                );
             },
         };
         Ok(review_decision_result(statement, work_item, operation_id, receipt))
+    }
+
+    /// 按原顺序读取并验证决定所针对的结算单与正式任务。
+    async fn load_review_decision_state(
+        &self,
+        id: &str,
+        req: &SettlementReviewCommand,
+        actor: &AuditActor,
+        expected_task_version: u64,
+    ) -> Result<(SupplierSettlementStatement, WorkItem)> {
+        let statement = self.domain().load_statement(id, &mut NoTransaction).await?;
+        statement
+            .ensure_version(req.decision.expected_lock_version)
+            .map_err(|_| Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))?;
+        let work_item = self
+            .db
+            .work_items()
+            .find_by_id(&req.work_item_id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("供应商结算复核待办不存在".to_string()))?;
+        validate_settlement_review_work_item(
+            &work_item,
+            &statement,
+            expected_task_version,
+            &req.expected_subject_version,
+            actor,
+        )?;
+        Ok((statement, work_item))
     }
 
     /// 重放提交复核命令并校验收据载荷。
@@ -272,15 +296,24 @@ impl SupplierSettlementProcess {
         audit_id: &str,
         expected_fingerprint: &str,
         statement_id: &str,
+        identity: (&str, &str),
     ) -> Result<Option<SubmitSettlementReviewResult>> {
-        let Some(audit) = self.db.audit_logs().find_by_id(audit_id, &mut NoTransaction).await? else {
+        let Some(stored) =
+            self.db.supply_command_receipts().find_command(audit_id, &mut NoTransaction).await?
+        else {
             return Ok(None);
         };
-        ensure_audit_resource(&audit, statement_id)?;
-        let receipt = parse_review_submission_receipt(
-            audit.message.as_deref().unwrap_or_default(),
-            expected_fingerprint,
+        stored.verify_identity(
+            audit_id,
+            identity.0,
+            "supplier_settlement.submit_review",
+            statement_id,
+            &stable_digest(identity.1.trim()),
         )?;
+        stored.verify(expected_fingerprint, Some(statement_id), "幂等键已用于不同的提交复核命令")?;
+        let SupplyCommandResult::ReviewSubmission(receipt) = stored.result else {
+            return Err(Error::Internal("提交复核回执类型非法".to_string()));
+        };
         let statement = self.domain().load_statement(statement_id, &mut NoTransaction).await?;
         ensure_submission_statement(&statement, &receipt)?;
         let work_item = self
@@ -307,15 +340,24 @@ impl SupplierSettlementProcess {
         statement_id: &str,
         work_item_id: &str,
         actor: &AuditActor,
+        request: (&str, &str),
     ) -> Result<Option<SettlementReviewDecisionResult>> {
-        let Some(audit) = self.db.audit_logs().find_by_id(audit_id, &mut NoTransaction).await? else {
+        let Some(stored) =
+            self.db.supply_command_receipts().find_command(audit_id, &mut NoTransaction).await?
+        else {
             return Ok(None);
         };
-        ensure_audit_resource(&audit, statement_id)?;
-        let receipt = parse_review_decision_receipt(
-            audit.message.as_deref().unwrap_or_default(),
-            expected_fingerprint,
+        stored.verify_identity(
+            audit_id,
+            actor.id(),
+            request.1,
+            statement_id,
+            &stable_digest(request.0.trim()),
         )?;
+        stored.verify(expected_fingerprint, Some(statement_id), "幂等键已用于不同的结算复核决定命令")?;
+        let SupplyCommandResult::ReviewDecision(receipt) = stored.result else {
+            return Err(Error::Internal("结算复核决定回执类型非法".to_string()));
+        };
         let statement = self.domain().load_statement(statement_id, &mut NoTransaction).await?;
         let work_item = self
             .db
@@ -374,24 +416,6 @@ fn review_work_item_binds_statement(item: &WorkItem, statement: &SupplierSettlem
         && item.business_object_id == statement.base.id
         && item.subject_version == statement.subject_hash
         && review_task_identity_matches(&item.owner_role, &item.owner_organization_id, statement)
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ReviewSubmissionReceipt {
-    pub operation_id: String,
-    pub statement_version: u64,
-    pub work_item_id: String,
-    pub task_version: u64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ReviewDecisionReceipt {
-    pub operation_id: String,
-    pub result_status: dto::SettlementReviewDecisionStatus,
-    pub statement_version: u64,
-    pub task_version: u64,
-    pub payable_account_id: Option<String>,
-    pub cost_delta: Option<Amount>,
 }
 
 pub fn validate_settlement_review_work_item(
@@ -458,82 +482,6 @@ fn review_decision_fingerprint(req: &SettlementReviewCommand) -> String {
         req.decision.reason_code.as_deref().map(str::trim).unwrap_or_default().to_ascii_uppercase(),
         req.decision.comment.clone().unwrap_or_default(),
     ])
-}
-
-/// 编码提交复核幂等收据。
-pub fn review_submission_receipt_message(fingerprint: &str, receipt: &ReviewSubmissionReceipt) -> String {
-    format!(
-        "{COMMAND_FINGERPRINT_PREFIX}{fingerprint};result={}|{}|{}|{}",
-        receipt.operation_id, receipt.statement_version, receipt.work_item_id, receipt.task_version,
-    )
-}
-
-/// 解析并校验提交复核幂等收据。
-pub fn parse_review_submission_receipt(
-    message: &str,
-    expected_fingerprint: &str,
-) -> Result<ReviewSubmissionReceipt> {
-    let result = receipt_result(message, expected_fingerprint, "提交复核")?;
-    let fields = result.split('|').collect::<Vec<_>>();
-    let [operation_id, statement_version, work_item_id, task_version] = fields.as_slice() else {
-        return Err(Error::Internal("提交复核幂等收据结果非法".to_string()));
-    };
-    Ok(ReviewSubmissionReceipt {
-        operation_id: (*operation_id).to_string(),
-        statement_version: parse_receipt_number(statement_version, "结算单版本")?,
-        work_item_id: (*work_item_id).to_string(),
-        task_version: parse_receipt_number(task_version, "待办版本")?,
-    })
-}
-
-/// 编码正式复核决定幂等收据。
-pub fn review_decision_receipt_message(fingerprint: &str, receipt: &ReviewDecisionReceipt) -> String {
-    let status = match receipt.result_status {
-        dto::SettlementReviewDecisionStatus::Confirmed => "C",
-        dto::SettlementReviewDecisionStatus::Rejected => "R",
-    };
-    format!(
-        "{COMMAND_FINGERPRINT_PREFIX}{fingerprint};result={}|{status}|{}|{}|{}|{}",
-        receipt.operation_id,
-        receipt.statement_version,
-        receipt.task_version,
-        receipt.payable_account_id.as_deref().unwrap_or("-"),
-        receipt.cost_delta.map(|value| value.to_string()).unwrap_or_else(|| "-".to_string()),
-    )
-}
-
-/// 解析并校验正式复核决定幂等收据。
-pub fn parse_review_decision_receipt(
-    message: &str,
-    expected_fingerprint: &str,
-) -> Result<ReviewDecisionReceipt> {
-    let result = receipt_result(message, expected_fingerprint, "结算复核决定")?;
-    let fields = result.split('|').collect::<Vec<_>>();
-    let [operation_id, status, statement_version, task_version, payable_account_id, cost_delta] =
-        fields.as_slice()
-    else {
-        return Err(Error::Internal("结算复核决定幂等收据结果非法".to_string()));
-    };
-    let result_status = match *status {
-        "C" => dto::SettlementReviewDecisionStatus::Confirmed,
-        "R" => dto::SettlementReviewDecisionStatus::Rejected,
-        _ => return Err(Error::Internal("结算复核决定收据状态非法".to_string())),
-    };
-    Ok(ReviewDecisionReceipt {
-        operation_id: (*operation_id).to_string(),
-        result_status,
-        statement_version: parse_receipt_number(statement_version, "结算单版本")?,
-        task_version: parse_receipt_number(task_version, "待办版本")?,
-        payable_account_id: (*payable_account_id != "-").then(|| (*payable_account_id).to_string()),
-        cost_delta: if *cost_delta == "-" {
-            None
-        } else {
-            Some(
-                Amount::from_str(cost_delta)
-                    .map_err(|_| Error::Internal("结算复核决定收据成本差额非法".to_string()))?,
-            )
-        },
-    })
 }
 
 /// 由正式事实与收据构造结算复核响应。
@@ -620,6 +568,79 @@ fn ensure_decision_replay(
     }
     Ok(())
 }
+
+/// 冻结主题与正式复核任务写入之后的回执输入。
+struct ReviewSubmissionWrite<'a> {
+    db: &'a Database,
+    actor: &'a AuditActor,
+    statement: &'a SupplierSettlementStatement,
+    work_item: &'a WorkItem,
+    command_id: &'a str,
+    fingerprint: &'a str,
+    request: &'a SubmitSettlementReviewRequest,
+}
+
+/// 保存首次复核提交的版本、任务引用及同事务单次事件。
+async fn persist_review_submission(
+    input: ReviewSubmissionWrite<'_>,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let receipt = ReviewSubmissionReceipt {
+        operation_id: input.request.operation_id.clone(),
+        statement_version: input.statement.base.version,
+        work_item_id: input.work_item.base.id.clone(),
+        task_version: input.work_item.base.version,
+    };
+    let audit = input
+        .actor
+        .clone()
+        .resource_log_with_id(
+            input.command_id.to_string(),
+            "supplier_settlement.submit_review",
+            "supplier_settlement_statement",
+            input.statement.base.id.clone(),
+            Some("结算主题已冻结并提交财务复核".to_string()),
+        )?
+        .with_command_id(Some(input.command_id.to_string()))?
+        .with_resource_number(Some(input.statement.statement_no.clone()))?;
+    persist_supply_receipt(
+        input.db,
+        &audit,
+        input.fingerprint,
+        &input.request.idempotency_key,
+        &input.statement.base.id,
+        SupplyCommandResult::ReviewSubmission(receipt),
+        executor,
+    )
+    .await?;
+    persist_log(input.db, &audit, executor).await?;
+    Ok(())
+}
+
+/// 提交前按原顺序验证负责人、结算版本和冻结主题。
+fn validate_submission_command(
+    statement: &SupplierSettlementStatement,
+    req: &SubmitSettlementReviewRequest,
+    actor: &AuditActor,
+) -> Result<()> {
+    if !statement.is_prepared_by(actor.id()) {
+        return Err(Error::Forbidden("只有当前对账负责人可以提交财务复核".to_string()));
+    }
+    statement
+        .ensure_version(req.expected_lock_version)
+        .map_err(|_| Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))?;
+    validate_review_submission_snapshot(statement, req)?;
+    Ok(())
+}
+
+/// 将正式复核决定映射为同一已登记动作代码。
+fn review_action(action: dto::SettlementReviewAction) -> &'static str {
+    match action {
+        dto::SettlementReviewAction::Reject => "supplier_settlement.review_reject",
+        dto::SettlementReviewAction::Confirm => "supplier_settlement.review_confirm",
+    }
+}
+
 #[cfg(test)]
 mod replay_tests {
     use super::super::tests::{sample_statement, sample_work_item};

@@ -1,16 +1,21 @@
-//! 反向验收的幂等根事务；事实逆转后刷新销售、按剩余事实重开任务并写双审计。
+//! 反向验收的幂等根事务；事实逆转后刷新销售、按剩余事实重开任务并写独立回执。
 use application_core::{AuditActor, CommandReceipt};
-use erp_audit::CommandReceiptServiceExt;
 use erp_core::ids::CustomerAcceptanceId;
+use erp_fulfillment::FulfillmentCommandReceiptService;
 use erp_fulfillment::dto::{CustomerAcceptanceView, ReverseCustomerAcceptanceRequest};
 use erp_fulfillment::entity::fulfillment::CustomerAcceptance;
+use erp_fulfillment::repository::extensions::FulfillmentExt;
 use erp_fulfillment::service::FulfillmentService;
-use persistence_core::Transactional;
+use erp_identity::SharedRbacService;
+use erp_read_models::sales_center::access::SalesAccess;
+use mongodb::Database;
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::CustomerAcceptanceProcess;
 use super::completion::{CompletionKind, complete_acceptance};
-use crate::Result;
+use crate::reverse_flow::command_recovery::recovered_resource;
+use crate::{Error, Result};
 impl CustomerAcceptanceProcess {
     /// 冲正客户验收（已过账 → 已冲正；§8.2 第 5 条反向分配事务）。
     ///
@@ -60,7 +65,10 @@ impl CustomerAcceptanceProcess {
             &req.idempotency_key,
             [req.expected_version.to_string(), req.reason_text.clone()],
         )?;
-        if let Some(reverse_acceptance_id) = command_receipt.committed_resource_id(&self.db).await? {
+        if let Some(reverse_acceptance_id) = FulfillmentCommandReceiptService::new(self.db.clone())
+            .committed_resource_id(&command_receipt, &mut NoTransaction)
+            .await?
+        {
             return Ok(self.domain.customer_acceptance_detail(&reverse_acceptance_id).await?.acceptance);
         }
         let original_id = CustomerAcceptanceId::new(id.to_string());
@@ -72,12 +80,12 @@ impl CustomerAcceptanceProcess {
         let transaction_result = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let original = FulfillmentService::new(db.clone())
-                        .load_customer_acceptance(original_id.as_ref(), executor)
-                        .await?;
-                    erp_read_models::sales_center::access::SalesAccess::new(db.clone(), rbac)
-                        .require_object(&actor, "detail", &original.acceptance.sales_order_id, &[], executor)
-                        .await?;
+                    if let Some(persisted) =
+                        replay_reverse(&db, rbac, &original_id, &actor, &command_receipt_for_tx, executor)
+                            .await?
+                    {
+                        return Ok(persisted);
+                    }
                     let (original, reverse_acceptance) =
                         FulfillmentService::persist_customer_acceptance_reverse(
                             &db,
@@ -92,7 +100,7 @@ impl CustomerAcceptanceProcess {
                         &actor,
                         CompletionKind::Reverse {
                             original_id: original.base.id,
-                            receipt: command_receipt_for_tx,
+                            receipt: Box::new(command_receipt_for_tx),
                         },
                         executor,
                     )
@@ -103,12 +111,49 @@ impl CustomerAcceptanceProcess {
             .await;
         match transaction_result {
             Ok(reversed) => Ok(reversed.into()),
-            Err(error) => match command_receipt.committed_resource_id(&self.db).await? {
-                Some(reverse_acceptance_id) => {
-                    Ok(self.domain.customer_acceptance_detail(&reverse_acceptance_id).await?.acceptance)
-                },
-                None => Err(error),
-            },
+            Err(error) => self.recover_reverse(error, &command_receipt).await,
         }
     }
+
+    /// 只读查询冲正收据并返回既有结果，未确认提交时保留原错误。
+    async fn recover_reverse(
+        &self,
+        error: Error,
+        receipt: &CommandReceipt,
+    ) -> Result<CustomerAcceptanceView> {
+        let reverse_acceptance_id = recovered_resource(
+            error,
+            FulfillmentCommandReceiptService::new(self.db.clone())
+                .committed_resource_id(receipt, &mut NoTransaction)
+                .await
+                .map_err(Error::from),
+        )?;
+        Ok(self.domain.customer_acceptance_detail(&reverse_acceptance_id).await?.acceptance)
+    }
+}
+
+/// 按原顺序重验验收归属授权，再读取同一执行器上的冲正命令结果。
+async fn replay_reverse(
+    db: &Database,
+    rbac: SharedRbacService,
+    original_id: &CustomerAcceptanceId,
+    actor: &AuditActor,
+    receipt: &CommandReceipt,
+    executor: &mut dyn Executor,
+) -> Result<Option<CustomerAcceptance>> {
+    let original =
+        FulfillmentService::new(db.clone()).load_customer_acceptance(original_id.as_ref(), executor).await?;
+    SalesAccess::new(db.clone(), rbac)
+        .require_object(actor, "detail", &original.acceptance.sales_order_id, &[], executor)
+        .await?;
+    let Some(result_id) =
+        FulfillmentCommandReceiptService::new(db.clone()).committed_resource_id(receipt, executor).await?
+    else {
+        return Ok(None);
+    };
+    db.customer_acceptances()
+        .find_by_id(&result_id, executor)
+        .await?
+        .map(Some)
+        .ok_or_else(|| Error::NotFound("验收单不存在".to_string()))
 }

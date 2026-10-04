@@ -2,24 +2,25 @@
 
 use application_core::AuditActor;
 use async_trait::async_trait;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_procurement::dto::purchase_order::{VOID_ACTION, VoidPurchaseOrderRequest, VoidPurchaseOrderResult};
 use erp_procurement::entity::purchase_order::{
-    LegacyReceiptIdScheme, PurchaseCommandReceipt, PurchaseCommandReceiptError, PurchaseOrder,
-    PurchaseOrderStatus,
+    PurchaseCommandReceipt, PurchaseCommandReceiptError, PurchaseCommandReceiptIdentity, PurchaseOrder,
+    PurchaseOrderStatus, VoidDraftReceipt,
 };
+use erp_procurement::repository::PurchaseCommandExt;
 use erp_procurement::service::purchase_order::void_order::{
     ensure_current_submission_is_draft, ensure_void_target, load_purchase_order, persist_voided_order,
 };
 use erp_sales::repository::SalesOrderExt;
+use id_generator::next_id;
 use persistence_core::{Executor, NoTransaction};
-use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use super::PurchaseOrderProcess;
 use super::authorization::{PurchaseOrderAuthorization, ensure_purchase_order_actor_account};
 use super::procurement_task_sync::sync_procurement_tasks_for_sales_order;
-use crate::procure_to_pay::adapters::audit::audit_receipt_fact;
+use crate::audit::{persist_log, recover_command};
 use crate::{Error, Result};
 
 const VOID_PERMISSION: &str = "purchase_order:delete";
@@ -32,26 +33,11 @@ struct VoidDraftCommand<'a> {
     /// 原始作废请求。
     request: &'a VoidPurchaseOrderRequest,
     /// 稳定命令收据 ID。
-    receipt_id: &'a str,
+    receipt_id: &'a PurchaseCommandReceiptIdentity,
     /// 已排除幂等键的请求指纹。
     request_fingerprint: &'a str,
     /// 已认证审计操作人。
     actor: &'a AuditActor,
-}
-
-/// 作废采购草稿命令收据载荷。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-struct VoidDraftReceipt {
-    /// 采购单主键。
-    purchase_order_id: String,
-    /// 作废后的稳定状态。
-    status: String,
-    /// 作废完成时的乐观锁版本。
-    lock_version: u64,
-    /// 首次执行时规范化的作废原因。
-    reason: String,
-    /// 首次成功响应的业务引用。
-    reference: String,
 }
 
 impl PurchaseOrderProcess {
@@ -87,9 +73,8 @@ impl PurchaseOrderProcess {
             VOID_ACTION,
             Some(id),
             &req.idempotency_key,
-            LegacyReceiptIdScheme::None,
         )?;
-        let receipt_id = receipt_identity.receipt_id().to_string();
+        let receipt_id = receipt_identity;
         if let Some(result) =
             replay_void_draft(&self.db, &receipt_id, &fingerprint, id, actor, &mut NoTransaction).await?
         {
@@ -123,7 +108,7 @@ async fn execute_void_draft_transaction(
     service: &PurchaseOrderProcess,
     purchase_order_id: &str,
     request: VoidPurchaseOrderRequest,
-    receipt_id: String,
+    receipt_id: PurchaseCommandReceiptIdentity,
     fingerprint: String,
     actor: &AuditActor,
     authorization: PurchaseOrderAuthorization,
@@ -285,17 +270,21 @@ impl VoidSteps for VoidPosting<'_, '_> {
 
     async fn receipt(&mut self, executor: &mut dyn Executor) -> Result<VoidPurchaseOrderResult> {
         let receipt = VoidDraftReceipt::from_voided(self.order, &self.command.request.reason);
-        let audit = self.command.actor.clone().resource_log_with_id(
-            self.command.receipt_id.to_string(),
-            VOID_ACTION,
-            "purchase_order",
-            self.order.base.id.clone(),
-            Some(
-                PurchaseCommandReceipt::new(self.command.request_fingerprint.to_string(), receipt.clone())
-                    .encode_message()?,
-            ),
+        let audit = self
+            .command
+            .actor
+            .clone()
+            .resource_log_with_id(next_id(), VOID_ACTION, "purchase_order", self.order.base.id.clone(), None)?
+            .with_command_id(Some(self.command.receipt_id.receipt_id().to_string()))?
+            .with_resource_number(Some(self.order.purchase_no.clone()))?;
+        let record = PurchaseCommandReceipt::new(
+            self.command.receipt_id,
+            self.command.request_fingerprint,
+            receipt.clone(),
+            audit.base.id.clone(),
         )?;
-        self.db.audit_logs().create(&audit, executor).await?;
+        self.db.purchase_command_receipts::<VoidDraftReceipt>().create(&record, executor).await?;
+        persist_log(self.db, &audit, executor).await?;
         Ok(receipt.into_result(false))
     }
 }
@@ -320,30 +309,31 @@ impl VoidSteps for VoidPosting<'_, '_> {
 /// 只有匹配稳定收据且当前采购单确为已作废时才能返回 `replayed = true`。
 async fn replay_void_draft(
     db: &mongodb::Database,
-    receipt_id: &str,
+    receipt_id: &PurchaseCommandReceiptIdentity,
     expected_fingerprint: &str,
     purchase_order_id: &str,
-    actor: &AuditActor,
+    _actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<Option<VoidPurchaseOrderResult>> {
-    let Some(audit) = db.audit_logs().find_by_id(receipt_id, executor).await? else {
+    let Some(record) = db
+        .purchase_command_receipts::<VoidDraftReceipt>()
+        .find_by_id_including_deleted(receipt_id.receipt_id(), executor)
+        .await?
+    else {
         return Ok(None);
     };
-    let receipt = match PurchaseCommandReceipt::<VoidDraftReceipt>::decode(
-        &audit_receipt_fact(&audit),
-        actor.id(),
-        VOID_ACTION,
-        Some(purchase_order_id),
-        expected_fingerprint,
-    ) {
-        Ok(receipt) => receipt,
-        Err(PurchaseCommandReceiptError::IdentityMismatch | PurchaseCommandReceiptError::PayloadConflict) => {
-            return Err(Error::ConflictError("幂等键已用于不同采购命令".to_string()));
-        },
-        Err(PurchaseCommandReceiptError::Corrupted(message)) => {
-            return Err(Error::Internal(message));
-        },
-    };
+    let receipt =
+        match PurchaseCommandReceipt::<VoidDraftReceipt>::decode(record, receipt_id, expected_fingerprint) {
+            Ok(receipt) => receipt,
+            Err(
+                PurchaseCommandReceiptError::IdentityMismatch | PurchaseCommandReceiptError::PayloadConflict,
+            ) => {
+                return Err(Error::ConflictError("幂等键已用于不同采购命令".to_string()));
+            },
+            Err(PurchaseCommandReceiptError::Corrupted(message)) => {
+                return Err(Error::Internal(message));
+            },
+        };
     if receipt.payload().purchase_order_id != purchase_order_id {
         return Err(Error::ConflictError("采购草稿作废收据与业务资源不一致".to_string()));
     }
@@ -377,67 +367,18 @@ async fn replay_void_draft(
 async fn recover_void_draft(
     transaction_result: Result<VoidPurchaseOrderResult>,
     db: &mongodb::Database,
-    receipt_id: &str,
+    receipt_id: &PurchaseCommandReceiptIdentity,
     fingerprint: &str,
     purchase_order_id: &str,
     actor: &AuditActor,
 ) -> Result<VoidPurchaseOrderResult> {
     match transaction_result {
         Ok(result) => Ok(result),
-        Err(error) => {
+        Err(error) => recover_command(
+            error,
             replay_void_draft(db, receipt_id, fingerprint, purchase_order_id, actor, &mut NoTransaction)
-                .await?
-                .ok_or(error)
-        },
-    }
-}
-
-impl VoidDraftReceipt {
-    /// 从已持久化的作废采购单构造稳定收据。
-    ///
-    /// # 参数
-    /// * `order` - Repository 更新后带新版本的已作废采购单
-    /// * `reason` - 首次请求中的作废原因
-    ///
-    /// # 返回
-    /// 返回可持久化并稳定回放的作废结果载荷。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 状态、版本和业务引用必须与首次成功响应一致，审计收据保留规范化作废原因。
-    fn from_voided(order: &PurchaseOrder, reason: &str) -> Self {
-        Self {
-            purchase_order_id: order.base.id.clone(),
-            status: order.stable.status.as_str().to_string(),
-            lock_version: order.base.version,
-            reason: reason.trim().to_string(),
-            reference: format!("VOID-V{}", order.base.version),
-        }
-    }
-
-    /// 转换为采购草稿作废 API 结果。
-    ///
-    /// # 参数
-    /// * `replayed` - 是否来自匹配命令收据的回放
-    ///
-    /// # 返回
-    /// 返回首次执行或幂等回放结果。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 只有读取并校验匹配收据后才能传入 `true`。
-    fn into_result(self, replayed: bool) -> VoidPurchaseOrderResult {
-        VoidPurchaseOrderResult {
-            purchase_order_id: self.purchase_order_id,
-            status: self.status,
-            lock_version: self.lock_version,
-            replayed,
-            reference: self.reference,
-        }
+                .await,
+        ),
     }
 }
 

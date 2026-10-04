@@ -1,6 +1,8 @@
 //! Inventory MongoDB repositories and accessors.
 
+mod cancellation;
 pub mod extensions;
+pub use cancellation::StockAdjustmentCancellationExt;
 pub mod inventory;
 pub mod owned;
 pub mod prelude;

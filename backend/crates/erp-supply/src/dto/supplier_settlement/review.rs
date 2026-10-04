@@ -166,7 +166,7 @@ pub struct SettlementReviewCommand {
 }
 
 /// 复核决定结果状态。
-#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum SettlementReviewDecisionStatus {
     /// 已确认结算。

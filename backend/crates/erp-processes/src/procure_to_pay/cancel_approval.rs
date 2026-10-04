@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use bpm::engine::{CancelPlan, CancelPlanInput, DefinitionGraph, plan_cancel};
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance, IdempotencyKey, ParticipantId, Timestamp};
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
 use erp_procurement::dto::purchase_order::CancelPurchaseOrderApprovalRequest;
 use erp_procurement::entity::purchase_order::PurchaseOrder;
@@ -33,6 +33,7 @@ use super::adapter::{
     require_frozen_binding,
 };
 use super::start_approval::load_bound_definition_graph;
+use crate::audit::persist_log;
 use crate::{Error, Result};
 
 impl PurchaseOrderProcess {
@@ -449,7 +450,7 @@ impl CancelSteps for CancelPosting<'_> {
                 .await?
             },
             CancelStep::Audit => {
-                self.db.audit_logs().create(self.audit, executor).await?;
+                persist_log(self.db, self.audit, executor).await?;
             },
         }
         Ok(())

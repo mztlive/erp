@@ -1,10 +1,11 @@
 //! 原回款提交的完整载荷收据、当前资格回放与原子启动事务。
 
-use application_core::{AuditActor, CommandReceipt, CommandReceiptFact};
-use erp_audit::{AuditExt, AuditLog, AuditLogRepositoryExt as _, CommandReceiptServiceExt as _};
+use application_core::{AuditActor, CommandReceipt};
+use async_trait::async_trait;
 use erp_finance::dto::receivable::SubmitCustomerReceiptRequest;
 use erp_finance::entity::receivable::CustomerReceipt;
 use erp_finance::repository::ReceivableExt;
+use erp_finance::service::command_receipt::FinanceCommandReceiptService;
 use erp_finance::service::receivable::mapping::ensure_expected_version;
 use erp_identity::SharedRbacService;
 use erp_read_models::finance::dto::CustomerReceiptView;
@@ -18,6 +19,10 @@ use super::adapter::{
     self, RECENT_HISTORY_LIMIT, build_customer_receipt_snapshot, customer_receipt_object_readable,
     customer_receipt_responsible_org_id, customer_receipt_start_command, customer_receipt_subject_ref,
     require_frozen_binding, start_approval_command_kind,
+};
+use super::customer_receipt_command::{
+    MongoReceiptCommandWrites, ReceiptReplayPort, ensure_committed_resource, persist_receipt_command_success,
+    receipt_command_context, replay_receipt_command,
 };
 use super::customer_receipt_posting::prepare_dispatch_start;
 use super::draft_read::{ensure_receipt_owner, receipt_view_with_actions};
@@ -100,11 +105,8 @@ impl ReceivableProcess {
             .client()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    authorized_receipt(&db, &rbac, &actor, &id, executor).await?;
-                    if !committed_submit(&db, &command, &id, executor).await? {
-                        return Ok(None);
-                    }
-                    Ok(Some(receipt_view_with_actions(&db, &rbac, &actor, &id, executor).await?))
+                    let port = MongoReceiptSubmitReplay { db: &db, rbac: &rbac, actor: &actor };
+                    replay_authorized_submit(&port, &id, &command, executor).await
                 })
             })
             .await
@@ -118,20 +120,61 @@ impl ReceivableProcess {
         actor: &AuditActor,
         original_error: Error,
     ) -> Result<CustomerReceiptView> {
-        const RECOVERY_ATTEMPTS: usize = 8;
-        for attempt in 0..RECOVERY_ATTEMPTS {
-            match self.replay_customer_receipt_submit(id, command, actor).await {
-                Ok(Some(view)) => return Ok(view),
-                Ok(None) => {},
-                Err(error) if error.command_may_have_committed() => {},
-                Err(error) => return Err(error),
-            }
-            if attempt + 1 < RECOVERY_ATTEMPTS {
-                tokio::time::sleep(command_recovery_delay(attempt)).await;
-            }
-        }
-        Err(original_error)
+        recover_authorized_submit(&MongoReceiptSubmitRecovery(self), id, command, actor, original_error).await
     }
+}
+
+/// 每次恢复查证由原用例取得独立的只读事务快照。
+#[async_trait]
+trait ReceiptSubmitRecoveryPort: Send + Sync {
+    type Output: Send;
+
+    async fn probe(
+        &self,
+        id: &str,
+        command: &CommandReceipt,
+        actor: &AuditActor,
+    ) -> Result<Option<Self::Output>>;
+}
+
+struct MongoReceiptSubmitRecovery<'a>(&'a ReceivableProcess);
+
+#[async_trait]
+impl ReceiptSubmitRecoveryPort for MongoReceiptSubmitRecovery<'_> {
+    type Output = CustomerReceiptView;
+
+    async fn probe(
+        &self,
+        id: &str,
+        command: &CommandReceipt,
+        actor: &AuditActor,
+    ) -> Result<Option<CustomerReceiptView>> {
+        self.0.replay_customer_receipt_submit(id, command, actor).await
+    }
+}
+
+/// 有界查证只读原命令；未知提交下资格、回执或视图读取失败均保留原错误。
+async fn recover_authorized_submit<P: ReceiptSubmitRecoveryPort>(
+    port: &P,
+    id: &str,
+    command: &CommandReceipt,
+    actor: &AuditActor,
+    original_error: Error,
+) -> Result<P::Output> {
+    const RECOVERY_ATTEMPTS: usize = 8;
+    for attempt in 0..RECOVERY_ATTEMPTS {
+        match port.probe(id, command, actor).await {
+            Ok(Some(view)) => return Ok(view),
+            Ok(None) => {},
+            Err(_) if matches!(original_error, Error::OutcomeUnknown(_)) => return Err(original_error),
+            Err(error) if error.command_may_have_committed() => {},
+            Err(error) => return Err(error),
+        }
+        if attempt + 1 < RECOVERY_ATTEMPTS {
+            tokio::time::sleep(command_recovery_delay(attempt)).await;
+        }
+    }
+    Err(original_error)
 }
 
 /// 启动事实、完整提交收据和成功审计同事务写入；竞争重试只回读既有原单。
@@ -158,9 +201,16 @@ pub(super) async fn persist_receipt_submit(
                 }
                 current.ensure_draft_editor(input.actor.id())?;
                 ensure_expected_version(current.base.version, input.receipt.base.version)?;
-                let audit = command.audit(input.actor.clone(), input.id.clone())?;
+                let context = receipt_command_context(&command, &input.actor)?;
                 let receipt = persist_customer_receipt_start_apply(&db, input, executor).await?;
-                db.audit_logs().create(&audit, executor).await?;
+                persist_receipt_command_success(
+                    &MongoReceiptCommandWrites { db: &db },
+                    &command,
+                    &context,
+                    &receipt,
+                    executor,
+                )
+                .await?;
                 Ok(receipt)
             })
         })
@@ -192,29 +242,78 @@ async fn committed_submit(
     id: &str,
     executor: &mut dyn Executor,
 ) -> Result<bool> {
-    let candidates = command.id_candidates();
-    let facts = db.audit_logs().find_command_receipts_by_ids(&candidates, executor).await?;
-    matches_committed_submit(command, id, &facts)
+    let committed =
+        FinanceCommandReceiptService::new(db.clone()).committed_resource_id(command, executor).await?;
+    match committed {
+        Some(committed_id) => {
+            ensure_committed_resource(&committed_id, Some(id))?;
+            Ok(true)
+        },
+        None => Ok(false),
+    }
 }
 
-/// 完整命令匹配不能接受同键异载荷，也不能指向其他原单。
-fn matches_committed_submit(
-    command: &CommandReceipt,
+/// 同一事务的授权资格必须先于财务回执及原结果读取。
+#[async_trait]
+trait ReceiptSubmitReplayPort: ReceiptReplayPort {
+    async fn authorize(&self, id: &str, executor: &mut dyn Executor) -> Result<()>;
+}
+
+/// 首错顺序沿用账号、提交资格、完整资金来源、原登记人、回执与当前视图。
+async fn replay_authorized_submit<P: ReceiptSubmitReplayPort>(
+    port: &P,
     id: &str,
-    facts: &[CommandReceiptFact],
-) -> Result<bool> {
-    let candidates = command.id_candidates();
-    match AuditLog::pick_committed_resource_id(command, &candidates, facts)? {
-        Some(committed_id) if committed_id == id => Ok(true),
-        Some(_) => Err(Error::ConflictError("回款提交收据与原单不一致".into())),
-        None => Ok(false),
+    command: &CommandReceipt,
+    executor: &mut dyn Executor,
+) -> Result<Option<P::Output>> {
+    port.authorize(id, executor).await?;
+    replay_receipt_command(port, command, Some(id), executor).await
+}
+
+struct MongoReceiptSubmitReplay<'a> {
+    db: &'a Database,
+    rbac: &'a SharedRbacService,
+    actor: &'a AuditActor,
+}
+
+#[async_trait]
+impl ReceiptReplayPort for MongoReceiptSubmitReplay<'_> {
+    type Output = CustomerReceiptView;
+
+    async fn committed_resource_id(
+        &self,
+        command: &CommandReceipt,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<String>> {
+        Ok(FinanceCommandReceiptService::new(self.db.clone())
+            .committed_resource_id(command, executor)
+            .await?)
+    }
+
+    async fn current_result(&self, id: &str, executor: &mut dyn Executor) -> Result<CustomerReceiptView> {
+        receipt_view_with_actions(self.db, self.rbac, self.actor, id, executor).await
+    }
+}
+
+#[async_trait]
+impl ReceiptSubmitReplayPort for MongoReceiptSubmitReplay<'_> {
+    async fn authorize(&self, id: &str, executor: &mut dyn Executor) -> Result<()> {
+        authorized_receipt(self.db, self.rbac, self.actor, id, executor).await?;
+        Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Mutex;
+
+    use erp_core::AccountKind;
     use erp_core::ids::ReceivableEntryId;
+    use erp_finance::Error as FinanceError;
     use erp_finance::dto::receivable::ReceiptAllocationLineRequest;
+    use erp_finance::entity::command_receipt::FinanceCommandReceipt;
+    use mongodb::error::Error as MongoError;
+    use persistence_core::Error as PersistenceError;
 
     use super::*;
 
@@ -230,15 +329,10 @@ mod tests {
             }],
         };
         let command = submit_receipt("receipt", &request, "creator").unwrap();
-        let fact =
-            CommandReceiptFact::new(command.id(), "creator", "customer_receipt.submit", "customer_receipt")
-                .with_resource_id("receipt")
-                .with_success(true)
-                .with_message(command.message(None));
+        let fact = FinanceCommandReceipt::resource(&command, "receipt".into(), "audit-event".into()).unwrap();
         let replay = submit_receipt("receipt", &request, "creator").unwrap();
-        assert!(matches_committed_submit(&replay, "receipt", std::slice::from_ref(&fact)).unwrap());
-        assert!(!matches_committed_submit(&replay, "receipt", &[]).unwrap());
-        assert!(matches_committed_submit(&replay, "other", std::slice::from_ref(&fact)).is_err());
+        assert_eq!(fact.resource_id(&replay).unwrap(), "receipt");
+        assert!(ensure_committed_resource(&fact.resource_id(&replay).unwrap(), Some("other")).is_err());
         let mut changed_version = request.clone();
         changed_version.expected_version += 1;
         let mut changed_amount = request.clone();
@@ -247,14 +341,171 @@ mod tests {
         changed_source.allocations[0].receivable_entry_id = ReceivableEntryId::new("other");
         for changed in [changed_version, changed_amount, changed_source] {
             let command = submit_receipt("receipt", &changed, "creator").unwrap();
-            assert!(matches_committed_submit(&command, "receipt", std::slice::from_ref(&fact)).is_err());
+            assert!(matches!(fact.resource_id(&command), Err(FinanceError::ConflictError(_))));
         }
         let other_order = submit_receipt("other", &request, "creator").unwrap();
-        assert!(matches_committed_submit(&other_order, "other", std::slice::from_ref(&fact)).is_err());
+        assert!(matches!(fact.resource_id(&other_order), Err(FinanceError::ConflictError(_))));
         let other_actor = submit_receipt("receipt", &request, "other").unwrap();
-        assert!(
-            other_actor.match_fact(&fact)
-                != application_core::CommandReceiptMatch::SamePayload("receipt".into())
-        );
+        assert!(matches!(fact.resource_id(&other_actor), Err(FinanceError::Internal(_))));
+    }
+
+    fn actor() -> AuditActor {
+        AuditActor::new("creator".into(), "fukuan".into(), AccountKind::Admin)
+    }
+
+    fn request() -> SubmitCustomerReceiptRequest {
+        SubmitCustomerReceiptRequest {
+            expected_version: 2,
+            idempotency_key: "retry".into(),
+            allocations: vec![ReceiptAllocationLineRequest {
+                receivable_entry_id: ReceivableEntryId::new("entry"),
+                allocated_amount: "50.00".parse().unwrap(),
+            }],
+        }
+    }
+
+    struct SubmitReplay {
+        identity: usize,
+        denied: bool,
+        receipt: Option<FinanceCommandReceipt>,
+        calls: Mutex<Vec<&'static str>>,
+    }
+
+    impl SubmitReplay {
+        fn visit(&self, executor: &mut dyn Executor, call: &'static str) {
+            assert_eq!(executor as *mut dyn Executor as *mut () as usize, self.identity);
+            self.calls.lock().unwrap().push(call);
+        }
+    }
+
+    #[async_trait]
+    impl ReceiptReplayPort for SubmitReplay {
+        type Output = u32;
+
+        async fn committed_resource_id(
+            &self,
+            command: &CommandReceipt,
+            executor: &mut dyn Executor,
+        ) -> Result<Option<String>> {
+            self.visit(executor, "receipt");
+            self.receipt.as_ref().map(|receipt| receipt.resource_id(command).map_err(Error::from)).transpose()
+        }
+
+        async fn current_result(&self, id: &str, executor: &mut dyn Executor) -> Result<u32> {
+            self.visit(executor, "view");
+            assert_eq!(id, "receipt");
+            Ok(17)
+        }
+    }
+
+    #[async_trait]
+    impl ReceiptSubmitReplayPort for SubmitReplay {
+        async fn authorize(&self, id: &str, executor: &mut dyn Executor) -> Result<()> {
+            self.visit(executor, "authorize");
+            assert_eq!(id, "receipt");
+            if self.denied {
+                return Err(Error::Forbidden("原资格拒绝".into()));
+            }
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn current_authorization_precedes_replay_and_payload_conflict_on_same_executor() {
+        for (denied, changed, expected_steps) in [
+            (false, false, vec!["authorize", "receipt", "view"]),
+            (true, true, vec!["authorize"]),
+            (false, true, vec!["authorize", "receipt"]),
+        ] {
+            let mut executor = NoTransaction;
+            let original = submit_receipt("receipt", &request(), "creator").unwrap();
+            let probe = SubmitReplay {
+                identity: &mut executor as *mut NoTransaction as usize,
+                denied,
+                receipt: Some(
+                    FinanceCommandReceipt::resource(&original, "receipt".into(), "event".into()).unwrap(),
+                ),
+                calls: Mutex::new(vec![]),
+            };
+            let mut changed_request = request();
+            if changed {
+                changed_request.expected_version += 1;
+            }
+            let command = submit_receipt("receipt", &changed_request, "creator").unwrap();
+            let result = replay_authorized_submit(&probe, "receipt", &command, &mut executor).await;
+            if denied {
+                assert!(matches!(result, Err(Error::Forbidden(message)) if message == "原资格拒绝"));
+            } else if changed {
+                assert!(matches!(result, Err(Error::ConflictError(_))));
+            } else {
+                assert_eq!(result.unwrap(), Some(17));
+            }
+            assert_eq!(*probe.calls.lock().unwrap(), expected_steps);
+        }
+    }
+
+    struct RecoveryProbe {
+        result: Mutex<Option<Result<Option<u32>>>>,
+        calls: Mutex<usize>,
+    }
+
+    #[async_trait]
+    impl ReceiptSubmitRecoveryPort for RecoveryProbe {
+        type Output = u32;
+
+        async fn probe(&self, id: &str, command: &CommandReceipt, actor: &AuditActor) -> Result<Option<u32>> {
+            assert_eq!(id, "receipt");
+            assert_eq!(command, &submit_receipt("receipt", &request(), actor.id()).unwrap());
+            *self.calls.lock().unwrap() += 1;
+            self.result.lock().unwrap().take().unwrap_or(Ok(None))
+        }
+    }
+
+    fn unknown_error() -> Error {
+        Error::OutcomeUnknown(PersistenceError::CommitOutcomeUnknown(MongoError::custom(
+            "original submit unknown",
+        )))
+    }
+
+    #[tokio::test]
+    async fn unknown_submit_keeps_original_error_for_authorization_receipt_or_view_failure() {
+        for probe_error in [
+            Error::Forbidden("原资格拒绝".into()),
+            Error::ConflictError("同键异载荷".into()),
+            Error::Internal("回执损坏".into()),
+            Error::NotFound("原单视图不可用".into()),
+        ] {
+            let probe = RecoveryProbe { result: Mutex::new(Some(Err(probe_error))), calls: Mutex::new(0) };
+            let command = submit_receipt("receipt", &request(), "creator").unwrap();
+            let error = recover_authorized_submit(&probe, "receipt", &command, &actor(), unknown_error())
+                .await
+                .unwrap_err();
+            match error {
+                Error::OutcomeUnknown(PersistenceError::CommitOutcomeUnknown(source)) => {
+                    assert_eq!(source.get_custom::<&str>(), Some(&"original submit unknown"));
+                },
+                other => panic!("原未知错误被替换: {other:?}"),
+            }
+            assert_eq!(*probe.calls.lock().unwrap(), 1);
+        }
+    }
+
+    #[tokio::test]
+    async fn unknown_submit_missing_receipt_stays_bounded_and_exact_success_returns_original_view() {
+        for (found, expected_calls) in [(false, 8), (true, 1)] {
+            let probe = RecoveryProbe {
+                result: Mutex::new(Some(Ok(if found { Some(17) } else { None }))),
+                calls: Mutex::new(0),
+            };
+            let command = submit_receipt("receipt", &request(), "creator").unwrap();
+            let result =
+                recover_authorized_submit(&probe, "receipt", &command, &actor(), unknown_error()).await;
+            if found {
+                assert_eq!(result.unwrap(), 17);
+            } else {
+                assert!(matches!(result, Err(Error::OutcomeUnknown(_))));
+            }
+            assert_eq!(*probe.calls.lock().unwrap(), expected_calls);
+        }
     }
 }

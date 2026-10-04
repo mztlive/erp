@@ -1,13 +1,14 @@
 //! 销售变更原单草稿的授权与事务组合。
 
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_sales::dto::sales_review::{SalesChangeDraftView, SaveSalesChangeDraftRequest};
 use erp_sales::repository::SalesReviewExt;
 use erp_sales::service::sales_review::SalesReviewService;
 use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::SalesChangeProcess;
+use crate::audit::persist_log;
 use crate::order_to_cash::adapters::catalog::CatalogQualificationAdapter;
 use crate::{Error, Result};
 
@@ -65,7 +66,7 @@ impl SalesChangeProcess {
                         )
                         .await?;
                     let audit = actor.resource_log("sales_change_order.update", "sales_change_order", id)?;
-                    db.audit_logs().create(&audit, executor).await?;
+                    persist_log(&db, &audit, executor).await?;
                     Ok(result)
                 })
             })

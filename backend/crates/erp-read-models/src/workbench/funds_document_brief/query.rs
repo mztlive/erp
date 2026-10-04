@@ -29,27 +29,6 @@ use crate::errors::Result;
 use crate::workbench::authority::funds::mapping::voucher_revision_ids;
 
 impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
-    /// 从创建审计回填单据创建人（资金单据实体不落创建人字段）。
-    ///
-    /// # 参数
-    /// * `resource_type` - 审计资源类型（与单据类型一致）
-    /// * `ids` - 单据 ID 集合
-    /// * `executor` - 事务执行器
-    ///
-    /// # 返回
-    /// 返回单据 ID → 创建人 ID 映射；无审计时返回空映射。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
-    pub(super) async fn load_created_by_from_audit(
-        &self,
-        resource_type: &str,
-        ids: &HashSet<String>,
-        executor: &mut dyn Executor,
-    ) -> Result<HashMap<String, String>> {
-        self.funds_reader().load_created_by_from_audit(resource_type, ids, executor).await
-    }
-
     /// 批量读取应付供应商展示名。
     pub(super) async fn payable_supplier_names(
         &self,

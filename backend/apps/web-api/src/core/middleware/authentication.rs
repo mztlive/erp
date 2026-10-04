@@ -4,13 +4,14 @@ use axum::http::HeaderMap;
 use axum::http::header::AUTHORIZATION;
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
-use erp_identity::BackofficeAuthService;
+use erp_identity::{BackofficeAuthResult, BackofficeAuthService};
 use tracing::{error, info, warn};
 
 use crate::app_state::AppState;
 use crate::core::auth::jwt::TokenPayload;
 use crate::core::extractor::{Account, UserID};
 use crate::core::response::ApiResponse;
+use crate::core::tracing::RequestId;
 
 /// 已认证后台账号对应的 Casbin 主体。
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -35,10 +36,11 @@ pub async fn authenticate(State(state): State<AppState>, mut request: Request, n
         warn!("Authorization failed: invalid token");
         return ApiResponse::<()>::unauthorized().into_response();
     };
-    if let Err(response) = validate_current_identity(&state, &payload).await {
-        return response.into_response();
-    }
-    if let Err(response) = attach_identity(&mut request, payload) {
+    let identity = match validate_current_identity(&state, &payload).await {
+        Ok(identity) => identity,
+        Err(response) => return response.into_response(),
+    };
+    if let Err(response) = attach_identity(&mut request, payload, Some(identity.name().to_string())) {
         return response.into_response();
     }
 
@@ -47,7 +49,10 @@ pub async fn authenticate(State(state): State<AppState>, mut request: Request, n
 }
 
 /// 校验 token 中的后台身份仍与当前账号记录一致且处于可用状态。
-async fn validate_current_identity(state: &AppState, payload: &TokenPayload) -> Result<(), ApiResponse<()>> {
+async fn validate_current_identity(
+    state: &AppState,
+    payload: &TokenPayload,
+) -> Result<BackofficeAuthResult, ApiResponse<()>> {
     let Some(account_kind) = payload.account_kind else {
         warn!("Authorization failed: missing account kind for backoffice token");
         return Err(ApiResponse::unauthorized());
@@ -61,7 +66,7 @@ async fn validate_current_identity(state: &AppState, payload: &TokenPayload) -> 
         .validate_session(&payload.id, &payload.account, account_kind, account_version)
         .await
     {
-        Ok(_) => Ok(()),
+        Ok(identity) => Ok(identity),
         Err(erp_identity::Error::Unauthenticated(_)) => {
             warn!("Authorization failed: backoffice account is no longer active");
             Err(ApiResponse::unauthorized())
@@ -84,13 +89,28 @@ fn bearer_token(headers: &HeaderMap) -> Option<&str> {
 }
 
 /// 校验 token 身份边界并写入后续 Handler 所需的扩展。
-fn attach_identity(request: &mut Request, payload: TokenPayload) -> Result<(), ApiResponse<()>> {
+fn attach_identity(
+    request: &mut Request,
+    payload: TokenPayload,
+    actor_name_snapshot: Option<String>,
+) -> Result<(), ApiResponse<()>> {
     let TokenPayload { id: user_id, account, subject_kind, account_kind, .. } = payload;
     let Some(account_kind) = account_kind else {
         warn!("Authorization failed: missing account kind for backoffice token");
         return Err(ApiResponse::unauthorized());
     };
-    request.extensions_mut().insert(AuditActor::new(user_id.clone(), account.clone(), account_kind));
+    let actor = AuditActor::new(user_id.clone(), account.clone(), account_kind)
+        .with_actor_name_snapshot(actor_name_snapshot)
+        .and_then(|actor| {
+            actor.with_request_id(
+                request.extensions().get::<RequestId>().map(|request_id| request_id.0.clone()),
+            )
+        })
+        .map_err(|error| {
+            error!(error = %error, "Failed to capture authenticated audit context");
+            ApiResponse::system_error()
+        })?;
+    request.extensions_mut().insert(actor);
     request.extensions_mut().insert(account_kind);
     let rbac_subject = RbacSubject(erp_identity::subject(account_kind, &user_id));
     request.extensions_mut().insert(UserID(user_id));
@@ -127,7 +147,7 @@ mod tests {
         let payload =
             TokenPayload::backoffice("admin-1".to_string(), "alice".to_string(), AccountKind::Admin, 1);
 
-        assert!(attach_identity(&mut request, payload).is_ok());
+        assert!(attach_identity(&mut request, payload, None).is_ok());
         assert_eq!(request.extensions().get::<UserID>().map(|value| value.0.as_str()), Some("admin-1"));
         assert_eq!(request.extensions().get::<Account>().map(|value| value.0.as_str()), Some("alice"));
         assert_eq!(request.extensions().get::<AccountKind>(), Some(&AccountKind::Admin));
@@ -153,9 +173,68 @@ mod tests {
             account_version: None,
         };
 
-        assert!(attach_identity(&mut request, payload).is_err());
+        assert!(attach_identity(&mut request, payload, None).is_err());
         assert!(request.extensions().get::<UserID>().is_none());
         assert!(request.extensions().get::<Account>().is_none());
+    }
+
+    /// 本次会话名称进入真实工厂并冻结，不依赖后续账号查询或名称变化。
+    #[test]
+    fn attached_current_name_is_frozen_in_real_audit_factory() {
+        use erp_audit::{AuditActorLogs, prepare_business_log};
+
+        let mut request = Request::builder().uri("/admin/customer").body(Body::empty()).unwrap();
+        let payload =
+            TokenPayload::backoffice("actor-1".into(), "sales-account".into(), AccountKind::Admin, 1);
+        let mut verified_name = "  周晓彤  ".to_string();
+        attach_identity(&mut request, payload, Some(verified_name.clone())).unwrap();
+        verified_name = "之后的新名称".into();
+        let actor = request.extensions().get::<AuditActor>().unwrap().clone();
+        assert_eq!(actor.actor_name_snapshot(), Some("周晓彤"));
+        let log = actor.resource_log("customer.create", "customer", "customer-1".into()).unwrap();
+        let frozen = prepare_business_log(&log).unwrap();
+        assert_eq!(frozen.structured_event.as_ref().unwrap().actor_name_snapshot.as_deref(), Some("周晓彤"));
+        assert!(!frozen.message.as_deref().unwrap().contains(&verified_name));
+        assert!(frozen.message.as_deref().unwrap().contains("周晓彤"));
+    }
+
+    /// 原 HTTP 中间件关联经真实身份附加和事件工厂进入事件、尝试，并冻结为同一值。
+    #[tokio::test]
+    async fn traced_request_id_is_frozen_in_events_and_attempts() {
+        use axum::body::to_bytes;
+        use axum::routing::get;
+        use axum::{Json, Router, middleware};
+        use erp_audit::{AuditActorLogs, AuditAttempt, AuditAttemptResult, AuditLog, attempt_context};
+        use tower::ServiceExt;
+
+        use crate::core::tracing::{RequestId, trace_middleware};
+
+        let app = Router::new()
+            .route(
+                "/",
+                get(|mut request: Request| async move {
+                    let request_id = request.extensions().get::<RequestId>().unwrap().0.clone();
+                    assert_eq!(request.headers().get("X-Trace-Id").unwrap(), request_id.as_str());
+                    let payload =
+                        TokenPayload::backoffice("actor-1".into(), "sales".into(), AccountKind::Admin, 1);
+                    attach_identity(&mut request, payload, None).unwrap();
+                    let actor = request.extensions().get::<AuditActor>().unwrap().clone();
+                    request.extensions_mut().insert(RequestId("later-context".into()));
+                    assert_eq!(actor.request_id(), Some(request_id.as_str()));
+                    let log = actor.resource_log("customer.create", "customer", "customer-1".into()).unwrap();
+                    let attempt = attempt_context(&log).unwrap().attempt(AuditAttemptResult::Unknown);
+                    Json((log, attempt))
+                }),
+            )
+            .layer(middleware::from_fn(trace_middleware));
+        let request =
+            Request::builder().uri("/").header("X-Trace-Id", "original-request").body(Body::empty()).unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.headers().get("X-Trace-Id").unwrap(), "original-request");
+        let body = to_bytes(response.into_body(), 8192).await.unwrap();
+        let (log, attempt): (AuditLog, AuditAttempt) = serde_json::from_slice(&body).unwrap();
+        assert_eq!(log.structured_event.unwrap().request_id.as_deref(), Some("original-request"));
+        assert_eq!(attempt.request_id.as_deref(), Some("original-request"));
     }
 
     #[test]

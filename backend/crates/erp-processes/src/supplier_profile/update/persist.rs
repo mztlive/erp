@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_core::ids::{SupplierCapabilityId, SupplierQualificationId};
 use erp_party::{
     Party, PartyAddress, PartyBankAccount, PartyContact, PartyExt, PartyRevision, PartyTaxProfile,
@@ -23,6 +23,7 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use crate::Result;
+use crate::audit::persist_log;
 
 /// 主体从属事实的追加式变更。
 #[derive(Default)]
@@ -200,7 +201,7 @@ impl PreparedUpdate {
         self.qualifications.persist(db, executor).await?;
         self.ratings.persist(db, executor).await?;
         db.supplier_profile_commands().create(&self.command, executor).await?;
-        db.audit_logs().create(&self.audit, executor).await?;
+        persist_log(db, &self.audit, executor).await?;
         Ok(())
     }
 

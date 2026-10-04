@@ -465,6 +465,7 @@ pub(crate) mod tests {
                 Submission,
                 SupersededDraft,
                 Runtime,
+                CommandReceipt,
                 Audit
             ]
         );
@@ -482,6 +483,7 @@ pub(crate) mod tests {
             Submission,
             SupersededDraft,
             Runtime,
+            CommandReceipt,
             Audit,
         ];
         for (index, step) in expected.iter().copied().enumerate() {

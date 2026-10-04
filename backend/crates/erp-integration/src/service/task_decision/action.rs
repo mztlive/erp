@@ -333,7 +333,7 @@ async fn difference_query_fact(
     executor: &mut dyn Executor,
 ) -> Result<DirectFact> {
     let fact = query_action_fact(authority, subject, executor).await?;
-    let evidence_reference = Some(audit_log_reference(receipt_id)?);
+    let evidence_reference = Some(command_receipt_reference(receipt_id)?);
     Ok(open_direct_fact(ResolutionAction::QueryOriginalResult, fact, evidence_reference))
 }
 
@@ -417,7 +417,7 @@ pub(super) fn ensure_compensation_evidence(refs: &[ControlledEvidenceRef]) -> Re
     }
 }
 
-/// 由收据 ID 构造 `audit_log:id` 证据记录引用。
+/// 由收据 ID 构造 `integration_command_receipt:id` 证据记录引用。
 ///
 /// # 参数
 /// * `receipt_id` - 命令收据 ID
@@ -430,8 +430,8 @@ pub(super) fn ensure_compensation_evidence(refs: &[ControlledEvidenceRef]) -> Re
 ///
 /// # 约束
 /// 语法由 [`EvidenceRecordRef`] 独占，禁止 `format!` 拼接。
-pub fn audit_log_reference(receipt_id: &str) -> Result<String> {
-    EvidenceRecordRef::new("audit_log", receipt_id)
+pub fn command_receipt_reference(receipt_id: &str) -> Result<String> {
+    EvidenceRecordRef::new("integration_command_receipt", receipt_id)
         .map(|reference| reference.to_string())
         .map_err(|error| Error::ValidationError(error.to_string()))
 }

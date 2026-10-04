@@ -23,6 +23,7 @@ use erp_identity::SharedRbacService;
 use erp_procurement::service::purchase_order::PurchaseOrderService;
 use mongodb::Database;
 
+use crate::audit::persist_log;
 use crate::{Error, Result};
 mod adapter;
 mod adapters;
@@ -107,7 +108,7 @@ impl PurchaseOrderProcess {
 }
 
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_workflow::service::approval::policy::ApprovalDomainAction;
 use persistence_core::Executor;
@@ -138,7 +139,7 @@ pub async fn cancel_order_approval(
     .await?;
     let audit =
         actor.clone().resource_log("purchase_order.cancel_approval", "purchase_order", id.to_string())?;
-    db.audit_logs().create(&audit, executor).await?;
+    persist_log(db, &audit, executor).await?;
     Ok(())
 }
 
@@ -165,6 +166,6 @@ pub async fn cancel_change_approval_apply(
         "purchase_change_order",
         id.to_string(),
     )?;
-    db.audit_logs().create(&audit, executor).await?;
+    persist_log(db, &audit, executor).await?;
     Ok(())
 }

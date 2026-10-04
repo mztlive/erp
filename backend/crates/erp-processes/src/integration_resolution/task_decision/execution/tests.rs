@@ -238,3 +238,34 @@ async fn replay_read_error_stops_initially_or_replaces_transaction_error_on_reco
         assert_eq!(*writes.borrow(), if initial { 0 } else { 1 });
     }
 }
+
+#[tokio::test]
+async fn unknown_commit_recovery_failure_preserves_source_and_never_reexecutes() {
+    let reads = RefCell::new(0);
+    let writes = RefCell::new(0);
+    let result: Result<()> = execute_with_receipt(
+        || {
+            *reads.borrow_mut() += 1;
+            std::future::ready(if *reads.borrow() == 1 {
+                Ok(None)
+            } else {
+                Err(Error::Internal("verification unavailable".into()))
+            })
+        },
+        || {
+            *writes.borrow_mut() += 1;
+            std::future::ready(Err(Error::OutcomeUnknown(persistence_core::Error::CommitOutcomeUnknown(
+                mongodb::error::Error::custom("original W29 commit"),
+            ))))
+        },
+    )
+    .await;
+    match result.unwrap_err() {
+        Error::OutcomeUnknown(persistence_core::Error::CommitOutcomeUnknown(source)) => {
+            assert_eq!(source.get_custom::<&str>(), Some(&"original W29 commit"));
+        },
+        error => panic!("未知提交来源被替换: {error:?}"),
+    }
+    assert_eq!(*reads.borrow(), 2);
+    assert_eq!(*writes.borrow(), 1);
+}

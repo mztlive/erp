@@ -2,7 +2,8 @@
 
 use application_core::{AuditActor, CommandReceipt};
 use async_trait::async_trait;
-use erp_audit::{AuditActorLogs, AuditExt, CommandReceiptServiceExt};
+use erp_audit::AuditActorLogs;
+use erp_fulfillment::FulfillmentCommandReceiptService;
 use erp_fulfillment::entity::fulfillment::{AcceptanceProgress, CustomerAcceptance};
 use erp_sales::entity::sales_order::FulfillmentProgress;
 use erp_workflow::entity::work_item::WorkItem;
@@ -13,13 +14,14 @@ use super::task::{
     CustomerAcceptanceTaskReason, ensure_customer_acceptance_task,
     persist_customer_acceptance_task_after_posting,
 };
-use crate::Result;
+use crate::audit::persist_log;
+use crate::{Error, Result};
 
 /// 用例确定任务来源和审计种类，避免给普通 post 新增幂等回放。
 pub(super) enum CompletionKind {
-    Commit { task: WorkItem, receipt: CommandReceipt },
+    Commit { task: WorkItem, receipt: Box<CommandReceipt> },
     Post { task: WorkItem },
-    Reverse { original_id: String, receipt: CommandReceipt },
+    Reverse { original_id: String, receipt: Box<CommandReceipt> },
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum CompletionMode {
@@ -46,7 +48,7 @@ pub(super) async fn complete_acceptance(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let mode = kind.mode();
-    let mut port = DatabaseCompletion { db, acceptance, actor, kind };
+    let mut port = DatabaseCompletion { db, acceptance, actor, kind, audit_event_id: None };
     finish(&mut port, mode, executor).await
 }
 
@@ -65,9 +67,7 @@ async fn finish(
 ) -> Result<()> {
     let remaining = port.refresh_sales(executor).await?;
     port.persist_task(remaining, executor).await?;
-    if mode != CompletionMode::Commit {
-        port.business_audit(executor).await?;
-    }
+    port.business_audit(executor).await?;
     if mode != CompletionMode::Post {
         port.command_receipt(executor).await?;
     }
@@ -79,6 +79,7 @@ struct DatabaseCompletion<'a> {
     acceptance: &'a CustomerAcceptance,
     actor: &'a AuditActor,
     kind: CompletionKind,
+    audit_event_id: Option<String>,
 }
 
 #[async_trait]
@@ -129,10 +130,25 @@ impl AcceptanceCompletion for DatabaseCompletion<'_> {
             CompletionKind::Reverse { original_id, .. } => {
                 ("customer_acceptance.reverse", original_id.clone())
             },
-            CompletionKind::Commit { .. } => return Ok(()),
+            CompletionKind::Commit { .. } => ("customer_acceptance.commit", self.acceptance.base.id.clone()),
         };
-        let audit = self.actor.clone().resource_log(action, "customer_acceptance", resource_id)?;
-        self.db.audit_logs().create(&audit, executor).await?;
+        let audit = self
+            .actor
+            .clone()
+            .resource_log_with_message(
+                action,
+                "customer_acceptance",
+                resource_id,
+                Some(format!("客户验收单 {} 已完成处理", self.acceptance.acceptance_no)),
+            )?
+            .with_command_id(match &self.kind {
+                CompletionKind::Commit { receipt, .. } | CompletionKind::Reverse { receipt, .. } => {
+                    Some(receipt.id().to_string())
+                },
+                CompletionKind::Post { .. } => None,
+            })?;
+        persist_log(self.db, &audit, executor).await?;
+        self.audit_event_id = Some(audit.base.id);
         Ok(())
     }
     async fn command_receipt(&mut self, executor: &mut dyn Executor) -> Result<()> {
@@ -140,8 +156,14 @@ impl AcceptanceCompletion for DatabaseCompletion<'_> {
             CompletionKind::Commit { receipt, .. } | CompletionKind::Reverse { receipt, .. } => receipt,
             CompletionKind::Post { .. } => return Ok(()),
         };
-        let audit = receipt.audit(self.actor.clone(), self.acceptance.base.id.clone())?;
-        self.db.audit_logs().create(&audit, executor).await?;
+        if receipt.actor_id() != self.actor.id() {
+            return Err(Error::Forbidden("当前账号不能复用其他账号的操作号".to_string()));
+        }
+        let audit_event_id =
+            self.audit_event_id.clone().ok_or_else(|| Error::Internal("验收成功事件未记录".to_string()))?;
+        FulfillmentCommandReceiptService::new(self.db.clone())
+            .save_resource(receipt, self.acceptance.base.id.clone(), audit_event_id, executor)
+            .await?;
         Ok(())
     }
 }
@@ -247,13 +269,13 @@ mod tests {
     }
     fn cases() -> [(CompletionMode, Vec<&'static str>); 3] {
         [
-            (CompletionMode::Commit, vec!["sales_progress", "task", "command_receipt"]),
+            (CompletionMode::Commit, vec!["sales_progress", "task", "business_audit", "command_receipt"]),
             (CompletionMode::Post, vec!["sales_progress", "task", "business_audit"]),
             (CompletionMode::Reverse, vec!["sales_progress", "task", "business_audit", "command_receipt"]),
         ]
     }
     #[tokio::test]
-    async fn three_commands_keep_original_audit_order_and_one_executor() {
+    async fn three_commands_keep_business_events_receipts_and_one_executor() {
         for (mode, steps) in cases() {
             for remaining in [false, true] {
                 let mut port = RecordingCompletion { remaining, ..Default::default() };

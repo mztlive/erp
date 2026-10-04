@@ -1,17 +1,20 @@
 //! Party audit and supplier-role adapters.
 
+use std::num::NonZeroU32;
 use std::sync::Arc;
 
 use application_core::AuditActor;
 use async_trait::async_trait;
 use entity_core::BaseModel;
-use erp_audit::{AuditActorLogs, AuditExt, AuditLog, AuditLogData};
+use erp_audit::{AuditActorLogs, AuditLog, AuditLogData, prepare_business_log};
 use erp_core::ids::PartyId;
 use erp_party::{PartyAuditPort, PreparedPartyAudit, SupplierRolePort};
 use erp_supplier::SupplierExt;
 use erp_supplier::repository::prelude::*;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
+
+use crate::audit::persist_log;
 
 /// MongoDB adapter that converts party audit facts into `erp-audit` writes.
 #[derive(Clone)]
@@ -50,7 +53,7 @@ impl PartyAuditPort for MongoPartyAudit {
         executor: &mut dyn Executor,
     ) -> erp_party::Result<()> {
         let log = audit_log_from_party(audit).map_err(map_audit_to_party)?;
-        self.db.audit_logs().create(&log, executor).await.map_err(erp_party::Error::from)?;
+        persist_log(&self.db, &log, executor).await.map_err(map_audit_to_party)?;
         Ok(())
     }
 }
@@ -98,6 +101,13 @@ fn prepared_party_audit(log: &AuditLog) -> PreparedPartyAudit {
         log.success,
         log.message.clone(),
     )
+    .with_actor_name_snapshot(
+        log.structured_event.as_ref().and_then(|event| event.actor_name_snapshot.clone()),
+    )
+    .with_request_id(log.structured_event.as_ref().and_then(|event| event.request_id.clone()))
+    .with_event_sequence(
+        log.structured_event.as_ref().map(|event| event.event_sequence).unwrap_or(NonZeroU32::MIN),
+    )
 }
 
 fn audit_log_from_party(audit: &PreparedPartyAudit) -> erp_audit::Result<AuditLog> {
@@ -121,7 +131,10 @@ fn audit_log_from_party(audit: &PreparedPartyAudit) -> erp_audit::Result<AuditLo
         updated_at: audit.updated_at,
         deleted_at: audit.deleted_at,
     };
-    Ok(log)
+    prepare_business_log(&log)?
+        .with_actor_name_snapshot(audit.actor_name_snapshot.clone())?
+        .with_request_id(audit.request_id.clone())?
+        .with_event_sequence(audit.event_sequence.get())
 }
 
 fn map_audit_to_party(error: erp_audit::Error) -> erp_party::Error {
@@ -138,5 +151,90 @@ fn map_audit_to_party(error: erp_audit::Error) -> erp_party::Error {
         erp_audit::Error::Logic(error) => erp_party::Error::Logic(error),
         erp_audit::Error::OutcomeUnknown(error) => erp_party::Error::OutcomeUnknown(error),
         erp_audit::Error::RepositoryError(error) => erp_party::Error::RepositoryError(error),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_core::AccountKind;
+
+    use super::*;
+
+    fn actor() -> AuditActor {
+        AuditActor::new("actor".into(), "login".into(), AccountKind::Admin)
+    }
+
+    #[test]
+    fn prepared_audit_round_trip_freezes_name_and_original_event_metadata() {
+        let mut log = actor()
+            .with_actor_name_snapshot(Some("周晓彤".into()))
+            .unwrap()
+            .with_request_id(Some("request-original".into()))
+            .unwrap()
+            .resource_log("party.update", "party", "object-1".into())
+            .unwrap()
+            .with_event_sequence(7)
+            .unwrap();
+        log.base = BaseModel {
+            id: "audit-original".into(),
+            version: 7,
+            created_at: 11,
+            updated_at: 19,
+            deleted_at: 23,
+        };
+        log.structured_event.as_mut().unwrap().occurred_at = log.base.created_at;
+        let log = prepare_business_log(&log).unwrap();
+        let prepared = prepared_party_audit(&log);
+        assert_eq!(prepared.actor_name_snapshot.as_deref(), Some("周晓彤"));
+        assert_eq!(prepared.request_id.as_deref(), Some("request-original"));
+        assert_eq!(prepared.event_sequence.get(), 7);
+        let renamed_actor = actor()
+            .with_actor_name_snapshot(Some("新名称".into()))
+            .unwrap()
+            .with_request_id(Some("request-next".into()))
+            .unwrap();
+        assert_eq!(renamed_actor.actor_name_snapshot(), Some("新名称"));
+        assert_eq!(renamed_actor.request_id(), Some("request-next"));
+        let restored = audit_log_from_party(&prepared).unwrap();
+        assert_eq!(restored, log);
+        assert!(restored.message.as_deref().unwrap().contains("周晓彤"));
+        assert!(restored.message.as_deref().unwrap().contains("主体"));
+    }
+
+    #[test]
+    fn prepared_audit_preserves_unknown_name_and_discards_private_body() {
+        let log = actor().resource_log("party.update", "party", "object-1".into()).unwrap();
+        let mut prepared = prepared_party_audit(&log);
+        prepared.message = Some("password bank-account ciphertext private-request".into());
+        let restored = audit_log_from_party(&prepared).unwrap();
+        let event = restored.structured_event.as_ref().unwrap();
+        assert_eq!(event.actor_name_snapshot, None);
+        assert_eq!(event.request_id, None);
+        assert_eq!(event.event_sequence, NonZeroU32::MIN);
+        assert_eq!(event.actor_account, "login");
+        let serialized = serde_json::to_string(&restored).unwrap();
+        assert!(!serialized.contains("password"));
+        assert!(!serialized.contains("bank-account"));
+        assert!(!serialized.contains("ciphertext"));
+        assert!(!serialized.contains("private-request"));
+        assert!(!serialized.contains("actor_name_snapshot"));
+        assert!(!serialized.contains("request_id"));
+        assert!(restored.message.as_deref().unwrap().contains("login"));
+    }
+
+    #[test]
+    fn prepared_audit_rejects_invalid_request_id() {
+        let log = actor().resource_log("party.update", "party", "object-1".into()).unwrap();
+        for request_id in ["unsafe\nrequest".into(), "x".repeat(129)] {
+            let prepared = prepared_party_audit(&log).with_request_id(Some(request_id));
+            assert!(audit_log_from_party(&prepared).unwrap_err().to_string().contains("请求编号"));
+        }
+    }
+
+    #[test]
+    fn prepared_audit_rejects_invalid_name_snapshot() {
+        let log = actor().resource_log("party.update", "party", "object-1".into()).unwrap();
+        let prepared = prepared_party_audit(&log).with_actor_name_snapshot(Some("unsafe\nname".into()));
+        assert!(audit_log_from_party(&prepared).is_err());
     }
 }

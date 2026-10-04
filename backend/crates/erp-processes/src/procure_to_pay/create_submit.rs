@@ -22,6 +22,7 @@ use super::adapter::{
     purchase_order_start_command, purchase_order_subject_ref, require_frozen_binding,
     start_approval_command_kind,
 };
+use super::sourcing_create::sequence::PurchaseCreationEventSequence;
 use super::start_approval::{
     PurchaseOrderStartInput, PurchaseOrderStartPersistInput, build_purchase_order_start_input,
     load_bound_definition_graph_with_executor, persist_purchase_order_start,
@@ -46,6 +47,10 @@ pub(super) struct CreatedDraftBundle {
     pub(super) draft_lines: Vec<PurchaseOrderSubmissionLine>,
     /// 已绑定定义的注册行。
     pub(super) document: BusinessDocument,
+    /// 创建命令或原选源批次的稳定审计关联。
+    pub(super) audit_command_id: String,
+    /// 业务首写前验证的提交与创建事件序号。
+    pub(super) audit_event_sequence: PurchaseCreationEventSequence,
 }
 
 /// 冻结后待写入启动计划的采购单。
@@ -60,6 +65,10 @@ struct FrozenCreatedDraft {
     submission: PurchaseOrderSubmission,
     /// 冻结提交行。
     submission_lines: Vec<PurchaseOrderSubmissionLine>,
+    /// 原创建或选源批次命令，连接创建和提交事件。
+    audit_command_id: String,
+    /// 原创建或选源计划验证的事件序号。
+    audit_event_sequence: PurchaseCreationEventSequence,
 }
 
 /// 把刚创建的采购草稿冻结并启动审批。
@@ -158,7 +167,14 @@ async fn freeze_created_order(
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<FrozenCreatedDraft> {
-    let CreatedDraftBundle { mut order, draft, draft_lines, document } = bundle;
+    let CreatedDraftBundle {
+        mut order,
+        draft,
+        draft_lines,
+        document,
+        audit_command_id,
+        audit_event_sequence,
+    } = bundle;
     let mut superseded_draft = draft.clone();
     superseded_draft.mark_superseded()?;
     let (submission, submission_lines) =
@@ -169,7 +185,15 @@ async fn freeze_created_order(
         &submission.base.id,
         actor.id(),
     )?;
-    Ok(FrozenCreatedDraft { order, document, superseded_draft, submission, submission_lines })
+    Ok(FrozenCreatedDraft {
+        order,
+        document,
+        superseded_draft,
+        submission,
+        submission_lines,
+        audit_command_id,
+        audit_event_sequence,
+    })
 }
 
 /// 构造启动计划并与冻结提交同会话写入。
@@ -317,7 +341,12 @@ async fn persist_frozen_created_order_start(
     executor: &mut dyn Executor,
 ) -> Result<SubmittedCreatedOrder> {
     let order_id = input.frozen.order.base.id.clone();
-    let audit = create_submit_audit(input.actor, &input.frozen.order)?;
+    let audit = create_submit_audit(
+        input.actor,
+        &input.frozen.order,
+        &input.frozen.audit_command_id,
+        input.frozen.audit_event_sequence,
+    )?;
     persist_purchase_order_start(
         db,
         PurchaseOrderStartPersistInput {
@@ -347,6 +376,8 @@ async fn persist_frozen_created_order_start(
 /// # 参数
 /// * `actor` - 提交人
 /// * `order` - 已分配正式号的采购单
+/// * `command_id` - 独立创建命令或原选源批次稳定关联
+/// * `sequence` - 业务首写前校验的提交与创建事件顺序
 ///
 /// # 返回
 /// 返回稳定主键的提交审计。
@@ -356,17 +387,23 @@ async fn persist_frozen_created_order_start(
 ///
 /// # 关键业务约束
 /// 主键按采购单稳定，不复用独立提交接口的收据格式。
-fn create_submit_audit(actor: &AuditActor, order: &PurchaseOrder) -> Result<erp_audit::AuditLog> {
-    actor
-        .clone()
-        .resource_log_with_id(
-            format!("purchase-create-submit-{}", order.base.id),
-            "purchase_order.submit",
-            "purchase_order",
-            order.base.id.clone(),
-            Some(format!("create_and_submit;purchase_no={}", order.purchase_no)),
-        )
-        .map_err(Into::into)
+pub(super) fn create_submit_audit(
+    actor: &AuditActor,
+    order: &PurchaseOrder,
+    command_id: &str,
+    sequence: PurchaseCreationEventSequence,
+) -> Result<erp_audit::AuditLog> {
+    let audit = actor.clone().resource_log_with_id(
+        format!("purchase-create-submit-{}", order.base.id),
+        "purchase_order.submit",
+        "purchase_order",
+        order.base.id.clone(),
+        None,
+    )?;
+    Ok(audit
+        .with_command_id(Some(command_id.to_string()))?
+        .with_resource_number(Some(order.purchase_no.clone()))?
+        .with_event_sequence(sequence.submitted())?)
 }
 
 /// 回读提交后的采购单正式号与版本。
@@ -476,5 +513,46 @@ mod tests {
         assert!(order.purchase_no.is_empty());
         assert!(document.document_no.is_empty());
         assert_eq!(order.current_submission_id.as_deref(), Some("formal"));
+    }
+
+    /// 子采购提交事件保持原事件 ID，使用批次关联及真实编号，不伪造操作人名称。
+    #[test]
+    fn created_submit_event_preserves_batch_command_and_known_number() {
+        let mut order = created_order();
+        order.assign_purchase_no("PO-20261004-001").unwrap();
+        let actor = AuditActor::new("buyer-id".into(), "buyer-account".into(), erp_core::AccountKind::Admin);
+        let batch_command = "purchase-order-sourcing-command-batch";
+        let audit =
+            create_submit_audit(&actor, &order, batch_command, PurchaseCreationEventSequence::standalone())
+                .unwrap();
+        let prepared = erp_audit::prepare_business_log(&audit).unwrap();
+        let stored = serde_json::to_string(&prepared).unwrap();
+        let decoded: erp_audit::AuditLog = serde_json::from_str(&stored).unwrap();
+        assert_eq!(decoded.base.id, "purchase-create-submit-po-created");
+        let event = decoded.structured_event.unwrap();
+        assert_eq!(event.command_id.as_deref(), Some(batch_command));
+        assert_eq!(event.resource_type, "purchase_order");
+        assert_eq!(event.resource_id, "po-created");
+        assert_eq!(event.resource_number_snapshot.as_deref(), Some("PO-20261004-001"));
+        assert_eq!(event.actor_id, "buyer-id");
+        assert_eq!(event.actor_account, "buyer-account");
+        assert!(event.actor_name_snapshot.is_none());
+        assert!(!decoded.message.unwrap().contains("create_and_submit;"));
+    }
+
+    /// 正式编号尚未分配时明确缺失，不用对象 ID 或账号冒充业务快照。
+    #[test]
+    fn created_submit_event_leaves_unavailable_number_missing() {
+        let actor = AuditActor::new("buyer-id".into(), "buyer-account".into(), erp_core::AccountKind::Admin);
+        let audit = create_submit_audit(
+            &actor,
+            &created_order(),
+            "create-command",
+            PurchaseCreationEventSequence::standalone(),
+        )
+        .unwrap();
+        let event = audit.structured_event.unwrap();
+        assert!(event.resource_number_snapshot.is_none());
+        assert!(event.actor_name_snapshot.is_none());
     }
 }

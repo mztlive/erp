@@ -1,5 +1,5 @@
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_sales::dto::sales_order::{SaveWorkingCopyRequest, WorkingCopyView};
 use erp_sales::entity::sales_order::{SalesOrderWorkingCopy, SalesOrderWorkingCopyLine};
 use erp_sales::repository::SalesOrderExt;
@@ -9,6 +9,7 @@ use validator::Validate;
 
 use super::super::SalesOrderCommandProcess;
 use crate::Result;
+use crate::audit::persist_log;
 
 impl SalesOrderCommandProcess {
     /// 按准备阶段的副本身份读取原活跃行，保留原独立展示执行器和查询顺序。
@@ -115,7 +116,7 @@ impl SalesOrderCommandProcess {
                             executor,
                         )
                         .await?;
-                    db.audit_logs().create(&audit, executor).await?;
+                    persist_log(&db, &audit, executor).await?;
                     Ok::<SalesOrderWorkingCopy, crate::Error>(working_copy)
                 })
             })

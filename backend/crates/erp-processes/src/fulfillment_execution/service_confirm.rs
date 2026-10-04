@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::{BusinessEventContent, BusinessEventContext};
 use erp_core::ids::{FileAssetId, ServiceFulfillmentId};
 use erp_fulfillment::dto::{ConfirmServiceFulfillmentRequest, ServiceFulfillmentView};
 use erp_fulfillment::entity::fulfillment::{
@@ -21,7 +21,9 @@ use validator::Validate;
 use super::FulfillmentProcess;
 use super::fulfillment_actual_cost::{ActualCostSource, post as post_actual_cost};
 use super::purchase_context::{ensure_allocation_valid, ensure_po_fulfillable, ensure_prepay_gate};
+use super::service_confirm_audit::{SERVICE_CONFIRM_ACTION, confirmed_service_content};
 use super::service_crypto::{ServiceCryptoAdapter, evidence_metadata};
+use crate::audit::{AuditEventSink, AuditedCommand, AuditedWrite, MongoAuditEventSink, execute_audited};
 use crate::{Error, Result};
 
 impl FulfillmentProcess {
@@ -123,6 +125,13 @@ async fn persist_confirmed_service_fulfillment(
     pending_assets: Arc<dyn PendingAttachmentBatch>,
     actor: AuditActor,
 ) -> Result<ServiceFulfillmentView> {
+    let identity = ServiceConfirmationIdentity {
+        audit: BusinessEventContext::new(actor.clone(), SERVICE_CONFIRM_ACTION)?
+            .with_target(Some(record_id.to_string()), None)?,
+        actor,
+    };
+    let attempt_context = identity.audit.clone();
+    let attempt_db = db.clone();
     let db = db.clone();
     let client = db.client().clone();
     let confirmed = client
@@ -134,13 +143,19 @@ async fn persist_confirmed_service_fulfillment(
                     expected_version,
                     confirmation,
                     &pending_assets,
-                    &actor,
+                    &identity,
                     executor,
                 )
                 .await
             })
         })
-        .await?;
+        .await;
+    let confirmed = crate::audit::finish_attempt(
+        confirmed,
+        &attempt_context,
+        &crate::audit::MongoAuditAttemptSink::new(&attempt_db),
+    )
+    .await?;
     Ok(confirmed.into())
 }
 
@@ -152,7 +167,7 @@ async fn persist_confirmed_service_fulfillment(
 /// * `expected_version` - 调用方看到的乐观锁版本
 /// * `confirmation` - 已规范化的确认现场事实
 /// * `pending_assets` - 本次待登记图片凭证
-/// * `actor` - 已通过鉴权的审计操作人
+/// * `identity` - 写入前已验证的操作人与审计上下文
 /// * `session` - 事务会话
 ///
 /// # 返回
@@ -166,11 +181,20 @@ async fn confirm_service_fulfillment_apply(
     expected_version: u64,
     confirmation: ServiceFulfillmentConfirmation,
     pending_assets: &dyn PendingAttachmentBatch,
-    actor: &AuditActor,
+    identity: &ServiceConfirmationIdentity,
     session: &mut dyn Executor,
 ) -> Result<ServiceFulfillment> {
     execute_confirmation(
-        &MongoServiceConfirmation { db, record_id, expected_version, confirmation, pending_assets, actor },
+        &MongoServiceConfirmation {
+            db,
+            record_id,
+            expected_version,
+            confirmation,
+            pending_assets,
+            actor: &identity.actor,
+        },
+        &identity.audit,
+        &MongoAuditEventSink::new(db),
         session,
     )
     .await
@@ -259,11 +283,39 @@ trait ServiceConfirmationPort: Send + Sync {
         executor: &mut dyn Executor,
     ) -> Result<()>;
     async fn acceptance(&self, purchase: &Self::Purchase, executor: &mut dyn Executor) -> Result<()>;
-    async fn audit(&self, executor: &mut dyn Executor) -> Result<()>;
+    fn audit_content(&self, record: &Self::Record) -> BusinessEventContent;
 }
 
 /// 依次确认事实、完成任务、记录成功履约实际成本并创建验收任务。
-async fn execute_confirmation<P: ServiceConfirmationPort>(
+async fn execute_confirmation<P: ServiceConfirmationPort, S: AuditEventSink>(
+    port: &P,
+    context: &BusinessEventContext,
+    sink: &S,
+    executor: &mut dyn Executor,
+) -> Result<P::Record> {
+    execute_audited(context, sink, executor, &ServiceConfirmationCommand(port)).await
+}
+
+struct ServiceConfirmationIdentity {
+    actor: AuditActor,
+    audit: BusinessEventContext,
+}
+
+struct ServiceConfirmationCommand<'a, P>(&'a P);
+
+#[async_trait::async_trait]
+impl<P: ServiceConfirmationPort> AuditedCommand for ServiceConfirmationCommand<'_, P> {
+    type Output = P::Record;
+
+    async fn execute(&self, executor: &mut dyn Executor) -> Result<AuditedWrite<Self::Output>> {
+        let record = execute_confirmation_steps(self.0, executor).await?;
+        let content = self.0.audit_content(&record);
+        Ok(AuditedWrite::Fresh { result: record, content })
+    }
+}
+
+/// 业务规则与写入顺序由服务确认流程维护，统一边界负责事件构造和持久化。
+async fn execute_confirmation_steps<P: ServiceConfirmationPort>(
     port: &P,
     executor: &mut dyn Executor,
 ) -> Result<P::Record> {
@@ -278,7 +330,6 @@ async fn execute_confirmation<P: ServiceConfirmationPort>(
         port.cost(&record, &purchase, executor).await?;
         port.acceptance(&purchase, executor).await?;
     }
-    port.audit(executor).await?;
     Ok(record)
 }
 
@@ -399,14 +450,8 @@ impl ServiceConfirmationPort for MongoServiceConfirmation<'_> {
         Ok(())
     }
 
-    async fn audit(&self, executor: &mut dyn Executor) -> Result<()> {
-        let audit = self.actor.clone().resource_log(
-            "service_fulfillment.confirm",
-            "service_fulfillment",
-            self.record_id.to_string(),
-        )?;
-        self.db.audit_logs().create(&audit, executor).await?;
-        Ok(())
+    fn audit_content(&self, record: &Self::Record) -> BusinessEventContent {
+        confirmed_service_content(record)
     }
 }
 
@@ -458,9 +503,16 @@ mod tests {
 mod confirmation_order_tests {
     use std::sync::Mutex;
 
+    use application_core::AuditActor;
+    use erp_audit::{
+        AuditFact, AuditLog, AuditValue, BusinessEventContent, BusinessEventContext, BusinessEventResult,
+    };
+    use erp_core::AccountKind;
     use persistence_core::Executor;
 
+    use super::super::service_confirm_audit::SERVICE_CONFIRM_ACTION;
     use super::{ServiceConfirmationPort, execute_confirmation};
+    use crate::audit::AuditEventSink;
     use crate::{Error, Result};
 
     struct TestExecutor {
@@ -526,9 +578,38 @@ mod confirmation_order_tests {
         async fn acceptance(&self, _: &(), e: &mut dyn Executor) -> Result<()> {
             self.record("acceptance", e)
         }
-        async fn audit(&self, e: &mut dyn Executor) -> Result<()> {
+        fn audit_content(&self, _: &bool) -> BusinessEventContent {
+            BusinessEventContent {
+                target_id: "service-1".to_string(),
+                target_number: Some("SF-001".to_string()),
+                result: BusinessEventResult::Succeeded,
+                field_changes: Vec::new(),
+                facts: vec![AuditFact {
+                    field: "service_result".to_string(),
+                    value: AuditValue::Code {
+                        code: if self.eligible { "SUCCESS" } else { "FAILURE" }.to_string(),
+                        label: if self.eligible { "成功" } else { "失败" }.to_string(),
+                    },
+                }],
+            }
+        }
+    }
+    #[async_trait::async_trait]
+    impl AuditEventSink for RecordingPort {
+        async fn persist(&self, log: &AuditLog, e: &mut dyn Executor) -> Result<()> {
+            assert!(log.success);
+            assert!(log.message.as_deref().unwrap().contains("确认服务履约"));
+            assert_eq!(log.structured_event.as_ref().unwrap().result, BusinessEventResult::Succeeded);
             self.record("audit", e)
         }
+    }
+
+    fn audit_context() -> BusinessEventContext {
+        BusinessEventContext::new(
+            AuditActor::new("actor-1".to_string(), "caigou".to_string(), AccountKind::Admin),
+            SERVICE_CONFIRM_ACTION,
+        )
+        .unwrap()
     }
     const STEPS: &[&str] = &[
         "draft_version",
@@ -552,7 +633,7 @@ mod confirmation_order_tests {
             fail: None,
             calls: Mutex::new(Vec::new()),
         };
-        assert!(execute_confirmation(&port, &mut executor).await.unwrap());
+        assert!(execute_confirmation(&port, &audit_context(), &port, &mut executor).await.unwrap());
         assert_eq!(*port.calls.lock().unwrap(), STEPS);
         assert_eq!(executor.visits, STEPS.len());
     }
@@ -567,7 +648,8 @@ mod confirmation_order_tests {
                 fail: Some(step),
                 calls: Mutex::new(Vec::new()),
             };
-            let error = execute_confirmation(&port, &mut executor).await.unwrap_err();
+            let error =
+                execute_confirmation(&port, &audit_context(), &port, &mut executor).await.unwrap_err();
             assert!(matches!(error, Error::ConflictError(message) if message == format!("failed {step}")));
             assert_eq!(*port.calls.lock().unwrap(), STEPS[..=index]);
             assert_eq!(executor.visits, index + 1);
@@ -583,7 +665,7 @@ mod confirmation_order_tests {
             fail: None,
             calls: Mutex::new(Vec::new()),
         };
-        assert!(!execute_confirmation(&port, &mut executor).await.unwrap());
+        assert!(!execute_confirmation(&port, &audit_context(), &port, &mut executor).await.unwrap());
         assert_eq!(
             *port.calls.lock().unwrap(),
             [

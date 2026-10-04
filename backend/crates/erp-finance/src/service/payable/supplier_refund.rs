@@ -293,7 +293,9 @@ mod tests {
     use erp_core::ids::{FileAssetId, PartyBankAccountId, SupplierAccountId};
 
     use super::*;
-    use crate::entity::payable::{PayableAccountData, PayableSourceType, SupplierPaymentData};
+    use crate::entity::payable::{
+        PayableAccountData, PayableSourceType, PendingPaymentAllocation, SupplierPaymentData,
+    };
 
     fn amount(value: &str) -> Amount {
         Amount::from_str(value).unwrap()
@@ -310,9 +312,16 @@ mod tests {
                 bank_reference: None,
                 bank_receipt_asset_id: FileAssetId::new("file"),
             },
+            "creator",
         )
         .unwrap();
-        payment.transition(SupplierPaymentStatus::Posted).unwrap();
+        payment
+            .post_from_execution(
+                &[PendingPaymentAllocation::new(PayableEntryId::new("entry"), amount("100")).unwrap()],
+                "executor",
+                Instant::from_unix_secs(2),
+            )
+            .unwrap();
         payment
     }
     fn allocation(id: &str, entry: &str, seq: u32, value: &str) -> PaymentAllocation {

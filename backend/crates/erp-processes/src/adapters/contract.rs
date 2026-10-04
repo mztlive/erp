@@ -1,12 +1,13 @@
 //! Contract customer, identity, attachment and audit adapters.
 
 use std::collections::HashMap;
+use std::num::NonZeroU32;
 use std::sync::Arc;
 
 use application_core::AuditActor;
 use async_trait::async_trait;
 use entity_core::BaseModel;
-use erp_audit::{AuditActorLogs, AuditExt, AuditLog, AuditLogData};
+use erp_audit::{AuditActorLogs, AuditLog, AuditLogData, prepare_business_log};
 use erp_contract::{
     AccountNamePort, ContractAssignmentFact, ContractAuditPort, ContractParticipantPort, ContractScopePorts,
     ContractService, CustomerAccountFact, CustomerAssignmentFactsPort, CustomerFactsPort,
@@ -26,6 +27,7 @@ use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 
 use super::contract_data_scope::MongoContractDataScope;
+use crate::audit::persist_log;
 
 /// MongoDB adapter that converts contract audit facts into `erp-audit` writes.
 #[derive(Clone)]
@@ -64,7 +66,7 @@ impl ContractAuditPort for MongoContractAudit {
         executor: &mut dyn Executor,
     ) -> erp_contract::Result<()> {
         let log = audit_log_from_contract(audit).map_err(map_audit_to_contract)?;
-        self.db.audit_logs().create(&log, executor).await.map_err(erp_contract::Error::from)?;
+        persist_log(&self.db, &log, executor).await.map_err(map_audit_to_contract)?;
         Ok(())
     }
 }
@@ -425,6 +427,13 @@ fn prepared_contract_audit(log: &AuditLog) -> PreparedContractAudit {
         log.success,
         log.message.clone(),
     )
+    .with_actor_name_snapshot(
+        log.structured_event.as_ref().and_then(|event| event.actor_name_snapshot.clone()),
+    )
+    .with_request_id(log.structured_event.as_ref().and_then(|event| event.request_id.clone()))
+    .with_event_sequence(
+        log.structured_event.as_ref().map(|event| event.event_sequence).unwrap_or(NonZeroU32::MIN),
+    )
 }
 
 fn audit_log_from_contract(audit: &PreparedContractAudit) -> erp_audit::Result<AuditLog> {
@@ -448,7 +457,10 @@ fn audit_log_from_contract(audit: &PreparedContractAudit) -> erp_audit::Result<A
         updated_at: audit.updated_at,
         deleted_at: audit.deleted_at,
     };
-    Ok(log)
+    prepare_business_log(&log)?
+        .with_actor_name_snapshot(audit.actor_name_snapshot.clone())?
+        .with_request_id(audit.request_id.clone())?
+        .with_event_sequence(audit.event_sequence.get())
 }
 
 fn map_audit_to_contract(error: erp_audit::Error) -> erp_contract::Error {
@@ -478,4 +490,136 @@ fn map_identity_to_contract(error: persistence_core::Error) -> erp_contract::Err
 
 fn map_support_to_contract(error: persistence_core::Error) -> erp_contract::Error {
     erp_contract::Error::from(error)
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_core::AccountKind;
+
+    use super::*;
+
+    #[test]
+    fn prepared_audit_preserves_original_metadata_and_actor_name_snapshot() {
+        for name in [Some("发生时名称".to_string()), None] {
+            let actor = AuditActor::new("actor".into(), "login".into(), AccountKind::Admin)
+                .with_actor_name_snapshot(name.clone())
+                .unwrap();
+            let domain_prepared = PreparedContractAudit::resource(
+                actor.clone(),
+                "contract.create",
+                "contract",
+                "contract-1".into(),
+            )
+            .unwrap();
+            assert_eq!(domain_prepared.actor_name_snapshot, name);
+            let mut log = actor
+                .clone()
+                .resource_log_with_id(
+                    "audit-original".into(),
+                    "contract.create",
+                    "contract",
+                    "contract-1".into(),
+                    None,
+                )
+                .unwrap();
+            log.base = BaseModel {
+                id: "audit-original".into(),
+                version: 7,
+                created_at: 11,
+                updated_at: 19,
+                deleted_at: 23,
+            };
+            log.structured_event.as_mut().unwrap().occurred_at = 11;
+            let prepared = prepared_contract_audit(&log);
+            let renamed = actor.with_actor_name_snapshot(Some("当前名称".into())).unwrap();
+            assert_eq!(renamed.actor_name_snapshot(), Some("当前名称"));
+            let restored = audit_log_from_contract(&prepared).unwrap();
+            assert_eq!(restored, log);
+            assert_eq!(restored.structured_event.unwrap().actor_name_snapshot, name);
+        }
+    }
+
+    #[test]
+    fn prepared_audit_preserves_request_correlation_and_event_sequence() {
+        for request_id in [Some("request-original".to_string()), None] {
+            let actor = AuditActor::new("actor".into(), "login".into(), AccountKind::Admin)
+                .with_actor_name_snapshot(Some("发生时名称".into()))
+                .unwrap()
+                .with_request_id(request_id.clone())
+                .unwrap();
+            let domain_prepared = PreparedContractAudit::resource(
+                actor.clone(),
+                "contract.create",
+                "contract",
+                "contract-1".into(),
+            )
+            .unwrap();
+            assert_eq!(domain_prepared.request_id, request_id);
+            assert_eq!(domain_prepared.event_sequence, NonZeroU32::MIN);
+            let log = actor
+                .clone()
+                .resource_log_with_id(
+                    "request-audit-original".into(),
+                    "contract.create",
+                    "contract",
+                    "contract-1".into(),
+                    None,
+                )
+                .unwrap()
+                .with_event_sequence(4)
+                .unwrap();
+            let prepared = prepared_contract_audit(&log);
+            let changed = actor.with_request_id(Some("request-current".into())).unwrap();
+            assert_eq!(changed.request_id(), Some("request-current"));
+            let restored = audit_log_from_contract(&prepared).unwrap();
+            assert_eq!(restored, log);
+            let event = restored.structured_event.as_ref().unwrap();
+            assert_eq!(event.request_id, request_id);
+            assert_eq!(event.event_sequence.get(), 4);
+            assert_eq!(event.actor_name_snapshot.as_deref(), Some("发生时名称"));
+            assert!(!restored.message.as_deref().unwrap().contains("request-original"));
+        }
+    }
+
+    #[test]
+    fn prepared_audit_rejects_unsafe_request_correlation_and_omits_raw_input() {
+        let log = AuditActor::new("actor".into(), "login".into(), AccountKind::Admin)
+            .with_request_id(Some("request-original".into()))
+            .unwrap()
+            .resource_log("contract.create", "contract", "contract-1".into())
+            .unwrap();
+        let mut prepared = prepared_contract_audit(&log);
+        prepared.message = Some("body=private-request-body;token=private-token".into());
+        let restored = audit_log_from_contract(&prepared).unwrap();
+        let serialized = serde_json::to_string(&restored).unwrap();
+        assert!(!serialized.contains("private-request-body"));
+        assert!(!serialized.contains("private-token"));
+        for request_id in ["request\nforged".to_string(), "r".repeat(129)] {
+            prepared.request_id = Some(request_id);
+            assert!(audit_log_from_contract(&prepared).is_err());
+        }
+    }
+
+    #[test]
+    fn prepared_audit_rejects_unsafe_names_and_drops_unprojected_message() {
+        let log = AuditActor::new("actor".into(), "login".into(), AccountKind::Admin)
+            .with_actor_name_snapshot(Some("发生时名称".into()))
+            .unwrap()
+            .resource_log("contract.create", "contract", "contract-1".into())
+            .unwrap();
+        let mut prepared = prepared_contract_audit(&log);
+        prepared.message = Some("token=private-request;bank=private-bank".into());
+        let restored = audit_log_from_contract(&prepared).unwrap();
+        let serialized = serde_json::to_string(&restored).unwrap();
+        assert!(!serialized.contains("private-request"));
+        assert!(!serialized.contains("private-bank"));
+        assert!(restored.message.as_deref().unwrap().contains("发生时名称"));
+        prepared.actor_name_snapshot = Some("非法\n名称".into());
+        assert!(audit_log_from_contract(&prepared).is_err());
+        prepared.actor_name_snapshot = Some("名".repeat(129));
+        assert!(audit_log_from_contract(&prepared).is_err());
+        prepared.actor_id = " ".into();
+        prepared.action = " ".into();
+        assert!(audit_log_from_contract(&prepared).unwrap_err().to_string().contains("操作人ID不能为空"));
+    }
 }

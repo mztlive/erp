@@ -87,7 +87,7 @@ impl CommandFingerprint {
     }
 }
 
-/// 以长度前缀 feeding 给定哈希器，版本化与历史路径共用内核。
+/// 以长度前缀 feeding 给定哈希器，用于版本化稳定摘要。
 fn feed_length_prefixed(hasher: &mut Sha256, parts: impl IntoIterator<Item = impl AsRef<[u8]>>) {
     for part in parts {
         let bytes = part.as_ref();
@@ -107,36 +107,27 @@ impl<'de> Deserialize<'de> for CommandFingerprint {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommandIdentity {
     current_id: String,
-    legacy_ids: Vec<String>,
 }
 
 impl CommandIdentity {
-    /// 形成 v1 身份，并登记只读兼容查询使用的历史 ID。
+    /// 形成 v1 身份，仅登记当前命令 ID。
     ///
     /// # 参数
     /// * `prefix` - 收据 ID 前缀
     /// * `parts` - 当前身份分量
-    /// * `legacy_ids` - 历史兼容候选 ID
     ///
     /// # 返回
-    /// 返回当前与历史候选身份。
+    /// 返回当前命令身份。
     ///
     /// # 错误
     /// 前缀为空时返回错误。
-    pub fn new(
-        prefix: &str,
-        parts: impl IntoIterator<Item = String>,
-        legacy_ids: impl IntoIterator<Item = String>,
-    ) -> Result<Self> {
+    pub fn new(prefix: &str, parts: impl IntoIterator<Item = String>) -> Result<Self> {
         if prefix.trim().is_empty() {
             return Err(Error::from("命令身份前缀不能为空"));
         }
         let fingerprint = CommandFingerprint::from_parts(parts);
         let current_id = format!("{prefix}{}", fingerprint.digest_hex());
-        let mut legacy_ids = legacy_ids.into_iter().filter(|id| id != &current_id).collect::<Vec<_>>();
-        legacy_ids.sort();
-        legacy_ids.dedup();
-        Ok(Self { current_id, legacy_ids })
+        Ok(Self { current_id })
     }
 
     /// 返回新写入使用的 v1 ID。
@@ -152,176 +143,6 @@ impl CommandIdentity {
     pub fn current_id(&self) -> &str {
         &self.current_id
     }
-
-    /// 判断给定 ID 是否为当前或历史候选，避免纯检查场景分配。
-    ///
-    /// # 参数
-    /// * `id` - 待检查的候选 ID
-    ///
-    /// # 返回
-    /// 命中时返回 `true`。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn contains_candidate(&self, id: &str) -> bool {
-        self.current_id == id || self.legacy_ids.iter().any(|legacy| legacy == id)
-    }
-
-    /// 返回按当前优先、历史其次排列的候选迭代器，避免纯检查场景分配。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回当前与历史候选的 borrowed 迭代器。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn candidates_iter(&self) -> impl Iterator<Item = &str> + '_ {
-        std::iter::once(self.current_id.as_str()).chain(self.legacy_ids.iter().map(String::as_str))
-    }
-
-    /// 返回按当前优先、历史其次排列的查询候选 ID。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 owned 候选集合；纯检查改用 `contains_candidate`。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn candidates(&self) -> Vec<String> {
-        self.candidates_iter().map(str::to_string).collect()
-    }
-}
-
-/// Repository 返回的命令收据最小事实。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CommandReceiptFact {
-    pub id: String,
-    pub actor_id: String,
-    pub action: String,
-    pub resource_type: String,
-    pub resource_id: Option<String>,
-    pub success: bool,
-    pub message: Option<String>,
-}
-
-impl CommandReceiptFact {
-    /// 由必填收据身份字段构造最小事实。
-    ///
-    /// # 参数
-    /// * `id` - 收据主键
-    /// * `actor_id` - 操作人身份
-    /// * `action` - 动作名称
-    /// * `resource_type` - 资源类型
-    ///
-    /// # 返回
-    /// 返回资源、结果与消息为空的收据事实。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn new(
-        id: impl Into<String>,
-        actor_id: impl Into<String>,
-        action: impl Into<String>,
-        resource_type: impl Into<String>,
-    ) -> Self {
-        Self {
-            id: id.into(),
-            actor_id: actor_id.into(),
-            action: action.into(),
-            resource_type: resource_type.into(),
-            resource_id: None,
-            success: false,
-            message: None,
-        }
-    }
-
-    /// 设置目标资源 ID。
-    ///
-    /// # 参数
-    /// * `resource_id` - 目标资源 ID
-    ///
-    /// # 返回
-    /// 返回更新后的收据事实。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn with_resource_id(self, resource_id: impl Into<String>) -> Self {
-        self.with_resource_id_opt(Some(resource_id.into()))
-    }
-
-    /// 设置目标资源 ID（`None` 保持缺省）。
-    ///
-    /// # 参数
-    /// * `resource_id` - 目标资源 ID
-    ///
-    /// # 返回
-    /// 返回更新后的收据事实。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn with_resource_id_opt(mut self, resource_id: Option<String>) -> Self {
-        self.resource_id = resource_id;
-        self
-    }
-
-    /// 设置执行结果。
-    ///
-    /// # 参数
-    /// * `success` - 是否执行成功
-    ///
-    /// # 返回
-    /// 返回更新后的收据事实。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn with_success(mut self, success: bool) -> Self {
-        self.success = success;
-        self
-    }
-
-    /// 设置收据消息。
-    ///
-    /// # 参数
-    /// * `message` - 收据消息
-    ///
-    /// # 返回
-    /// 返回更新后的收据事实。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn with_message(self, message: impl Into<String>) -> Self {
-        self.with_message_opt(Some(message.into()))
-    }
-
-    /// 设置收据消息（`None` 保持缺省）。
-    ///
-    /// # 参数
-    /// * `message` - 收据消息
-    ///
-    /// # 返回
-    /// 返回更新后的收据事实。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn with_message_opt(mut self, message: Option<String>) -> Self {
-        self.message = message;
-        self
-    }
-}
-
-/// 已提交收据与当前请求的纯匹配结果。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CommandReceiptMatch {
-    /// 同一命令载荷，可回放首次资源 ID。
-    SamePayload(String),
-    /// 同一命令身份已被不同载荷占用。
-    DifferentPayload,
-    /// 持久化行身份或收据形态损坏。
-    Corrupted,
 }
 
 /// 共享、版本化的业务命令收据值对象。
@@ -332,7 +153,8 @@ pub struct CommandReceipt {
     action: String,
     resource_type: String,
     fingerprint: CommandFingerprint,
-    legacy_fingerprints: Vec<String>,
+    scope_id: Option<String>,
+    idempotency_key_hash: CommandFingerprint,
 }
 
 /// 去首尾空白后非空校验，幂等键与资源 ID 共用空白判定。
@@ -354,31 +176,31 @@ struct ReceiptHeader<'a> {
     actor_id: &'a str,
     action: &'a str,
     resource_type: &'a str,
+    scope_id: Option<&'a str>,
+    idempotency_key: &'a str,
 }
 
 /// 组装收据主体，两构造入口共用身份去重与字段填充。
 fn assemble(
     prefix: &str,
     identity_parts: impl IntoIterator<Item = String>,
-    legacy_digest: &str,
     header: ReceiptHeader<'_>,
     fingerprint: CommandFingerprint,
-    legacy_fingerprint: String,
 ) -> Result<CommandReceipt> {
-    let legacy_identity = format!("{prefix}{legacy_digest}");
-    let identity = CommandIdentity::new(prefix, identity_parts, [legacy_identity])?;
+    let identity = CommandIdentity::new(prefix, identity_parts)?;
     Ok(CommandReceipt {
         identity,
         actor_id: header.actor_id.to_string(),
         action: header.action.to_string(),
         resource_type: header.resource_type.to_string(),
         fingerprint,
-        legacy_fingerprints: vec![legacy_fingerprint],
+        scope_id: header.scope_id.map(str::to_string),
+        idempotency_key_hash: CommandFingerprint::from_parts([header.idempotency_key.to_string()]),
     })
 }
 
 impl CommandReceipt {
-    /// 从可序列化请求形成规范 JSON v1 收据，并保留旧 JSON/摘要兼容候选。
+    /// 从可序列化请求形成规范 JSON v1 收据，仅保留当前规范化身份。
     ///
     /// # 参数
     /// * `prefix` - 收据 ID 前缀
@@ -403,7 +225,6 @@ impl CommandReceipt {
     ) -> Result<Self> {
         let key = require_non_blank(idempotency_key, "操作号不能为空")?;
         let canonical_payload = canonical_json(payload)?;
-        let legacy_payload = serde_json::to_string(payload).map_err(payload_serialize_error)?;
         let fingerprint = CommandFingerprint::from_parts([
             action.to_string(),
             resource_type.to_string(),
@@ -412,17 +233,14 @@ impl CommandReceipt {
         assemble(
             prefix,
             [actor_id, action, resource_type, key].into_iter().map(str::to_string),
-            &legacy_compat::digest_parts(&[actor_id, action, resource_type, key]),
-            ReceiptHeader { actor_id, action, resource_type },
+            ReceiptHeader { actor_id, action, resource_type, scope_id: None, idempotency_key: key },
             fingerprint,
-            legacy_compat::digest_parts(&[action, resource_type, &legacy_payload]),
         )
     }
 
     /// 从资源定位命令的固定顺序字段形成 v1 收据。
     ///
-    /// 兼容候选使用历史 `actor|action|resource_id|key` 身份和无版本
-    /// 长度前缀指纹；新写入不保存原始幂等键。
+    /// 身份与载荷均使用版本化摘要，不保存原始幂等键。
     ///
     /// # 参数
     /// * `prefix` - 收据 ID 前缀
@@ -450,26 +268,23 @@ impl CommandReceipt {
         let key = require_non_blank(idempotency_key, "操作号不能为空")?;
         require_non_blank(resource_id, "命令资源 ID 不能为空")?;
         let fingerprint_parts = fingerprint_parts.into_iter().collect::<Vec<_>>();
-        let legacy_fingerprint_parts = fingerprint_parts.iter().map(String::as_str).collect::<Vec<_>>();
-        let legacy_fingerprint = legacy_compat::digest_parts(&legacy_fingerprint_parts);
         assemble(
             prefix,
             [actor_id, action, resource_type, resource_id, key].into_iter().map(str::to_string),
-            &legacy_compat::pipe_identity(actor_id, action, resource_id, key),
-            ReceiptHeader { actor_id, action, resource_type },
+            ReceiptHeader {
+                actor_id,
+                action,
+                resource_type,
+                scope_id: Some(resource_id),
+                idempotency_key: key,
+            },
             CommandFingerprint::from_parts(fingerprint_parts),
-            legacy_fingerprint,
         )
     }
 
     /// 返回新写入使用的收据 ID。
     pub fn id(&self) -> &str {
         self.identity.current_id()
-    }
-
-    /// 返回当前及历史收据查询候选 ID。
-    pub fn id_candidates(&self) -> Vec<String> {
-        self.identity.candidates()
     }
 
     /// 返回收据所属操作人。
@@ -487,118 +302,43 @@ impl CommandReceipt {
         &self.resource_type
     }
 
-    /// 返回 v1 持久化消息；可追加权限安全的说明文本。
-    ///
-    /// # 参数
-    /// * `detail` - 追加的说明文本
-    ///
-    /// # 返回
-    /// 返回指纹承载段与说明的展示拼接。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn message(&self, detail: Option<&str>) -> String {
-        let base = format!("command_fingerprint={}", self.fingerprint.as_str());
-        match detail {
-            Some(detail) => format!("{base}; {detail}"),
-            None => base,
-        }
-    }
-
-    /// 返回结构化指纹承载段，供展示拼接外的调用方直接使用。
+    /// 返回资源定位命令的目标作用域；创建命令以动作和资源类型划定作用域。
     ///
     /// # 参数
     /// 无。
-    ///
     /// # 返回
-    /// 返回 `(当前指纹, 历史指纹)`。
-    ///
+    /// 返回可选目标资源 ID。
     /// # 错误
     /// 无。
-    pub fn fingerprints(&self) -> (&CommandFingerprint, &[String]) {
-        (&self.fingerprint, &self.legacy_fingerprints)
+    pub fn scope_id(&self) -> Option<&str> {
+        self.scope_id.as_deref()
     }
 
-    /// 校验最小持久化事实并分类回放结果。
-    ///
-    /// 身份不一致（含候选缺失与字段不一致）与未成功回放视为不可回放；
-    /// 形态损坏（缺消息、缺资源）视为损坏；指纹不一致视为载荷不同。
+    /// 返回规范化幂等键的版本化摘要，不暴露原始操作号。
     ///
     /// # 参数
-    /// * `fact` - 最小持久化事实
+    /// 无。
+    /// # 返回
+    /// 返回长度前缀 SHA-256 v1 摘要。
+    /// # 错误
+    /// 无。
+    pub fn idempotency_key_hash(&self) -> &CommandFingerprint {
+        &self.idempotency_key_hash
+    }
+
+    /// 返回当前规范化请求的版本化指纹。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
-    /// 返回回放分类。
+    /// 返回当前请求指纹。
     ///
     /// # 错误
     /// 无。
-    pub fn match_fact(&self, fact: &CommandReceiptFact) -> CommandReceiptMatch {
-        // 注意：当前仍返回 Corrupted 以保持调用方匹配语义；
-        // 未成功回放与身份不符的独立分类待调用方同步后收敛。
-        if let Err(matched) = self.check_identity(fact) {
-            return matched;
-        }
-        let fingerprint = match extract_persisted_fingerprint(fact.message.as_deref()) {
-            Ok(fingerprint) => fingerprint,
-            Err(matched) => return matched,
-        };
-        if !self.matches_fingerprint(fingerprint) {
-            return CommandReceiptMatch::DifferentPayload;
-        }
-        fact.resource_id
-            .clone()
-            .map(CommandReceiptMatch::SamePayload)
-            .unwrap_or(CommandReceiptMatch::Corrupted)
+    pub fn fingerprint(&self) -> &CommandFingerprint {
+        &self.fingerprint
     }
-
-    /// 校验候选身份、成功标志与身份字段三元组。
-    fn check_identity(&self, fact: &CommandReceiptFact) -> std::result::Result<(), CommandReceiptMatch> {
-        if !self.identity.contains_candidate(&fact.id)
-            || fact.actor_id != self.actor_id
-            || fact.action != self.action
-            || fact.resource_type != self.resource_type
-        {
-            return Err(CommandReceiptMatch::Corrupted);
-        }
-        if !fact.success {
-            return Err(CommandReceiptMatch::Corrupted);
-        }
-        Ok(())
-    }
-
-    /// 比对当前与历史指纹。
-    fn matches_fingerprint(&self, persisted: PersistedFingerprint<'_>) -> bool {
-        match persisted {
-            PersistedFingerprint::Current(value) => value == self.fingerprint.as_str(),
-            PersistedFingerprint::Legacy(value) => {
-                self.legacy_fingerprints.iter().any(|legacy| legacy == value)
-            },
-        }
-    }
-}
-
-/// 持久化消息中的指纹承载段。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PersistedFingerprint<'a> {
-    Current(&'a str),
-    Legacy(&'a str),
-}
-
-/// 从自由文本消息提取结构化指纹段。
-fn extract_persisted_fingerprint(
-    message: Option<&str>,
-) -> std::result::Result<PersistedFingerprint<'_>, CommandReceiptMatch> {
-    let Some(message) = message else {
-        return Err(CommandReceiptMatch::Corrupted);
-    };
-    let persisted = message.split_once(';').map(|(head, _)| head).unwrap_or(message);
-    if let Some(value) = persisted.strip_prefix("command_fingerprint=") {
-        return Ok(PersistedFingerprint::Current(value));
-    }
-    if let Some(value) = persisted.strip_prefix("command_sha256=") {
-        return Ok(PersistedFingerprint::Legacy(value));
-    }
-    Err(CommandReceiptMatch::Corrupted)
 }
 
 fn canonical_json<T: Serialize>(payload: &T) -> Result<String> {
@@ -646,169 +386,78 @@ fn write_canonical_json(value: &serde_json::Value, output: &mut String) -> Resul
     Ok(())
 }
 
-/// 历史无版本指纹内核（独立版本适配，核心 v1 路径不依赖它）。
-mod legacy_compat {
-    use sha2::{Digest, Sha256};
-
-    use super::feed_length_prefixed;
-
-    /// 计算历史无版本长度前缀摘要。
-    pub(super) fn digest_parts(parts: &[&str]) -> String {
-        let mut hasher = Sha256::new();
-        feed_length_prefixed(&mut hasher, parts);
-        hex::encode(hasher.finalize())
-    }
-
-    /// 历史 `actor|action|resource_id|key` 管道身份摘要。
-    pub(super) fn pipe_identity(actor_id: &str, action: &str, resource_id: &str, key: &str) -> String {
-        hex::encode(Sha256::digest(format!("{actor_id}|{action}|{resource_id}|{key}").as_bytes()))
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use serde::Serialize;
-    use sha2::{Digest, Sha256};
+    use serde_json::json;
 
-    use super::legacy_compat::digest_parts as legacy_digest_parts;
-    use super::{CommandFingerprint, CommandReceipt, CommandReceiptFact, CommandReceiptMatch};
-
-    #[derive(Serialize)]
-    struct Payload {
-        amount: u32,
-        idempotency_key: String,
-    }
+    use super::*;
+    use crate::{StructuredCommandReceipt, StructuredReceiptMatch};
 
     #[test]
-    fn length_prefix_prevents_concatenation_collision() {
-        assert_ne!(
-            CommandFingerprint::from_parts(["ab".to_string(), "c".to_string()]),
-            CommandFingerprint::from_parts(["a".to_string(), "bc".to_string()])
+    fn fingerprint_has_unambiguous_lengths_and_versioned_round_trip() {
+        let a = CommandFingerprint::from_parts(["a".to_string(), "bc".to_string()]);
+        let b = CommandFingerprint::from_parts(["ab".to_string(), "c".to_string()]);
+        assert_ne!(a, b);
+        assert_eq!(CommandFingerprint::parse(a.as_str()).unwrap(), a);
+        assert_eq!(
+            serde_json::from_str::<CommandFingerprint>(&serde_json::to_string(&a).unwrap()).unwrap(),
+            a
         );
+        assert!(CommandFingerprint::parse("broken").is_err());
     }
 
     #[test]
-    fn wire_format_is_versioned_and_round_trips() {
-        let fingerprint = CommandFingerprint::from_parts(["payload".to_string()]);
-        assert!(fingerprint.as_str().starts_with("sha256-v1:"));
-        assert_eq!(CommandFingerprint::parse(fingerprint.as_str()).unwrap(), fingerprint);
+    fn same_key_same_payload_replays_structured_fact_and_changed_payload_conflicts() {
+        let make = |amount| {
+            CommandReceipt::from_payload(
+                "command-",
+                "actor",
+                "payment.commit",
+                "payment",
+                "raw-key",
+                &json!({"amount":amount}),
+            )
+            .unwrap()
+        };
+        let original = make(10);
+        let fact = StructuredCommandReceipt::from_command(&original).unwrap();
+        assert_eq!(original.match_structured(&fact), StructuredReceiptMatch::SamePayload);
+        assert_eq!(make(20).match_structured(&fact), StructuredReceiptMatch::DifferentPayload);
+        assert!(!serde_json::to_string(&fact).unwrap().contains("raw-key"));
     }
 
     #[test]
-    fn receipt_hides_raw_key_and_rejects_different_payload() {
-        let first = Payload { amount: 100, idempotency_key: "secret-operation-key".to_string() };
-        let changed = Payload { amount: 200, idempotency_key: first.idempotency_key.clone() };
-        let receipt = CommandReceipt::from_payload(
-            "receipt-",
-            "actor-1",
-            "payment.commit",
-            "payment",
-            &first.idempotency_key,
-            &first,
-        )
-        .unwrap();
-        assert!(!receipt.id().contains(&first.idempotency_key));
-        assert!(!receipt.message(None).contains(&first.idempotency_key));
-        let fact = CommandReceiptFact::new(receipt.id().to_string(), "actor-1", "payment.commit", "payment")
-            .with_resource_id("payment-1")
-            .with_success(true)
-            .with_message(receipt.message(None));
-        assert_eq!(receipt.match_fact(&fact), CommandReceiptMatch::SamePayload("payment-1".to_string()));
-        let changed_receipt = CommandReceipt::from_payload(
-            "receipt-",
-            "actor-1",
-            "payment.commit",
-            "payment",
-            &changed.idempotency_key,
-            &changed,
-        )
-        .unwrap();
-        assert_eq!(changed_receipt.match_fact(&fact), CommandReceiptMatch::DifferentPayload);
-    }
-
-    #[test]
-    fn canonical_json_ignores_object_key_insertion_order() {
-        let left = serde_json::json!({"z": 1, "nested": {"b": 2, "a": 1}});
-        let right = serde_json::json!({"nested": {"a": 1, "b": 2}, "z": 1});
-        let left =
-            CommandReceipt::from_payload("receipt-", "actor-1", "object.commit", "object", "key-1", &left)
+    fn json_object_order_does_not_change_fingerprint() {
+        let first =
+            CommandReceipt::from_payload("c-", "actor", "update", "object", "key", &json!({"a":1,"b":2}))
                 .unwrap();
-        let right =
-            CommandReceipt::from_payload("receipt-", "actor-1", "object.commit", "object", "key-1", &right)
+        let second =
+            CommandReceipt::from_payload("c-", "actor", "update", "object", "key", &json!({"b":2,"a":1}))
                 .unwrap();
-        assert_eq!(left.id(), right.id());
-        assert_eq!(left.message(None), right.message(None));
+        assert_eq!(first.fingerprint(), second.fingerprint());
     }
 
     #[test]
-    fn historical_audit_receipt_remains_replayable() {
-        let payload = Payload { amount: 100, idempotency_key: "legacy-key".to_string() };
-        let receipt = CommandReceipt::from_payload(
-            "receipt-",
-            "actor-1",
-            "payment.commit",
-            "payment",
-            &payload.idempotency_key,
-            &payload,
-        )
-        .unwrap();
-        let legacy_payload = serde_json::to_string(&payload).unwrap();
-        let legacy_id = format!(
-            "receipt-{}",
-            legacy_digest_parts(&["actor-1", "payment.commit", "payment", "legacy-key"])
-        );
-        let legacy_fingerprint = legacy_digest_parts(&["payment.commit", "payment", &legacy_payload]);
-        let fact = CommandReceiptFact::new(legacy_id.clone(), "actor-1", "payment.commit", "payment")
-            .with_resource_id("payment-1")
-            .with_success(true)
-            .with_message(format!("command_sha256={legacy_fingerprint}"));
-        assert!(receipt.id_candidates().contains(&legacy_id));
-        assert_eq!(receipt.match_fact(&fact), CommandReceiptMatch::SamePayload("payment-1".to_string()));
-    }
-
-    #[test]
-    fn receipt_fact_constructor_sets_identity_only() {
-        let fact = CommandReceiptFact::new("receipt-1", "actor-1", "payment.commit", "payment");
-        assert_eq!(fact.id, "receipt-1");
-        assert_eq!(fact.actor_id, "actor-1");
-        assert!(fact.resource_id.is_none());
-        assert!(!fact.success);
-        assert!(fact.message.is_none());
-        let complete = CommandReceiptFact::new("receipt-1", "actor-1", "payment.commit", "payment")
-            .with_resource_id("payment-1")
-            .with_success(true)
-            .with_message("command_fingerprint=sha256-v1:abc");
-        assert_eq!(complete.resource_id.as_deref(), Some("payment-1"));
-        assert!(complete.success);
-        assert!(complete.message.is_some());
-    }
-
-    #[test]
-    fn historical_work_item_receipt_remains_replayable_without_join_collision() {
-        let receipt = CommandReceipt::from_resource_parts(
-            "work-item-command-",
-            "actor-1",
-            "work_item.reassign",
-            "work_item",
-            "wi-1",
-            "legacy-key",
-            ["3".to_string(), "user-2".to_string(), "reason".to_string()],
-        )
-        .unwrap();
-        let legacy_id = format!(
-            "work-item-command-{}",
-            hex::encode(Sha256::digest(b"actor-1|work_item.reassign|wi-1|legacy-key"))
-        );
-        let legacy_fingerprint = legacy_digest_parts(&["3", "user-2", "reason"]);
-        let fact = CommandReceiptFact::new(legacy_id.clone(), "actor-1", "work_item.reassign", "work_item")
-            .with_resource_id("wi-1")
-            .with_success(true)
-            .with_message(format!("command_sha256={legacy_fingerprint}; reason=safe"));
-        assert!(receipt.id_candidates().contains(&legacy_id));
-        assert_eq!(receipt.match_fact(&fact), CommandReceiptMatch::SamePayload("wi-1".to_string()));
-        assert_ne!(
-            CommandFingerprint::from_parts(["ab".to_string(), "c".to_string()]),
-            CommandFingerprint::from_parts(["a".to_string(), "bc".to_string()])
-        );
+    fn target_actor_and_key_are_independent_identity_components() {
+        let make = |actor: &str, target: &str, key: &str| {
+            CommandReceipt::from_resource_parts(
+                "c-",
+                actor,
+                "reassign",
+                "task",
+                target,
+                key,
+                ["payload".to_string()],
+            )
+            .unwrap()
+        };
+        let original = make("actor", "task", "key");
+        for altered in
+            [make("other", "task", "key"), make("actor", "other", "key"), make("actor", "task", "other")]
+        {
+            assert_ne!(original.id(), altered.id());
+        }
+        assert!(CommandReceipt::from_resource_parts("c-", "actor", "a", "r", " ", "key", []).is_err());
+        assert!(CommandReceipt::from_payload("c-", "actor", "a", "r", " ", &1).is_err());
     }
 }

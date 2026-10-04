@@ -1,10 +1,11 @@
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_supply::entity::supplier_settlement::SupplierSettlementStatement;
 use persistence_core::Transactional;
 
 use super::{SupplierSettlementProcess, SupplierSettlementStatementView, VoidSettlementRequest};
 use crate::Result;
+use crate::audit::persist_log;
 
 impl SupplierSettlementProcess {
     /// 作废尚未提交复核的结算草稿。
@@ -67,7 +68,7 @@ impl SupplierSettlementProcess {
                     erp_supply::service::supplier_settlement::SupplierSettlementService::new(db.clone())
                         .persist_statement(&mut statement_for_tx, executor)
                         .await?;
-                    db.audit_logs().create(&audit_for_tx, executor).await?;
+                    persist_log(&db, &audit_for_tx, executor).await?;
                     Ok::<SupplierSettlementStatement, crate::Error>(statement_for_tx)
                 })
             })

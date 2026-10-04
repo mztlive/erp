@@ -67,7 +67,7 @@ pub struct ImportExecutionCommand {
 }
 
 /// 导入执行命令的稳定结果状态。
-#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ImportExecutionResultStatus {
     /// 后台应用已启动。
@@ -81,7 +81,7 @@ pub enum ImportExecutionResultStatus {
 }
 
 /// 导入执行命令完成后的固定下一步。
-#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ImportExecutionNextStep {
     /// 查看后台应用进度。
@@ -117,7 +117,7 @@ pub struct ImportExecutionResult {
     pub affected_items: u64,
     /// 服务端确定的下一步。
     pub next_step: ImportExecutionNextStep,
-    /// 不含原始 `request_id` 的稳定审计收据 ID。
+    /// 与独立命令回执关联的同次成功审计事件 ID。
     pub audit_receipt: String,
 }
 

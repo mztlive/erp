@@ -1,6 +1,6 @@
 //! 目录同步启动与结果事务；保留与健康检查不同的读取时点。
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
 use erp_supply::entity::supplier_api::SupplierApiConnection;
 use erp_supply::ports::supplier_api_gateway::ClassifiedError;
@@ -12,6 +12,7 @@ use persistence_core::{NoTransaction, Transactional};
 use super::SupplierConnectionExecutionProcess;
 use super::execution::{ConnectionJobExecutionPort, execute};
 use super::failure::persist_health_failure_task;
+use crate::audit::persist_log;
 use crate::{Error, Result};
 
 impl SupplierConnectionExecutionProcess {
@@ -76,7 +77,7 @@ impl SupplierConnectionExecutionProcess {
                         connection.base.id,
                         Some(format!("job_id={};status={}", job.base.id, job.status.as_str())),
                     )?;
-                    db.audit_logs().create(&audit, executor).await?;
+                    persist_log(&db, &audit, executor).await?;
                     Ok(())
                 })
             })

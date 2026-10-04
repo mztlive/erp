@@ -9,11 +9,9 @@ use bpm::engine::DefinitionGraph;
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::types::{ApprovalCommandKind, ApprovalProcessInstanceStatus};
 use bpm::model::{
-    ApprovalCancellationTaskPolicy, ApprovalNodeExecution, ApprovalProcessInstance, IdempotencyKey,
-    ParticipantId, Timestamp,
+    ApprovalCancellationTaskPolicy, ApprovalCommandReceipt, ApprovalNodeExecution, ApprovalProcessInstance,
+    IdempotencyKey, ParticipantId, Timestamp,
 };
-use erp_audit::AuditExt;
-use erp_audit::repository::prelude::*;
 use erp_core::common::time::Instant;
 use erp_identity::SharedRbacService;
 use erp_inventory::{CancelStockAdjustmentApprovalRequest, InventoryExt, StockAdjustmentView};
@@ -46,6 +44,7 @@ use persistence_core::{Executor, NoTransaction, Transactional};
 use super::InventoryAdjustmentService;
 use super::adapter::stock_adjustment_adapter;
 use super::approval_prepare::load_bound_definition_graph;
+use super::cancel_facts::{cancellation_fact, ensure_receipt};
 use crate::{Error, Result};
 
 pub(crate) const STOCK_ADJUSTMENT_CANCEL_AUDIT_ACTION: &str = "stock_adjustment.cancel_approval";
@@ -80,10 +79,13 @@ pub(crate) struct CancelAuthorization {
 }
 
 impl CancelAuthority {
-    pub(crate) fn as_str(self) -> &'static str {
+    /// 返回撤回授权身份的展示名称。
+    /// # 返回
+    /// 返回原提交人或审批管理员的中文名称。
+    pub(crate) fn label(self) -> &'static str {
         match self {
-            Self::Submitter => "submitter",
-            Self::RuntimeAdmin => "runtime_admin",
+            Self::Submitter => "原提交人",
+            Self::RuntimeAdmin => "审批管理员",
         }
     }
 }
@@ -140,6 +142,17 @@ pub(crate) async fn load_cancel_runtime(
 ///
 /// 实例 ID 直接来自强类型命令，因此即使单据已修改并以更高主题版本重新提交，
 /// 仍能精确定位原命令作用域。收据读取和事务失败恢复都使用新会话。
+/// # 参数
+/// * `service` - 库存调整用例及当前授权服务。
+/// * `id` - 原调整单路径身份。
+/// * `req` - 原实例及全部期望版本。
+/// * `reason` - 已规范化撤回原因。
+/// * `idempotency_key` - 已规范化幂等键。
+/// * `actor` - 当前认证操作人。
+/// # 返回
+/// 原命令已提交时返回调整单视图，否则返回空值。
+/// # 错误
+/// 当前授权、原操作人、命令身份或取消终态不匹配时拒绝回放。
 pub(crate) async fn committed_cancel_replay(
     service: &InventoryAdjustmentService,
     id: &str,
@@ -148,67 +161,103 @@ pub(crate) async fn committed_cancel_replay(
     idempotency_key: &IdempotencyKey,
     actor: &AuditActor,
 ) -> Result<Option<StockAdjustmentView>> {
+    let input = CancelReplayCommand {
+        id: id.to_string(),
+        request: req.clone(),
+        reason: reason.to_string(),
+        actor: actor.clone(),
+        identity: document_cancel_identity(DocumentCancelIdentityParams {
+            idempotency_key: idempotency_key.clone(),
+            instance_id: &req.approval_process_instance_id,
+            subject_version: req.expected_subject_version,
+            expected_document_version: req.expected_version,
+            expected_instance_version: req.expected_instance_version,
+            expected_execution_version: req.expected_execution_version,
+            expected_task_version: req.expected_task_version,
+            reason,
+            actor_id: actor.id(),
+        })?,
+    };
     let db = service.db.clone();
     let rbac = service.rbac.clone();
-    let id = id.to_string();
-    let req = req.clone();
-    let reason = reason.to_string();
-    let identity = document_cancel_identity(DocumentCancelIdentityParams {
-        idempotency_key: idempotency_key.clone(),
-        instance_id: &req.approval_process_instance_id,
-        subject_version: req.expected_subject_version,
-        expected_document_version: req.expected_version,
-        expected_instance_version: req.expected_instance_version,
-        expected_execution_version: req.expected_execution_version,
-        expected_task_version: req.expected_task_version,
-        reason: &reason,
-        actor_id: actor.id(),
-    })?;
-    let actor = actor.clone();
     let client = db.client().clone();
     client
         .with_transaction(move |executor| {
-            Box::pin(async move {
-                // 请求已携带稳定 instance scope，因此收据必须是快照内第一读。
-                let receipt = find_cancel_receipt(&db, &identity, executor).await?;
-                let instance = db
-                    .bpm_workflow()
-                    .find_instance_by_id(
-                        &ApprovalProcessInstanceId::new(&req.approval_process_instance_id),
-                        executor,
-                    )
-                    .await?
-                    .ok_or_else(|| Error::NotFound("审批实例不存在".to_string()))?;
-                ensure_cancel_instance_subject(&instance, &id, req.expected_subject_version)?;
-                ensure_cancel_authorized_with_executor(&db, &rbac, &instance, &actor, executor).await?;
-                if instance.status == ApprovalProcessInstanceStatus::Cancelled {
-                    let original_actor =
-                        committed_cancel_actor(&db, &id, &instance.base.id, executor).await?;
-                    if original_actor != actor.id() {
-                        return Err(cancel_replay_actor_mismatch(&instance));
-                    }
-                }
-                let Some(receipt) = receipt else {
-                    return Ok(None);
-                };
-                if instance.status != ApprovalProcessInstanceStatus::Cancelled
-                    || receipt.command_kind != ApprovalCommandKind::CancelApproval
-                    || receipt.result_ref != instance.base.id
-                {
-                    return Err(Error::ConflictError("库存调整撤回收据与终态事实不一致".to_string()));
-                }
-                if !matches!(identity.classify(Some(&receipt)), ReceiptBranch::SamePayload(_)) {
-                    return Err(payload_conflict_error().into());
-                }
-                let adjustment = db
-                    .inventory()
-                    .stock_adjustment(&id, executor)
-                    .await?
-                    .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
-                Ok(Some(adjustment.into()))
-            })
+            Box::pin(async move { replay_cancel_step(&db, &rbac, input, executor).await })
         })
         .await
+}
+
+/// 普通撤回的精确命令身份；不从当前单据反推原版本。
+struct CancelReplayCommand {
+    id: String,
+    request: CancelStockAdjustmentApprovalRequest,
+    reason: String,
+    actor: AuditActor,
+    identity: PreparedCommandIdentity,
+}
+
+/// 新会话首先读取回执；重验当前授权后再证明原 actor 和终态。
+async fn replay_cancel_step(
+    db: &Database,
+    rbac: &SharedRbacService,
+    input: CancelReplayCommand,
+    executor: &mut dyn Executor,
+) -> Result<Option<StockAdjustmentView>> {
+    let receipt = find_cancel_receipt(db, &input.identity, executor).await?;
+    let instance = db
+        .bpm_workflow()
+        .find_instance_by_id(
+            &ApprovalProcessInstanceId::new(&input.request.approval_process_instance_id),
+            executor,
+        )
+        .await?
+        .ok_or_else(|| Error::NotFound("审批实例不存在".into()))?;
+    ensure_cancel_instance_subject(&instance, &input.id, input.request.expected_subject_version)?;
+    ensure_cancel_authorized_with_executor(db, rbac, &instance, &input.actor, executor).await?;
+    ensure_replay_terminal(db, &instance, receipt.as_ref(), &input, executor).await?;
+    let Some(receipt) = receipt else {
+        return Ok(None);
+    };
+    if instance.status != ApprovalProcessInstanceStatus::Cancelled
+        || receipt.command_kind != ApprovalCommandKind::CancelApproval
+        || receipt.result_ref != instance.base.id
+    {
+        return Err(Error::ConflictError("库存调整撤回收据与终态事实不一致".into()));
+    }
+    if !matches!(input.identity.classify(Some(&receipt)), ReceiptBranch::SamePayload(_)) {
+        return Err(payload_conflict_error().into());
+    }
+    let adjustment = db
+        .inventory()
+        .stock_adjustment(&input.id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("库存调整单不存在".into()))?;
+    Ok(Some(adjustment.into()))
+}
+
+/// 未命中原键也先验证 actor；异载荷判断仅在原回执命中后执行。
+async fn ensure_replay_terminal(
+    db: &Database,
+    instance: &ApprovalProcessInstance,
+    receipt: Option<&ApprovalCommandReceipt>,
+    input: &CancelReplayCommand,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    if instance.status != ApprovalProcessInstanceStatus::Cancelled {
+        return Ok(());
+    }
+    let fact = cancellation_fact(db, instance, executor).await?;
+    if fact.data.actor_id != input.actor.id() {
+        return Err(cancel_replay_actor_mismatch(instance));
+    }
+    if let Some(receipt) = receipt {
+        if !fact.matches_request(&input.id, &input.request, input.actor.id(), &input.reason) {
+            return Err(payload_conflict_error().into());
+        }
+        ensure_receipt(&fact, receipt)?;
+    }
+    Ok(())
 }
 
 /// 按 V3、已知历史精确 scope 顺序读取普通撤回收据。
@@ -232,42 +281,6 @@ pub(crate) async fn find_cancel_receipt(
         }
     }
     Ok(None)
-}
-
-/// 从与取消收据同事务提交的不可变审计事实解析原命令操作人。
-pub(crate) async fn committed_cancel_actor(
-    db: &Database,
-    adjustment_id: &str,
-    instance_id: &str,
-    executor: &mut dyn Executor,
-) -> Result<String> {
-    let actors = db
-        .audit_logs()
-        .list_successful_by_resource(STOCK_ADJUSTMENT_AUDIT_RESOURCE, adjustment_id, executor)
-        .await?
-        .into_iter()
-        .filter(|audit| {
-            audit.action == STOCK_ADJUSTMENT_CANCEL_AUDIT_ACTION
-                && audit
-                    .message
-                    .as_deref()
-                    .is_some_and(|message| cancel_audit_matches_instance(message, instance_id))
-        })
-        .map(|audit| audit.actor_id)
-        .collect::<Vec<_>>();
-    let [actor] = actors.as_slice() else {
-        return Err(Error::ConflictError("库存调整撤回收据缺少唯一原命令操作人审计".to_string()));
-    };
-    Ok(actor.clone())
-}
-
-/// 构造不可歧义的取消审计实例前缀；原因仅追加在固定前缀之后。
-pub(crate) fn cancel_audit_message_prefix(instance_id: &str) -> String {
-    format!("instance={}:{} ", instance_id.len(), instance_id)
-}
-
-pub(crate) fn cancel_audit_matches_instance(message: &str, instance_id: &str) -> bool {
-    message.starts_with(&cancel_audit_message_prefix(instance_id))
 }
 
 /// 非原命令操作人不得因收据是否存在获得不同错误投影。

@@ -1,6 +1,6 @@
 //! 集成事实、正式 WorkItem、审计的原顺序写入；复用外层唯一 Executor。
 use async_trait::async_trait;
-use erp_audit::{AuditExt, AuditLog};
+use erp_audit::AuditLog;
 use erp_integration::entity::integration_ops::{
     InboxMessage, IntegrationErrorTask, ReconciliationDifference,
 };
@@ -13,6 +13,7 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use crate::Result;
+use crate::audit::persist_log;
 
 pub(super) enum CreatedFact<'a> {
     ErrorTask(&'a IntegrationErrorTask),
@@ -53,7 +54,7 @@ impl CreationWrites for MongoWrites<'_> {
         Ok(())
     }
     async fn audit(&mut self, executor: &mut dyn Executor) -> Result<()> {
-        self.db.audit_logs().create(self.audit, executor).await?;
+        persist_log(self.db, self.audit, executor).await?;
         Ok(())
     }
 }

@@ -2,8 +2,9 @@ use erp_integration::dto::{
     IntegrationActionOutcome, IntegrationItemType, IntegrationNonTerminalTaskAction,
     IntegrationTaskActionCommand, IntegrationTaskActionKind,
 };
+use erp_integration::service::task_decision::action::next_allowed_actions;
 
-use super::{command_identity, next_allowed_actions};
+use super::command_identity;
 
 fn command(key: &str, kind: IntegrationTaskActionKind) -> IntegrationTaskActionCommand {
     IntegrationTaskActionCommand {

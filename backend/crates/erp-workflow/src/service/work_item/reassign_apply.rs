@@ -1,8 +1,11 @@
 //! 转交命令的事务内策略重验与写入。
 
+use std::num::NonZeroU32;
 use std::sync::Arc;
 
+use application_core::{AuditActor, CommandReceipt};
 use erp_core::common::time::Instant;
+use id_generator::next_id;
 use persistence_core::Executor;
 
 use super::WorkItemService;
@@ -11,12 +14,13 @@ use super::reassign::{
     AssignmentAuthorizationSnapshot, AssignmentPolicyAuditInput, ensure_fulfillment_tasks_candidate,
     purchase_order_fulfillment_responsibility_id,
 };
-use super::write::WorkItemWriteOutcome;
+use super::write::{WorkItemWriteOutcome, record_command_attempt, recover_command_error};
 use crate::entity::work_item::WorkItem;
+use crate::entity::work_item_command::{WorkItemCommandReceipt, WorkItemCommandResult};
 use crate::error::{Error, Result};
-use crate::ports::PreparedWorkflowAudit;
-use crate::repository::WorkItemExt;
+use crate::ports::{PreparedWorkflowAudit, WorkflowAuditOperation};
 use crate::repository::prelude::*;
+use crate::repository::{WorkItemCommandExt, WorkItemExt};
 
 const REASSIGN_VERSION_CONFLICT: &str = "任务版本已变化";
 
@@ -53,37 +57,15 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         let replay_receipt = receipt.clone();
         let replay_item_id = item.base.id.clone();
         let purchase_order_id = purchase_order_fulfillment_responsibility_id(&item)?;
-        let source_user_id = item.owner_user_id.as_deref().unwrap_or("未指定").to_string();
-        let selected_work_item_id = item.base.id.clone();
-        let purchase_order_audit = purchase_order_id
-            .as_ref()
-            .map(|purchase_order_id| {
-                PreparedWorkflowAudit::resource_with_id(
-                    format!("{}-purchase-order", receipt.id()),
-                    actor.clone(),
-                    "purchase_order.owner_reassign",
-                    "purchase_order",
-                    purchase_order_id.clone(),
-                    Some(format!(
-                        "source_user_id={source_user_id};target_user_id={target_user_id};cascade=open_fulfillment_tasks;selected_work_item_id={selected_work_item_id}"
-                    )),
-                )
-            })
-            .transpose()?;
-        let audit = PreparedWorkflowAudit::resource_with_id(
-            receipt.id().to_string(),
-            actor.clone(),
-            receipt.action(),
-            receipt.resource_type(),
-            item.base.id.clone(),
-            Some(receipt.message(Some(&audit_detail))),
-        )?;
+        let (audit, purchase_order_audit) =
+            self.prepare_reassignment_audits(actor, &receipt, &item, purchase_order_id.as_deref())?;
         let item_id = item.base.id;
         let actor_id = actor.id().to_string();
         let actor_kind = actor.kind();
         let policy_revision = authorization.policy_revision;
         let policy_rbac = self.auth.clone();
         let validation = self.clone();
+        let attempt_audit = audit.clone();
         let audit_port = Arc::clone(&self.audit);
         let db = self.db.clone();
         let result = policy_rbac
@@ -160,21 +142,109 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
                         audit_port.persist(purchase_order_audit, executor).await?;
                     }
                     audit_port.persist(&audit, executor).await?;
+                    let committed = WorkItemCommandReceipt::new(
+                        &receipt,
+                        WorkItemCommandResult::Reassigned {
+                            work_item_id: current.base.id.clone(),
+                            task_version: current.base.version,
+                            target_user_id: target_user_id.clone(),
+                            reason: audit_detail.clone(),
+                        },
+                        audit.id.clone(),
+                    )?;
+                    db.work_item_command_receipts().create(&committed, executor).await?;
                     Ok(current)
                 })
             })
             .await;
+        if let Err(error) = &result {
+            record_command_attempt(self.audit.as_ref(), &attempt_audit, error).await;
+        }
         match result {
             Ok(item) => Ok(WorkItemWriteOutcome::Updated(Box::new(item))),
             Err(Error::ConflictError(message)) if message == REASSIGN_VERSION_CONFLICT => {
                 Ok(WorkItemWriteOutcome::VersionConflict)
             },
-            Err(error) => match self.idempotent_replay(&replay_receipt, &replay_item_id).await? {
-                Some(item) => Ok(WorkItemWriteOutcome::Updated(Box::new(item))),
-                None => Err(error),
-            },
+            Err(error) => recover_command_error(
+                error,
+                self.idempotent_replay(&replay_receipt, &replay_item_id, actor).await,
+            )
+            .map(|item| WorkItemWriteOutcome::Updated(Box::new(item))),
         }
     }
+
+    /// 在转交事务前冻结并校验任务与采购履约的安全审计上下文。
+    /// # 参数
+    /// * `actor` - 命令操作人及调用上下文。
+    /// * `receipt` - 已规范化的命令身份。
+    /// * `item` - 原选中任务。
+    /// * `purchase_order_id` - 原责任键解析出的采购单编号。
+    /// # 返回
+    /// 返回原任务事件及可选采购履约事件，保留原构造与校验顺序。
+    /// # 错误
+    /// 动作或上下文校验失败时返回原错误。
+    fn prepare_reassignment_audits(
+        &self,
+        actor: &AuditActor,
+        receipt: &CommandReceipt,
+        item: &WorkItem,
+        purchase_order_id: Option<&str>,
+    ) -> Result<(PreparedWorkflowAudit, Option<PreparedWorkflowAudit>)> {
+        let (audit, purchase_order_audit) =
+            reassignment_audits(actor, receipt, &item.base.id, purchase_order_id)?;
+        self.audit.validate(&audit)?;
+        if let Some(value) = &purchase_order_audit {
+            self.audit.validate(value)?;
+        }
+        Ok((audit, purchase_order_audit))
+    }
+}
+
+/// 冻结同一转交命令的任务与采购履约事件及其写入顺序。
+/// # 参数
+/// * `actor` - 原命令操作人及调用上下文。
+/// * `receipt` - 原命令身份。
+/// * `item_id` - 原选中任务编号。
+/// * `purchase_order_id` - 原责任键解析出的采购单编号。
+/// # 返回
+/// 返回任务事件与可选采购事件；采购事件为一，随后任务为二，否则任务为一。
+/// # 错误
+/// 事件动作或命令关联非法时返回原错误。
+fn reassignment_audits(
+    actor: &AuditActor,
+    receipt: &CommandReceipt,
+    item_id: &str,
+    purchase_order_id: Option<&str>,
+) -> Result<(PreparedWorkflowAudit, Option<PreparedWorkflowAudit>)> {
+    let purchase_order_audit = purchase_order_id
+        .map(|purchase_order_id| -> Result<PreparedWorkflowAudit> {
+            let audit = PreparedWorkflowAudit::resource_with_id(
+                next_id(),
+                actor.clone(),
+                "purchase_order.owner_reassign",
+                "purchase_order",
+                purchase_order_id.to_string(),
+                Some("采购履约责任已转交".to_string()),
+            )?
+            .for_command(receipt.id().to_string(), WorkflowAuditOperation::PurchaseOwnerReassigned)?;
+            Ok(audit.with_event_sequence(NonZeroU32::MIN))
+        })
+        .transpose()?;
+    let audit = PreparedWorkflowAudit::resource_with_id(
+        next_id(),
+        actor.clone(),
+        receipt.action(),
+        receipt.resource_type(),
+        item_id.to_string(),
+        Some("开放任务责任已转交，原因已记录".to_string()),
+    )?
+    .for_command(receipt.id().to_string(), WorkflowAuditOperation::Reassigned)?
+    .with_event_sequence(if purchase_order_audit.is_some() {
+        NonZeroU32::new(2).expect("固定任务事件序号 2 必须非零")
+    } else {
+        NonZeroU32::MIN
+    });
+    Ok((audit, purchase_order_audit))
 }
 
 /// 事务内分派策略重验输入。
@@ -331,4 +401,68 @@ async fn reassign_purchase_order_fulfillment_responsibility<A: crate::ports::Wor
         }
     }
     selected_after.ok_or_else(|| Error::ConflictError("采购单开放履约任务已变化，请刷新后重试".to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_core::AccountKind;
+
+    use super::*;
+
+    #[test]
+    fn reassignment_factory_orders_related_events_and_preserves_command_context() {
+        let actor = AuditActor::new("actor".into(), "account".into(), AccountKind::Admin)
+            .with_actor_name_snapshot(Some("发生时名称".into()))
+            .unwrap()
+            .with_request_id(Some("request-original".into()))
+            .unwrap();
+        let receipt = CommandReceipt::from_resource_parts(
+            "work-item-command-",
+            actor.id(),
+            "work_item.reassign",
+            "work_item",
+            "item-1",
+            "key-1",
+            ["1".into(), "target".into(), "reason".into()],
+        )
+        .unwrap();
+        for purchase_order_id in [Some("purchase-1"), None] {
+            let (task_audit, purchase_audit) =
+                reassignment_audits(&actor, &receipt, "item-1", purchase_order_id).unwrap();
+            assert_eq!(task_audit.command_id.as_deref(), Some(receipt.id()));
+            assert_eq!(task_audit.actor_name_snapshot.as_deref(), Some("发生时名称"));
+            assert_eq!(task_audit.request_id.as_deref(), Some("request-original"));
+            assert_ne!(task_audit.id, receipt.id());
+            if let Some(purchase_audit) = purchase_audit {
+                assert_eq!(purchase_audit.event_sequence.get(), 1);
+                assert_eq!(task_audit.event_sequence.get(), 2);
+                assert_eq!(purchase_audit.command_id, task_audit.command_id);
+                assert_eq!(purchase_audit.actor_name_snapshot, task_audit.actor_name_snapshot);
+                assert_eq!(purchase_audit.request_id, task_audit.request_id);
+                assert_ne!(purchase_audit.id, task_audit.id);
+                assert_eq!(purchase_audit.resource_id, "purchase-1");
+            } else {
+                assert_eq!(task_audit.event_sequence.get(), 1);
+            }
+        }
+    }
+
+    #[test]
+    fn reassignment_factory_rejects_a_different_command_action() {
+        let actor = AuditActor::new("actor".into(), "account".into(), AccountKind::Admin);
+        let receipt = CommandReceipt::from_resource_parts(
+            "work-item-command-",
+            actor.id(),
+            "work_item.close",
+            "work_item",
+            "item-1",
+            "key-1",
+            ["1".into()],
+        )
+        .unwrap();
+        assert!(matches!(
+            reassignment_audits(&actor, &receipt, "item-1", Some("purchase-1")),
+            Err(Error::ValidationError(_))
+        ));
+    }
 }

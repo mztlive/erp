@@ -1,7 +1,6 @@
 //! 销售变更同事务写入合同；生产与纯替身共同执行相同编排函数。
 
 use async_trait::async_trait;
-use erp_audit::AuditExt;
 use erp_core::ids::ReceivableAccountId;
 use erp_finance::service::receivable::sales_change::{
     SalesChangeReceivableInput, SalesChangeReceivableWrite, prepare_sales_change_receivable,
@@ -11,6 +10,7 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use crate::Result;
+use crate::audit::persist_log;
 
 /// 销售变更最终生效的最小写入能力；不得在实现内另开事务。
 #[async_trait]
@@ -56,7 +56,7 @@ impl SalesChangePostingPort for DatabasePosting<'_> {
         Ok(self.write.persist_change(self.db, executor).await?)
     }
     async fn audit(&mut self, executor: &mut dyn Executor) -> Result<()> {
-        self.db.audit_logs().create(self.audit, executor).await?;
+        persist_log(self.db, self.audit, executor).await?;
         Ok(())
     }
 }

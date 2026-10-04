@@ -1,12 +1,10 @@
 //! 冲正提交先恢复精确命令收据，未知结果仅 fresh 回读，不重复写入。
 
 use application_core::{AuditActor, CommandReceipt};
-use erp_audit::AuditExt;
-use erp_audit::entity::AuditLog;
-use erp_audit::repository::AuditLogRepositoryExt;
 use erp_core::common::time::Instant;
 use erp_identity::SharedRbacService;
 use erp_read_models::Error as ReadModelError;
+use erp_returns::ReturnsCommandReceiptService;
 use erp_workflow::DocumentRegistryExt;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::repository::BusinessDocumentRepositoryExt;
@@ -65,6 +63,7 @@ impl ReturnsProcess {
                 Ok(Some(_)) => return Ok(()),
                 Ok(None) => {},
                 Err(error) if error.command_may_have_committed() => {},
+                Err(_) if matches!(original_error, Error::OutcomeUnknown(_)) => return Err(original_error),
                 Err(error) => return Err(error),
             }
             if attempt + 1 < RECOVERY_ATTEMPTS {
@@ -102,9 +101,9 @@ pub(super) async fn committed_reversal_submit(
     command_receipt: &CommandReceipt,
     executor: &mut dyn Executor,
 ) -> Result<Option<String>> {
-    let candidates = command_receipt.id_candidates();
-    let facts = db.audit_logs().find_command_receipts_by_ids(&candidates, executor).await?;
-    let replayed = AuditLog::pick_committed_resource_id(command_receipt, &candidates, &facts)?;
+    let replayed = ReturnsCommandReceiptService::new(db.clone())
+        .committed_resource_id(command_receipt, executor)
+        .await?;
     if replayed.as_deref().is_some_and(|resource_id| resource_id != id) {
         return Err(Error::ConflictError("冲正提交收据与原单不一致".into()));
     }

@@ -72,7 +72,7 @@ pub struct CompleteImportBusinessConfirmationCommand {
 }
 
 /// 强类型确认命令的最终结果状态。
-#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ImportBusinessConfirmationResultStatus {
     /// 已确认责任范围。
@@ -84,7 +84,7 @@ pub enum ImportBusinessConfirmationResultStatus {
 }
 
 /// 强类型确认完成后的固定下一步。
-#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ImportBusinessConfirmationNextStep {
     /// 等待同一试算矩阵的其它责任范围。

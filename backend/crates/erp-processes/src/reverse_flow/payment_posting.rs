@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_core::ids::PayableAccountId;
 use erp_finance::entity::payable::SupplierPayment;
 use erp_finance::service::payable::payment_reversal::{
@@ -19,6 +19,7 @@ use persistence_core::{Executor, Transactional};
 
 use super::adapter::execute_payment_reversal_domain_action;
 use crate::Result;
+use crate::audit::persist_log;
 
 /// 付款冲正最终通过流程；所有财务与工作项副作用复用调用方事务。
 pub struct PaymentReversalProcess {
@@ -216,7 +217,7 @@ impl PaymentReversalPostingPort for MongoPaymentReversal<'_> {
             "payment_reversal",
             reversal.base.id.clone(),
         )?;
-        self.db.audit_logs().create(&audit, executor).await?;
+        persist_log(self.db, &audit, executor).await?;
         Ok(())
     }
 }

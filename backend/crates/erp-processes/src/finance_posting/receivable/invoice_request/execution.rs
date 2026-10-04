@@ -1,6 +1,6 @@
 //! 申请批准后派工，以及每次开票的授权消耗。
 use application_core::AuditActor;
-use erp_audit::{AuditActorLogs, AuditExt};
+use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
 use erp_core::ids::{PartyId, WorkItemId};
 use erp_finance::repository::prelude::*;
@@ -13,6 +13,7 @@ use erp_workflow::repository::prelude::*;
 use id_generator::next_id;
 
 use super::*;
+use crate::audit::persist_log;
 
 /// 最终审批通过时原子授予额度并生成申请专属财务执行任务。
 /// # 错误
@@ -60,7 +61,7 @@ pub(crate) async fn approve(
         "sales_invoice_request",
         id.to_owned(),
     )?;
-    db.audit_logs().create(&audit, executor).await?;
+    persist_log(db, &audit, executor).await?;
     Ok(())
 }
 /// 消耗与任务一一关联的已批准申请；旧任务及错配任务一律拒绝。

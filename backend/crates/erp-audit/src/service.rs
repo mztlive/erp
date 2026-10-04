@@ -1,12 +1,15 @@
-pub use application_core::CommandReceipt;
 use application_core::{AuditActor, Page};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::NoTransaction;
 use validator::Validate;
 
+use crate::Error;
+use crate::catalog::registered_action;
 pub use crate::dto::{AuditLogItem, AuditLogListParams};
-use crate::entity::{AuditLog, AuditLogData};
+use crate::entity::{
+    AuditLog, AuditLogData, BusinessEventContent, BusinessEventContext, BusinessEventResult,
+};
 use crate::error::Result;
 use crate::repository::prelude::*;
 use crate::repository::{AuditExt, AuditLogFilter};
@@ -49,8 +52,16 @@ impl AuditActorLogs for AuditActor {
         resource_id: String,
         message: Option<String>,
     ) -> Result<AuditLog> {
+        let actor_name_snapshot = self.actor_name_snapshot().map(str::to_string);
+        let request_id = self.request_id().map(str::to_string);
         let data = AuditLog::success_resource_data(self, action, resource_type, resource_id, message)?;
-        Ok(AuditLog::new(id, data)?)
+        let mut prepared = prepare_business_log(&AuditLog::new(id, data)?)?;
+        if let Some(event) = &mut prepared.structured_event {
+            event.actor_name_snapshot = actor_name_snapshot;
+            event.request_id = request_id;
+            prepared.message = Some(event.message());
+        }
+        Ok(prepared)
     }
 
     fn resource_log_with_message(
@@ -64,27 +75,73 @@ impl AuditActorLogs for AuditActor {
     }
 }
 
-/// 命令收据的 Service I/O 适配。
-#[allow(async_fn_in_trait)]
-pub trait CommandReceiptServiceExt {
-    /// 查询并校验已经提交的同一业务命令。
-    async fn committed_resource_id(&self, db: &Database) -> Result<Option<String>>;
-
-    /// 构造必须与业务写入同事务持久化的成功收据审计。
-    fn audit(&self, actor: AuditActor, resource_id: String) -> Result<AuditLog>;
+/// 将普通资源日志转换为已登记的安全业务事件；自由正文不属于事实投影。
+/// # 参数
+/// * `log` - 事务前已准备的动作、操作人与目标快照。
+/// # 返回
+/// 返回保留事件身份和时间的结构化中文记录。
+/// # 错误
+/// 未登记动作、资源错配、目标缺失或结构化身份不一致时拒绝。
+pub fn prepare_business_log(log: &AuditLog) -> Result<AuditLog> {
+    let action = registered_action(&log.action, &log.resource_type)?;
+    if let Some(event) = &log.structured_event {
+        if event.schema_version != 1
+            || event.action_version == 0
+            || event.action_code != log.action
+            || event.resource_type != log.resource_type
+            || Some(event.resource_id.as_str()) != log.resource_id.as_deref()
+            || event.actor_id != log.actor_id
+            || event.actor_account != log.actor_account
+            || event.actor_type != log.actor_type
+            || log.success != (event.result == BusinessEventResult::Succeeded)
+        {
+            return Err(Error::ValidationError("结构化审计与业务身份不一致".to_string()));
+        }
+        let mut prepared = log.clone();
+        prepared.message = Some(event.message());
+        return Ok(prepared);
+    }
+    let actor = AuditActor::new(log.actor_id.clone(), log.actor_account.clone(), log.actor_type);
+    let context = BusinessEventContext::new(actor, action)?;
+    let mut prepared = context.log(BusinessEventContent {
+        target_id: log
+            .resource_id
+            .clone()
+            .ok_or_else(|| Error::ValidationError("业务审计目标不能为空".into()))?,
+        target_number: None,
+        result: if log.success { BusinessEventResult::Succeeded } else { BusinessEventResult::Rejected },
+        field_changes: Vec::new(),
+        facts: Vec::new(),
+    })?;
+    prepared.base = log.base.clone();
+    if let Some(event) = &mut prepared.structured_event {
+        event.occurred_at = log.base.created_at;
+    }
+    Ok(prepared)
 }
 
-impl CommandReceiptServiceExt for CommandReceipt {
-    async fn committed_resource_id(&self, db: &Database) -> Result<Option<String>> {
-        let candidates = self.id_candidates();
-        let facts = db.audit_logs().find_command_receipts_by_ids(&candidates, &mut NoTransaction).await?;
-        AuditLog::pick_committed_resource_id(self, &candidates, &facts)
+/// 从已验证业务日志提取事务外尝试所需的安全静态上下文。
+/// # 参数
+/// * `log` - 普通事件准备记录。
+/// # 返回
+/// 返回保留安全目标、命令及请求关联的尝试上下文。
+/// # 错误
+/// 未登记动作或身份无效时拒绝，不读取自由正文。
+pub fn attempt_context(log: &AuditLog) -> Result<BusinessEventContext> {
+    let actor = AuditActor::new(log.actor_id.clone(), log.actor_account.clone(), log.actor_type);
+    let mut context = BusinessEventContext::new(actor, registered_action(&log.action, &log.resource_type)?)?;
+    let event = log.structured_event.as_ref();
+    context = context.with_target(
+        log.resource_id.clone(),
+        event.and_then(|event| event.resource_number_snapshot.clone()),
+    )?;
+    if let Some(event) = event {
+        context = context
+            .with_command_id(event.command_id.clone())?
+            .with_request_id(event.request_id.clone())?
+            .with_actor_name_snapshot(event.actor_name_snapshot.clone())?;
     }
-
-    fn audit(&self, actor: AuditActor, resource_id: String) -> Result<AuditLog> {
-        let data = AuditLog::receipt_audit_data(self, actor, resource_id)?;
-        Ok(AuditLog::new(self.id().to_string(), data)?)
-    }
+    Ok(context)
 }
 
 /// 审计日志服务
@@ -138,18 +195,10 @@ impl AuditLogService {
 
 #[cfg(test)]
 mod tests {
-    use application_core::{AuditActor, CommandReceiptMatch};
+    use application_core::AuditActor;
     use erp_core::AccountKind;
-    use serde::Serialize;
 
-    use super::{AuditActorLogs, CommandReceipt, CommandReceiptServiceExt as _};
-    use crate::entity::AuditLog;
-
-    #[derive(Serialize)]
-    struct CommandPayload {
-        amount: u32,
-        idempotency_key: String,
-    }
+    use super::AuditActorLogs;
 
     #[test]
     fn audit_actor_builds_valid_success_resource_log() {
@@ -164,7 +213,7 @@ mod tests {
         assert_eq!(log.resource_type, "customer");
         assert_eq!(log.resource_id.as_deref(), Some("customer-1"));
         assert!(log.success);
-        assert!(log.message.is_none());
+        assert!(log.message.as_deref().unwrap().contains("创建客户"));
     }
 
     #[test]
@@ -178,7 +227,8 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(log.message.as_deref(), Some("恢复销售"));
+        assert!(log.message.as_deref().unwrap().contains("修改商品"));
+        assert!(!log.message.as_deref().unwrap().contains("恢复销售"));
     }
 
     #[test]
@@ -188,125 +238,84 @@ mod tests {
 
         assert!(result.is_err());
     }
+}
 
+#[cfg(test)]
+mod ordinary_factory_tests {
+    use erp_core::AccountKind;
+
+    use super::*;
+    fn actor() -> AuditActor {
+        AuditActor::new("actor".into(), "account".into(), AccountKind::Admin)
+    }
     #[test]
-    fn command_receipt_hides_raw_key_and_replays_matching_resource() {
-        let actor = AuditActor::new("admin-1".to_string(), "root".to_string(), AccountKind::Admin);
-        let payload = CommandPayload { amount: 100, idempotency_key: "raw-operation-key".to_string() };
-        let receipt = CommandReceipt::from_payload(
-            "receipt-command-",
-            actor.id(),
-            "customer_receipt.commit",
-            "customer_receipt",
-            &payload.idempotency_key,
-            &payload,
-        )
-        .unwrap();
-        let audit = receipt.audit(actor, "receipt-1".to_string()).unwrap();
-
-        assert!(!audit.base.id.contains("raw-operation-key"));
-        assert!(!audit.message.as_deref().unwrap().contains("raw-operation-key"));
-        let fact = audit.receipt_fact();
-        assert_eq!(receipt.match_fact(&fact), CommandReceiptMatch::SamePayload("receipt-1".to_string()));
+    fn registered_factory_discards_uncontrolled_message_and_preserves_safe_snapshot() {
+        let log = actor()
+            .resource_log_with_id(
+                "event".into(),
+                "customer.update",
+                "customer",
+                "customer".into(),
+                Some("secret request body / bank / ciphertext".into()),
+            )
+            .unwrap()
+            .with_command_id(Some("command".into()))
+            .unwrap()
+            .with_resource_number(Some("KH-0001".into()))
+            .unwrap();
+        let prepared = prepare_business_log(&log).unwrap();
+        assert_eq!(prepared.base, log.base);
+        let event = prepared.structured_event.as_ref().unwrap();
+        assert_eq!(event.command_id.as_deref(), Some("command"));
+        assert_eq!(event.resource_number_snapshot.as_deref(), Some("KH-0001"));
+        assert_eq!(event.actor_name_snapshot, None);
+        assert!(prepared.message.as_deref().unwrap().contains("KH-0001"));
+        assert!(!serde_json::to_string(&prepared).unwrap().contains("secret request"));
+        let attempt = attempt_context(&prepared).unwrap().attempt(crate::AuditAttemptResult::Rejected);
+        assert_eq!(attempt.resource_id.as_deref(), Some("customer"));
+        assert_eq!(attempt.command_id.as_deref(), Some("command"));
+    }
+    #[test]
+    fn unknown_factory_and_mismatched_structured_identity_fail_closed() {
+        assert!(actor().resource_log("customer.update:customer", "customer", "customer".into()).is_err());
+        assert!(actor().resource_log("customer.update", "supplier", "customer".into()).is_err());
+        let mut log = actor().resource_log("customer.update", "customer", "customer".into()).unwrap();
+        log.structured_event.as_mut().unwrap().actor_id = "another actor".into();
+        assert!(prepare_business_log(&log).is_err());
+    }
+    #[test]
+    fn snapshot_setters_reject_control_characters_and_missing_structured_event() {
+        let log = actor().resource_log("customer.update", "customer", "customer".into()).unwrap();
+        assert!(log.clone().with_command_id(Some("invalid\nkey".into())).is_err());
+        assert!(log.clone().with_resource_number(Some("invalid\nnumber".into())).is_err());
+        let mut missing = log;
+        missing.structured_event = None;
+        assert!(missing.with_command_id(Some("command".into())).is_err());
     }
 
+    /// 普通工厂在三元组转换前捕获本次名称，并保留事件原身份与时间。
     #[test]
-    fn command_receipt_rejects_same_key_with_different_payload() {
-        let actor = AuditActor::new("admin-1".to_string(), "root".to_string(), AccountKind::Admin);
-        let first = CommandPayload { amount: 100, idempotency_key: "operation-key".to_string() };
-        let changed = CommandPayload { amount: 200, idempotency_key: "operation-key".to_string() };
-        let first_receipt = CommandReceipt::from_payload(
-            "receipt-command-",
-            actor.id(),
-            "customer_receipt.commit",
-            "customer_receipt",
-            &first.idempotency_key,
-            &first,
-        )
-        .unwrap();
-        let audit = first_receipt.audit(actor.clone(), "receipt-1".to_string()).unwrap();
-        let changed_receipt = CommandReceipt::from_payload(
-            "receipt-command-",
-            actor.id(),
-            "customer_receipt.commit",
-            "customer_receipt",
-            &changed.idempotency_key,
-            &changed,
-        )
-        .unwrap();
-
-        let fact = audit.receipt_fact();
-        assert_eq!(changed_receipt.match_fact(&fact), CommandReceiptMatch::DifferentPayload);
-    }
-
-    #[test]
-    fn pick_receipt_returns_none_without_db_when_no_candidate_matches() {
-        let actor = AuditActor::new("admin-1".to_string(), "root".to_string(), AccountKind::Admin);
-        let payload = CommandPayload { amount: 100, idempotency_key: "pick-none-key".to_string() };
-        let receipt = CommandReceipt::from_payload(
-            "receipt-command-",
-            actor.id(),
-            "customer_receipt.commit",
-            "customer_receipt",
-            &payload.idempotency_key,
-            &payload,
-        )
-        .unwrap();
-
-        let candidates = vec!["missing-1".to_string()];
-        assert_eq!(AuditLog::pick_committed_resource_id(&receipt, &candidates, &[]).unwrap(), None);
-    }
-
-    #[test]
-    fn pick_receipt_replays_matching_resource_without_db() {
-        let actor = AuditActor::new("admin-1".to_string(), "root".to_string(), AccountKind::Admin);
-        let payload = CommandPayload { amount: 100, idempotency_key: "pick-hit-key".to_string() };
-        let receipt = CommandReceipt::from_payload(
-            "receipt-command-",
-            actor.id(),
-            "customer_receipt.commit",
-            "customer_receipt",
-            &payload.idempotency_key,
-            &payload,
-        )
-        .unwrap();
-        let audit = receipt.audit(actor, "receipt-1".to_string()).unwrap();
-        let candidates = vec![audit.base.id.clone()];
-        let facts = vec![audit.receipt_fact()];
-
-        assert_eq!(
-            AuditLog::pick_committed_resource_id(&receipt, &candidates, &facts).unwrap(),
-            Some("receipt-1".to_string())
-        );
-    }
-
-    #[test]
-    fn pick_receipt_conflicts_without_db_on_same_id_different_payload() {
-        let actor = AuditActor::new("admin-1".to_string(), "root".to_string(), AccountKind::Admin);
-        let first = CommandPayload { amount: 100, idempotency_key: "pick-conflict-key".to_string() };
-        let changed = CommandPayload { amount: 200, idempotency_key: "pick-conflict-key".to_string() };
-        let first_receipt = CommandReceipt::from_payload(
-            "receipt-command-",
-            actor.id(),
-            "customer_receipt.commit",
-            "customer_receipt",
-            &first.idempotency_key,
-            &first,
-        )
-        .unwrap();
-        let audit = first_receipt.audit(actor.clone(), "receipt-1".to_string()).unwrap();
-        let changed_receipt = CommandReceipt::from_payload(
-            "receipt-command-",
-            actor.id(),
-            "customer_receipt.commit",
-            "customer_receipt",
-            &changed.idempotency_key,
-            &changed,
-        )
-        .unwrap();
-        let candidates = vec![audit.base.id.clone()];
-        let facts = vec![audit.receipt_fact()];
-
-        assert!(AuditLog::pick_committed_resource_id(&changed_receipt, &candidates, &facts).is_err());
+    fn ordinary_factory_preserves_current_actor_name_and_event_metadata() {
+        let named = actor()
+            .with_actor_name_snapshot(Some("  王慧敏  ".into()))
+            .unwrap()
+            .with_request_id(Some("request-original".into()))
+            .unwrap();
+        let log = named
+            .resource_log_with_id("name-event".into(), "customer.update", "customer", "customer".into(), None)
+            .unwrap();
+        let prepared = prepare_business_log(&log).unwrap();
+        let persisted: AuditLog = serde_json::from_str(&serde_json::to_string(&prepared).unwrap()).unwrap();
+        assert_eq!(persisted.base, log.base);
+        let event = persisted.structured_event.as_ref().unwrap();
+        assert_eq!(event.actor_name_snapshot.as_deref(), Some("王慧敏"));
+        assert_eq!(event.request_id.as_deref(), Some("request-original"));
+        assert_eq!(event.actor_id, "actor");
+        assert_eq!(event.actor_account, "account");
+        assert!(persisted.message.as_deref().unwrap().contains("王慧敏"));
+        let attempt = attempt_context(&persisted).unwrap().attempt(crate::AuditAttemptResult::Unknown);
+        assert_eq!(attempt.actor_name_snapshot.as_deref(), Some("王慧敏"));
+        assert_eq!(attempt.request_id.as_deref(), Some("request-original"));
+        assert_eq!(event.occurred_at, persisted.base.created_at);
     }
 }

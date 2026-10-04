@@ -1,7 +1,7 @@
 //! Fixed first-formalization posting order within the caller's transaction.
 
 use async_trait::async_trait;
-use erp_audit::{AuditExt, AuditLog};
+use erp_audit::AuditLog;
 use erp_core::ids::SalesOrderId;
 use erp_finance::entity::receivable::SalesBusinessTypeFact;
 use erp_finance::service::receivable::initial_account::{InitialReceivableInput, create_initial_receivable};
@@ -12,6 +12,7 @@ use super::formalize::{FormalizedSubmissionWrite, persist_procurement_work_items
 #[cfg(test)]
 use crate::Error;
 use crate::Result;
+use crate::audit::persist_log;
 
 /// Each variant is one existing side-effect boundary, in the original order below.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -137,7 +138,7 @@ impl PostingSteps for MongoPosting<'_> {
                 .await?;
             },
             Audit => {
-                write.db.audit_logs().create(self.audit, executor).await?;
+                persist_log(&write.db, self.audit, executor).await?;
             },
         }
         Ok(())

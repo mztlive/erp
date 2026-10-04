@@ -1,0 +1,127 @@
+{
+  "schema_version": 1,
+  "boundaries": [
+    {
+      "path": "crates/erp-audit/src/service.rs",
+      "function": "audit_log_list",
+      "operation": "audit_logs.search_logs",
+      "max_occurrences": 1,
+      "policy": "Display",
+      "contract_items": [
+        "E01"
+      ],
+      "removal_condition": "保留为授权业务审计展示；禁止向命令恢复或业务资格输出事实。"
+    },
+    {
+      "path": "crates/erp-identity/src/service/access_control/mod.rs",
+      "function": "audit_event_list",
+      "operation": "audit_events.search_audit_events",
+      "max_occurrences": 1,
+      "policy": "Display",
+      "contract_items": [
+        "E02"
+      ],
+      "removal_condition": "保留为授权身份治理展示，继续执行独立身份域目录合同。"
+    },
+    {
+      "path": "crates/erp-processes/src/audit/execution.rs",
+      "function": "persist_log",
+      "operation": "audit_logs.create",
+      "max_occurrences": 1,
+      "policy": "Audited",
+      "contract_items": [
+        "V04",
+        "V14"
+      ],
+      "removal_condition": "唯一普通业务审计单条持久化入口；复用调用方Executor并先验证安全结构化投影。"
+    },
+    {
+      "path": "crates/erp-processes/src/audit/execution.rs",
+      "function": "persist_logs",
+      "operation": "audit_logs.create_many_ordered",
+      "max_occurrences": 1,
+      "policy": "Audited",
+      "contract_items": [
+        "V04",
+        "V14"
+      ],
+      "removal_condition": "唯一批量业务审计入口；全部投影验证后保留原有序批量写入及同Executor。"
+    },
+    {
+      "path": "crates/erp-audit/src/service.rs",
+      "function": "create",
+      "operation": "audit_logs.create",
+      "max_occurrences": 1,
+      "policy": "Exempt",
+      "contract_items": [
+        "E08"
+      ],
+      "removal_condition": "仅登录安全审计独立best-effort生命周期；普通成功业务写入禁止调用此入口。"
+    },
+    {
+      "path": "crates/erp-identity/src/service/access_control/mod.rs",
+      "function": "with_audited_write",
+      "operation": "audit_events.create",
+      "max_occurrences": 1,
+      "policy": "Audited",
+      "contract_items": [
+        "E02",
+        "V04",
+        "V14"
+      ],
+      "removal_condition": "保留身份治理独立审计与原策略事务、提交后刷新和未知结果失败关闭生命周期。"
+    },
+    {
+      "path": "crates/erp-identity/src/service/access_control/person_scope.rs",
+      "function": "save_person_scope",
+      "operation": "audit_events.create",
+      "max_occurrences": 1,
+      "policy": "Audited",
+      "contract_items": [
+        "E02",
+        "V04",
+        "V14"
+      ],
+      "removal_condition": "保留人员数据范围政策修改的身份域事件；普通业务事件不得替代该授权及策略版本事务。"
+    },
+    {
+      "path": "crates/erp-identity/src/service/access_control/person_scope_migration.rs",
+      "function": "migrate",
+      "operation": "audit_events.create",
+      "max_occurrences": 1,
+      "policy": "Audited",
+      "contract_items": [
+        "E02",
+        "V04",
+        "V14"
+      ],
+      "removal_condition": "保留身份域明确范围政策变更事件与其原策略事务；本次不执行真实数据操作。"
+    },
+    {
+      "path": "crates/erp-identity/src/service/person_directory/management.rs",
+      "function": "record_change",
+      "operation": "audit_events.create",
+      "max_occurrences": 1,
+      "policy": "Audited",
+      "contract_items": [
+        "E02",
+        "V04",
+        "V14"
+      ],
+      "removal_condition": "保留人员目录治理独立身份事件；与业务audit_logs目录及成功事件语义分别登记。"
+    },
+    {
+      "path": "crates/erp-processes/src/audit/attempt.rs",
+      "function": "persist_attempt",
+      "operation": "audit_attempts.create",
+      "max_occurrences": 1,
+      "policy": "Audited",
+      "contract_items": [
+        "E08",
+        "V06",
+        "V14"
+      ],
+      "removal_condition": "唯一普通命令尝试持久化入口；原事务返回后独立NoTransaction写入，不替代正式回执或首次错误。"
+    }
+  ]
+}

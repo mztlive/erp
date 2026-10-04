@@ -1,13 +1,14 @@
 //! 回款冲正一次创建并提交：根命令回执优先，原资金事实在事务内重验。
 
 use application_core::{AuditActor, CommandReceipt};
-use erp_audit::{AuditActorLogs, AuditExt, CommandReceiptServiceExt as _};
 use erp_core::common::time::Instant;
 use erp_core::ids::CustomerReceiptId;
 use erp_finance::entity::receivable::CustomerReceiptStatus;
 use erp_finance::repository::ReceivableExt;
 use erp_read_models::returns_center::dto::ReceiptReversalView;
+use erp_returns::ReturnsCommandReceiptService;
 use erp_returns::dto::CommitReceiptReversalRequest;
+use erp_returns::entity::returns::ReceiptReversal;
 use erp_returns::service::ReturnsService;
 use erp_returns::service::approval::start_receipt_reversal_approval;
 use erp_returns::service::receipt_reversal::build_commit;
@@ -31,6 +32,7 @@ use super::super::start_approval::{
     persist_receipt_reversal_runtime,
 };
 use super::context::{load_receipt_reversal_context, persist_bound_receipt_reversal_document};
+use crate::reverse_flow::command_recovery::{commit_audits, recovered_resource, save_commit};
 use crate::{Error, Result};
 
 impl ReturnsProcess {
@@ -52,18 +54,14 @@ impl ReturnsProcess {
             &req.idempotency_key,
             &req,
         )?;
-        if let Some(reversal_id) = command_receipt.committed_resource_id(&self.db).await? {
+        if let Some(reversal_id) = ReturnsCommandReceiptService::new(self.db.clone())
+            .committed_resource_id(&command_receipt, &mut NoTransaction)
+            .await?
+        {
             return self.reads().receipt_reversal_detail(&reversal_id).await.map_err(crate::Error::from);
         }
-        let receipt = self
-            .db
-            .customer_receipts()
-            .find_by_id(&req.source_fact_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("原客户回款不存在".to_string()))?;
-        let source_fact_id = CustomerReceiptId::new(receipt.base.id.clone());
-        let source_version = receipt.base.version;
-        let mut reversal = build_commit(&req, source_fact_id.clone(), receipt.amount, actor.id())?;
+        let (source_fact_id, source_version, mut reversal) =
+            self.receipt_reversal_commit_source(&req, actor).await?;
         let adapter = receipt_reversal_adapter()?;
         start_receipt_reversal_approval(&mut reversal)?;
         let id = reversal.base.id.clone();
@@ -88,11 +86,8 @@ impl ReturnsProcess {
         let document =
             new_registered_document(&id, DocumentType::ReceiptReversal, reversal.reversal_no.clone())
                 .map_err(crate::Error::from)?;
-        let create_audit =
-            actor.clone().resource_log("receipt_reversal.create", "receipt_reversal", id.clone())?;
-        let submit_audit =
-            actor.clone().resource_log("receipt_reversal.submit", "receipt_reversal", id.clone())?;
-        let command_audit = command_receipt.audit(actor.clone(), id.clone())?;
+        let (create_audit, submit_audit) = commit_audits(actor, &command_receipt, &id)?;
+        let command = command_receipt.clone();
         let db = self.db.clone();
         let rbac = self.rbac.clone();
         let object_read = std::sync::Arc::clone(&self.object_read);
@@ -103,6 +98,12 @@ impl ReturnsProcess {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     validate_receipt_reversal_source(&db, &source_fact_id, source_version, executor).await?;
+                    if let Some(existing_id) = ReturnsCommandReceiptService::new(db.clone())
+                        .committed_resource_id(&command, executor)
+                        .await?
+                    {
+                        return Ok::<Option<String>, crate::Error>(Some(existing_id));
+                    }
                     let binding = persist_bound_receipt_reversal_document(
                         &db,
                         &rbac,
@@ -141,21 +142,47 @@ impl ReturnsProcess {
                         )
                         .await?;
                     }
-                    db.audit_logs().create(&create_audit, executor).await?;
-                    db.audit_logs().create(&submit_audit, executor).await?;
-                    db.audit_logs().create(&command_audit, executor).await?;
-                    Ok::<(), crate::Error>(())
+                    save_commit(&db, &command, &reversal.base.id, (&create_audit, &submit_audit), executor)
+                        .await?;
+                    Ok::<Option<String>, crate::Error>(None)
                 })
             })
             .await;
         let detail_id = match transaction_result {
-            Ok(()) => id,
-            Err(error) => match command_receipt.committed_resource_id(&self.db).await? {
-                Some(reversal_id) => reversal_id,
-                None => return Err(error),
-            },
+            Ok(Some(existing_id)) => existing_id,
+            Ok(None) => id,
+            Err(error) => self.recover_receipt_commit(error, &command_receipt).await?,
         };
         self.reads().receipt_reversal_detail(&detail_id).await.map_err(crate::Error::from)
+    }
+
+    /// 只读查询冲正命令收据，未确认提交时保留原错误。
+    async fn recover_receipt_commit(&self, error: Error, receipt: &CommandReceipt) -> Result<String> {
+        recovered_resource(
+            error,
+            ReturnsCommandReceiptService::new(self.db.clone())
+                .committed_resource_id(receipt, &mut NoTransaction)
+                .await
+                .map_err(Error::from),
+        )
+    }
+
+    /// 按原顺序读取原回款及版本，准备一次创建提交所需的冲正事实。
+    async fn receipt_reversal_commit_source(
+        &self,
+        req: &CommitReceiptReversalRequest,
+        actor: &AuditActor,
+    ) -> Result<(CustomerReceiptId, u64, ReceiptReversal)> {
+        let receipt = self
+            .db
+            .customer_receipts()
+            .find_by_id(&req.source_fact_id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("原客户回款不存在".to_string()))?;
+        let source_fact_id = CustomerReceiptId::new(receipt.base.id.clone());
+        let source_version = receipt.base.version;
+        let reversal = build_commit(req, source_fact_id.clone(), receipt.amount, actor.id())?;
+        Ok((source_fact_id, source_version, reversal))
     }
 }
 

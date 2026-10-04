@@ -6,7 +6,6 @@ use bpm::ids::{
     ApprovalCommandReceiptId, ApprovalInstanceAssigneeId, ApprovalNodeExecutionId, ApprovalProcessInstanceId,
 };
 use bpm::model::{ApprovalNodeExecution, ParticipantId, SubjectRef, Timestamp};
-use erp_audit::{AuditActorLogs, AuditExt};
 use erp_core::common::time::Instant;
 use erp_core::ids::{ApprovalSubjectSnapshotId, WorkItemId};
 use erp_finance::entity::receivable::CustomerReceipt;
@@ -343,12 +342,13 @@ pub(super) struct CustomerReceiptStartPersistInput {
 /// 返回更新后的回款实体。
 ///
 /// # 错误
-/// 运行事实、回款或审计写入失败时返回错误。
+/// 运行事实或回款写入失败时返回错误。
 ///
 /// # 关键业务约束
 /// 独立提交通过上层新建事务，本方法的启动收据必须是整笔事务第一写。创建并
 /// 提交由外层创建命令先完成自身幂等仲裁；本方法作为不可独立调用的审批子步骤，
-/// 其写段仍固定为“启动收据 -> 注册行启动守卫 -> BPM -> 回款单与审计”。
+/// 其写段固定为“启动收据 -> 注册行启动守卫 -> 回款单 -> BPM”。
+/// 成功财务回执与业务事件由外层主命令在同一执行器写入，本子步骤不重复记录。
 pub(super) async fn persist_customer_receipt_start_apply(
     db: &Database,
     input: CustomerReceiptStartPersistInput,
@@ -356,8 +356,8 @@ pub(super) async fn persist_customer_receipt_start_apply(
 ) -> Result<CustomerReceipt> {
     let CustomerReceiptStartPersistInput {
         receipt,
-        actor,
-        id,
+        actor: _,
+        id: _,
         snapshot_payload,
         prepared,
         owner_role,
@@ -367,7 +367,6 @@ pub(super) async fn persist_customer_receipt_start_apply(
     let PreparedExecution::Apply(writes) = prepared else {
         return Ok(receipt);
     };
-    let audit = actor.resource_log("customer_receipt.submit", "customer_receipt", id)?;
     db.bpm_workflow()
         .insert_command_receipt(&writes.receipt, executor)
         .await
@@ -399,7 +398,6 @@ pub(super) async fn persist_customer_receipt_start_apply(
         executor,
     )
     .await?;
-    db.audit_logs().create(&audit, executor).await?;
     Ok(receipt)
 }
 
