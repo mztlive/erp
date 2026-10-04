@@ -193,7 +193,7 @@ env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked
 ./scripts/check-org-data-scope.sh
 ```
 
-前端在 `erp-client/`：`npm run lint`、相关 vitest。禁止新增或执行 `tests/` 集成测试、真实 Mongo／S3。生产方法 ≤50 有效行，生产文件 ≤800 行。Handler 权限宏与生成物同步；禁止手改 `permissions.generated.ts`。
+前端在 `erp-client/`：`npm run lint`。`erp-client` 已无单元测试，不要跑 vitest，也不要恢复已删除用例。禁止新增或执行后端 `tests/` 集成测试、真实 Mongo／S3。生产方法 ≤50 有效行，生产文件 ≤800 行。Handler 权限宏与生成物同步；禁止手改 `permissions.generated.ts`。
 
 ## 6. 九列登记（S4-08，基线 `a16ce443`）
 
@@ -289,7 +289,7 @@ A36 详情重验增量（工作区，基线 `a45e00e1` 之上未提交）：
 | `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` | 101 | `erp-processes` 既有 `supplier_profile::{create,handover}` `too_many_arguments`（9–10/7），非本批引入，未改该子树 |
 | `erp-client` oxlint | 0 | 供给列表 `useEffect` 依赖已收束 |
 | `erp-client` `npm run lint` | 1 | `lint:fixed-decimal` 与 `lint:feature-cycles` 为 S3 票款既有失败（`customer-receivables` ↔ `invoice-requests`），非本批引入 |
-| S4 相关 vitest（settlements／offerings／orders／integration-errors／inventory／master-data） | 0 | 52 files / 238 tests passed |
+| S4 相关 vitest（当时的 settlements／offerings／orders／integration-errors／inventory／master-data） | 0 | 当时 52 files / 238 tests passed。这些前端单测后来已删除，不要再执行 |
 
 本批新增单测：`review_owner_organization_rejects_company_and_empty`、`review_task_identity_binds_finance_role_and_statement_org`、`review_work_item_uses_statement_org_and_rejects_company`。
 

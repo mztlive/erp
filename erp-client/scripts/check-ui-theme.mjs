@@ -41,10 +41,7 @@ function sourceFiles(directory) {
         if (entry.isDirectory()) {
             return entry.name === "__tests__" ? [] : sourceFiles(file)
         }
-        if (
-            /\.(test|spec)\./.test(entry.name) ||
-            entry.name === "test-utils.tsx"
-        ) {
+        if (/\.(test|spec)\./.test(entry.name)) {
             return []
         }
         return sourceExtensions.has(extname(file)) || extname(file) === ".css"

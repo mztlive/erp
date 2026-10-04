@@ -68,7 +68,7 @@ final result: passed
 
 1. 最终回款专项：`python3 scripts/run-e2e-parallel.py e2e/tests/flow-06-customer-funds.spec.ts`，运行 `20261002t234458_d2742dd541c2` 通过。
 2. 最终全量 E2E：`python3 scripts/run-e2e-parallel.py all`，运行 `20261002t234630_43b337c8f594` 通过。21 个 spec 文件、24 项测试通过，0 失败、0 重试通过、0 跳过；总耗时 307.947 秒。`logs/e2e/20261002t234630_43b337c8f594/summary.json` 与 21 份 spec 结果 JSON 已交叉核对；6 个数据库均为 `dropped`，临时 Mongo 清理为 `removed`。
-3. 前端 lint、TypeScript、生产构建、9 个改动源码文件格式检查通过；E2E TypeScript 通过。现有相关 Vitest 5 个文件、25 项通过，未新增或修改前端单元测试。
+3. 前端 lint、TypeScript、生产构建、9 个改动源码文件格式检查通过；E2E TypeScript 通过。当时相关 Vitest 5 个文件、25 项通过，未新增或修改前端单元测试。这些前端单测后来已删除。
 4. 后端 `erp-read-models` 库测试 380 项通过、35 项既有测试忽略；新增整单登记信息保留与部分授权字段省略测试。工作区 check、目标 crate clippy、格式、领域边界及权限生成物检查通过；本次两个 Rust 文件体积检查通过。
 5. 红票 E2E 的 URL 已提供视图及关键词时，辅助函数只等待查询回显，不得再次触发重复路由更新；最终全量中的红票流程通过。
 6. 浏览器截图须禁用截图过程中的动画，避免将确认框打开过渡态误作稳定状态；报告与截图保留于本次 `logs/e2e/` 运行目录。

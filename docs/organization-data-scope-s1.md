@@ -123,14 +123,15 @@ env -u ERP_TEST_MONGO_URI cargo test -p erp-customer --lib
 ```sh
 npx tsc --noEmit
 npm run lint
-npx vitest run features/contracts features/customers features/purchase-orders features/sales-orders features/entity-selectors/components/responsible-user-filter.test.tsx tests/list-export.test.ts tests/owner-query-state.test.ts
 ```
+
+`erp-client` 单元测试已删除。原先从本目录执行的 `npx vitest run features/contracts ...` 只属于当时的检查记录，不要再执行，也不要恢复那些测试文件。
 
 浏览器检查使用独立本地前端与模拟 API：105 条对象中，两个同名负责人分别关联 102 条和 3 条；四类列表须按所选 ID 请求并显示 3 条对应对象。销售选择 102 条的一方后，刷新保留条件，第 6 页仅显示最后 2 条，导出必须重新读取全部 102 条。390px 检查覆盖销售、采购的已选人员和筛选菜单。模拟环境不得登记真实数据库、组织范围或业务验收通过（该限制仅针对“已验收／上线准入”，不阻塞 S1 完成）。
 
 ## 9. HEAD 本地重验补登记（2026-09-15，基线 8b3fc1e4）
 
-本节为 2026-09-15 在 S1 专用 worktree 对 HEAD 提交 `8b3fc1e4`（`fix(org-scope): S1 销售采购补齐 ownership_basis 与服务端 as_of`）的本地重验补登记，只记录本次执行的命令与结果，不改写 §7 历史表及其计数。
+本节为 2026-09-15 在 S1 专用 worktree 对 HEAD 提交 `8b3fc1e4`（`fix(org-scope): S1 销售采购补齐 ownership_basis 与服务端 as_of`）的本地重验补登记，只记录本次执行的命令与结果，不改写 §7 历史表及其计数。本节提到的 `erp-client` 单元测试文件后来已删除，下面的 vitest 计数只保留当时记录。
 
 1. 执行环境：worktree 路径 `/Users/huangjiajiang/Development/erp-s1-remaining`，分支 `org-scope/s1-remaining`，基线 `8b3fc1e4`。未合并到 main，未改父仓库。
 2. 本次 6 文件修复内容（均为加法透传，无行为破坏）：
@@ -152,7 +153,7 @@ npx vitest run features/contracts features/customers features/purchase-orders fe
 
 ## 10. HEAD 全量本地重验（2026-09-16，基线 ceb0fdb0）
 
-本节为 2026-09-16 在工作区路径 `/Users/huangjiajiang/Development/erp`、分支 `main`、基线 `ceb0fdb0`（`docs(org-scope): S1 补登记 HEAD 本地重验`）上执行的 S1 §8 全量本地重验。不改写 §7、§9 历史表。状态为“已完成（本地检查通过）”，“已验收”单列；真实验收未执行不阻塞完成。
+本节为 2026-09-16 在工作区路径 `/Users/huangjiajiang/Development/erp`、分支 `main`、基线 `ceb0fdb0`（`docs(org-scope): S1 补登记 HEAD 本地重验`）上执行的 S1 §8 全量本地重验。不改写 §7、§9 历史表。状态为“已完成（本地检查通过）”，“已验收”单列；真实验收未执行不阻塞完成。其中前端 vitest 计数是当时结果；这些用例后来已删除。
 
 1. 本批为打通 §8 全仓门禁与模拟浏览器检查而做的修复（不含 S1 查询语义变更）：
    - 前端 lint：`sales-orders-list-filter-panel.tsx`、`customer-center-directory-toolbar.tsx`、`contracts-table-panel.tsx` 为包含下级 Checkbox 补 `htmlFor`；`sales-orders-list-filters.ts` 去掉多余 `Boolean()`；`organization/lib/impact.ts`、`organization-layout.test.tsx` 删除未使用变量。

@@ -45,7 +45,7 @@ final result: blocked
 | 既有回归测试 | 5 个文件、24 个用例通过；覆盖共享查询栏、列表框架、负责人选择、合同列表及导出 API；未新增或修改测试 |
 | TypeScript 全量检查 | 未通过；错误位于本次未修改的 integration-errors 和 master-data 文件 |
 | Feature 循环依赖检查 | 未通过；customer-receivables 与 invoice-requests 存在循环，本次未修改这两个模块 |
-| 金额规范检查 | 未通过；customer-receivables/lib/scoped-amount.test.ts 第 80、81 行使用 Number，本次未修改 |
+| 金额规范检查 | 未通过；当时 `customer-receivables/lib/scoped-amount.test.ts` 第 80、81 行使用 Number，本次未修改。该测试文件后来已删除 |
 | 数据写入与 E2E | 未执行 |
 
 ## 浏览器验收门禁

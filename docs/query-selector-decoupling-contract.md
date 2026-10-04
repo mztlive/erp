@@ -221,7 +221,7 @@ rg -n 'ownerOptions|handlerOptions|operatorOptions|settlementOptions|warehouseOp
 | A15 | 移除共享 options 字段与合并逻辑 | 所有实际调用方已切换；分页、统计、导出、行展示无依赖残留 |
 | A16 | 审计动作／成本类型没有对应业务记录 | 固定合法字典值仍可选择，业务结果为空 |
 
-后端只新增／修改内联库单元测试，使用真实生产规则与必要替身；禁止源码字符串断言代替行为验证。当前前端规则禁止新增／修改单元测试，除非用户在实施任务中明确授权；使用现有检查及允许的隔离／模拟验证登记前端证据，不为保持旧响应测试通过而恢复旧字段。
+后端只新增／修改内联库单元测试，使用真实生产规则与必要替身；禁止源码字符串断言代替行为验证。`erp-client` 已无单元测试。不要为了恢复已删除的 vitest 用例而改回旧字段。前端证据用 lint、格式、类型检查和获准的隔离或模拟验证登记。
 
 不新增、修改、运行后端集成测试、真实 Mongo／外部服务验收例程；不调用会清库的 E2E 编排。未获允许或受规则限制的运行验收必须列为未验证，不能用静态检查替代。
 
@@ -248,7 +248,7 @@ rg -n 'ownerOptions|handlerOptions|operatorOptions|settlementOptions|warehouseOp
 
 1. 文档批次只执行 `git diff --check`、新增文档格式及链接检查，不编译业务代码。
 2. 后端按 `backend/AGENTS.md` 执行受影响 crate 的 fmt、check、库单元测试和 clippy；公开签名变更追加 workspace check；数据访问和跨 crate 变更执行领域边界门禁；权限标注变更执行权限漂移门禁并同步生成物。
-3. 前端按 `erp-client/AGENTS.md` 执行相应 lint、格式和类型检查；不得擅自改既有单元测试。旧测试受接口变化影响时如实登记，不能宣称整套测试通过。
+3. 前端按 `erp-client/AGENTS.md` 执行 lint、格式和类型检查。`erp-client` 已无单元测试，不要恢复已删除用例，也不要宣称前端单测通过。
 4. 提交阶段的全量门禁仅在需要提交时按仓库规则执行；运行与验收限制始终有效。静态、库单元、隔离／模拟浏览器、真实数据库、真实业务验收分别列出。
 
 ## 9. 后续 agent 的交付记录格式
@@ -417,7 +417,7 @@ rg -n 'ownerOptions|handlerOptions|operatorOptions|settlementOptions|warehouseOp
 
 ### 11.5 本地门禁与验收限制
 
-验收证据限定为本地源码检查、库单元测试和前端模拟测试。禁止据此核销 A01—A22 的真实多账号、真实目录和浏览器验收。
+验收证据限定为本地源码检查、库单元测试和当时的前端模拟测试。禁止据此核销 A01—A22 的真实多账号、真实目录和浏览器验收。`erp-client` 单元测试后来已删除，下表中的 `npm test` 行不能再执行。
 
 下表为修复前已登记记录，未在本次重跑；所有受本次修改影响的门禁均为待验证。
 
@@ -429,17 +429,16 @@ rg -n 'ownerOptions|handlerOptions|operatorOptions|settlementOptions|warehouseOp
 | 后端 `cargo fmt --all -- --check`、前端 `npm run format:check`、`git diff --check` | 通过 |
 | 领域边界及 BPM 边界 | 通过；未新增业务领域间依赖 |
 | 前端 `npm run lint`、`tsc --noEmit --pretty false` | 通过；含定点数与 feature-cycles 检查 |
-| 前端 `npm test` | Vitest 233 文件、981 用例通过；Node 73 用例通过；无未处理错误 |
+| 前端 `npm test`（已删除） | 当时 Vitest 233 文件、981 用例通过；Node 73 用例通过；无未处理错误。这些用例后来已删除，不要再执行 |
 | 三份目录 OpenAPI 的 Redocly lint | 通过；6 条推荐警告为本地 server URL 与未声明许可证，不得编造生产地址或开源许可证 |
 | 权限／审计生成内容一致性 | 强制重建 web-api 后，两份生成物与重建前内容一致；在隔离 Git 索引下执行漂移脚本通过，真实暂存区未改变。正式提交仍必须纳入两份生成物 |
 | 前端 `npm run build` | 未通过：`next/font/google` 下载 Noto Sans 时无法连接 `fonts.googleapis.com`；失败发生在字体下载阶段，类型检查已独立通过，完整打包尚未验证。须在可访问字体源的构建环境重跑，不得以模拟字体响应记为生产构建通过 |
 
-本地回归必须保留以下行为覆盖：
+下列文件是当时的前端单测，后来已整目录删除，不再作为回归门禁，也不要恢复：
 
-- `erp-client/tests/query-directories.test.tsx`：独立对象目录、停用对象、完整分页、版本冲突、10000 项上限、已选授权、人员分页及历史目录与报表条件隔离。
-- `erp-client/tests/person-directory-filter.test.tsx`：重新校验与撤权时撤下旧姓名，保留已选 ID，不静默清除业务筛选。
-- 合同、库存、商品、选品、履约和供应商订单测试使用当前响应合同；行姓名来自业务行，不能从候选回填。
-- 跨功能测试放 `erp-client/tests/`；依赖前端 bundler 模块解析的测试由 Vitest 执行，不能放入 Node 直接加载的 `.mts` 用例。
+- `erp-client/tests/query-directories.test.tsx`：曾覆盖独立对象目录、停用对象、完整分页、版本冲突、10000 项上限、已选授权、人员分页及历史目录与报表条件隔离。
+- `erp-client/tests/person-directory-filter.test.tsx`：曾覆盖重新校验与撤权时撤下旧姓名，保留已选 ID，不静默清除业务筛选。
+- 合同、库存、商品、选品、履约和供应商订单当时的单测使用当前响应合同；行姓名来自业务行，不能从候选回填。该行为仍以源码和获准的页面检查为准。
 
 开发工作区的生成内容检查允许使用临时索引，禁止为检查而暂存他人变更。在仓库根执行：
 

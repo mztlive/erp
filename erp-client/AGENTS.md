@@ -122,4 +122,6 @@ work item、租约、投影、事实、幂等键只出现在代码注释、字�
 
 ## 9. 不写单元测试
 
-改 `erp-client` 时不新增、不修改单元测试，包括 vitest（`*.test.ts` / `*.test.tsx`）和 `node --test`（`*.test.mts`）。用户在当次任务里明确要求写测试时再写。
+`erp-client` 没有单元测试。vitest、`node --test`、`tests/`、`*.test.ts` / `*.test.tsx` / `*.test.mts` 和只给测试用的夹具都已删除。不要恢复这些文件，也不要新增单元测试，除非用户在当次任务里明确要求写测试。仓库根目录的 `e2e/` 是流程测试，不在本目录，不要改动。
+
+前端检查用 `npm run lint`、`npm run format:check`、`npx tsc --noEmit` 和 `npm run build`。

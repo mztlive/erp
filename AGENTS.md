@@ -39,8 +39,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - `lint:fixed-decimal`：禁止对金额/数量/税率类字段用 `Number()`、`parseFloat` 或 epsilon 比较，改用 `lib/fixed-decimal.ts`。
   - `lint:feature-cycles`：`features/*` 之间禁止循环 import。
 - `npm run format` / `npm run format:check`（oxfmt）。
-- `npm test` = vitest（jsdom，匹配 `features/**/*.test.{ts,tsx}` 和 `tests/**/*.test.{ts,tsx}`）+ `node --test`（匹配 `*.test.mts`）。
-- 单个测试：`npx vitest run tests/list-export.test.ts`、`npx vitest run -t "<用例名>"`，或 `node --test --experimental-strip-types <file>.test.mts`。
+- `erp-client` 没有单元测试，也没有 `npm test`。不要恢复 vitest、`node --test`、`tests/` 或 `*.test.ts` / `*.test.tsx` / `*.test.mts`，除非用户在当次任务里明确要求写测试。仓库根 `e2e/` 仍是 Playwright 流程测试。
 - 后端地址：`NEXT_PUBLIC_API_BASE_URL`，默认 `http://127.0.0.1:10001`。
 
 ### 全栈与 E2E（在仓库根执行）

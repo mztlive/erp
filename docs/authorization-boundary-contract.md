@@ -250,7 +250,7 @@
 | 格式与差异 | `cargo fmt --all -- --check`、`git diff --check` 通过 |
 | 权限生成物 | 标准漂移脚本完成重建，因新生成物尚未提交、与 HEAD 不同而返回 1；重建前后两份生成物 SHA-256 一致，生成结果已同步到工作区 |
 | 前端 | TypeScript、lint 和生产 build 通过；没有修改前端测试 |
-| 现有前端权限预览测试 | `effective-access.test.ts`、`effective-access-body.test.tsx` 仍按旧 ROLE 范围合同断言，和改造前已只展示角色操作的代码失配；未登记为通过 |
+| 当时的前端权限预览测试 | `effective-access.test.ts`、`effective-access-body.test.tsx` 当时仍按旧 ROLE 范围合同断言，和改造前已只展示角色操作的代码失配；未登记为通过。这两个文件后来已随 `erp-client` 单元测试删除 |
 | 体积 | 仓库全量仍存在既有超限；与 HEAD 逐项比较，本次没有新增或扩大超限，不将存量门禁登记为通过 |
 | 运行验收 | 未重启后端、未写业务库、未执行数据库迁移、浏览器连真实后端或外部存储验收 |
 
