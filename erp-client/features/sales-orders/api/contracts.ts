@@ -378,21 +378,3 @@ export type BackendSalesChangeOrder = {
     reason?: string
     approval?: DocumentApprovalViewDto | null
 }
-
-export type BackendBackgroundJob = {
-    id: string
-    job_no?: string
-    status?: string
-    total_count?: number
-    created_at?: number
-    version?: number
-}
-
-export type ExportJobResult = {
-    jobId: string
-    status: "queued" | "running" | "succeeded" | "failed"
-    rowCount: number
-    permissionVersion: string
-    createdAt: string
-    downloadLabel: string
-}

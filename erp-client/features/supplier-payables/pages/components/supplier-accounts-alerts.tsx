@@ -5,17 +5,7 @@ import { XIcon } from "lucide-react"
 
 import { FormalActionResult } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import type {
-    FormalSubmitResult,
-    SupplierAccountsListView,
-} from "@/features/supplier-payables/types"
-
-export interface SupplierAccountsAlertsProps {
-    fromWorkspace: string | undefined
-    purchaseOrderId: string | undefined
-    returnTo: string | undefined
-    policy: SupplierAccountsListView["payablePriorityPolicy"]
-}
+import type { FormalSubmitResult } from "@/features/supplier-payables/types"
 
 export interface SupplierAccountsResultBannerProps {
     lastResult: FormalSubmitResult | null

@@ -120,23 +120,6 @@ pub fn parse_business_date(value: &str) -> Result<BusinessDate> {
     BusinessDate::from_str(value.trim()).map_err(|_| Error::from(format!("非法业务日期: {value}")))
 }
 
-/// 解析可选业务日期字符串。
-///
-/// # 参数
-/// * `value` - 原始业务日期字符串；`None` 或空白表示缺省
-///
-/// # 返回
-/// 缺省时返回 `None`，否则返回类型化业务日期。
-///
-/// # 错误
-/// 非法形态时返回领域错误，文案为 `非法业务日期: {value}`。
-///
-/// # 约束
-/// 纯内存转换，不触碰 I/O、时钟、ID 生成器或密钥。
-pub fn parse_optional_business_date(value: Option<&str>) -> Result<Option<BusinessDate>> {
-    value.map(str::trim).filter(|value| !value.is_empty()).map(parse_business_date).transpose()
-}
-
 #[cfg(test)]
 mod tests {
     use super::{

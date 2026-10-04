@@ -27,10 +27,9 @@ use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use crate::AccessControlExt;
-use crate::access_control::{ScopeDimension, ScopeTargetMode};
 use crate::entity::access_control::{
-    AuditEvent, AuditEventData, AuditEventId, AuditEventResult, DataScope, DataScopeId, Permission,
-    PermissionId, UserRole, UserRoleId,
+    AuditEvent, AuditEventData, AuditEventId, AuditEventResult, Permission, PermissionId, UserRole,
+    UserRoleId,
 };
 use crate::ports::ScopeTargetPort;
 use crate::repository::prelude::*;
@@ -38,8 +37,6 @@ pub mod consumers;
 mod person_scope;
 pub mod person_scope_migration;
 mod person_scope_query;
-mod query;
-mod replacement;
 pub mod resolve;
 
 use application_core::AuditActor;
@@ -54,8 +51,6 @@ use crate::error::{Error, Result};
 
 /// 权限定义列表筛选条件类型（经 `AccessControlExt` 关联类型跨 crate 可达）。
 type PermissionFilter = <mongodb::Database as crate::AccessControlExt>::PermissionFilter;
-/// 数据范围列表筛选条件类型。
-type DataScopeFilter = <mongodb::Database as crate::AccessControlExt>::DataScopeFilter;
 /// 审计事件列表筛选条件类型。
 type AuditEventFilter = <mongodb::Database as crate::AccessControlExt>::AuditEventFilter;
 
@@ -251,100 +246,6 @@ impl AccessControlService {
         self.with_audited_write(event, move |executor| {
             Box::pin(async move {
                 db.permissions().soft_delete(&mut permission, executor).await?;
-                Ok(())
-            })
-        })
-        .await
-    }
-
-    /// 创建数据范围。
-    ///
-    /// 范围类型与目标携带一致性由实体校验（组织/团队必须携带目标，公司/本人
-    /// 负责/协作参与不允许携带）；同主体同范围类型唯一由
-    /// `uk_data_scopes_subject_scope` 透出冲突（409）。
-    ///
-    /// # 参数
-    /// * `req` - 创建请求
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回新建的数据范围视图。
-    ///
-    /// # 错误
-    /// * `ValidationError` - 请求体校验失败
-    /// * `ConflictError` - 同主体同范围类型已存在（唯一索引透出）
-    pub async fn create_data_scope(
-        &self,
-        req: CreateDataScopeRequest,
-        actor: &AuditActor,
-    ) -> Result<DataScopeView> {
-        req.validate()?;
-        let scope = DataScope::new(DataScopeId::new(next_id()), req.into_data())?;
-        let event = self
-            .build_audit_event(
-                actor,
-                "data_scope.create",
-                "data_scope",
-                Some(scope.base.id.clone()),
-                Vec::new(),
-            )
-            .await?;
-        let db = self.db.clone();
-        let targets = self.targets.clone();
-        let rbac = self.rbac.clone().ok_or_else(|| Error::Forbidden("未装配范围配置授权".into()))?;
-        let actor_for_tx = actor.clone();
-        let scope = self
-            .with_audited_write(event, move |executor| {
-                Box::pin(async move {
-                    ensure_scope_configuration(&db, rbac, &actor_for_tx, &scope, "create", executor).await?;
-                    if scope.binding.target_mode == Some(ScopeTargetMode::Explicit)
-                        && scope.binding.target_dimension != ScopeDimension::InternalOrg
-                    {
-                        targets
-                            .as_ref()
-                            .ok_or_else(|| Error::ValidationError("外部范围目标校验未装配".into()))?
-                            .validate_targets(scope.binding.target_dimension, &scope.scope_targets, executor)
-                            .await?;
-                    }
-                    db.data_scopes().create(&scope, executor).await?;
-                    crate::MongoCasbinAdapter::new(db).bump_policy_revision(executor).await?;
-                    Ok(scope)
-                })
-            })
-            .await?;
-
-        Ok(scope.into())
-    }
-
-    /// 删除数据范围（软删除）。
-    ///
-    /// # 参数
-    /// * `id` - 数据范围 ID
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 无返回值。
-    ///
-    /// # 错误
-    /// * `NotFound` - 数据范围不存在
-    pub async fn delete_data_scope(&self, id: &str, actor: &AuditActor) -> Result<()> {
-        let mut scope = self
-            .db
-            .data_scopes()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("数据范围不存在".to_string()))?;
-        let event = self
-            .build_audit_event(actor, "data_scope.delete", "data_scope", Some(id.to_string()), Vec::new())
-            .await?;
-        let rbac = self.rbac.clone().ok_or_else(|| Error::Forbidden("未装配范围配置授权".into()))?;
-        let actor_for_tx = actor.clone();
-        let db = self.db.clone();
-        self.with_audited_write(event, move |executor| {
-            Box::pin(async move {
-                ensure_scope_configuration(&db, rbac, &actor_for_tx, &scope, "delete", executor).await?;
-                db.data_scopes().soft_delete(&mut scope, executor).await?;
-                crate::MongoCasbinAdapter::new(db.clone()).bump_policy_revision(executor).await?;
                 Ok(())
             })
         })
@@ -612,83 +513,6 @@ impl AccessControlService {
             })
             .await
     }
-}
-
-/// 配置动作须由同一角色同时证明组织配置权与范围配置权，并具有明确公司配置边界。
-async fn ensure_scope_configuration(
-    db: &Database,
-    rbac: crate::SharedRbacService,
-    actor: &AuditActor,
-    scope: &DataScope,
-    action: &str,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    let mut permissions = vec![crate::Permission::parse("org_unit:manage")?];
-    if action == "replace" {
-        permissions.push(crate::Permission::parse("data_scope:create")?);
-        permissions.push(crate::Permission::parse("data_scope:delete")?);
-    } else {
-        permissions.push(crate::Permission::parse(format!("data_scope:{action}"))?);
-    }
-    let access = resolve::DataScopeService::new(db.clone(), rbac.clone())
-        .resolve_permissions(actor, "org_unit", "manage", &permissions, executor)
-        .await?;
-    if !access.scope.role_clauses.iter().any(|scope| scope.company)
-        || access.scope.user_limit.as_ref().is_some_and(|limit| !limit.company)
-    {
-        return Err(Error::Forbidden("范围配置要求公司边界的组织配置权限".into()));
-    }
-    consumers::validate_binding(&scope.binding)?;
-    consumers::validate_scope_type(&scope.binding.resource, scope.scope_type)?;
-    if action == "delete" {
-        return Ok(());
-    }
-    for scope_action in &scope.binding.actions {
-        consumers::configurable_registration(&scope.binding.resource, scope_action)?;
-    }
-    ensure_scope_subject(db, &rbac, scope, executor).await?;
-    if scope.binding.target_mode == Some(ScopeTargetMode::Explicit)
-        && scope.binding.target_dimension == ScopeDimension::InternalOrg
-    {
-        let tree = crate::entity::organization::OrgTree::new(&access.organizations.units)?;
-        for id in &scope.scope_targets {
-            if tree.expand(id, false)?.is_empty() {
-                return Err(Error::ValidationError("目标组织已停用".into()));
-            }
-        }
-    }
-    Ok(())
-}
-
-/// 角色规则绑定的动作必须由目标角色实际持有；个人上限不产生直接动作授权。
-async fn ensure_scope_subject(
-    db: &Database,
-    rbac: &crate::SharedRbacService,
-    scope: &DataScope,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    use crate::access_control::DataScopeSubjectType;
-    if scope.subject_type == DataScopeSubjectType::User {
-        if db.accounts().find_by_id(&scope.subject_id, executor).await?.is_none() {
-            return Err(Error::NotFound("范围主体账号不存在".into()));
-        }
-        return Ok(());
-    }
-    if db.roles().enabled_roles(std::slice::from_ref(&scope.subject_id), executor).await?.is_empty() {
-        return Err(Error::ValidationError("范围主体角色不存在或已停用".into()));
-    }
-    for action in &scope.binding.actions {
-        if !rbac
-            .enforce(
-                &format!("role:{}", scope.subject_id),
-                &crate::Permission::parse(format!("{}:{action}", scope.binding.resource))?,
-            )
-            .await?
-        {
-            return Err(Error::ValidationError("目标角色不具备范围绑定的完整动作权限".into()));
-        }
-    }
-    Ok(())
 }
 
 pub mod inspection;

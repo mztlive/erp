@@ -435,8 +435,4 @@ function useSettlementCenterActions({
     }
 }
 
-export type SettlementCenterActions = ReturnType<
-    typeof useSettlementCenterActions
->
-
 export { useSettlementCenterActions }

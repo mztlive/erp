@@ -14,9 +14,7 @@ use erp_finance::service::payable::PaymentSettlementFacts;
 use erp_identity::SharedRbacService;
 use erp_party::PartyExt;
 use erp_supplier::{SupplierAccount, SupplierExt};
-use erp_support::{
-    BankReceiptEvidencePolicy, EmptyPendingAttachments, FileAssetExt, FileAssetView, PendingAttachmentBatch,
-};
+use erp_support::{BankReceiptEvidencePolicy, FileAssetExt, FileAssetView, PendingAttachmentBatch};
 use erp_workflow::ApprovalObjectReadPort;
 use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
 use erp_workflow::service::approval::binding::BindPublishedDefinitionCommand;
@@ -28,7 +26,7 @@ use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
-use super::dto::{CommitSupplierPaymentRequest, SupplierPaymentView};
+use super::dto::CommitSupplierPaymentRequest;
 use super::mapping::resolve_current_party_payment_recipient;
 use super::posting::post_supplier_payment;
 use super::{
@@ -138,23 +136,6 @@ impl PayableService {
                 })
             })
             .await
-    }
-    /// 原子登记并过账供应商付款。
-    ///
-    /// 不携带新上传对象的内部兼容入口；HTTP 付款工作台使用
-    /// [`Self::commit_supplier_payment_with_assets`]。
-    ///
-    /// # 错误
-    /// 参数组合、银行回单、任务责任、收款账户或事务提交不合法时返回错误。
-    pub async fn commit_supplier_payment(
-        &self,
-        req: CommitSupplierPaymentRequest,
-        actor: &AuditActor,
-    ) -> Result<SupplierPaymentView> {
-        Ok(self
-            .commit_supplier_payment_with_assets(req, Arc::new(EmptyPendingAttachments), actor)
-            .await?
-            .view)
     }
     /// 原子登记并过账供应商付款，同时登记银行回单。
     ///

@@ -3,7 +3,6 @@
 use std::sync::Arc;
 
 use application_core::AuditActor;
-use mongodb::Database;
 use persistence_core::Executor;
 
 use crate::error::{Error, Result};
@@ -221,11 +220,6 @@ fn map_clause(clause: &IntegrationResolvedClause, actor: &str) -> IntegrationSco
         owner_user_id: clause.self_owned.then(|| actor.into()),
         owner_org_unit_ids: clause.org_unit_ids.clone(),
     }
-}
-
-/// 供测试与组合根绑定数据库的访问器。
-pub fn integration_access(_db: Database, scope: Arc<dyn IntegrationDataScopePort>) -> IntegrationAccess {
-    IntegrationAccess::new(scope)
 }
 
 /// 越权详情与对象不存在同码，避免枚举他域任务或差异。

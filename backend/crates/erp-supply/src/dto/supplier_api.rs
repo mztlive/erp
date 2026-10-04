@@ -379,21 +379,6 @@ impl SafeReferenceView {
     pub fn new(state: &'static str) -> Self {
         Self { state, alias: None, version: None, visible: false }
     }
-
-    /// 设置是否可见。
-    ///
-    /// # 参数
-    /// * `visible` - 是否可见
-    ///
-    /// # 返回
-    /// 返回更新后的投影。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn with_visible(mut self, visible: bool) -> Self {
-        self.visible = visible;
-        self
-    }
 }
 
 /// 地址与密钥引用的安全状态集合；不包含底层引用正文。

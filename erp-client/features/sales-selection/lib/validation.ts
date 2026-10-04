@@ -74,8 +74,6 @@ export const tierRuleSchema = z.object({
         .max(8, "每套餐最多包含 8 个商品"),
 })
 
-export type TierRuleFormValue = z.input<typeof tierRuleSchema>
-
 /** 创建选品册表单。 */
 export const createBookSchema = z
     .object({

@@ -10,10 +10,3 @@
  */
 
 export type FulfillmentLane = "warehouse" | "procurement"
-
-export type FulfillmentLaneHeader = {
-    /** 侧栏 / 页头标题 */
-    label: string
-    /** 页头说明 */
-    description: string
-}

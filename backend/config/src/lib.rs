@@ -218,20 +218,6 @@ impl S3Config {
         self
     }
 
-    /// 设置临时凭证的 session token。
-    ///
-    /// # 参数
-    ///
-    /// * `session_token` - 临时凭证的 session token
-    ///
-    /// # 返回
-    ///
-    /// * `S3Config` - 更新后的启动配置
-    pub fn with_session_token(mut self, session_token: impl Into<String>) -> Self {
-        self.session_token = Some(session_token.into());
-        self
-    }
-
     /// 设置对象键前缀。
     ///
     /// # 参数

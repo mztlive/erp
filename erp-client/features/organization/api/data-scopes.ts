@@ -4,7 +4,7 @@ import type {
     DataScopeRecord,
     DataScopeUrlState,
 } from "@/features/organization/types"
-import { apiDelete, apiPost } from "@/lib/api"
+import { apiPost } from "@/lib/api"
 import { fetchCompleteList } from "@/lib/collect-pages"
 
 type BackendDataScope = {
@@ -103,10 +103,6 @@ function scopePayload(input: CreateDataScopeInput) {
         scope_type: input.scopeType,
         scope_targets: input.scopeTargets,
     }
-}
-
-export async function deleteDataScope(id: string) {
-    await apiDelete<void>(`/admin/data-scopes/${id}`)
 }
 
 export async function createDataScope(input: CreateDataScopeInput) {

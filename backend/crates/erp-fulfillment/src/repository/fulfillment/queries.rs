@@ -4,8 +4,8 @@
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::{
-    CustomerAcceptanceId, CustomerAcceptanceLineId, DeliveryId, ElectronicDeliveryId, PurchaseReceiptId,
-    SalesOrderId, SalesOrderLineId, ServiceFulfillmentId, WarehouseId,
+    CustomerAcceptanceId, CustomerAcceptanceLineId, DeliveryId, PurchaseReceiptId, SalesOrderId,
+    SalesOrderLineId, WarehouseId,
 };
 use mongodb::Database;
 use mongodb::bson::doc;
@@ -177,84 +177,6 @@ impl FulfillmentRepository<'_> {
                 "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
             },
             FindOptions::builder().sort(doc! { "accepted_at": -1 }).build(),
-            executor,
-        )
-        .await
-    }
-
-    /// 按主键批量读取发货单。
-    ///
-    /// # 参数
-    /// * `delivery_ids` - 发货单主键集合
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回全部匹配且未删除的发货单。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_deliveries_by_ids(
-        &self,
-        delivery_ids: &[DeliveryId],
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<Delivery>> {
-        find_lines_in(
-            self.db,
-            <mongodb::Database as FulfillmentExt>::DELIVERIES,
-            "id",
-            &ids_to_strings(delivery_ids),
-            executor,
-        )
-        .await
-    }
-
-    /// 按主键批量读取电子交付记录。
-    ///
-    /// # 参数
-    /// * `record_ids` - 电子交付主键集合
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回全部匹配且未删除的电子交付记录。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_electronic_deliveries_by_ids(
-        &self,
-        record_ids: &[ElectronicDeliveryId],
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<ElectronicDelivery>> {
-        find_lines_in(
-            self.db,
-            <mongodb::Database as FulfillmentExt>::ELECTRONIC_DELIVERIES,
-            "id",
-            &ids_to_strings(record_ids),
-            executor,
-        )
-        .await
-    }
-
-    /// 按主键批量读取服务履约记录。
-    ///
-    /// # 参数
-    /// * `record_ids` - 服务履约主键集合
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回全部匹配且未删除的服务履约记录。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_service_fulfillments_by_ids(
-        &self,
-        record_ids: &[ServiceFulfillmentId],
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<ServiceFulfillment>> {
-        find_lines_in(
-            self.db,
-            <mongodb::Database as FulfillmentExt>::SERVICE_FULFILLMENTS,
-            "id",
-            &ids_to_strings(record_ids),
             executor,
         )
         .await

@@ -203,18 +203,6 @@ pub fn supplier_service(db: Database) -> SupplierService {
     SupplierService::new(db.clone(), MongoSupplierPartyFacts::shared(db))
 }
 
-/// Construct a supplier list/detail service that can issue reveal tokens.
-pub fn supplier_service_with_sensitive(
-    db: Database,
-    sensitive_data: Arc<SensitiveDataCodec>,
-) -> SupplierService {
-    SupplierService::with_sensitive_data(
-        db.clone(),
-        MongoSupplierPartyFacts::shared(db),
-        MongoSupplierSensitiveTokens::shared(sensitive_data),
-    )
-}
-
 pub mod catalog_supply_query;
 pub mod supplier_api;
 pub mod supplier_failure;

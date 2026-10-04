@@ -61,10 +61,6 @@ export const PROCESS_REQUIRED_DOCUMENT_TYPES = [
     "payment_reversal",
 ] as const satisfies readonly DocumentType[]
 
-export type NoApprovalDocumentType = (typeof NO_APPROVAL_DOCUMENT_TYPES)[number]
-export type ProcessRequiredDocumentType =
-    (typeof PROCESS_REQUIRED_DOCUMENT_TYPES)[number]
-
 /** 审批政策。 */
 export const APPROVAL_REQUIREMENTS = [
     "NO_APPROVAL",
@@ -210,18 +206,6 @@ export type EditorNode = {
     assignee_name: string
     node_purpose: string | null
     unsaved_purpose_slot: boolean
-}
-
-/** 草稿编辑器表单值。 */
-export type DefinitionEditorValues = {
-    name: string
-    nodes: EditorNode[]
-}
-
-/** 创建草稿表单值。 */
-export type CreateDraftFormValues = {
-    name: string
-    draft_source: DraftSource | ""
 }
 
 /** 目录 URL 状态。 */

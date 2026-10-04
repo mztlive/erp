@@ -8,7 +8,6 @@ mod queries;
 mod rate;
 pub mod scope;
 
-use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
@@ -26,9 +25,8 @@ pub use rate::SalesSelectionRateRepository;
 pub use scope::{SelectionReadScope, SelectionScopeClause};
 
 use crate::entity::sales_selection::{
-    SalesSelectionBooklet, SalesSelectionDisplayItem, SalesSelectionIdempotency, SalesSelectionPoolMember,
-    SalesSelectionPrepareTask, SalesSelectionProposal, SalesSelectionProposalDisplayLine,
-    SalesSelectionProposalSkuLine, SalesSelectionSession,
+    SalesSelectionBooklet, SalesSelectionDisplayItem, SalesSelectionPoolMember, SalesSelectionPrepareTask,
+    SalesSelectionProposal,
 };
 use crate::repository::extensions::SalesSelectionExt;
 use crate::repository::filter::push_undeleted;
@@ -41,11 +39,6 @@ const ITEMS: &str = <mongodb::Database as SalesSelectionExt>::SALES_SELECTION_DI
 const POOL: &str = <mongodb::Database as SalesSelectionExt>::SALES_SELECTION_POOL_MEMBERS;
 /// 方案集合名（单一来源）。
 const PROPOSALS: &str = <mongodb::Database as SalesSelectionExt>::SALES_SELECTION_PROPOSALS;
-/// 方案陈列行集合名。
-const PROPOSAL_DISPLAY_LINES: &str =
-    <mongodb::Database as SalesSelectionExt>::SALES_SELECTION_PROPOSAL_DISPLAY_LINES;
-/// 方案 SKU 行集合名。
-const PROPOSAL_SKU_LINES: &str = <mongodb::Database as SalesSelectionExt>::SALES_SELECTION_PROPOSAL_SKU_LINES;
 
 /// 选品册列表允许的排序字段白名单。
 pub const BOOK_SORT_FIELDS: &[&str] = &["created_at", "status"];
@@ -331,41 +324,6 @@ impl<'a> SalesSelectionDomainRepository<'a> {
     ///
     /// # 错误
     /// 查询失败时返回仓储错误。
-    pub async fn distinct_owner_ids(
-        &self,
-        booklet: bool,
-        scope: &SelectionReadScope,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<String>> {
-        let name = if booklet { BOOKLETS } else { PROPOSALS };
-        let collection = self.db.collection::<Document>(name);
-        let mut query = collection.distinct(
-            "sales_owner_user_id",
-            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$and": [scope.document()] },
-        );
-        if let Some(session) = executor.session() {
-            query = query.session(session);
-        }
-        let values = query.await?;
-        let mut ids: Vec<String> =
-            values.into_iter().filter_map(|value| value.as_str().map(str::to_owned)).collect();
-        ids.sort();
-        ids.dedup();
-        Ok(ids)
-    }
-
-    /// 列出某批次当前有效陈列。
-    ///
-    /// # 参数
-    /// * `booklet_id` - 选品册
-    /// * `batch_id` - 准备批次
-    /// * `executor` - 执行器
-    ///
-    /// # 返回
-    /// 返回有效且未删除的陈列项。
-    ///
-    /// # 错误
-    /// 查询失败时返回仓储错误。
     pub async fn list_effective_items(
         &self,
         booklet_id: &str,
@@ -400,25 +358,6 @@ impl<'a> SalesSelectionDomainRepository<'a> {
             .sales_selection_pool_members()
             .find_many(doc! { "booklet_id": booklet_id, "batch_id": batch_id }, executor)
             .await
-    }
-
-    /// 按选品册读取会话。
-    ///
-    /// # 参数
-    /// * `booklet_id` - 选品册
-    /// * `executor` - 执行器
-    ///
-    /// # 返回
-    /// 存在时返回会话。
-    ///
-    /// # 错误
-    /// 查询失败时返回仓储错误。
-    pub async fn find_session_by_booklet(
-        &self,
-        booklet_id: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<SalesSelectionSession>> {
-        self.db.sales_selection_sessions().find_one(doc! { "booklet_id": booklet_id }, executor).await
     }
 
     /// 按选品册读取方案。
@@ -513,113 +452,6 @@ impl<'a> SalesSelectionDomainRepository<'a> {
                 .await?;
         }
         Ok(())
-    }
-
-    /// 原子提交：建方案、冻结会话、册置已提交。
-    ///
-    /// # 参数
-    /// * `proposal` - 方案表头
-    /// * `display_lines` - 陈列项行
-    /// * `sku_lines` - SKU 行
-    /// * `session` - 已冻结的会话
-    /// * `booklet` - 已标记提交的选品册
-    /// * `executor` - 执行器，必须位于事务中
-    ///
-    /// # 返回
-    /// 成功写入全部事实。
-    ///
-    /// # 错误
-    /// 任一步失败全部回滚，不允许残缺方案。
-    pub async fn submit_proposal_bundle(
-        &self,
-        proposal: &SalesSelectionProposal,
-        display_lines: &[SalesSelectionProposalDisplayLine],
-        sku_lines: &[SalesSelectionProposalSkuLine],
-        session: &mut SalesSelectionSession,
-        booklet: &mut SalesSelectionBooklet,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        self.db.sales_selection_proposals().create(proposal, executor).await?;
-        self.insert_proposal_lines(display_lines, sku_lines, executor).await?;
-        self.db.sales_selection_sessions().update(session, executor).await?;
-        self.db.sales_selection_booklets().update(booklet, executor).await
-    }
-
-    /// 插入方案双层明细。
-    ///
-    /// # 参数
-    /// * `display_lines` - 陈列项行
-    /// * `sku_lines` - SKU 行
-    /// * `executor` - 执行器，必须位于事务中
-    ///
-    /// # 返回
-    /// 成功插入。
-    ///
-    /// # 错误
-    /// 写入失败时返回仓储错误。
-    async fn insert_proposal_lines(
-        &self,
-        display_lines: &[SalesSelectionProposalDisplayLine],
-        sku_lines: &[SalesSelectionProposalSkuLine],
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        mongo_ops::insert_many(
-            &self.db.collection::<SalesSelectionProposalDisplayLine>(PROPOSAL_DISPLAY_LINES),
-            display_lines,
-            executor,
-        )
-        .await?;
-        mongo_ops::insert_many(
-            &self.db.collection::<SalesSelectionProposalSkuLine>(PROPOSAL_SKU_LINES),
-            sku_lines,
-            executor,
-        )
-        .await
-    }
-
-    /// 写入幂等记录。
-    ///
-    /// # 参数
-    /// * `record` - 幂等记录
-    /// * `executor` - 执行器
-    ///
-    /// # 返回
-    /// 成功写入。
-    ///
-    /// # 错误
-    /// 唯一冲突或写入失败时返回仓储错误。
-    pub async fn create_idempotency(
-        &self,
-        record: &SalesSelectionIdempotency,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        self.db.sales_selection_idempotency().create(record, executor).await
-    }
-
-    /// 按操作域与作用域读取幂等记录。
-    ///
-    /// # 参数
-    /// * `operation` - 操作代码
-    /// * `scope_id` - 作用域
-    /// * `key` - 幂等键
-    /// * `executor` - 执行器
-    ///
-    /// # 返回
-    /// 存在时返回记录。
-    ///
-    /// # 错误
-    /// 查询失败时返回仓储错误。
-    pub async fn find_idempotency(
-        &self,
-        operation: &str,
-        scope_id: &str,
-        key: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<SalesSelectionIdempotency>> {
-        self.db
-            .sales_selection_idempotency()
-            .find_one(doc! { "operation": operation, "scope_id": scope_id, "idempotency_key": key }, executor)
-            .await
     }
 }
 

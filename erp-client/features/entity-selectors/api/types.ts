@@ -24,6 +24,3 @@ export type ContractSearch = EntitySearch &
         /** 仅当前账号有效归属客户下的合同；缺省不按归属收窄。 */
         scope?: ContractCustomerScope
     }>
-
-export type SellableSkuSearch = EntitySearch &
-    Readonly<{ productKind?: string; excludeProductKind?: string }>

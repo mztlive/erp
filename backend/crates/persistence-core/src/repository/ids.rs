@@ -76,25 +76,6 @@ impl IdRepository {
         }
         Ok(result)
     }
-
-    /// 仅按业务主键物理删除；空集合不写入。
-    ///
-    /// # 参数
-    /// * `ids` - 已完成归属校验的主键
-    /// * `executor` - 调用方事务执行器
-    /// # 返回
-    /// 实际删除条数。
-    /// # 错误
-    /// 数据库删除失败时返回错误。
-    pub async fn purge(&self, ids: &[String], executor: &mut dyn Executor) -> Result<u64> {
-        let mut count = 0;
-        for chunk in ids.chunks(200) {
-            count += mongo_ops::delete_many(&self.collection, doc! {"id": {"$in": chunk}}, executor)
-                .await?
-                .deleted_count;
-        }
-        Ok(count)
-    }
 }
 
 /// 解析主键，异常数据不得被静默跳过。

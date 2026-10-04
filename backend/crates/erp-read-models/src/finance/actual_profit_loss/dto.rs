@@ -222,23 +222,6 @@ impl ProfitLossRow {
         self
     }
 
-    /// 设置金额汇总与覆盖阻断。
-    ///
-    /// # 参数
-    /// * `totals` - 已校验金额汇总
-    /// * `coverage_blockers` - 覆盖阻断
-    ///
-    /// # 返回
-    /// 返回更新后的行。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn with_totals(mut self, totals: Totals, coverage_blockers: Vec<CoverageBlocker>) -> Self {
-        self.totals = totals;
-        self.coverage_blockers = coverage_blockers;
-        self
-    }
-
     /// 设置下钻与成本来源。
     ///
     /// # 参数

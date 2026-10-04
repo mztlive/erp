@@ -28,11 +28,6 @@ impl SupplierOfferingProcess {
             db,
         }
     }
-    /// 注入供给消费方资格Port，保留调用时点和错误类别。
-    pub fn with_qualification(mut self, qualification: Arc<dyn QualificationPort<Error = Error>>) -> Self {
-        self.qualification = qualification;
-        self
-    }
     /// 注入供给范围 Port。
     ///
     /// # 参数

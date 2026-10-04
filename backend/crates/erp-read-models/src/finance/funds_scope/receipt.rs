@@ -882,7 +882,5 @@ mod tests {
             )
             .is_empty()
         );
-        assert!(!keep_row(true, false, false, true));
-        assert!(keep_row(true, true, false, true));
     }
 }

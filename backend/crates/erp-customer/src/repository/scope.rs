@@ -180,23 +180,6 @@ impl CustomerReadScope {
             && self.user_limit.as_ref().is_none_or(|clause| clause.allows(owner, owner_org, false))
     }
 
-    /// 判断指定客户是否落在已证明的授权集合内。
-    ///
-    /// # 参数
-    /// * `customer_id` - 客户稳定主键
-    ///
-    /// # 返回
-    /// 公司范围或命中授权 ID 时返回 true。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 授权集合必须由 Service 预先求值；仓储不得按登录人自行推断。
-    pub fn allows_id(&self, customer_id: &str) -> bool {
-        self.authorized_customer_ids.as_ref().is_none_or(|ids| ids.iter().any(|id| id == customer_id))
-    }
-
     /// 判断授权是否覆盖全部未删除客户。
     ///
     /// # 参数

@@ -70,21 +70,6 @@ impl CustomerProfileContactInput {
         self.mobile = Some(mobile.into());
         self
     }
-
-    /// 设置是否默认联系人。
-    ///
-    /// # 参数
-    /// * `is_default` - 是否默认联系人
-    ///
-    /// # 返回
-    /// 返回更新后的联系人输入。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn with_is_default(mut self, is_default: bool) -> Self {
-        self.is_default = is_default;
-        self
-    }
 }
 
 /// 客户资料根命令中的地址输入。

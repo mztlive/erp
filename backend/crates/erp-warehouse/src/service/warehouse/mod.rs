@@ -22,7 +22,7 @@ use erp_core::common::time::BusinessDate;
 use erp_core::ids::{WarehouseId, WarehouseRevisionId};
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, PageResult, Transactional};
+use persistence_core::{NoTransaction, PageResult, Transactional};
 use validator::Validate;
 
 pub use crate::dto::warehouse::{
@@ -108,18 +108,6 @@ impl WarehouseService {
         Self { db, identity, audit, fingerprint, fingerprint_key: FINGERPRINT_KEY }
     }
 
-    /// 覆盖敏感字段指纹密钥（默认 `FINGERPRINT_KEY`，换钥或测试时使用）。
-    ///
-    /// # 参数
-    /// * `key` - HMAC 密钥字节（`'static` 保证与服务同生命周期）
-    ///
-    /// # 返回
-    /// 返回携带新密钥的服务实例；指纹结果随密钥变化。
-    pub fn with_fingerprint_key(mut self, key: &'static [u8]) -> Self {
-        self.fingerprint_key = key;
-        self
-    }
-
     /// 创建仓库（仓库稳定身份 + 首个修订，跨集合事务）。
     ///
     /// 地址与联系人生成带密钥 HMAC 指纹的 `SensitiveText` 后落库
@@ -178,26 +166,6 @@ impl WarehouseService {
             Ok::<Warehouse, Error>(warehouse)
         })
         .map(Into::into)
-    }
-
-    /// 在调用方 Executor 上写入仓库稳定身份与首个修订。
-    ///
-    /// 组合层持有根事务时必须调用本方法，不得再开事务。
-    ///
-    /// # 参数
-    /// * `warehouse` - 待写入的仓库
-    /// * `revision` - 待写入的首个修订
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 错误
-    /// 唯一索引冲突或底层写入失败。
-    pub async fn persist_warehouse_with_revision(
-        &self,
-        warehouse: &mut Warehouse,
-        revision: &WarehouseRevision,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        Ok(self.db.warehouse().create_warehouse_with_revision(warehouse, revision, executor).await?)
     }
 
     /// 更新仓库（追加新修订并更新稳定身份，跨集合事务）。

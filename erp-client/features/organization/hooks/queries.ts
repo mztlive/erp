@@ -3,17 +3,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import {
-    createDataScope,
-    deleteDataScope,
-    fetchDataScopes,
-} from "@/features/organization/api/data-scopes"
-import {
     fetchOrganizationState,
     previewOrganizationChange,
     submitOrganizationChange,
 } from "@/features/organization/api/org-units"
 import type {
-    CreateDataScopeInput,
     DataScopeUrlState,
     OrganizationChangeRequest,
 } from "@/features/organization/types"
@@ -38,14 +32,6 @@ export function useOrganizationStateQuery(enabled = true) {
     })
 }
 
-export function useDataScopesQuery(url: DataScopeUrlState, enabled = true) {
-    return useQuery({
-        enabled,
-        queryKey: dataScopeKeys.list(url),
-        queryFn: () => fetchDataScopes(url),
-    })
-}
-
 export function usePreviewOrganizationChangeMutation() {
     return useMutation({
         mutationFn: (request: OrganizationChangeRequest) =>
@@ -64,28 +50,6 @@ export function useSubmitOrganizationChangeMutation() {
                 queryKey: organizationKeys.all,
             })
             await queryClient.invalidateQueries({ queryKey: ["admin"] })
-        },
-    })
-}
-
-export function useCreateDataScopeMutation() {
-    const queryClient = useQueryClient()
-    return useMutation({
-        meta: { affectsDataScope: true },
-        mutationFn: (input: CreateDataScopeInput) => createDataScope(input),
-        onSuccess: async () => {
-            await queryClient.invalidateQueries({ queryKey: dataScopeKeys.all })
-        },
-    })
-}
-
-export function useDeleteDataScopeMutation() {
-    const queryClient = useQueryClient()
-    return useMutation({
-        meta: { affectsDataScope: true },
-        mutationFn: (id: string) => deleteDataScope(id),
-        onSuccess: async () => {
-            await queryClient.invalidateQueries({ queryKey: dataScopeKeys.all })
         },
     })
 }

@@ -89,13 +89,6 @@ export type BackendAcceptanceDetail = {
     }>
 }
 
-export type PageView<T> = {
-    items: T[]
-    total: number
-    page: number
-    page_size: number
-}
-
 // ─── 映射 ────────────────────────────────────────────────────────────────────
 
 export function formatInstant(secs?: number | null): string {

@@ -90,19 +90,6 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         )
     }
 
-    /// 创建已由组合根注入领域动作端口的运行服务。
-    pub fn with_action_port(db: Database, auth: A, action_port: Arc<dyn ApprovalDomainActionPort>) -> Self {
-        Self::with_ports(
-            db,
-            auth,
-            action_port,
-            Arc::new(FailClosedObjectReadPort),
-            Arc::new(crate::ports::FailClosedUpgradeSubjectPort),
-            Arc::new(crate::ports::FailClosedAuditPort),
-            Arc::new(crate::ports::FailClosedObjectFactPort),
-        )
-    }
-
     /// Create a runtime service with every composition-root port injected.
     pub fn with_ports(
         db: Database,

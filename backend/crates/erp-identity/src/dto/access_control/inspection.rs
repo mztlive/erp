@@ -1,7 +1,6 @@
 //! 权限检查只返回判定与下一步，不返回其他人员的业务数据。
 use serde::{Deserialize, Serialize};
 
-use crate::access_control::{DataScope, ScopeTargetMode};
 use crate::entity::access_control::authorization_policy::AuthorizationPolicy;
 use crate::service::access_control::consumers::registration;
 use crate::service::access_control::resolve::AuthorizedDataScope;
@@ -125,54 +124,6 @@ impl AccessInspectionView {
             );
         }
         view
-    }
-}
-
-impl AccessInspectionView {
-    /// 解释特定角色的组织关系依赖，不把关系本身作为授权。
-    /// # 参数
-    /// * `access` - 本次已解析上下文。
-    /// * `rule` - 当前角色规则。
-    /// * `role_name` - 提供该规则的角色名称。
-    /// # 返回
-    /// 缺失关系时向报告追加明确原因。
-    /// # 错误
-    /// 无；本方法只解释缺项，授权结论由公共解析器提供。
-    pub fn explain_relation(&mut self, access: &AuthorizedDataScope, rule: &DataScope, role_name: &str) {
-        if !rule.binding.applies(&access.resource, &access.action) {
-            return;
-        }
-        let state = &access.organizations;
-        let missing = match rule.binding.target_mode {
-            Some(ScopeTargetMode::ManagedOrgs) => !state.management.iter().any(|grant| {
-                !grant.base.is_deleted()
-                    && grant.user_id == access.user_id
-                    && grant.role_id == rule.subject_id
-                    && grant.validity.contains(access.as_of)
-                    && state.units.iter().any(|unit| unit.base.id == grant.org_unit_id && unit.enabled)
-            }),
-            Some(ScopeTargetMode::OwnOrg) => !state.memberships.iter().any(|member| {
-                !member.base.is_deleted()
-                    && member.user_id == access.user_id
-                    && member.validity.contains(access.as_of)
-                    && state.units.iter().any(|unit| unit.base.id == member.org_unit_id && unit.enabled)
-            }),
-            _ => false,
-        };
-        if missing {
-            let relation = if rule.binding.target_mode == Some(ScopeTargetMode::ManagedOrgs) {
-                "该角色对应的有效管理部门"
-            } else {
-                "有效所属部门"
-            };
-            self.push(
-                "组织关系",
-                "review",
-                &format!(
-                    "{role_name}使用部门范围，但未找到{relation}。请在人员资料中补齐；其他角色仍独立计算。"
-                ),
-            );
-        }
     }
 }
 

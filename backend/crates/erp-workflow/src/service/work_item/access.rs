@@ -338,15 +338,6 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
     }
 }
 
-/// 事务内校验 Casbin 持久化策略仍与事务外稳定授权快照一致。
-pub async fn ensure_policy_revision<A: crate::ports::WorkflowAuthorizationPort>(
-    auth: &A,
-    expected_revision: u64,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    auth.ensure_policy_snapshot_with_executor(expected_revision, executor).await
-}
-
 /// 从事务内 Casbin `g` 授权事实与启用角色形成角色集合。
 pub async fn active_role_ids<A: crate::ports::WorkflowAuthorizationPort>(
     auth: &A,

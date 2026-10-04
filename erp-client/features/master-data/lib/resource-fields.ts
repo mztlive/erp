@@ -23,14 +23,6 @@ export {
 } from "@/features/master-data/lib/resource-fields-defs"
 export type { ResourceFieldDef } from "@/features/master-data/lib/resource-fields-defs"
 
-export type ResourceFormValues = {
-    name: string
-    effectiveFrom: string
-    effectiveTo: string
-    changeReason: string
-    [field: string]: string
-}
-
 /** 字典类资源默认立即生效的业务日。 */
 export function defaultImmediateEffectiveFrom(): string {
     return new Date().toISOString().slice(0, 10)

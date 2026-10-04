@@ -61,7 +61,3 @@ export function useSupplierOrderCenterNoteForm(input: {
 
     return noteForm
 }
-
-export type SupplierOrderCenterNoteForm = ReturnType<
-    typeof useSupplierOrderCenterNoteForm
->

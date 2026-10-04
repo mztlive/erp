@@ -50,12 +50,6 @@ export type BackendCustomerDetail = {
     created_at: number
 }
 
-export type BackendPartyView = {
-    id: string
-    party_no: string
-    unified_credit_code?: string | null
-}
-
 export type BackendFileAsset = {
     id: string
     storage_object_key?: string

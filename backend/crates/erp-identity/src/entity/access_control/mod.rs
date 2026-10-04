@@ -25,7 +25,6 @@ pub mod resolved_scope;
 pub mod responsibility_scope;
 pub use resolved_scope::{ResolvedScope, ScopeClause, ScopeResolution, ScopedObject};
 pub mod scope_binding;
-pub(crate) mod scope_replacement;
 pub mod user_role;
 pub use audit_event::{AuditEvent, AuditEventData, AuditEventResult};
 pub use data_scope::{DataScope, DataScopeData, DataScopeSubjectType, DataScopeType};

@@ -5,8 +5,7 @@ use persistence_core::{Executor, NoTransaction};
 
 use super::SalesSelectionService;
 use crate::dto::sales_selection::{
-    PublicChoiceView, PublicReceiptView, PublicSelectionPageKind, PublicSelectionPageView,
-    SalesSelectionBookletListParams, SalesSelectionBookletPage, SalesSelectionBookletView,
+    PublicChoiceView, SalesSelectionBookletListParams, SalesSelectionBookletPage, SalesSelectionBookletView,
     SalesSelectionProposalView, SalesSelectionSessionView,
 };
 use crate::entity::sales_selection::{SalesSelectionBooklet, SalesSelectionProposal};
@@ -102,27 +101,6 @@ impl SalesSelectionService {
         let mut executor = NoTransaction;
         let booklet = self.load_booklet(id, &mut executor).await?;
         self.detail_view(&booklet, None, &mut executor).await
-    }
-
-    /// 预览某批次陈列。
-    ///
-    /// # 参数
-    /// * `id` - 选品册身份
-    /// * `batch_id` - 准备批次；为空使用当前批次
-    ///
-    /// # 返回
-    /// 返回该批次的详情视图。
-    ///
-    /// # 错误
-    /// 无可预览批次时拒绝。
-    pub async fn preview_booklet(
-        &self,
-        id: &str,
-        batch_id: Option<String>,
-    ) -> Result<SalesSelectionBookletView> {
-        let mut executor = NoTransaction;
-        let booklet = self.load_booklet(id, &mut executor).await?;
-        self.detail_view(&booklet, batch_id, &mut executor).await
     }
 
     /// 组装详情视图。
@@ -319,146 +297,6 @@ impl SalesSelectionService {
             self.db.sales_selection_proposal_sku_lines().list_by_proposal(proposal_id, executor).await?;
         Ok(Self::proposal_view(proposal, &display_lines, &sku_lines))
     }
-
-    /// 按令牌哈希读取公开页。
-    ///
-    /// # 参数
-    /// * `token_hash` - 令牌查找哈希
-    /// * `now` - 服务端时间
-    ///
-    /// # 返回
-    /// 返回选择页、只读回执或结束态，不泄漏内部字段。
-    ///
-    /// # 错误
-    /// 查询失败时返回仓储错误；未知令牌按结束态返回。
-    pub async fn public_page_by_hash(
-        &self,
-        token_hash: &str,
-        now: Instant,
-    ) -> Result<PublicSelectionPageView> {
-        let mut executor = NoTransaction;
-        let booklet =
-            self.db.sales_selection_booklets().find_by_token_hash(token_hash, &mut executor).await?;
-        let Some(booklet) = booklet else {
-            return Ok(Self::public_page(PublicSelectionPageKind::Ended, &ended_booklet(), &[], None, None));
-        };
-        self.public_page_for(&booklet, now, &mut executor).await
-    }
-
-    /// 按册状态组装公开页。
-    ///
-    /// # 参数
-    /// * `booklet` - 选品册
-    /// * `now` - 服务端时间
-    /// * `executor` - 执行器
-    ///
-    /// # 返回
-    /// 返回选择页、回执或结束态。
-    ///
-    /// # 错误
-    /// 查询失败时返回仓储错误。
-    async fn public_page_for(
-        &self,
-        booklet: &SalesSelectionBooklet,
-        now: Instant,
-        executor: &mut dyn Executor,
-    ) -> Result<PublicSelectionPageView> {
-        if booklet.status.public_is_ended(booklet.link_revoked, booklet.is_expired(now)) {
-            return Ok(Self::public_page(PublicSelectionPageKind::Ended, booklet, &[], None, None));
-        }
-        if booklet.status == crate::entity::sales_selection::BookletStatus::Submitted {
-            return self.receipt_page(booklet, executor).await;
-        }
-        self.selecting_page(booklet, executor).await
-    }
-
-    /// 组装可选择页。
-    ///
-    /// # 参数
-    /// * `booklet` - 已发布选品册
-    /// * `executor` - 执行器
-    ///
-    /// # 返回
-    /// 返回陈列与当前选择。
-    ///
-    /// # 错误
-    /// 查询失败时返回仓储错误。
-    async fn selecting_page(
-        &self,
-        booklet: &SalesSelectionBooklet,
-        executor: &mut dyn Executor,
-    ) -> Result<PublicSelectionPageView> {
-        let batch = booklet.current_batch_id.as_deref().unwrap_or_default();
-        let domain = crate::repository::sales_selection::SalesSelectionDomainRepository::new(&self.db);
-        let items = domain.list_effective_items(&booklet.base.id, batch, executor).await?;
-        let session = domain.find_session_by_booklet(&booklet.base.id, executor).await?;
-        Ok(Self::public_page(PublicSelectionPageKind::Selecting, booklet, &items, session.as_ref(), None))
-    }
-
-    /// 组装只读回执页。
-    ///
-    /// # 参数
-    /// * `booklet` - 已提交选品册
-    /// * `executor` - 执行器
-    ///
-    /// # 返回
-    /// 返回回执页。
-    ///
-    /// # 错误
-    /// 查询失败时返回仓储错误。
-    async fn receipt_page(
-        &self,
-        booklet: &SalesSelectionBooklet,
-        executor: &mut dyn Executor,
-    ) -> Result<PublicSelectionPageView> {
-        let domain = crate::repository::sales_selection::SalesSelectionDomainRepository::new(&self.db);
-        let proposal = domain.find_proposal_by_booklet(&booklet.base.id, executor).await?;
-        let receipt = match proposal {
-            Some(item) => {
-                let choices = self.receipt_items(&item.base.id, executor).await?;
-                Some(PublicReceiptView {
-                    proposal_no: item.proposal_no,
-                    submitted_at: item.submitted_at,
-                    customer_name: item.customer_name,
-                    items: choices,
-                    total_amount: item.total_amount,
-                })
-            },
-            None => None,
-        };
-        let batch = booklet.current_batch_id.as_deref().unwrap_or_default();
-        let items = domain.list_effective_items(&booklet.base.id, batch, executor).await?;
-        let session = domain.find_session_by_booklet(&booklet.base.id, executor).await?;
-        Ok(Self::public_page(PublicSelectionPageKind::Receipt, booklet, &items, session.as_ref(), receipt))
-    }
-
-    /// 回执明细行。
-    ///
-    /// # 参数
-    /// * `proposal_id` - 方案身份
-    /// * `executor` - 执行器
-    ///
-    /// # 返回
-    /// 返回回证明细。
-    ///
-    /// # 错误
-    /// 查询失败时返回仓储错误。
-    pub(super) async fn receipt_items(
-        &self,
-        proposal_id: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<PublicChoiceView>> {
-        let lines =
-            self.db.sales_selection_proposal_display_lines().list_by_proposal(proposal_id, executor).await?;
-        Ok(lines
-            .into_iter()
-            .map(|line| PublicChoiceView {
-                item_id: line.display_item_id.to_string(),
-                quantity: line.quantity,
-                line_amount: line.line_amount,
-            })
-            .collect())
-    }
 }
 
 /// 由列表参数与已解析范围构造仓储过滤。
@@ -493,44 +331,6 @@ fn booklet_filter(
         sort_ascending: ascending,
         q: params.q.clone(),
     })
-}
-
-/// 构造结束态占位册。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回最小占位册，仅用于结束态映射。
-///
-/// # 错误
-/// 无。
-fn ended_booklet() -> SalesSelectionBooklet {
-    use erp_core::ids::{CustomerAccountId, SalesSelectionBookletId};
-
-    use crate::entity::sales_selection::{
-        PoolFilterSnapshot, PoolSource, PoolSourceKind, SalesSelectionBookletData, SelectionForm, SubmitMode,
-    };
-    SalesSelectionBooklet::new(
-        SalesSelectionBookletId::new("ended"),
-        SalesSelectionBookletData {
-            customer_id: CustomerAccountId::new("ended"),
-            customer_no: "ended".into(),
-            customer_name: "ended".into(),
-            sales_owner_user_id: "sales-1".into(),
-            business_org_unit_id: "org-1".into(),
-            form: SelectionForm::SingleSku,
-            submit_mode: SubmitMode::MallRedeem,
-            pool_source: PoolSource {
-                kind: PoolSourceKind::Filter,
-                filter: Some(PoolFilterSnapshot::default()),
-                sku_ids: None,
-            },
-            tiers: Vec::new(),
-            created_by: "system".into(),
-        },
-    )
-    .expect("结束态占位册必然合法")
 }
 
 /// 当前批次按每档最近成功任务汇总报告，按档重生成不丢失其他档结果。

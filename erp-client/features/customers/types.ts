@@ -223,20 +223,6 @@ export type CustomerDirectoryResult = Readonly<{
     queriedAt: string
 }>
 
-export type SaveCustomerRevisionInput = Readonly<{
-    customerId: string
-    expectedLockVersion: number
-    expectedPartyVersion: number
-    baseRevisionId: string
-    legalName: string
-    shortName?: string
-    unifiedCreditCode?: string
-    defaultPaymentTerm?: string
-    status: CustomerStatus
-    changeReason: string
-    idempotencyKey: string
-}>
-
 export type SaveCustomerDetailsInput = Readonly<{
     customerId: string
     expectedLockVersion: number

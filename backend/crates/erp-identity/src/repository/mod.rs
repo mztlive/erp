@@ -12,9 +12,8 @@ pub(crate) mod person_directory_query;
 pub mod prelude;
 mod role;
 pub use access_control::{
-    AccessControlRepository, AuditEventFilter, AuditEventRepositoryExt, AuditEventRow, DataScopeFilter,
-    DataScopeRepositoryExt, DataScopeRow, PermissionFilter, PermissionRepositoryExt, PermissionRow,
-    UserRoleRepositoryExt,
+    AuditEventFilter, AuditEventRepositoryExt, AuditEventRow, DataScopeFilter, DataScopeRepositoryExt,
+    DataScopeRow, PermissionFilter, PermissionRepositoryExt, PermissionRow, UserRoleRepositoryExt,
 };
 pub use account_core::AccountCoreRepositoryExt;
 pub use casbin_adapter::{CASBIN_RULES, MongoCasbinAdapter};

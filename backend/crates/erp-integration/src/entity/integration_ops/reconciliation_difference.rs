@@ -73,21 +73,6 @@ impl ReconciliationDifferenceData {
             owner_org_unit_id: String::new(),
         }
     }
-
-    /// 设置左侧不可变证据引用。
-    ///
-    /// # 参数
-    /// * `left_fact_reference` - 左侧不可变证据引用
-    ///
-    /// # 返回
-    /// 返回更新后的创建数据。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn with_left_fact_reference(mut self, left_fact_reference: Option<String>) -> Self {
-        self.left_fact_reference = left_fact_reference;
-        self
-    }
 }
 
 /// 对账差异实体（数据模型 §6.21，正式差异事实，创建后不可修改）。

@@ -260,12 +260,3 @@ export type BackendPurchaseChangeOrder = {
     created_at: number
     approval?: DocumentApprovalViewDto | null
 }
-
-export type BackendPurchaseChangeSubmitResult = {
-    change_id: string
-    submission_id: string
-    submission_no: string
-    status: string
-    lock_version: number
-    reference: string
-}

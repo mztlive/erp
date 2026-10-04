@@ -191,59 +191,6 @@ impl ProcurementResponsibilityResolveLineView {
         self.resolved = resolved;
         self
     }
-
-    /// 设置解析成功的负责人。
-    ///
-    /// # 参数
-    /// * `owner_user_id` - 负责人账号 ID
-    /// * `owner_name` - 负责人名称
-    ///
-    /// # 返回
-    /// 返回更新后的行视图。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn with_owner(mut self, owner_user_id: impl Into<String>, owner_name: impl Into<String>) -> Self {
-        self.owner_user_id = Some(owner_user_id.into());
-        self.owner_name = Some(owner_name.into());
-        self
-    }
-
-    /// 设置命中规则。
-    ///
-    /// # 参数
-    /// * `rule_id` - 命中规则 ID
-    /// * `rule_type` - 命中规则类型
-    ///
-    /// # 返回
-    /// 返回更新后的行视图。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn with_rule(
-        mut self,
-        rule_id: impl Into<String>,
-        rule_type: ProcurementResponsibilityRuleType,
-    ) -> Self {
-        self.rule_id = Some(rule_id.into());
-        self.rule_type = Some(rule_type);
-        self
-    }
-
-    /// 设置失败时的稳定诊断文案。
-    ///
-    /// # 参数
-    /// * `error` - 稳定诊断文案
-    ///
-    /// # 返回
-    /// 返回更新后的行视图。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn with_error(mut self, error: impl Into<String>) -> Self {
-        self.error = Some(error.into());
-        self
-    }
 }
 
 /// 逐行责任预览响应。

@@ -180,29 +180,6 @@ impl<'a> SupplierOfferingReadRepository<'a> {
         })
     }
 
-    /// 执行供给列表分页查询。
-    ///
-    /// # 参数
-    /// * `query` - 高层查询条件
-    /// * `executor` - 数据访问执行器，由调用方决定事务边界
-    ///
-    /// # 返回
-    /// 返回当前页投影行与总数；总数与排序语义与历史实现一致。
-    ///
-    /// # 错误
-    /// 关联解析或分页查询失败时返回错误。
-    ///
-    /// # 约束
-    /// 查询次数不随页大小增长；不开启或提交事务。
-    pub async fn search_offering_list(
-        &self,
-        query: &SupplierOfferingListQuery,
-        executor: &mut dyn Executor,
-    ) -> Result<PageResult<SupplierOfferingRow>> {
-        let filter = self.resolve_list_filter(query, executor).await?;
-        self.db.supplier_offerings().search_supplier_offerings(&filter, executor).await
-    }
-
     /// 一次装载供给列表页的全部最小展示事实。
     ///
     /// # 参数

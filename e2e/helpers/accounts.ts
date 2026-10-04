@@ -57,8 +57,6 @@ export const ACCOUNTS = {
     ops: byRole.operations,
 } as const satisfies Record<string, AccountRecord>
 
-export type AccountKey = keyof typeof ACCOUNTS
-
 export type LoginIdentity =
     | string
     | {

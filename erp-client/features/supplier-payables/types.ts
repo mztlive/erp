@@ -428,12 +428,6 @@ export type PostInvoiceInput = {
     idempotencyKey: string
 }
 
-export type ReversePaymentInput = {
-    paymentId: string
-    reason: string
-    idempotencyKey: string
-}
-
 export type ReverseInvoiceInput = {
     invoiceId: string
     reason: string

@@ -369,20 +369,6 @@ export type SubmitPurchaseOrderPayload = Omit<
     "idempotencyKey"
 >
 
-export type CreatePurchaseOrderFromBasisInput = {
-    basisId: string
-    workItemId: string
-    purchaseType: PurchaseType
-    paymentTermCode: string
-    targetWarehouseId?: string
-    lines: Array<{
-        salesOrderLineId: string
-        quantity: string
-        expectedDeliveryDate: string
-    }>
-    idempotencyKey: string
-}
-
 export type CreatePurchaseOrdersFromSourcingInput = {
     workItemId: string
     salesOrderId: string

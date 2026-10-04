@@ -1,12 +1,11 @@
 //! 域 D06 `access_control` 的 数据范围 DTO。
 
-use application_core::{non_blank, normalized_text};
+use application_core::non_blank;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use super::{PageParams, PageView};
+use super::PageView;
 use crate::entity::access_control::{DataScope, DataScopeData, DataScopeSubjectType, DataScopeType};
-use crate::error::{Error, Result};
 
 /// 数据范围响应视图。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -255,78 +254,6 @@ pub struct DataScopeListParams {
     pub sort_by: Option<String>,
     /// 排序方向（`asc`/`desc`）。
     pub sort_dir: Option<String>,
-}
-
-/// 归一化后的数据范围列表查询参数。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct DataScopeListQuery {
-    /// 范围主体类型筛选。
-    pub subject_type: Option<DataScopeSubjectType>,
-    /// 范围类型筛选。
-    pub scope_type: Option<DataScopeType>,
-    /// 范围主体 ID 筛选。
-    pub subject_id: Option<String>,
-    /// 资源筛选。
-    pub resource: Option<String>,
-    /// 动作筛选。
-    pub action: Option<String>,
-    /// 跨页携带的范围版本。
-    pub scope_version: Option<String>,
-    /// 分页与排序参数。
-    pub paging: PageParams,
-}
-
-impl DataScopeListParams {
-    /// 归一化数据范围列表查询参数。
-    ///
-    /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验；按主体查询
-    /// 时必须同时提供 `subject_type`。资源与动作必须是注册标识。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单、方向非法、按主体查询缺少 `subject_type`，或资源
-    /// 动作使用通配/显示名时返回 `ValidationError`。
-    pub(crate) fn normalized(&self) -> Result<DataScopeListQuery> {
-        let subject_id = normalized_text(self.subject_id.as_deref());
-        if subject_id.is_some() && self.subject_type.is_none() {
-            return Err(Error::ValidationError("按主体查询时必须提供范围主体类型".to_string()));
-        }
-        Ok(DataScopeListQuery {
-            subject_type: self.subject_type,
-            scope_type: self.scope_type,
-            subject_id,
-            resource: registered_identifier(self.resource.as_deref(), "资源")?,
-            action: registered_identifier(self.action.as_deref(), "动作")?,
-            scope_version: normalized_text(self.scope_version.as_deref()),
-            paging: super::page_params(&self.sort_by, &self.sort_dir, self.page, self.page_size)?,
-        })
-    }
-}
-
-/// 规范化范围配置使用的注册标识。
-///
-/// # 参数
-/// * `value` - 原始筛选文本
-/// * `field` - 字段中文名，用于错误提示
-///
-/// # 返回
-/// 空白视为未筛选；非空时返回去空白后的标识。
-///
-/// # 错误
-/// 通配符、显示名或非法字符时返回校验错误。
-fn registered_identifier(value: Option<&str>, field: &str) -> Result<Option<String>> {
-    let Some(text) = normalized_text(value) else {
-        return Ok(None);
-    };
-    if text.is_empty()
-        || text.len() > 128
-        || !text.bytes().all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
-    {
-        return Err(Error::ValidationError(format!("{field}必须使用已注册标识，禁止通配符和显示名")));
-    }
-    Ok(Some(text))
 }
 
 /// 岗位范围替换请求；只替换新范围中列出的动作，不影响其他动作。

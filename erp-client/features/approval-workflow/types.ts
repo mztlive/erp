@@ -28,15 +28,6 @@ export type ApprovalInstanceStatus =
     | "CANCELLED"
     | "BLOCKED"
 
-/** 节点执行状态。 */
-export type ApprovalExecutionStatus =
-    | "ACTIVE"
-    | "APPROVED"
-    | "REJECTED"
-    | "CANCELLED"
-    | "BLOCKED"
-    | "SUPERSEDED"
-
 /** 决定值。 */
 export type ApprovalDecision = "APPROVE" | "REJECT"
 
@@ -58,8 +49,6 @@ export const DECISION_REQUEST_KEYS = [
     "expected_task_version",
     "idempotency_key",
 ] as const
-
-export type DecisionRequestKey = (typeof DECISION_REQUEST_KEYS)[number]
 
 /** 决定 HTTP 请求体。 */
 export type SubmitDecisionRequest = Readonly<{

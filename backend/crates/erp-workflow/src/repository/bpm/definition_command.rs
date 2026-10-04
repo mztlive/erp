@@ -6,25 +6,6 @@ use persistence_core::{Executor, Result, mongo_ops};
 use super::{BpmWorkflowRepository, CasWriteOutcome, NODE_DEFINITIONS, TRANSITION_DEFINITIONS};
 
 impl<'a> BpmWorkflowRepository<'a> {
-    /// 以 `id + DRAFT + expected_definition_lock_version` 更新草稿定义字段。
-    ///
-    /// # 错误
-    /// 元数据越界或 MongoDB 写入失败时返回错误。
-    pub async fn update_draft_definition(
-        &self,
-        definition: &ApprovalProcessDefinition,
-        expected_definition_lock_version: u64,
-        executor: &mut dyn Executor,
-    ) -> Result<CasWriteOutcome<ApprovalProcessDefinition>> {
-        self.cas_write_definition(
-            definition,
-            expected_definition_lock_version,
-            &[ApprovalDefinitionStatus::Draft],
-            executor,
-        )
-        .await
-    }
-
     /// 以 `id + DRAFT + expected_definition_lock_version` 整组替换草稿图。
     ///
     /// # 错误

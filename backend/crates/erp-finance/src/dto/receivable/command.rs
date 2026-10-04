@@ -178,21 +178,6 @@ impl CommitCustomerReceiptRequest {
         self.receipt = Some(receipt);
         self
     }
-
-    /// 设置提交时冻结的待过账核销分配。
-    ///
-    /// # 参数
-    /// * `allocations` - 待过账核销分配行
-    ///
-    /// # 返回
-    /// 返回更新后的提交请求。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn with_allocations(mut self, allocations: Vec<ReceiptAllocationLineRequest>) -> Self {
-        self.allocations = allocations;
-        self
-    }
 }
 
 /// 撤回客户回款审批请求。原因必填。

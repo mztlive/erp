@@ -12,17 +12,7 @@
 //! **不提供**软删除/恢复方法；筛选/行类型定义在各子模块，经 `AccessControlExt`
 //! 的关联类型对外暴露。
 
-use mongodb::Database;
 use mongodb::bson::{Document, doc};
-use persistence_core::{Executor, Result, mongo_ops};
-
-use super::extensions::AccessControlExt;
-use crate::entity::access_control::{AuditEvent, UserRole};
-
-/// `user_role` 集合名（单一来源：`AccessControlExt` 关联常量）。
-pub(super) const USER_ROLES: &str = <mongodb::Database as AccessControlExt>::USER_ROLES;
-/// `audit_event` 集合名（单一来源：`AccessControlExt` 关联常量）。
-pub(super) const AUDIT_EVENTS: &str = <mongodb::Database as AccessControlExt>::AUDIT_EVENTS;
 
 pub mod audit_event;
 pub mod data_scope;
@@ -33,54 +23,6 @@ pub mod personal_grant;
 pub use audit_event::{AuditEventFilter, AuditEventRepositoryExt, AuditEventRow};
 pub use data_scope::{DataScopeFilter, DataScopeRepositoryExt, DataScopeRow, data_scope_subjects_filter};
 pub use permission::{PermissionFilter, PermissionRepositoryExt, PermissionRow, UserRoleRepositoryExt};
-
-/// D06 域专用仓储：跨集合、多步骤且必须位于事务内的聚合写入。
-///
-/// 单一集合 CRUD 使用 [`Repository`] 基类；本类型只承载依赖事务的
-/// 跨集合原子写入入口，由 `AccessControlExt::access_control()` 访问。
-pub struct AccessControlRepository<'a> {
-    db: &'a Database,
-}
-
-impl<'a> AccessControlRepository<'a> {
-    /// 创建域专用仓储。
-    ///
-    /// # 参数
-    /// * `db` - 目标 MongoDB 数据库
-    ///
-    /// # 返回
-    /// 返回仓储实例。
-    pub fn new(db: &'a Database) -> Self {
-        Self { db }
-    }
-
-    /// 分配用户角色并追加审计事件（跨集合多步骤写入）。
-    ///
-    /// 依次写入 `user_roles` 与 `audit_events`，保证「授权绑定 + 审计留痕」
-    /// 原子可见（§4.5.4 安全审计与变更留痕）。**必须收到事务执行器**：本方法
-    /// 不构成原子边界，传入 `NoTransaction` 时两笔写入各自自动提交，审计失败
-    /// 会留下没有审计的绑定；Service 必须通过
-    /// `persistence_core::Transactional::with_transaction` 传入事务会话。
-    ///
-    /// # 参数
-    /// * `binding` - 待写入的用户角色绑定
-    /// * `event` - 待追加的审计事件
-    /// * `executor` - 数据访问执行器，必须位于事务中
-    ///
-    /// # 错误
-    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射
-    /// 为冲突语义）或 MongoDB 写入失败时返回错误。
-    pub async fn assign_user_role_with_audit(
-        &self,
-        binding: &UserRole,
-        event: &AuditEvent,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        mongo_ops::insert_one(&self.db.collection::<UserRole>(USER_ROLES), binding, executor).await?;
-        mongo_ops::insert_one(&self.db.collection::<AuditEvent>(AUDIT_EVENTS), event, executor).await?;
-        Ok(())
-    }
-}
 
 /// 构建排序文档（排序字段白名单化，禁止透传任意字段名）。
 ///

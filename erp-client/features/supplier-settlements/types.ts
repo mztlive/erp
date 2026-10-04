@@ -81,8 +81,6 @@ type EmptyReason =
     | "NO_STATEMENTS"
     | "FILTER_NO_RESULT"
 
-export type SettlementFilterOption = { value: string; label: string }
-
 type ActionBlocker = {
     action: string
     code: string

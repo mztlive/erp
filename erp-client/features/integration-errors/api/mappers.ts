@@ -8,11 +8,7 @@
  * - ./query-filter          matchesQuery
  */
 
-export type {
-    BackendDifference,
-    BackendErrorTask,
-    BackendReplayResult,
-} from "./backend-types"
+export type { BackendDifference, BackendErrorTask } from "./backend-types"
 export { mapErrorTask } from "./error-task-mappers"
 export { mapDifference } from "./difference-mappers"
 export { errorClassToBackend } from "./shared-mappers"

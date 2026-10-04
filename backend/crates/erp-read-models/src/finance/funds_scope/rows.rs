@@ -670,10 +670,6 @@ pub(super) fn build_summary(
     })
 }
 
-/// M07 回款与 M09 付款共用的单据可见性：整单可见或至少含一条获授权的匹配份额。
-pub(super) fn keep_row(visible: bool, whole: bool, matched_any: bool, _all_unlinked_or_empty: bool) -> bool {
-    visible && (whole || matched_any)
-}
 /// 单据行关联责任元组：关联单据、负责人、组织、事实主键与版本。
 pub(super) type OrderTuple = (LinkedOrderId, Option<String>, Option<String>, String, u64);
 

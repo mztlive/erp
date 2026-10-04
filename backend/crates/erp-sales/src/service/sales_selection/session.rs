@@ -352,28 +352,6 @@ impl SalesSelectionService {
             .ok_or_else(|| Error::Forbidden("无权查看该图片".into()))
     }
 
-    /// 管理端历史图片授权。入口已校验客户归属，资产必须由该册的历史陈列引用。
-    /// # 错误
-    /// 任意文件身份、其他册资产或不存在的册均拒绝。
-    pub async fn admin_image_key(&self, booklet_id: &str, asset_id: &str) -> Result<String> {
-        let mut tx = persistence_core::NoTransaction;
-        self.image_key_of(booklet_id, asset_id, &mut tx).await
-    }
-
-    /// 拒绝 P1 换品/自组。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 无。
-    ///
-    /// # 错误
-    /// 始终拒绝。
-    pub fn reject_custom_package() -> Result<()> {
-        Err(Error::BusinessLogicError("本期不支持换品和自组".into()))
-    }
-
     /// 读取批次有效陈列。
     ///
     /// # 参数

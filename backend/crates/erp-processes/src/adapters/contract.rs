@@ -11,16 +11,14 @@ use erp_audit::{AuditActorLogs, AuditLog, AuditLogData, prepare_business_log};
 use erp_contract::{
     AccountNamePort, ContractAssignmentFact, ContractAuditPort, ContractParticipantPort, ContractScopePorts,
     ContractService, CustomerAccountFact, CustomerAssignmentFactsPort, CustomerFactsPort,
-    FailClosedContractDataScopePort, FailClosedContractParticipantPort, FileAssetFact, FileAssetFactsPort,
-    PreparedContractAudit,
+    FailClosedContractDataScopePort, FailClosedContractParticipantPort, PreparedContractAudit,
 };
 use erp_core::common::time::BusinessDate;
-use erp_core::ids::{CustomerAccountId, FileAssetId};
+use erp_core::ids::CustomerAccountId;
 use erp_customer::repository::prelude::*;
 use erp_customer::{AssignmentRole, CustomerExt};
 use erp_identity::repository::prelude::*;
 use erp_identity::{AccessControlExt, SharedRbacService};
-use erp_support::FileAssetExt;
 use erp_workflow::DocumentRegistryExt;
 use erp_workflow::repository::prelude::*;
 use mongodb::Database;
@@ -290,41 +288,6 @@ impl AccountNamePort for MongoContractAccounts {
     }
 }
 
-/// MongoDB adapter that confirms contract PDF file-asset existence.
-#[derive(Clone)]
-pub struct MongoContractFileAssets {
-    db: Database,
-}
-
-impl MongoContractFileAssets {
-    /// Bind the adapter to `db`.
-    pub fn new(db: Database) -> Self {
-        Self { db }
-    }
-
-    /// Wrap the adapter as a shared port.
-    pub fn shared(db: Database) -> Arc<dyn FileAssetFactsPort> {
-        Arc::new(Self::new(db))
-    }
-}
-
-#[async_trait]
-impl FileAssetFactsPort for MongoContractFileAssets {
-    async fn find_by_id(
-        &self,
-        attachment_id: &FileAssetId,
-        executor: &mut dyn Executor,
-    ) -> erp_contract::Result<Option<FileAssetFact>> {
-        Ok(self
-            .db
-            .file_assets()
-            .find_by_id(attachment_id.as_ref(), executor)
-            .await
-            .map_err(map_support_to_contract)?
-            .map(|asset| FileAssetFact { id: asset.base.id }))
-    }
-}
-
 /// 构造只装载合同事实的服务；范围 Port 失败关闭。
 ///
 /// # 参数
@@ -345,7 +308,6 @@ pub fn contract_service(db: Database) -> ContractService {
         MongoContractCustomers::shared(db.clone()),
         MongoContractAssignments::shared(db.clone()),
         MongoContractAccounts::shared(db.clone()),
-        MongoContractFileAssets::shared(db),
         ContractScopePorts {
             data_scope: FailClosedContractDataScopePort::shared(),
             participants: FailClosedContractParticipantPort::shared(),
@@ -374,7 +336,6 @@ pub fn scoped_contract_service(db: Database, rbac: SharedRbacService) -> Contrac
         MongoContractCustomers::shared(db.clone()),
         MongoContractAssignments::shared(db.clone()),
         MongoContractAccounts::shared(db.clone()),
-        MongoContractFileAssets::shared(db.clone()),
         ContractScopePorts {
             data_scope: MongoContractDataScope::shared(db.clone(), rbac),
             participants: MongoContractParticipants::shared(db),
@@ -485,10 +446,6 @@ fn map_customer_to_contract(error: persistence_core::Error) -> erp_contract::Err
 }
 
 fn map_identity_to_contract(error: persistence_core::Error) -> erp_contract::Error {
-    erp_contract::Error::from(error)
-}
-
-fn map_support_to_contract(error: persistence_core::Error) -> erp_contract::Error {
     erp_contract::Error::from(error)
 }
 

@@ -190,23 +190,6 @@ impl CustomerAssignmentService {
         persist_assign(&self.db, customer_id, new_assignment, executor).await
     }
 
-    /// 在调用方 Executor 上结束既有协作归属。
-    ///
-    /// # 参数
-    /// * `assignment` - 已应用结束规则的归属
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 错误
-    /// 版本冲突或底层写入失败。
-    pub async fn persist_end(
-        &self,
-        assignment: &mut CustomerAssignment,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        self.db.customer_assignments().update(assignment, executor).await?;
-        Ok(())
-    }
-
     /// 建立新归属（结束重叠旧归属）。
     async fn assign(
         &self,

@@ -142,23 +142,6 @@ impl DefinitionGraph {
         ordered_nodes(&self.nodes)
     }
 
-    /// 提取按展示顺序排列的节点键。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回从入口开始的节点键。
-    ///
-    /// # 错误
-    /// 节点数量或顺序非法时返回模型错误。
-    ///
-    /// # 关键业务约束
-    /// 返回顺序可直接交给线性连线生成器。
-    pub fn ordered_node_keys(&self) -> ModelResult<Vec<String>> {
-        Ok(self.ordered_nodes()?.into_iter().map(|node| node.node_key.clone()).collect())
-    }
-
     /// 提取定义内确定性的审批人 ID 集合。
     ///
     /// # 参数

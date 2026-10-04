@@ -171,33 +171,6 @@ impl SalesSelectionDisplayItem {
         }
     }
 
-    /// 返回可授权展示的文件资产身份。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 封面与成员图资产。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn authorized_asset_ids(&self) -> Vec<String> {
-        match &self.kind {
-            DisplayKind::SingleSku { sku } => {
-                sku.image.as_ref().map(|image| vec![image.file_asset_id.clone()]).unwrap_or_default()
-            },
-            DisplayKind::Package { members, cover, .. } => {
-                let mut ids = vec![cover.file_asset_id.clone()];
-                for member in members {
-                    if let Some(image) = &member.image {
-                        ids.push(image.file_asset_id.clone());
-                    }
-                }
-                ids
-            },
-        }
-    }
-
     /// 发布复核用的精确 SKU 修订引用。
     ///
     /// # 参数

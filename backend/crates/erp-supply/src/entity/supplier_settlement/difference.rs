@@ -359,17 +359,6 @@ impl SupplierSettlementDifference {
         Ok(())
     }
 
-    /// 判断差异是否属于指定结算明细。
-    ///
-    /// # 参数
-    /// * `item_id` - 结算明细主键
-    ///
-    /// # 返回
-    /// 归属一致时返回 `true`。
-    pub fn belongs_to_item(&self, item_id: &SupplierSettlementItemId) -> bool {
-        self.statement_item_id == *item_id
-    }
-
     /// 判断差异是否仍等待正式结论。
     ///
     /// # 返回

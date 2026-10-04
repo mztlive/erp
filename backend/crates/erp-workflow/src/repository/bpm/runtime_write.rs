@@ -14,33 +14,6 @@ use super::{
 };
 
 impl<'a> BpmWorkflowRepository<'a> {
-    /// 只写入 BPM 运行事实：实例、审批人、首个执行和命令收据。
-    ///
-    /// 实例插入必须同时写入有界列表投影；列表不得再扫执行历史补全当前节点、
-    /// 当前审批人、最近驳回与最近状态变更时间。
-    ///
-    /// # 错误
-    /// 唯一索引冲突或 MongoDB 写入失败时返回错误。
-    pub async fn create_bpm_runtime(
-        &self,
-        instance: &ApprovalProcessInstance,
-        assignees: &[ApprovalInstanceAssignee],
-        first_execution: &ApprovalNodeExecution,
-        receipt: &ApprovalCommandReceipt,
-        list_projection: &ApprovalInstanceListProjection,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        self.create_bpm_runtime_after_receipt(
-            instance,
-            assignees,
-            first_execution,
-            list_projection,
-            executor,
-        )
-        .await?;
-        self.insert_command_receipt(receipt, executor).await
-    }
-
     /// 在命令收据已先行仲裁后写入启动实例、审批人绑定和首个执行。
     ///
     /// 本方法不写收据、不创建事务。要求并发启动以收据作为第一写的调用方，

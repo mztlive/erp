@@ -59,13 +59,3 @@ export type BackendDifference = {
     resolution_evidence_policy?: BackendResolutionEvidencePolicy | null
     reconciliation_reason_registry?: BackendReconciliationReasonRegistry | null
 }
-
-export type BackendReplayResult = {
-    task_id: string
-    original_action_idempotency_key_summary: string
-    original_action_idempotency_key_locked: boolean
-    replay_accepted: boolean
-    task_status: string
-    attempt_count: number
-    task_version: number
-}

@@ -61,37 +61,6 @@ impl<'a> BpmWorkflowRepository<'a> {
         self.instances().find_many(filter, executor).await
     }
 
-    /// 判断业务主体是否已经启动过审批实例。
-    ///
-    /// # 参数
-    /// * `subject` - 业务对象稳定引用
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 任意未删除审批实例命中主体时返回 `true`。
-    ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 终态实例仍证明单据已经启动过审批，因此本查询不附加状态条件。
-    pub async fn has_started_instance_for_subject(
-        &self,
-        subject: &SubjectRef,
-        executor: &mut dyn Executor,
-    ) -> Result<bool> {
-        mongo_ops::exists(
-            &self.db.collection::<Document>(INSTANCES),
-            doc! {
-                "subject.subject_kind": subject.subject_kind(),
-                "subject.subject_id": subject.subject_id(),
-                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-            },
-            executor,
-        )
-        .await
-    }
-
     /// 查询同一主体与提交版本的非终态实例。
     ///
     /// # 错误
@@ -165,63 +134,6 @@ impl<'a> BpmWorkflowRepository<'a> {
         )
         .await?;
         Ok(rows.pop())
-    }
-
-    /// 按视图、状态和 DataScopeFact 过滤分页读取实例摘要。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn list_instance_summaries(
-        &self,
-        filter: &ApprovalInstanceListFilter,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<ApprovalInstanceSummary>> {
-        if instance_list_scope_empty(filter) {
-            return Ok(Vec::new());
-        }
-        let options = FindOptions::builder()
-            .sort(instance_list_sort(filter))
-            .limit(instance_list_limit(filter.limit))
-            .projection(instance_summary_projection())
-            .build();
-        mongo_ops::find_many(
-            &self.db.collection::<ApprovalInstanceSummary>(INSTANCES),
-            instance_list_filter_doc(filter),
-            options,
-            executor,
-        )
-        .await
-    }
-
-    /// 统计当前授权过滤条件下的审批实例总数。
-    ///
-    /// 游标只限定当前页起点，不得缩小总数口径，因此统计时固定移除游标。
-    ///
-    /// # 参数
-    /// * `filter` - 与列表相同的视图、状态、启动人和对象范围
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回当前过滤条件下的完整实例数量。
-    ///
-    /// # 错误
-    /// MongoDB 统计失败时返回错误。
-    pub async fn count_instance_summaries(
-        &self,
-        filter: &ApprovalInstanceListFilter,
-        executor: &mut dyn Executor,
-    ) -> Result<u64> {
-        if instance_list_scope_empty(filter) {
-            return Ok(0);
-        }
-        let mut total_filter = filter.clone();
-        total_filter.cursor = None;
-        mongo_ops::count_documents(
-            &self.db.collection::<ApprovalInstanceSummary>(INSTANCES),
-            instance_list_filter_doc(&total_filter),
-            executor,
-        )
-        .await
     }
 
     /// 按实例主键批量读取审批运行的有界列表投影。

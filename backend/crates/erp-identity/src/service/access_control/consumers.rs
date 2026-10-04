@@ -191,23 +191,6 @@ pub fn configurable_registration(resource: &str, action: &str) -> Result<Consume
     Ok(consumer)
 }
 
-/// 返回支持本人默认与部门扩展的已接线业务及动作。
-/// # 参数
-/// 无。
-/// # 返回
-/// 白名单业务与真实接线动作，不包含管理或仓库维度。
-/// # 错误
-/// 无。
-pub fn department_resources() -> impl Iterator<Item = (&'static str, &'static [&'static str])> {
-    use crate::entity::access_control::personal_grant::department_grant_resource;
-    WIRED_CONSUMERS
-        .iter()
-        .filter(|(resource, _, dimensions)| {
-            department_grant_resource(resource) && *dimensions == [ScopeDimension::InternalOrg]
-        })
-        .map(|(resource, actions, _)| (*resource, *actions))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -124,14 +124,6 @@ export type BackendStockBalanceDetail = {
     pending_adjustments: BackendStockAdjustment[]
 }
 
-export type BackendWarehouse = {
-    id: string
-    warehouse_code: string
-    status?: string
-    created_at?: number
-    version?: number
-}
-
 export type BackendBackgroundJob = {
     id: string
     job_no: string

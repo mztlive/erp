@@ -11,7 +11,6 @@ import type {
 } from "@/features/master-data/types"
 import { PRODUCT_KIND_LABELS } from "@/features/master-data/types"
 import { paymentTermCode } from "@/lib/business-options"
-import { compareDecimal, multiplyFixed } from "@/lib/fixed-decimal"
 import { periodicSettlement } from "@/lib/supplier-payment-terms"
 
 export const asLifecycle = (status: EnableStatus): LifecycleStatus =>
@@ -207,26 +206,6 @@ export const parseScore100 = (raw: string | undefined): number | undefined => {
     const n = Number.parseInt(String(raw).trim(), 10)
     if (!Number.isFinite(n) || n < 0 || n > 100) return undefined
     return n
-}
-
-/** 将后端 [0, 1) 税率转换为页面百分数输入值。 */
-export const taxRatePercent = (raw: string | null | undefined): string => {
-    if (!raw?.trim()) return ""
-    try {
-        if (
-            compareDecimal(raw, "0", 6) < 0 ||
-            compareDecimal(raw, "1", 6) >= 0
-        ) {
-            return ""
-        }
-        return multiplyFixed(raw, "100", {
-            leftMaxScale: 6,
-            rightMaxScale: 0,
-            outputScale: 0,
-        })
-    } catch {
-        return ""
-    }
 }
 
 export const pickDefaultOrFirst = <T extends { is_default?: boolean }>(

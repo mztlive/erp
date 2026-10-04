@@ -145,30 +145,6 @@ mod tests {
     }
 
     #[test]
-    fn data_scope_list_params_require_subject_type_for_subject_query() {
-        let params = DataScopeListParams {
-            subject_type: Some(DataScopeSubjectType::Role),
-            subject_id: Some(" role-sales ".to_string()),
-            resource: Some(" sales_order ".to_string()),
-            action: Some(" list ".to_string()),
-            scope_version: Some(" scope-v ".to_string()),
-            ..Default::default()
-        };
-        let query = params.normalized().unwrap();
-        assert_eq!(query.subject_id.as_deref(), Some("role-sales"));
-        assert_eq!(query.resource.as_deref(), Some("sales_order"));
-        assert_eq!(query.action.as_deref(), Some("list"));
-        assert_eq!(query.scope_version.as_deref(), Some("scope-v"));
-
-        let missing =
-            DataScopeListParams { subject_id: Some("role-sales".to_string()), ..Default::default() };
-        assert!(missing.normalized().is_err());
-
-        let wildcard = DataScopeListParams { resource: Some("*".to_string()), ..Default::default() };
-        assert!(wildcard.normalized().is_err());
-    }
-
-    #[test]
     fn data_scope_list_envelope_keeps_versions_off_items() {
         let view = DataScopeListView::compose(
             PageView { items: Vec::new(), total: 0, page: 1, page_size: 20 },

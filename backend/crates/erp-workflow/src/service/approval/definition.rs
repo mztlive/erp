@@ -42,15 +42,6 @@ impl<A: WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
     pub fn with_audit(db: Database, auth: A, audit: Arc<dyn WorkflowAuditPort>) -> Self {
         Self { db, auth, audit }
     }
-
-    /// 返回定义管理使用的数据库。
-    ///
-    /// # 返回
-    /// 返回 MongoDB 句柄。
-    #[allow(dead_code)]
-    pub(crate) fn db(&self) -> &Database {
-        &self.db
-    }
 }
 
 #[cfg(test)]

@@ -566,22 +566,6 @@ pub struct ExpireTargetsOutcome {
     pub conflicts: Vec<String>,
 }
 
-impl ExpireTargetsOutcome {
-    /// 是否存在版本冲突。
-    ///
-    /// # 返回
-    /// 存在任一冲突目标时返回 `true`。
-    ///
-    /// # 错误
-    /// 无错误返回。
-    ///
-    /// # 约束
-    /// 纯状态判断；调用方必须在 `true` 时失败关闭并回滚事务。
-    pub fn has_conflicts(&self) -> bool {
-        !self.conflicts.is_empty()
-    }
-}
-
 /// D01 域专用仓储：跨集合、多步骤且必须位于事务内的聚合写入。
 ///
 /// 单一集合 CRUD 使用 [`Repository`] 基类；本类型只承载依赖事务的

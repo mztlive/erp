@@ -110,11 +110,6 @@ export const SALES_ORDER_STATUS_OPTIONS = [
     { value: "voided", label: "已作废" },
 ] as const
 
-export type SalesOrderStatusValue =
-    (typeof SALES_ORDER_STATUS_OPTIONS)[number]["value"]
-
-export type SalesOrderStatusFilter = "all" | SalesOrderStatusValue
-
 function optionLabel(
     options: readonly { value: string; label: string }[],
     value: string,

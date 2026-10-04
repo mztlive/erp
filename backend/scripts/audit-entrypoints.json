@@ -810,39 +810,7 @@
     },
     {
       "path": "crates/erp-identity/src/service/access_control/mod.rs",
-      "function": "create_data_scope",
-      "policy": "Audited",
-      "stage": "SpecialLifecycle",
-      "boundaries": [
-        ".build_audit_event",
-        ".with_audited_write"
-      ],
-      "call_counts": {
-        ".build_audit_event": 1,
-        ".with_audited_write": 1
-      },
-      "location_count": 1,
-      "reason": "身份域通过独立 audit_events 目录及 .build_audit_event、.with_audited_write 记录权限或人员范围变更；保留其现有业务写入、范围版本和同 Executor 顺序，不将身份事件并入普通业务成功事件生命周期。"
-    },
-    {
-      "path": "crates/erp-identity/src/service/access_control/mod.rs",
       "function": "create_permission",
-      "policy": "Audited",
-      "stage": "SpecialLifecycle",
-      "boundaries": [
-        ".build_audit_event",
-        ".with_audited_write"
-      ],
-      "call_counts": {
-        ".build_audit_event": 1,
-        ".with_audited_write": 1
-      },
-      "location_count": 1,
-      "reason": "身份域通过独立 audit_events 目录及 .build_audit_event、.with_audited_write 记录权限或人员范围变更；保留其现有业务写入、范围版本和同 Executor 顺序，不将身份事件并入普通业务成功事件生命周期。"
-    },
-    {
-      "path": "crates/erp-identity/src/service/access_control/mod.rs",
-      "function": "delete_data_scope",
       "policy": "Audited",
       "stage": "SpecialLifecycle",
       "boundaries": [
@@ -953,22 +921,6 @@
       },
       "location_count": 1,
       "reason": "身份域通过独立 audit_events 目录及 .audit_events().create、.run_authorized_policy_transaction、AuditEvent::new 记录权限或人员范围变更；保留其现有业务写入、范围版本和同 Executor 顺序，不将身份事件并入普通业务成功事件生命周期。"
-    },
-    {
-      "path": "crates/erp-identity/src/service/access_control/replacement.rs",
-      "function": "replace_data_scope",
-      "policy": "Audited",
-      "stage": "SpecialLifecycle",
-      "boundaries": [
-        ".build_audit_event",
-        ".with_audited_write"
-      ],
-      "call_counts": {
-        ".build_audit_event": 1,
-        ".with_audited_write": 1
-      },
-      "location_count": 1,
-      "reason": "身份域通过独立 audit_events 目录及 .build_audit_event、.with_audited_write 记录权限或人员范围变更；保留其现有业务写入、范围版本和同 Executor 顺序，不将身份事件并入普通业务成功事件生命周期。"
     },
     {
       "path": "crates/erp-identity/src/service/iam/account/admin.rs",

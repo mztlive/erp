@@ -411,24 +411,6 @@ impl CreatePurchaseOrdersFromSourcingResult {
         self
     }
 
-    /// 设置本次建立的库存预占。
-    ///
-    /// # 参数
-    /// * `stock_reservations` - 本次建立或幂等回放的现有库存销售预占
-    ///
-    /// # 返回
-    /// 返回更新后的确认结果。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn with_stock_reservations(
-        mut self,
-        stock_reservations: Vec<ExistingStockReservationResult>,
-    ) -> Self {
-        self.stock_reservations = stock_reservations;
-        self
-    }
-
     /// 设置是否为幂等重放。
     ///
     /// # 参数

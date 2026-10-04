@@ -134,25 +134,6 @@ pub struct SubmitSalesChangeRequest {
     pub idempotency_key: String,
 }
 
-/// 变更复核决策请求。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-pub struct ChangeReviewDecisionRequest {
-    /// 当前复核待办。
-    #[validate(custom(function = "non_blank", message = "复核待办ID不能为空"))]
-    pub work_item_id: String,
-    /// 期望的待办乐观锁版本。
-    #[validate(range(min = 1, message = "待办版本必须大于 0"))]
-    pub expected_task_version: u64,
-    /// 期望的不可变销售变更提交版本。
-    #[validate(custom(function = "non_blank", message = "提交版本不能为空"))]
-    pub expected_subject_version: String,
-    /// 复核意见（通过时可空；驳回必填且非空白）。
-    pub decision_reason: Option<String>,
-    /// 幂等键。
-    #[validate(length(min = 1, max = 128, message = "幂等键长度必须在1-128之间"))]
-    pub idempotency_key: String,
-}
-
 /// 作废销售变更单请求（乐观锁：携带期望版本）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct VoidSalesChangeOrderRequest {

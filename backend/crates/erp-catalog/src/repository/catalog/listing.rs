@@ -76,22 +76,6 @@ impl<'a> CatalogRepository<'a> {
             aggregate_listing_summaries(&self.db.collection::<Document>(SKUS), &unique_ids, executor).await?;
         Ok(fill_listing_summaries(&unique_ids, rows))
     }
-
-    /// 返回上架汇总 `$match` + `$group` 管道，供 explain 与列表口径对拍共用。
-    ///
-    /// 调用方不得附加 hint；空输入仍返回管道，但 [`Self::listing_summaries`] 不会执行查询。
-    ///
-    /// # 参数
-    /// * `product_ids` - 商品稳定 ID 集合
-    ///
-    /// # 返回
-    /// 返回与 [`Self::listing_summaries`] 相同的聚合管道（已按首次出现去重）。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn listing_summary_aggregation_pipeline(&self, product_ids: &[ProductId]) -> Vec<Document> {
-        listing_summary_pipeline(&unique_product_ids(product_ids))
-    }
 }
 
 /// 当前启用 SKU 是否上架的聚合表达式。

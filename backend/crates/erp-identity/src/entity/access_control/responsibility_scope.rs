@@ -122,13 +122,6 @@ impl ResponsibilityScopeSet {
         )
     }
 
-    /// 由一个角色和组织覆盖事实形成责任范围集合。
-    pub fn for_role(role_id: &str, coverage: &OrganizationCoverage) -> Self {
-        Self::new(
-            coverage.targets().into_iter().map(|organization_id| (role_id.to_string(), organization_id)),
-        )
-    }
-
     /// 合并责任范围集合。
     pub fn union(&self, other: &Self) -> Self {
         Self::new(self.0.iter().cloned().chain(other.0.iter().cloned()))

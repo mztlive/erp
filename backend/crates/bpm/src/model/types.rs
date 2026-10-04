@@ -462,8 +462,6 @@ pub const LABEL_MAX_LEN: usize = 128;
 pub const PURPOSE_MAX_LEN: usize = 64;
 /// 作用域 ID 与幂等键最大字节长度。
 pub const SCOPE_MAX_LEN: usize = 128;
-/// 载荷摘要最大字节长度。
-pub const DIGEST_MAX_LEN: usize = 128;
 
 /// 由调用方时间构造持久化元数据，禁止读取系统时钟。
 ///

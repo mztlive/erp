@@ -184,14 +184,3 @@ export async function submitSalesChangeOrder(
     )
     return mapChangeOrder(submitted, input.nature)
 }
-
-export type SalesChangeReviewDecisionInput = Readonly<{
-    salesChangeOrderId: string
-    handlerKey: "sales_change_impact_review" | "sales_change_finance_review"
-    decision: "APPROVE" | "REJECT"
-    workItemId: string
-    expectedTaskVersion: string
-    expectedSubjectVersion: string
-    decisionReason?: string
-    idempotencyKey: string
-}>

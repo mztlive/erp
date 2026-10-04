@@ -42,39 +42,6 @@ pub struct SupplierAccountRow {
 }
 
 /// 供应商编号窄投影行。
-impl SupplierAccountRow {
-    /// 以必填身份构造测试占位投影行（erp-supplier-012）。
-    ///
-    /// 生产装配一律从仓储行取值，不得把此处的 `version = 1` 与
-    /// `created_at = 0` 占位默认值当作真实版本使用。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键
-    /// * `party_id` - 共用企业主体 ID
-    /// * `supplier_no` - 供应商编号
-    ///
-    /// # 返回
-    /// 返回启用状态的占位投影行，仅供测试装配。
-    ///
-    /// # 错误
-    /// 无。
-    #[cfg(test)]
-    pub fn test_placeholder(id: String, party_id: String, supplier_no: String) -> Self {
-        Self {
-            id,
-            party_id,
-            supplier_no,
-            maintainer_user_id: String::new(),
-            business_org_unit_id: String::new(),
-            default_payment_term_id: None,
-            current_commercial_profile_revision_id: None,
-            status: SupplierAccountStatus::Active,
-            version: 1,
-            created_at: 0,
-        }
-    }
-}
-
 /// 供应商编号窄投影行。
 
 #[derive(Debug, Clone, Deserialize)]

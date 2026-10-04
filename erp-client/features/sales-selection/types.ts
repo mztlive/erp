@@ -60,26 +60,6 @@ export type DisplayMemberView = {
     price: string
 }
 
-export type DisplayItemView = {
-    id: string
-    item_id: string
-    kind: "SINGLE_SKU" | "PACKAGE"
-    removed: boolean
-    tier_id?: string | null
-    tier_name?: string | null
-    name: string
-    specification: { name: string; value: string }[]
-    spec_label: string
-    price: string
-    price_gross: string
-    target_delta?: string | null
-    cover_asset_id?: string | null
-    cover_image?: string | null
-    unit?: string | null
-    members: DisplayMemberView[]
-    missing_image: boolean
-}
-
 export type PublicDisplayItemView = {
     item_id: string
     tier_name?: string | null
@@ -304,24 +284,4 @@ export type DisplayItem = {
     unit?: string | null
     members: DisplayMemberView[]
     missing_image: boolean
-}
-
-export type SessionSelection = {
-    item_id: string
-    quantity?: number | null
-}
-
-export type SelectionProposal = ProposalView
-export type PublicSelection = PublicPageView
-export type PublicDisplayItem = PublicDisplayItemView
-export type SaveSessionInput = {
-    token: string
-    expected_session_version: number
-    idempotency_key: string
-    choices: SessionSelection[]
-}
-export type SubmitSelectionInput = {
-    token: string
-    expected_session_version: number
-    idempotency_key: string
 }

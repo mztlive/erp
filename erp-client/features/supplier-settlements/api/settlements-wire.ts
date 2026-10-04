@@ -107,23 +107,6 @@ export type BackendDetail = {
     }
 }
 
-export type BackendSourceEvidence = {
-    id: string
-    request_id: string
-    supplier_id: string
-    period_start: string
-    period_end: string
-    period_policy_id: string
-    period_policy_version: string
-    timezone: string
-    source_version: number
-    external_bill_no: string
-    external_bill_version: string
-    source_as_of: number
-    source_hash: string
-    line_count: number
-}
-
 export type BackendDraftCommandResult = {
     result_status: "CREATED" | "REFRESHED" | "UNCHANGED" | "REPLAYED"
     message: string

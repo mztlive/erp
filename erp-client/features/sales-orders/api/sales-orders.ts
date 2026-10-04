@@ -32,7 +32,6 @@ export {
     type ActiveSalesChangeOrderResult,
     startSalesChangeOrder,
     submitSalesChangeOrder,
-    type SalesChangeReviewDecisionInput,
     type StartSalesChangeOrderInput,
     type StartSalesChangeOrderIntent,
     type StartSalesChangeOrderPayload,

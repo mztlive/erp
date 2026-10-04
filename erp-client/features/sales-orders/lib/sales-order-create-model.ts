@@ -15,7 +15,6 @@ import type {
 export {
     decimalAtMost,
     decimalInput,
-    validateSalesOrderContractId,
     validateSalesOrderForm,
 } from "@/features/sales-orders/lib/sales-order-create-validation"
 export type {

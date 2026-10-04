@@ -26,7 +26,7 @@ use crate::entity::contract::{Contract, ContractRevision};
 use crate::error::{Error, Result};
 use crate::ports::{
     AccountNamePort, ContractAuditPort, ContractDataScopePort, ContractParticipantPort, CustomerAccountFact,
-    CustomerAssignmentFactsPort, CustomerFactsPort, FileAssetFact, FileAssetFactsPort, PreparedContractAudit,
+    CustomerAssignmentFactsPort, CustomerFactsPort, PreparedContractAudit,
 };
 use crate::repository::ContractExt;
 use crate::repository::prelude::*;
@@ -57,7 +57,6 @@ pub struct ContractService {
     customers: Arc<dyn CustomerFactsPort>,
     assignments: Arc<dyn CustomerAssignmentFactsPort>,
     accounts: Arc<dyn AccountNamePort>,
-    files: Arc<dyn FileAssetFactsPort>,
     data_scope: Arc<dyn ContractDataScopePort>,
     participants: Arc<dyn ContractParticipantPort>,
 }
@@ -71,7 +70,6 @@ impl ContractService {
     /// * `customers` - 客户存在性与编号事实
     /// * `assignments` - 客户归属可见范围
     /// * `accounts` - 负责人显示名
-    /// * `files` - 合同 PDF 附件存在性
     /// * `scope_ports` - 成组装配的公共范围与合法参与端口
     ///
     /// # 返回
@@ -88,7 +86,6 @@ impl ContractService {
         customers: Arc<dyn CustomerFactsPort>,
         assignments: Arc<dyn CustomerAssignmentFactsPort>,
         accounts: Arc<dyn AccountNamePort>,
-        files: Arc<dyn FileAssetFactsPort>,
         scope_ports: ContractScopePorts,
     ) -> Self {
         Self {
@@ -97,7 +94,6 @@ impl ContractService {
             customers,
             assignments,
             accounts,
-            files,
             data_scope: scope_ports.data_scope,
             participants: scope_ports.participants,
         }
@@ -376,25 +372,6 @@ impl ContractService {
         self.contract_detail(id, actor).await
     }
 
-    /// 在调用方 Executor 上追加不可变修订并切换当前版本指针。
-    ///
-    /// # 参数
-    /// * `contract` - 待绑定新版本的合同
-    /// * `revision` - 新不可变修订
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 错误
-    /// 唯一索引冲突、乐观锁冲突或底层写入失败。
-    pub async fn apply_archive(
-        &self,
-        contract: &mut Contract,
-        revision: &ContractRevision,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        self.db.contract().archive_contract_revision(contract, revision, executor).await?;
-        Ok(())
-    }
-
     /// 终止合同（乐观锁语义；历史销售引用保持不变，W04 授权终止）。
     ///
     /// 编排经 [`execute_authorized_transaction`]；终止状态机仍在事务外先执行。
@@ -457,19 +434,6 @@ impl ContractService {
         self.contract_detail(id, actor).await
     }
 
-    /// 在调用方 Executor 上持久化已终止合同。
-    ///
-    /// # 参数
-    /// * `contract` - 已调用 `terminate` 的合同
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 错误
-    /// 乐观锁冲突或底层写入失败。
-    pub async fn apply_terminate(&self, contract: &mut Contract, executor: &mut dyn Executor) -> Result<()> {
-        self.db.contracts().update(contract, executor).await?;
-        Ok(())
-    }
-
     /// 在调用方事务内证明按指定客户创建合同的资格。
     ///
     /// # 参数
@@ -522,28 +486,6 @@ impl ContractService {
             return Err(Error::NotFound("合同附件不存在或无权查看".into()));
         }
         Ok(())
-    }
-
-    /// 确认合同 PDF 附件存在。组合层在登记新文件前用 Port 读取既有资产。
-    ///
-    /// # 参数
-    /// * `file_id` - 文件资产 ID
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 返回附件事实。
-    ///
-    /// # 错误
-    /// 附件不存在时返回 `NotFound`。
-    pub async fn confirm_contract_pdf(
-        &self,
-        file_id: &FileAssetId,
-        executor: &mut dyn Executor,
-    ) -> Result<FileAssetFact> {
-        self.files
-            .find_by_id(file_id, executor)
-            .await?
-            .ok_or_else(|| Error::NotFound("合同 PDF 不存在".to_string()))
     }
 
     /// 校验客户存在且未停用。

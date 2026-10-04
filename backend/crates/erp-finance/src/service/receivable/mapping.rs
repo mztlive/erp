@@ -121,18 +121,6 @@ fn allocations_by_invoice_id(
     grouped
 }
 
-/// 将 HTTP 字符串任务版本严格解析为运行时乐观锁版本。
-pub fn parse_task_version(value: &str) -> Result<u64> {
-    let normalized = value.trim();
-    let parsed = normalized
-        .parse::<u64>()
-        .map_err(|_| Error::ValidationError("任务版本必须是无符号整数字符串".to_string()))?;
-    if parsed == 0 || parsed.to_string() != normalized {
-        return Err(Error::ValidationError("任务版本必须是规范的正整数字符串".to_string()));
-    }
-    Ok(parsed)
-}
-
 /// 将回款账本错误映射为既有业务错误。
 ///
 /// # 参数

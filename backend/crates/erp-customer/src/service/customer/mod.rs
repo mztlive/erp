@@ -172,27 +172,6 @@ impl CustomerService {
         persist_new_account(&self.db, account, assignment, executor).await
     }
 
-    /// 判断当前用户是否在指定客户的当前 OWNER 或 COLLABORATOR 归属中。
-    ///
-    /// # 参数
-    /// * `customer_id` - 客户角色 ID
-    /// * `user_id` - 当前登录用户 ID
-    ///
-    /// # 返回
-    /// 命中当前有效归属返回 `true`，否则返回 `false`。
-    pub async fn customer_is_assigned_to(&self, customer_id: &str, user_id: &str) -> Result<bool> {
-        Ok(self
-            .db
-            .customer_assignments()
-            .has_active_assignment_for_customer_user(
-                customer_id,
-                user_id,
-                BusinessDate::today(),
-                &mut NoTransaction,
-            )
-            .await?)
-    }
-
     /// 按服务端数据范围解析允许返回的客户 ID。
     ///
     /// # 参数
@@ -277,23 +256,6 @@ impl CustomerService {
             .await?;
 
         Ok(updated.into())
-    }
-
-    /// 在调用方 Executor 上更新客户角色。
-    ///
-    /// # 参数
-    /// * `account` - 已应用领域更新的客户角色
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 错误
-    /// 版本冲突或底层写入失败。
-    pub async fn persist_account_update(
-        &self,
-        account: &mut CustomerAccount,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        self.db.customer_accounts().update(account, executor).await?;
-        Ok(())
     }
 
     /// 按 ID 加载未删除客户角色。

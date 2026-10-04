@@ -12,9 +12,6 @@ use crate::error::{Error, ErrorCode, Result};
 /// 历史销售单草稿可能仍带有的采购确认用途键。发布不再要求，保存时清除。
 pub const SALES_ORDER_PROCUREMENT_CONFIRMATION: &str = "SALES_ORDER_PROCUREMENT_CONFIRMATION";
 
-/// 定义期校验指定审批人的静态审批权限。
-pub const STATIC_APPROVE_PERMISSION: &str = "approval_instance:decide";
-
 /// 合同 §4.3 基线 20 个单据类型 + 1 个新增项（共 21），复用实体层权威穷尽集合。
 pub const ALL_DOCUMENT_TYPES: [DocumentType; 21] = DocumentType::ALL;
 

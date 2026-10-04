@@ -18,8 +18,6 @@ export const BOOK_STATUS_VIEWS = [
     { value: "VOIDED", label: "已作废" },
 ] as const
 
-export type BookStatusView = (typeof BOOK_STATUS_VIEWS)[number]["value"]
-
 /** 状态徽标语气：终态、待办与进行中可一眼区分。 */
 export function bookletStatusTone(status: BookletStatus): StatusTone {
     switch (status) {

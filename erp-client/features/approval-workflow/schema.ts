@@ -16,18 +16,12 @@ export const decisionFormSchema = z
         }
     })
 
-export type DecisionFormValues = z.input<typeof decisionFormSchema>
-
 /** 受阻取消与撤回共用的原因表单。 */
 export const reasonFormSchema = z.object({
     reason: z.string().trim().min(1, "请填写原因"),
 })
 
-export type ReasonFormValues = z.input<typeof reasonFormSchema>
-
 /** 升级未提交绑定。不允许选择任意历史定义。 */
 export const upgradeBindingFormSchema = z.object({
     reason: z.string().trim().min(1, "请填写更新原因"),
 })
-
-export type UpgradeBindingFormValues = z.input<typeof upgradeBindingFormSchema>

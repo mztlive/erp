@@ -8,9 +8,7 @@
 
 use mongodb::Database;
 
-use crate::repository::access_control::{
-    AccessControlRepository, AuditEventFilter, DataScopeFilter, PermissionFilter,
-};
+use crate::repository::access_control::{AuditEventFilter, DataScopeFilter, PermissionFilter};
 use crate::repository::owned::{
     AccountCoreRepository, AuditEventRepository, DataScopeRepository, PermissionRepository,
     PersonDataScopeRepository, PersonQueryQualificationRepository, PersonalBusinessGrantRepository,
@@ -85,12 +83,6 @@ pub trait AccessControlExt {
     /// 返回 `AuditEventRepository<'_>`。
     fn audit_events(&self) -> AuditEventRepository<'_>;
 
-    /// 获取承载跨集合事务写入的域专用仓储。
-    ///
-    /// # 返回
-    /// 返回 `AccessControlRepository` 实例。
-    fn access_control(&self) -> AccessControlRepository<'_>;
-
     /// 获取人员查询资格仓储。
     ///
     /// # 返回
@@ -143,9 +135,5 @@ impl AccessControlExt for Database {
 
     fn person_query_qualifications(&self) -> PersonQueryQualificationRepository<'_> {
         PersonQueryQualificationRepository::new(self, Self::PERSON_QUERY_QUALIFICATIONS)
-    }
-
-    fn access_control(&self) -> AccessControlRepository<'_> {
-        AccessControlRepository::new(self)
     }
 }

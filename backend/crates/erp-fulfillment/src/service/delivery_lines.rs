@@ -5,24 +5,10 @@
 use erp_core::ids::DeliveryLineId;
 use id_generator::next_id;
 
-use super::FulfillmentService;
 use crate::Result;
 use crate::dto::DeliveryLineInput;
 use crate::entity::facts::ReceiptReservationLineFact;
 use crate::entity::fulfillment::DeliveryLineSpec;
-
-impl FulfillmentService {
-    /// 发货创建指纹算法与密钥版本的 golden 断言锚点。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回本域发货行规则源的稳定标识。
-    pub fn delivery_line_rule_source() -> &'static str {
-        "entities::fulfillment::DeliveryLineBatch"
-    }
-}
 
 /// 将创建请求行映射为领域规格（含系统行 ID 注入）。
 ///

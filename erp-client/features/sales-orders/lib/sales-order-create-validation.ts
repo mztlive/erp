@@ -301,14 +301,6 @@ const draftSalesOrderSchema = z
         }
     })
 
-/** 合同字段提交校验。未选合同时给出可读错误；已选则交给整单 schema 检查修订同步。 */
-export function validateSalesOrderContractId(
-    contractId: string,
-): string | undefined {
-    if (!contractId.trim()) return "请选择已有有效合同"
-    return undefined
-}
-
 export type SalesOrderFormFieldErrors = {
     fields: Record<string, StandardSchemaV1Issue[]>
 }

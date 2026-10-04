@@ -7,9 +7,9 @@ use application_core::{AuditActor, PageView};
 use erp_identity::AccessControlExt;
 use erp_identity::repository::prelude::*;
 use erp_sales::dto::sales_selection::{
-    CreateSalesSelectionBookletRequest, DeleteDisplayItemRequest, PrepareSalesSelectionRequest,
-    PublishSalesSelectionRequest, SalesSelectionBookletListParams, SalesSelectionBookletView,
-    SalesSelectionCommandRequest, SalesSelectionProposalListParams, SalesSelectionSessionView,
+    DeleteDisplayItemRequest, PrepareSalesSelectionRequest, PublishSalesSelectionRequest,
+    SalesSelectionBookletListParams, SalesSelectionBookletView, SalesSelectionCommandRequest,
+    SalesSelectionProposalListParams, SalesSelectionSessionView,
 };
 use erp_sales::entity::sales_selection::{FirstNonEmptyMemberImage, LinkTokenCrypto};
 use erp_sales::service::sales_selection::{SalesSelectionService, SelectionAccess};
@@ -506,24 +506,4 @@ fn ensure_version(expected: Option<&str>, actual: &str) -> Result<()> {
         return Err(Error::ConflictError("DATA_SCOPE_CHANGED：数据范围已变化，请从第一页刷新".into()));
     }
     Ok(())
-}
-
-/// 创建请求必须携带显式责任；过渡期兼容缺字段的旧幂等键。
-///
-/// # 参数
-/// * `req` - 创建请求
-///
-/// # 返回
-/// 显式责任齐全时返回原请求。
-///
-/// # 错误
-/// 缺负责人或组织时拒绝。
-#[allow(dead_code)]
-fn ensure_create_request(
-    req: CreateSalesSelectionBookletRequest,
-) -> Result<CreateSalesSelectionBookletRequest> {
-    if req.sales_owner_user_id.trim().is_empty() || req.business_org_unit_id.trim().is_empty() {
-        return Err(Error::ValidationError("销售负责人与业务组织必填".into()));
-    }
-    Ok(req)
 }

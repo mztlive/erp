@@ -375,11 +375,6 @@ export function salesOrderAmountSummary(page: Page) {
         .first()
 }
 
-/** 金额摘要中带状态徽章的指标，例如「已回款 / 未收」。 */
-export function salesOrderMetric(page: Page, metricLabel: string) {
-    return salesOrderAmountSummary(page).locator("span").filter({ hasText: metricLabel }).first()
-}
-
 /**
  * 可有可无的中间步骤（如二次确认框）与后续结果谁先出现。
  * `optional` 先可见返回 true；`settled`（结果元素或请求 Promise）先到返回 false；都没到则 timeout 后返回 false。
@@ -427,18 +422,6 @@ export async function openFulfillmentWorkspaceForm(page: Page) {
         await expect(dialog).toBeVisible({ timeout: 5_000 })
     }).toPass({ timeout: UI_TIMEOUT })
     return dialog
-}
-
-/**
- * 履约表单等把 aria-label 标在普通 section/div 上，getByLabel 匹配不到。
- */
-export function labeledRegion(page: Page, name: string) {
-    return page.locator(`[aria-label="${name}"]`)
-}
-
-/** 对话框确认按钮常因 toast/动画抖动点不中。 */
-export async function forceClick(locator: { click: (opts?: { force?: boolean; timeout?: number }) => Promise<void> }) {
-    await locator.click({ force: true, timeout: UI_TIMEOUT })
 }
 
 /**

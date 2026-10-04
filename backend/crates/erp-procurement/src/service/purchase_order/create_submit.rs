@@ -6,39 +6,9 @@ use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Executor;
 
+use crate::Result;
 use crate::entity::purchase_order::{PurchaseOrder, PurchaseOrderSubmission, PurchaseOrderSubmissionLine};
 use crate::repository::PurchaseOrderExt;
-use crate::{Error, Result};
-/// 读取刚写入的草稿采购单。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `order_id` - 采购单主键
-/// * `session` - 建单事务会话
-///
-/// # 返回
-/// 返回仍处于草稿的采购单。
-///
-/// # 错误
-/// 采购单不存在或已不是草稿时返回错误。
-///
-/// # 关键业务约束
-/// 创建并提交路径不得处理已提交单据。
-pub async fn load_created_order(
-    db: &Database,
-    order_id: &str,
-    session: &mut dyn Executor,
-) -> Result<PurchaseOrder> {
-    let order = db
-        .purchase_orders()
-        .find_by_id(order_id, session)
-        .await?
-        .ok_or_else(|| Error::NotFound("采购单不存在".to_string()))?;
-    order
-        .ensure_draft_for_submission()
-        .map_err(|_| Error::ConflictError("采购单已提交或已生效，请勿重复提交".to_string()))?;
-    Ok(order)
-}
 /// 按当前草稿派生正式提交头和行。
 ///
 /// # 参数

@@ -413,14 +413,6 @@ impl WorkItemType {
         }
     }
 
-    /// 判断任务是否为采购建单责任。
-    ///
-    /// # 返回
-    /// 供给分配任务返回 `true`。
-    pub fn is_procurement_order_creation(self) -> bool {
-        self == Self::ProcurementOrderCreation
-    }
-
     /// 判断任务是否为具体履约操作。
     ///
     /// # 返回

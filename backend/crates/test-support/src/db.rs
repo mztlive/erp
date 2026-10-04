@@ -1,6 +1,5 @@
 //! `TestDb`：按随机库名连接并创建、`Drop` 时清理的测试数据库夹具。
 
-use mongodb::bson::Document;
 use mongodb::{Client, Database};
 
 use crate::{Error, Result, test_mongo_uri, uuid_hex_n};
@@ -69,29 +68,6 @@ impl TestDb {
     /// 返回当前测试数据库的名称。
     pub fn name(&self) -> &str {
         &self.name
-    }
-
-    /// 删除指定集合上的命名索引，用于模拟索引建立前的遗留脏数据。
-    ///
-    /// # 参数
-    /// * `collection` - 集合名
-    /// * `index_names` - 必须先删除才能写入重复行的索引名
-    ///
-    /// # 返回
-    /// 全部索引删除成功时返回 `()`。
-    ///
-    /// # 错误
-    /// 任一索引不存在或删除失败时返回错误（已统一为 [`crate::Error`]，
-    /// 与 `TestDb::new` 等其他公开方法的错误风格一致）。
-    ///
-    /// # 关键业务约束
-    /// 仅测试夹具可调用；不得替代生产唯一索引。生产路径必须继续依赖这些索引。
-    pub async fn drop_named_indexes(&self, collection: &str, index_names: &[&str]) -> Result<()> {
-        let target = self.db.collection::<Document>(collection);
-        for name in index_names {
-            target.drop_index(*name).await?;
-        }
-        Ok(())
     }
 
     /// 显式清理测试数据库并传播错误。

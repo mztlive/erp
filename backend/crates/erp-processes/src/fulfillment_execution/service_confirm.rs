@@ -13,7 +13,7 @@ use erp_fulfillment::entity::fulfillment::{
 use erp_fulfillment::service::FulfillmentService;
 use erp_fulfillment::service::service_fulfillment_confirm::service_confirmation_from_request;
 use erp_procurement::repository::PurchaseOrderExt;
-use erp_support::{EmptyPendingAttachments, FileAssetExt, PendingAttachmentBatch};
+use erp_support::{FileAssetExt, PendingAttachmentBatch};
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
@@ -27,30 +27,6 @@ use crate::audit::{AuditEventSink, AuditedCommand, AuditedWrite, MongoAuditEvent
 use crate::{Error, Result};
 
 impl FulfillmentProcess {
-    /// 确认服务履约（草稿 → 已确认；§8.1.5 + §6.7 跨集合事务）。
-    ///
-    /// 不携带新上传对象的内部兼容入口；HTTP 确认使用
-    /// [`Self::confirm_service_fulfillment_with_assets`]。
-    ///
-    /// # 参数
-    /// * `id` - 记录主键
-    /// * `req` - 现场事实、乐观锁版本与图片凭证
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回确认后的记录视图。
-    ///
-    /// # 错误
-    /// 校验失败、状态冲突、门槛未满足或事务提交结果未知时返回错误。
-    pub async fn confirm_service_fulfillment(
-        &self,
-        id: &str,
-        req: ConfirmServiceFulfillmentRequest,
-        actor: &AuditActor,
-    ) -> Result<ServiceFulfillmentView> {
-        self.confirm_service_fulfillment_with_assets(id, req, Arc::new(EmptyPendingAttachments), actor).await
-    }
-
     /// 确认服务履约，同时登记本次上传的现场图片凭证。
     ///
     /// 门槛、采购销售分配、凭证资产、履约记录、任务完成和审计位于同一事务。
