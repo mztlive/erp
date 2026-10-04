@@ -214,8 +214,9 @@ impl PolicyPlan {
                 )));
             }
             let current = existing.iter().find(|s| s.resource == scope.resource && s.action == *action);
-            let expression = request.expression(action);
-            if current.is_some_and(|s| s.expression == expression)
+            let expression = scope.canonical_expression(action, &request.expression(action))?;
+            let previous = current.map(|s| scope.canonical_expression(action, &s.expression)).transpose()?;
+            if previous.as_ref() == Some(&expression)
                 || (current.is_none() && expression.alternatives.is_empty())
             {
                 continue;
@@ -546,5 +547,50 @@ mod tests {
         assert!(result.bindings[0].role_ids.is_empty());
         assert!(result.scopes.is_empty());
         assert_eq!(result.preview.changes.len(), 2);
+    }
+
+    #[test]
+    fn exported_default_scopes_revoke_grants_added_after_export() {
+        let mut facts = facts();
+        let exported = facts.export(4).unwrap();
+        let mut row = PersonDataScope::default_for("alice", "sales_order", "list");
+        row.expression = scope(&["list"]).request(4).unwrap().expression("list");
+        facts.scopes.push(row);
+        let restored = plan(exported.document, &facts).unwrap();
+        assert_eq!(restored.scopes.len(), 1);
+        assert_eq!(restored.scopes[0].action, "list");
+        assert!(restored.scopes[0].expression.additive);
+        assert!(restored.scopes[0].expression.alternatives.is_empty());
+    }
+
+    #[test]
+    fn export_reimport_ignores_grant_and_target_order_and_duplicates() {
+        let mut facts = facts();
+        let mut row = PersonDataScope::default_for("alice", "sales_order", "list");
+        row.expression = scope(&["list"]).request(4).unwrap().expression("list");
+        row.expression.alternatives[0][0].scope_targets = vec!["west".into(), "east".into(), "east".into()];
+        let mut other = row.expression.alternatives[0].clone();
+        other[0].scope_targets = vec!["north".into()];
+        row.expression.alternatives.insert(0, other.clone());
+        row.expression.alternatives.push(other);
+        facts.scopes.push(row);
+        let exported = facts.export(4).unwrap();
+        assert!(plan(exported.document, &facts).unwrap().preview.changes.is_empty());
+    }
+
+    #[test]
+    fn export_keeps_empty_warehouse_scope_and_omits_task_and_source_inherited_scopes() {
+        let mut facts = facts();
+        facts.roles.insert(
+            "reader".into(),
+            role("reader", &["stock_balance:list", "approval_instance:read", "contract:list"]),
+        );
+        let exported = facts.export(4).unwrap();
+        assert_eq!(exported.document.data_scopes.len(), 1);
+        let scope = &exported.document.data_scopes[0];
+        assert_eq!(scope.resource, "stock_balance");
+        assert!(scope.grants.is_empty());
+        assert!(!PersonScopeExpression::default_self(&scope.resource));
+        assert!(plan(exported.document, &facts).unwrap().preview.changes.is_empty());
     }
 }

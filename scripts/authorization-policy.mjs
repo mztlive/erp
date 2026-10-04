@@ -21,6 +21,30 @@ const HELP = `用法：
 apply 必须使用审核过的预览文件；超时或结果未知时保留原计划和操作号。
 `;
 
+/** 只接受完整机器结果；缺失结果不能解释为授权已成功。 */
+function validResult(command, value) {
+  const record = (item) => item !== null && typeof item === "object" && !Array.isArray(item);
+  const integer = (item) => Number.isSafeInteger(item) && item >= 0;
+  if (!record(value) || !integer(value.policy_version)) return false;
+  if (command === "apply") {
+    return typeof value.command_id === "string" && value.command_id.length > 0
+      && integer(value.change_count) && typeof value.replayed === "boolean";
+  }
+  const doc = value.document;
+  if (!record(doc) || doc.version !== "1.0"
+    || ![doc.roles, doc.bindings, doc.data_scopes, value.policy_notes].every(Array.isArray)) return false;
+  return command === "export"
+    || (typeof value.review_hash === "string" && /^sha256-v1:[0-9a-f]{64}$/i.test(value.review_hash)
+      && Array.isArray(value.changes));
+}
+
+/** 协议不完整时保留应用结果未知语义，防止调用方重新分配操作号。 */
+function protocolError(command, status) {
+  return new Error(command === "apply"
+    ? `应用响应不符合接口合同（HTTP ${status}），提交状态未知；请保留原计划和操作号`
+    : `API 响应不符合授权接口合同（HTTP ${status}）`);
+}
+
 /** 读取有界 JSON 文件，避免把任意大型文件载入请求。 */
 async function jsonFile(path) {
   if (!path) throw new Error("缺少输入文件");
@@ -45,7 +69,7 @@ async function payload(command, values) {
       throw new Error("apply 必须提供 --plan 和 --operation-key");
     }
     const plan = await jsonFile(values.plan);
-    if (!plan.document || !Number.isSafeInteger(plan.policy_version) || typeof plan.review_hash !== "string") {
+    if (!validResult("preview", plan)) {
       throw new Error("输入不是有效预览文件，请先执行 preview");
     }
     return {
@@ -98,9 +122,11 @@ async function request(command, body) {
       ? `应用响应无法解析（HTTP ${response.status}），提交状态未知；请保留原计划和操作号`
       : `API 返回了无效 JSON（HTTP ${response.status}）`);
   }
+  if (!envelope || typeof envelope.success !== "boolean") throw protocolError(command, response.status);
   if (!response.ok || envelope.success !== true) {
     throw new Error(`HTTP ${response.status}: ${envelope.code ?? ""} ${envelope.errorMessage ?? "授权操作失败"}`.trim());
   }
+  if (!validResult(command, envelope.data)) throw protocolError(command, response.status);
   return envelope.data;
 }
 

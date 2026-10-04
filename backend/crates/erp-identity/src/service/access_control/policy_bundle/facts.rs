@@ -8,7 +8,7 @@ use super::PolicyBundleService;
 use crate::entity::authorization_bundle::PolicyDocument;
 use crate::entity::authorization_bundle::plan::{PolicyFacts, PolicyRoleState, PolicyUserState};
 use crate::repository::access_control::person_scope::PersonDataScopeRepositoryExt;
-use crate::{AccessControlExt, Error, MongoCasbinAdapter, Permission, Result, RoleIdSet, subject};
+use crate::{AccessControlExt, Error, MongoCasbinAdapter, Permission, Result, subject};
 
 impl PolicyBundleService {
     /// 按文件引用有界读取人员、直接绑定、角色及范围。
@@ -61,8 +61,7 @@ impl PolicyBundleService {
         let keys = MongoCasbinAdapter::new(self.access.db.clone())
             .subject_roles(&subject(AccountKind::Admin, id), executor)
             .await?;
-        let role_ids = RoleIdSet::from_casbin_role_keys(keys)?.to_strings();
-        Ok(PolicyUserState { version: user.base.version, role_ids })
+        PolicyUserState::from_role_keys(user.base.version, keys)
     }
 
     /// 角色权限和所有直接受影响人员均从持久化事实读取。
@@ -80,36 +79,14 @@ impl PolicyBundleService {
         let store = MongoCasbinAdapter::new(self.access.db.clone());
         let key = format!("role:{id}");
         let subjects = store.role_subjects(&key, executor).await?;
-        let Some(role) = self.access.db.roles().find_by_id_including_deleted(id, executor).await? else {
-            if !subjects.is_empty() || !store.role_permissions(&key, executor).await?.is_empty() {
-                return Err(Error::ValidationError(
-                    "角色实体缺失但存在授权记录，请先治理后使用文件入口".into(),
-                ));
-            }
-            return Ok(None);
-        };
-        if !store.subject_roles(&key, executor).await?.is_empty() {
-            return Err(Error::ValidationError("文件格式1.0不支持角色继承，请保留原授权入口".into()));
-        }
+        let parents = store.subject_roles(&key, executor).await?;
+        let role = self.access.db.roles().find_by_id_including_deleted(id, executor).await?;
         let permissions = store
             .role_permissions(&key, executor)
             .await?
             .into_iter()
             .map(|(resource, action)| Permission::parse(format!("{resource}:{action}")))
             .collect::<std::result::Result<Vec<_>, _>>()?;
-        if subjects.len() > 1000 {
-            return Err(Error::ValidationError("角色影响超过1000个人员，请分批治理后再使用文件入口".into()));
-        }
-        if subjects.iter().any(|subject| subject.starts_with("role:")) {
-            return Err(Error::ValidationError("角色被其他角色继承，不能用1.0文件管理".into()));
-        }
-        if subjects.iter().any(|subject| !subject.starts_with("user:admin:")) {
-            return Err(Error::ValidationError("角色绑定包含非后台主体，不能用1.0文件管理".into()));
-        }
-        let affected_user_ids = subjects
-            .iter()
-            .filter_map(|subject| subject.strip_prefix("user:admin:").map(str::to_owned))
-            .collect();
-        Ok(Some(PolicyRoleState { role, permissions, affected_user_ids }))
+        PolicyRoleState::from_parts(role, permissions, parents, subjects)
     }
 }

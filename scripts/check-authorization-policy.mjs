@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 const directory = await mkdtemp(join(tmpdir(), "erp-policy-cli-"));
 const script = fileURLToPath(new URL("./authorization-policy.mjs", import.meta.url));
 const document = { version: "1.0", roles: [], bindings: [], data_scopes: [] };
-const plan = { document, policy_version: 4, review_hash: "fixture-review", changes: [], policy_notes: [] };
+const plan = { document, policy_version: 4, review_hash: `sha256-v1:${"a".repeat(64)}`, changes: [], policy_notes: [] };
 const calls = [];
 let mode = "ok";
 const server = createServer(async (request, response) => {
@@ -29,6 +29,11 @@ const server = createServer(async (request, response) => {
     return;
   }
   response.setHeader("content-type", "application/json");
+  if (["missing-data", "null", "empty-receipt"].includes(mode)) {
+    const envelope = mode === "null" ? null : { success: true, ...(mode === "empty-receipt" ? { data: {} } : {}) };
+    response.end(JSON.stringify(envelope));
+    return;
+  }
   if (mode === "forbidden") {
     response.writeHead(403);
     response.end(JSON.stringify({ success: false, code: "FORBIDDEN", errorMessage: "拒绝" }));
@@ -115,7 +120,13 @@ try {
   assert.equal(result.code, 1);
   assert.match(result.stderr, /提交状态未知/);
   assert(!result.stderr.includes("local-fixture-token"));
-  process.stdout.write("授权 CLI：11 项传输契约检查通过；未连接真实 ERP、MongoDB 或 S3。\n");
+  for (const invalidEnvelope of ["missing-data", "null", "empty-receipt"]) {
+    mode = invalidEnvelope;
+    result = await run(["apply", "--plan", "plan.json", "--operation-key", "same-key"]);
+    assert.equal(result.code, 1, invalidEnvelope);
+    assert.match(result.stderr, /提交状态未知/);
+  }
+  process.stdout.write("授权 CLI：14 项传输契约检查通过；未连接真实 ERP、MongoDB 或 S3。\n");
 } finally {
   server.closeAllConnections();
   await new Promise((resolve) => server.close(resolve));

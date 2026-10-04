@@ -1,5 +1,6 @@
 //! 可移植的显式授权配置；仅声明自身管理的对象和替换边界。
 mod export;
+mod facts;
 mod normalize;
 pub(crate) mod plan;
 pub(crate) mod receipt;

@@ -2,7 +2,8 @@
 use std::collections::BTreeSet;
 
 use super::{PolicyDocument, PolicyMode, PolicyScope};
-use crate::dto::person_scope::SavePersonScopeRequest;
+use crate::dto::person_scope::{PersonScopeGrant, SavePersonScopeRequest};
+use crate::entity::access_control::person_scope::PersonScopeExpression;
 use crate::entity::role::{ROOT_ROLE_ID, Role, RoleData};
 use crate::service::access_control::consumers::configurable_registration;
 use crate::{Error, Permission, Result};
@@ -60,20 +61,7 @@ impl PolicyDocument {
             if scope.mode != PolicyMode::Replace {
                 return Err(Error::ValidationError("人员范围必须显式使用 replace".into()));
             }
-            let request = scope.request(0)?;
-            scope.actions = request.actions;
-            scope.grants = request.grants;
-            let mut keyed = scope
-                .grants
-                .drain(..)
-                .map(|grant| {
-                    serde_json::to_string(&grant)
-                        .map(|key| (key, grant))
-                        .map_err(|error| Error::Internal(error.to_string()))
-                })
-                .collect::<Result<Vec<_>>>()?;
-            keyed.sort_by(|a, b| a.0.cmp(&b.0));
-            scope.grants = keyed.into_iter().map(|(_, grant)| grant).collect();
+            scope.normalize_grants()?;
             for action in &scope.actions {
                 if !keys.insert((scope.user_id.clone(), scope.resource.clone(), action.clone())) {
                     return Err(Error::ValidationError("人员资源动作重复，替换边界重叠".into()));
@@ -118,6 +106,52 @@ impl PolicyDocument {
 }
 
 impl PolicyScope {
+    /// 使用同一规则规范化动作、条件集合及授权项顺序。
+    fn normalize_grants(&mut self) -> Result<()> {
+        let request = self.request(0)?;
+        self.actions = request.actions;
+        let mut keyed = request
+            .grants
+            .into_iter()
+            .map(|grant| {
+                serde_json::to_string(&grant)
+                    .map(|key| (key, grant))
+                    .map_err(|error| Error::Internal(error.to_string()))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        keyed.sort_by(|a, b| a.0.cmp(&b.0));
+        self.grants = keyed.into_iter().map(|(_, grant)| grant).collect();
+        Ok(())
+    }
+
+    /// 将已存储和待保存的追加范围转为同一比较形式；保留旧表达式标志。
+    /// # 参数
+    /// action 为当前动作，expression 为该动作的范围表达式。
+    /// # 返回
+    /// 追加项、条件和目标均按集合规范化的表达式。
+    /// # 错误
+    /// 追加配置不满足正式范围模型时拒绝。
+    pub(super) fn canonical_expression(
+        &self,
+        action: &str,
+        expression: &PersonScopeExpression,
+    ) -> Result<PersonScopeExpression> {
+        if !expression.additive || expression.history_read || expression.condition.is_some() {
+            return Ok(expression.clone());
+        }
+        let mut scope = Self {
+            actions: vec![action.into()],
+            grants: expression
+                .alternatives
+                .iter()
+                .map(|terms| PersonScopeGrant { actions: vec![action.into()], terms: terms.clone() })
+                .collect(),
+            ..self.clone()
+        };
+        scope.normalize_grants()?;
+        Ok(scope.request(0)?.expression(action))
+    }
+
     /// 复用人员范围正式 DTO 的规范化规则。
     /// # 参数
     /// version 为当前策略版本。
