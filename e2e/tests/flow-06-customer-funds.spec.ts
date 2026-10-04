@@ -679,50 +679,44 @@ async function registerReceiptAllocatingBothOrders(
 }
 
 async function assertCaiwuCannotSubmitReceipt(page: Page, customerName: string) {
-    await page.goto("/finance/customer-accounts")
-    await waitHeading(page, "客户往来")
-    const register = page.locator("#customer-receivables-header-register-receipt")
-    await expect(register).toBeVisible({ timeout: LONG })
-    if (await register.isDisabled()) {
-        await expect(register).toBeDisabled()
-        return
-    }
-    await register.click()
-    const sessionHeading = page.getByRole("heading", { name: "登记回款", exact: true })
-    const picker = page.getByRole("dialog").filter({ hasText: "登记回款 — 选择往来主体" })
-    await Promise.race([
-        sessionHeading.waitFor({ state: "visible", timeout: LONG }),
-        picker.waitFor({ state: "visible", timeout: LONG }),
-    ])
-    if (await picker.isVisible().catch(() => false)) {
-        await chooseOption(
-            page,
-            picker.locator("#customer-receivables-party-picker-input"),
-            customerName,
-            customerName,
-        )
-        await page.locator("#customer-receivables-party-picker-confirm").click()
-    }
-    await expect(sessionHeading).toBeVisible({ timeout: LONG })
+    // 种子财务角色共用回款权限；等待实际权限加载后验证运行时岗位分离。
+    await startReceiptSession(page, customerName)
     await page.locator("#customer-receivables-session-amount").fill("1.00")
     await page.locator("#customer-receivables-session-bank-reference").fill("CAI-WU-SHOULD-FAIL")
     const selection = page
         .locator("#customer-receivables-session-allocations")
         .getByRole("checkbox")
         .first()
-    if (await selection.isVisible().catch(() => false)) {
-        await selection.check()
-        const fill = page.getByRole("button", { name: "填入剩余" }).first()
-        if (await fill.isVisible().catch(() => false)) await fill.click()
-    }
+    await expect(selection).toBeVisible({ timeout: LONG })
+    await selection.check()
+    await expect(selection).toBeChecked()
+    const fill = page.getByRole("button", { name: "填入剩余" }).first()
+    await expect(fill).toBeEnabled({ timeout: LONG })
+    await fill.click()
     const submit = page.locator("#customer-receivables-session-submit")
-    if (await submit.isEnabled()) {
-        await submit.click()
-        const confirm = page.locator("#customer-receivables-session-receipt-confirm-dialog-confirm")
-        if (await confirm.isVisible().catch(() => false)) await confirm.click()
+    await expect(submit).toBeEnabled({ timeout: LONG })
+    await submit.click()
+    const confirm = page.locator("#customer-receivables-session-receipt-confirm-dialog-confirm")
+    await expect(confirm).toBeVisible({ timeout: LONG })
+    const rejected = page.waitForResponse(
+        (response) =>
+            response.request().method() === "POST" &&
+            new URL(response.url()).pathname === "/admin/customer-receipts/commit",
+        { timeout: 60_000 },
+    )
+    await confirm.click()
+    const response = await rejected
+    const result = (await response.json()) as {
+        success?: boolean
+        code?: string
+        errorMessage?: string
     }
+    expect(response.status(), result.errorMessage).toBe(400)
+    expect(result.success).toBe(false)
+    expect(result.code).toBe("INVALID_REQUEST")
+    expect(result.errorMessage).toContain("提交人不得审批自己的单据")
     await expect(
-        page.getByText(/提交人不得审批自己的单据|当前账号没有执行此操作的权限/),
+        page.getByText(/提交人不得审批自己的单据/),
     ).toBeVisible({ timeout: LONG })
 }
 

@@ -217,7 +217,7 @@ function useAccessAuditPage(surface: "access" | "audit" = "access") {
     )
     const eventQuery = useAuditEventQuery(eventOpenId)
     // 账号表单角色选项：仅当前操作者可分配的角色（API 层失败时回落全部角色）
-    const assignableRolesQuery = useAssignableRolesQuery()
+    const assignableRolesQuery = useAssignableRolesQuery(surface === "access")
 
     const data = pageQuery.data
     const policies = data?.governancePolicies

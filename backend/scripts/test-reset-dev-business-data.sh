@@ -20,6 +20,21 @@ if grep -Eq '\.dropDatabase[[:space:]]*\(' "${MONGOSH_SCRIPT}" "${RESET_SCRIPT}"
     fail "重置脚本禁止调用 dropDatabase()"
 fi
 for collection in \
+    finance_command_receipts \
+    sales_command_receipts \
+    purchase_command_receipts \
+    returns_command_receipts \
+    fulfillment_command_receipts \
+    supply_command_receipts \
+    import_command_receipts \
+    integration_command_receipts \
+    work_item_command_receipts \
+    stock_adjustment_cancellations \
+    approval_cancellation_facts \
+    supplier_offering_handover_command_receipts \
+    product_handover_command_receipts \
+    supplier_handover_command_receipts \
+    audit_attempts \
     system_safety_pause_operations \
     low_margin_manager_confirmations \
     supplier_api_health_check_runs \
@@ -113,6 +128,48 @@ grep -q "ERP_RESET_E2E" "${help_output}" || fail "--help 未声明 ERP_RESET_E2E
 grep -q "CATALOG_DROP_GROUPS" "${MONGOSH_SCRIPT}" || fail "供应商/商品主数据重置分组未纳入合同"
 grep -q "KEPT_PUBLISHED_DEFINITION_COLLECTIONS" "${MONGOSH_SCRIPT}" || fail "E2E 保留审批定义集合未纳入合同"
 grep -q "ERP_RESET_E2E" "${MONGOSH_SCRIPT}" || fail "mongosh 未读取 ERP_RESET_E2E"
+
+# 调用生产纯分组函数核对实际模式边界；不执行 run()，不加载 Mongo 连接。
+node - "${MONGOSH_SCRIPT}" <<'JS'
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const source = fs.readFileSync(process.argv[2], 'utf8');
+const start = source.indexOf('async function run()');
+assert.ok(start > 0, '必须截断真实数据库入口');
+const context = vm.createContext({});
+vm.runInContext(source.slice(0, start), context);
+const business = [
+  'finance_command_receipts', 'sales_command_receipts', 'purchase_command_receipts',
+  'returns_command_receipts', 'fulfillment_command_receipts', 'supply_command_receipts',
+  'import_command_receipts', 'integration_command_receipts', 'work_item_command_receipts',
+  'stock_adjustment_cancellations', 'approval_cancellation_facts',
+];
+const masterReceipts = [
+  'supplier_offering_handover_command_receipts', 'product_handover_command_receipts',
+  'supplier_handover_command_receipts',
+];
+for (const includeCatalog of [false, true]) {
+  for (const e2eFast of [false, true]) {
+    const names = context.dropCollectionNames(includeCatalog, e2eFast);
+    const active = new Set(names);
+    assert.equal(active.size, names.length, '每个模式不得重复清理集合');
+    for (const name of business) assert.ok(active.has(name), `${name} 必须随原业务重置`);
+    for (const name of masterReceipts) {
+      assert.equal(active.has(name), includeCatalog || e2eFast, `${name} 必须遵守主数据/隔离模式`);
+    }
+    assert.equal(active.has('audit_attempts'), e2eFast, '普通开发重置保留审计尝试，E2E清空');
+    for (const name of ['audit_logs', 'accounts', 'roles', 'policies']) {
+      assert.ok(!active.has(name), `${name} 不得进入清理范围`);
+    }
+    for (const name of ['approval_process_definitions', 'approval_node_definitions', 'approval_transition_definitions']) {
+      assert.equal(active.has(name), !e2eFast, '隔离E2E必须保留已发布审批定义');
+    }
+    assert.equal(active.has('products'), includeCatalog, '保留主数据模式不得清商品');
+    assert.equal(active.has('supplier_accounts'), includeCatalog, '保留主数据模式不得清供应商');
+  }
+}
+JS
 
 mkdir -p "${TEST_DIR}/bin"
 fixture_config="${TEST_DIR}/config.toml"

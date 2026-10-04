@@ -34,9 +34,14 @@ export async function fetchAccessList(
     const gp = governancePolicies()
     const permissionVersion = `pv-live`
 
+    // 权限审计读取保存的事件快照，不依赖人员或角色管理权限。
     const [roles, admins, auditPage] = await Promise.all([
-        apiGet<BackendRole[]>("/admin/roles"),
-        apiGet<BackendAdmin[]>("/admin/admins"),
+        query.view === "audit"
+            ? Promise.resolve<BackendRole[]>([])
+            : apiGet<BackendRole[]>("/admin/roles"),
+        query.view === "audit"
+            ? Promise.resolve<BackendAdmin[]>([])
+            : apiGet<BackendAdmin[]>("/admin/admins"),
         (query.view === "audit"
             ? fetchCompleteList<BackendAuditEvent>
             : apiGet<Page<BackendAuditEvent>>)("/admin/audit-events", {

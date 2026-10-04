@@ -46,10 +46,11 @@ export function useWorkspaceDashboardQuery(
 /**
  * 顶栏待办角标。数量来自服务端统计，不对列表求和。
  */
-export function useWorkspaceInboxCountQuery() {
+export function useWorkspaceInboxCountQuery(enabled = true) {
     return useQuery({
         queryKey: workItemKeys.inboxCount(),
         queryFn: fetchWorkspaceInboxCount,
+        enabled,
     })
 }
 

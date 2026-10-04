@@ -65,7 +65,10 @@ function useAccessDetailPanels({
     }, [eventIdParam])
 
     React.useEffect(() => {
-        if (subjectIdParam) {
+        if (
+            subjectIdParam &&
+            (view === "roles" || view === "users" || view === "scopes")
+        ) {
             setExplainSubject({
                 type:
                     subjectTypeParam === "USER" || view === "users"
@@ -73,6 +76,8 @@ function useAccessDetailPanels({
                         : "ROLE",
                 id: subjectIdParam,
             })
+        } else {
+            setExplainSubject(null)
         }
     }, [subjectIdParam, subjectTypeParam, view])
 

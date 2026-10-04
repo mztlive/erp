@@ -53,6 +53,22 @@ const CONFLICTING_INDEX_ALLOWLIST = [
 
 const DROP_GROUPS = [
   {
+    name: "业务命令回执与取消事实（随原业务对象整体重置）",
+    collections: [
+      "finance_command_receipts",
+      "sales_command_receipts",
+      "purchase_command_receipts",
+      "returns_command_receipts",
+      "fulfillment_command_receipts",
+      "supply_command_receipts",
+      "import_command_receipts",
+      "integration_command_receipts",
+      "work_item_command_receipts",
+      "stock_adjustment_cancellations",
+      "approval_cancellation_facts",
+    ],
+  },
+  {
     name: "安全暂停叶子证据",
     collections: ["system_safety_pause_operations"],
   },
@@ -292,6 +308,7 @@ const CATALOG_DROP_GROUPS = [
       "supplier_offering_revisions",
       "supplier_offerings",
       "supplier_offering_commands",
+      "supplier_offering_handover_command_receipts",
     ],
   },
   {
@@ -303,6 +320,7 @@ const CATALOG_DROP_GROUPS = [
       "product_revision_medias",
       "product_revisions",
       "products",
+      "product_handover_command_receipts",
       "voucher_category_profile_revisions",
     ],
   },
@@ -313,6 +331,7 @@ const CATALOG_DROP_GROUPS = [
       "supplier_api_capabilities",
       "supplier_api_connections",
       "supplier_profile_commands",
+      "supplier_handover_command_receipts",
       "supplier_rating_revisions",
       "supplier_qualification_capabilities",
       "supplier_qualification_revisions",
@@ -501,10 +520,22 @@ function chunks(values) {
 }
 
 function activeDropGroups(includeCatalog, e2eFast) {
-  const groups = includeCatalog ? [...DROP_GROUPS, ...CATALOG_DROP_GROUPS] : DROP_GROUPS;
+  const groups = includeCatalog ? [...DROP_GROUPS, ...CATALOG_DROP_GROUPS] : [...DROP_GROUPS];
   if (!e2eFast) {
     return groups;
   }
+  // 开发重置保留审计尝试与保留主数据的交接回执；隔离 E2E 必须清空运行证据。
+  groups.push({
+    name: "隔离 E2E 命令运行证据（保留主数据与权限审计）",
+    collections: [
+      "audit_attempts",
+      ...(includeCatalog ? [] : [
+        "supplier_offering_handover_command_receipts",
+        "product_handover_command_receipts",
+        "supplier_handover_command_receipts",
+      ]),
+    ],
+  });
   return groups
     .map((group) => ({
       name: group.name,

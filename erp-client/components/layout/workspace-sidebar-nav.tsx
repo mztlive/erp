@@ -161,7 +161,9 @@ export function WorkspaceSidebarNav() {
         [navGroups],
     )
 
-    const todoCountQuery = useWorkspaceInboxCountQuery()
+    const todoCountQuery = useWorkspaceInboxCountQuery(
+        hasPermission(permissions, "work_item:list"),
+    )
     const canListSelectionBooks = hasPermission(
         permissions,
         "sales_selection_booklet:list",
