@@ -24,6 +24,7 @@ use erp_support::FileAssetView;
 use erp_workflow::{ApprovalObjectReadPort, FailClosedObjectReadPort};
 use mongodb::Database;
 
+use crate::Result;
 use crate::adapters::identity::shared_rbac_service;
 
 mod account;
@@ -50,10 +51,13 @@ pub struct PayableService {
     object_read: Arc<dyn ApprovalObjectReadPort>,
 }
 
-/// 携带银行回单文件资产的付款提交结果。
+/// 已确认付款结果的详情读取与本次银行回单提交状态。
+///
+/// 调用方必须先按附件提交状态完成补偿，再展开详情读取结果；
+/// 详情读取失败不得改变已提交或已恢复的付款事实。
 pub struct SupplierPaymentWithAssetsResult {
-    /// 稳定付款单结果。
-    pub view: SupplierPaymentView,
+    /// 提交或回执查证完成后的详情读取结果；失败保留原错误分类。
+    pub view: Result<SupplierPaymentView>,
     /// 本次上传对象是否已随业务事务登记；幂等重放时为 `false`。
     pub assets_committed: bool,
 }

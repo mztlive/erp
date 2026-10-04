@@ -15,14 +15,15 @@ use crate::app_state::AppState;
 /// # 参数
 /// * `state` - 提供对象存储客户端的应用状态
 /// * `requests` - 仅属于本次请求的新上传对象
-/// * `result` - 数据库命令结果
+/// * `result` - 数据库命令结果；提交后的读取错误须放在成功载荷中，保留附件消费事实
 /// * `assets_committed` - 成功结果是否消费了本次上传；普通成功固定返回 `true`
 ///
 /// # 返回
-/// 完成必要的对象补偿后，原样返回命令结果。
+/// 完成必要的对象补偿后，原样返回命令结果；调用方随后展开载荷中的详情读取结果。
 ///
 /// # 错误
-/// 保留原命令错误；提交结果未知时不删除对象。清理失败只记日志，不覆盖原结果。
+/// 保留原命令错误；提交结果未知时不删除对象。已确认提交后的读取错误不得转换为
+/// 外层失败而触发补偿。清理失败只记日志，不覆盖命令结果或载荷中的读取错误。
 pub(crate) async fn finish_asset_command<T>(
     state: &AppState,
     requests: &[PendingFileAssetRequest],
@@ -92,6 +93,7 @@ pub(crate) fn should_compensate_pending_assets(error: &Error) -> bool {
 mod tests {
     use std::cell::Cell;
 
+    use erp_processes::finance_posting::payable::SupplierPaymentWithAssetsResult;
     use mongodb::error::Error as MongoError;
     use persistence_core::Error as PersistenceError;
 
@@ -158,5 +160,71 @@ mod tests {
 
         assert!(matches!(result, Err(Error::OutcomeUnknown(_))));
         assert_eq!(cleanup_count.get(), 0);
+    }
+
+    #[tokio::test]
+    async fn committed_payment_with_detail_failure_keeps_upload_and_original_read_error() {
+        let cleanup_count = Cell::new(0);
+        let payment = SupplierPaymentWithAssetsResult {
+            view: Err(Error::Internal("付款详情读取失败".to_string())),
+            assets_committed: true,
+        };
+        let result = finish_with_cleanup(
+            Ok(payment),
+            |payment| payment.assets_committed,
+            || async { cleanup_count.set(cleanup_count.get() + 1) },
+        )
+        .await
+        .expect("付款提交事实保持成功");
+
+        assert_eq!(cleanup_count.get(), 0);
+        assert!(result.assets_committed);
+        assert!(matches!(result.view, Err(Error::Internal(message)) if message == "付款详情读取失败"));
+    }
+
+    #[tokio::test]
+    async fn replayed_payment_with_detail_failure_cleans_unused_upload_before_returning_read_error() {
+        let cleanup_count = Cell::new(0);
+        let payment = SupplierPaymentWithAssetsResult {
+            view: Err(Error::NotFound("原付款详情暂不可读取".to_string())),
+            assets_committed: false,
+        };
+        let result = finish_with_cleanup(
+            Ok(payment),
+            |payment| payment.assets_committed,
+            || async { cleanup_count.set(cleanup_count.get() + 1) },
+        )
+        .await
+        .expect("重放回执保持成功");
+
+        assert_eq!(cleanup_count.get(), 1);
+        assert!(!result.assets_committed);
+        assert!(matches!(result.view, Err(Error::NotFound(message)) if message == "原付款详情暂不可读取"));
+    }
+
+    #[tokio::test]
+    async fn recovered_unknown_payment_with_detail_failure_keeps_upload_and_original_unknown_error() {
+        let cleanup_count = Cell::new(0);
+        let original_unknown =
+            PersistenceError::CommitOutcomeUnknown(MongoError::custom("original unknown commit result"));
+        let original_display = original_unknown.to_string();
+        let payment = SupplierPaymentWithAssetsResult {
+            view: Err(Error::OutcomeUnknown(original_unknown)),
+            assets_committed: true,
+        };
+        let result = finish_with_cleanup(
+            Ok(payment),
+            |payment| payment.assets_committed,
+            || async { cleanup_count.set(cleanup_count.get() + 1) },
+        )
+        .await
+        .expect("已找到付款回执，保留附件可能已提交的事实");
+
+        assert_eq!(cleanup_count.get(), 0);
+        assert!(result.assets_committed);
+        let Err(Error::OutcomeUnknown(source)) = result.view else {
+            panic!("详情读取失败必须保留最初的提交未知错误");
+        };
+        assert_eq!(source.to_string(), original_display);
     }
 }

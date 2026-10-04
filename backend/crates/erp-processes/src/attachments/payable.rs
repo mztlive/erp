@@ -13,17 +13,23 @@ use super::pending::PendingFileAssets;
 use crate::Result;
 use crate::finance_posting::payable::{PayableService, SupplierPaymentWithAssetsResult};
 
-/// Commit a supplier payment and persist uploaded bank receipts atomically.
+/// 原子登记供应商付款与本次上传的银行回单。
 ///
-/// # Parameters
-/// * `rbac` - composition-root authorization reader; the policy transaction remains local
-/// * `asset_requests` - validated upload metadata to persist with this payment
+/// # 参数
+/// * `db` - 付款与附件使用的数据库
+/// * `rbac` - 组合根共享授权读取器；付款 policy 事务实例保持局部装配
+/// * `object_read` - 组合根装配的单据读取端口
+/// * `req` - 付款事实、核销分配及原始幂等键
+/// * `asset_requests` - 已上传、须随付款登记的银行回单元数据
+/// * `actor` - 已通过鉴权的当前操作人
 ///
-/// # Returns
-/// Returns the stable payment and whether this attempt registered its uploaded assets.
+/// # 返回
+/// 返回付款详情读取结果及本次附件提交状态；调用方必须先完成附件补偿，
+/// 再展开详情读取结果。
 ///
-/// # Errors
-/// Returns receipt-policy, command, authorization or transaction errors unchanged.
+/// # 错误
+/// 回单政策、命令、授权或事务错误保持原分类。确认提交或幂等重放后的详情
+/// 读取失败保存在 `view` 内，禁止丢弃附件提交状态后触发对象清理。
 pub async fn commit_supplier_payment_with_assets(
     db: Database,
     rbac: SharedRbacService,

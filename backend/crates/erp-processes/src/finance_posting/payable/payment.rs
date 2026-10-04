@@ -1,11 +1,13 @@
 //! 供应商付款单查询、银行回单与过账编排。
 
 use std::collections::HashSet;
+use std::future::Future;
 use std::sync::Arc;
 
 use application_core::{AuditActor, CommandReceipt};
 use erp_audit::{AuditAction, AuditActorLogs, AuditField, AuditFieldKind, BusinessEventContext};
 use erp_core::ids::{FileAssetId, PartyBankAccountId, PartyId, SupplierPaymentId, WorkItemId};
+use erp_finance::dto::payable::SupplierPaymentView;
 use erp_finance::entity::payable::{PendingPaymentAllocation, SupplierPayment, SupplierPaymentData};
 use erp_finance::repository::PayableExt;
 use erp_finance::repository::prelude::*;
@@ -13,6 +15,7 @@ use erp_finance::service::command_receipt::FinanceCommandReceiptService;
 use erp_finance::service::payable::PaymentSettlementFacts;
 use erp_identity::SharedRbacService;
 use erp_party::PartyExt;
+use erp_read_models::Result as ReadResult;
 use erp_supplier::{SupplierAccount, SupplierExt};
 use erp_support::{BankReceiptEvidencePolicy, FileAssetExt, FileAssetView, PendingAttachmentBatch};
 use erp_workflow::ApprovalObjectReadPort;
@@ -145,10 +148,12 @@ impl PayableService {
     ///
     /// # 参数
     /// * `req` - 本次付款事实、冻结分配与幂等键
+    /// * `pending_assets` - 已上传、须随本次付款登记的银行回单批次
     /// * `actor` - 已通过鉴权的审计操作人
     ///
     /// # 返回
-    /// 返回已过账付款单视图。
+    /// 返回详情读取结果及本次附件提交状态。调用方必须先完成附件补偿，
+    /// 再展开详情；提交后读取失败保存在 `view` 内，不得触发已关联回单清理。
     ///
     /// # 错误
     /// * `ValidationError` - 参数组合或分配不合法
@@ -173,10 +178,9 @@ impl PayableService {
             .committed_resource_id(&command_receipt, &mut NoTransaction)
             .await?
         {
-            return Ok(SupplierPaymentWithAssetsResult {
-                view: self.read().supplier_payment_detail(&payment_id).await?,
-                assets_committed: false,
-            });
+            return Ok(
+                read_payment_result(self.read().supplier_payment_detail(&payment_id), false, None).await
+            );
         }
         let has_pending_assets = !pending_assets.is_empty();
         let prepared = PreparedSupplierPayment::prepare(req, pending_assets.as_ref(), actor.id())?;
@@ -214,17 +218,32 @@ impl PayableService {
                     .committed_resource_id(command_receipt, &mut NoTransaction)
                     .await;
                 let recovered = recovered_resource(error, recovered.map_err(Error::from))?;
-                let view = self.read().supplier_payment_detail(&recovered.id).await.map_err(Error::from);
-                return Ok(SupplierPaymentWithAssetsResult {
-                    view: recovered_view(view, recovered.original_unknown)?,
-                    assets_committed: has_pending_assets && assets_may_be_committed,
-                });
+                return Ok(read_payment_result(
+                    self.read().supplier_payment_detail(&recovered.id),
+                    has_pending_assets && assets_may_be_committed,
+                    recovered.original_unknown,
+                )
+                .await);
             },
         };
-        Ok(SupplierPaymentWithAssetsResult {
-            view: self.read().supplier_payment_detail(&payment.base.id).await?,
-            assets_committed: has_pending_assets && fresh,
-        })
+        Ok(read_payment_result(
+            self.read().supplier_payment_detail(&payment.base.id),
+            has_pending_assets && fresh,
+            None,
+        )
+        .await)
+    }
+}
+
+/// 回读付款详情，同时保留已确定的附件提交状态和首次未知提交错误。
+async fn read_payment_result(
+    view: impl Future<Output = ReadResult<SupplierPaymentView>>,
+    assets_committed: bool,
+    original_unknown: Option<Error>,
+) -> SupplierPaymentWithAssetsResult {
+    SupplierPaymentWithAssetsResult {
+        view: recovered_view(view.await.map_err(Error::from), original_unknown),
+        assets_committed,
     }
 }
 
@@ -536,4 +555,113 @@ async fn persist_unbound_supplier_payment_document(
         return Err(Error::Internal("供应商付款为 NO_APPROVAL，不得写入审批绑定".to_string()));
     }
     persist_registered_document(db, &document, executor).await.map_err(crate::Error::from)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cell::Cell;
+
+    use erp_core::common::time::Instant;
+    use erp_core::money::Amount;
+    use erp_finance::entity::payable::SupplierPaymentStatus;
+    use erp_read_models::Error as ReadError;
+    use mongodb::error::Error as MongoError;
+    use persistence_core::Error as PersistenceError;
+
+    use super::{Error, SupplierPaymentView, read_payment_result};
+
+    fn payment_view() -> SupplierPaymentView {
+        SupplierPaymentView {
+            id: "payment-1".into(),
+            payment_no: "PAY-1".into(),
+            status: SupplierPaymentStatus::Posted,
+            supplier_id: "supplier-1".into(),
+            supplier_no: None,
+            supplier_name: None,
+            payment_recipient: None,
+            paid_at: Instant::from_unix_secs(1),
+            amount: Amount::zero(),
+            bank_reference: None,
+            bank_receipt: None,
+            version: 1,
+            created_at: 1,
+            allocated_total: Amount::zero(),
+            unallocated_amount: Amount::zero(),
+            allocations: Vec::new(),
+            related_reversals: Vec::new(),
+        }
+    }
+
+    fn unknown() -> Error {
+        Error::OutcomeUnknown(PersistenceError::CommitOutcomeUnknown(MongoError::custom("original unknown")))
+    }
+
+    #[tokio::test]
+    async fn committed_detail_database_failure_preserves_registered_assets_and_error() {
+        let read_count = Cell::new(0);
+        let result = read_payment_result(
+            async {
+                read_count.set(read_count.get() + 1);
+                Err(ReadError::RepositoryError(PersistenceError::DatabaseError(MongoError::custom(
+                    "detail read timeout",
+                ))))
+            },
+            true,
+            None,
+        )
+        .await;
+
+        assert_eq!(read_count.get(), 1);
+        assert!(result.assets_committed);
+        let Err(Error::RepositoryError(PersistenceError::DatabaseError(source))) = result.view else {
+            panic!("提交后读取失败必须保留普通数据库错误");
+        };
+        assert_eq!(source.get_custom::<&'static str>(), Some(&"detail read timeout"));
+    }
+
+    #[tokio::test]
+    async fn replayed_detail_failure_preserves_unused_upload_status_and_read_error() {
+        let result =
+            read_payment_result(async { Err(ReadError::NotFound("原付款详情暂不可读".into())) }, false, None)
+                .await;
+
+        assert!(!result.assets_committed);
+        assert!(matches!(result.view, Err(Error::NotFound(message)) if message == "原付款详情暂不可读"));
+    }
+
+    #[tokio::test]
+    async fn recovered_unknown_detail_failure_preserves_assets_and_original_unknown_source() {
+        let result = read_payment_result(
+            async { Err(ReadError::Internal("新的详情读取错误".into())) },
+            true,
+            Some(unknown()),
+        )
+        .await;
+
+        assert!(result.assets_committed);
+        let Err(Error::OutcomeUnknown(PersistenceError::CommitOutcomeUnknown(source))) = result.view else {
+            panic!("未知提交恢复后的读取失败必须保留原未知错误");
+        };
+        assert_eq!(source.get_custom::<&'static str>(), Some(&"original unknown"));
+    }
+
+    #[tokio::test]
+    async fn successful_detail_read_preserves_view_for_committed_and_replayed_payments() {
+        for assets_committed in [true, false] {
+            let expected = payment_view();
+            let result = read_payment_result(async { Ok(expected.clone()) }, assets_committed, None).await;
+
+            assert_eq!(result.assets_committed, assets_committed);
+            assert_eq!(result.view.unwrap(), expected);
+        }
+    }
+
+    #[tokio::test]
+    async fn recovered_unknown_detail_success_returns_confirmed_view_and_keeps_assets() {
+        let expected = payment_view();
+        let result = read_payment_result(async { Ok(expected.clone()) }, true, Some(unknown())).await;
+
+        assert!(result.assets_committed);
+        assert_eq!(result.view.unwrap(), expected);
+    }
 }

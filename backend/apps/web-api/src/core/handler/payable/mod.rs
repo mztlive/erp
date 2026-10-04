@@ -263,10 +263,12 @@ pub async fn supplier_payment_merge_candidates(
 /// * `multipart` - 付款 JSON 命令、冻结分配、幂等键和银行回单文件
 ///
 /// # 返回
-/// 返回已过账的付款单视图。
+/// 按附件消费事实完成对象补偿后，返回已过账的付款单视图。
 ///
 /// # 错误
-/// 文件、权限、版本或付款失败时返回原错误；提交结果未知时保留本次对象。
+/// 文件、权限、版本或付款失败时返回原错误。已提交付款的详情读取失败保持原错误
+/// 分类及上传对象；幂等重放未消费本次上传时，先清理对象再传播读取错误。
+/// 提交结果未知时保留本次对象及最初的未知错误。
 pub async fn supplier_payment_commit(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -286,7 +288,7 @@ pub async fn supplier_payment_commit(
     )
     .await;
     let result = finish_asset_command(&state, &pending, result, |result| result.assets_committed).await?;
-    Ok(ApiResponse::ok_with_data(result.view))
+    Ok(ApiResponse::ok_with_data(result.view?))
 }
 
 #[permission_macros::permission(
