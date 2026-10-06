@@ -178,12 +178,16 @@ export function SalesOrderCreateForm({
                     JSON.stringify(submission.savedValues)),
     )
     const nature = useSelector(form.store, (state) => state.values.nature)
+    const orderBasis = useSelector(
+        form.store,
+        (state) => state.values.orderBasis,
+    )
     const selectedCustomerId = useSelector(
         form.store,
         (state) => state.values.customerId,
     )
     const customerQuery = useCustomerCenterQuery(
-        selectedContractId ? "" : selectedCustomerId,
+        orderBasis === "evidence" ? selectedCustomerId : "",
     )
     const lineItems = useSelector(form.store, (state) => state.values.lineItems)
     const procurementResponsibilityQuery =
@@ -197,7 +201,8 @@ export function SalesOrderCreateForm({
 
     React.useEffect(() => {
         const contract = contractQuery.data
-        if (!contract) return
+        if (!selectedContractId || contract?.contractId !== selectedContractId)
+            return
         const preferredRevision = preferredRevisionRef.current
             ? contract.revisionTimeline.find(
                   (revision) =>
@@ -248,10 +253,10 @@ export function SalesOrderCreateForm({
                 dontUpdateMeta: true,
             })
         }
-    }, [contractQuery.data, form])
+    }, [contractQuery.data, form, selectedContractId])
 
     React.useEffect(() => {
-        if (selectedContractId) return
+        if (orderBasis !== "evidence") return
         const customer = customerQuery.data
         if (!customer || customer.customerId !== selectedCustomerId) return
         form.setFieldValue("customerName", customer.currentRevision.legalName, {
@@ -272,7 +277,7 @@ export function SalesOrderCreateForm({
                 { dontUpdateMeta: true },
             )
         }
-    }, [customerQuery.data, form, selectedContractId, selectedCustomerId])
+    }, [customerQuery.data, form, orderBasis, selectedCustomerId])
 
     /** 负责销售固定为当前登录用户。 */
     React.useEffect(() => {
@@ -293,9 +298,21 @@ export function SalesOrderCreateForm({
             form.setFieldValue("contractRevisionLabel", "")
             form.setFieldValue("customerName", "")
             form.setFieldValue("settlementEntity", "")
+            form.setFieldValue("settlementPartyId", "")
         },
         [form],
     )
+
+    const handleOrderBasisChange = (basis: "contract" | "evidence") => {
+        if (basis === form.state.values.orderBasis) return
+        // 已保存单据的开单依据沿用原单；上传期间不卸载凭证控件。
+        if (submission.draftIdentity || form.state.values.evidenceUploadPending)
+            return
+        form.setFieldValue("orderBasis", basis)
+        form.setFieldValue("contractId", "")
+        handleContractChange("")
+        form.setFieldValue("paymentTerms", "")
+    }
 
     const handleUploadSuccess = React.useCallback(
         async (result: UploadContractPdfResult) => {
@@ -304,11 +321,13 @@ export function SalesOrderCreateForm({
             })
             preferredRevisionRef.current = result.revisionId
             setSelectedContractId(result.contractId)
+            form.setFieldValue("orderBasis", "contract")
             form.setFieldValue("contractId", result.contractId)
             form.setFieldValue("requestedContractRevisionId", "")
             form.setFieldValue("contractRevisionLabel", "")
             form.setFieldValue("customerName", "")
             form.setFieldValue("settlementEntity", "")
+            form.setFieldValue("settlementPartyId", "")
         },
         [form, queryClient],
     )
@@ -413,6 +432,7 @@ export function SalesOrderCreateForm({
                             customerLocked={submission.draftIdentity != null}
                             contractFetching={contractQuery.isFetching}
                             onContractChange={handleContractChange}
+                            onOrderBasisChange={handleOrderBasisChange}
                             onUploadClick={() => setUploadOpen(true)}
                         />
                         <SalesOrderCreateHeaderFields

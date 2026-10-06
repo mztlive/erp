@@ -87,6 +87,10 @@ export function useSalesOrderCreateSubmission({
         value: CreateSalesOrderFormValues,
         form: { reset: () => void },
     ) => {
+        const evidenceFileAssetIds =
+            value.orderBasis === "evidence"
+                ? (value.evidenceAttachments?.map((file) => file.id) ?? [])
+                : []
         const draftContent = {
             nature: value.nature,
             customerId: value.customerId,
@@ -190,8 +194,7 @@ export function useSalesOrderCreateSubmission({
                         value.requestedContractRevisionId,
                 },
                 ...draftContent,
-                evidenceFileAssetIds:
-                    value.evidenceAttachments?.map((file) => file.id) ?? [],
+                evidenceFileAssetIds,
                 intent: submitIntentRef.current,
             })
         }
@@ -222,9 +225,7 @@ export function useSalesOrderCreateSubmission({
                 value.contractId === command.payload.contract.contractId &&
                 value.requestedContractRevisionId ===
                     command.payload.contract.requestedContractRevisionId &&
-                JSON.stringify(
-                    value.evidenceAttachments?.map((file) => file.id) ?? [],
-                ) ===
+                JSON.stringify(evidenceFileAssetIds) ===
                     JSON.stringify(
                         command.payload.evidenceFileAssetIds ?? [],
                     ) &&

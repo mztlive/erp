@@ -33,8 +33,10 @@ export function useSalesOrderCreateDefaults({
 }: SalesOrderCreateDefaultsInput): CreateSalesOrderFormValues {
     return React.useMemo(() => {
         const nature = initialDraft?.nature ?? initialNature
+        const contractId = initialDraft?.contractId || initialContractId
         return {
-            contractId: initialDraft?.contractId || initialContractId,
+            orderBasis: initialDraft && !contractId ? "evidence" : "contract",
+            contractId,
             requestedContractRevisionId: initialContractRevisionId,
             contractRevisionLabel: "",
             customerId: initialDraft?.customerId || initialCustomerId,

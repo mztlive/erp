@@ -85,6 +85,7 @@ export function SalesOrderCreateEvidenceField({
                                 idPrefix="sales-orders-create-evidence"
                                 accept="application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp"
                                 multiple={false}
+                                density="compact"
                                 disabled={upload.isPending}
                                 label={
                                     upload.isPending
@@ -104,7 +105,7 @@ export function SalesOrderCreateEvidenceField({
                         <FieldDescription id="sales-orders-create-evidence-description">
                             {locked
                                 ? "创建销售单时上传的开单依据已保留。"
-                                : "无合同时至少上传一份开单依据，可继续添加多份；合同可在销售单详情中补录。"}
+                                : "至少上传一份凭证，支持继续添加；签署合同后可在销售单详情中补录。"}
                         </FieldDescription>
                         {invalid ? (
                             <FieldError

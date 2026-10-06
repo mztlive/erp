@@ -80,6 +80,7 @@ const draftRowSchema = z.object({
 
 const createSalesOrderSchema = z
     .object({
+        orderBasis: z.enum(["contract", "evidence"]),
         contractId: z.string(),
         evidenceUploadPending: z.boolean().optional(),
         evidenceAttachments: z
@@ -121,7 +122,13 @@ const createSalesOrderSchema = z
                 message: "请等待开单凭证上传完成",
             })
         }
-        if (!value.contractId.trim()) {
+        if (value.orderBasis === "contract" && !value.contractId.trim()) {
+            context.addIssue({
+                code: "custom",
+                path: ["contractId"],
+                message: "请选择有效合同，或切换为凭证开单",
+            })
+        } else if (value.orderBasis === "evidence") {
             if (!value.customerId.trim() || !value.customerName.trim()) {
                 context.addIssue({
                     code: "custom",
@@ -253,6 +260,7 @@ export type CreateSalesOrderFormValues = z.input<typeof createSalesOrderSchema>
 /** 保存草稿保留客户及开单依据，提交时校验完整商业字段。 */
 const draftSalesOrderSchema = z
     .object({
+        orderBasis: z.enum(["contract", "evidence"]),
         contractId: z.string(),
         evidenceUploadPending: z.boolean().optional(),
         evidenceAttachments: z
@@ -283,7 +291,13 @@ const draftSalesOrderSchema = z
                 message: "请等待开单凭证上传完成",
             })
         }
-        if (!value.contractId.trim()) {
+        if (value.orderBasis === "contract" && !value.contractId.trim()) {
+            context.addIssue({
+                code: "custom",
+                path: ["contractId"],
+                message: "请选择有效合同，或切换为凭证开单",
+            })
+        } else if (value.orderBasis === "evidence") {
             if (!value.customerId.trim() || !value.customerName.trim()) {
                 context.addIssue({
                     code: "custom",
