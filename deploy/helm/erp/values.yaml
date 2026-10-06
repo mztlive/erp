@@ -6,7 +6,7 @@ imagePullSecret: ""
 api:
   image: ""
   replicas: 1
-  configSecret: erp-config
+  configSecret: erp-api-config
   configRevision: "nacos-1"
   nacos:
     serverAddr: ""

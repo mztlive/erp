@@ -53,7 +53,7 @@ Agent 必须能够访问 Git、依赖源、TCR、目标 TKE API Server 和所选
 
 1. 清理任务工作区。`deploy` 检出 `GIT_REF`，`rollback` 检出任务配置分支。随后校验工具版本和环境映射；`rollback` 同时校验 revision 为正整数。
 2. 始终执行 `bash deploy/jenkins/test_release.sh`。测试使用真实的本地 Helm 和 Docker、kubectl、HTTP 命令替身，不连接 Docker、集群或业务服务；测试工作区在临时目录，退出时清理。
-3. `deploy` 且要发布到集群，或 `rollback` 时，检查现有 Ingress 的共享模式和 CLB 归属，以及配置、证书、拉取 Secret 所需的数据键。当前 Nacos 模式检查 `erp-config` 的非空 `NACOS_USERNAME`、`NACOS_PASSWORD`；回滚按目标 revision 检查，历史文件模式检查旧配置 Secret 的 `config.toml`。
+3. `deploy` 且要发布到集群，或 `rollback` 时，检查现有 Ingress 的共享模式和 CLB 归属，以及配置、证书、拉取 Secret 所需的数据键。当前 Nacos 模式检查 `erp-api-config` 的非空 `NACOS_USERNAME`、`NACOS_PASSWORD`；回滚按目标 revision 检查，历史文件模式检查旧配置 Secret 的 `config.toml`。
 4. 仅 `deploy` 按质量开关执行后端格式、编译、Clippy、库单元测试、边界与权限漂移检查，以及前端 lint 与 TypeScript。`erp-client` 没有单元测试。不得新增或执行后端集成测试。
 5. 仅 `deploy`：使用隔离的 Docker 登录目录构建推送两个镜像；结束时只清理凭据目录。Buildx builder 按平台保留为 `erp-<平台>`，cargo 缓存留在该 builder 的状态卷中。记录目录默认是 `~/.local/state/erp-buildx`，可用 `BUILDX_CONFIG` 覆盖。固定的 BuildKit 镜像变化时才重建 builder。前端构建地址从所选环境读取。
 6. 构建成功后，在同一 Shell 环境内读取并校验 Buildx digest，将环境 values、两个镜像地址及发布标识合并为 `values-release.json`，直接执行 Helm lint、package、template，归档完整发布包。构建开始时清除旧产物，失败不得继续发布。

@@ -16,7 +16,7 @@ ERP 的生产、测试环境统一使用 `deploy/helm/erp` Chart，由根目录 
 | Nacos Namespace UUID | `8888c735-1d29-4765-ab7f-70100a888479` | `ccf7ec38-1d60-407e-bf2c-7c4654c481d0` |
 | Nacos Group / Data ID | `DEFAULT_GROUP / erp` | `DEFAULT_GROUP / erp` |
 | Nacos 只读账号 | `prod` | `test` |
-| Nacos 凭据 Secret | `prod/erp-config` | `test/erp-config` |
+| Nacos 凭据 Secret | `prod/erp-api-config` | `test/erp-api-config` |
 | 证书 Secret | `prod/fsytsl-wsk87cm7` | `test/fsytsl-wsk87cm7` |
 
 环境 JSON 是 Helm 原生支持的 values 输入，发布脚本通过 `jq` 读取其中的域名和配置引用。域名、CLB、配置 Secret 引用只在环境文件维护；副本、资源额度、探针与通用默认值在 Chart 中维护。需要环境专属副本或资源额度时，在对应环境文件覆盖 `api`、`client` 或 `pdb` 字段。
@@ -31,7 +31,7 @@ Chart 不管理 Namespace、MongoDB、S3、应用配置 Secret、证书 Secret�
 
 1. 创建对应命名空间；生产用 `prod`，测试用 `test`。
 2. 按 [Nacos 环境配置接入与权限管理规范](https://outline.fushangyunfu.com/doc/nacos-vxFwmIgO8r)向运维登记本表标识。将[后端配置模板](examples/web-api-config.example.toml)填写为完整 TOML，发布到对应 Namespace 的 `DEFAULT_GROUP / erp`，Data ID 无后缀。端口必须为 `10001`，JWT 密钥至少 32 个随机字节。若目标库尚无 `admin`，可配置 `[bootstrap].initial_admin_password`（6 到 32 个字符）；已有账号不改密码。首次登录确认后，从 Nacos 删除该字段并重启 API。
-3. 运维在应用命名空间创建或更新 `erp-config`，保留其他键并写入非空 `NACOS_USERNAME`、`NACOS_PASSWORD`。测试使用 `test`，生产使用 `prod`；禁止管理员或 Seata 账号。Chart 将两键映射到 `NACOS_CLIENT_USERNAME`、`NACOS_CLIENT_PASSWORD`。应用 Pod 必须能解析 `nacos.infra.svc.cluster.local` 并访问 `8848/TCP`、`9848/TCP`。两环境须使用不同数据库及凭据、JWT 密钥、S3 bucket 或受权限隔离的前缀，不得复制整份生产配置到测试。
+3. 运维在应用命名空间创建或更新 `erp-api-config`，保留其他键并写入非空 `NACOS_USERNAME`、`NACOS_PASSWORD`。测试使用 `test`，生产使用 `prod`；禁止管理员或 Seata 账号。Chart 将两键映射到 `NACOS_CLIENT_USERNAME`、`NACOS_CLIENT_PASSWORD`。应用 Pod 必须能解析 `nacos.infra.svc.cluster.local` 并访问 `8848/TCP`、`9848/TCP`。两环境须使用不同数据库及凭据、JWT 密钥、S3 bucket 或受权限隔离的前缀，不得复制整份生产配置到测试。
 4. MongoDB 必须是副本集，成员地址必须从目标 Pod 可达。流水线不创建数据库、不清库、不执行种子或数据库迁移。
 5. 在各自命名空间准备证书 Secret，包含 `qcloud_cert_id`，并确认覆盖该环境的两个域名。Secret 不跨命名空间引用；相同名称不代表测试环境已经有证书。
 6. 将四个域名解析到共享 CLB，确认域名和路径未被其他应用占用。
