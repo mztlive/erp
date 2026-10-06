@@ -8,6 +8,13 @@
     "tlsSecret": "fsytsl-wsk87cm7"
   },
   "api": {
-    "configSecret": "erp-api-config"
+    "configSecret": "erp-config",
+    "configRevision": "nacos-1",
+    "nacos": {
+      "serverAddr": "nacos.infra.svc.cluster.local:8848",
+      "namespace": "ccf7ec38-1d60-407e-bf2c-7c4654c481d0",
+      "group": "DEFAULT_GROUP",
+      "dataId": "erp"
+    }
   }
 }

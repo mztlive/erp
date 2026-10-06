@@ -17,6 +17,8 @@ use args::{Cli, Command};
 use clap::Parser;
 use error::Result;
 use tracing_subscriber::EnvFilter;
+use tracing_subscriber::filter::filter_fn;
+use tracing_subscriber::prelude::*;
 
 /// 程序入口。
 ///
@@ -44,10 +46,10 @@ async fn run() -> Result<()> {
     init_tracing();
     let cli = Cli::parse();
     match cli.command {
-        Command::MigrateContractTemplates => migrate_contract_templates::run(&cli.config_path).await,
-        Command::MigratePersonScopes(args) => migrate_scopes::run(&cli.config_path, args).await,
-        Command::InitAdmin(args) => init_admin::run(&cli.config_path, args).await,
-        Command::ResetPassword(args) => reset_password::run(&cli.config_path, args).await,
+        Command::MigrateContractTemplates => migrate_contract_templates::run(&cli.config).await,
+        Command::MigratePersonScopes(args) => migrate_scopes::run(&cli.config, args).await,
+        Command::InitAdmin(args) => init_admin::run(&cli.config, args).await,
+        Command::ResetPassword(args) => reset_password::run(&cli.config, args).await,
     }
 }
 
@@ -63,5 +65,11 @@ async fn run() -> Result<()> {
 /// 无；环境变量缺失时回退到 `info`。
 fn init_tracing() {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
-    tracing_subscriber::fmt().with_env_filter(filter).with_target(false).init();
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_target(false)
+        .finish()
+        // SDK 的认证 debug 日志包含密码，必须独立于 RUST_LOG 强制过滤。
+        .with(filter_fn(|metadata| !metadata.target().starts_with("nacos_sdk")))
+        .init();
 }

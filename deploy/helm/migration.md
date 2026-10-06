@@ -4,6 +4,8 @@
 
 本流程只用于已经通过 Kustomize/kubectl 部署、尚未归属任何 Helm release 的 ERP 资源。空的测试命名空间按正常 Jenkins 发布，不执行本流程。存在其他 Helm release 归属时必须停止，禁止覆盖其归属。
 
+当前 Chart 0.2.0 使用 Nacos，仅可用于已支持本项目 Nacos 鉴权参数、且配置已发布的镜像。仍运行文件模式的旧工作负载必须使用受控归档中的 0.1.x Chart、环境 values 和发布脚本先建立文件模式基线，再通过日常发布升级到 Nacos。禁止将旧镜像直接配上当前 Chart，禁止在接管时同时切换配置来源。以下命令只适用于已经使用 Nacos 的工作负载。
+
 接管只改变 ERP 资源的管理方式。保留当前成功版本的镜像 digest、资源名称、Deployment selector、Service NodePort 和共享 CLB 入口；不得同时执行数据库变更或切换 Ingress 模式。Pod 注解变化可能触发滚动更新，必须预留容量和维护窗口。
 
 ## 2. 接管前核对
@@ -78,4 +80,4 @@ helm --kubeconfig "$KUBECONFIG" --kube-context "$KUBE_CONTEXT" -n "$KUBE_NAMESPA
 
 通过后归档 `helm get values erp -a`、`helm get manifest erp`、`helm history erp` 与接管前备份，记录基线 revision。以上命令均须显式携带同一 kubeconfig/context/namespace。停止旧的应用 Kustomize 发布入口，再允许 Jenkins 执行普通升级。
 
-基线 release 成功建立后，后续升级才具备 Helm 可回退的上一版本。回退按 [Jenkins 发布执行规范](../jenkins/README.md)执行；Helm 回退不会恢复配置 Secret 或数据库。
+基线 release 成功建立后，后续升级才具备 Helm 可回退的上一版本。回退按 [Jenkins 发布执行规范](../jenkins/README.md)执行；Helm 回退不会恢复 Nacos 内容、配置 Secret 或数据库。

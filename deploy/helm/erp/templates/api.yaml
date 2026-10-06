@@ -53,11 +53,30 @@ spec:
         - name: erp-api
           image: {{ .Values.api.image | quote }}
           imagePullPolicy: IfNotPresent
-          args: ["--config-path", "/app/config.toml"]
+          args:
+            - --enable-nacos
+            - --nacos-addr
+            - {{ .Values.api.nacos.serverAddr | quote }}
+            - --nacos-namespace
+            - {{ .Values.api.nacos.namespace | quote }}
+            - --nacos-group
+            - {{ .Values.api.nacos.group | quote }}
+            - --nacos-data-id
+            - {{ .Values.api.nacos.dataId | quote }}
           ports:
             - name: http
               containerPort: 10001
           env:
+            - name: NACOS_CLIENT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.api.configSecret | quote }}
+                  key: NACOS_USERNAME
+            - name: NACOS_CLIENT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.api.configSecret | quote }}
+                  key: NACOS_PASSWORD
             - name: RUST_LOG
               value: info
             - name: LOG_FORMAT
@@ -79,11 +98,6 @@ spec:
             - name: HOME
               value: /tmp
           volumeMounts:
-            # 进程只在启动时读取该文件。更新 Secret 后要 rollout restart。
-            - name: config
-              mountPath: /app/config.toml
-              subPath: config.toml
-              readOnly: true
             - name: tmp
               mountPath: /tmp
           # /health 只表示进程已开始监听。索引和副本集校验发生在监听之前，
@@ -116,13 +130,6 @@ spec:
           resources:
 {{ toYaml .Values.api.resources | indent 12 }}
       volumes:
-        - name: config
-          secret:
-            secretName: {{ .Values.api.configSecret | quote }}
-            items:
-              - key: config.toml
-                path: config.toml
-            defaultMode: 0444
         - name: tmp
           emptyDir: {}
 ---

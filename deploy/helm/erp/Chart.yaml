@@ -2,4 +2,4 @@ apiVersion: v2
 name: erp
 description: ERP API and web application on Tencent TKE
 type: application
-version: 0.1.0
+version: 0.2.0

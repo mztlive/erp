@@ -3,8 +3,23 @@
 `config` 负责解析应用与 MongoDB 配置，并通过 `SafeConfig` 提供只读快照和变更订阅。
 配置来源二选一：
 
-- 默认读取 `--config-path` 指定的本地 TOML。
-- 启用 `--enable-nacos` 后从 Nacos 拉取 TOML，并每 10 秒刷新一次。
+- 本地开发与隔离 E2E 默认读取 `--config-path` 指定的本地 TOML。
+- TKE 测试、生产使用 `--enable-nacos` 从 Nacos 读取完整 TOML；API 每 10 秒刷新，CLI 单次读取。
+- 两种来源不得混用。Nacos 必须显式传入地址、Namespace UUID、Group、Data ID，并设置非空环境变量 `NACOS_CLIENT_USERNAME`、`NACOS_CLIENT_PASSWORD`；不得在命令参数中传密码。
+
+接入以 [Nacos 环境配置接入与权限管理规范](https://outline.fushangyunfu.com/doc/nacos-vxFwmIgO8r)为准，ERP 使用 `DEFAULT_GROUP / erp`。测试 Namespace 为 `ccf7ec38-1d60-407e-bf2c-7c4654c481d0`，生产为 `8888c735-1d29-4765-ab7f-70100a888479`。地址使用 `host:port`，不得使用控制台 HTTPS URL 或 `http://` 前缀。
+
+```bash
+# 凭据由 Secret 或受控终端环境注入；本机调试先建立 8848、9848 端口转发。
+cargo run -p web-api -- --enable-nacos \
+  --nacos-addr 127.0.0.1:8848 \
+  --nacos-namespace ccf7ec38-1d60-407e-bf2c-7c4654c481d0 \
+  --nacos-group DEFAULT_GROUP --nacos-data-id erp
+```
+
+兼容 `--enable-nacos true`。连接和读取均在 30 秒后超时失败；首次读取失败不得降级到文件或 SDK 磁盘缓存。运行中读取、解析或应用校验失败保留有效快照。SDK 环境优先级已关闭，`NACOS_CLIENT_SERVER_ADDRESS`、`NACOS_CLIENT_NAMESPACE`、`NACOS_CLIENT_ENDPOINT` 和缓存环境变量不能覆盖启动参数；只有上述两个凭据变量由应用显式读取。
+
+锁定的 SDK 0.8.0 在 debug 日志包含登录密码，API 和 CLI 必须全局过滤 `nacos_sdk` 日志。应用记录脱敏的连接标识、错误类别及协议错误码，不记录配置原文；TOML 解析错误只保留字节位置。新增进程复用本 crate 时必须执行同一日志过滤约束。
 
 最小配置如下：
 

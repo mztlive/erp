@@ -1,14 +1,15 @@
 use std::fmt;
 
 use clap::{Args, Parser, Subcommand};
+use config::ConfigArgs;
 
 /// ERP 运维命令行。
 #[derive(Debug, Parser)]
 #[command(name = "cli", about = "初始化超级管理员与重置管理员密码", disable_help_subcommand = true)]
 pub struct Cli {
-    /// TOML 配置文件路径。
-    #[arg(short, long, default_value = "./config.toml", global = true)]
-    pub config_path: String,
+    /// 文件或 Nacos 配置来源。
+    #[command(flatten)]
+    pub config: ConfigArgs,
     /// 子命令。
     #[command(subcommand)]
     pub command: Command,
@@ -141,7 +142,7 @@ mod tests {
         ])
         .unwrap();
 
-        assert_eq!(cli.config_path, "./config.toml");
+        assert_eq!(cli.config.config_path, "./config.toml");
         match cli.command {
             Command::InitAdmin(args) => {
                 assert_eq!(args.account, "admin");

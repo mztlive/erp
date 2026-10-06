@@ -1,4 +1,4 @@
-use config::Config;
+use config::ConfigArgs;
 use erp_identity::AdminService;
 use erp_processes::adapters::identity::shared_rbac_service;
 
@@ -17,15 +17,15 @@ impl AdminRuntime {
     /// 规则，因此同时确保索引存在。
     ///
     /// # 参数
-    /// * `config_path` - TOML 配置文件路径
+    /// * `source` - 文件或 Nacos 配置来源
     ///
     /// # 返回值
     /// 返回可调用 `AdminService` 的运行时。
     ///
     /// # 错误
     /// 配置无效、数据库不可用或不支持事务时返回错误。
-    pub async fn connect(config_path: &str) -> Result<Self> {
-        let config = Config::from_file(config_path).await?;
+    pub async fn connect(source: &ConfigArgs) -> Result<Self> {
+        let config = source.load().await?;
         let (_, db) = persistence_core::connect(&config.database.uri, &config.database.db_name).await?;
         persistence_core::ensure_transaction_support(&db).await?;
         crate::indexes::ensure_indexes(&db).await?;

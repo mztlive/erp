@@ -30,9 +30,9 @@
 //!
 //! ```no_run
 //! // 启用 nacos 运行:
-//! // ./program --enable-nacos --nacos-addr="http://localhost:8848"
-//! //           --nacos-namespace="public" --nacos-group="DEFAULT_GROUP"
-//! //           --nacos-data-id="config.toml"
+//! // ./program --enable-nacos --nacos-addr="127.0.0.1:8848"
+//! //           --nacos-namespace="ccf7ec38-1d60-407e-bf2c-7c4654c481d0" --nacos-group="DEFAULT_GROUP"
+//! //           --nacos-data-id="erp"
 //! ```
 //!
 //! ## 配置结构
@@ -48,7 +48,7 @@ use std::fmt;
 use std::path::Path;
 
 use clap::Parser;
-use command::Args;
+pub use command::ConfigArgs;
 use nacos::NacosConfig;
 use nacos_watch::NacosConfigWatcher;
 use serde::Deserialize;
@@ -454,10 +454,10 @@ impl SafeConfig {
 
     /// 从命令行参数创建新的 SafeConfig 实例。
     ///
-    /// 本方法依赖 command 模块中定义的 Args 结构体来解析命令行参数。
-    /// Args 结构体通过 clap 实现命令行参数的解析，定义在 `command.rs` 文件中。
+    /// 本方法依赖 command 模块中定义的 ConfigArgs 结构体来解析命令行参数。
+    /// ConfigArgs 结构体通过 clap 实现命令行参数的解析，定义在 `command.rs` 文件中。
     ///
-    /// Args 结构体包含以下字段:
+    /// ConfigArgs 结构体包含以下字段:
     /// * `config_path`: 配置文件路径
     /// * `enable_nacos`: 是否启用 Nacos 配置中心
     /// * `nacos_addr`: Nacos 服务器地址
@@ -473,23 +473,23 @@ impl SafeConfig {
     ///
     /// # 使用 Nacos 配置中心
     /// ./program --enable-nacos \
-    ///           --nacos-addr="http://localhost:8848" \
-    ///           --nacos-namespace="public" \
+    ///           --nacos-addr="127.0.0.1:8848" \
+    ///           --nacos-namespace="ccf7ec38-1d60-407e-bf2c-7c4654c481d0" \
     ///           --nacos-group="DEFAULT_GROUP" \
-    ///           --nacos-data-id="config.toml"
+    ///           --nacos-data-id="erp"
     /// ```
     ///
     /// # 返回
     ///
     /// * `Result<Self>` - 初始化的 SafeConfig 实例或错误
     pub async fn from_args() -> Result<Self> {
-        let args = Args::parse();
+        let args = ConfigArgs::parse();
 
-        if args.is_enable_nacos() {
-            return Self::from_nacos_with_watcher(args.to_nacos_config()).await;
+        if args.enable_nacos {
+            return Self::from_nacos_with_watcher(args.nacos_config()?).await;
         }
 
-        let config = Config::from_file(&args.config_path).await?;
+        let config = args.load().await?;
         Ok(Self::new(config))
     }
 
@@ -543,10 +543,15 @@ impl SafeConfig {
     /// * `Result<()>` - 成功或错误指示
     async fn reload_from_nacos(&self, nacos_client: &NacosConfigClient) -> Result<()> {
         let content = nacos_client.fetch().await?;
-        let config = Config::from_toml_str(&content)?;
-        self.sender.send_replace(config);
+        self.replace_from_toml(&content)?;
 
         info!("从 nacos 重新加载配置成功");
+        Ok(())
+    }
+
+    fn replace_from_toml(&self, content: &str) -> Result<()> {
+        let config = Config::from_toml_str(content)?;
+        self.sender.send_replace(config);
         Ok(())
     }
 }
@@ -575,6 +580,30 @@ key_prefix = "erp/uploads"
 public_base_url = "https://cdn.example.com/assets"
 force_path_style = true
 "#;
+
+    #[test]
+    fn reload_validates_before_replacing_snapshot() {
+        let config = super::SafeConfig::new(Config::from_toml_str(MINIMAL_CONFIG).unwrap());
+        let receiver = config.subscribe();
+        for invalid in [
+            "secret = [invalid",
+            "",
+            &MINIMAL_CONFIG.replace("test-secret-that-is-at-least-32-bytes", "short"),
+        ] {
+            assert!(config.replace_from_toml(invalid).is_err());
+            assert!(!receiver.has_changed().unwrap());
+            assert_eq!(config.snapshot().app.port, 10001);
+        }
+        config.replace_from_toml(&MINIMAL_CONFIG.replace("10001", "10002")).unwrap();
+        assert!(receiver.has_changed().unwrap());
+        assert_eq!(config.snapshot().app.port, 10002);
+    }
+
+    #[test]
+    fn parse_error_does_not_include_config_content() {
+        let error = Config::from_toml_str("secret = super-private-secret").unwrap_err();
+        assert!(!format!("{error} {error:?}").contains("super-private-secret"));
+    }
 
     #[test]
     fn parses_required_s3_runtime_config() {

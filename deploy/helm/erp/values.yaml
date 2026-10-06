@@ -6,8 +6,13 @@ imagePullSecret: ""
 api:
   image: ""
   replicas: 1
-  configSecret: erp-api-config
-  configRevision: "1"
+  configSecret: erp-config
+  configRevision: "nacos-1"
+  nacos:
+    serverAddr: ""
+    namespace: ""
+    group: ""
+    dataId: ""
   resources:
     requests: {cpu: 100m, memory: 256Mi}
     limits: {cpu: "1", memory: 1Gi}

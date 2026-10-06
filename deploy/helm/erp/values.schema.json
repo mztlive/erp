@@ -59,6 +59,34 @@
         "configRevision": {
           "type": "string",
           "minLength": 1
+        },
+        "nacos": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "serverAddr": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9.-]+:[0-9]+$"
+            },
+            "namespace": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            },
+            "group": {
+              "type": "string",
+              "pattern": "^\\S+$"
+            },
+            "dataId": {
+              "type": "string",
+              "pattern": "^\\S+$"
+            }
+          },
+          "required": [
+            "serverAddr",
+            "namespace",
+            "group",
+            "dataId"
+          ]
         }
       },
       "required": [
@@ -66,7 +94,8 @@
         "replicas",
         "resources",
         "configSecret",
-        "configRevision"
+        "configRevision",
+        "nacos"
       ]
     },
     "client": {

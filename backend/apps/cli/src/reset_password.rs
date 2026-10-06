@@ -1,3 +1,4 @@
+use config::ConfigArgs;
 use erp_identity::{ResetAdminPasswordParams, ResetAdminPasswordResult};
 use tracing::info;
 
@@ -9,7 +10,7 @@ use crate::runtime::AdminRuntime;
 /// 执行已有管理员密码重置。
 ///
 /// # 参数
-/// * `config_path` - TOML 配置文件路径
+/// * `source` - 文件或 Nacos 配置来源
 /// * `args` - 账号与可选密码
 ///
 /// # 返回值
@@ -17,9 +18,9 @@ use crate::runtime::AdminRuntime;
 ///
 /// # 错误
 /// 配置、数据库、密码输入或服务编排失败时返回错误。
-pub async fn run(config_path: &str, args: ResetPasswordArgs) -> Result<()> {
+pub async fn run(source: &ConfigArgs, args: ResetPasswordArgs) -> Result<()> {
     let password = resolve_password(args.password)?;
-    let runtime = AdminRuntime::connect(config_path).await?;
+    let runtime = AdminRuntime::connect(source).await?;
     let result = runtime
         .service
         .reset_admin_password(ResetAdminPasswordParams { account: args.account, password })

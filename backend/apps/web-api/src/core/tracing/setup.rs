@@ -6,9 +6,10 @@ use opentelemetry_otlp::SpanExporter;
 use opentelemetry_sdk::Resource;
 use opentelemetry_sdk::propagation::TraceContextPropagator;
 use opentelemetry_sdk::trace::SdkTracerProvider;
-use tracing::info;
+use tracing::{Metadata, info};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
+use tracing_subscriber::filter::filter_fn;
 use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::fmt::{self};
 use tracing_subscriber::layer::SubscriberExt;
@@ -159,7 +160,13 @@ pub fn init_tracing(config: TracingConfig) -> Result<TracingGuard, Box<dyn std::
         tracing_opentelemetry::layer().with_tracer(tracer)
     });
 
-    tracing_subscriber::registry().with(env_filter).with(layers).with(telemetry_layer).init();
+    tracing_subscriber::registry()
+        .with(env_filter)
+        .with(layers)
+        .with(telemetry_layer)
+        // SDK 0.8.0 会在 debug 输出登录密码；全局过滤不允许 RUST_LOG 绕过。
+        .with(filter_fn(allow_log))
+        .init();
 
     info!(
         json_format = config.json_format,
@@ -201,9 +208,31 @@ fn build_tracer_provider(
     Ok(Some(provider))
 }
 
+// SDK 0.8.0 的认证及响应日志可能包含凭据，禁止通过 RUST_LOG 重新开启。
+fn allow_log(metadata: &Metadata<'_>) -> bool {
+    !metadata.target().starts_with("nacos_sdk")
+}
+
 #[cfg(test)]
 mod tests {
-    use super::TracingConfig;
+    use tracing::Level;
+    use tracing_subscriber::EnvFilter;
+    use tracing_subscriber::filter::filter_fn;
+    use tracing_subscriber::prelude::*;
+
+    use super::{TracingConfig, allow_log};
+
+    #[test]
+    fn sdk_logs_stay_disabled_under_explicit_trace_directives() {
+        let subscriber = tracing_subscriber::registry()
+            .with(EnvFilter::new("trace,nacos_sdk=trace,nacos_sdk::api::plugin::auth=trace"))
+            .with(filter_fn(allow_log));
+        tracing::subscriber::with_default(subscriber, || {
+            assert!(!tracing::enabled!(target: "nacos_sdk::api::plugin::auth", Level::DEBUG));
+            assert!(!tracing::enabled!(target: "nacos_sdk::api::plugin::auth", Level::ERROR));
+            assert!(tracing::enabled!(target: "config::nacos", Level::INFO));
+        });
+    }
 
     #[test]
     fn default_config_avoids_unbounded_file_logs() {

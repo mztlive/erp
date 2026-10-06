@@ -52,7 +52,8 @@ validate() {
 
 preflight() {
     load_environment
-    local context="${KUBE_CONTEXT:-}" ingress clb config_secret tls_secret
+    local context="${KUBE_CONTEXT:-}" ingress clb tls_secret target_values
+    local action="${1:-${ACTION:-deploy}}"
     if [[ ! -f "${KUBECONFIG:-}" ]]; then
         echo '缺少 Jenkins 上传的 kubeconfig 文件，不使用 Agent 默认配置。' >&2
         return 1
@@ -64,7 +65,6 @@ preflight() {
     kube=(kubectl --kubeconfig "$KUBECONFIG" --context "$context" --namespace "$namespace" --request-timeout=30s)
     helm_target=(helm --kubeconfig "$KUBECONFIG" --kube-context "$context" --namespace "$namespace")
     clb="$(jq -er '.ingress.clbId' "$environment_values")"
-    config_secret="$(jq -er '.api.configSecret' "$environment_values")"
     tls_secret="$(jq -er '.ingress.tlsSecret' "$environment_values")"
     ingress="$("${kube[@]}" get ingress erp --ignore-not-found -o json)"
     if [[ -n "$ingress" ]] && ! jq -e --arg clb "$clb" '
@@ -74,12 +74,41 @@ preflight() {
         return 1
     fi
     # 只校验数据键，不输出 Secret 内容。
-    "${kube[@]}" get secret "$config_secret" -o go-template='{{if index .data "config.toml"}}present{{end}}' | grep -qx present
+    if [[ "$action" == rollback ]]; then
+        [[ "${ROLLBACK_REVISION:-}" =~ ^[1-9][0-9]*$ ]] || return 1
+        target_values="$("${helm_target[@]}" get values erp --revision "$ROLLBACK_REVISION" -o json)"
+    else
+        target_values="$(cat "$environment_values")"
+    fi
+    check_config_secret "$target_values"
     "${kube[@]}" get secret "$tls_secret" -o go-template='{{if index .data "qcloud_cert_id"}}present{{end}}' | grep -qx present
     if [[ -n "${IMAGE_PULL_SECRET:-}" ]]; then
         "${kube[@]}" get secret "$IMAGE_PULL_SECRET" \
             -o go-template='{{if index .data ".dockerconfigjson"}}present{{end}}' | grep -qx present
     fi
+}
+
+# 只读取 Secret 的非空键标记，不把值取回或写入日志/归档。
+check_config_secret() {
+    local values="$1" secret key expected_namespace
+    jq -e --arg environment "$DEPLOY_ENV" --arg namespace "$namespace" \
+        '.environment == $environment and .namespace == $namespace' <<< "$values" >/dev/null
+    secret="$(jq -er '.api.configSecret' <<< "$values")"
+    local keys=(config.toml)
+    if jq -e '.api.nacos != null' <<< "$values" >/dev/null; then
+        expected_namespace="$(jq -er '.api.nacos.namespace' "$environment_values")"
+        jq -e --arg ns "$expected_namespace" '.api.nacos |
+            .namespace == $ns and ([.serverAddr, .group, .dataId] |
+            all(.[]; type == "string" and test("^[^[:space:]]+$")))' <<< "$values" >/dev/null
+        keys=(NACOS_USERNAME NACOS_PASSWORD)
+    fi
+    for key in "${keys[@]}"; do
+        if ! "${kube[@]}" get secret "$secret" \
+            -o "go-template={{if index .data \"$key\"}}present{{end}}" | grep -qx present; then
+            printf '配置 Secret %s 缺少非空键 %s。\n' "$secret" "$key" >&2
+            return 1
+        fi
+    done
 }
 
 # cargo 的 registry 与 target 缓存在 builder 的状态卷里。临时 DOCKER_CONFIG 只放登录凭据，
@@ -160,9 +189,9 @@ deploy() {
     load_environment
     # 校验目标环境；渲染时由 Chart schema 继续校验镜像 digest 和其余参数。
     jq -e --slurpfile environment "$environment_values" --arg pull "${IMAGE_PULL_SECRET:-}" '
-        [.environment, .namespace, .ingress, .api.configSecret, .imagePullSecret] ==
+        [.environment, .namespace, .ingress, .api.configSecret, .api.nacos, .api.configRevision, .imagePullSecret] ==
         [$environment[0].environment, $environment[0].namespace, $environment[0].ingress,
-         $environment[0].api.configSecret, $pull]' "$artifacts/values-release.json" >/dev/null
+         $environment[0].api.configSecret, $environment[0].api.nacos, $environment[0].api.configRevision, $pull]' "$artifacts/values-release.json" >/dev/null
     helm template erp "$artifacts/chart.tgz" --namespace "$namespace" -f "$artifacts/values-release.json" \
         > "$artifacts/manifests.yaml"
     preflight
@@ -177,7 +206,7 @@ deploy() {
     printf 'rollout、镜像核对与公网 HTTP 检查通过\n' > "$artifacts/deployment-status.txt"
 }
 
-# 回退到已成功发布过、且已被更新替换的 Helm revision。不构建镜像，不恢复配置 Secret 或数据库。
+# 回退到已成功发布过、且已被更新替换的 Helm revision。不构建镜像，不恢复 Nacos 内容、配置 Secret 或数据库。
 rollback() {
     local revision="${ROLLBACK_REVISION:-}" release_history
     if [[ ! "$revision" =~ ^[1-9][0-9]*$ ]]; then
@@ -185,7 +214,7 @@ rollback() {
         return 1
     fi
     rm -f "$artifacts/deployment-status.txt"
-    preflight
+    preflight rollback
     release_history="$("${helm_target[@]}" history erp -o json)"
     if ! jq -e --argjson revision "$revision" '
         (map(select(.status == "deployed")) | length) == 1

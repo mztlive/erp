@@ -98,7 +98,7 @@ case "$tool" in
                 rollback-failed-status)
                     printf '%s\n' '[{"revision":2,"status":"failed"},{"revision":3,"status":"deployed"}]'
                     ;;
-                rollback-ok|rollback-failure|rollback-bad-image|rollback-image-mismatch|rollback-rollout-failure|rollback-http-failure)
+                rollback-*)
                     printf '%s\n' '[{"revision":2,"status":"superseded"},{"revision":3,"status":"deployed"}]'
                     ;;
                 *)
@@ -110,9 +110,12 @@ case "$tool" in
             if [[ "$CASE" == rollback-bad-image ]]; then
                 printf '%s\n' '{"api":{"image":"latest"},"client":{"image":"latest"}}'
             else
-                jq -n --arg api "example.invalid/api@sha256:$(printf 'a%.0s' {1..64})" \
-                    --arg web "example.invalid/web@sha256:$(printf 'b%.0s' {1..64})" \
-                    '{api:{image:$api},client:{image:$web}}'
+                jq --arg api "example.invalid/api@sha256:$(printf 'a%.0s' {1..64})" \
+                    --arg web "example.invalid/web@sha256:$(printf 'b%.0s' {1..64})" --arg case "$CASE" \
+                    '.api.image = $api | .client.image = $web |
+                     if ($case | startswith("rollback-file")) then del(.api.nacos) | .api.configSecret = "erp-api-config"
+                     elif $case == "rollback-wrong-namespace" then .api.nacos.namespace = "wrong" else . end' \
+                    "deploy/helm/erp/environments/$DEPLOY_ENV.json"
             fi
             exit 0
         fi
@@ -132,6 +135,10 @@ case "$tool" in
                 "ingress.cloud.tencent.com/enable-group":$group,"kubernetes.io/ingress.existLbId":$clb}}}'
         elif [[ "$args" == *' get secret '* ]]; then
             [[ "$CASE" != missing-secret ]] || exit 1
+            if [[ "$CASE" == missing-nacos-username && "$args" == *NACOS_USERNAME* ]]; then exit 0; fi
+            if [[ "$CASE" == missing-nacos-password && "$args" == *NACOS_PASSWORD* ]]; then exit 0; fi
+            if [[ "$CASE" == rollback-file-missing && "$args" == *config.toml* ]]; then exit 0; fi
+            if [[ "$CASE" == rollback-file* && "$args" == *NACOS_* ]]; then exit 1; fi
             printf present
         elif [[ "$args" == *' --dry-run=server '* ]]; then
             [[ "$CASE" != dry-run-failure ]]
@@ -200,6 +207,26 @@ for DEPLOY_ENV in test production; do
     check_log 'all(.[]; index("--take-ownership") == null and (index("apply") == null or index("--dry-run=server") != null))'
     check_log "any(.[]; .[0] == \"curl\" and .[-1] == \"https://erp-api$suffix.fushangyunfu.com/health\")"
 done
+# 渲染结果包含 SDK 参数和两个 Secret 引用，不再挂载文件配置。
+grep -q -- '--enable-nacos' release-artifacts/manifests.yaml
+grep -q 'key: NACOS_USERNAME' release-artifacts/manifests.yaml
+grep -q 'key: NACOS_PASSWORD' release-artifacts/manifests.yaml
+if grep -q 'config.toml' release-artifacts/manifests.yaml; then exit 1; fi
+# 绕过发布脚本时，Chart 同样拒绝跨环境 Namespace。
+if "$HELM_REAL" template erp deploy/helm/erp -n prod -f release-artifacts/values-release.json \
+    --set api.nacos.namespace=ccf7ec38-1d60-407e-bf2c-7c4654c481d0 > output.log 2>&1; then exit 1; fi
+checks=$((checks + 1))
+# 归档的配置标识或 revision 被替换时，不允许触达集群。
+cp release-artifacts/values-release.json original-values.json
+for field in dataId group serverAddr namespace; do
+    jq --arg field "$field" '.api.nacos[$field] = "tampered"' original-values.json > release-artifacts/values-release.json
+    run_fail deploy
+    check_log 'length == 0'
+done
+jq '.api.configRevision = "tampered"' original-values.json > release-artifacts/values-release.json
+run_fail deploy
+check_log 'length == 0'
+mv original-values.json release-artifacts/values-release.json
 # BuildKit 镜像变化时才重建 builder，并写回当前 digest。
 printf 'old-image\n' > "$BUILDX_CONFIG/erp-linux-amd64.image"
 run_ok build
@@ -213,14 +240,14 @@ export DEPLOY_ENV=test
 run_fail deploy
 check_log 'length == 0'
 export DEPLOY_ENV=production
-for CASE in missing-secret legacy-ingress wrong-clb ingress-read-failure dry-run-failure ownership-failure \
+for CASE in missing-secret missing-nacos-username missing-nacos-password legacy-ingress wrong-clb ingress-read-failure dry-run-failure ownership-failure \
     upgrade-failure rollout-failure image-mismatch missing-deployment http-failure; do
     export CASE
     printf 'stale success' > release-artifacts/deployment-status.txt
     run_fail deploy
     test ! -e release-artifacts/deployment-status.txt
     case "$CASE" in
-        missing-secret|legacy-ingress|wrong-clb|ingress-read-failure|dry-run-failure) no_upgrade ;;
+        missing-secret|missing-nacos-username|missing-nacos-password|legacy-ingress|wrong-clb|ingress-read-failure|dry-run-failure) no_upgrade ;;
         ownership-failure) no_live_upgrade ;;
     esac
 done
@@ -276,7 +303,7 @@ for ROLLBACK_REVISION in '' 0 -1 01 abc; do
     no_cluster_change
 done
 export ROLLBACK_REVISION=2
-for CASE in rollback-current rollback-missing rollback-failed-status rollback-bad-image; do
+for CASE in rollback-current rollback-missing rollback-failed-status rollback-bad-image rollback-wrong-namespace rollback-file-missing; do
     export CASE
     printf 'stale success' > release-artifacts/deployment-status.txt
     run_fail rollback
@@ -304,6 +331,16 @@ for DEPLOY_ENV in test production; do
     check_log 'all(.[]; index("upgrade") == null and .[0] != "docker")'
     check_log "all(.[]; if .[0] == \"kubectl\" or .[0] == \"helm\" then index(\"--namespace\") != null and .[index(\"--namespace\") + 1] == \"$namespace\" else true end)"
 done
+# 历史文件模式回滚只检查旧 Secret 的 config.toml，不能要求新 Nacos 凭据。
+export CASE=rollback-file DEPLOY_ENV=test
+run_ok rollback
+check_log 'any(.[]; index("erp-api-config") != null and any(.[]; contains("config.toml")))'
+check_log 'all(.[]; all(.[]; contains("NACOS_USERNAME") == false and contains("NACOS_PASSWORD") == false))'
+# Jenkins 提前调用 preflight 时也必须根据 ACTION 读取回滚目标。
+export ACTION=rollback
+run_ok preflight
+check_log 'any(.[]; index("erp-api-config") != null)'
+unset ACTION
 mv "$KUBECONFIG" "$KUBECONFIG.saved"
 export DEPLOY_ENV=test CASE=rollback-ok
 run_fail rollback

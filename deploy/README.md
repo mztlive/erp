@@ -13,7 +13,10 @@ ERP 的生产、测试环境统一使用 `deploy/helm/erp` Chart，由根目录 
 | API | `https://erp-api.fushangyunfu.com` | `https://erp-api-test.fushangyunfu.com` |
 | 环境 values | `helm/erp/environments/production.json` | `helm/erp/environments/test.json` |
 | 共享 CLB | `lb-gpk8k2ps` | `lb-gpk8k2ps` |
-| 后端配置 Secret | `prod/erp-api-config` | `test/erp-api-config` |
+| Nacos Namespace UUID | `8888c735-1d29-4765-ab7f-70100a888479` | `ccf7ec38-1d60-407e-bf2c-7c4654c481d0` |
+| Nacos Group / Data ID | `DEFAULT_GROUP / erp` | `DEFAULT_GROUP / erp` |
+| Nacos 只读账号 | `prod` | `test` |
+| Nacos 凭据 Secret | `prod/erp-config` | `test/erp-config` |
 | 证书 Secret | `prod/fsytsl-wsk87cm7` | `test/fsytsl-wsk87cm7` |
 
 环境 JSON 是 Helm 原生支持的 values 输入，发布脚本通过 `jq` 读取其中的域名和配置引用。域名、CLB、配置 Secret 引用只在环境文件维护；副本、资源额度、探针与通用默认值在 Chart 中维护。需要环境专属副本或资源额度时，在对应环境文件覆盖 `api`、`client` 或 `pdb` 字段。
@@ -27,8 +30,8 @@ Chart 不管理 Namespace、MongoDB、S3、应用配置 Secret、证书 Secret�
 集群管理员必须在首次发布前完成：
 
 1. 创建对应命名空间；生产用 `prod`，测试用 `test`。
-2. 在该命名空间创建 `erp-api-config`，键为 `config.toml`。参考 [后端配置模板](examples/web-api-config.example.toml)；端口必须为 `10001`，JWT 密钥必须替换为至少 32 个随机字节。若该库还没有超级管理员，在同一文件的 `[bootstrap]` 中填写 `initial_admin_password`（6 到 32 个字符）。API 只在启动时、且账号 `admin` 不存在时用它创建超级管理员；账号已存在则忽略，不改密码。登录确认后从 Secret 删除该字段并重启。
-3. 生产与测试使用不同数据库及凭据、JWT 密钥、S3 bucket 或受权限隔离的前缀。不得向测试 Secret 复制整份生产配置。命名空间隔离不会自动隔离外部数据库和对象存储。
+2. 按 [Nacos 环境配置接入与权限管理规范](https://outline.fushangyunfu.com/doc/nacos-vxFwmIgO8r)向运维登记本表标识。将[后端配置模板](examples/web-api-config.example.toml)填写为完整 TOML，发布到对应 Namespace 的 `DEFAULT_GROUP / erp`，Data ID 无后缀。端口必须为 `10001`，JWT 密钥至少 32 个随机字节。若目标库尚无 `admin`，可配置 `[bootstrap].initial_admin_password`（6 到 32 个字符）；已有账号不改密码。首次登录确认后，从 Nacos 删除该字段并重启 API。
+3. 运维在应用命名空间创建或更新 `erp-config`，保留其他键并写入非空 `NACOS_USERNAME`、`NACOS_PASSWORD`。测试使用 `test`，生产使用 `prod`；禁止管理员或 Seata 账号。Chart 将两键映射到 `NACOS_CLIENT_USERNAME`、`NACOS_CLIENT_PASSWORD`。应用 Pod 必须能解析 `nacos.infra.svc.cluster.local` 并访问 `8848/TCP`、`9848/TCP`。两环境须使用不同数据库及凭据、JWT 密钥、S3 bucket 或受权限隔离的前缀，不得复制整份生产配置到测试。
 4. MongoDB 必须是副本集，成员地址必须从目标 Pod 可达。流水线不创建数据库、不清库、不执行种子或数据库迁移。
 5. 在各自命名空间准备证书 Secret，包含 `qcloud_cert_id`，并确认覆盖该环境的两个域名。Secret 不跨命名空间引用；相同名称不代表测试环境已经有证书。
 6. 将四个域名解析到共享 CLB，确认域名和路径未被其他应用占用。
@@ -46,7 +49,11 @@ Chart 不管理 Namespace、MongoDB、S3、应用配置 Secret、证书 Secret�
 
 前端 `NEXT_PUBLIC_API_BASE_URL` 在镜像构建时写入。发布脚本按环境推导 API 地址，不接受 Pod 环境变量替换。测试前端镜像不能直接提升到生产；必须为生产地址重新构建。镜像标签包含环境名，正式发布始终使用 `repository@sha256:...`。
 
-后端只在启动时读取 `/app/config.toml`，通过 Secret 的 `subPath` 挂载。更新 Secret 后，必须执行对应命名空间的 `kubectl rollout restart deployment/erp-api`，或递增环境 values 中的 `api.configRevision` 后执行发布。Helm 不监视外部 Secret 内容变化。
+后端从 Nacos 读取并校验完整 TOML，首次连接与每次读取均设 30 秒超时。启动读取失败必须退出，不回退到文件或磁盘缓存。运行中每 10 秒刷新，读取或校验失败保留上一次有效快照。JWT 密钥可热更新；端口、数据库、RBAC、S3 客户端和管理员初始化属于启动期资源，修改后必须重启。
+
+正式配置变更必须登记 Nacos 版本或摘要和兼容镜像，再递增环境 JSON 的 `api.configRevision` 并发布，以重建全部启动期资源。轮换环境账号密码须同步全部消费应用的 Secret 并重启。Helm 不监视外部 Secret 或 Nacos 内容变化。发布归档只保存地址、Namespace、Group、Data ID、Secret 名称和 revision，不保存密码或配置全文。
+
+从文件模式切换前，必须保留历史 `erp-api-config` Secret 的 `config.toml` 键，并登记保留期限和兼容镜像。回滚 Nacos 版本前，先核对或恢复兼容目标镜像的 Nacos 配置；回滚历史文件版本前，确认旧文件 Secret 仍存在。流水线按目标 revision 的配置来源检查所需键，Helm 回滚不会恢复 Nacos 内容、Secret 或数据库。
 
 默认每个工作负载 1 个副本，PDB `minAvailable: 0`，允许节点维护时驱逐。滚动更新可能临时增加 Pod，须预留容量；单副本维护或故障可能中断服务。修改副本数时必须同时检查 PDB 与应用后台任务并发约束。
 
@@ -63,3 +70,9 @@ API 的 `/health` 表示进程已经监听；副本集校验和索引创建发�
 生产和测试均连接由数据库管理方独立维护的外部 MongoDB 副本集。应用部署目录不提供 MongoDB 安装清单；数据库生命周期、账号授权、备份与恢复由数据库管理方负责。发布前必须确认目标环境的数据库及凭据、网络可达性和副本集配置，不得将测试应用连接到生产业务库。
 
 Helm 就绪、镜像核对及 HTTPS 探测通过后，仍须执行实际登录、权限、开单、审批、上传等业务验收。管理员初始化或密码重置使用可访问对应数据库的 CLI 环境，发布流水线不执行此类操作。
+
+## 6. Nacos 接入验收
+
+发布前完成配置解析和应用校验；发布后使用实际应用 Pod、实际 SDK 验证读取。必须分别记录：目标配置读取成功、跨环境读取拒绝、无额外写授权、8848/9848 链路、配置生效及关键业务验收。写入拒绝测试只能使用专用验收条目。记录环境、账号名、Namespace / Group / Data ID、配置版本或摘要、镜像、时间、执行人和结果，不记录密码及配置全文。
+
+本地调试先运行 `kubectl -n infra port-forward --address 127.0.0.1 svc/nacos 8848:8848 9848:9848`，再按 [Config 接入说明](../backend/config/README.md)启动。调试完成停止转发；本机通过不能替代 Pod 验收。仓库离线检查不得连接真实 Nacos、MongoDB 或 S3。

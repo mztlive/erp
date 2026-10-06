@@ -11,7 +11,18 @@ cargo run -p cli -- reset-password --account admin
 cargo run -p cli -- migrate-contract-templates
 ```
 
-默认读取 `./config.toml`。可用 `--config-path` 覆盖，全局参数可放在子命令前或后。
+默认读取 `./config.toml`。可用 `--config-path` 覆盖；Nacos 环境须使用与 API 相同的配置来源参数及凭据环境变量，单次读取并校验完整配置。全局参数可放在子命令前或后，不得同时指定文件与 Nacos。
+
+```bash
+# 凭据须提前通过受控环境注入，不得写在命令参数中。
+cargo run -p cli -- --enable-nacos \
+  --nacos-addr 127.0.0.1:8848 \
+  --nacos-namespace ccf7ec38-1d60-407e-bf2c-7c4654c481d0 \
+  --nacos-group DEFAULT_GROUP --nacos-data-id erp \
+  reset-password --account admin
+```
+
+端口转发、凭据与失败语义执行 [Config 接入说明](../../config/README.md)。CLI 不启动配置刷新；一次运维命令始终使用同一份已校验快照。
 
 `migrate-contract-templates` 必须在开放合同申请前执行，复用 `erp-contract::indexes::ensure_templates` 登记模板、主体编号绑定、年度流水及申请记录的索引；不得修改历史合同和已有流水。正常 API 启动也必须完成同一索引登记。迁移与回退执行[合同模板与申请合同](../../../docs/contract-template-contract.md)第 6 节。
 

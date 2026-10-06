@@ -1,4 +1,5 @@
-# 复制到 deploy/secrets/web-api-config.toml 后再填写。不要提交填写后的文件。
+# 复制到受控位置并填写，完整 TOML 由运维发布到对应 Namespace 的 DEFAULT_GROUP / erp。
+# 不要提交填写后的文件；Nacos 用户名和密码通过 erp-config Secret 交付，不写入本文。
 # app.port 必须保持 10001，与 Service、探针一致。
 # 生产和测试均使用独立配置的外部 MongoDB 副本集，填写目标环境的地址和凭据。
 

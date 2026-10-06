@@ -50,14 +50,14 @@ Build ERP HTTP and CLI entrypoints from domain crates, named processes, and read
    - `[app]` `port`, `secret` (JWT key)
    - `[database]` `uri`, `db_name`
    - Required `[s3]` `bucket`, `region`, `endpoint`, `access_key_id`, `secret_access_key`, `session_token`, `key_prefix`, `force_path_style`, `public_base_url`. `public_base_url` is the public bucket or CDN root; the API appends `key_prefix` and the generated object key.
-3. Optional Nacos configuration updates (database connection changes require a process restart):
+3. TKE uses Nacos; local development may retain the file above. Inject non-empty `NACOS_CLIENT_USERNAME` and `NACOS_CLIENT_PASSWORD` through a controlled environment. For local Nacos debugging, forward ports 8848 and 9848 first. Database and S3 changes require a restart:
    ```bash
    cargo run -p web-api -- \
-     --enable-nacos true \
-     --nacos-addr "http://localhost:8848" \
-     --nacos-namespace "public" \
+     --enable-nacos \
+     --nacos-addr "127.0.0.1:8848" \
+     --nacos-namespace "ccf7ec38-1d60-407e-bf2c-7c4654c481d0" \
      --nacos-group "DEFAULT_GROUP" \
-     --nacos-data-id "config.toml"
+     --nacos-data-id "erp"
    ```
 
 ## Run Locally
