@@ -6,3 +6,4 @@ pub mod auth;
 pub mod iam;
 pub mod organization;
 pub mod person_directory;
+pub mod portal;

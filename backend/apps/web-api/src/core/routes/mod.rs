@@ -50,6 +50,7 @@ mod supplier;
 mod supplier_api;
 mod supplier_fulfillment;
 mod supplier_offering;
+mod supplier_portal;
 mod supplier_settlement;
 mod warehouse;
 mod work_item;
@@ -77,6 +78,7 @@ pub fn create(app_state: AppState) -> Router {
         .route("/ready", get(readiness))
         .merge(public::routes(app_state.clone()))
         .nest("/account", account::routes(app_state.clone()))
+        .nest("/supplier-portal", supplier_portal::routes(app_state.clone()))
         .nest("/admin", admin::routes(app_state.clone()))
         .merge(upload_routes);
 

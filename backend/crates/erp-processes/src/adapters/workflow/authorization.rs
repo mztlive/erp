@@ -25,6 +25,8 @@ use super::order_access::{approval_readable, readable_sources};
 use super::{account_fact, map_service};
 use crate::adapters::{contract_access, purchase_access};
 use crate::errors::{Error, Result};
+use crate::supplier_portal::authorization::request_readable as portal_request_readable;
+use crate::supplier_portal::request_reviewable as portal_request_reviewable;
 
 /// Shared RBAC adapter consumed by workflow command and definition services.
 #[derive(Clone)]
@@ -57,6 +59,24 @@ impl WorkflowAuth {
 }
 
 impl WorkflowAuthorizationPort for WorkflowAuth {
+    async fn supplier_portal_request_reviewable(
+        &self,
+        actor: &AuditActor,
+        request_id: &str,
+        executor: &mut dyn Executor,
+    ) -> WorkflowResult<bool> {
+        portal_request_reviewable(&self.db, &self.rbac, actor, request_id, executor)
+            .await
+            .map_err(map_service)
+    }
+    async fn supplier_portal_request_readable(
+        &self,
+        actor: &AuditActor,
+        request_id: &str,
+        executor: &mut dyn Executor,
+    ) -> WorkflowResult<bool> {
+        portal_request_readable(&self.db, &self.rbac, actor, request_id, executor).await.map_err(map_service)
+    }
     /// 同阶段复用首次身份范围事实；末尾版本校验仍由原队列入口独立执行。
     async fn queue_access_facts(
         &self,

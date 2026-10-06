@@ -19,6 +19,7 @@ use super::repository::offering::{
 use crate::Result;
 mod detail;
 pub mod dto;
+pub mod portal;
 mod procurement;
 mod scope;
 use dto::{OFFERING_SORT_FIELDS, SortDir};

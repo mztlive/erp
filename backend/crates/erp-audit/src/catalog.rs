@@ -1,13 +1,74 @@
 //! 业务 audit_logs 的显式动作目录；身份 audit_events 的目录由身份域单独维护。
 
-use crate::{AuditAction, Error, Result};
+use crate::{AuditAction, AuditCode, AuditField, AuditFieldKind, Error, Result};
 
 const fn action(code: &'static str, resource_type: &'static str, label: &'static str) -> AuditAction {
     AuditAction { code, resource_type, label, version: 1, allowed_fields: &[] }
 }
 
+const fn portal_action(code: &'static str, label: &'static str) -> AuditAction {
+    AuditAction {
+        code,
+        resource_type: "supplier_portal_request",
+        label,
+        version: 1,
+        allowed_fields: &[
+            AuditField { code: "available_quantity", label: "可供数量", kind: AuditFieldKind::Quantity },
+            AuditField {
+                code: "before_available_quantity",
+                label: "原可供数量",
+                kind: AuditFieldKind::Quantity,
+            },
+            AuditField {
+                code: "after_available_quantity",
+                label: "本次可供数量",
+                kind: AuditFieldKind::Quantity,
+            },
+            AuditField {
+                code: "quantity_reported",
+                label: "数量报送状态",
+                kind: AuditFieldKind::Code(&[
+                    AuditCode { code: "PROVIDED", label: "已提供" },
+                    AuditCode { code: "NOT_PROVIDED", label: "未提供" },
+                ]),
+            },
+            AuditField {
+                code: "availability_status",
+                label: "可供状态",
+                kind: AuditFieldKind::Code(&[
+                    AuditCode { code: "AVAILABLE", label: "可供" },
+                    AuditCode { code: "UNAVAILABLE", label: "不可供" },
+                    AuditCode { code: "STOPPED", label: "停止供应" },
+                    AuditCode { code: "STALE", label: "数据已过期" },
+                ]),
+            },
+        ],
+    }
+}
+
 /// 普通安全事件默认不记录任意字段；具有专用投影的类型化入口保留自身白名单。
 const REGISTERED_ACTIONS: &[AuditAction] = &[
+    portal_action("supplier_portal.account_create", "开通供应商门户账号"),
+    portal_action("supplier_portal.account_update", "调整供应商门户账号"),
+    portal_action("supplier_portal.password_update", "供应商修改密码"),
+    portal_action("supplier_portal.asset_register", "供应商登记申请素材"),
+    portal_action("supplier_portal.availability_update", "供应商更新可供"),
+    portal_action("supplier_portal.application_save", "保存供应商报价申请"),
+    portal_action("supplier_portal.application_submit", "提交供应商报价申请"),
+    portal_action("supplier_portal.application_withdraw", "撤回供应商报价申请"),
+    portal_action("supplier_portal.application_approve", "确认供应商报价申请"),
+    portal_action("supplier_portal.application_return", "退回供应商报价申请"),
+    portal_action("supplier_portal.quote_access_update", "调整供应商报价开放目录"),
+    portal_action("supplier_portal.new_product_save", "保存供应商新品提报"),
+    portal_action("supplier_portal.new_product_submit", "提交供应商新品提报"),
+    portal_action("supplier_portal.new_product_withdraw", "撤回供应商新品提报"),
+    portal_action("supplier_portal.new_product_approve", "确认供应商新品提报"),
+    portal_action("supplier_portal.new_product_return", "退回供应商新品提报"),
+    portal_action("supplier_portal.commercial_save", "保存供应商合作条款申请"),
+    portal_action("supplier_portal.commercial_submit", "提交供应商合作条款申请"),
+    portal_action("supplier_portal.commercial_withdraw", "撤回供应商合作条款申请"),
+    portal_action("supplier_portal.commercial_approve", "确认供应商合作条款申请"),
+    portal_action("supplier_portal.commercial_return", "退回供应商合作条款申请"),
     action("admin.create", "admin", "创建管理员账号"),
     action("admin.delete", "admin", "删除管理员账号"),
     action("admin.role.update", "admin", "修改管理员角色"),
@@ -346,7 +407,7 @@ mod tests {
             assert!(pairs.insert((action.code, action.resource_type)));
             action.validate().unwrap();
             assert_eq!(action.version, 1);
-            assert!(action.allowed_fields.is_empty());
+            assert!(action.allowed_fields.is_empty() || action.resource_type == "supplier_portal_request");
             assert!(action.label.chars().any(|ch| ('\u{4e00}'..='\u{9fff}').contains(&ch)));
             assert_eq!(registered_action(action.code, action.resource_type).unwrap().label, action.label);
         }

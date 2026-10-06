@@ -250,6 +250,7 @@ impl super::recipe::CommandFactReads for super::WorkItemFactsReader {
                 self.load_supplier_fulfillment_order_facts(keys, facts, executor).await
             },
             Step::SupplierOffering => self.load_supplier_offering_facts(keys, facts, executor).await,
+            Step::SupplierPortal => self.load_supplier_portal_request_facts(keys, facts, executor).await,
         }
     }
 }

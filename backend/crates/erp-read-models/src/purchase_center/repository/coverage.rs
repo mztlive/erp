@@ -332,6 +332,7 @@ mod isolation_tests {
         PurchaseOrderSubmissionLine::new(
             PurchaseOrderSubmissionLineId::new(id),
             PurchaseOrderSubmissionLineData {
+                supplier_offering_source: None,
                 purchase_order_submission_id: PurchaseOrderSubmissionId::new(submission_id),
                 line_no: 1,
                 line_type: PurchaseLineType::ItemService,
@@ -394,6 +395,7 @@ mod isolation_tests {
         PurchaseOrderRevisionLine::new(
             PurchaseOrderRevisionLineId::new(id),
             PurchaseOrderRevisionLineData {
+                supplier_offering_source: None,
                 purchase_order_revision_id: PurchaseOrderRevisionId::new(revision_id),
                 line_no: 1,
                 line_type: PurchaseLineType::ItemService,

@@ -26,6 +26,7 @@ pub mod product_import;
 pub mod source_registry;
 pub mod supplier;
 pub mod supplier_import;
+pub mod supplier_portal;
 pub mod supplier_profile;
 pub use supplier_import::SupplierImportProcess;
 pub mod warehouse;

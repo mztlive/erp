@@ -88,6 +88,12 @@ export const HANDLER_REGISTRY: Readonly<Record<string, HandlerRegistration>> = {
         destinationWorkspaceId: "W21",
         baseHref: "/procurement/supplier-offerings",
     },
+    supplier_portal_review: {
+        workItemTypeLabel: "供应商申请确认",
+        family: "procurement",
+        destinationWorkspaceId: "W21",
+        baseHref: "/procurement/supplier-portal/applications",
+    },
     integration_unknown: {
         workItemTypeLabel: "集成结果待确认",
         family: "exception",
@@ -347,6 +353,11 @@ export function buildHandlerHref(item: HandlerNavigationInput): string | null {
     })
 
     switch (item.handlerKey) {
+        case "supplier_portal_review":
+            return withParams(
+                `${registration.baseHref}/${encodeURIComponent(businessObjectId)}`,
+                params,
+            )
         case "supplier_payment_execution": {
             const purchaseOrderId = requiredValue(item.rootBusinessObjectId)
             if (!purchaseOrderId || purchaseOrderId === businessObjectId) {

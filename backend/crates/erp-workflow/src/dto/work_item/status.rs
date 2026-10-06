@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::entity::work_item::WorkItemType;
 
-pub const WORK_ITEM_TYPES: [WorkItemType; 10] = [
+pub const WORK_ITEM_TYPES: [WorkItemType; 11] = [
     WorkItemType::DocumentApproval,
     WorkItemType::ProcurementOrderCreation,
     WorkItemType::FulfillmentOperation,
@@ -10,6 +10,7 @@ pub const WORK_ITEM_TYPES: [WorkItemType; 10] = [
     WorkItemType::SupplierPaymentExecution,
     WorkItemType::SalesInvoiceExecution,
     WorkItemType::SupplierSettlementReview,
+    WorkItemType::SupplierPortalReview,
     WorkItemType::ImportBusinessConfirmation,
     WorkItemType::IntegrationResultUnknown,
     WorkItemType::BusinessException,
@@ -124,9 +125,9 @@ pub fn family_of(work_item_type: WorkItemType) -> WorkItemFamily {
         WorkItemType::FulfillmentOperation | WorkItemType::CustomerAcceptanceRegistration => {
             WorkItemFamily::Fulfillment
         },
-        WorkItemType::DocumentApproval | WorkItemType::OwnershipMigrationSalesConfirmation => {
-            WorkItemFamily::Approval
-        },
+        WorkItemType::DocumentApproval
+        | WorkItemType::SupplierPortalReview
+        | WorkItemType::OwnershipMigrationSalesConfirmation => WorkItemFamily::Approval,
         WorkItemType::CardFundsReview
         | WorkItemType::CardFundsDeltaReview
         | WorkItemType::SupplierPaymentExecution

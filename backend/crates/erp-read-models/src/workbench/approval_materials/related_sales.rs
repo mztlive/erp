@@ -394,6 +394,7 @@ mod tests {
                 procurement_confirmation_line_id: Some(ProcurementConfirmationLineId::new("confirmation")),
                 sku_id: Some(SkuId::new("sku")),
                 sku_revision_id: Some(SkuRevisionId::new("sku-revision")),
+                supplier_offering_source: None,
                 product_name_snapshot: Some("礼盒".into()),
                 specification_snapshot: Some("标准装".into()),
                 quantity: Some("2".parse().unwrap()),

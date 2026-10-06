@@ -17,6 +17,7 @@
 
 - 供应商账户、能力、资质及能力关联、评级和相应修订。
 - 商业档案、结算条件、资料命令及供应商创建和资料修订的确定性规则。
+- 供应商门户合作条款申请、冻结提交及处理历史、成功命令回执和商务档案确认写入步骤。
 
 ## 依赖与协作边界
 
@@ -37,6 +38,7 @@
 | [src/entity/mod.rs](src/entity/mod.rs) | 本域实体、值对象和确定性规则 |
 | [src/repository/mod.rs](src/repository/mod.rs) | 本域 MongoDB 仓储与集合访问器 |
 | [src/indexes/mod.rs](src/indexes/mod.rs) | 公开索引注册入口 |
+| [src/portal/mod.rs](src/portal/mod.rs) | 合作条款申请与使用调用方事务的商务确认步骤 |
 
 ## 修改执行要求
 

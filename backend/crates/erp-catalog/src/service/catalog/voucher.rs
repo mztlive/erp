@@ -683,7 +683,7 @@ impl CatalogService {
                     db.products().update(&mut product, executor).await?;
                     db.catalog().create_product_revision_with_media(&product_revision, &[], executor).await?;
                     db.skus().update(&mut sku, executor).await?;
-                    db.sku_revisions().create(&sku_revision, executor).await?;
+                    db.catalog().create_sku_revision(&sku_revision, executor).await?;
                     db.voucher_category_profile_revisions().create(&voucher_revision, executor).await?;
                     audit_port.persist(&audit, executor).await?;
                     Ok::<VoucherCategoryProfileRevision, crate::error::Error>(voucher_revision)

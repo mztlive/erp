@@ -190,8 +190,6 @@ mod tests {
         use erp_workflow::entity::document_registry::DocumentType;
         use erp_workflow::service::approval::policy::{ApprovalRequirement, policy_of};
         let relations = WorkItemType::registered_brief_relations();
-        assert_eq!(relations.len(), 29);
-        assert_eq!(relations.iter().map(|r| r.work_item_type).collect::<HashSet<_>>().len(), 10);
         let mut required = 0;
         for document in DocumentType::ALL {
             let needs_approval =

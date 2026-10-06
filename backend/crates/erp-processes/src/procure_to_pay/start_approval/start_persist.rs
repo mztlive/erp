@@ -7,25 +7,35 @@ use async_trait::async_trait;
 use bpm::engine::TaskIntent;
 use bpm::ids::ApprovalProcessInstanceId;
 use bpm::model::ApprovalNodeExecution;
-use erp_core::common::time::Instant;
+use erp_audit::AuditLog;
+use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{ApprovalSubjectSnapshotId, WorkItemId};
 use erp_procurement::dto::purchase_order::SavePurchaseOrderLine;
 use erp_procurement::entity::purchase_order::{
     PurchaseCommandReceipt, PurchaseCommandReceiptIdentity, PurchaseOrder, PurchaseOrderSubmission,
     PurchaseOrderSubmissionLine, PurchaseSubmitReceipt, validate_draft_line_edits,
 };
+use erp_procurement::ports::creation_basis::CreationBasisSupplierPort;
 use erp_procurement::repository::PurchaseCommandExt;
+use erp_procurement::service::purchase_order::draft_edit::map_draft_edit_violation;
+use erp_procurement::service::purchase_order::start_approval::{
+    persist_started_submission, persist_superseded_draft,
+};
 use erp_workflow::entity::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
 use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
 use erp_workflow::entity::work_item::{DocumentApprovalWorkItemData, WorkItem, WorkItemPriority};
 use erp_workflow::repository::bpm::ApprovalInstanceListProjection;
 use erp_workflow::repository::prelude::*;
+use erp_workflow::service::approval::execution::apply_plan::PlannedWrites;
 use erp_workflow::service::approval::execution::{PreparedExecution, map_receipt_first_write_error};
 use erp_workflow::{ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, WorkItemExt};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Executor;
 
+use super::super::creation_basis::supplier::CreationBasisSupplierAdapter;
+use super::super::draft_edit::advance_guard_and_load_coverage;
+use super::supply_selection::revalidate_selected_supply;
 use crate::adapters::freeze_approval_materials;
 use crate::audit::persist_log;
 use crate::{Error, Result};
@@ -70,7 +80,7 @@ pub(crate) struct PurchaseOrderStartPersistInput {
     /// 调用方时间。
     pub now: Instant,
     /// 已构造独立审计事件。
-    pub audit: erp_audit::AuditLog,
+    pub audit: AuditLog,
     /// 采购提交独立回执：身份、请求指纹与结果；首个任务写入后同事务持久化。
     pub receipt: Option<(PurchaseCommandReceiptIdentity, String, PurchaseSubmitReceipt)>,
     /// 提交写事务内重验的对象范围；创建并提交路径已在同一事务检查建单范围。
@@ -128,6 +138,7 @@ pub(super) enum StartStep {
     DocumentGuard,
     ProcurementGuard,
     SupplierQualification,
+    SupplySelection,
     Submission,
     SupersededDraft,
     Runtime,
@@ -152,6 +163,7 @@ pub(super) async fn execute_start_steps(
         DocumentGuard,
         ProcurementGuard,
         SupplierQualification,
+        SupplySelection,
         Submission,
         SupersededDraft,
         Runtime,
@@ -172,104 +184,136 @@ struct StartPosting<'a> {
 #[async_trait]
 impl StartSteps for StartPosting<'_> {
     async fn apply(&mut self, step: StartStep, executor: &mut dyn Executor) -> Result<()> {
-        let input = &mut self.input;
-        let PreparedExecution::Apply(writes) = &input.prepared else {
+        if !matches!(&self.input.prepared, PreparedExecution::Apply(_)) {
             return Ok(());
-        };
+        }
         match step {
-            StartStep::Receipt => {
-                self.db
-                    .bpm_workflow()
-                    .insert_command_receipt(&writes.receipt, executor)
-                    .await
-                    .map_err(map_receipt_first_write_error)?;
-            },
-            StartStep::DocumentGuard => {
-                let guarded = self
-                    .db
-                    .business_documents()
-                    .mark_loaded_approval_started(
-                        &mut input.document,
-                        DocumentType::PurchaseOrder,
-                        &writes.instance.process_definition_id,
-                        writes.instance.definition_version,
-                        input.now,
-                        executor,
-                    )
-                    .await?;
-                if !guarded {
-                    return Err(Error::ConflictError("采购单审批启动守卫冲突，请刷新后重试".to_string()));
-                }
-            },
-            StartStep::ProcurementGuard => {
-                if let Some(guard) = input.procurement_guard.take() {
-                    let coverage = super::super::draft_edit::advance_guard_and_load_coverage(
-                        self.db,
-                        &input.order,
-                        &guard.actor_id,
-                        executor,
-                    )
-                    .await?;
-                    let requested_edits = guard
-                        .requested_lines
-                        .iter()
-                        .map(SavePurchaseOrderLine::to_draft_edit)
-                        .collect::<Vec<_>>();
-                    validate_draft_line_edits(&requested_edits, &guard.existing_lines, &coverage.lines)
-                        .map_err(
-                            erp_procurement::service::purchase_order::draft_edit::map_draft_edit_violation,
-                        )?;
-                }
-            },
-            StartStep::SupplierQualification => {
-                use erp_procurement::ports::creation_basis::CreationBasisSupplierPort;
-                super::super::creation_basis::supplier::CreationBasisSupplierAdapter::new(self.db.clone())
-                    .ensure_qualified(
-                        &input.submission.supplier_id,
-                        input.submission.purchase_type,
-                        erp_core::common::time::BusinessDate::today(),
-                        executor,
-                    )
-                    .await?;
-            },
-            StartStep::Submission => {
-                erp_procurement::service::purchase_order::start_approval::persist_started_submission(
-                    self.db,
-                    &mut input.order,
-                    &input.submission,
-                    &input.submission_lines,
-                    executor,
-                )
-                .await?;
-            },
-            StartStep::SupersededDraft => {
-                erp_procurement::service::purchase_order::start_approval::persist_superseded_draft(
-                    self.db,
-                    &mut input.superseded_draft,
-                    executor,
-                )
-                .await?;
-            },
-            StartStep::Runtime => {
-                self.first_task = persist_runtime_writes(
-                    self.db,
-                    writes,
-                    &input.snapshot_payload,
-                    input.owner_role,
-                    &input.organization_id,
-                    input.now,
-                    executor,
-                )
-                .await?;
-            },
-            StartStep::CommandReceipt => {
-                persist_submit_command_receipt(self.db, input, self.first_task.as_ref(), executor).await?;
-            },
-            StartStep::Audit => {
-                persist_log(self.db, &input.audit, executor).await?;
-            },
+            StartStep::Receipt => self.receipt(executor).await,
+            StartStep::DocumentGuard => self.document_guard(executor).await,
+            StartStep::ProcurementGuard => self.procurement_guard(executor).await,
+            StartStep::SupplierQualification => self.supplier_qualification(executor).await,
+            StartStep::SupplySelection => self.supply_selection(executor).await,
+            StartStep::Submission => self.submission(executor).await,
+            StartStep::SupersededDraft => self.superseded_draft(executor).await,
+            StartStep::Runtime => self.runtime(executor).await,
+            StartStep::CommandReceipt => self.command_receipt(executor).await,
+            StartStep::Audit => persist_log(self.db, &self.input.audit, executor).await.map_err(Error::from),
+        }
+    }
+}
+
+impl StartPosting<'_> {
+    /// 审批启动回执保持为审批写段的第一写。
+    async fn receipt(&self, executor: &mut dyn Executor) -> Result<()> {
+        let PreparedExecution::Apply(writes) = &self.input.prepared else { return Ok(()) };
+        self.db
+            .bpm_workflow()
+            .insert_command_receipt(&writes.receipt, executor)
+            .await
+            .map_err(map_receipt_first_write_error)?;
+        Ok(())
+    }
+
+    /// 锁定已分配正式号的注册行，避免并发重复启动。
+    async fn document_guard(&mut self, executor: &mut dyn Executor) -> Result<()> {
+        let input = &mut self.input;
+        let PreparedExecution::Apply(writes) = &input.prepared else { return Ok(()) };
+        let guarded = self
+            .db
+            .business_documents()
+            .mark_loaded_approval_started(
+                &mut input.document,
+                DocumentType::PurchaseOrder,
+                &writes.instance.process_definition_id,
+                writes.instance.definition_version,
+                input.now,
+                executor,
+            )
+            .await?;
+        if !guarded {
+            return Err(Error::ConflictError("采购单审批启动守卫冲突，请刷新后重试".into()));
         }
         Ok(())
+    }
+
+    /// 草稿补丁在销售采购 guard 后重算覆盖，不变更供给选源。
+    async fn procurement_guard(&mut self, executor: &mut dyn Executor) -> Result<()> {
+        let input = &mut self.input;
+        if let Some(guard) = input.procurement_guard.take() {
+            let coverage =
+                advance_guard_and_load_coverage(self.db, &input.order, &guard.actor_id, executor).await?;
+            let requested_edits =
+                guard.requested_lines.iter().map(SavePurchaseOrderLine::to_draft_edit).collect::<Vec<_>>();
+            validate_draft_line_edits(&requested_edits, &guard.existing_lines, &coverage.lines)
+                .map_err(map_draft_edit_violation)?;
+        }
+        Ok(())
+    }
+
+    /// 供应商当前资质与采购类型继续在提交事务中重验。
+    async fn supplier_qualification(&self, executor: &mut dyn Executor) -> Result<()> {
+        CreationBasisSupplierAdapter::new(self.db.clone())
+            .ensure_qualified(
+                &self.input.submission.supplier_id,
+                self.input.submission.purchase_type,
+                BusinessDate::today(),
+                executor,
+            )
+            .await?;
+        Ok(())
+    }
+
+    /// 沿冻结身份重验当前供给、条款及可供版本，不静默刷新来源。
+    async fn supply_selection(&self, executor: &mut dyn Executor) -> Result<()> {
+        revalidate_selected_supply(
+            self.db,
+            &self.input.submission.supplier_id,
+            &self.input.submission_lines,
+            executor,
+        )
+        .await
+    }
+
+    /// 写入本次正式冻结提交，与前置资格核对共用执行器。
+    async fn submission(&mut self, executor: &mut dyn Executor) -> Result<()> {
+        let input = &mut self.input;
+        persist_started_submission(
+            self.db,
+            &mut input.order,
+            &input.submission,
+            &input.submission_lines,
+            executor,
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// 原草稿失效事实仅在正式提交同事务登记。
+    async fn superseded_draft(&mut self, executor: &mut dyn Executor) -> Result<()> {
+        persist_superseded_draft(self.db, &mut self.input.superseded_draft, executor).await?;
+        Ok(())
+    }
+
+    /// 保存 BPM 运行事实、不可变快照及首个真实入口任务。
+    async fn runtime(&mut self, executor: &mut dyn Executor) -> Result<()> {
+        let input = &self.input;
+        let PreparedExecution::Apply(writes) = &input.prepared else { return Ok(()) };
+        self.first_task = persist_runtime_writes(
+            self.db,
+            writes,
+            &input.snapshot_payload,
+            input.owner_role,
+            &input.organization_id,
+            input.now,
+            executor,
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// 原命令结果与首个任务版本一并持久化，保持未知结果恢复身份。
+    async fn command_receipt(&mut self, executor: &mut dyn Executor) -> Result<()> {
+        persist_submit_command_receipt(self.db, &mut self.input, self.first_task.as_ref(), executor).await
     }
 }
 
@@ -298,7 +342,7 @@ async fn persist_submit_command_receipt(
 /// 计划缺少入口执行或写入失败时返回错误。
 async fn persist_runtime_writes(
     db: &Database,
-    writes: &erp_workflow::service::approval::execution::apply_plan::PlannedWrites,
+    writes: &PlannedWrites,
     snapshot_payload: &ApprovalSubjectSnapshotPayload,
     owner_role: &str,
     organization_id: &str,
@@ -361,7 +405,7 @@ fn list_projection_from_execution(
 /// 责任人为空或仓储失败时返回错误。
 async fn persist_open_tasks(
     db: &Database,
-    writes: &erp_workflow::service::approval::execution::apply_plan::PlannedWrites,
+    writes: &PlannedWrites,
     owner_role: &str,
     organization_id: &str,
     now: Instant,

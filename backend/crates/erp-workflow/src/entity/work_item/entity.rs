@@ -3,6 +3,7 @@
 mod approval;
 mod permissions;
 mod status;
+mod supplier_portal;
 mod types;
 mod validation;
 
@@ -19,6 +20,7 @@ use erp_core::{Error, Result};
 pub use permissions::{AvailableWorkItemAccount, WorkflowAccountFact, casbin_subject};
 use serde::{Deserialize, Serialize};
 pub use status::WorkItemCloseData;
+pub use supplier_portal::{SupplierPortalReviewIdentity, SupplierPortalReviewTaskData};
 pub use types::{
     AssignmentSource, WorkItemAssignmentSeparationPolicy, WorkItemBriefObjectKind, WorkItemBriefRelation,
     WorkItemPriority, WorkItemStatus, WorkItemType,

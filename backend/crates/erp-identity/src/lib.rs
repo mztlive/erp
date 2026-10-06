@@ -9,12 +9,14 @@ pub mod repository;
 pub mod service;
 
 pub use dto::*;
+pub use entity::portal::{PortalActor, PortalBinding, PortalRole};
 pub use entity::{
     AccountCore, AccountCoreData, AccountCoreUpdate, AccountStatus, LoginAccount, PasswordVerification,
     Permission, PermissionSet, Role, RoleData, RoleId, RoleIdSet, RoleUpdate, Secret, access_control,
 };
 pub use error::{Error, Result};
 pub use ports::{AuthorizationPort, IdentityAuditPort, OrganizationScopeFact, PreparedResourceAudit};
+pub use repository::portal::{PortalBindingRepository, PortalBindingRepositoryExt, PortalIdentityExt};
 pub use repository::{
     AccessControlExt, AccountCoreRepository, AccountCoreRepositoryExt, AuditEventFilter,
     AuditEventRepository, AuditEventRepositoryExt, AuditEventRow, CASBIN_RULES, DataScopeFilter,
@@ -32,3 +34,4 @@ pub use service::iam::{
     UpdateAdminParams, UpdateAdminRoleParams, UpdateRoleParams, ensure_predefined_roles, ensure_root_role,
     shared_rbac_service, subject,
 };
+pub use service::portal::{PortalIdentityService, PreparedPortalAccount, PreparedPortalPassword};

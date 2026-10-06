@@ -4,6 +4,7 @@ pub mod dto;
 pub mod entity;
 mod error;
 pub mod indexes;
+pub mod portal;
 pub mod ports;
 pub mod repository;
 pub mod service;

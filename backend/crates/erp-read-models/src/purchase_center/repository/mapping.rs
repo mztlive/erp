@@ -10,6 +10,10 @@ use erp_sales::entity::sales_order::{
     CommercialStatus, LineType, SalesOrder, SalesOrderGoodsServiceLineRevision, SalesOrderRevision,
     SalesOrderRevisionLine,
 };
+use erp_supply::entity::supplier_offering::{
+    AvailabilityStatus as SupplyAvailabilityStatus, SupplierOffering, SupplierOfferingAvailability,
+    SupplierOfferingRevision,
+};
 
 /// 投影采购依据身份；销售状态资格和 guard CAS 仍由对应调用位置执行。
 pub fn sales_order_basis_fact(order: &SalesOrder) -> SalesOrderBasisFact {
@@ -106,20 +110,35 @@ pub fn stock_balance_fact(value: erp_inventory::StockBalance) -> StockBalanceFac
     }
 }
 /// 投影已筛选 ACTIVE 供给身份和当前条款指针。
-pub(crate) fn offering_fact(value: erp_supply::entity::supplier_offering::SupplierOffering) -> OfferingFact {
+///
+/// # 参数
+/// * `value` - 提供方已筛选启用状态的供给。
+/// # 返回
+/// 返回真实身份、归属、版本和当前条款指针，不推断采购选源。
+/// # 错误
+/// 无；状态及权限资格由调用方证明。
+pub fn offering_fact(value: SupplierOffering) -> OfferingFact {
     OfferingFact {
         base: FactIdentity { id: value.base.id.clone() },
+        version: value.base.version,
         stable: CurrentRevisionFact { current_revision_id: value.stable.current_revision_id.clone() },
         sku_id: value.sku_id.clone(),
         supplier_id: value.supplier_id.clone(),
     }
 }
 /// 原条款有效期与价格直接映射，由采购规则在原位置判断。
-pub(crate) fn offering_revision_fact(
-    value: erp_supply::entity::supplier_offering::SupplierOfferingRevision,
-) -> OfferingRevisionFact {
+///
+/// # 参数
+/// * `value` - 精确供给当前指针关联的条款修订。
+/// # 返回
+/// 返回原始所属供给、版本、有效期和采购价格事实。
+/// # 错误
+/// 无；当前指针及归属由调用方或领域规则核对。
+pub fn offering_revision_fact(value: SupplierOfferingRevision) -> OfferingRevisionFact {
     OfferingRevisionFact {
         base: FactIdentity { id: value.base.id.clone() },
+        version: value.base.version,
+        supplier_offering_id: value.supplier_offering_id.clone(),
         valid_from: value.valid_from,
         valid_to: value.valid_to,
         bulk_supply_price_gross: value.bulk_supply_price_gross,
@@ -128,21 +147,22 @@ pub(crate) fn offering_revision_fact(
     }
 }
 /// 可供状态显式映射；所有不可供状态保持采购原拒绝分支。
-pub(crate) fn availability_fact(
-    value: erp_supply::entity::supplier_offering::SupplierOfferingAvailability,
-) -> AvailabilityFact {
+///
+/// # 参数
+/// * `value` - 精确供给的当前独立可供事实。
+/// # 返回
+/// 返回原数量及版本，未提供数量保持空值。
+/// # 错误
+/// 无；采购是否可用由采购领域判断。
+pub fn availability_fact(value: SupplierOfferingAvailability) -> AvailabilityFact {
     AvailabilityFact {
         base: VersionedFactIdentity { id: value.base.id.clone(), version: value.base.version },
         supplier_offering_id: value.supplier_offering_id.clone(),
         availability_status: match value.availability_status {
-            erp_supply::entity::supplier_offering::AvailabilityStatus::Available => {
-                AvailabilityStatus::Available
-            },
-            erp_supply::entity::supplier_offering::AvailabilityStatus::Unavailable
-            | erp_supply::entity::supplier_offering::AvailabilityStatus::Stopped
-            | erp_supply::entity::supplier_offering::AvailabilityStatus::Stale => {
-                AvailabilityStatus::Unavailable
-            },
+            SupplyAvailabilityStatus::Available => AvailabilityStatus::Available,
+            SupplyAvailabilityStatus::Unavailable
+            | SupplyAvailabilityStatus::Stopped
+            | SupplyAvailabilityStatus::Stale => AvailabilityStatus::Unavailable,
         },
         available_quantity: value.available_quantity,
         source_revision_token: value.source_revision_token.clone(),

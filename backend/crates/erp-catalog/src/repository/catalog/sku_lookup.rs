@@ -12,13 +12,14 @@ use super::sku_revision::{
     SKU_REVISION_ATTRIBUTE_VALUES, SkuRevisionFilter, SkuRevisionRow, select_current_sku_revisions,
     sku_revision_keyword_filter,
 };
+use crate::Result as CatalogResult;
 use crate::entity::catalog::{Sku, SkuRevision, SkuRevisionAttributeValue};
 use crate::repository::CatalogExt;
 use crate::repository::owned::{ProductRepository, SkuRepository, SkuRevisionRepository};
 use crate::repository::prelude::*;
 
 impl<'a> CatalogRepository<'a> {
-    /// 按 SKU 编号或当前修订名称解析公司 SKU 主键。
+    /// 按 SKU 编号、正式规格签名或当前修订名称解析公司 SKU 主键。
     ///
     /// 两个字段均按字面量部分匹配并忽略大小写；名称命中只接受稳定 SKU 当前修订，
     /// 避免历史名称继续污染供给列表关键字筛选。
@@ -56,7 +57,11 @@ impl<'a> CatalogRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<Vec<SkuId>> {
         let mut sku_filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
-        insert_literal_regex_filter(&mut sku_filter, "sku_no", Some(keyword));
+        let mut sku_no = Document::new();
+        insert_literal_regex_filter(&mut sku_no, "sku_no", Some(keyword));
+        let mut specification = Document::new();
+        insert_literal_regex_filter(&mut specification, "specification_signature", Some(keyword));
+        sku_filter.insert("$or", vec![sku_no, specification]);
         let mut skus = SkuRepository::new(self.db, SKUS).find_many(sku_filter, executor).await?;
 
         let revision_filter = sku_revision_keyword_filter(keyword, include_specification);
@@ -402,7 +407,8 @@ impl<'a> CatalogRepository<'a> {
         revision: &SkuRevision,
         attribute_values: &[SkuRevisionAttributeValue],
         executor: &mut dyn Executor,
-    ) -> Result<()> {
+    ) -> CatalogResult<()> {
+        self.claim_sku_barcode(revision, executor).await?;
         mongo_ops::insert_one(&self.db.collection::<Sku>(SKUS), sku, executor).await?;
         mongo_ops::insert_one(&self.db.collection::<SkuRevision>(SKU_REVISIONS), revision, executor).await?;
         mongo_ops::insert_many(

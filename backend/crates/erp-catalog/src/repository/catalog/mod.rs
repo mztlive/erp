@@ -14,6 +14,7 @@
 //! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
 
 mod attribute;
+mod barcode_claim;
 mod category;
 mod dictionary;
 mod import_lookup;

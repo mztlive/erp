@@ -181,6 +181,7 @@ impl PurchaseOrderProcess {
                 .freeze_submission_from_lines(
                     &draft.order,
                     &draft.submission,
+                    &existing_lines,
                     &requested_lines,
                     command.actor,
                 )

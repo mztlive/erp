@@ -182,6 +182,7 @@ pub(crate) const PREDEFINED_ROLES: &[PredefinedRoleDef] = &[
 ///
 /// # 业务约束
 /// 管理员额外授予的权限、角色名称与启停状态不会被启动过程删除或覆盖。
+/// 门户专项只进入首次创建或显式应用的模板，既有角色必须由管理员显式授予。
 pub async fn ensure_predefined_roles(rbac: &SharedRbacService) -> Result<()> {
     for role in PREDEFINED_ROLES {
         seed_one(rbac, role).await?;
@@ -219,7 +220,7 @@ pub async fn ensure_predefined_roles(rbac: &SharedRbacService) -> Result<()> {
 async fn ensure_missing_permissions(rbac: &SharedRbacService) -> Result<()> {
     for role in PREDEFINED_ROLES {
         // 已存在角色的目录授权由管理员显式维护；缺失无法区分从未授予与人工撤销。
-        let desired = parse_permissions(role.permissions)?
+        let desired = startup_permissions(parse_permissions(role.permissions)?)
             .into_iter()
             .filter(|permission| {
                 !matches!(
@@ -244,6 +245,21 @@ async fn ensure_missing_permissions(rbac: &SharedRbacService) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// 启动过程不授予外部账号、定向目录与申请处理专项权限。
+///
+/// # 参数
+/// `permissions` 为岗位模板或历史升级目标。
+/// # 返回
+/// 保留普通岗位基线，门户专项交由管理员显式授权。
+/// # 错误
+/// 无。
+fn startup_permissions(permissions: Vec<Permission>) -> Vec<Permission> {
+    permissions
+        .into_iter()
+        .filter(|permission| !permission.resource().starts_with("supplier_portal_"))
+        .collect()
 }
 
 /// 从仍保持上一版默认权限快照的财务角色移除已退役采购审核旁路权限。
@@ -326,6 +342,37 @@ pub(super) fn predefined_role_ids() -> Vec<&'static str> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn portal_permissions_are_explicit_template_grants_and_never_startup_grants() {
+        let role = super::PREDEFINED_ROLES.iter().find(|role| role.id == "role-procurement").unwrap();
+        let initial = super::initial_permissions(role).unwrap();
+        for code in [
+            "supplier_portal_account:list",
+            "supplier_portal_account:create",
+            "supplier_portal_account:update",
+            "supplier_portal_catalog:list",
+            "supplier_portal_catalog:update",
+            "supplier_portal_request:list",
+            "supplier_portal_request:detail",
+            "supplier_portal_request:review",
+        ] {
+            assert!(initial.iter().any(|permission| permission.to_string() == code), "{code}");
+        }
+        let startup = super::startup_permissions(initial);
+        assert!(startup.iter().all(|permission| !permission.resource().starts_with("supplier_portal_")));
+        assert!(startup.iter().any(|permission| permission.to_string() == "supplier:*"));
+        assert!(startup.iter().all(|permission| permission.resource() != "account"));
+        let old = super::remove_permissions(
+            &super::parse_permissions(role.permissions).unwrap(),
+            &["supplier_sensitive:reveal"],
+        );
+        assert!(
+            super::startup_permissions(old)
+                .iter()
+                .all(|permission| !permission.resource().starts_with("supplier_portal_"))
+        );
+    }
+
     #[test]
     fn ledger_read_is_only_seeded_for_a_new_finance_role() {
         for role in super::PREDEFINED_ROLES {

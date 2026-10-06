@@ -24,6 +24,7 @@ import {
 } from "@/lib/api/errors"
 import { toQueryString } from "@/lib/api/paging"
 import { getToken, notifyUnauthorized } from "@/lib/api/session"
+import type { ApiSession } from "@/lib/api/session"
 
 /** 默认后端地址（可用 NEXT_PUBLIC_API_BASE_URL 覆盖）。 */
 const DEFAULT_API_BASE_URL = "http://127.0.0.1:10001"
@@ -51,6 +52,8 @@ interface ApiResponseEnvelope<T> {
 
 /** apiFetch 请求选项。 */
 export interface ApiRequestOptions {
+    /** 内部账号与供应商账号分别鉴权；公开登录不附带凭证。 */
+    session?: ApiSession
     /** HTTP 方法，默认 GET。 */
     method?: string
     /** 额外请求头。 */
@@ -78,7 +81,7 @@ const sendRequest = async (
     options: ApiRequestOptions,
 ): Promise<Response> => {
     const headers: Record<string, string> = { ...options.headers }
-    const token = getToken()
+    const token = getToken(options.session)
     if (token) {
         headers.Authorization = `Bearer ${token}`
     }
@@ -135,6 +138,7 @@ const apiFetch = async <T>(
     path: string,
     options: ApiRequestOptions = {},
 ): Promise<T> => {
+    const requestToken = getToken(options.session)
     const res = await sendRequest(path, options)
 
     const bodyText = await res.text()
@@ -152,7 +156,7 @@ const apiFetch = async <T>(
 
     // 401：HTTP 状态或业务信封中的 status 均归类为 Auth，并通知 session 清理
     if (res.status === 401 || envelope?.status === 401) {
-        notifyUnauthorized()
+        notifyUnauthorized(options.session, requestToken)
         throw fromAuth(401, parsed, requestId)
     }
 
@@ -198,11 +202,12 @@ export const apiGetBlob = async (
     path: string,
     options: ApiRequestOptions = {},
 ): Promise<Blob> => {
+    const requestToken = getToken(options.session)
     const res = await sendRequest(path, options)
     const requestId = res.headers.get("X-Trace-Id") ?? undefined
 
     if (res.status === 401) {
-        notifyUnauthorized()
+        notifyUnauthorized(options.session, requestToken)
         throw fromAuth(401, await readErrorBody(res), requestId)
     }
     if (!res.ok) {

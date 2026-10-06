@@ -2,6 +2,10 @@
 //!
 //! Domain-specific methods are extension traits on the generic repository.
 
+use persistence_core::Repository;
+
+use crate::entity::catalog::sku_barcode_claim::SkuBarcodeClaim;
+
 pub type ProductRepository<'a> = persistence_core::Repository<'a, crate::entity::catalog::Product>;
 pub type ProductBrandRepository<'a> = persistence_core::Repository<'a, crate::entity::catalog::ProductBrand>;
 pub type ProductCategoryRepository<'a> =
@@ -17,6 +21,7 @@ pub type SkuAttributeRepository<'a> = persistence_core::Repository<'a, crate::en
 pub type SkuAttributeValueRepository<'a> =
     persistence_core::Repository<'a, crate::entity::catalog::SkuAttributeValue>;
 pub type SkuRevisionRepository<'a> = persistence_core::Repository<'a, crate::entity::catalog::SkuRevision>;
+pub type SkuBarcodeClaimRepository<'a> = Repository<'a, SkuBarcodeClaim>;
 pub type UnitOfMeasureRepository<'a> =
     persistence_core::Repository<'a, crate::entity::catalog::UnitOfMeasure>;
 pub type VoucherCategoryProfileRevisionRepository<'a> =

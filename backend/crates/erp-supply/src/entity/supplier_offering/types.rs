@@ -53,6 +53,21 @@ pub enum OfferingStatus {
 }
 
 impl OfferingStatus {
+    /// 返回关系暂停或停供导致履约受阻的正式领域原因。
+    /// # 参数
+    /// 无；读取当前关系状态。
+    /// # 返回
+    /// 停供和暂停分别返回停止供应与当前不可供；启用返回空。
+    /// # 错误
+    /// 无。
+    pub fn interruption_reason(self) -> Option<AvailabilityInterruptionReason> {
+        match self {
+            Self::Active => None,
+            Self::Paused => Some(AvailabilityInterruptionReason::SupplyUnavailable),
+            Self::Stopped => Some(AvailabilityInterruptionReason::SupplierStopped),
+        }
+    }
+
     /// 返回持久化与查询使用的稳定代码。
     ///
     /// # 返回
@@ -146,7 +161,20 @@ impl AvailabilityStatus {
 
 #[cfg(test)]
 mod tests {
-    use super::{AvailabilityStatus, OfferingSourceType, OfferingStatus};
+    use super::{AvailabilityInterruptionReason, AvailabilityStatus, OfferingSourceType, OfferingStatus};
+
+    #[test]
+    fn relationship_pause_and_stop_block_supply_even_when_quantity_is_available() {
+        assert_eq!(OfferingStatus::Active.interruption_reason(), None);
+        assert_eq!(
+            OfferingStatus::Paused.interruption_reason(),
+            Some(AvailabilityInterruptionReason::SupplyUnavailable)
+        );
+        assert_eq!(
+            OfferingStatus::Stopped.interruption_reason(),
+            Some(AvailabilityInterruptionReason::SupplierStopped)
+        );
+    }
 
     #[test]
     fn codes_and_labels_are_stable() {

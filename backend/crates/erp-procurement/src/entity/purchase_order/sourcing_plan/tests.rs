@@ -81,6 +81,7 @@ fn remaining(total: &str, covered: &str) -> Quantity {
 /// 构造供给稳定身份。
 fn offering(id: &str, supplier_id: &str) -> SupplierOffering {
     SupplierOffering {
+        version: 1,
         base: FactIdentity { id: id.to_string() },
         stable: CurrentRevisionFact::default(),
         sku_id: SkuId::new("sku-1"),
@@ -91,7 +92,9 @@ fn offering(id: &str, supplier_id: &str) -> SupplierOffering {
 /// 构造供给商业条款修订。
 fn offering_revision(offering_id: &str) -> SupplierOfferingRevision {
     SupplierOfferingRevision {
+        version: 1,
         base: FactIdentity { id: format!("offrev-{offering_id}") },
+        supplier_offering_id: SupplierOfferingId::new(offering_id),
         dropship_supply_price_gross: UnitPrice::from_str("6").unwrap(),
         bulk_supply_price_gross: UnitPrice::from_str("5").unwrap(),
         input_tax_rate: Rate::from_str("0.13").unwrap(),

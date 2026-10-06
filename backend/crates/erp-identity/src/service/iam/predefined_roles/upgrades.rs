@@ -389,6 +389,8 @@ pub(crate) async fn upgrade_exact(
     previous: Vec<Permission>,
     desired: Vec<Permission>,
 ) -> Result<()> {
+    let previous = super::startup_permissions(previous);
+    let desired = super::startup_permissions(desired);
     let legacy_workflow_previous = legacy_workflow_permission_snapshot(role_id, &previous)?;
     if legacy_workflow_previous != previous
         && rbac

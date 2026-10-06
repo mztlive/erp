@@ -221,7 +221,7 @@ async fn replace_current_draft(
         requested_lines.iter().map(SavePurchaseOrderLine::to_draft_edit).collect::<Vec<_>>();
     validate_draft_line_edits(&requested_edits, &old_lines, &coverage.lines)
         .map_err(map_draft_edit_violation)?;
-    let replacement = build_draft_replacement(order, &old_draft, &requested_lines)?;
+    let replacement = build_draft_replacement(order, &old_draft, &old_lines, &requested_lines)?;
     order.update(Default::default(), command.actor.id(), super::adapters::payment_term::parse)?;
     old_draft.mark_superseded()?;
     order.current_submission_id = Some(replacement.submission.base.id.clone());

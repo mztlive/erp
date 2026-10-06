@@ -103,8 +103,13 @@ fn duplicate_key_conflict_message(error: &persistence_core::Error) -> String {
 ///
 /// Catalog unique indexes currently share the generic conflict copy from the
 /// original `services::Error` mapping; do not invent field-specific messages.
-fn duplicate_index_conflict_message(_index_name: Option<&str>) -> String {
-    "数据已存在，请勿重复提交".to_string()
+fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
+    match index_name {
+        Some("uk_sku_barcode_claims_barcode" | "uk_sku_barcode_claims_id") => {
+            "条码已被并发建档占用，请刷新并重新核对匹配 SKU".into()
+        },
+        _ => "数据已存在，请勿重复提交".into(),
+    }
 }
 
 impl From<validator::ValidationErrors> for Error {
@@ -133,6 +138,10 @@ mod tests {
         assert_eq!(
             super::duplicate_index_conflict_message(Some("uk_skus_product_spec")),
             "数据已存在，请勿重复提交"
+        );
+        assert_eq!(
+            super::duplicate_index_conflict_message(Some("uk_sku_barcode_claims_barcode")),
+            "条码已被并发建档占用，请刷新并重新核对匹配 SKU"
         );
     }
 }

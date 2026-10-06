@@ -223,13 +223,15 @@ pub fn compose_basis_id(
 /// 可供投影版本变化会使旧依据失效。
 fn basis_line_fingerprint(line: &BasisLine) -> String {
     format!(
-        "{}|{}|{}|{}|{}|{}|{}|{}|{}",
+        "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
         stable_line_id(line),
         line.coverage.revision_line.base.id,
         line.coverage.summary.remaining_quantity,
         line.max_create_quantity,
         line.supply.offering.base.id,
+        line.supply.offering.version,
         line.supply.revision.base.id,
+        line.supply.revision.version,
         line.supply.availability.base.id,
         line.supply.availability.base.version,
         line.supply.availability.source_revision_token.as_deref().unwrap_or("-"),
@@ -468,6 +470,7 @@ mod tests {
     /// 构造供给稳定身份。
     fn offering(id: &str, supplier_id: &str) -> SupplierOffering {
         SupplierOffering {
+            version: 1,
             base: FactIdentity { id: id.to_string() },
             stable: CurrentRevisionFact::default(),
             sku_id: SkuId::new("sku-1"),
@@ -482,7 +485,9 @@ mod tests {
         valid_to: Option<&str>,
     ) -> SupplierOfferingRevision {
         SupplierOfferingRevision {
+            version: 1,
             base: FactIdentity { id: format!("offrev-{offering_id}") },
+            supplier_offering_id: SupplierOfferingId::new(offering_id),
             dropship_supply_price_gross: UnitPrice::from_str("6").unwrap(),
             bulk_supply_price_gross: UnitPrice::from_str("5").unwrap(),
             input_tax_rate: Rate::from_str("0.13").unwrap(),
@@ -555,6 +560,18 @@ mod tests {
         assert_eq!(first.split(':').count(), 2);
         assert_eq!(first.split(':').next().unwrap(), "so-1");
         assert!(first.split(':').nth(1).unwrap().len() == 64);
+    }
+
+    #[test]
+    fn basis_identity_changes_when_selected_offering_or_terms_version_changes() {
+        let order = sales_order("sales");
+        let mut group = basis_group("supplier", "NET-30");
+        let original = basis_id_for(&order, &group, "task", None);
+        group.lines[0].supply.offering.version += 1;
+        let offering_changed = basis_id_for(&order, &group, "task", None);
+        assert_ne!(original, offering_changed);
+        group.lines[0].supply.revision.version += 1;
+        assert_ne!(offering_changed, basis_id_for(&order, &group, "task", None));
     }
 
     /// 同一范围拆向不同目标仓时必须形成不同的数据库唯一身份。

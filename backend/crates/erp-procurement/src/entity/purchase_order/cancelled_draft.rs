@@ -170,6 +170,7 @@ mod tests {
                 procurement_confirmation_line_id: Some(ProcurementConfirmationLineId::new("confirmation-1")),
                 sku_id: Some(SkuId::new("sku-1")),
                 sku_revision_id: Some(SkuRevisionId::new("sku-revision-1")),
+                supplier_offering_source: None,
                 product_name_snapshot: Some("采购商品".into()),
                 specification_snapshot: Some("500g".into()),
                 quantity: Some(Quantity::from_str("2").unwrap()),
@@ -403,7 +404,8 @@ mod tests {
             },
         ];
         let requested = SavePurchaseOrderLinePatch::resolve_all(&patches, &draft.lines).unwrap();
-        let replacement = build_draft_replacement(&cancelled, &draft.submission, &requested).unwrap();
+        let replacement =
+            build_draft_replacement(&cancelled, &draft.submission, &draft.lines, &requested).unwrap();
         replacement.submission.ensure_draft().unwrap();
         replacement.submission.ensure_line_totals(&replacement.lines).unwrap();
         assert_eq!(replacement.submission.gross_amount, Amount::from_str("208").unwrap());

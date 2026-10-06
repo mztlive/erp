@@ -8,6 +8,7 @@
 mod start_input;
 mod start_persist;
 mod start_receipt;
+mod supply_selection;
 
 #[cfg(test)]
 pub(crate) use start_input::tests;

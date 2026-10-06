@@ -312,6 +312,7 @@ mod tests {
 
     fn offering() -> OfferingFact {
         OfferingFact {
+            version: 1,
             base: FactIdentity { id: "offering-1".to_string() },
             stable: CurrentRevisionFact { current_revision_id: Some("revision-1".to_string()) },
             sku_id: SkuId::new("sku-1"),
@@ -323,7 +324,9 @@ mod tests {
         facts.revisions.insert(
             "revision-1".to_string(),
             OfferingRevisionFact {
+                version: 1,
                 base: FactIdentity { id: "revision-1".to_string() },
+                supplier_offering_id: SupplierOfferingId::new("offering-1"),
                 valid_from: BusinessDate::today(),
                 valid_to: None,
                 bulk_supply_price_gross: UnitPrice::from_str("1").unwrap(),

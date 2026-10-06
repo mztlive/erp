@@ -37,6 +37,10 @@ tower = { workspace = true }
 tower-http = { workspace = true }
 validator = { workspace = true }
 jwt-sha2 = { workspace = true }
+image = { workspace = true }
+lopdf = { workspace = true }
+zune-core = { workspace = true }
+zune-jpeg = { workspace = true }
 opentelemetry = { workspace = true }
 opentelemetry-otlp = { workspace = true }
 opentelemetry_sdk = { workspace = true }

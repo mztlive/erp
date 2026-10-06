@@ -4812,6 +4812,132 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         ],
     },
     {
+        name: "供应商门户管理",
+        description: "管理外部账号、定向报价与专项申请",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-portal/accounts",
+                description: "查询供应商门户账号",
+                permission: {
+                    resource: "supplier_portal_account",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-portal/accounts",
+                description: "开通供应商门户账号",
+                permission: {
+                    resource: "supplier_portal_account",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/supplier-portal/accounts/{id}",
+                description: "管理供应商门户账号",
+                permission: {
+                    resource: "supplier_portal_account",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-portal/catalog-grants",
+                description: "查询供应商定向报价目录",
+                permission: {
+                    resource: "supplier_portal_catalog",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-portal/catalog-grants",
+                description: "维护供应商定向报价目录",
+                permission: {
+                    resource: "supplier_portal_catalog",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-portal/applications",
+                description: "查询供应商门户申请",
+                permission: {
+                    resource: "supplier_portal_request",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-portal/applications/{id}",
+                description: "查看供应商门户申请",
+                permission: {
+                    resource: "supplier_portal_request",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-portal/applications/{id}/review",
+                description: "确认供应商门户申请",
+                permission: {
+                    resource: "supplier_portal_request",
+                    action: "review",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-portal/offerings/{id}/impacts",
+                description: "核对供给未完成履约影响",
+                permission: {
+                    resource: "supplier_portal_request",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-portal/applications/{id}/files/{file_id}/download",
+                description: "下载供应商专项审核素材",
+                permission: {
+                    resource: "supplier_portal_request",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-portal/dictionaries/{kind}",
+                description: "查询供应商新品审核字典",
+                permission: {
+                    resource: "supplier_portal_request",
+                    action: "review",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-portal/applications/{id}/duplicates",
+                description: "匹配供应商新品已有商品",
+                permission: {
+                    resource: "supplier_portal_request",
+                    action: "review",
+                },
+            },
+        ],
+    },
+    {
         name: "API 供应商连接",
         description: "供应商 API 连接与能力治理（W20）",
         permissions: [

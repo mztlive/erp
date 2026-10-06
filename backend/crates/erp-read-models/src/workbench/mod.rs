@@ -25,6 +25,8 @@ mod purchase_review_brief;
 mod query;
 mod sales_order_brief;
 mod stats;
+mod supplier_portal_brief;
+mod supply_warnings;
 #[cfg(test)]
 mod test_auth;
 

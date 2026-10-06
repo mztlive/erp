@@ -23,7 +23,9 @@ pub use change::{
 };
 mod common;
 mod coverage_sources;
+mod offering_usage;
 mod order;
+pub use offering_usage::{PurchaseOfferingUsageFact, PurchaseOfferingUsageLine};
 mod revision;
 pub mod scope;
 mod submission;

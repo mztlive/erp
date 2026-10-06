@@ -588,6 +588,7 @@ mod posting_contract_tests {
             procurement_confirmation_line_id: Some(ProcurementConfirmationLineId::new("confirmation-line")),
             sku_id: Some(SkuId::new("sku")),
             sku_revision_id: Some(SkuRevisionId::new("sku-revision")),
+            supplier_offering_source: None,
             product_name_snapshot: Some("商品".into()),
             specification_snapshot: None,
             quantity: Some(quantity.parse().unwrap()),

@@ -4,11 +4,12 @@ use axum::http::HeaderMap;
 use axum::http::header::AUTHORIZATION;
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
+use erp_core::AccountKind;
 use erp_identity::{BackofficeAuthResult, BackofficeAuthService};
 use tracing::{error, info, warn};
 
 use crate::app_state::AppState;
-use crate::core::auth::jwt::TokenPayload;
+use crate::core::auth::jwt::{SubjectKind, TokenPayload};
 use crate::core::extractor::{Account, UserID};
 use crate::core::response::ApiResponse;
 use crate::core::tracing::RequestId;
@@ -53,6 +54,9 @@ async fn validate_current_identity(
     state: &AppState,
     payload: &TokenPayload,
 ) -> Result<BackofficeAuthResult, ApiResponse<()>> {
+    if payload.subject_kind != SubjectKind::Backoffice || payload.account_kind != Some(AccountKind::Admin) {
+        return Err(ApiResponse::unauthorized());
+    }
     let Some(account_kind) = payload.account_kind else {
         warn!("Authorization failed: missing account kind for backoffice token");
         return Err(ApiResponse::unauthorized());
@@ -79,7 +83,7 @@ async fn validate_current_identity(
 }
 
 /// 从标准 Authorization 头提取非空 Bearer token。
-fn bearer_token(headers: &HeaderMap) -> Option<&str> {
+pub(super) fn bearer_token(headers: &HeaderMap) -> Option<&str> {
     let value = headers.get(AUTHORIZATION)?.to_str().ok()?;
     let (scheme, token) = value.split_once(' ')?;
     (scheme.eq_ignore_ascii_case("Bearer")
@@ -95,6 +99,9 @@ fn attach_identity(
     actor_name_snapshot: Option<String>,
 ) -> Result<(), ApiResponse<()>> {
     let TokenPayload { id: user_id, account, subject_kind, account_kind, .. } = payload;
+    if subject_kind != SubjectKind::Backoffice || account_kind != Some(AccountKind::Admin) {
+        return Err(ApiResponse::unauthorized());
+    }
     let Some(account_kind) = account_kind else {
         warn!("Authorization failed: missing account kind for backoffice token");
         return Err(ApiResponse::unauthorized());
@@ -141,6 +148,15 @@ mod tests {
     }
 
     #[test]
+    fn supplier_token_cannot_attach_internal_permissions_context() {
+        let mut request = Request::builder().uri("/admin/products").body(Body::empty()).unwrap();
+        let payload = TokenPayload::supplier_portal("supplier-user".into(), "supplier01".into(), 1, 1);
+        assert!(attach_identity(&mut request, payload, None).is_err());
+        assert!(request.extensions().get::<RbacSubject>().is_none());
+        assert!(request.extensions().get::<AuditActor>().is_none());
+    }
+
+    #[test]
     fn attach_identity_inserts_backoffice_context() {
         let mut request =
             Request::builder().uri("/admin/roles").body(Body::empty()).expect("request should be valid");
@@ -171,6 +187,7 @@ mod tests {
             subject_kind: SubjectKind::Backoffice,
             account_kind: None,
             account_version: None,
+            binding_version: None,
         };
 
         assert!(attach_identity(&mut request, payload, None).is_err());

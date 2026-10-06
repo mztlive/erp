@@ -65,6 +65,9 @@ export function WorkspaceTaskCard({
             .amounts[0]
     const number = stripDocumentNumberPrefix(item.stableNumber)
     const sourceSales = findSourceSalesOrder(item.summarySections)
+    const supplyWarnings = (item.summarySections ?? []).filter(
+        (section) => section.label === "供给影响提示",
+    )
     const appearance = FAMILY_APPEARANCE[item.family]
     const Icon =
         item.workItemType === "CUSTOMER_ACCEPTANCE_REGISTRATION"
@@ -138,6 +141,14 @@ export function WorkspaceTaskCard({
                     >
                         {number}
                     </span>
+                    {supplyWarnings.map((section) => (
+                        <span
+                            key={section.value}
+                            className="whitespace-pre-wrap text-xs text-muted-foreground"
+                        >
+                            {section.value}
+                        </span>
+                    ))}
                     {item.listSummary ? (
                         <span className="truncate text-xs text-muted-foreground">
                             {item.listSummary}

@@ -209,29 +209,7 @@ impl WorkItem {
         at: Instant,
     ) -> Result<Self> {
         let normalized = NormalizedWorkItemData::try_from(data)?;
-        if normalized.work_item_type == WorkItemType::DocumentApproval {
-            return Err(Error::from("单据审批任务必须使用专用构造路径"));
-        }
-        if normalized.work_item_type == WorkItemType::ProcurementOrderCreation
-            && (responsibility_key.is_none() || responsibility_scope_ids.is_empty())
-        {
-            return Err(Error::from("供给分配任务必须冻结责任键和责任行范围"));
-        }
-        if matches!(
-            normalized.work_item_type,
-            WorkItemType::FulfillmentOperation
-                | WorkItemType::CustomerAcceptanceRegistration
-                | WorkItemType::SupplierPaymentExecution
-                | WorkItemType::SalesInvoiceExecution
-        ) && responsibility_key.is_none()
-        {
-            return Err(Error::from("执行任务必须冻结责任键"));
-        }
-        if normalized.work_item_type != WorkItemType::ProcurementOrderCreation
-            && !responsibility_scope_ids.is_empty()
-        {
-            return Err(Error::from("只有供给分配任务可以冻结责任行范围"));
-        }
+        normalized.ensure_creation_contract(responsibility_key.as_deref(), &responsibility_scope_ids)?;
         let responsibility_actor_ids = vec![normalized.owner_user_id.clone()];
         Ok(Self {
             base: BaseModel::new(id.to_string()),
@@ -390,6 +368,41 @@ struct NormalizedWorkItemData {
     due_at: Option<Instant>,
     reason_code: Option<String>,
     impact_summary: Option<String>,
+}
+
+impl NormalizedWorkItemData {
+    /// 验证任务类型对应的固定创建路径、责任键和行范围。
+    fn ensure_creation_contract(&self, responsibility_key: Option<&str>, scope_ids: &[String]) -> Result<()> {
+        if self.work_item_type == WorkItemType::DocumentApproval {
+            return Err(Error::from("单据审批任务必须使用专用构造路径"));
+        }
+        if self.work_item_type == WorkItemType::SupplierPortalReview
+            && (self.business_object_type != "supplier_portal_request"
+                || responsibility_key
+                    != Some(format!("supplier_portal_request:{}", self.business_object_id).as_str()))
+        {
+            return Err(Error::from("供应商申请确认任务必须冻结申请身份和责任键"));
+        }
+        if self.work_item_type == WorkItemType::ProcurementOrderCreation
+            && (responsibility_key.is_none() || scope_ids.is_empty())
+        {
+            return Err(Error::from("供给分配任务必须冻结责任键和责任行范围"));
+        }
+        if matches!(
+            self.work_item_type,
+            WorkItemType::FulfillmentOperation
+                | WorkItemType::CustomerAcceptanceRegistration
+                | WorkItemType::SupplierPaymentExecution
+                | WorkItemType::SalesInvoiceExecution
+        ) && responsibility_key.is_none()
+        {
+            return Err(Error::from("执行任务必须冻结责任键"));
+        }
+        if self.work_item_type != WorkItemType::ProcurementOrderCreation && !scope_ids.is_empty() {
+            return Err(Error::from("只有供给分配任务可以冻结责任行范围"));
+        }
+        Ok(())
+    }
 }
 
 impl TryFrom<WorkItemData> for NormalizedWorkItemData {

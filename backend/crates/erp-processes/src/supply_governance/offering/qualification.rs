@@ -11,7 +11,7 @@ use persistence_core::Executor;
 use crate::{Error, Result};
 /// 生产资格适配器；构造不读取任何事实。
 pub struct MongoOfferingQualification {
-    db: Database,
+    pub(super) db: Database,
 }
 impl MongoOfferingQualification {
     /// 绑定数据库；资格读取由ensure_qualified在原命令位置触发。
@@ -23,10 +23,18 @@ struct SkuQualificationFact {
     product_id: ProductId,
     is_active: bool,
 }
+struct ProductQualificationFact {
+    kind: ProductKind,
+    is_active: bool,
+}
 #[async_trait]
 trait CatalogQualificationPort: Sync {
     async fn sku(&self, id: &SkuId, executor: &mut dyn Executor) -> Result<Option<SkuQualificationFact>>;
-    async fn product_kind(&self, id: &ProductId, executor: &mut dyn Executor) -> Result<Option<ProductKind>>;
+    async fn product(
+        &self,
+        id: &ProductId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ProductQualificationFact>>;
     async fn supplier(
         &self,
         id: &SupplierAccountId,
@@ -45,8 +53,15 @@ impl CatalogQualificationPort for MongoOfferingQualification {
             .await?
             .map(|sku| SkuQualificationFact { is_active: sku.is_active(), product_id: sku.product_id }))
     }
-    async fn product_kind(&self, id: &ProductId, executor: &mut dyn Executor) -> Result<Option<ProductKind>> {
-        Ok(self.db.products().find_by_id(id, executor).await?.map(|product| product.product_kind))
+    async fn product(
+        &self,
+        id: &ProductId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ProductQualificationFact>> {
+        Ok(self.db.products().find_by_id(id, executor).await?.map(|product| ProductQualificationFact {
+            is_active: product.is_active(),
+            kind: product.product_kind,
+        }))
     }
     async fn supplier(
         &self,
@@ -88,11 +103,14 @@ async fn qualify<P: CatalogQualificationPort>(
     if !sku.is_active {
         return Err(Error::BusinessLogicError("公司 SKU 未启用".to_string()));
     }
-    let kind = port
-        .product_kind(&sku.product_id, executor)
+    let product = port
+        .product(&sku.product_id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("公司商品不存在".to_string()))?;
-    let fact = match kind {
+    if !product.is_active {
+        return Err(Error::BusinessLogicError("公司商品未启用".into()));
+    }
+    let fact = match product.kind {
         ProductKind::Physical => OfferingProductKind::Physical,
         ProductKind::Virtual => OfferingProductKind::Virtual,
         ProductKind::OfflineService => OfferingProductKind::OfflineService,
@@ -118,6 +136,7 @@ mod tests {
         fail: Option<usize>,
         kind: ProductKind,
         active: bool,
+        product_active: bool,
         missing_sku: bool,
         missing_product: bool,
     }
@@ -143,14 +162,15 @@ mod tests {
                 is_active: self.active,
             }))
         }
-        async fn product_kind(
+        async fn product(
             &self,
             id: &ProductId,
             executor: &mut dyn Executor,
-        ) -> Result<Option<ProductKind>> {
+        ) -> Result<Option<ProductQualificationFact>> {
             assert_eq!(id.as_ref(), "product");
             self.record("product", executor)?;
-            Ok((!self.missing_product).then_some(self.kind))
+            Ok((!self.missing_product)
+                .then_some(ProductQualificationFact { kind: self.kind, is_active: self.product_active }))
         }
         async fn supplier(
             &self,
@@ -174,6 +194,7 @@ mod tests {
     async fn invoke(
         kind: ProductKind,
         active: bool,
+        product_active: bool,
         missing_sku: bool,
         missing_product: bool,
         fail: Option<usize>,
@@ -185,6 +206,7 @@ mod tests {
             fail,
             kind,
             active,
+            product_active,
             missing_sku,
             missing_product,
         };
@@ -204,7 +226,7 @@ mod tests {
         for kind in
             [ProductKind::Physical, ProductKind::Virtual, ProductKind::OfflineService, ProductKind::Voucher]
         {
-            let (result, calls) = invoke(kind, true, false, false, None).await;
+            let (result, calls) = invoke(kind, true, true, false, false, None).await;
             result.unwrap();
             assert_eq!(calls, ["sku", "product", "supplier"]);
         }
@@ -212,7 +234,7 @@ mod tests {
     #[tokio::test]
     async fn catalog_qualification_stops_on_every_provider_error() {
         for i in 0..3 {
-            let (result, calls) = invoke(ProductKind::Physical, true, false, false, Some(i)).await;
+            let (result, calls) = invoke(ProductKind::Physical, true, true, false, false, Some(i)).await;
             assert!(matches!(result,Err(Error::ConflictError(ref e)) if e==&format!("catalog {i}")));
             assert_eq!(calls, ["sku", "product", "supplier"][..=i]);
         }
@@ -225,10 +247,17 @@ mod tests {
             (true, false, true, "公司商品不存在", 2),
         ] {
             let (result, calls) =
-                invoke(ProductKind::Physical, active, missing_sku, missing_product, None).await;
+                invoke(ProductKind::Physical, active, true, missing_sku, missing_product, None).await;
             let error = result.unwrap_err();
             assert!(matches!(error,Error::NotFound(ref e)|Error::BusinessLogicError(ref e) if e==message));
             assert_eq!(calls.len(), expected);
         }
+    }
+
+    #[tokio::test]
+    async fn inactive_parent_product_stops_before_supplier_policy() {
+        let (result, calls) = invoke(ProductKind::Physical, true, false, false, false, None).await;
+        assert!(matches!(result, Err(Error::BusinessLogicError(ref message)) if message == "公司商品未启用"));
+        assert_eq!(calls, ["sku", "product"]);
     }
 }

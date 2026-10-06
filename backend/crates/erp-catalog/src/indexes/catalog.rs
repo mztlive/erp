@@ -50,8 +50,8 @@ pub(crate) const VOUCHER_CATEGORY_PROFILE_REVISIONS: &str =
 /// 索引**（与 accounts 的 code 处理一致）：软删除后仍保留身份，避免复用破坏
 /// 恢复语义；`(product_id, specification_signature)` 在全部生命周期记录上永久
 /// 唯一，不实现为仅约束启用行的 partial unique index（停用后会产生第二个同签名
-/// 稳定 SKU）；条码走非唯一精确查询索引——同一条码允许存在多个在用 SKU，
-/// 冲突阻断由 Service 判定（§6.3）。
+/// 稳定 SKU）；修订条码保留非唯一查询索引以支持同 SKU 的历次修订。
+/// 实际条码的唯一归属由 `sku_barcode_claims` 共同事务写入点阻止并发重复建档。
 ///
 /// # 参数
 /// * `db` - 目标 MongoDB 数据库

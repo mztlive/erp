@@ -8,7 +8,32 @@ use mongodb::options::IndexOptions;
 use mongodb::{Database, IndexModel};
 use persistence_core::Result;
 
+use crate::repository::portal::PortalIdentityExt;
 use crate::repository::{AccessControlExt, CASBIN_RULES};
+
+/// 创建外部账号绑定索引，供组合根逐集合登记。
+///
+/// # 参数
+/// `db` 为身份领域数据库。
+/// # 返回
+/// 唯一身份及按供应商查账号的索引全部创建后返回成功。
+/// # 错误
+/// 已有重复身份或数据库失败时拒绝，撤销绑定仍占用原账号身份。
+pub async fn ensure_portal_indexes(db: &Database) -> Result<()> {
+    create_indexes(
+        db,
+        <Database as PortalIdentityExt>::PORTAL_BINDINGS,
+        vec![
+            unique_index("uk_supplier_portal_bindings_id", doc! { "id": 1 }),
+            unique_index("uk_supplier_portal_bindings_account", doc! { "account_id": 1 }),
+            named_index(
+                "idx_supplier_portal_bindings_supplier",
+                doc! { "supplier_id": 1, "deleted_at": 1, "account_id": 1 },
+            ),
+        ],
+    )
+    .await
+}
 
 const ACCOUNTS: &str = "accounts";
 const ROLES: &str = "roles";

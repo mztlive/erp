@@ -1,13 +1,16 @@
 #[path = "../../crates/erp-identity/src/entity/access_control/audit_actions.rs"]
 mod audit_actions;
 
+mod build_format;
 mod build_permissions;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::{env, fs, io};
 
+use build_format::push_description;
 use build_permissions::{
     DOMAIN_MODULES, PermissionGroup, PermissionItem, PermissionMeta, RouteHandler, append_policy_permissions,
+    management_routes,
 };
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
@@ -49,6 +52,7 @@ fn main() {
     let handlers_root = manifest_dir.join("src/core/handler");
 
     rerun_if_changed(&manifest_dir.join("build_permissions.rs"));
+    rerun_if_changed(&manifest_dir.join("build_format.rs"));
     rerun_if_changed(&routes_mod_path);
     rerun_if_changed(&routes_admin_path);
 
@@ -417,7 +421,7 @@ fn collect_route_handlers(manifest_dir: &Path) -> io::Result<Vec<RouteHandler>> 
         let Ok(content) = fs::read_to_string(&path) else {
             continue;
         };
-        handlers.extend(parse_routes(&content));
+        handlers.extend(management_routes(module, parse_routes(&content)));
     }
     Ok(handlers)
 }
@@ -710,15 +714,14 @@ fn write_generated_file(
     for (group_name, group) in groups {
         content.push_str("    {\n");
         content.push_str(&format!("        name: \"{}\",\n", escape_ts(group_name)));
-        content.push_str(&format!("        description: \"{}\",\n", escape_ts(&group.desc)));
+        push_description(&mut content, 8, &group.desc);
         content.push_str("        permissions: [\n");
         for perm in &group.permissions {
             content.push_str("            {\n");
             content.push_str(&format!("                module: \"{}\",\n", escape_ts(&perm.module)));
             content.push_str(&format!("                method: \"{}\",\n", escape_ts(&perm.method)));
             content.push_str(&format!("                path: \"{}\",\n", escape_ts(&perm.path)));
-            content
-                .push_str(&format!("                description: \"{}\",\n", escape_ts(&perm.description)));
+            push_description(&mut content, 16, &perm.description);
             content.push_str("                permission: {\n");
             content.push_str(&format!("                    resource: \"{}\",\n", escape_ts(&perm.resource)));
             content.push_str(&format!("                    action: \"{}\",\n", escape_ts(&perm.action)));

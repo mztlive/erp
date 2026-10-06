@@ -101,6 +101,11 @@ export function FulfillmentQueueList({
                                     : item.statusTone,
                             }}
                         />
+                        {item.impact && (
+                            <p className="whitespace-pre-wrap px-1 text-xs text-muted-foreground">
+                                履约影响：{item.impact}
+                            </p>
+                        )}
                         {/* 类型已由 taskType 显示，这里不再重复；改为交代明细行数 */}
                         <div className="mt-1 flex flex-wrap gap-1 px-1 pb-1">
                             <Badge

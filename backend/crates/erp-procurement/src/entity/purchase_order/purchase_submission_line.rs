@@ -11,7 +11,9 @@ use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
+use crate::entity::purchase_order::PurchaseOfferingSource;
 use crate::entity::purchase_order::line_common::{PurchaseLineDataRef, normalize_and_validate_line};
+use crate::entity::purchase_order::offering_source::ensure_offering_source;
 use crate::entity::purchase_order::types::PurchaseLineType;
 
 /// 采购提交行创建数据（不含系统字段）。
@@ -29,6 +31,9 @@ pub struct PurchaseOrderSubmissionLineData {
     pub sku_id: Option<SkuId>,
     /// 商品行引用的 SKU 版本；物流费用行为空。
     pub sku_revision_id: Option<SkuRevisionId>,
+    /// 服务端冻结的正式供给选源；旧资料或物流费用行为空。
+    #[serde(default)]
+    pub supplier_offering_source: Option<PurchaseOfferingSource>,
     /// 商品名称快照；物流费用行为空。
     pub product_name_snapshot: Option<String>,
     /// 规格快照；物流费用行为空。
@@ -150,6 +155,9 @@ pub struct PurchaseOrderSubmissionLine {
     pub sku_id: Option<SkuId>,
     /// 商品行引用的 SKU 版本。
     pub sku_revision_id: Option<SkuRevisionId>,
+    /// 服务端冻结的正式供给选源；旧资料或物流费用行为空。
+    #[serde(default)]
+    pub supplier_offering_source: Option<PurchaseOfferingSource>,
     /// 商品名称快照。
     pub product_name_snapshot: Option<String>,
     /// 规格快照。
@@ -199,6 +207,7 @@ impl PurchaseOrderSubmissionLine {
     pub fn new(id: PurchaseOrderSubmissionLineId, data: PurchaseOrderSubmissionLineData) -> Result<Self> {
         ensure_line_no(data.line_no)?;
         let (product_name, specification, base_unit_code) = normalize_and_validate_line(&data)?;
+        ensure_offering_source(data.line_type, data.supplier_offering_source.as_ref())?;
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             purchase_order_submission_id: data.purchase_order_submission_id,
@@ -207,6 +216,7 @@ impl PurchaseOrderSubmissionLine {
             procurement_confirmation_line_id: data.procurement_confirmation_line_id,
             sku_id: data.sku_id,
             sku_revision_id: data.sku_revision_id,
+            supplier_offering_source: data.supplier_offering_source,
             product_name_snapshot: product_name,
             specification_snapshot: specification,
             quantity: data.quantity,
@@ -250,6 +260,7 @@ impl PurchaseOrderSubmissionLine {
                 procurement_confirmation_line_id: draft_line.procurement_confirmation_line_id.clone(),
                 sku_id: draft_line.sku_id.clone(),
                 sku_revision_id: draft_line.sku_revision_id.clone(),
+                supplier_offering_source: draft_line.supplier_offering_source.clone(),
                 product_name_snapshot: draft_line.product_name_snapshot.clone(),
                 specification_snapshot: draft_line.specification_snapshot.clone(),
                 quantity: draft_line.quantity,
@@ -353,6 +364,7 @@ mod tests {
             procurement_confirmation_line_id: Some(ProcurementConfirmationLineId::new("pcl-1")),
             sku_id: Some(SkuId::new("sku-1")),
             sku_revision_id: Some(erp_core::ids::SkuRevisionId::new("skur-1")),
+            supplier_offering_source: None,
             product_name_snapshot: Some(" 慰问礼包 ".to_string()),
             specification_snapshot: Some(" 500g×2 ".to_string()),
             quantity: Some(Quantity::from_str("3.000000").unwrap()),
@@ -368,6 +380,106 @@ mod tests {
             sales_order_submission_line_id: Some(SalesOrderSubmissionLineId::new("ssl-1")),
             allocated_quantity: Some(Quantity::from_str("3.000000").unwrap()),
         }
+    }
+
+    /// 完整服务端选源用于冻结和撤回恢复测试。
+    fn offering_source() -> super::PurchaseOfferingSource {
+        super::PurchaseOfferingSource {
+            supplier_offering_id: erp_core::ids::SupplierOfferingId::new("offering-selected"),
+            offering_version: 7,
+            supplier_offering_revision_id: erp_core::ids::SupplierOfferingRevisionId::new("terms-selected"),
+            revision_version: 3,
+            availability_version: 11,
+        }
+    }
+
+    #[test]
+    fn selected_source_survives_freeze_formalization_change_and_client_patch() {
+        use erp_core::ids::{
+            PurchaseChangeSubmissionId, PurchaseChangeSubmissionLineId, PurchaseOrderRevisionId,
+            PurchaseOrderRevisionLineId,
+        };
+
+        use crate::dto::purchase_order::{SavePurchaseOrderLine, SavePurchaseOrderLinePatch};
+        use crate::entity::purchase_order::{
+            PurchaseOrderRevisionLine, inherit_revision_sources, inherit_submission_sources,
+        };
+
+        let mut data = goods_line_data();
+        data.supplier_offering_source = Some(offering_source());
+        let draft = PurchaseOrderSubmissionLine::new("draft-line".to_string().into(), data).unwrap();
+        let formal = PurchaseOrderSubmissionLine::freeze_from_draft(
+            "formal-line".to_string().into(),
+            "formal".to_string().into(),
+            &draft,
+        )
+        .unwrap();
+        let restored = PurchaseOrderSubmissionLine::freeze_from_draft(
+            "restored-line".to_string().into(),
+            "restored".to_string().into(),
+            &formal,
+        )
+        .unwrap();
+        let revision = PurchaseOrderRevisionLine::from_submission_line(
+            PurchaseOrderRevisionLineId::new("revision-line"),
+            PurchaseOrderRevisionId::new("revision"),
+            &formal,
+        )
+        .unwrap();
+        assert_eq!(draft.supplier_offering_source, restored.supplier_offering_source);
+        assert_eq!(draft.supplier_offering_source, revision.supplier_offering_source);
+
+        let patch = SavePurchaseOrderLinePatch {
+            line_id: draft.base.id.clone(),
+            line_type: draft.line_type,
+            quantity: Some("2".into()),
+            unit_cost_gross: None,
+            input_tax_rate: None,
+        };
+        let requested =
+            SavePurchaseOrderLinePatch::resolve_all(&[patch], std::slice::from_ref(&draft)).unwrap();
+        let mut json = serde_json::to_value(&requested[0]).unwrap();
+        json["supplier_offering_source"] = serde_json::json!({ "supplier_offering_id": "forged", "supplier_offering_revision_id": "forged-terms", "offering_version": 1, "revision_version": 1, "availability_version": 1 });
+        let requested: SavePurchaseOrderLine = serde_json::from_value(json).unwrap();
+        let mut inputs = vec![requested.to_line_input().unwrap()];
+        assert!(inputs[0].supplier_offering_source.is_none());
+        inherit_submission_sources(&mut inputs, std::slice::from_ref(&draft)).unwrap();
+        assert_eq!(inputs[0].supplier_offering_source, Some(offering_source()));
+        inherit_revision_sources(&mut inputs, std::slice::from_ref(&revision)).unwrap();
+        let mut wrong_revision = inputs.clone();
+        wrong_revision[0].sku_revision_id = Some(erp_core::ids::SkuRevisionId::new("foreign-version"));
+        assert!(inherit_revision_sources(&mut wrong_revision, std::slice::from_ref(&revision)).is_err());
+        let change_data = inputs
+            .remove(0)
+            .into_change_submission_line_data(PurchaseChangeSubmissionId::new("change"), 1)
+            .unwrap();
+        let change = crate::entity::purchase_order::PurchaseChangeSubmissionLine::new(
+            PurchaseChangeSubmissionLineId::new("change-line"),
+            change_data,
+        )
+        .unwrap();
+        let changed_revision = PurchaseOrderRevisionLine::from_change_submission_line(
+            PurchaseOrderRevisionLineId::new("changed-line"),
+            PurchaseOrderRevisionId::new("changed-revision"),
+            &change,
+        )
+        .unwrap();
+        assert_eq!(changed_revision.supplier_offering_source, Some(offering_source()));
+        assert_eq!(changed_revision.quantity, Some(Quantity::from_str("2").unwrap()));
+    }
+
+    #[test]
+    fn old_unassociated_lines_stay_unknown_and_invalid_source_is_rejected() {
+        let old = PurchaseOrderSubmissionLine::new("old".to_string().into(), goods_line_data()).unwrap();
+        let mut json = serde_json::to_value(old).unwrap();
+        json.as_object_mut().unwrap().remove("supplier_offering_source");
+        let restored: PurchaseOrderSubmissionLine = serde_json::from_value(json).unwrap();
+        assert!(restored.supplier_offering_source.is_none());
+        let mut data = goods_line_data();
+        let mut invalid = offering_source();
+        invalid.revision_version = 0;
+        data.supplier_offering_source = Some(invalid);
+        assert!(PurchaseOrderSubmissionLine::new("invalid".to_string().into(), data).is_err());
     }
 
     #[test]
@@ -390,6 +502,7 @@ mod tests {
             procurement_confirmation_line_id: None,
             sku_id: None,
             sku_revision_id: None,
+            supplier_offering_source: None,
             product_name_snapshot: None,
             specification_snapshot: None,
             quantity: None,

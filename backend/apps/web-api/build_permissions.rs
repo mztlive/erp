@@ -43,6 +43,7 @@ pub(crate) const DOMAIN_MODULES: &[&str] = &[
     "returns",
     "legacy_import",
     "supplier_offering",
+    "supplier_portal",
     "supplier_api",
     "supplier_fulfillment",
     "supplier_settlement",
@@ -56,6 +57,29 @@ pub(crate) struct RouteHandler {
     pub(crate) method: String,
     pub(crate) path: String,
     pub(crate) handler: String,
+}
+
+/// 只登记管理端路由，补全门户专项路由的嵌套前缀。
+/// # 参数
+/// 路由模块名称和解析出的实际方法、路径及处理器引用。
+/// # 返回
+/// 内部权限目录使用的路由，不包含供应商外部登录和业务入口。
+/// # 错误
+/// 纯路由投影，不执行外部操作。
+pub(crate) fn management_routes(module: &str, parsed: Vec<RouteHandler>) -> Vec<RouteHandler> {
+    if module != "supplier_portal" {
+        return parsed;
+    }
+    parsed
+        .into_iter()
+        .filter_map(|mut route| {
+            if !route.handler.starts_with("supplier_portal::") {
+                return None;
+            }
+            route.path = format!("/supplier-portal{}", route.path);
+            Some(route)
+        })
+        .collect()
 }
 
 #[derive(Debug, Default)]

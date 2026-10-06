@@ -39,6 +39,10 @@ resolver = "2"
 
 
 [workspace.dependencies]
+image = { version = "=0.25.10", default-features = false, features = ["png", "webp"] }
+lopdf = { version = "=0.45.0", default-features = false }
+zune-core = { version = "=0.5.3", default-features = false, features = ["std"] }
+zune-jpeg = { version = "=0.5.15", default-features = false, features = ["std"] }
 # Workspace crates
 bpm = { path = "crates/bpm" }
 erp-core = { path = "crates/erp-core" }

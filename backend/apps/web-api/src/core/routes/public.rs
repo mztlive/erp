@@ -34,7 +34,7 @@ pub fn routes(app_state: AppState) -> Router<AppState> {
 /// # 返回值
 /// 返回每个“登录域 + TCP peer IP”20 次/60 秒、全局应急熔断 600 次/60 秒、
 /// 并发 4 个请求的限流器。同一来源上的账号不再单独计数。
-fn login_limiter() -> RateLimiter {
+pub(super) fn login_limiter() -> RateLimiter {
     RateLimiter::new(
         LOGIN_ATTEMPTS_PER_SOURCE,
         EMERGENCY_GLOBAL_LOGIN_ATTEMPTS,
@@ -44,7 +44,7 @@ fn login_limiter() -> RateLimiter {
 }
 
 /// 创建两个登录入口共享的 4 KiB 请求体上限。
-fn login_body_limit() -> DefaultBodyLimit {
+pub(super) fn login_body_limit() -> DefaultBodyLimit {
     DefaultBodyLimit::max(MAX_LOGIN_REQUEST_BYTES)
 }
 

@@ -312,7 +312,7 @@ impl FileAssetService {
 
     /// 记录安全检查结果。
     ///
-    /// 迁移合法性由实体安全检查状态机校验（`PENDING → PASSED|REJECTED|QUARANTINED`，
+    /// 迁移合法性由实体安全检查状态机校验（`PENDING/CONTENT_CHECKED → PASSED|REJECTED|QUARANTINED`，
     /// `QUARANTINED → PASSED|REJECTED`）。
     ///
     /// # 参数

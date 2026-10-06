@@ -28,8 +28,9 @@ pub(super) enum Step {
     Reconciliation,
     SupplierFulfillment,
     SupplierOffering,
+    SupplierPortal,
 }
-const ORDER: [Step; 20] = [
+const ORDER: [Step; 21] = [
     Step::Sales,
     Step::Purchase,
     Step::Fulfillment,
@@ -50,6 +51,7 @@ const ORDER: [Step; 20] = [
     Step::Reconciliation,
     Step::SupplierFulfillment,
     Step::SupplierOffering,
+    Step::SupplierPortal,
 ];
 #[async_trait]
 pub(super) trait CommandFactReads: Send + Sync {
@@ -146,11 +148,12 @@ mod tests {
                 Step::IntegrationError,
                 Step::Reconciliation,
                 Step::SupplierFulfillment,
-                Step::SupplierOffering
+                Step::SupplierOffering,
+                Step::SupplierPortal,
             ]
         );
-        assert_eq!(executor.calls, 20);
-        assert_eq!(facts.len(), 20);
+        assert_eq!(executor.calls, 21);
+        assert_eq!(facts.len(), 21);
     }
     #[tokio::test]
     async fn each_first_read_error_preserves_variant_and_stops_later_reads() {

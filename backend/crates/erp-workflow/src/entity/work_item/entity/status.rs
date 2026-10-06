@@ -119,6 +119,9 @@ impl WorkItem {
     /// 任务非开放、没有个人责任或执行人不是当前责任人时返回错误。
     pub fn complete_by_domain_command(&mut self, completed_by: impl Into<String>, at: Instant) -> Result<()> {
         self.ensure_generic_mutation()?;
+        if self.work_item_type == WorkItemType::SupplierPortalReview {
+            return Err(Error::from("供应商申请确认任务必须使用专用决定入口"));
+        }
         self.complete_open(completed_by, at)
     }
 
@@ -135,6 +138,9 @@ impl WorkItem {
         at: Instant,
     ) -> Result<()> {
         self.ensure_generic_mutation()?;
+        if self.work_item_type == WorkItemType::SupplierPortalReview {
+            return Err(Error::from("供应商申请确认任务只能随申请撤回关闭"));
+        }
         self.close_open(closed_by, data, at)
     }
 

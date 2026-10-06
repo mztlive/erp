@@ -18,6 +18,7 @@
 - 账号、角色、权限、用户角色绑定和数据范围规则。
 - 内部组织节点与成员关系，组织变更预览与执行；旧部门管理关系仅保留历史记录。
 - 后台认证、IAM 管理、RBAC 服务与 MongoDB Casbin 适配。
+- 独立供应商门户账号、固定维护或只读岗位、单供应商绑定及会话版本失效。门户不建立内部角色或组织关系。
 
 ## 依赖与协作边界
 
@@ -34,6 +35,8 @@
 | --- | --- |
 | [src/service/iam/mod.rs](src/service/iam/mod.rs) | 账号、角色与 RBAC 服务入口 |
 | [src/service/auth/mod.rs](src/service/auth/mod.rs) | 后台认证入口 |
+| [src/service/portal/mod.rs](src/service/portal/mod.rs) | 供应商身份、绑定、账号管理及密码步骤 |
+| [src/entity/portal.rs](src/entity/portal.rs) | 门户固定岗位及账号绑定不变式 |
 | [src/service/organization.rs](src/service/organization.rs) | 组织状态、变更预览与执行 |
 | [src/entity/organization.rs](src/entity/organization.rs) | 部门、团队、成员及旧管理关系存储类型 |
 | [src/ports/mod.rs](src/ports/mod.rs) | 审计及授权合同 |
@@ -48,6 +51,7 @@
 3. 新增或调整集合查询时同步评估索引；组合根复用本域公开索引入口，保持既有逐集合注册顺序。
 4. HTTP 请求和响应优先复用本域 DTO；扩展公开合同须同步检查 Process、ReadModel 和应用调用方。
 5. 业务改动补充本域库单元测试，覆盖成功、失败、边界及相关幂等或版本冲突路径。
+6. 门户密码哈希在事务外完成；开通、启停及自助密码的持久化步骤接收调用方 `Executor`。供应商启用事实、内部管理权限和对象范围由组合层在同一写入事务中重验。每次门户访问必须重验账号版本、绑定版本、绑定启用及供应商启用；后台认证固定接受 `Admin`。
 
 ## 部署岗位角色
 

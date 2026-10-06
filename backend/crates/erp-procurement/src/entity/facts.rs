@@ -192,6 +192,8 @@ pub struct ProductCategoryFact {
 pub struct OfferingFact {
     /// 供给身份。
     pub base: FactIdentity,
+    /// 当前供给的乐观锁版本。
+    pub version: u64,
     /// 当前条款修订指针。
     pub stable: CurrentRevisionFact,
     /// SKU。
@@ -205,6 +207,10 @@ pub struct OfferingFact {
 pub struct OfferingRevisionFact {
     /// 条款修订身份。
     pub base: FactIdentity,
+    /// 当前条款修订的乐观锁版本。
+    pub version: u64,
+    /// 提供方条款真实所属供给，不能由消费方当前指针推断。
+    pub supplier_offering_id: SupplierOfferingId,
     /// 生效自然日。
     pub valid_from: BusinessDate,
     /// 可选截止自然日。

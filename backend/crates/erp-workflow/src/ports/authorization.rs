@@ -127,6 +127,44 @@ pub type WorkflowPolicyWrite<T, E> = Box<
 
 /// Authorization facts and policy-bound transactions for workflow commands.
 pub trait WorkflowAuthorizationPort: Clone + Send + Sync + 'static {
+    /// 证明内部账号可读取指定供应商申请的当前对象范围。
+    ///
+    /// # 参数
+    /// * `actor` - 当前内部账号，调用方已在同一执行器验证登录资格。
+    /// * `request_id` - 精确供应商申请 ID，不从展示根对象推断。
+    /// * `executor` - 调用方读取或业务事务执行器。
+    /// # 返回
+    /// detail 权限和当前 DataScope 均满足时返回 true；越界返回 false。
+    /// # 错误
+    /// 未装配、资格配置或基础设施失败时拒绝；具体任务责任不得替代对象授权。
+    fn supplier_portal_request_readable(
+        &self,
+        _actor: &AuditActor,
+        _request_id: &str,
+        _executor: &mut dyn Executor,
+    ) -> impl Future<Output = Result<bool>> + Send {
+        async { Err(Error::Internal("供应商申请读取范围未装配".into())) }
+    }
+
+    /// 在当前申请对象范围内证明真实商品与供给业务确认资格。
+    ///
+    /// # 参数
+    /// * `actor` - 同一执行器已验证为启用内部账号的当前确认人或转交候选。
+    /// * `request_id` - 当前精确申请，商品/供给创建或复用资格由组合层读取真实事实判定。
+    /// * `executor` - 任务创建、决定、转交或工作台读取使用的当前执行器。
+    /// # 返回
+    /// 当前所需业务动作权限与责任范围全部满足为 true；资格撤销或越界为 false。
+    /// # 错误
+    /// 未装配及基础设施错误保持失败关闭；此 Port 不复验已写入业务前的旧版本。
+    fn supplier_portal_request_reviewable(
+        &self,
+        _actor: &AuditActor,
+        _request_id: &str,
+        _executor: &mut dyn Executor,
+    ) -> impl Future<Output = Result<bool>> + Send {
+        async { Err(Error::Internal("供应商申请业务确认资格未装配".into())) }
+    }
+
     /// 在同一只读阶段复用工作台身份事实，保留原查询及失败顺序。
     ///
     /// # 参数
@@ -592,6 +630,15 @@ mod permission_tests {
             .approval_contract_readable(&actor, "contract-1", &mut NoTransaction)
             .await;
         assert!(matches!(result, Err(Error::Internal(message)) if message == "审批合同材料读取授权未装配"));
+    }
+
+    #[tokio::test]
+    async fn unwired_supplier_portal_business_authorization_fails_closed() {
+        let actor = AuditActor::new("reviewer".into(), "reviewer".into(), AccountKind::Admin);
+        let result = FailClosedWorkflowAuthorizationPort
+            .supplier_portal_request_reviewable(&actor, "request", &mut NoTransaction)
+            .await;
+        assert!(matches!(result, Err(Error::Internal(message)) if message == "供应商申请业务确认资格未装配"));
     }
 
     #[test]

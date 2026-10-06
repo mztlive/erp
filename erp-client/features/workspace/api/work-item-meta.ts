@@ -34,6 +34,13 @@ type TypeMeta = Readonly<{
 }>
 
 export const TYPE_META: Record<string, TypeMeta> = {
+    SUPPLIER_PORTAL_REVIEW: {
+        label: "供应商申请确认",
+        family: "procurement",
+        badgeLabel: "供应商申请",
+        badgeVariant: "lime",
+        openActionLabel: "去确认供应商申请",
+    },
     DOCUMENT_APPROVAL: {
         label: "单据审批",
         family: "approval",

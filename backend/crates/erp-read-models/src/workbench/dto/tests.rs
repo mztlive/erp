@@ -5,6 +5,24 @@ use super::status::WORK_ITEM_TYPES;
 use super::view::{handler_route, role_label};
 use super::*;
 
+#[test]
+fn supplier_portal_review_has_dedicated_handler_and_registered_family() {
+    let route = handler_route(
+        WorkItemType::SupplierPortalReview,
+        "supplier_portal_request",
+        "supplier_portal_reviewer",
+    )
+    .unwrap();
+    assert_eq!(route.handler_key, "supplier_portal_review");
+    assert_eq!(route.destination_workspace_id, "W21");
+    assert_eq!(family_of(WorkItemType::SupplierPortalReview), WorkItemFamily::Approval);
+    assert!(WORK_ITEM_TYPES.contains(&WorkItemType::SupplierPortalReview));
+    assert!(
+        handler_route(WorkItemType::SupplierPortalReview, "purchase_order", "supplier_portal_reviewer")
+            .is_err()
+    );
+}
+
 fn params(scope: WorkItemScope) -> WorkItemListParams {
     WorkItemListParams {
         scope,

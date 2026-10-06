@@ -11,7 +11,10 @@ use super::access::{
     ActorAccess, MANAGE_PERMISSION, active_role_ids, ensure_generic_work_item_mutation,
     ensure_item_in_managed_scope, ensure_managed_access, has_assignment_candidate_access, object_policy,
 };
-use super::order_access::{require_order_task_read, task_read_error};
+use super::order_access::{
+    require_order_task_read, require_supplier_portal_task_read, require_supplier_portal_task_review,
+    task_read_error,
+};
 use super::write::{IDEMPOTENCY_AUDIT_PREFIX, WorkItemWriteOutcome, expected_task_version, required_text};
 use super::{
     ReassignWorkItemRequest, WorkItemConflictKind, WorkItemMutationOutcome, WorkItemReassignCandidateView,
@@ -19,6 +22,7 @@ use super::{
 };
 use crate::entity::work_item::{
     AvailableWorkItemAccount, FulfillmentResponsibilityKey, WorkItem, WorkItemAssignmentSeparationPolicy,
+    WorkItemType,
 };
 use crate::error::{Error, Result};
 
@@ -357,6 +361,9 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             .ok_or_else(|| Error::Forbidden("目标账号不存在或已失效".to_string()))?;
         AvailableWorkItemAccount::from_account_kind(&account, expected_kind)
             .map_err(|_| Error::Forbidden("目标账号不存在或已失效".to_string()))?;
+        if item.work_item_type == WorkItemType::SupplierPortalReview && !account.is_active_backoffice() {
+            return Err(Error::Forbidden("供应商申请确认人必须为启用的内部账号".into()));
+        }
         let mut access = self
             .assignment_access_for_executor(
                 expected_kind,
@@ -455,7 +462,23 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         let fact = facts
             .get(&(policy.object_kind, item.business_object_id.clone()))
             .ok_or_else(|| Error::Forbidden("任务业务对象不可访问".into()))?;
+        require_supplier_portal_task_read(
+            &self.auth,
+            &access.actor_id,
+            policy.object_kind,
+            &item.business_object_id,
+            executor,
+        )
+        .await?;
         require_order_task_read(&self.auth, &access.actor_id, policy.object_kind, fact, executor).await?;
+        require_supplier_portal_task_review(
+            &self.auth,
+            &access.actor_id,
+            policy.object_kind,
+            &item.business_object_id,
+            executor,
+        )
+        .await?;
         if !has_assignment_candidate_access(item, access, &facts) {
             return Err(Error::Forbidden("业务对象不可访问".to_string()));
         }

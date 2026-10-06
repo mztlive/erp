@@ -8,7 +8,7 @@ use super::line_input::{build_submission_lines, compute_request_totals};
 use crate::dto::purchase_order::SavePurchaseOrderLine;
 use crate::entity::purchase_order::{
     DraftLineEditViolation, PurchaseOrder, PurchaseOrderStatus, PurchaseOrderSubmission,
-    PurchaseOrderSubmissionData, PurchaseOrderSubmissionLine, SubmissionStatus,
+    PurchaseOrderSubmissionData, PurchaseOrderSubmissionLine, SubmissionStatus, inherit_submission_sources,
 };
 use crate::repository::PurchaseOrderExt;
 use crate::repository::prelude::*;
@@ -128,6 +128,7 @@ pub async fn load_current_draft(
 /// # 参数
 /// * `order` - 当前采购单
 /// * `old_draft` - 当前草稿提交
+/// * `old_lines` - 当前服务端完整来源行
 /// * `lines` - 已通过草稿编辑校验的完整请求行
 ///
 /// # 返回
@@ -141,9 +142,11 @@ pub async fn load_current_draft(
 pub fn build_draft_replacement(
     order: &PurchaseOrder,
     old_draft: &PurchaseOrderSubmission,
+    old_lines: &[PurchaseOrderSubmissionLine],
     lines: &[SavePurchaseOrderLine],
 ) -> Result<DraftReplacement> {
-    let inputs = SavePurchaseOrderLine::to_line_inputs(lines)?;
+    let mut inputs = SavePurchaseOrderLine::to_line_inputs(lines)?;
+    inherit_submission_sources(&mut inputs, old_lines)?;
     let (gross, net, tax) = compute_request_totals(&inputs)?;
     let submission = PurchaseOrderSubmission::new(
         PurchaseOrderSubmissionId::new(next_id()),

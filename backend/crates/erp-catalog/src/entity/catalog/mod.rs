@@ -27,6 +27,7 @@ pub mod revision;
 pub mod sku;
 pub mod sku_attribute;
 pub mod sku_attribute_value;
+pub mod sku_barcode_claim;
 pub mod sku_revision;
 pub mod sku_revision_attribute_value;
 pub mod sku_sales_prices;

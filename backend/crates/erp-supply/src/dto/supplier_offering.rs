@@ -26,6 +26,7 @@ use application_core::non_blank;
 
 /// 供给商业条款公共写入字段。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct SupplierOfferingTermsWrite {
     /// 一件代发含税价。
     #[validate(custom(function = "non_blank", message = "一件代发供给价不能为空"))]

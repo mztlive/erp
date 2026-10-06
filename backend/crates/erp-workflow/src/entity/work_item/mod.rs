@@ -15,9 +15,10 @@ mod queue_context;
 pub use due::{WorkItemDueFilter, WorkItemDueWindow};
 pub use entity::{
     ApprovalDecisionTaskError, ApprovalRuntimeTaskEnding, AssignmentSource, AvailableWorkItemAccount,
-    DocumentApprovalWorkItemData, WorkItem, WorkItemAssignmentSeparationPolicy, WorkItemBriefObjectKind,
-    WorkItemBriefRelation, WorkItemCloseData, WorkItemData, WorkItemPriority, WorkItemStatus,
-    WorkItemSubjectVersions, WorkItemType, WorkflowAccountFact, casbin_subject,
+    DocumentApprovalWorkItemData, SupplierPortalReviewIdentity, SupplierPortalReviewTaskData, WorkItem,
+    WorkItemAssignmentSeparationPolicy, WorkItemBriefObjectKind, WorkItemBriefRelation, WorkItemCloseData,
+    WorkItemData, WorkItemPriority, WorkItemStatus, WorkItemSubjectVersions, WorkItemType,
+    WorkflowAccountFact, casbin_subject,
 };
 pub use erp_core::ids::WorkItemId;
 pub use finance_responsibility::{

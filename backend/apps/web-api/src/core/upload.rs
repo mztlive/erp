@@ -1,5 +1,6 @@
 //! Multipart 图片上传的 HTTP 协议适配与输入校验。
 
+mod portal_asset;
 use std::path::Path;
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -10,6 +11,8 @@ use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::MethodRouter;
 use erp_catalog::MAX_PRODUCT_IMPORT_FILE_BYTES;
+use erp_identity::PortalActor;
+pub(crate) use portal_asset::ValidatedPortalAsset;
 use tracing::{error, warn};
 
 use crate::app_state::AppState;
@@ -118,17 +121,17 @@ impl From<Error> for errors::Error {
 
 /// 在读取 Multipart 请求体前执行上传配额与并发限制。
 ///
-/// 该中间件必须放在后台认证中间件之后；缺少后台主体时会失败关闭。
+/// 该中间件必须放在后台或供应商门户认证之后；缺少认证主体时失败关闭。
 pub(crate) async fn enforce_admission(
     State(admission): State<RateLimiter>,
     request: Request,
     next: Next,
 ) -> Response {
     let Some(subject) = upload_subject(&request) else {
-        warn!("Upload denied without authenticated backoffice subject");
+        warn!("Upload denied without authenticated subject");
         return ApiResponse::<()>::unauthorized().into_response();
     };
-    let permit = match admission.admit(subject) {
+    let permit = match admission.admit(&subject) {
         Ok(permit) => permit,
         Err(admission_error) => {
             if admission_error.retry_after_secs().is_none() {
@@ -149,8 +152,10 @@ pub(crate) async fn enforce_admission(
     response
 }
 
-fn upload_subject(request: &Request) -> Option<&str> {
-    request.extensions().get::<RbacSubject>().map(|subject| subject.0.as_str())
+fn upload_subject(request: &Request) -> Option<String> {
+    request.extensions().get::<RbacSubject>().map(|subject| subject.0.clone()).or_else(|| {
+        request.extensions().get::<PortalActor>().map(|actor| format!("supplier_portal:{}", actor.account_id))
+    })
 }
 
 /// 从 Multipart 表单中提取的原始文件。
@@ -303,6 +308,7 @@ pub(crate) fn detect_image_mime(content: &[u8]) -> Option<&'static str> {
 mod tests {
     use axum::body::Body;
     use axum::extract::Request;
+    use erp_identity::{PortalActor, PortalRole};
 
     use super::{Error, FormFile, MAX_UPLOAD_FILE_BYTES, limiter, new_limiter, upload_subject};
     use crate::core::errors;
@@ -459,6 +465,28 @@ mod tests {
         assert_eq!(upload_subject(&request), None);
 
         request.extensions_mut().insert(RbacSubject("user:admin:1".to_string()));
-        assert_eq!(upload_subject(&request), Some("user:admin:1"));
+        assert_eq!(upload_subject(&request).as_deref(), Some("user:admin:1"));
+    }
+
+    #[test]
+    fn portal_uploads_use_real_account_without_backoffice_subject() {
+        let mut request = Request::new(Body::empty());
+        request.extensions_mut().insert(application_core::AuditActor::new(
+            "ordinary-account".into(),
+            "ordinary-login".into(),
+            erp_core::AccountKind::Admin,
+        ));
+        assert_eq!(upload_subject(&request), None);
+        request.extensions_mut().insert(PortalActor {
+            account_id: "supplier-account-1".into(),
+            account: "supplier-login".into(),
+            name: "供应商维护员".into(),
+            supplier_id: "supplier-1".into(),
+            role: PortalRole::Maintainer,
+            account_version: 1,
+            binding_version: 1,
+        });
+        assert_eq!(upload_subject(&request).as_deref(), Some("supplier_portal:supplier-account-1"));
+        assert!(request.extensions().get::<RbacSubject>().is_none());
     }
 }

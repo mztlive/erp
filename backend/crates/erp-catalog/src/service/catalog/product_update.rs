@@ -406,7 +406,7 @@ impl CatalogService {
                                     .await?;
                             },
                             SkuEditAction::Keep | SkuEditAction::Reactivate => {
-                                db.sku_revisions().create(&item.revision, executor).await?;
+                                db.catalog().create_sku_revision(&item.revision, executor).await?;
                                 db.skus().update(&mut item.sku, executor).await?;
                             },
                         }

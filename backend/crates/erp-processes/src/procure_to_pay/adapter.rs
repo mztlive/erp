@@ -421,6 +421,7 @@ mod tests {
                 procurement_confirmation_line_id: Some(ProcurementConfirmationLineId::new("pcl-1")),
                 sku_id: Some(SkuId::new("sku-1")),
                 sku_revision_id: Some(SkuRevisionId::new("skurev-1")),
+                supplier_offering_source: None,
                 product_name_snapshot: Some("商品".into()),
                 specification_snapshot: Some("规格".into()),
                 quantity: Some(Quantity::from_str("2").expect("数量合法")),

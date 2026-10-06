@@ -169,6 +169,26 @@ export function ProductsListPage() {
             exportMeta={state.exportMeta}
             actions={[
                 {
+                    id: "master-data-products-list-unlisted",
+                    actionKey: "unlisted",
+                    label: "全部未上架",
+                    variant: "outline",
+                    onClick: () =>
+                        router.push(
+                            "/master-data/products?productListingStatus=unlisted",
+                        ),
+                },
+                {
+                    id: "master-data-products-list-partially-listed",
+                    actionKey: "partially-listed",
+                    label: "还有未上架规格",
+                    variant: "outline",
+                    onClick: () =>
+                        router.push(
+                            "/master-data/products?productListingStatus=partially_listed",
+                        ),
+                },
+                {
                     id: IMPORT_ACTION_ID,
                     actionKey: "import",
                     label: "导入",

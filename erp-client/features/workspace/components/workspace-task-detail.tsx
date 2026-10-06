@@ -66,6 +66,7 @@ import { WorkspaceProcurementTask } from "./workspace-procurement-task"
 import { WorkspaceSettlementTask } from "./workspace-settlement-task"
 import { WorkspaceSupplierInvestigationTask } from "./workspace-supplier-investigation-task"
 import { WorkspaceSupplyExceptionTask } from "./workspace-supply-exception-task"
+import { PortalAdminReviewPage } from "@/features/supplier-portal-admin/pages/review-page"
 import { WorkspaceTaskIdentityHeader } from "./workspace-task-identity-header"
 import { WorkspaceTaskSurfaceBoundary } from "./workspace-task-surface-boundary"
 import {
@@ -133,6 +134,26 @@ function WorkspaceTaskSurface({
     }
 
     // 待供给分配：销售单生成采购 → WorkspaceProcurementTask
+    if (
+        item.workItemType === "SUPPLIER_PORTAL_REVIEW" &&
+        item.handlerKey === "supplier_portal_review" &&
+        item.businessObjectType === "supplier_portal_request"
+    ) {
+        return (
+            <WorkspaceTaskPane
+                header={<WorkspaceTaskIdentityHeader item={item} />}
+                aria-label="供应商申请确认任务"
+            >
+                <PortalAdminReviewPage
+                    applicationId={item.businessObjectId}
+                    workItemId={item.workItemId}
+                    embedded
+                    onTaskCompleted={onTaskCompleted}
+                />
+            </WorkspaceTaskPane>
+        )
+    }
+
     if (
         item.workItemType === "PROCUREMENT_ORDER_CREATION" &&
         item.businessObjectType === "sales_order"

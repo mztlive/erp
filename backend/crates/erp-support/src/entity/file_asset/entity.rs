@@ -91,10 +91,11 @@ impl fmt::Display for ContentHmac {
     }
 }
 
-/// 安全检查状态（数据模型 §6.1：待扫描、通过、拒绝、隔离）。
+/// 内容检查与安全扫描状态；基础内容检查不等于完成安全扫描。
 ///
 /// 固定状态机（无运行时扩展）：
-/// `PENDING → PASSED | REJECTED | QUARANTINED`；`QUARANTINED → PASSED | REJECTED`
+/// `PENDING → CONTENT_CHECKED | PASSED | REJECTED | QUARANTINED`；
+/// `CONTENT_CHECKED → PASSED | REJECTED | QUARANTINED`；`QUARANTINED → PASSED | REJECTED`
 /// （人工复核后放行或拒绝）。`PASSED` / `REJECTED` 是终态。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -102,6 +103,8 @@ pub enum SecurityScanStatus {
     /// 待扫描。
     #[default]
     Pending,
+    /// 已完成有界内容检查，尚未登记真实安全扫描结果。
+    ContentChecked,
     /// 通过。
     Passed,
     /// 拒绝。
@@ -112,6 +115,7 @@ pub enum SecurityScanStatus {
 
 crate::entity::enum_str!(SecurityScanStatus {
     Pending => ("pending", "待扫描"),
+    ContentChecked => ("content_checked", "内容已检查，待安全扫描"),
     Passed => ("passed", "通过"),
     Rejected => ("rejected", "拒绝"),
     Quarantined => ("quarantined", "隔离"),
@@ -120,7 +124,8 @@ crate::entity::enum_str!(SecurityScanStatus {
 impl DocumentState for SecurityScanStatus {
     fn allowed_next(self) -> &'static [Self] {
         match self {
-            Self::Pending => &[Self::Passed, Self::Rejected, Self::Quarantined],
+            Self::Pending => &[Self::ContentChecked, Self::Passed, Self::Rejected, Self::Quarantined],
+            Self::ContentChecked => &[Self::Passed, Self::Rejected, Self::Quarantined],
             Self::Quarantined => &[Self::Passed, Self::Rejected],
             Self::Passed | Self::Rejected => &[],
         }
@@ -369,8 +374,24 @@ impl FileAsset {
     /// # 错误
     /// 当迁移不在安全检查状态机内（如已通过后再次隔离）时返回错误。
     pub fn mark_scan_result(&mut self, status: SecurityScanStatus) -> Result<()> {
+        if status == SecurityScanStatus::ContentChecked {
+            return Err(Error::from("基础内容检查须经受控文件准备流程登记"));
+        }
         ensure_transition(self.security_scan_status, status)?;
         self.security_scan_status = status;
+        Ok(())
+    }
+
+    /// 登记可信上传流程完成的基础内容检查，保留后续扫描和隔离能力。
+    /// # 参数
+    /// 使用受控上传流程完成真实内容检查后的当前文件事实。
+    /// # 返回
+    /// 返回内容已检查状态，不登记安全扫描通过。
+    /// # 错误
+    /// 已隔离、拒绝或通过安全扫描的文件不得倒退为内容检查状态。
+    pub fn mark_content_checked(&mut self) -> Result<()> {
+        ensure_transition(self.security_scan_status, SecurityScanStatus::ContentChecked)?;
+        self.security_scan_status = SecurityScanStatus::ContentChecked;
         Ok(())
     }
 
@@ -396,7 +417,8 @@ impl FileAsset {
 
     /// 判断文件资产在指定时点是否可用作受控证据。
     ///
-    /// 仅当安全扫描已通过、未被销毁且未过期（`expires_at` 为空或晚于 `now`）时视为可用；
+    /// 有界内容检查或安全扫描通过、未被销毁且未过期时视为可用；
+    /// `CONTENT_CHECKED` 仅允许受控业务使用，不表示病毒或恶意内容扫描已经通过。
     /// 该判断为纯时点快照，不执行 I/O、时钟或加密。
     ///
     /// # 参数
@@ -405,7 +427,7 @@ impl FileAsset {
     /// # 返回
     /// 可用时返回 `true`。
     pub fn is_usable_at(&self, now: Instant) -> bool {
-        self.security_scan_status == SecurityScanStatus::Passed
+        matches!(self.security_scan_status, SecurityScanStatus::ContentChecked | SecurityScanStatus::Passed)
             && self.destroyed_at.is_none()
             && self.expires_at.is_none_or(|expires_at| expires_at > now)
     }
@@ -440,6 +462,28 @@ mod tests {
             expires_at: Some(Instant::from_unix_secs(1_703_260_800)),
             created_by: " admin-1 ".to_string(),
         }
+    }
+
+    #[test]
+    fn content_check_preserves_real_scan_and_immediate_governance_controls() {
+        let now = Instant::from_unix_secs(1_700_000_000);
+        for result in
+            [SecurityScanStatus::Passed, SecurityScanStatus::Quarantined, SecurityScanStatus::Rejected]
+        {
+            let mut asset = FileAsset::new(FileAssetId::new("content-checked"), data()).unwrap();
+            assert!(!asset.is_usable_at(now));
+            assert!(asset.mark_scan_result(SecurityScanStatus::ContentChecked).is_err());
+            asset.mark_content_checked().unwrap();
+            assert_eq!(asset.security_scan_status, SecurityScanStatus::ContentChecked);
+            assert!(asset.is_usable_at(now));
+            asset.mark_scan_result(result).unwrap();
+            assert_eq!(asset.is_usable_at(now), result == SecurityScanStatus::Passed);
+            assert!(asset.mark_content_checked().is_err());
+        }
+        let mut asset = FileAsset::new(FileAssetId::new("destroyed"), data()).unwrap();
+        asset.mark_content_checked().unwrap();
+        asset.destroy(now).unwrap();
+        assert!(!asset.is_usable_at(now));
     }
 
     /// 文件转授不接受停用身份、未知资产所有权或仅知道文件 ID。

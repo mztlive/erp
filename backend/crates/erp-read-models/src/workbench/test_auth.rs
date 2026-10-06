@@ -20,10 +20,36 @@ pub(super) struct TestAuth {
     pub(super) fail_revision: Arc<AtomicBool>,
     pub(super) queue: Arc<Mutex<Option<WorkflowQueueAccessFact>>>,
     pub(super) fail_queue: Arc<AtomicBool>,
+    pub(super) portal_readable: Arc<Mutex<HashMap<String, bool>>>,
+    pub(super) portal_reviewable: Arc<Mutex<HashMap<String, bool>>>,
+    pub(super) fail_portal_reviewable: Arc<AtomicBool>,
 }
 
 #[allow(clippy::manual_async_fn)]
 impl WorkflowAuthorizationPort for TestAuth {
+    /// 记录精确申请范围读取，并返回当前可配置资格。
+    async fn supplier_portal_request_readable(
+        &self,
+        actor: &AuditActor,
+        request_id: &str,
+        _executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        self.trace.lock().unwrap().push(format!("portal:{}:{request_id}", actor.id()));
+        Ok(self.portal_readable.lock().unwrap().get(request_id).copied().unwrap_or(false))
+    }
+    /// 记录当前申请业务动作资格，明确区分越界与基础设施失败。
+    async fn supplier_portal_request_reviewable(
+        &self,
+        actor: &AuditActor,
+        request_id: &str,
+        _executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        self.trace.lock().unwrap().push(format!("portal-review:{}:{request_id}", actor.id()));
+        if self.fail_portal_reviewable.load(Ordering::SeqCst) {
+            return Err(Error::Rbac("portal business authorization failed".into()));
+        }
+        Ok(self.portal_reviewable.lock().unwrap().get(request_id).copied().unwrap_or(false))
+    }
     /// 返回可配置的队列身份事实，并验证原调用人的身份透传。
     async fn queue_access_facts(
         &self,

@@ -5,7 +5,7 @@ use validator::Validate;
 
 use crate::AccessControlExt;
 use crate::entity::account_core::AccountCore;
-use crate::entity::auth::LoginAccount;
+use crate::entity::auth::{LoginAccount, Secret};
 use crate::error::{Error, Result};
 use crate::repository::prelude::*;
 
@@ -116,7 +116,7 @@ impl BackofficeAuthService {
         let stored_account = self.find_account(&request.account).await?;
         let secret = stored_account
             .as_ref()
-            .and_then(|account| account.authentication_secret_for(request.account_kind))
+            .and_then(|account| backoffice_secret(account, request.account_kind))
             .cloned();
         let is_authenticatable = secret.is_some();
         let password_check = password::verify_password(secret, request.password.clone()).await?;
@@ -163,10 +163,11 @@ impl BackofficeAuthService {
         account_version: u64,
     ) -> Result<BackofficeAuthResult> {
         let stored_account = self.db.accounts().find_by_id(account_id, &mut NoTransaction).await?;
-        let Some(stored_account) = stored_account
-            .as_ref()
-            .filter(|stored| stored.matches_session_identity(account, account_kind, account_version))
-        else {
+        let Some(stored_account) = stored_account.as_ref().filter(|stored| {
+            stored.is_active_backoffice()
+                && account_kind == DomainAccountKind::Admin
+                && stored.matches_session_identity(account, account_kind, account_version)
+        }) else {
             return Err(invalid_session());
         };
 
@@ -186,6 +187,13 @@ impl BackofficeAuthService {
 /// 构造不泄露具体失败原因的凭证错误。
 fn invalid_credentials() -> Error {
     Error::Unauthenticated("用户名或密码错误".to_string())
+}
+
+/// 后台入口固定要求内部身份，不受客户端账号类型选择影响。
+fn backoffice_secret(account: &AccountCore, requested_kind: DomainAccountKind) -> Option<&Secret> {
+    (requested_kind == DomainAccountKind::Admin)
+        .then(|| account.authentication_secret_for(DomainAccountKind::Admin))
+        .flatten()
 }
 
 #[cfg(test)]
@@ -221,8 +229,8 @@ pub use crate::dto::{AuthRequest, AuthResponse, PasswordLoginPayload};
 mod tests {
     use erp_core::AccountKind;
 
-    use super::BackofficeAuthResult;
     use super::password::{PasswordCheck, verify_password};
+    use super::{BackofficeAuthResult, backoffice_secret};
     use crate::entity::account_core::{AccountCore, AccountCoreData, AccountStatus};
     use crate::entity::auth::{LoginAccount, Secret};
 
@@ -240,6 +248,16 @@ mod tests {
             },
         )
         .unwrap()
+    }
+
+    #[test]
+    fn backoffice_entry_rejects_supplier_credentials_and_client_kind_selection() {
+        let admin = account(AccountKind::Admin, AccountStatus::Active);
+        let supplier = account(AccountKind::Supplier, AccountStatus::Active);
+        assert!(backoffice_secret(&admin, AccountKind::Admin).is_some());
+        assert!(backoffice_secret(&admin, AccountKind::Supplier).is_none());
+        assert!(backoffice_secret(&supplier, AccountKind::Admin).is_none());
+        assert!(backoffice_secret(&supplier, AccountKind::Supplier).is_none());
     }
 
     #[tokio::test]

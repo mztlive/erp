@@ -60,6 +60,15 @@ pub(crate) const PROCUREMENT_PERMISSIONS: &[&str] = &[
     "party_bank_account:*",
     "supplier:*",
     "supplier_sensitive:reveal",
+    // 门户专项只用于初次建岗或显式应用模板；既有岗位不得由启动补权。
+    "supplier_portal_account:list",
+    "supplier_portal_account:create",
+    "supplier_portal_account:update",
+    "supplier_portal_catalog:list",
+    "supplier_portal_catalog:update",
+    "supplier_portal_request:list",
+    "supplier_portal_request:detail",
+    "supplier_portal_request:review",
     // 确认与采购
     "contract:detail",
     "sales_order:list",

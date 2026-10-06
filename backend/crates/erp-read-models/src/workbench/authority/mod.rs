@@ -11,6 +11,7 @@ pub(in crate::workbench) mod purchase;
 mod recipe;
 pub(in crate::workbench) mod sales;
 mod sources;
+pub(in crate::workbench) mod supplier_portal;
 pub(crate) use command::object_ids;
 use erp_workflow::ports::{ObjectFact, ObjectFactMap, ObjectKind, SubjectBrief};
 use mongodb::Database;

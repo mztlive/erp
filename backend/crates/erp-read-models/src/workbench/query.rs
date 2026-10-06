@@ -77,6 +77,40 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
 }
 
 impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static> WorkbenchReadService<A> {
+    /// 在供给影响读取中复用当前任务详情阅读资格，不另建事务。
+    ///
+    /// # 参数
+    /// * `actor` - 当前真实内部账号。
+    /// * `id` - 已读取的精确履约任务身份。
+    /// * `executor` - 影响读取沿用的执行器。
+    /// # 返回
+    /// 返回任务详情授权是否成立，不返回任务或业务显示内容。
+    /// # 错误
+    /// 不存在或禁止访问返回false；授权配置及读取故障继续传播。
+    pub(crate) async fn work_item_readable_with_executor(
+        &self,
+        actor: &AuditActor,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        let result = async {
+            let item = self
+                .db
+                .work_items()
+                .find_work_item(id, executor)
+                .await?
+                .ok_or_else(|| Error::NotFound("任务不存在".into()))?;
+            let access = self.actor_access_for(actor.kind(), actor.id(), executor).await?;
+            detail_scope(&item, actor.id(), &access)?;
+            Ok(!self.authorized_fields_for_items(vec![item], &access, executor).await?.is_empty())
+        }
+        .await;
+        match result {
+            Err(Error::NotFound(_) | Error::Forbidden(_)) => Ok(false),
+            other => other,
+        }
+    }
+
     /// 查询服务端授权过滤后的责任队列。
     ///
     /// # 参数
@@ -308,13 +342,14 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
     /// 为已授权任务逐条计算审批阻断与允许动作。
     pub(super) async fn project_fields(
         &self,
-        fields: Vec<dto::WorkItemFields>,
+        mut fields: Vec<dto::WorkItemFields>,
         scope: WorkItemScope,
         actor: &AuditActor,
         actor_access: &ActorAccess,
         queue_context_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Vec<WorkItemView>> {
+        self.apply_fulfillment_supply_warnings(&mut fields, executor).await?;
         let mut items = Vec::with_capacity(fields.len());
         for fields in fields {
             let access = self.view_access(&fields, scope, actor, actor_access)?;
@@ -431,8 +466,9 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         let access = self.actor_access_for(actor.kind(), actor.id(), executor).await?;
         let scope = detail_scope(&item, actor.id(), &access)?;
         let fields = self.authorized_fields_for_items(vec![item], &access, executor).await?;
-        let fields =
+        let mut fields =
             fields.into_iter().next().ok_or_else(|| Error::NotFound("任务或业务对象不可见".to_string()))?;
+        self.apply_fulfillment_supply_warnings(std::slice::from_mut(&mut fields), executor).await?;
         let queue_context_id = single_item_context_id(actor.id(), &item_id);
         let view_access = self.view_access(&fields, scope, actor, &access)?;
         let mut view = WorkItemView::from_fields(fields, queue_context_id)?.with_access(

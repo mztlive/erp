@@ -8,7 +8,7 @@ use super::{business_date_of, zero_amount};
 use crate::dto::purchase_order::CreatePurchaseOrderFromBasisRequest;
 use crate::entity::facts::SalesOrderBasisFact;
 use crate::entity::purchase_order::{
-    BasisGroup, BasisLine, BasisScope, FulfillmentResponsibility, PurchaseLineType,
+    BasisGroup, BasisLine, BasisScope, FulfillmentResponsibility, PurchaseLineType, PurchaseOfferingSource,
     PurchaseOrderSubmissionLine, PurchaseOrderSubmissionLineData, RequestedLine, basis_id_for,
     stable_line_id, supply_cost,
 };
@@ -101,6 +101,9 @@ pub fn build_submission_line(
     line: &ComputedLine,
 ) -> Result<PurchaseOrderSubmissionLine> {
     let basis = &line.selected.basis;
+    if basis.supply.offering.sku_id != basis.coverage.goods_line.sku_id {
+        return Err(Error::BusinessLogicError("采购选中供给与来源SKU不一致".into()));
+    }
     PurchaseOrderSubmissionLine::new(
         PurchaseOrderSubmissionLineId::new(next_id()),
         PurchaseOrderSubmissionLineData {
@@ -112,6 +115,7 @@ pub fn build_submission_line(
             )),
             sku_id: Some(basis.coverage.goods_line.sku_id.clone()),
             sku_revision_id: Some(basis.coverage.goods_line.sku_revision_id.clone()),
+            supplier_offering_source: Some(PurchaseOfferingSource::from_supply(&basis.supply)?),
             product_name_snapshot: Some(basis.coverage.revision_line.item_name_snapshot.clone()),
             specification_snapshot: basis.coverage.revision_line.spec_snapshot.clone(),
             quantity: Some(line.selected.quantity),

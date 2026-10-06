@@ -80,6 +80,7 @@ impl SavePurchaseOrderLine {
                 .map(|value| ProcurementConfirmationLineId::new(value.clone())),
             sku_id: self.sku_id.as_ref().map(|value| SkuId::new(value.clone())),
             sku_revision_id: self.sku_revision_id.as_ref().map(|value| SkuRevisionId::new(value.clone())),
+            supplier_offering_source: None,
             product_name_snapshot: self.product_name.clone(),
             specification_snapshot: self.specification.clone(),
             quantity: parsed.quantity,

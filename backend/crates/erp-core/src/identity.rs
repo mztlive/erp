@@ -35,11 +35,15 @@ impl std::error::Error for InvalidAccountKind {}
 pub enum AccountKind {
     /// 系统管理员账号。
     Admin,
+    /// 独立供应商门户账号，不具备后台身份。
+    Supplier,
 }
 
 impl AccountKind {
     /// 管理员账号的稳定代码（唯一真相源，`as_str`/`parse` 均由此驱动）。
     pub const ADMIN_CODE: &'static str = "admin";
+    /// 供应商门户账号的稳定代码。
+    pub const SUPPLIER_CODE: &'static str = "supplier";
 
     /// 返回账号类型字符串表示。
     ///
@@ -48,6 +52,7 @@ impl AccountKind {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Admin => Self::ADMIN_CODE,
+            Self::Supplier => Self::SUPPLIER_CODE,
         }
     }
 
@@ -64,6 +69,9 @@ impl AccountKind {
     pub fn parse(value: &str) -> std::result::Result<Self, InvalidAccountKind> {
         if value == Self::ADMIN_CODE {
             return Ok(Self::Admin);
+        }
+        if value == Self::SUPPLIER_CODE {
+            return Ok(Self::Supplier);
         }
         Err(InvalidAccountKind)
     }

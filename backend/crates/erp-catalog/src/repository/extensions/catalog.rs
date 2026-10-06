@@ -17,8 +17,8 @@ use crate::repository::catalog::{
 use crate::repository::owned::{
     ProductBrandRepository, ProductCategoryAttributeRepository, ProductCategoryRepository, ProductRepository,
     ProductRevisionMediaRepository, ProductRevisionRepository, SkuAttributeRepository,
-    SkuAttributeValueRepository, SkuRepository, SkuRevisionRepository, UnitOfMeasureRepository,
-    VoucherCategoryProfileRevisionRepository,
+    SkuAttributeValueRepository, SkuBarcodeClaimRepository, SkuRepository, SkuRevisionRepository,
+    UnitOfMeasureRepository, VoucherCategoryProfileRevisionRepository,
 };
 
 /// 域 D10 仓储访问器。
@@ -45,6 +45,8 @@ pub trait CatalogExt {
     const SKUS: &'static str = "skus";
     /// `sku_revision` 集合名。
     const SKU_REVISIONS: &'static str = "sku_revisions";
+    /// `sku_barcode_claims` 以实际条码保存唯一 SKU 归属。
+    const SKU_BARCODE_CLAIMS: &'static str = "sku_barcode_claims";
     /// `sku_revision_attribute_value` 集合名。
     const SKU_REVISION_ATTRIBUTE_VALUES: &'static str = "sku_revision_attribute_values";
     /// `voucher_category_profile_revision` 集合名。
@@ -157,6 +159,15 @@ pub trait CatalogExt {
     /// # 返回
     /// 返回 `SkuRevisionRepository<'_>`。
     fn sku_revisions(&self) -> SkuRevisionRepository<'_>;
+
+    /// 获取实际条码唯一归属占用仓储。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 当前数据库的标准乐观锁仓储。
+    /// # 错误
+    /// 无。
+    fn sku_barcode_claims(&self) -> SkuBarcodeClaimRepository<'_>;
 
     /// 获取 `sku_revision_attribute_value` 集合的 Repository。
     ///
@@ -279,6 +290,10 @@ impl CatalogExt for Database {
     /// 返回 `SkuRevisionRepository<'_>`。
     fn sku_revisions(&self) -> SkuRevisionRepository<'_> {
         SkuRevisionRepository::new(self, Self::SKU_REVISIONS)
+    }
+
+    fn sku_barcode_claims(&self) -> SkuBarcodeClaimRepository<'_> {
+        SkuBarcodeClaimRepository::new(self, Self::SKU_BARCODE_CLAIMS)
     }
 
     /// 获取 `sku_revision_attribute_value` 集合的 Repository。

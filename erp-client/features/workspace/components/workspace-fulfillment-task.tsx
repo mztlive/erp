@@ -82,6 +82,11 @@ export function WorkspaceFulfillmentTask({
             }
         },
     })
+    const supplyFacts = (item.summarySections ?? []).filter(
+        (section) =>
+            section.label === "供给影响提示" ||
+            section.label === "当前采购负责人",
+    )
 
     return (
         <WorkspaceTaskPane
@@ -104,6 +109,33 @@ export function WorkspaceFulfillmentTask({
             }
             aria-label="当前履约任务"
         >
+            {!!supplyFacts.length && (
+                <Alert>
+                    <AlertTitle>当前供给与采购责任</AlertTitle>
+                    <AlertDescription>
+                        <dl className="space-y-2">
+                            {supplyFacts.map((section) => (
+                                <div key={section.label}>
+                                    <dt className="font-medium">
+                                        {section.label}
+                                    </dt>
+                                    <dd className="whitespace-pre-wrap">
+                                        {section.value}
+                                    </dd>
+                                </div>
+                            ))}
+                        </dl>
+                    </AlertDescription>
+                </Alert>
+            )}
+            {controller.operation?.impact && (
+                <Alert>
+                    <AlertTitle>履约影响与核对事项</AlertTitle>
+                    <AlertDescription className="whitespace-pre-wrap">
+                        {controller.operation.impact}
+                    </AlertDescription>
+                </Alert>
+            )}
             {!descriptor ? (
                 <Alert variant="destructive">
                     <AlertTitle>任务责任与履约对象不一致</AlertTitle>

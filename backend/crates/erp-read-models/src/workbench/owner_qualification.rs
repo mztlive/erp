@@ -84,6 +84,7 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
     ) -> Result<()> {
         let mut actions = items.iter().map(ActionProjection::from_view).collect::<Vec<_>>();
         self.qualify_approvals(&mut actions, executor).await?;
+        self.qualify_portal_reviews(&mut actions, &mut QualificationCache::disabled(), executor).await?;
         let keys = qualification_keys(&actions);
         if !keys.is_empty() {
             let facts = self.facts_reader().load(&keys, executor).await?;
@@ -113,8 +114,39 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         self.qualify_approvals(items, executor).await?;
+        self.qualify_portal_reviews(items, qualification, executor).await?;
         let groups = owner_groups(items, facts)?;
         self.qualify_owner_groups(items, groups, qualification, executor).await
+    }
+
+    /// 供应商申请单人确认同时重验内部身份、完整执行权限和独立对象范围。
+    async fn qualify_portal_reviews(
+        &self,
+        items: &mut [ActionProjection],
+        qualification: &mut QualificationCache,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let groups = portal_owner_groups(items);
+        if groups.is_empty() {
+            return Ok(());
+        }
+        let accounts = self
+            .auth
+            .load_accounts(&groups.keys().cloned().collect::<Vec<_>>(), executor)
+            .await?
+            .into_iter()
+            .map(|account| (account.id.clone(), account))
+            .collect::<HashMap<_, _>>();
+        for (owner, indices) in groups {
+            let Some(account) = accounts.get(&owner).filter(|account| account.is_active_backoffice()) else {
+                for index in indices {
+                    block_action_owner(&mut items[index]);
+                }
+                continue;
+            };
+            qualify_portal_owner(&self.auth, items, account, &indices, qualification, executor).await?;
+        }
+        Ok(())
     }
 
     /// 任务链已由工作流服务校验；投影仅复核当前审批人账号和静态资格。
@@ -221,6 +253,31 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
     }
 }
 
+/// 处理人权限和每个申请范围分别证明，任务责任不替代 DataScope。
+async fn qualify_portal_owner(
+    auth: &impl WorkflowAuthorizationPort,
+    items: &mut [ActionProjection],
+    account: &WorkflowAccountFact,
+    indices: &[usize],
+    qualification: &mut QualificationCache,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let actor = AuditActor::new(account.id.clone(), account.login_account.clone(), account.kind);
+    let required =
+        indices.iter().filter_map(|index| execution_permissions(&items[*index])).flatten().collect();
+    let permissions = owner_permissions(auth, account, required, qualification, executor).await?;
+    for index in indices {
+        let item = &mut items[*index];
+        if !can_execute(item, &permissions.grants, &permissions.enabled_roles)
+            || !auth.supplier_portal_request_readable(&actor, &item.business_object_id, executor).await?
+            || !auth.supplier_portal_request_reviewable(&actor, &item.business_object_id, executor).await?
+        {
+            block_action_owner(item);
+        }
+    }
+    Ok(())
+}
+
 /// 同拍同策略版本复用共同角色事实；来源资格仍由每批的精确订单授权独立证明。
 async fn owner_permissions(
     auth: &impl WorkflowAuthorizationPort,
@@ -277,6 +334,17 @@ fn can_execute(
 
 type OwnerGroups = BTreeMap<String, Vec<(usize, OrderTaskSource)>>;
 
+/// 单人采购确认按任务当前具体负责人分组，不采用申请上的冻结分派快照。
+fn portal_owner_groups(items: &[ActionProjection]) -> BTreeMap<String, Vec<usize>> {
+    let mut groups = BTreeMap::<String, Vec<usize>>::new();
+    for (index, item) in items.iter().enumerate() {
+        if item.status == WorkItemStatus::Open && item.work_item_type == WorkItemType::SupplierPortalReview {
+            groups.entry(item.owner_user_id.clone().unwrap_or_default()).or_default().push(index);
+        }
+    }
+    groups
+}
+
 /// 精确的业务来源与当前负责人分组；不从任务展示组织推断内部组织。
 fn owner_groups(items: &[ActionProjection], facts: &ObjectFactMap) -> Result<OwnerGroups> {
     let mut groups = BTreeMap::<String, Vec<(usize, OrderTaskSource)>>::new();
@@ -312,7 +380,7 @@ fn block_action_owner(item: &mut ActionProjection) {
     }
     let blocker = ProcessingBlockerView {
         code: "WORK_ITEM_OWNER_INELIGIBLE".into(),
-        message: "当前负责人已失去账号、执行权限或关联订单读取资格，需由管理人员处理".into(),
+        message: "当前负责人已失去账号、执行权限或业务对象资格，需由管理人员处理".into(),
     };
     item.access.processing_state = ProcessingState::ExecutionBlocked;
     item.access.processing_blocker = Some(blocker.clone());
@@ -339,12 +407,107 @@ mod tests {
 
     use erp_core::ids::WorkItemId;
     use erp_workflow::entity::work_item::{
-        AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
+        AssignmentSource, SupplierPortalReviewTaskData, WorkItem, WorkItemData, WorkItemPriority,
+        WorkItemType,
     };
 
     use super::*;
     use crate::workbench::dto::WorkItemFields;
     use crate::workbench::test_auth::TestAuth;
+
+    /// 供应商申请责任不替代当前 DataScope，失效只阻断动作并保留原任务责任。
+    #[tokio::test]
+    async fn portal_owner_qualification_checks_scope_and_keeps_controlled_reassignment() {
+        let auth = TestAuth::default();
+        auth.portal_readable.lock().unwrap().insert("request".into(), true);
+        auth.portal_reviewable.lock().unwrap().insert("request".into(), true);
+        let task = WorkItem::new_supplier_portal_review(
+            WorkItemId::new("portal-task"),
+            SupplierPortalReviewTaskData {
+                request_id: "request".into(),
+                subject_version: "offering:1".into(),
+                owner_user_id: "reviewer".into(),
+                owner_organization_id: "organization".into(),
+                due_at: None,
+                impact_summary: None,
+            },
+        )
+        .unwrap();
+        let mut view = WorkItemView::from_fields(WorkItemFields::from(task), "context".into()).unwrap();
+        view.allowed_actions = vec![
+            WorkItemAllowedAction::View,
+            WorkItemAllowedAction::Process,
+            WorkItemAllowedAction::Reassign,
+        ];
+        let mut actions = vec![ActionProjection::from_view(&view)];
+        let account = WorkflowAccountFact::new("reviewer", AccountKind::Admin, true);
+        let mut executor = persistence_core::NoTransaction;
+        qualify_portal_owner(
+            &auth,
+            &mut actions,
+            &account,
+            &[0],
+            &mut QualificationCache::disabled(),
+            &mut executor,
+        )
+        .await
+        .unwrap();
+        assert!(actions[0].access.allowed_actions.contains(&WorkItemAllowedAction::Process));
+        auth.portal_reviewable.lock().unwrap().insert("request".into(), false);
+        qualify_portal_owner(
+            &auth,
+            &mut actions,
+            &account,
+            &[0],
+            &mut QualificationCache::disabled(),
+            &mut executor,
+        )
+        .await
+        .unwrap();
+        actions.remove(0).apply(&mut view);
+        assert_eq!(view.allowed_actions, [WorkItemAllowedAction::View, WorkItemAllowedAction::Reassign]);
+        assert_eq!(view.owner_user_id.as_deref(), Some("reviewer"));
+        assert_eq!(view.processing_state, ProcessingState::ExecutionBlocked);
+        assert!(auth.trace.lock().unwrap().contains(&"portal:reviewer:request".into()));
+        assert!(auth.trace.lock().unwrap().contains(&"portal-review:reviewer:request".into()));
+    }
+
+    #[tokio::test]
+    async fn portal_business_authorization_error_propagates_instead_of_becoming_an_ineligible_owner() {
+        let auth = TestAuth::default();
+        auth.portal_readable.lock().unwrap().insert("request".into(), true);
+        auth.fail_portal_reviewable.store(true, Ordering::SeqCst);
+        let task = WorkItem::new_supplier_portal_review(
+            WorkItemId::new("portal-task"),
+            SupplierPortalReviewTaskData {
+                request_id: "request".into(),
+                subject_version: "new_product:submission".into(),
+                owner_user_id: "reviewer".into(),
+                owner_organization_id: "organization".into(),
+                due_at: None,
+                impact_summary: None,
+            },
+        )
+        .unwrap();
+        let mut view = WorkItemView::from_fields(WorkItemFields::from(task), "context".into()).unwrap();
+        view.allowed_actions = vec![WorkItemAllowedAction::View, WorkItemAllowedAction::Process];
+        let mut actions = vec![ActionProjection::from_view(&view)];
+        let account = WorkflowAccountFact::new("reviewer", AccountKind::Admin, true);
+        let result = qualify_portal_owner(
+            &auth,
+            &mut actions,
+            &account,
+            &[0],
+            &mut QualificationCache::disabled(),
+            &mut persistence_core::NoTransaction,
+        )
+        .await;
+        assert!(
+            matches!(result, Err(Error::Rbac(message)) if message == "portal business authorization failed")
+        );
+        assert!(actions[0].access.allowed_actions.contains(&WorkItemAllowedAction::Process));
+        assert!(auth.trace.lock().unwrap().contains(&"portal-review:reviewer:request".into()));
+    }
 
     /// 同扫描阶段命中只复用共同角色事实，policy 变化或权限扩展仍重新读取。
     #[tokio::test]

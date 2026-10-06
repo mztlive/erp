@@ -586,7 +586,22 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         self.load_reconciliation_difference_facts(keys, facts, executor).await?;
         self.load_supplier_fulfillment_order_facts(keys, facts, executor).await?;
         self.load_supplier_offering_facts(keys, facts, executor).await?;
+        self.load_supplier_portal_facts(keys, facts, executor).await?;
+        self.load_supplier_portal_briefs(keys, facts, executor).await?;
         self.load_operational_briefs(keys, facts, executor).await
+    }
+
+    /// 权威申请归属与冻结版本由命令和显示共用的 reader 唯一生成。
+    async fn load_supplier_portal_facts(
+        &self,
+        keys: &HashSet<(ObjectKind, String)>,
+        facts: &mut WorkbenchObjectFactMap,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let mut loaded = erp_workflow::ports::ObjectFactMap::new();
+        self.facts_reader().load_supplier_portal_request_facts(keys, &mut loaded, executor).await?;
+        facts.extend(loaded.into_iter().map(|(key, fact)| (key, WorkbenchObjectFact::from_authority(fact))));
+        Ok(())
     }
 
     async fn load_legacy_import_batch_facts(

@@ -38,6 +38,7 @@ pub struct Engine {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SubjectKind {
     Backoffice,
+    SupplierPortal,
 }
 
 impl SubjectKind {
@@ -48,6 +49,7 @@ impl SubjectKind {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Backoffice => "backoffice",
+            Self::SupplierPortal => "supplier_portal",
         }
     }
 }
@@ -65,6 +67,7 @@ impl TryFrom<&str> for SubjectKind {
     fn try_from(value: &str) -> std::result::Result<Self, Self::Error> {
         match value {
             "backoffice" => Ok(Self::Backoffice),
+            "supplier_portal" => Ok(Self::SupplierPortal),
             _ => Err(()),
         }
     }
@@ -76,6 +79,7 @@ pub struct TokenPayload {
     pub subject_kind: SubjectKind,
     pub account_kind: Option<AccountKind>,
     pub account_version: Option<u64>,
+    pub binding_version: Option<u64>,
 }
 
 impl TokenPayload {
@@ -96,6 +100,25 @@ impl TokenPayload {
             subject_kind: SubjectKind::Backoffice,
             account_kind: Some(account_kind),
             account_version: Some(account_version),
+            binding_version: None,
+        }
+    }
+
+    /// 构造独立门户凭证，供应商归属始终由当前绑定解析。
+    /// # 参数
+    /// `id`、`account` 为实名账号，版本对应账号及门户绑定。
+    /// # 返回
+    /// 返回供应商主体的令牌载荷。
+    /// # 错误
+    /// 无。
+    pub fn supplier_portal(id: String, account: String, account_version: u64, binding_version: u64) -> Self {
+        Self {
+            id,
+            account,
+            subject_kind: SubjectKind::SupplierPortal,
+            account_kind: Some(AccountKind::Supplier),
+            account_version: Some(account_version),
+            binding_version: Some(binding_version),
         }
     }
 }
@@ -118,6 +141,9 @@ impl From<TokenPayload> for BTreeMap<String, Value> {
         }
         if let Some(account_version) = payload.account_version {
             out.insert("account_version".to_string(), account_version.into());
+        }
+        if let Some(binding_version) = payload.binding_version {
+            out.insert("binding_version".to_string(), binding_version.into());
         }
 
         out
@@ -148,13 +174,13 @@ impl TryFrom<BTreeMap<String, Value>> for TokenPayload {
 
         let subject_kind = SubjectKind::try_from(required_string(&mut payload_map, "subject_kind")?.as_str())
             .map_err(|_| Error::InvalidClaims)?;
-
-        match (subject_kind, account_kind, account_version) {
-            (SubjectKind::Backoffice, Some(_), Some(_)) => {},
+        let binding_version = payload_map.remove("binding_version").and_then(|value| value.as_u64());
+        match (subject_kind, account_kind, account_version, binding_version) {
+            (SubjectKind::Backoffice, Some(AccountKind::Admin), Some(_), None) => {},
+            (SubjectKind::SupplierPortal, Some(AccountKind::Supplier), Some(_), Some(_)) => {},
             _ => return Err(Error::InvalidClaims),
         }
-
-        Ok(TokenPayload { id, account, subject_kind, account_kind, account_version })
+        Ok(TokenPayload { id, account, subject_kind, account_kind, account_version, binding_version })
     }
 }
 
@@ -252,6 +278,33 @@ mod tests {
     use super::*;
 
     const TEST_SECRET: &str = "test-secret-that-is-at-least-32-bytes";
+
+    #[test]
+    fn supplier_token_round_trip_requires_external_kind_and_binding_version() {
+        let engine = Engine::new(TEST_SECRET.into()).unwrap();
+        let token = engine
+            .create_token(TokenPayload::supplier_portal("supplier-user".into(), "supplier01".into(), 3, 5))
+            .unwrap();
+        let payload = engine.verify_token(&token).unwrap();
+        assert_eq!(payload.subject_kind, SubjectKind::SupplierPortal);
+        assert_eq!(payload.account_kind, Some(AccountKind::Supplier));
+        assert_eq!(payload.binding_version, Some(5));
+        let mut map: BTreeMap<String, Value> = payload.into();
+        map.remove("binding_version");
+        assert!(TokenPayload::try_from(map).is_err());
+        let mut map: BTreeMap<String, Value> =
+            TokenPayload::supplier_portal("s".into(), "supplier01".into(), 1, 1).into();
+        map.insert("account_kind".into(), Value::String("admin".into()));
+        assert!(TokenPayload::try_from(map).is_err());
+    }
+
+    #[test]
+    fn supplier_account_cannot_be_encoded_as_backoffice_subject() {
+        let map: BTreeMap<String, Value> =
+            TokenPayload::backoffice("supplier-user".into(), "supplier01".into(), AccountKind::Supplier, 1)
+                .into();
+        assert!(TokenPayload::try_from(map).is_err());
+    }
 
     /// 使用当前 Engine 的密钥签发自定义声明，覆盖验签后的声明校验分支。
     fn signed_token(engine: &Engine, registered: RegisteredClaims, payload: TokenPayload) -> String {

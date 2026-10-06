@@ -6,7 +6,10 @@ use application_core::AuditActor;
 use persistence_core::{Executor, NoTransaction};
 
 use super::dto;
-use super::order_access::{require_order_task_read, task_read_error};
+use super::order_access::{
+    require_order_task_read, require_supplier_portal_task_read, require_supplier_portal_task_review,
+    task_read_error,
+};
 use crate::entity::work_item::{
     AvailableWorkItemAccount, WorkItem, WorkItemBriefRelation, WorkItemStatus, WorkItemType,
 };
@@ -276,6 +279,14 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         let fact = facts
             .get(&(policy.object_kind, item.business_object_id.clone()))
             .ok_or_else(|| Error::Forbidden("任务业务对象不可访问".into()))?;
+        require_supplier_portal_task_read(
+            &self.auth,
+            &access.actor_id,
+            policy.object_kind,
+            &item.business_object_id,
+            executor,
+        )
+        .await?;
         require_order_task_read(&self.auth, &access.actor_id, policy.object_kind, fact, executor).await?;
         if authorized_item_fields(item.clone(), access, &facts).is_none() {
             return Err(Error::Forbidden("业务对象不可访问".to_string()));
@@ -326,6 +337,14 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             )
             .await?;
         self.ensure_item_access_with_executor(item, &access, executor).await.map_err(task_read_error)?;
+        require_supplier_portal_task_review(
+            &self.auth,
+            actor.id(),
+            policy.object_kind,
+            &item.business_object_id,
+            executor,
+        )
+        .await?;
         self.auth.ensure_policy_snapshot_with_executor(policy_revision, executor).await
     }
 
@@ -747,7 +766,56 @@ fn apply_object_display(fields: &mut dto::WorkItemFields, fact: &ObjectFact) {
 
 #[cfg(test)]
 mod task_policy_tests {
+    use erp_core::ids::WorkItemId;
+
     use super::*;
+    use crate::entity::work_item::SupplierPortalReviewTaskData;
+    use crate::ports::ObjectKind;
+
+    #[test]
+    fn supplier_portal_review_requires_current_owner_and_review_permission() {
+        let task = WorkItem::new_supplier_portal_review(
+            WorkItemId::new("task"),
+            SupplierPortalReviewTaskData {
+                request_id: "request".into(),
+                subject_version: "submission-1".into(),
+                owner_user_id: "reviewer".into(),
+                owner_organization_id: "procurement".into(),
+                due_at: None,
+                impact_summary: None,
+            },
+        )
+        .unwrap();
+        let facts = ObjectFactMap::from([(
+            (ObjectKind::SupplierPortalRequest, "request".into()),
+            ObjectFact::new("request", "供应商申请", "supplier"),
+        )]);
+        let full = ActorAccess::new("reviewer".into()).with_permissions(vec![
+            "supplier_portal_request:detail".into(),
+            "supplier_portal_request:review".into(),
+        ]);
+        let fields = authorized_item_fields(task.clone(), &full, &facts).unwrap();
+        assert!(
+            allowed_actions(&fields, WorkItemScope::Mine, "reviewer", &full)
+                .contains(&WorkItemAllowedAction::Process)
+        );
+        assert!(
+            !allowed_actions(&fields, WorkItemScope::Mine, "other", &full)
+                .contains(&WorkItemAllowedAction::Process)
+        );
+        assert!(has_assignment_candidate_access(&task, &full, &facts));
+        let read_only = ActorAccess::new("reviewer".into())
+            .with_permissions(vec!["supplier_portal_request:detail".into()]);
+        let read_fields = authorized_item_fields(task.clone(), &read_only, &facts).unwrap();
+        assert!(
+            !allowed_actions(&read_fields, WorkItemScope::Mine, "reviewer", &read_only)
+                .contains(&WorkItemAllowedAction::Process)
+        );
+        assert!(!has_assignment_candidate_access(&task, &read_only, &facts));
+        let unrelated = ActorAccess::new("other".into()).with_permissions(full.permissions.clone());
+        assert!(authorized_item_fields(task, &unrelated, &facts).is_none());
+        assert!(WorkItemType::SupplierPortalReview.required_execution_permissions("unknown").is_none());
+    }
 
     #[test]
     fn object_creator_participation_requires_exact_nonblank_identity() {

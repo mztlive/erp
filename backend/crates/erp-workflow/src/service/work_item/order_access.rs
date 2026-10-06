@@ -1,4 +1,4 @@
-//! 订单关联任务的独立对象授权；读模型与任务命令复用同一来源合同。
+//! 订单与供应商申请任务的独立对象授权；读模型与任务命令复用同一合同。
 
 use std::collections::BTreeSet;
 
@@ -7,6 +7,70 @@ use persistence_core::Executor;
 
 use crate::error::{Error, Result};
 use crate::ports::{ObjectFact, ObjectFactMap, ObjectKind, OrderTaskSource, WorkflowAuthorizationPort};
+
+/// 重验供应商申请任务的内部账号及独立对象读取范围。
+///
+/// # 参数
+/// * `auth` - 已装配的工作流授权 Port。
+/// * `actor_id` - 操作人或转交候选人的当前账号 ID。
+/// * `kind` - 固定任务关系中的对象种类。
+/// * `object_id` - 权威对象主键，不从展示字段推断。
+/// * `executor` - 调用方事务或查询执行器。
+/// # 返回
+/// 供应商申请详情范围满足时返回成功；其他任务沿各自授权政策继续执行。
+/// # 错误
+/// 内部身份失效、范围越界或适配器未装配时失败关闭。
+pub async fn require_supplier_portal_task_read(
+    auth: &impl WorkflowAuthorizationPort,
+    actor_id: &str,
+    kind: ObjectKind,
+    object_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    if kind != ObjectKind::SupplierPortalRequest {
+        return Ok(());
+    }
+    let account = auth
+        .load_account(actor_id, executor)
+        .await?
+        .filter(|account| account.is_active_backoffice())
+        .ok_or_else(|| Error::Forbidden("供应商申请任务账号不是当前启用的内部账号".into()))?;
+    let actor = AuditActor::new(account.id, account.login_account, account.kind);
+    if auth.supplier_portal_request_readable(&actor, object_id, executor).await? {
+        return Ok(());
+    }
+    Err(Error::Forbidden("当前账号不具备供应商申请读取范围".into()))
+}
+
+/// 重验当前内部账号对精确供应商申请的商品与供给业务确认资格。
+///
+/// # 参数
+/// 当前授权 Port、具体账号、注册对象种类、精确申请及调用方执行器。
+/// # 返回
+/// 供应商申请业务动作和责任范围全部满足时成功；其他对象沿原授权规则执行。
+/// # 错误
+/// 外部身份、资格撤销或越界拒绝；配置和基础设施错误原样传播。
+pub(super) async fn require_supplier_portal_task_review(
+    auth: &impl WorkflowAuthorizationPort,
+    actor_id: &str,
+    kind: ObjectKind,
+    object_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    if kind != ObjectKind::SupplierPortalRequest {
+        return Ok(());
+    }
+    let account = auth
+        .load_account(actor_id, executor)
+        .await?
+        .filter(|account| account.is_active_backoffice())
+        .ok_or_else(|| Error::Forbidden("供应商申请确认人不是当前启用的内部账号".into()))?;
+    let actor = AuditActor::new(account.id, account.login_account, account.kind);
+    if auth.supplier_portal_request_reviewable(&actor, object_id, executor).await? {
+        return Ok(());
+    }
+    Err(Error::Forbidden("当前账号不具备供应商申请所需的商品或供给业务确认资格".into()))
+}
 
 /// 隐藏不可见对象的存在性，保留配置、版本及基础设施错误供调用方处理。
 ///
@@ -57,7 +121,7 @@ pub async fn require_order_task_read(
     auth.require_order_task_read(&actor, source, executor).await
 }
 
-/// 批量过滤订单关联对象；调用方须在排序、分页、计数之前应用结果。
+/// 批量过滤订单与供应商申请对象；调用方须在排序、分页、计数之前应用结果。
 ///
 /// # 参数
 /// * `auth` - 注入的授权 Port。
@@ -65,7 +129,7 @@ pub async fn require_order_task_read(
 /// * `facts` - 当前执行器读取的对象事实。
 /// * `executor` - 原读取执行器。
 /// # 返回
-/// 保留关联订单仍可读的对象；其他阶段对象由原有规则继续检查。
+/// 保留订单及供应商申请仍可读的对象；其他阶段沿原有规则继续检查。
 /// # 错误
 /// 缺失或错配来源、账号失效及授权配置错误失败关闭。
 pub async fn filter_order_facts(
@@ -74,6 +138,7 @@ pub async fn filter_order_facts(
     facts: &mut ObjectFactMap,
     executor: &mut dyn Executor,
 ) -> Result<()> {
+    filter_supplier_portal_facts(auth, actor_id, facts, executor).await?;
     let sources = order_sources(facts)?;
     if sources.is_empty() {
         return Ok(());
@@ -89,6 +154,31 @@ pub async fn filter_order_facts(
         !OrderTaskSource::required_for(*kind)
             || fact.order_scope_source.as_ref().is_some_and(|source| allowed.contains(source))
     });
+    Ok(())
+}
+
+/// 在分页、统计与简报形成前移除当前账号无权读取的供应商申请。
+async fn filter_supplier_portal_facts(
+    auth: &impl WorkflowAuthorizationPort,
+    actor_id: &str,
+    facts: &mut ObjectFactMap,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let mut keys = facts
+        .keys()
+        .filter(|(kind, _)| *kind == ObjectKind::SupplierPortalRequest)
+        .cloned()
+        .collect::<Vec<_>>();
+    keys.sort_by(|left, right| left.1.cmp(&right.1));
+    for (kind, id) in keys {
+        match require_supplier_portal_task_read(auth, actor_id, kind, &id, executor).await {
+            Ok(()) => {},
+            Err(Error::Forbidden(_) | Error::NotFound(_)) => {
+                facts.remove(&(kind, id));
+            },
+            Err(error) => return Err(error),
+        }
+    }
     Ok(())
 }
 
@@ -143,5 +233,12 @@ mod tests {
         assert!(
             auth.readable_order_sources(&actor, &BTreeSet::from([source]), &mut NoTransaction).await.is_err()
         );
+    }
+
+    #[tokio::test]
+    async fn missing_composition_cannot_authorize_supplier_portal_request_scope() {
+        let auth = FailClosedWorkflowAuthorizationPort;
+        let actor = AuditActor::new("reviewer".into(), "account".into(), AccountKind::Admin);
+        assert!(auth.supplier_portal_request_readable(&actor, "request", &mut NoTransaction).await.is_err());
     }
 }

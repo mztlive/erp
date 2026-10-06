@@ -176,10 +176,16 @@ fn purchase_order_submission_indexes() -> Vec<IndexModel> {
 
 /// 返回 `purchase_order_submission_line` 的行号唯一约束。
 fn purchase_order_submission_line_indexes() -> Vec<IndexModel> {
-    vec![unique_index(
-        "uk_purchase_order_submission_lines_order_line",
-        doc! { "purchase_order_submission_id": 1, "line_no": 1 },
-    )]
+    vec![
+        named_index(
+            "idx_purchase_submission_offering_source",
+            doc! { "supplier_offering_source.supplier_offering_id": 1, "deleted_at": 1, "purchase_order_submission_id": 1 },
+        ),
+        unique_index(
+            "uk_purchase_order_submission_lines_order_line",
+            doc! { "purchase_order_submission_id": 1, "line_no": 1 },
+        ),
+    ]
 }
 
 /// 返回 `purchase_order_revision` 的版本号唯一约束。
@@ -192,10 +198,16 @@ fn purchase_order_revision_indexes() -> Vec<IndexModel> {
 
 /// 返回 `purchase_order_revision_line` 的版本内行号唯一约束（§6.6）。
 fn purchase_order_revision_line_indexes() -> Vec<IndexModel> {
-    vec![unique_index(
-        "uk_purchase_order_revision_lines_revision_line",
-        doc! { "purchase_order_revision_id": 1, "line_no": 1 },
-    )]
+    vec![
+        named_index(
+            "idx_purchase_revision_offering_source",
+            doc! { "supplier_offering_source.supplier_offering_id": 1, "deleted_at": 1, "purchase_order_revision_id": 1 },
+        ),
+        unique_index(
+            "uk_purchase_order_revision_lines_revision_line",
+            doc! { "purchase_order_revision_id": 1, "line_no": 1 },
+        ),
+    ]
 }
 
 /// 返回 `purchase_line_sales_allocation` 的分配唯一约束与双向查询索引（§6.6）。

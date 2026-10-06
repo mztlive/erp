@@ -17,4 +17,6 @@ pub use coverage::load_procurement_coverage_facts;
 pub use coverage_service::load_sales_procurement_coverage;
 pub use creation_basis::load_creation_basis_facts;
 pub use list_facts::{PurchaseOrderListFacts, load_purchase_order_list_page};
-pub use mapping::{sales_order_basis_fact, stock_balance_fact};
+pub use mapping::{
+    availability_fact, offering_fact, offering_revision_fact, sales_order_basis_fact, stock_balance_fact,
+};

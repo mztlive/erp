@@ -9,6 +9,7 @@
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub(crate) async fn ensure_indexes(db: &mongodb::Database) -> persistence_core::Result<()> {
     erp_identity::indexes::ensure_accounts_and_roles(db).await?;
+    erp_identity::indexes::ensure_portal_indexes(db).await?;
     erp_audit::indexes::ensure(db).await?;
     erp_identity::indexes::ensure_authorization(db).await?;
     erp_workflow::indexes::ensure_approval_integration(db).await?;

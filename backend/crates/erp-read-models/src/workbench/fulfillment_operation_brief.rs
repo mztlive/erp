@@ -5,16 +5,58 @@
 use std::collections::{HashMap, HashSet};
 
 use erp_core::money::Amount;
+use erp_workflow::WorkflowAuthorizationPort;
 use persistence_core::Executor;
 
 #[cfg(test)]
 use super::authority::fulfillment::fulfillment_source_label;
 use super::brief::{ObjectBriefSource, non_empty, push_document_section, push_section};
+use super::dto::WorkItemFields;
 use super::presentation::format_yuan;
+use super::supply_warnings::{apply_supply_warning_briefs, current_fulfillment_keys, current_purchase_ids};
 use super::{ObjectKind, WorkbenchObjectFact, WorkbenchObjectFactMap, WorkbenchReadService, object_ids};
 use crate::errors::Result;
+use crate::supplier_portal::PurchaseSupplyWarningReader;
 
 type SourceBriefs = HashMap<(ObjectKind, String), ObjectBriefSource>;
+impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
+    /// 在当前页任务授权完成后批量补充当前供给影响提示。
+    ///
+    /// # 参数
+    /// * `fields` - 已授权任务字段；只处理开放且仍指向实际履约草稿当前版本的任务
+    /// * `executor` - 与任务授权共用的仓储执行器
+    ///
+    /// # 返回
+    /// 只追加供给提示简报段；历史任务、无实际采购关联及可供正常时保持原内容。
+    ///
+    /// # 错误
+    /// 实际履约对象、采购选源或供给事实读取失败时返回错误。
+    pub(super) async fn apply_fulfillment_supply_warnings(
+        &self,
+        fields: &mut [WorkItemFields],
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let keys = current_fulfillment_keys(fields);
+        if keys.is_empty() {
+            return Ok(());
+        }
+        let mut sources = self.current_fulfillment_supply_sources(&keys, executor).await?;
+        if sources.is_empty() {
+            return Ok(());
+        }
+        self.validate_fulfillment_supply_sources(fields, &mut sources, executor).await?;
+        let ids = current_purchase_ids(fields, &sources);
+        if ids.is_empty() {
+            return Ok(());
+        }
+        let warnings =
+            PurchaseSupplyWarningReader::new(self.db.clone()).for_purchases(&ids, executor).await?;
+        let owner_names = self.supply_warning_owner_names(&warnings, executor).await?;
+        apply_supply_warning_briefs(fields, &sources, &warnings, &owner_names);
+        Ok(())
+    }
+}
+
 impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     /// 装载履约权威事实，并批量补充来源单据当前生效金额。
     ///

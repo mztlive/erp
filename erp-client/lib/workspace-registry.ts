@@ -511,6 +511,17 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                     label: "供应商供给",
                     icon: PackageSearchIcon,
                 },
+                {
+                    routeId: "W21",
+                    href: "/procurement/supplier-portal",
+                    label: "供应商门户管理",
+                    icon: UsersIcon,
+                    requiredPermissions: [
+                        "supplier_portal_request:list",
+                        "supplier_portal_account:list",
+                        "supplier_portal_catalog:list",
+                    ],
+                },
             ],
         },
         {

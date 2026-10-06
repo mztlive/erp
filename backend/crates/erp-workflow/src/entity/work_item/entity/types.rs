@@ -37,6 +37,8 @@ pub enum WorkItemType {
     FinanceCorrectionReview,
     /// 供应商结算复核。
     SupplierSettlementReview,
+    /// 供应商门户申请的单人采购确认。
+    SupplierPortalReview,
     /// 导入业务确认。
     ImportBusinessConfirmation,
     /// 集成结果未知。
@@ -99,6 +101,8 @@ pub enum WorkItemBriefObjectKind {
     SupplierFulfillmentOrder,
     /// 供应商供给。
     SupplierOffering,
+    /// 供应商门户申请。
+    SupplierPortalRequest,
 }
 
 /// 工作项类型、业务对象类型与简报读取权限的固定关系。
@@ -128,6 +132,12 @@ pub enum WorkItemAssignmentSeparationPolicy {
 }
 
 const WORK_ITEM_BRIEF_RELATIONS: &[WorkItemBriefRelation] = &[
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::SupplierPortalReview,
+        object_kind: WorkItemBriefObjectKind::SupplierPortalRequest,
+        business_object_type: "supplier_portal_request",
+        read_permission: "supplier_portal_request:detail",
+    },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::ProcurementOrderCreation,
         object_kind: WorkItemBriefObjectKind::SalesOrder,
@@ -326,6 +336,7 @@ impl WorkItemType {
             Self::InventoryAdjustmentReview => "库存调整复核",
             Self::FinanceCorrectionReview => "财务纠错复核",
             Self::SupplierSettlementReview => "供应商结算复核",
+            Self::SupplierPortalReview => "供应商申请确认",
             Self::ImportBusinessConfirmation => "导入业务确认",
             Self::IntegrationResultUnknown => "集成结果未知",
             Self::BusinessException => "业务异常",
@@ -354,6 +365,7 @@ impl WorkItemType {
             Self::InventoryAdjustmentReview => "INVENTORY_ADJUSTMENT_REVIEW",
             Self::FinanceCorrectionReview => "FINANCE_CORRECTION_REVIEW",
             Self::SupplierSettlementReview => "SUPPLIER_SETTLEMENT_REVIEW",
+            Self::SupplierPortalReview => "SUPPLIER_PORTAL_REVIEW",
             Self::ImportBusinessConfirmation => "IMPORT_BUSINESS_CONFIRMATION",
             Self::IntegrationResultUnknown => "INTEGRATION_RESULT_UNKNOWN",
             Self::BusinessException => "BUSINESS_EXCEPTION",
@@ -389,7 +401,9 @@ impl WorkItemType {
     pub fn assignment_separation_policy(self) -> WorkItemAssignmentSeparationPolicy {
         match self {
             Self::DocumentApproval => WorkItemAssignmentSeparationPolicy::ApprovalHistory,
-            Self::ProcurementOrderCreation => WorkItemAssignmentSeparationPolicy::RoleAndParticipation,
+            Self::ProcurementOrderCreation | Self::SupplierPortalReview => {
+                WorkItemAssignmentSeparationPolicy::RoleAndParticipation
+            },
             Self::FulfillmentOperation | Self::CustomerAcceptanceRegistration => {
                 WorkItemAssignmentSeparationPolicy::RoleAndParticipation
             },

@@ -10,7 +10,7 @@ use crate::core::routes::{
     demo_master_data, document_registry, file_asset, financial_files, fulfillment, integration_ops,
     inventory, legacy_import, party, payable, purchase_order, receivable, returns, sales_order, sales_review,
     sales_selection, source_registry, supplier, supplier_api, supplier_fulfillment, supplier_offering,
-    supplier_settlement, warehouse, work_item,
+    supplier_portal, supplier_settlement, warehouse, work_item,
 };
 
 /// 管理后台路由入口。
@@ -52,6 +52,7 @@ pub fn routes(state: AppState) -> Router<AppState> {
         .merge(supplier::routes(&rbac_service))
         .merge(supplier_api::routes(&rbac_service))
         .merge(supplier_offering::routes(&rbac_service))
+        .merge(supplier_portal::admin_routes(&rbac_service))
         .merge(supplier_fulfillment::routes(&rbac_service))
         .merge(supplier_settlement::routes(&rbac_service))
         .merge(warehouse::routes(&rbac_service))

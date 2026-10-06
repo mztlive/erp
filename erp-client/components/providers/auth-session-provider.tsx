@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { useQueryClient } from "@tanstack/react-query"
+import { useQueryClient, type QueryClient } from "@tanstack/react-query"
 
 import { clearToken, isAuthenticated, onUnauthorized } from "@/lib/api/session"
 
@@ -23,7 +23,9 @@ export function AuthSessionProvider({
 
     React.useEffect(() => {
         return onUnauthorized(() => {
-            queryClient.clear()
+            queryClient.removeQueries({
+                predicate: (query) => query.queryKey[0] !== "supplier-portal",
+            })
             // 登录页本身 401 不应死循环（login 一般不带 token；防御）
             if (pathname === "/login" || pathname.startsWith("/login/")) {
                 return
@@ -127,9 +129,11 @@ export function RedirectIfAuthenticated({
 /** 登出并跳转登录（侧栏等调用）。可选清空 TanStack Query 缓存。 */
 export function logoutAndRedirect(
     router: { replace: (href: string) => void },
-    queryClient?: { clear: () => void },
+    queryClient?: Pick<QueryClient, "removeQueries">,
 ): void {
     clearToken()
-    queryClient?.clear()
+    queryClient?.removeQueries({
+        predicate: (query) => query.queryKey[0] !== "supplier-portal",
+    })
     router.replace("/login")
 }

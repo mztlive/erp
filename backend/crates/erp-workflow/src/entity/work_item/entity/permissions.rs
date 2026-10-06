@@ -113,11 +113,12 @@ impl WorkItemType {
     /// 判断转派候选人校验是否必须携带完整工作面执行权限快照。
     ///
     /// # 返回
-    /// W01、W06、W11、W12、W13 受控执行任务返回 `true`。
+    /// 履约、财务和供应商申请等受控执行任务返回 `true`。
     pub fn requires_full_execution_permissions(self) -> bool {
         matches!(
             self,
             Self::FulfillmentOperation
+                | Self::SupplierPortalReview
                 | Self::CustomerAcceptanceRegistration
                 | Self::SupplierPaymentExecution
                 | Self::SalesInvoiceExecution
@@ -248,6 +249,9 @@ impl WorkItemType {
             self.supplier_payment_execution_permissions(business_object_type)
         } else if self.is_sales_invoice_execution() {
             self.sales_invoice_execution_permissions(business_object_type)
+        } else if self == Self::SupplierPortalReview {
+            (business_object_type == "supplier_portal_request")
+                .then_some(&["supplier_portal_request:detail", "supplier_portal_request:review"] as &[&str])
         } else if matches!(self, Self::CardFundsReview | Self::CardFundsDeltaReview) {
             None
         } else {
@@ -258,11 +262,12 @@ impl WorkItemType {
     /// 判断任务是否以系统解析出的具体个人责任作为参与依据。
     ///
     /// # 返回
-    /// 冻结单人审批、导入确认、供给分配、履约操作、付款与开票执行返回 `true`；这些任务不依赖团队池或创建人回退。
+    /// 冻结单人审批、供应商申请确认、导入确认、供给分配、履约操作、付款与开票执行返回 `true`。
     pub fn uses_explicit_owner_authorization(self) -> bool {
         matches!(
             self,
             Self::DocumentApproval
+                | Self::SupplierPortalReview
                 | Self::ImportBusinessConfirmation
                 | Self::ProcurementOrderCreation
                 | Self::FulfillmentOperation

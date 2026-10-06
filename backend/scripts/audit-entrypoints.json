@@ -5989,6 +5989,108 @@
       },
       "location_count": 1,
       "reason": "工作流原命令事务结束后通过 audit.persist_attempt 保存独立尝试；只分类 Failed/Rejected/Unknown，尝试失败仅固定 warn，不覆盖原 Error，不自动重放正式业务。"
+    },
+    {
+      "path": "crates/erp-processes/src/supplier_portal/command.rs",
+      "function": "command_commit",
+      "policy": "Audited",
+      "stage": "Command",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "门户命令通过当前真实操作人构造审计并沿同一 Executor 持久化；业务事实与原操作号成功回执同事务提交，不依赖审计恢复业务身份或执行幂等。"
+    },
+    {
+      "path": "crates/erp-processes/src/supplier_portal/command.rs",
+      "function": "availability_log",
+      "policy": "Audited",
+      "stage": "MetadataFactory",
+      "boundaries": [
+        "BusinessEventContext::new"
+      ],
+      "call_counts": {
+        "BusinessEventContext::new": 1
+      },
+      "location_count": 1,
+      "reason": "门户可供事件工厂按登记字段构造数量、空值状态及可供状态前后值；正式持久化由原命令的同一 Executor 执行。"
+    },
+    {
+      "path": "crates/erp-processes/src/supplier_portal/accounts.rs",
+      "function": "password_update",
+      "policy": "Audited",
+      "stage": "Command",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "门户命令通过当前真实操作人构造审计并沿同一 Executor 持久化；业务事实与原操作号成功回执同事务提交，不依赖审计恢复业务身份或执行幂等。"
+    },
+    {
+      "path": "apps/web-api/src/core/handler/supplier_portal/auth.rs",
+      "function": "login",
+      "policy": "Audited",
+      "stage": "SpecialLifecycle",
+      "boundaries": [
+        "record_login_audit"
+      ],
+      "call_counts": {
+        "record_login_audit": 2
+      },
+      "location_count": 1,
+      "reason": "门户登录按真实 Supplier 身份独立留痕；仅记录账号、结果和固定渠道说明，不记录密码。审计失败只输出固定警告，不改变认证结果。"
+    },
+    {
+      "path": "apps/web-api/src/core/handler/supplier_portal/auth.rs",
+      "function": "record_login_audit",
+      "policy": "Audited",
+      "stage": "SpecialLifecycle",
+      "boundaries": [
+        "AuditLogService::new"
+      ],
+      "call_counts": {
+        "AuditLogService::new": 1
+      },
+      "location_count": 1,
+      "reason": "门户登录按真实 Supplier 身份独立留痕；仅记录账号、结果和固定渠道说明，不记录密码。审计失败只输出固定警告，不改变认证结果。"
+    },
+    {
+      "path": "crates/erp-processes/src/supplier_portal/command_recovery.rs",
+      "function": "commit_rejection",
+      "policy": "Audited",
+      "stage": "Command",
+      "boundaries": [
+        "persist_log"
+      ],
+      "call_counts": {
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "原门户命令恢复在同一 Executor 重验只读业务前提，拒绝事实与同操作身份终态回执原子提交；不执行正式业务写入，唯一回执争用封存迟到原命令，提交结果未知时保留原命令恢复。"
+    },
+    {
+      "path": "crates/erp-processes/src/supplier_portal/command_recovery.rs",
+      "function": "rejection_log",
+      "policy": "Audited",
+      "stage": "MetadataFactory",
+      "boundaries": [
+        "BusinessEventContext::new"
+      ],
+      "call_counts": {
+        "BusinessEventContext::new": 1
+      },
+      "location_count": 1,
+      "reason": "原门户命令拒绝终态工厂以真实供应商操作人、原命令身份和固定拒绝事件构造审计元数据，不构造成功业务事实；持久化由拒绝终态事务的同一 Executor 执行。"
     }
   ]
 }

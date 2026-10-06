@@ -6,7 +6,9 @@ use erp_procurement::dto::purchase_order::{
     CancelPurchaseChangeApprovalRequest, PurchaseChangeSubmitResult, SavePurchaseOrderLine,
     StartPurchaseChangeRequest, StartPurchaseChangeResult, SubmitPurchaseChangeRequest,
 };
-use erp_procurement::entity::purchase_order::{PurchaseChangeOrder, PurchaseChangeSubmission, PurchaseOrder};
+use erp_procurement::entity::purchase_order::{
+    PurchaseChangeOrder, PurchaseChangeSubmission, PurchaseOrder, inherit_revision_sources,
+};
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_procurement::service::purchase_order::change::lock_draft_change;
 use erp_procurement::service::purchase_order::change::mapping::content_fingerprint;
@@ -310,7 +312,13 @@ impl PurchaseOrderProcess {
             .await?;
         let enriched_lines =
             self.enrich_change_lines_with_current_sales_revision(order, &normalized_request.lines).await?;
-        let inputs = SavePurchaseOrderLine::to_line_inputs(&enriched_lines)?;
+        let mut inputs = SavePurchaseOrderLine::to_line_inputs(&enriched_lines)?;
+        let source_lines = self
+            .db
+            .purchase_order()
+            .list_revision_lines(&change.base_revision_id, &mut NoTransaction)
+            .await?;
+        inherit_revision_sources(&mut inputs, &source_lines)?;
         let lines = build_change_submission_lines(&submission.base.id.clone(), &inputs)?;
         let mut submission_mut = submission.clone();
         submission_mut.submit(Instant::now(), actor.id())?;

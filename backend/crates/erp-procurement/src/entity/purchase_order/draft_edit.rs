@@ -266,6 +266,7 @@ mod tests {
                 procurement_confirmation_line_id: Some(ProcurementConfirmationLineId::new("pcl-1")),
                 sku_id: Some(SkuId::new(sku_id)),
                 sku_revision_id: Some(SkuRevisionId::new(format!("skur-{sku_id}"))),
+                supplier_offering_source: None,
                 product_name_snapshot: Some("商品".to_string()),
                 specification_snapshot: Some("规格".to_string()),
                 quantity: Some(quantity),

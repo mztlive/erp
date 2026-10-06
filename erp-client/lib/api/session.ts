@@ -5,39 +5,53 @@
  */
 
 /** localStorage 中保存 token 的键名。 */
-const TOKEN_STORAGE_KEY = "erp.token"
+export type ApiSession = "admin" | "supplier-portal" | "none"
+
+const TOKEN_STORAGE_KEYS = {
+    admin: "erp.token",
+    "supplier-portal": "erp.supplier-portal.token",
+} as const
 
 /** 已注册的 401 处理器集合（client.ts 检测到未授权时逐个通知）。 */
-const unauthorizedHandlers = new Set<() => void>()
+const unauthorizedHandlers = {
+    admin: new Set<() => void>(),
+    "supplier-portal": new Set<() => void>(),
+}
 
 /**
  * 读取当前登录 token。
  *
  * @returns 未登录时返回 null。
  */
-export const getToken = (): string | null =>
-    localStorage.getItem(TOKEN_STORAGE_KEY)
+export const getToken = (session: ApiSession = "admin"): string | null =>
+    session === "none"
+        ? null
+        : localStorage.getItem(TOKEN_STORAGE_KEYS[session])
 
 /**
  * 保存登录 token。
  *
  * @param token 服务端下发的 JWT 字符串。
  */
-export const setToken = (token: string): void => {
-    localStorage.setItem(TOKEN_STORAGE_KEY, token)
+export const setToken = (
+    token: string,
+    session: Exclude<ApiSession, "none"> = "admin",
+): void => {
+    localStorage.setItem(TOKEN_STORAGE_KEYS[session], token)
 }
 
 /**
  * 清除登录 token（登出或 401 失效时调用）。
  */
-export const clearToken = (): void => {
-    localStorage.removeItem(TOKEN_STORAGE_KEY)
+export const clearToken = (session: ApiSession = "admin"): void => {
+    if (session !== "none") localStorage.removeItem(TOKEN_STORAGE_KEYS[session])
 }
 
 /**
  * 当前是否处于已登录状态（存在 token 即视为已登录）。
  */
-export const isAuthenticated = (): boolean => Boolean(getToken())
+export const isAuthenticated = (session: ApiSession = "admin"): boolean =>
+    Boolean(getToken(session))
 
 /**
  * 注册 401 未授权回调（如跳转登录页）。
@@ -45,10 +59,13 @@ export const isAuthenticated = (): boolean => Boolean(getToken())
  * @param handler 401 触发时执行的回调。
  * @returns 取消注册函数，调用后该回调不再被触发。
  */
-export const onUnauthorized = (handler: () => void): (() => void) => {
-    unauthorizedHandlers.add(handler)
+export const onUnauthorized = (
+    handler: () => void,
+    session: Exclude<ApiSession, "none"> = "admin",
+): (() => void) => {
+    unauthorizedHandlers[session].add(handler)
     return () => {
-        unauthorizedHandlers.delete(handler)
+        unauthorizedHandlers[session].delete(handler)
     }
 }
 
@@ -57,9 +74,14 @@ export const onUnauthorized = (handler: () => void): (() => void) => {
  *
  * 会先清除本地 token，再逐个执行回调（跳转登录页、清空 Query 缓存等）。
  */
-export const notifyUnauthorized = (): void => {
-    clearToken()
-    for (const handler of unauthorizedHandlers) {
+export const notifyUnauthorized = (
+    session: ApiSession = "admin",
+    requestToken?: string | null,
+): void => {
+    if (session === "none") return
+    if (requestToken !== undefined && requestToken !== getToken(session)) return
+    clearToken(session)
+    for (const handler of unauthorizedHandlers[session]) {
         handler()
     }
 }

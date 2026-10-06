@@ -344,76 +344,7 @@ pub(super) fn handler_route(
     business_object_type: &str,
     owner_role: &str,
 ) -> Result<HandlerRoute> {
-    let (handler_key, destination_workspace_id) = match (work_item_type, business_object_type) {
-        (
-            WorkItemType::IntegrationResultUnknown | WorkItemType::BusinessException,
-            "SUPPLIER_FULFILLMENT_ORDER",
-        ) => ("supplier_fulfillment_investigation", "W26"),
-        (WorkItemType::BusinessException, "SUPPLIER_OFFERING") => ("supplier_supply_exception", "W21"),
-        (WorkItemType::IntegrationResultUnknown, "integration_error_task") => ("integration_unknown", "W29"),
-        (WorkItemType::BusinessException, "integration_error_task" | "reconciliation_difference") => {
-            ("business_exception", "W29")
-        },
-        (WorkItemType::IntegrationResultUnknown, "reconciliation_difference") => {
-            ("integration_unknown", "W29")
-        },
-        (WorkItemType::ProcurementOrderCreation, "sales_order") => ("procurement_order_creation", "W08"),
-        (WorkItemType::ProcurementOrderCreation, _) => {
-            return Err(Error::ValidationError("供给分配任务业务对象未注册".to_string()));
-        },
-        (
-            WorkItemType::FulfillmentOperation,
-            "purchase_receipt" | "delivery" | "electronic_delivery" | "service_fulfillment",
-        ) => ("fulfillment_operation", "W01"),
-        (WorkItemType::FulfillmentOperation, _) => {
-            return Err(Error::ValidationError("履约任务业务对象未注册".to_string()));
-        },
-        (WorkItemType::CustomerAcceptanceRegistration, "sales_order") => {
-            ("customer_acceptance_registration", "W06")
-        },
-        (WorkItemType::CustomerAcceptanceRegistration, _) => {
-            return Err(Error::ValidationError("客户验收任务业务对象未注册".to_string()));
-        },
-        (WorkItemType::SupplierPaymentExecution, "payable_account") => ("supplier_payment_execution", "W12"),
-        (WorkItemType::SupplierPaymentExecution, _) => {
-            return Err(Error::ValidationError("付款执行任务业务对象未注册".to_string()));
-        },
-        (WorkItemType::SalesInvoiceExecution, "receivable_account") => ("sales_invoice_execution", "W11"),
-        (WorkItemType::SalesInvoiceExecution, _) => {
-            return Err(Error::ValidationError("销项开票执行任务业务对象未注册".to_string()));
-        },
-        (WorkItemType::SupplierSettlementReview, "supplier_settlement_statement") => {
-            ("supplier_settlement", "W27")
-        },
-        (WorkItemType::ImportBusinessConfirmation, "LEGACY_IMPORT_BATCH") => {
-            ("import_business_confirmation", "W18")
-        },
-        (
-            WorkItemType::PurchaseOrderReview
-            | WorkItemType::SalesChangeImpactReview
-            | WorkItemType::SalesChangeFinanceReview
-            | WorkItemType::OwnershipMigrationSalesConfirmation
-            | WorkItemType::OwnershipMigrationFinanceConfirmation
-            | WorkItemType::InventoryAdjustmentReview
-            | WorkItemType::FinanceCorrectionReview,
-            _,
-        ) => {
-            return Err(Error::ValidationError("WORK_ITEM_TYPE_RETIRED".to_string()));
-        },
-        (
-            WorkItemType::CardFundsReview
-            | WorkItemType::CardFundsDeltaReview
-            | WorkItemType::SupplierSettlementReview
-            | WorkItemType::ImportBusinessConfirmation,
-            _,
-        ) => {
-            return Err(Error::ValidationError("WORK_ITEM_HANDLER_UNMAPPED".to_string()));
-        },
-        (WorkItemType::IntegrationResultUnknown | WorkItemType::BusinessException, _) => {
-            return Err(Error::ValidationError("WORK_ITEM_HANDLER_UNMAPPED".to_string()));
-        },
-        (WorkItemType::DocumentApproval, object_type) => document_approval_route(object_type)?,
-    };
+    let (handler_key, destination_workspace_id) = handler_destination(work_item_type, business_object_type)?;
     let mut route_context = if work_item_type == WorkItemType::ImportBusinessConfirmation {
         let scope = w18_confirmation_scope(owner_role)
             .ok_or_else(|| Error::ValidationError("IMPORT_CONFIRMATION_SCOPE_UNMAPPED".to_string()))?;
@@ -428,6 +359,122 @@ pub(super) fn handler_route(
         });
     }
     Ok(HandlerRoute { handler_key, destination_workspace_id, route_context })
+}
+
+/// 固定任务处理面的允许对象、处理器、工作面与越界错误。
+type FixedRoute = (WorkItemType, &'static [&'static str], &'static str, &'static str, &'static str);
+
+const FIXED_TASK_ROUTES: &[FixedRoute] = &[
+    (
+        WorkItemType::SupplierPortalReview,
+        &["supplier_portal_request"],
+        "supplier_portal_review",
+        "W21",
+        "供应商申请任务业务对象未注册",
+    ),
+    (
+        WorkItemType::ProcurementOrderCreation,
+        &["sales_order"],
+        "procurement_order_creation",
+        "W08",
+        "供给分配任务业务对象未注册",
+    ),
+    (
+        WorkItemType::FulfillmentOperation,
+        &["purchase_receipt", "delivery", "electronic_delivery", "service_fulfillment"],
+        "fulfillment_operation",
+        "W01",
+        "履约任务业务对象未注册",
+    ),
+    (
+        WorkItemType::CustomerAcceptanceRegistration,
+        &["sales_order"],
+        "customer_acceptance_registration",
+        "W06",
+        "客户验收任务业务对象未注册",
+    ),
+    (
+        WorkItemType::SupplierPaymentExecution,
+        &["payable_account"],
+        "supplier_payment_execution",
+        "W12",
+        "付款执行任务业务对象未注册",
+    ),
+    (
+        WorkItemType::SalesInvoiceExecution,
+        &["receivable_account"],
+        "sales_invoice_execution",
+        "W11",
+        "销项开票执行任务业务对象未注册",
+    ),
+    (
+        WorkItemType::SupplierSettlementReview,
+        &["supplier_settlement_statement"],
+        "supplier_settlement",
+        "W27",
+        "WORK_ITEM_HANDLER_UNMAPPED",
+    ),
+    (
+        WorkItemType::ImportBusinessConfirmation,
+        &["LEGACY_IMPORT_BATCH"],
+        "import_business_confirmation",
+        "W18",
+        "WORK_ITEM_HANDLER_UNMAPPED",
+    ),
+];
+
+/// 按任务类型选择固定处理面，未知业务对象维持原拒绝原因。
+fn handler_destination(kind: WorkItemType, object: &str) -> Result<(&'static str, &'static str)> {
+    if let Some((_, expected, handler, workspace, error)) = FIXED_TASK_ROUTES.iter().find(|row| row.0 == kind)
+    {
+        return fixed_destination(object, expected, handler, workspace, error);
+    }
+    match kind {
+        WorkItemType::IntegrationResultUnknown | WorkItemType::BusinessException => {
+            exception_destination(kind, object)
+        },
+        WorkItemType::DocumentApproval => document_approval_route(object),
+        WorkItemType::PurchaseOrderReview
+        | WorkItemType::SalesChangeImpactReview
+        | WorkItemType::SalesChangeFinanceReview
+        | WorkItemType::OwnershipMigrationSalesConfirmation
+        | WorkItemType::OwnershipMigrationFinanceConfirmation
+        | WorkItemType::InventoryAdjustmentReview
+        | WorkItemType::FinanceCorrectionReview => {
+            Err(Error::ValidationError("WORK_ITEM_TYPE_RETIRED".into()))
+        },
+        _ => Err(Error::ValidationError("WORK_ITEM_HANDLER_UNMAPPED".into())),
+    }
+}
+
+/// 固定业务对象合同只接受明确登记的类型，不推断处理面。
+fn fixed_destination(
+    object: &str,
+    expected: &[&str],
+    handler: &'static str,
+    workspace: &'static str,
+    error: &'static str,
+) -> Result<(&'static str, &'static str)> {
+    if expected.contains(&object) {
+        Ok((handler, workspace))
+    } else {
+        Err(Error::ValidationError(error.into()))
+    }
+}
+
+/// 集成异常沿来源类型选择调查处理面。
+fn exception_destination(kind: WorkItemType, object: &str) -> Result<(&'static str, &'static str)> {
+    match (kind, object) {
+        (_, "SUPPLIER_FULFILLMENT_ORDER") => Ok(("supplier_fulfillment_investigation", "W26")),
+        (WorkItemType::BusinessException, "SUPPLIER_OFFERING") => Ok(("supplier_supply_exception", "W21")),
+        (WorkItemType::IntegrationResultUnknown, "integration_error_task" | "reconciliation_difference") => {
+            Ok(("integration_unknown", "W29"))
+        },
+        (WorkItemType::BusinessException, "integration_error_task" | "reconciliation_difference") => {
+            Ok(("business_exception", "W29"))
+        },
+        _ => Err(Error::ValidationError("WORK_ITEM_HANDLER_UNMAPPED".into())),
+    }
 }
 
 fn w18_confirmation_scope(owner_role: &str) -> Option<&'static str> {
@@ -478,6 +525,7 @@ pub(super) fn role_label(role: &str) -> String {
         "sales_order_owner" => "负责销售",
         "role-sales-leader" | "sales_leader" => "销售领导",
         "role-procurement" | "procurement" => "采购",
+        "supplier_portal_reviewer" => "采购确认人",
         "role-operations" | "operations" => "运营",
         "role-finance" | "finance" => "财务",
         "role-management" | "management" => "管理层",

@@ -10,6 +10,7 @@ pub mod order_access;
 mod query_support;
 mod reassign;
 mod reassign_apply;
+mod supplier_portal;
 mod write;
 
 use std::sync::Arc;

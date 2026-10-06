@@ -565,6 +565,7 @@ mod tests {
             procurement_confirmation_line_id: Some(ProcurementConfirmationLineId::new("pcl-1")),
             sku_id: Some(SkuId::new("sku-1")),
             sku_revision_id: Some(erp_core::ids::SkuRevisionId::new("skur-1")),
+            supplier_offering_source: None,
             product_name_snapshot: Some(" 慰问礼包 ".to_string()),
             specification_snapshot: Some(" 500g×2 ".to_string()),
             quantity: Some(Quantity::from_str("3.000000").unwrap()),

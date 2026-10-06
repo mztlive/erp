@@ -89,6 +89,9 @@ pub(crate) fn next_action_hint(work_item_type: WorkItemType) -> String {
         WorkItemType::InventoryAdjustmentReview => "进入库存页后，核对本次调整并提交复核结论。",
         WorkItemType::FinanceCorrectionReview => "进入对应页面后，核对财务纠错并提交复核结论。",
         WorkItemType::SupplierSettlementReview => "进入结算页后，核对供应商结算并提交复核结论。",
+        WorkItemType::SupplierPortalReview => {
+            "核对供应商原稿、当前正式内容与变更差异后，确认通过或填写退回原因。"
+        },
         WorkItemType::IntegrationResultUnknown => "进入接口错误中心后，确认本次集成结果。",
         WorkItemType::BusinessException => "进入对应页面后，处理本次业务异常。",
         WorkItemType::DocumentApproval => "核对本页事实后，确认通过或驳回。",
@@ -166,6 +169,7 @@ fn mapped_reason_label(code: &str) -> Option<&'static str> {
         "change_impact_dispatched" => "销售变更已提交，需要核对履约影响",
         "change_finance_dispatched" => "销售变更已提交，需要核对财务影响",
         "supplier_settlement_review_dispatched" => "供应商结算单待复核",
+        "supplier_portal_review_required" => "供应商已提交申请，需要采购确认本次报价、商品资料或合作条款",
         "import_trial_confirmation" => "导入试算已完成，需要业务确认范围",
         "supplier_stopped" => "供应已停止，商城在售发布已暂停",
         "purchase_order_review_dispatched" => "采购已提交，需要核对成本、进项税和付款条件",
@@ -200,6 +204,7 @@ fn default_reason_label(work_item_type: WorkItemType) -> &'static str {
         WorkItemType::InventoryAdjustmentReview => "库存调整待复核",
         WorkItemType::FinanceCorrectionReview => "财务纠错待复核",
         WorkItemType::SupplierSettlementReview => "供应商结算待复核",
+        WorkItemType::SupplierPortalReview => "供应商申请待采购确认",
         WorkItemType::ImportBusinessConfirmation => "导入试算待业务确认",
         WorkItemType::IntegrationResultUnknown => "集成结果待确认",
         WorkItemType::BusinessException => "业务异常待处理",
@@ -224,6 +229,7 @@ fn default_impact_summary(work_item_type: WorkItemType) -> &'static str {
         WorkItemType::InventoryAdjustmentReview => "不复核则库存调整不能入账",
         WorkItemType::FinanceCorrectionReview => "不复核则财务纠错不能入账",
         WorkItemType::SupplierSettlementReview => "不复核则供应商结算不能确认",
+        WorkItemType::SupplierPortalReview => "确认前申请内容不进入正式业务，新建商品规格保持未上架",
         WorkItemType::ImportBusinessConfirmation => "不确认则导入范围不能落地",
         WorkItemType::IntegrationResultUnknown | WorkItemType::BusinessException => {
             "不处理则异常会继续挡住后续业务"
