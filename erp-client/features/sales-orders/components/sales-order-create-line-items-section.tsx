@@ -78,7 +78,7 @@ export function SalesOrderCreateLineItemsSection({
             <section
                 id="sales-line-items-section"
                 tabIndex={-1}
-                className="min-w-0 space-y-3"
+                className="min-w-0 space-y-3 border-t border-grid p-4 sm:p-5"
                 aria-labelledby="sales-create-lines-title"
             >
                 <form.Subscribe
@@ -191,7 +191,7 @@ export function SalesOrderCreateLineItemsSection({
                     <Collapsible
                         open={remarkOpen || field.state.meta.errors.length > 0}
                         onOpenChange={setRemarkOpen}
-                        className="border-t border-grid pt-3"
+                        className="border-t border-grid px-4 py-3 sm:px-5"
                     >
                         <CollapsibleTrigger
                             id="sales-orders-create-remark-toggle"

@@ -1,7 +1,7 @@
 "use client"
 
 import { useSelector } from "@tanstack/react-form"
-import { FileTextIcon, PaperclipIcon, UploadIcon } from "lucide-react"
+import { UploadIcon } from "lucide-react"
 
 import { toFieldErrors } from "@/components/form"
 import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
@@ -14,7 +14,6 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { cn } from "@/lib/utils"
 
 export type SalesOrderCreateContractSectionProps = {
     form: SalesOrderCreateFormApi
@@ -42,20 +41,21 @@ export function SalesOrderCreateContractSection({
         (state) => state.values.evidenceUploadPending,
     )
     return (
-        <div className="max-w-4xl space-y-4">
+        <div className="space-y-5">
             <form.AppField name="orderBasis">
                 {(field) => (
-                    <Field className="gap-2">
+                    <Field className="gap-2 sm:grid sm:grid-cols-[auto_1fr] sm:gap-x-6">
                         <div
                             id="sales-orders-create-basis-label"
-                            className="text-sm font-medium"
+                            className="flex items-center text-sm font-medium"
                         >
-                            开单依据
+                            开单方式
                             <span className="ml-1 text-destructive">*</span>
                         </div>
                         <RadioGroup
                             id="sales-orders-create-basis"
                             aria-labelledby="sales-orders-create-basis-label"
+                            aria-describedby="sales-orders-create-basis-description"
                             value={field.state.value}
                             disabled={customerLocked || uploading}
                             onValueChange={(value) => {
@@ -67,83 +67,42 @@ export function SalesOrderCreateContractSection({
                                     field.handleBlur()
                                 }
                             }}
-                            className="grid gap-3 sm:grid-cols-2"
+                            className="flex w-fit gap-0"
                         >
                             {[
-                                {
-                                    value: "contract",
-                                    label: "关联合同",
-                                    description:
-                                        "选择已签合同，自动带入客户与付款条件",
-                                    icon: FileTextIcon,
-                                },
-                                {
-                                    value: "evidence",
-                                    label: "凭证开单",
-                                    description:
-                                        "暂未签约，上传凭证先开单，合同后补",
-                                    icon: PaperclipIcon,
-                                },
+                                { value: "contract", label: "关联合同" },
+                                { value: "evidence", label: "凭证开单" },
                             ].map((option) => (
-                                <label
+                                <RadioGroupItem
                                     key={option.value}
-                                    htmlFor={`sales-orders-create-basis-${option.value}`}
-                                    className={cn(
-                                        "flex min-w-0 cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors",
-                                        field.state.value === option.value
-                                            ? "border-foreground bg-background"
-                                            : "border-grid hover:bg-muted/40",
-                                        (customerLocked || uploading) &&
-                                            "cursor-default",
-                                    )}
+                                    id={`sales-orders-create-basis-${option.value}`}
+                                    value={option.value}
+                                    variant="segment"
+                                    nativeButton
+                                    render={
+                                        <button
+                                            type="button"
+                                            aria-label={option.label}
+                                        />
+                                    }
                                 >
-                                    <RadioGroupItem
-                                        id={`sales-orders-create-basis-${option.value}`}
-                                        value={option.value}
-                                        nativeButton
-                                        render={
-                                            <button
-                                                type="button"
-                                                aria-label={option.label}
-                                            />
-                                        }
-                                        className="mt-0.5"
-                                        aria-labelledby={`sales-orders-create-basis-${option.value}-label`}
-                                        aria-describedby={`sales-orders-create-basis-${option.value}-description`}
-                                    />
-                                    <span className="min-w-0 space-y-1">
-                                        <span
-                                            id={`sales-orders-create-basis-${option.value}-label`}
-                                            className="flex items-center gap-2 text-sm font-medium"
-                                        >
-                                            <option.icon
-                                                className="size-4 text-muted-foreground"
-                                                aria-hidden="true"
-                                            />
-                                            {option.label}
-                                        </span>
-                                        <span
-                                            id={`sales-orders-create-basis-${option.value}-description`}
-                                            className="block text-xs leading-relaxed text-muted-foreground"
-                                        >
-                                            {option.description}
-                                        </span>
-                                    </span>
-                                </label>
+                                    {option.label}
+                                </RadioGroupItem>
                             ))}
                         </RadioGroup>
-                        {customerLocked ? (
-                            <p className="text-xs text-muted-foreground">
-                                开单依据沿用原单据；补录合同请到销售单详情操作。
-                            </p>
-                        ) : uploading ? (
-                            <p
-                                role="status"
-                                className="text-xs text-muted-foreground"
-                            >
-                                凭证上传中，请完成后再切换开单依据。
-                            </p>
-                        ) : null}
+                        <p
+                            id="sales-orders-create-basis-description"
+                            className="text-xs text-muted-foreground sm:col-start-2"
+                            aria-live="polite"
+                        >
+                            {customerLocked
+                                ? "开单依据沿用原单据；补录合同请到销售单详情操作。"
+                                : uploading
+                                  ? "凭证上传中，请完成后再切换开单依据。"
+                                  : basis === "contract"
+                                    ? "选择已签合同，自动带入客户与付款条件"
+                                    : "暂未签约，上传凭证先开单，合同后补"}
+                        </p>
                     </Field>
                 )}
             </form.AppField>
@@ -156,40 +115,23 @@ export function SalesOrderCreateContractSection({
                         const errors = toFieldErrors(field.state.meta.errors)
                         return (
                             <Field
-                                className="max-w-4xl gap-2"
+                                className="gap-2"
                                 id="contractId"
                                 tabIndex={-1}
                                 data-invalid={isInvalid || undefined}
                             >
-                                <FieldLabel htmlFor="sales-orders-create-contract">
-                                    有效合同
-                                    <span className="text-destructive">*</span>
-                                </FieldLabel>
-                                <div className="flex flex-wrap items-start gap-2">
-                                    <div className="min-w-0 flex-1 basis-48">
-                                        <ContractSearchCombobox
-                                            id="sales-orders-create-contract"
-                                            value={
-                                                field.state.value || undefined
-                                            }
-                                            onValueChange={(id) => {
-                                                const next = id ?? ""
-                                                field.handleChange(next)
-                                                onContractChange(next)
-                                            }}
-                                            customerId={
-                                                initialCustomerId || undefined
-                                            }
-                                            selectableOnly
-                                            placeholder="搜索合同编号或客户"
-                                            emptyLabel="暂无可用合同，请上传合同或切换为凭证开单"
-                                        />
-                                    </div>
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <FieldLabel htmlFor="sales-orders-create-contract">
+                                        有效合同
+                                        <span className="text-destructive">
+                                            *
+                                        </span>
+                                    </FieldLabel>
                                     <Button
                                         id="sales-orders-create-contract-upload"
                                         type="button"
                                         variant="outline"
-                                        className="shrink-0"
+                                        size="sm"
                                         aria-label="上传合同 PDF"
                                         title="上传合同 PDF"
                                         onClick={() => onUploadClick()}
@@ -198,6 +140,19 @@ export function SalesOrderCreateContractSection({
                                         上传合同
                                     </Button>
                                 </div>
+                                <ContractSearchCombobox
+                                    id="sales-orders-create-contract"
+                                    value={field.state.value || undefined}
+                                    onValueChange={(id) => {
+                                        const next = id ?? ""
+                                        field.handleChange(next)
+                                        onContractChange(next)
+                                    }}
+                                    customerId={initialCustomerId || undefined}
+                                    selectableOnly
+                                    placeholder="搜索合同编号或客户"
+                                    emptyLabel="暂无可用合同，请上传合同或切换为凭证开单"
+                                />
                                 {isInvalid ? (
                                     <FieldError errors={errors} />
                                 ) : null}
@@ -206,7 +161,7 @@ export function SalesOrderCreateContractSection({
                     }}
                 </form.AppField>
             ) : (
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <form.AppField name="customerId">
                         {(field) => {
                             const invalid =
@@ -270,7 +225,7 @@ export function SalesOrderCreateContractSection({
                     (contractRevisionLabel ||
                         customerName ||
                         settlementEntity) ? (
-                        <div className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-1 text-xs [&>span]:min-w-0 [&>span]:break-words">
+                        <div className="flex min-w-0 flex-wrap items-center gap-x-6 gap-y-2 rounded-lg bg-muted/50 px-3 py-3 text-sm [&>span]:min-w-0 [&>span]:break-words">
                             {contractRevisionLabel ? (
                                 <Badge
                                     variant="outline"
@@ -281,7 +236,7 @@ export function SalesOrderCreateContractSection({
                             ) : null}
                             {customerName ? (
                                 <span className="text-muted-foreground">
-                                    客户{" "}
+                                    客户：
                                     <span className="text-foreground">
                                         {customerName}
                                     </span>
@@ -289,7 +244,7 @@ export function SalesOrderCreateContractSection({
                             ) : null}
                             {settlementEntity ? (
                                 <span className="text-muted-foreground">
-                                    结算主体{" "}
+                                    结算主体：
                                     <span className="text-foreground">
                                         {settlementEntity}
                                     </span>

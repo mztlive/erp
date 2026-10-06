@@ -90,7 +90,7 @@ export function SalesOrderCreateTotalBar({
         <>
             {headerIssues.length > 0 ? (
                 <ValidationSummary
-                    className="border-t border-grid pt-4"
+                    className="border-t border-grid p-4 sm:px-5"
                     issues={headerIssues}
                     title={`基本信息共 ${headerIssues.length} 项待处理`}
                 />
@@ -104,7 +104,8 @@ export function SalesOrderCreateTotalBar({
                     )
                     return (
                         <StickyTotalBar
-                            className="mt-auto rounded-none border-0 border-t border-grid px-0 py-3 shadow-none [&>div>div.grid]:block"
+                            layout="inline"
+                            className="mt-auto rounded-b-xl border-grid px-4 py-3 sm:px-5"
                             items={[
                                 {
                                     id: "gross",
@@ -112,11 +113,11 @@ export function SalesOrderCreateTotalBar({
                                     value: (
                                         <MoneyValue
                                             value={totals.gross}
-                                            className="text-xl font-semibold"
+                                            size="summary"
                                         />
                                     ),
                                     description: (
-                                        <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
+                                        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 lg:justify-end">
                                             <span>
                                                 不含税金额{" "}
                                                 <MoneyValue
@@ -136,7 +137,17 @@ export function SalesOrderCreateTotalBar({
                                     ),
                                 },
                             ]}
-                            note="提交后进入审批"
+                            leftActions={
+                                <span className="text-sm text-muted-foreground">
+                                    共{" "}
+                                    {
+                                        values.lineItems.filter((line) =>
+                                            line.sku.trim(),
+                                        ).length
+                                    }{" "}
+                                    项商品
+                                </span>
+                            }
                             actions={
                                 <form.AppForm>
                                     <form.SubmitButton

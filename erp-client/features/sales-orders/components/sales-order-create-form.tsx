@@ -349,6 +349,31 @@ export function SalesOrderCreateForm({
         [form, setDraftSaved],
     )
 
+    const owner = (
+        <>
+            <form.AppField name="ownerUserId">{() => null}</form.AppField>
+            <form.AppField name="ownerName">
+                {(field) => (
+                    <div
+                        id="sales-orders-create-header-owner-name"
+                        tabIndex={-1}
+                        className="flex min-w-0 flex-wrap items-baseline gap-2 text-xs"
+                        aria-live="polite"
+                    >
+                        <span className="text-muted-foreground">负责销售</span>
+                        <span className="break-words font-medium">
+                            {profileQuery.isPending
+                                ? "加载当前用户…"
+                                : profileQuery.isError
+                                  ? "无法获取登录用户"
+                                  : field.state.value || "当前用户未就绪"}
+                        </span>
+                    </div>
+                )}
+            </form.AppField>
+        </>
+    )
+
     const editor = (
         <>
             <SalesOrderCreateAlerts
@@ -383,43 +408,25 @@ export function SalesOrderCreateForm({
                     void form.handleSubmit()
                 }}
             >
-                <div className="flex min-w-0 flex-1 flex-col gap-5">
+                <div
+                    className={
+                        chrome === "page"
+                            ? "flex min-w-0 flex-1 flex-col rounded-xl border border-grid bg-card"
+                            : "flex min-w-0 flex-1 flex-col"
+                    }
+                >
                     <section
-                        className="min-w-0 space-y-4 rounded-lg border border-grid bg-muted/20 p-4"
+                        className="min-w-0 space-y-5 p-4 sm:p-5"
                         aria-labelledby="sales-create-contract-title"
                     >
                         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
                             <h2
                                 id="sales-create-contract-title"
-                                className="font-heading text-sm font-semibold"
+                                className="font-heading text-base font-semibold"
                             >
-                                基本信息
+                                客户与合同
                             </h2>
-                            <form.AppField name="ownerUserId">
-                                {() => null}
-                            </form.AppField>
-                            <form.AppField name="ownerName">
-                                {(field) => (
-                                    <div
-                                        id="sales-orders-create-header-owner-name"
-                                        tabIndex={-1}
-                                        className="flex min-w-0 flex-wrap items-baseline gap-2 text-xs"
-                                        aria-live="polite"
-                                    >
-                                        <span className="text-muted-foreground">
-                                            负责销售
-                                        </span>
-                                        <span className="break-words font-medium">
-                                            {profileQuery.isPending
-                                                ? "加载当前用户…"
-                                                : profileQuery.isError
-                                                  ? "无法获取登录用户"
-                                                  : field.state.value ||
-                                                    "当前用户未就绪"}
-                                        </span>
-                                    </div>
-                                )}
-                            </form.AppField>
+                            {chrome === "none" ? owner : null}
                         </div>
                         <SalesOrderCreateContractSection
                             form={form}
@@ -435,6 +442,17 @@ export function SalesOrderCreateForm({
                             onOrderBasisChange={handleOrderBasisChange}
                             onUploadClick={() => setUploadOpen(true)}
                         />
+                    </section>
+                    <section
+                        className="min-w-0 space-y-5 border-t border-grid p-4 sm:p-5"
+                        aria-labelledby="sales-create-settlement-title"
+                    >
+                        <h2
+                            id="sales-create-settlement-title"
+                            className="font-heading text-base font-semibold"
+                        >
+                            业务与结算
+                        </h2>
                         <SalesOrderCreateHeaderFields
                             form={form}
                             natureLocked={natureLocked}
@@ -533,6 +551,7 @@ export function SalesOrderCreateForm({
                 title={purpose === "create" ? "新建销售单" : "编辑销售单"}
                 documentNumber={submission.draftIdentity?.documentNumber}
                 version={submission.draftIdentity?.version}
+                primaryAction={owner}
                 back={{
                     id: "sales-orders-create-back-to-list",
                     label: "销售单列表",

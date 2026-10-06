@@ -108,6 +108,8 @@ type StickyTotalBarProps = Omit<
     actions?: React.ReactNode
     /** 左侧次级动作（如分步流程的"上一步"）；与 `actions` 分开渲染，不挤右侧主动作组。 */
     leftActions?: React.ReactNode
+    /** 单据编辑页：金额靠近右侧提交动作，标签与金额同行。 */
+    layout?: "metrics" | "inline"
 }
 
 /** M5 编辑工作区统一的金额汇总与提交动作条。 */
@@ -116,6 +118,7 @@ function StickyTotalBar({
     note,
     actions,
     leftActions,
+    layout = "metrics",
     className,
     ...props
 }: StickyTotalBarProps) {
@@ -134,9 +137,23 @@ function StickyTotalBar({
                         {leftActions}
                     </div>
                 ) : null}
-                <div className="grid min-w-0 flex-1 gap-3 sm:grid-cols-3">
+                <div
+                    className={cn(
+                        "grid min-w-0 flex-1 gap-3",
+                        layout === "inline"
+                            ? "lg:justify-items-end"
+                            : "sm:grid-cols-3",
+                    )}
+                >
                     {items.map((item) => (
-                        <div key={item.id} className="min-w-0">
+                        <div
+                            key={item.id}
+                            className={cn(
+                                "min-w-0",
+                                layout === "inline" &&
+                                    "flex flex-wrap items-baseline gap-x-3 gap-y-1 lg:justify-end",
+                            )}
+                        >
                             <div className="text-xs text-muted-foreground">
                                 {item.label}
                             </div>
@@ -149,7 +166,13 @@ function StickyTotalBar({
                                 {item.value}
                             </div>
                             {item.description ? (
-                                <div className="mt-0.5 text-xs text-muted-foreground">
+                                <div
+                                    className={cn(
+                                        "mt-0.5 text-xs text-muted-foreground",
+                                        layout === "inline" &&
+                                            "w-full lg:text-right",
+                                    )}
+                                >
                                     {item.description}
                                 </div>
                             ) : null}

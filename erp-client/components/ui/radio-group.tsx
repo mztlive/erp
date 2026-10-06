@@ -2,7 +2,9 @@
 
 import { Radio as RadioPrimitive } from "@base-ui/react/radio"
 import { RadioGroup as RadioGroupPrimitive } from "@base-ui/react/radio-group"
+import { CheckIcon } from "lucide-react"
 
+import { buttonVariants } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 function RadioGroup({ className, ...props }: RadioGroupPrimitive.Props) {
@@ -15,7 +17,30 @@ function RadioGroup({ className, ...props }: RadioGroupPrimitive.Props) {
     )
 }
 
-function RadioGroupItem({ className, ...props }: RadioPrimitive.Root.Props) {
+function RadioGroupItem({
+    className,
+    variant = "default",
+    children,
+    ...props
+}: RadioPrimitive.Root.Props & { variant?: "default" | "segment" }) {
+    if (variant === "segment") {
+        return (
+            <RadioPrimitive.Root
+                data-slot="radio-group-item"
+                className={cn(
+                    buttonVariants({ variant: "outline" }),
+                    "relative rounded-none px-8 first-of-type:rounded-l-lg last-of-type:rounded-r-lg not-first-of-type:border-l-0 data-checked:bg-muted focus-visible:z-10",
+                    className,
+                )}
+                {...props}
+            >
+                <RadioPrimitive.Indicator className="absolute left-3 flex items-center">
+                    <CheckIcon className="size-4" aria-hidden="true" />
+                </RadioPrimitive.Indicator>
+                {children}
+            </RadioPrimitive.Root>
+        )
+    }
     return (
         <RadioPrimitive.Root
             data-slot="radio-group-item"

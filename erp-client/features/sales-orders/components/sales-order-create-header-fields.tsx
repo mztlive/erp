@@ -31,7 +31,7 @@ export function SalesOrderCreateHeaderFields({
     onNatureChangeRequest,
 }: SalesOrderCreateHeaderFieldsProps) {
     return (
-        <div className="grid min-w-0 items-start gap-x-4 gap-y-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.25fr)_7rem] [&_[data-slot=field]]:gap-2 [&_[data-slot=field-description]]:text-xs [&_[data-slot=field-description]]:leading-5">
+        <div className="grid min-w-0 grid-cols-1 items-start gap-x-6 gap-y-5 sm:grid-cols-2">
             <form.AppField name="nature">
                 {(field) => {
                     const previousNature = field.state.value
@@ -118,7 +118,7 @@ export function SalesOrderCreateHeaderFields({
                         label="税率（%）"
                         required
                         type="number"
-                        className="max-w-28"
+                        className="max-w-36"
                         inputClassName="num text-right"
                     />
                 )}
@@ -126,7 +126,7 @@ export function SalesOrderCreateHeaderFields({
             <form.Subscribe selector={(state) => state.values.nature}>
                 {(nature) =>
                     nature === "card_voucher" ? (
-                        <div className="grid gap-4 border-t border-grid pt-3 sm:col-span-2 sm:grid-cols-2 xl:col-span-4 xl:max-w-2xl">
+                        <div className="grid grid-cols-1 gap-4 border-t border-grid pt-3 sm:col-span-2 sm:grid-cols-2">
                             <form.AppField
                                 name="fulfillmentDeadline"
                                 validators={{
