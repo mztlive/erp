@@ -5,12 +5,18 @@ import Link from "next/link"
 import type { ColumnDef } from "@tanstack/react-table"
 import { DownloadIcon, PlusIcon, SettingsIcon } from "lucide-react"
 import {
+    BusinessEmptyState,
     DataTable,
     PageActions,
-    PageHeader,
     PageScaffold,
 } from "@/components/business"
-import { ListWorkSurface } from "@/components/business/list-workspace"
+import {
+    ListWorkspaceHeader,
+    ListWorkspaceViews,
+    ListWorkSurface,
+    listWorkspaceEmptyStateClassName,
+    listWorkspaceStyles as styles,
+} from "@/components/business/list-workspace"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useAccountProfileQuery } from "@/features/auth/queries"
@@ -237,11 +243,22 @@ export function ContractTemplatesPage() {
     ]
     const query = view === "templates" ? templates : applications
     return (
-        <PageScaffold density="compact">
-            <PageHeader
+        <PageScaffold density="compact" className={styles.page}>
+            <ListWorkspaceHeader
+                eyebrow="销售"
                 title="合同模板与申请"
-                description="选择签约公司的 Word 模板，申请编号后下载。编号自动填写在第一页右上角，下载后用 Word 打印。"
-                actions={
+                description="选择签约公司的 Word 模板，申请编号后下载并打印。"
+            >
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                    {hasPermission(permissions, "contract:list") && (
+                        <Button
+                            id="contract-templates-archives-link"
+                            variant="ghost"
+                            render={<Link href="/sales/contracts" />}
+                        >
+                            已签合同档案
+                        </Button>
+                    )}
                     <PageActions
                         idPrefix="contract-templates-page"
                         actions={
@@ -264,53 +281,10 @@ export function ContractTemplatesPage() {
                                 : []
                         }
                     />
-                }
-            />
-            <div className="flex flex-wrap items-center gap-2">
-                {(canList || canManage) && (
-                    <Button
-                        id="contract-templates-view"
-                        variant={view === "templates" ? "secondary" : "ghost"}
-                        onClick={() => {
-                            setView("templates")
-                            setPagination({
-                                pageIndex: 0,
-                                pageSize: pagination.pageSize,
-                            })
-                        }}
-                    >
-                        合同模板
-                    </Button>
-                )}
-                {canHistory && (
-                    <Button
-                        id="contract-applications-view"
-                        variant={
-                            view === "applications" ? "secondary" : "ghost"
-                        }
-                        onClick={() => {
-                            setView("applications")
-                            setPagination({
-                                pageIndex: 0,
-                                pageSize: pagination.pageSize,
-                            })
-                        }}
-                    >
-                        我的合同申请
-                    </Button>
-                )}
-                {hasPermission(permissions, "contract:list") && (
-                    <Link
-                        id="contract-templates-archives-link"
-                        href="/sales/contracts"
-                        className="ml-auto text-sm text-muted-foreground hover:text-foreground"
-                    >
-                        已签合同档案
-                    </Link>
-                )}
-            </div>
+                </div>
+            </ListWorkspaceHeader>
             {recovery && canApply && (
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border p-3">
                     <p className="text-sm">
                         上次申请结果待核对：{recovery.template.name}
                         。继续核对会保留原申请编号。
@@ -332,7 +306,7 @@ export function ContractTemplatesPage() {
             {(error || query.isError) && (
                 <div
                     role="alert"
-                    className="flex flex-wrap items-center gap-3 text-sm text-destructive"
+                    className="mb-4 flex flex-wrap items-center gap-3 text-sm text-destructive"
                 >
                     <p>
                         {error ||
@@ -360,16 +334,73 @@ export function ContractTemplatesPage() {
                     ariaLabel={
                         view === "templates" ? "合同模板目录" : "我的合同申请"
                     }
+                    views={
+                        <ListWorkspaceViews
+                            ariaLabel="合同模板与申请视图"
+                            items={[
+                                ...(canList || canManage
+                                    ? [
+                                          {
+                                              id: "contract-templates-view",
+                                              label: "合同模板",
+                                              active: view === "templates",
+                                              onClick: () => {
+                                                  setView("templates")
+                                                  setPagination((current) => ({
+                                                      ...current,
+                                                      pageIndex: 0,
+                                                  }))
+                                              },
+                                          },
+                                      ]
+                                    : []),
+                                ...(canHistory
+                                    ? [
+                                          {
+                                              id: "contract-applications-view",
+                                              label: "我的合同申请",
+                                              active: view === "applications",
+                                              onClick: () => {
+                                                  setView("applications")
+                                                  setPagination((current) => ({
+                                                      ...current,
+                                                      pageIndex: 0,
+                                                  }))
+                                              },
+                                          },
+                                      ]
+                                    : []),
+                            ]}
+                        />
+                    }
                     toolbar={
-                        <p className="py-2 text-xs text-muted-foreground">
+                        <p className="text-xs leading-relaxed text-muted-foreground">
                             {view === "templates"
-                                ? "选择与签约公司一致的模板。同一编号组的主体共用年度流水。"
-                                : "重复下载保留原编号。已签署后到合同档案上传签署版 PDF。"}
+                                ? "选择与签约公司一致的模板；编号自动填写在首页右上角，同一编号组共用年度流水。"
+                                : "重复下载保留原编号，下载后用 Word 打印；签署后请到合同档案上传签署版 PDF。"}
                         </p>
                     }
                     table={
                         view === "templates" ? (
                             <DataTable
+                                emptyState={
+                                    <BusinessEmptyState
+                                        kind="no-data"
+                                        title={
+                                            canManage
+                                                ? "暂无合同模板"
+                                                : "暂无启用的合同模板"
+                                        }
+                                        description={
+                                            canManage
+                                                ? "请上传签约公司对应的 Word 模板，供销售申请编号并下载。"
+                                                : "请联系管理员上传或启用签约公司对应的 Word 模板。"
+                                        }
+                                        className={
+                                            listWorkspaceEmptyStateClassName
+                                        }
+                                    />
+                                }
                                 key="templates"
                                 id="contract-templates-table"
                                 data={templates.data?.items ?? []}
@@ -384,6 +415,20 @@ export function ContractTemplatesPage() {
                             />
                         ) : (
                             <DataTable
+                                emptyState={
+                                    <BusinessEmptyState
+                                        kind="no-data"
+                                        title="暂无合同申请"
+                                        description={
+                                            canList || canManage
+                                                ? "在合同模板中选择签约公司对应的模板，申请编号后即可在此下载。"
+                                                : "当前账号尚无合同申请记录。"
+                                        }
+                                        className={
+                                            listWorkspaceEmptyStateClassName
+                                        }
+                                    />
+                                }
                                 key="applications"
                                 id="contract-applications-table"
                                 data={applications.data?.items ?? []}
@@ -397,11 +442,6 @@ export function ContractTemplatesPage() {
                         )
                     }
                 />
-            )}
-            {view === "templates" && templates.data?.total === 0 && (
-                <p className="text-sm text-muted-foreground">
-                    暂无启用的合同模板。请管理员先上传公司对应的 Word 模板。
-                </p>
             )}
             {uploadOpen && canManage && (
                 <TemplateUploadDialog onClose={() => setUploadOpen(false)} />
