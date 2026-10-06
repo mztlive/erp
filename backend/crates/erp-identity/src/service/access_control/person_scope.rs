@@ -77,7 +77,13 @@ impl AccessControlService {
     }
 
     /// 按输入顺序校验目标，到首个明确组织目标时才装载一次组织树。
-    async fn validate_person_scope_targets(
+    /// # 参数
+    /// user 为目标人员，req 为规范化范围，organizations 和 executor 来自原授权事务。
+    /// # 返回
+    /// 所有明确目标存在且可用于指定维度时成功。
+    /// # 错误
+    /// 部门失效、维度不匹配、未装配外域校验或读取失败时拒绝。
+    pub(super) async fn validate_person_scope_targets(
         &self,
         user: &str,
         req: &SavePersonScopeRequest,

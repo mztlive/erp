@@ -6,6 +6,7 @@ mod seed_command;
 mod templates;
 
 mod authorize;
+mod bundle;
 mod command;
 mod enforcer;
 mod policy;

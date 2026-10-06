@@ -26,7 +26,7 @@ pub struct PersonScopeTerm {
 }
 
 /// 一份有效人员配置。condition 属于同一表达式，用于无损保留历史交集。
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct PersonScopeExpression {
     /// 新配置仅保存附加项；旧配置缺少此字段时保持原表达式。

@@ -5,6 +5,7 @@
 
 pub mod inspection;
 pub mod person_directory;
+pub mod policy_bundle;
 
 use application_core::AuditActor;
 use axum::extract::{Path, Query, State};

@@ -122,6 +122,19 @@
         "V14"
       ],
       "removal_condition": "唯一普通命令尝试持久化入口；原事务返回后独立NoTransaction写入，不替代正式回执或首次错误。"
+    },
+    {
+      "path": "crates/erp-identity/src/service/access_control/policy_bundle/apply.rs",
+      "function": "persist",
+      "operation": "audit_events.create",
+      "max_occurrences": 1,
+      "policy": "Audited",
+      "contract_items": [
+        "E02",
+        "V04",
+        "V14"
+      ],
+      "removal_condition": "保留授权文件批次成功事件与角色、绑定、范围、回执及 policy 版本的同事务原子性；不得用审计查询代替命令回执。"
     }
   ]
 }

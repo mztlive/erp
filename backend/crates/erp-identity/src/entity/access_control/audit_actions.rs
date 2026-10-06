@@ -2,6 +2,7 @@
 
 /// 当前审计事件写入入口的完整目录；不包含其他集合的操作日志或权限代码。
 pub const AUDIT_ACTIONS: &[(&str, &str)] = &[
+    ("authorization_policy.apply", "授权配置 · 应用"),
     ("permission.create", "权限定义 · 新建"),
     ("permission.update", "权限定义 · 修改"),
     ("permission.delete", "权限定义 · 删除"),

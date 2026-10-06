@@ -275,6 +275,68 @@ impl MongoCasbinAdapter {
         Ok(Self::subject_role_keys(rules))
     }
 
+    /// 在原事务中读取直接绑定角色的主体事实。
+    /// # 参数
+    /// role_key 为角色键，executor 为原执行器。
+    /// # 返回
+    /// 最多1001条排序主体键，供领域判断角色继承及影响规模。
+    /// # 错误
+    /// 查询失败或绑定行损坏时拒绝。
+    pub(crate) async fn role_subjects(
+        &self,
+        role_key: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<String>> {
+        let rows = mongo_ops::find_many(
+            &self.collection(),
+            Self::role_binding_filter(role_key),
+            FindOptions::builder().limit(1001).build(),
+            executor,
+        )
+        .await?;
+        let mut ids = Vec::new();
+        for row in rows {
+            let Some(subject) = row.values.first() else {
+                return Err(persistence_core::Error::EntityMetadataOutOfRange("Casbin role binding"));
+            };
+            ids.push(subject.to_owned());
+        }
+        ids.sort();
+        ids.dedup();
+        Ok(ids)
+    }
+
+    /// 在原事务内读取角色的直接权限，不展开角色继承。
+    /// # 参数
+    /// role_key 为 Casbin 角色键；executor 为调用方执行器。
+    /// # 返回
+    /// 排序后的资源动作对。
+    /// # 错误
+    /// 持久化读取失败或策略行损坏时拒绝。
+    pub(crate) async fn role_permissions(
+        &self,
+        role_key: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<(String, String)>> {
+        let rows = mongo_ops::find_many(
+            &self.collection(),
+            Self::role_permission_filter(role_key),
+            FindOptions::default(),
+            executor,
+        )
+        .await?;
+        let mut permissions = Vec::new();
+        for row in rows {
+            let [_, resource, action] = row.values.as_slice() else {
+                return Err(persistence_core::Error::EntityMetadataOutOfRange("Casbin role permission"));
+            };
+            permissions.push((resource.clone(), action.clone()));
+        }
+        permissions.sort();
+        permissions.dedup();
+        Ok(permissions)
+    }
+
     /// 递增 Casbin policy 全局版本。
     ///
     /// 所有 policy 事务写入同一个版本文档，使不同实例上的并发写产生 MongoDB

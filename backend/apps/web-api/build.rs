@@ -3,6 +3,7 @@ mod audit_actions;
 
 mod build_format;
 mod build_permissions;
+mod build_policy_catalog;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::{env, fs, io};
@@ -12,6 +13,7 @@ use build_permissions::{
     DOMAIN_MODULES, PermissionGroup, PermissionItem, PermissionMeta, RouteHandler, append_policy_permissions,
     management_routes,
 };
+use build_policy_catalog::write_policy_catalog;
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::{Attribute, Expr, File, Item, ItemFn, Lit, MetaNameValue, Token};
@@ -53,6 +55,7 @@ fn main() {
 
     rerun_if_changed(&manifest_dir.join("build_permissions.rs"));
     rerun_if_changed(&manifest_dir.join("build_format.rs"));
+    rerun_if_changed(&manifest_dir.join("build_policy_catalog.rs"));
     rerun_if_changed(&routes_mod_path);
     rerun_if_changed(&routes_admin_path);
 
@@ -96,6 +99,7 @@ fn main() {
     };
 
     let (groups, used_handlers) = build_permission_groups(&prefix, &handler_meta, &route_handlers);
+    write_policy_catalog(&groups).expect("权限目录必须随运行版本生成");
     for handler in handler_meta.keys() {
         if !used_handlers.contains(handler) {
             println!("cargo:warning=handler '{}' not found in routes", handler);

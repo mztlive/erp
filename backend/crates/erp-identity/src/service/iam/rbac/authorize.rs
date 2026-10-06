@@ -233,7 +233,7 @@ impl RbacService {
     ///
     /// # 错误
     /// 当角色无效或 MongoDB policy 写入失败时返回错误。
-    async fn write_subject_roles(
+    pub(super) async fn write_subject_roles(
         &self,
         account_kind: AccountKind,
         account_id: &str,

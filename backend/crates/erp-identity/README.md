@@ -8,6 +8,7 @@
 
 - 修改后台认证、账号管理、角色及权限配置。
 - 维护组织、成员和数据范围规则，调整授权解析。
+- 校验、预览、原子应用和导出授权 JSON 文件；角色、真实绑定、人员范围及命令回执由本域维护。
 
 ## 协作示例
 
@@ -34,6 +35,8 @@
 | 入口 | 用途 |
 | --- | --- |
 | [src/service/iam/mod.rs](src/service/iam/mod.rs) | 账号、角色与 RBAC 服务入口 |
+| [src/service/access_control/policy_bundle/mod.rs](src/service/access_control/policy_bundle/mod.rs) | 授权文件预览、应用及导出 |
+| [src/entity/authorization_bundle/mod.rs](src/entity/authorization_bundle/mod.rs) | 文件格式、权限差异、审核摘要和重放规则 |
 | [src/service/auth/mod.rs](src/service/auth/mod.rs) | 后台认证入口 |
 | [src/service/portal/mod.rs](src/service/portal/mod.rs) | 供应商身份、绑定、账号管理及密码步骤 |
 | [src/entity/portal.rs](src/entity/portal.rs) | 门户固定岗位及账号绑定不变式 |
@@ -62,6 +65,10 @@
 5. 在“组织与人员”分配生成的角色，并设置本人以外业务范围、目录可见和仓库范围；审批、付款、开票及履约责任另行指定。角色生成不创建演示账号、密码、部门、业务数据或审批定义。
 
 接口及部署约束执行[人员配置合同第 9 节](../../../docs/identity-access-workflow-contract.md#9-内建岗位角色生成)。
+
+## 外部授权配置
+
+使用仓库根 `scripts/authorization-policy.mjs` 调用正式后台 API；顺序为 validate、preview、审核差异、apply。export 必须明确选择人员或角色。文件格式、权限要求、命令示例及回滚要求执行[授权 JSON 配置合同](../../../docs/authorization-policy-json-contract.md)；不得直接写入 Casbin 或人员范围集合。
 
 ## 验证要求
 

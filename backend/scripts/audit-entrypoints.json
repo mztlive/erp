@@ -923,6 +923,36 @@
       "reason": "身份域通过独立 audit_events 目录及 .audit_events().create、.run_authorized_policy_transaction、AuditEvent::new 记录权限或人员范围变更；保留其现有业务写入、范围版本和同 Executor 顺序，不将身份事件并入普通业务成功事件生命周期。"
     },
     {
+      "path": "crates/erp-identity/src/service/access_control/policy_bundle/apply.rs",
+      "function": "apply",
+      "policy": "Audited",
+      "stage": "SpecialLifecycle",
+      "boundaries": [
+        ".run_optional_policy_transaction"
+      ],
+      "call_counts": {
+        ".run_optional_policy_transaction": 1
+      },
+      "location_count": 1,
+      "reason": "授权文件使用可选版本推进的原 policy 事务；重验、角色、绑定、范围、回执及审计共用 Executor，已提交重放不重复审计或推进版本。"
+    },
+    {
+      "path": "crates/erp-identity/src/service/access_control/policy_bundle/apply.rs",
+      "function": "persist",
+      "policy": "Audited",
+      "stage": "SpecialLifecycle",
+      "boundaries": [
+        ".audit_events().create",
+        ".build_audit_event"
+      ],
+      "call_counts": {
+        ".audit_events().create": 1,
+        ".build_audit_event": 1
+      },
+      "location_count": 1,
+      "reason": "授权文件逐项写入与身份 audit_events 成功事件共用调用方 Executor；事务失败整体回滚，无差异和已提交重放不产生新成功事件。"
+    },
+    {
       "path": "crates/erp-identity/src/service/iam/account/admin.rs",
       "function": "create_admin",
       "policy": "Audited",
@@ -1019,6 +1049,38 @@
       },
       "location_count": 1,
       "reason": "元数据工厂/准备步骤 update_admin_role 通过 .prepare_resource_log 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
+    },
+    {
+      "path": "crates/erp-identity/src/service/iam/rbac/bundle.rs",
+      "function": "write_bundle_binding",
+      "policy": "Audited",
+      "stage": "Command",
+      "boundaries": [
+        ".resource_log",
+        "audit.persist"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "audit.persist": 1
+      },
+      "location_count": 1,
+      "reason": "实际角色绑定、目录资格初始化及原有人员角色审计共用授权文件事务 Executor；不自行开启事务，不重复已提交命令。"
+    },
+    {
+      "path": "crates/erp-identity/src/service/iam/rbac/bundle.rs",
+      "function": "write_bundle_role",
+      "policy": "Audited",
+      "stage": "Command",
+      "boundaries": [
+        ".resource_log",
+        "audit.persist"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "audit.persist": 1
+      },
+      "location_count": 1,
+      "reason": "已重验角色写入、Casbin 权限及原有角色审计共用授权文件事务 Executor；不自行开启事务，不根据审计判断业务结果。"
     },
     {
       "path": "crates/erp-identity/src/service/iam/rbac/command.rs",
@@ -1268,7 +1330,7 @@
     },
     {
       "path": "crates/erp-identity/src/service/iam/rbac/transaction.rs",
-      "function": "run_policy_transaction_at_revision",
+      "function": "run_optional_policy_transaction",
       "policy": "Audited",
       "stage": "SpecialLifecycle",
       "boundaries": [
@@ -1278,7 +1340,21 @@
         ".finish_policy_transaction": 1
       },
       "location_count": 1,
-      "reason": "身份 policy 生命周期通过 .finish_policy_transaction 委托；业务及已有审计使用原 policy 事务 Executor，policy revision 和所有权任务由既有 runner 执行。提交成功后刷新本地策略，未知提交保持失败关闭，不以普通 run_audited 替换此边界。"
+      "reason": "沿用 policy 事务 Executor、所有权任务及提交后刷新；已提交回执重放不推进版本，发生变更才比较并推进版本，未知提交保持失败关闭。"
+    },
+    {
+      "path": "crates/erp-identity/src/service/iam/rbac/transaction.rs",
+      "function": "run_policy_transaction_at_revision",
+      "policy": "Audited",
+      "stage": "SpecialLifecycle",
+      "boundaries": [
+        ".run_optional_policy_transaction"
+      ],
+      "call_counts": {
+        ".run_optional_policy_transaction": 1
+      },
+      "location_count": 1,
+      "reason": "既有 policy 写入委托可选版本推进入口且固定声明发生变更，保留原版本比较、审计、所有权任务及提交后刷新语义。"
     },
     {
       "path": "crates/erp-identity/src/service/iam/rbac/transaction.rs",

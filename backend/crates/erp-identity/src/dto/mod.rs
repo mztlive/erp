@@ -2,6 +2,7 @@
 
 mod access_control;
 mod auth;
+pub mod authorization_bundle;
 mod iam;
 mod organization;
 mod person_directory;
