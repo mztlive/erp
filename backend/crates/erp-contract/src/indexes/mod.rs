@@ -1,6 +1,7 @@
 //! Contract collection indexes.
 
 mod contract;
+mod recognition;
 mod templates;
 
 use mongodb::Database;
@@ -15,7 +16,8 @@ use persistence_core::Result;
 /// Unique-constraint violations or MongoDB index creation failures.
 pub async fn ensure(db: &Database) -> Result<()> {
     contract::ensure(db).await?;
-    templates::ensure(db).await
+    templates::ensure(db).await?;
+    recognition::ensure(db).await
 }
 
 /// 只登记合同模板新增集合，供上线迁移命令复用领域索引定义。

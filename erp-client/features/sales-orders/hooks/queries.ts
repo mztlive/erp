@@ -2,6 +2,10 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
+import {
+    fetchSalesOrderContractCheck,
+    type SalesOrderContractInput,
+} from "@/features/sales-orders/api/sales-order-contract"
 import { approvalKeys } from "@/features/approval-workflow/queries"
 import { workItemKeys } from "@/features/work-items/queries"
 import { queryKeyRoots } from "@/lib/query-key-roots"
@@ -22,6 +26,8 @@ import {
 
 export const salesOrderKeys = {
     all: queryKeyRoots.salesOrders,
+    contractCheck: (input: SalesOrderContractInput) =>
+        [...salesOrderKeys.all, "contract-check", input] as const,
     list: (query: SalesOrdersListQuery) =>
         [...salesOrderKeys.all, "list", query] as const,
     detail: (id: string) => [...salesOrderKeys.all, "detail", id] as const,
@@ -261,5 +267,21 @@ export function useSubmitSalesChangeOrderMutation() {
                 }),
             ])
         },
+    })
+}
+
+/** 每次选择合同重新核对，最终补录仍由后端事务把关。 */
+export function useSalesOrderContractCheck(
+    input: SalesOrderContractInput,
+    enabled: boolean,
+) {
+    return useQuery({
+        queryKey: salesOrderKeys.contractCheck(input),
+        queryFn: () => fetchSalesOrderContractCheck(input),
+        enabled:
+            enabled &&
+            Boolean(input.contractId && input.requestedContractRevisionId),
+        staleTime: 0,
+        retry: false,
     })
 }

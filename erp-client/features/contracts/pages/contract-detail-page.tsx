@@ -14,6 +14,9 @@ import {
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { ContractUploadDialog } from "@/features/contracts/contract-upload-dialog"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import { ContractPaperDialog } from "@/features/contracts/components/contract-paper-dialog"
 import { ContractDetailAttachments } from "@/features/contracts/components/contract-detail-attachments"
 import { ContractDetailHeader } from "@/features/contracts/components/contract-detail-header"
@@ -38,6 +41,12 @@ export function ContractDetailPage({
 }) {
     const router = useRouter()
     const query = useContractCenterQuery(contractId)
+    const profile = useAccountProfileQuery()
+    const [importOpen, setImportOpen] = React.useState(false)
+    const [importTarget, setImportTarget] = React.useState<{
+        contractId: string
+        version: number
+    }>()
 
     const activeSection = resolveSection(section)
     const [paperOpen, setPaperOpen] = React.useState(false)
@@ -107,6 +116,25 @@ export function ContractDetailPage({
             <ContractDetailHeader
                 contract={contract}
                 onPaperOpen={() => setPaperOpen(true)}
+                onImportRevision={
+                    hasPermission(
+                        profile.data?.permissions,
+                        "contract:update",
+                    ) &&
+                    hasPermission(
+                        profile.data?.permissions,
+                        "contract:create",
+                    ) &&
+                    contract.status === "EFFECTIVE"
+                        ? () => {
+                              setImportTarget({
+                                  contractId,
+                                  version: contract.lockVersion,
+                              })
+                              setImportOpen(true)
+                          }
+                        : undefined
+                }
             />
 
             <div
@@ -148,6 +176,15 @@ export function ContractDetailPage({
                 </ObjectSectionTabs>
             </div>
 
+            <ContractUploadDialog
+                open={importOpen}
+                onOpenChange={setImportOpen}
+                initialCustomerId={contract.customer.id}
+                revisionTarget={importTarget}
+                onSuccess={() => {
+                    void query.refetch()
+                }}
+            />
             <ContractPaperDialog
                 contract={contract}
                 open={paperOpen}

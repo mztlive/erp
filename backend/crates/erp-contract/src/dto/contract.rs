@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::entity::contract::{ArchiveSource, ContractStatus};
+use crate::entity::recognition::RecognitionProof;
 use crate::error::Result;
 
 /// 合同列表允许的排序字段白名单（api-contract §4：Service 层校验，禁止任意字段透传）。
@@ -148,7 +149,7 @@ pub struct UploadContractRequest {
 }
 
 /// 合同 PDF 一次上传结果。
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct UploadContractView {
     /// 合同稳定身份。
     pub id: String,
@@ -358,6 +359,8 @@ pub struct ContractView {
 /// 合同版本响应视图。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct ContractRevisionView {
+    /// 识别依据及匹配快照；历史手填档案为空。
+    pub recognition: Option<RecognitionProof>,
     /// 实体主键。
     pub id: String,
     /// 聚合内版本号。
@@ -450,6 +453,7 @@ impl From<crate::entity::contract::ContractRevision> for ContractRevisionView {
     /// 返回版本视图。
     fn from(revision: crate::entity::contract::ContractRevision) -> Self {
         Self {
+            recognition: revision.recognition,
             id: revision.base.id,
             revision_no: revision.revision.revision_no,
             contract_pdf_file_id: revision.contract_pdf_file_id.to_string(),

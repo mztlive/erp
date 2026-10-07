@@ -1,0 +1,16 @@
+[package]
+name = "aliyun-ocr"
+version = "0.1.0"
+edition = "2024"
+autotests = false
+
+[dependencies]
+chrono = { workspace = true }
+hex = { workspace = true }
+hmac = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }

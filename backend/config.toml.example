@@ -34,3 +34,23 @@ force_path_style = false
 # 关闭时按钮仍可见，但接口拒绝写入。不要在生产环境打开。
 # [demo]
 # master_data = false
+
+# 可选：阿里云文档结构化 OCR。启用前开通 RecognizeDocumentStructure 并配置 RAM 权限。
+# 使用杭州端点；本机须安装 Poppler（运行镜像已安装）。AI 提取须配置下方 contract_ai。
+# [aliyun_ocr]
+# pdftoppm_path = "pdftoppm"
+# [aliyun_ocr.credentials]
+# access_key_id = "<RAM AccessKey ID>"
+# access_key_secret = "<RAM AccessKey Secret>"
+# security_token = "<STS SecurityToken>" # 使用临时凭据时填写；长期 AK/SK 删除此项
+
+# 可选合同 AI 提取。使用 rig-core 的 OpenAI Chat Completions 协议。
+# base_url 填 API 前缀，不包含 /chat/completions；模型必须支持 JSON Schema 结构化输出。
+# 远程地址必须为 HTTPS；本地 loopback 服务允许 HTTP。配置只从本文件或 Nacos 读取。
+# [contract_ai]
+# provider_id = "contract-ai-primary" # 必填非敏感连接标识；更换供应商/网关时使用新标识
+# base_url = "https://your-provider.example/v1"
+# api_key = "<API key>"
+# model = "<provider model ID>"
+# timeout_seconds = 90 # 1..120；OCR 与 AI 仍共用 180 秒总预算
+# max_output_tokens = 8192 # 256..32768；超限截断导致任务失败，不截断后归档

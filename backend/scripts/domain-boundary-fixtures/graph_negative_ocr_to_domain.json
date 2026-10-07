@@ -1,0 +1,17 @@
+{
+  "packages": [
+    {
+      "name": "aliyun-ocr",
+      "deps": [
+        {
+          "name": "erp-contract",
+          "kind": "normal"
+        }
+      ]
+    },
+    {
+      "name": "erp-contract",
+      "deps": []
+    }
+  ]
+}

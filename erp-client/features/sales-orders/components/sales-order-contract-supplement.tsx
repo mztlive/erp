@@ -25,6 +25,8 @@ import {
 } from "@/features/entity-selectors"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/contracts"
 import { useSupplementSalesOrderContract } from "@/features/sales-orders/hooks/use-sales-order-contract"
+import { useSalesOrderContractCheck } from "@/features/sales-orders/hooks/queries"
+import { ContractSupplementCheck } from "./contract-supplement-check"
 import { hasPermission } from "@/lib/permissions"
 
 /** 概览内补录合同；客户与结算主体由原销售单固定。 */
@@ -50,6 +52,13 @@ export function SalesOrderContractSupplement({
             }),
         },
         onSubmit: async ({ value }) => {
+            if (
+                !checkQuery.data?.matches ||
+                checkQuery.isFetching ||
+                checkQuery.isError ||
+                contractQuery.isError
+            )
+                return
             await mutation.mutateAsync({
                 salesOrderId: order.id,
                 version: order.version,
@@ -60,6 +69,19 @@ export function SalesOrderContractSupplement({
     const contractId = useSelector(
         form.store,
         (state) => state.values.contractId,
+    )
+    const requestedContractRevisionId = useSelector(
+        form.store,
+        (state) => state.values.requestedContractRevisionId,
+    )
+    const checkQuery = useSalesOrderContractCheck(
+        {
+            salesOrderId: order.id,
+            version: order.version,
+            contractId,
+            requestedContractRevisionId,
+        },
+        open,
     )
     const contractQuery = useContractCenterQuery(contractId)
     useEffect(() => {
@@ -105,7 +127,7 @@ export function SalesOrderContractSupplement({
                     <DialogHeader>
                         <DialogTitle>补录销售合同</DialogTitle>
                         <DialogDescription>
-                            选择与原销售单客户和结算主体一致的有效合同。合同绑定后不能在此更换。
+                            客户、结算主体及商业条款必须与原销售单一致。补录不会修改原单内容，绑定后不能在此更换。
                         </DialogDescription>
                     </DialogHeader>
                     <form
@@ -169,6 +191,17 @@ export function SalesOrderContractSupplement({
                         >
                             上传新合同
                         </Button>
+                        {contractId ? (
+                            <ContractSupplementCheck
+                                data={checkQuery.data}
+                                loading={
+                                    contractQuery.isFetching ||
+                                    checkQuery.isFetching ||
+                                    !requestedContractRevisionId
+                                }
+                                error={contractQuery.error ?? checkQuery.error}
+                            />
+                        ) : null}
                         <DialogFooter>
                             <Button
                                 id="sales-order-contract-supplement-cancel"
@@ -187,7 +220,12 @@ export function SalesOrderContractSupplement({
                                     loading={mutation.isPending}
                                     disabled={
                                         mutation.isPending ||
-                                        contractQuery.isFetching
+                                        contractQuery.isFetching ||
+                                        contractQuery.isError ||
+                                        checkQuery.isFetching ||
+                                        checkQuery.isError ||
+                                        !requestedContractRevisionId ||
+                                        !checkQuery.data?.matches
                                     }
                                 />
                             </form.AppForm>

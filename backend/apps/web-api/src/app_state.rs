@@ -14,6 +14,9 @@ use erp_processes::adapters::supplier_api::{
 use erp_processes::adapters::supplier_fulfillment_gateway::UnavailableSupplierGateway;
 use erp_processes::adapters::workflow::{WorkflowAuth, workflow_audit, workflow_auth, workflow_object_facts};
 use erp_processes::approval_dispatch::{ProcessObjectRead, ProcessUpgradeSubject};
+use erp_processes::contract_import::aliyun::AliyunContractOcr;
+use erp_processes::contract_import::openai::OpenAiContractExtractor;
+use erp_processes::contract_import::{ContractImportProcess, RecognitionProviders};
 use erp_processes::integration_resolution::IntegrationResolutionProcess;
 use erp_processes::integration_resolution::evidence_adapter::MongoIntegrationEvidenceAuthority;
 use erp_read_models::integration_center::IntegrationCenterReadService;
@@ -512,7 +515,33 @@ impl AppState {
         )
     }
 
-    /// Contract domain service with customer, identity, attachment and audit adapters.
+    /// 按当前配置快照装配阿里云 OCR 和 OpenAI 兼容提取端。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 供应商无关导入流程。
+    /// # 错误
+    /// 无；配置缺省或识别失败由任务记录，不返回模拟识别结果。
+    pub fn contract_import_process(&self) -> ContractImportProcess {
+        let mut providers = RecognitionProviders::default();
+        let snapshot = self.config.snapshot();
+        if let Some(ocr) = snapshot.aliyun_ocr {
+            providers.ocr = Arc::new(AliyunContractOcr::new(ocr.credentials, ocr.pdftoppm_path));
+        }
+        if let Some(ai) = snapshot.contract_ai {
+            providers.extractor = Arc::new(OpenAiContractExtractor::new(
+                ai.provider_id,
+                ai.base_url,
+                ai.api_key,
+                ai.model,
+                ai.timeout_seconds,
+                ai.max_output_tokens,
+            ));
+        }
+        ContractImportProcess::new(self.db(), self.rbac(), providers)
+    }
+
+    /// 装配现有合同查询与终止服务。
     pub fn contract_service(&self) -> erp_contract::ContractService {
         erp_processes::adapters::scoped_contract_service(self.db(), self.rbac())
     }

@@ -31,6 +31,7 @@ members = [
   "crates/entity-core",
   "crates/permission-macros",
   "crates/storage",
+  "crates/aliyun-ocr",
   "crates/id-generator",
   "crates/test-support",
   "config",
@@ -75,6 +76,10 @@ entity-macros = { path = "crates/entity-macros" }
 id-generator = { path = "crates/id-generator" }
 permission-macros = { path = "crates/permission-macros" }
 storage = { path = "crates/storage" }
+aliyun-ocr = { path = "crates/aliyun-ocr" }
+reqwest = { version = "0.12.28", default-features = false, features = ["rustls-tls"] }
+rig-core = { version = "=0.43.0", default-features = false }
+bytes = "1"
 test-support = { path = "crates/test-support" }
 
 # 异步运行时

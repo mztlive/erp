@@ -52,6 +52,8 @@ BUSINESS_DOMAINS = {
 }
 OLD_BUSINESS = {"entities", "database", "services"}
 BPM_FORBIDDEN_PACKAGES = {
+    "rig-core",
+    "aliyun-ocr",
     "entities",
     "database",
     "services",
@@ -67,7 +69,7 @@ KINDS = ("normal", "build", "dev")
 CUTOVER_REQUIRED_PACKAGES = (
     FOUNDATION | COMPOSITION | (BUSINESS_DOMAINS - {"erp-commerce"})
     | {"bpm", "cli", "web-api", "config", "entity-core", "entity-macros",
-       "permission-macros", "storage", "id-generator", "test-support"}
+       "permission-macros", "storage", "aliyun-ocr", "id-generator", "test-support"}
 )
 
 
@@ -320,6 +322,12 @@ def forbidden_graph_errors(graph: Graph) -> list[str]:
     for edge in graph.edges:
         src, dst, kind = edge.from_package, edge.to_package, edge.kind
         label = f"{src} -[{kind}{f', rename={edge.rename}' if edge.rename else ''}]-> {dst}"
+        if src in FOUNDATION | BUSINESS_DOMAINS and dst == "aliyun-ocr":
+            errors.append(f"领域和基础 crate 必须通过 Port 使用 OCR，不能依赖供应商客户端: {label}")
+        if src in FOUNDATION | BUSINESS_DOMAINS and dst == "rig-core":
+            errors.append(f"领域和基础 crate 必须通过 Port 使用 AI，不能依赖供应商 SDK: {label}")
+        if src == "aliyun-ocr" and dst in FOUNDATION | BUSINESS_DOMAINS | COMPOSITION | {"config", "web-api", "cli"}:
+            errors.append(f"OCR 技术客户端不得依赖业务或应用组合层: {label}")
         if src in FOUNDATION | BUSINESS_DOMAINS and dst in OLD_BUSINESS:
             errors.append(f"新领域/基础 crate 不得依赖旧三层: {label}")
         if src in BUSINESS_DOMAINS and dst in BUSINESS_DOMAINS and src != dst:
@@ -471,6 +479,9 @@ def run_fixture_suite(fixture_dir: Path) -> CheckResult:
     require_empty("graph_positive", forbidden_graph_errors(graph_pos))
     for name in (
         "graph_negative_domain_to_old.json",
+        "graph_negative_ocr_to_domain.json",
+        "graph_negative_domain_to_ocr.json",
+        "graph_negative_domain_to_ai.json",
         "graph_negative_domain_to_domain.json",
         "graph_negative_foundation_to_business.json",
         "graph_negative_bpm_io.json",

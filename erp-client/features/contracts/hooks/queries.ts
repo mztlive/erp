@@ -59,12 +59,12 @@ export function useUploadContractPdfMutation() {
     return useMutation({
         meta: { affectsDataScope: true },
         mutationFn: (input: UploadContractPdfInput) => uploadContractPdf(input),
-        onSuccess: async (data) => {
+        onSuccess: async () => {
             await queryClient.invalidateQueries({
                 queryKey: contractKeys.list(),
             })
             await queryClient.invalidateQueries({
-                queryKey: contractKeys.detail(data.contractId),
+                queryKey: ["contract-imports"],
             })
             await queryClient.invalidateQueries({
                 queryKey: contractKeys.selectable(),

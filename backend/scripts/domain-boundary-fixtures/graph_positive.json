@@ -1,5 +1,6 @@
 {
   "packages": [
+    { "name": "aliyun-ocr", "deps": [] },
     {
       "name": "erp-core",
       "deps": []
@@ -30,6 +31,7 @@
     {
       "name": "erp-processes",
       "deps": [
+        { "name": "aliyun-ocr", "kind": "normal" },
         { "name": "erp-customer", "kind": "normal" },
         { "name": "erp-sales", "kind": "normal" },
         { "name": "services", "kind": "normal" },

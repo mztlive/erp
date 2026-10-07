@@ -2,7 +2,7 @@
 
 本目录的 crate 按业务职责和技术能力组织。开发时先确定“修改哪类业务事实”或“组合哪些业务步骤”，再选择对应入口。每个 crate 的 README 说明用途、使用场景、协作示例、代码入口及修改要求。
 
-当前 [workspace](../Cargo.toml) 在本目录登记 31 个 crate：19 个业务领域、2 个跨域组合、3 个共享基础、7 个技术及测试支持。HTTP 应用见 [web-api](../apps/web-api/README.md)，运维命令见 [cli](../apps/cli/README.md)，全局开发要求见 [backend/AGENTS.md](../AGENTS.md)。
+当前 [workspace](../Cargo.toml) 在本目录登记 32 个 crate：19 个业务领域、2 个跨域组合、3 个共享基础、8 个技术及测试支持。HTTP 应用见 [web-api](../apps/web-api/README.md)，运维命令见 [cli](../apps/cli/README.md)，全局开发要求见 [backend/AGENTS.md](../AGENTS.md)。
 
 ## 先按工作内容选择位置
 
@@ -133,3 +133,7 @@ git diff --check
 ```
 
 测试仅运行库单元测试。不得新增、修改或执行集成测试，不运行 `--test`、`--include-ignored` 或真实 MongoDB、S3 等外部服务测试。上述命令是执行要求，不代表当前工作区已完成验证。
+
+## 外部 OCR 技术客户端
+
+[aliyun-ocr](aliyun-ocr/README.md) 负责阿里云图片识别签名和传输，不依赖业务 crate。合同 PDF 逐页转图与 `ContractOcr` 适配位于 `erp-processes::contract_import::aliyun`，由 web-api 使用 `SafeConfig` 装配。

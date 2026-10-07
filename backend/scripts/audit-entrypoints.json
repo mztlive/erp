@@ -6167,6 +6167,48 @@
       },
       "location_count": 1,
       "reason": "原门户命令拒绝终态工厂以真实供应商操作人、原命令身份和固定拒绝事件构造审计元数据，不构造成功业务事实；持久化由拒绝终态事务的同一 Executor 执行。"
+    },
+    {
+      "path": "crates/erp-processes/src/contract_import/archive.rs",
+      "function": "archive",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        "run_audited_event"
+      ],
+      "call_counts": {
+        "run_audited_event": 1
+      },
+      "location_count": 1,
+      "reason": "通过 run_audited_event 执行领域命令，业务事实与成功事件共用事务执行器；创建任务重放不追加事件，事务失败或未知由统一入口记录独立尝试。"
+    },
+    {
+      "path": "crates/erp-processes/src/contract_import/source.rs",
+      "function": "create",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        "run_audited_event"
+      ],
+      "call_counts": {
+        "run_audited_event": 1
+      },
+      "location_count": 1,
+      "reason": "通过 run_audited_event 执行领域命令，业务事实与成功事件共用事务执行器；创建任务重放不追加事件，事务失败或未知由统一入口记录独立尝试。"
+    },
+    {
+      "path": "crates/erp-processes/src/contract_import/audit.rs",
+      "function": "context",
+      "policy": "Audited",
+      "stage": "MetadataFactory",
+      "boundaries": [
+        "BusinessEventContext::new"
+      ],
+      "call_counts": {
+        "BusinessEventContext::new": 1
+      },
+      "location_count": 1,
+      "reason": "在正式写入前验证导入动作、资源类型与认证人；实际业务和结果事件由 run_audited_event 统一执行，本工厂不单独持久化事件。"
     }
   ]
 }

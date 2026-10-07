@@ -34,6 +34,7 @@ use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 
+use super::SalesOrderCommandProcess;
 use super::adapter::sales_order_object_readable;
 use super::authorization::SalesCommandAccess;
 use crate::adapters::freeze_approval_materials;
@@ -482,6 +483,16 @@ pub(super) async fn persist_sales_order_start(
                     return Ok::<Option<SubmissionView>, crate::Error>(Some(view));
                 }
                 access.revalidate(&order.base.id, expected_order_version, executor).await?;
+                let current = access.current(&order.base.id, executor).await?;
+                SalesOrderCommandProcess::check_first_contract_binding(
+                    &db,
+                    &access,
+                    &current,
+                    &order,
+                    working_copy.contract_revision_id.as_ref(),
+                    executor,
+                )
+                .await?;
                 db.bpm_workflow()
                     .insert_command_receipt(&writes.receipt, executor)
                     .await

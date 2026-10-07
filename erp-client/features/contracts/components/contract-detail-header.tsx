@@ -13,6 +13,7 @@ import { isExpiringWithin30Days } from "@/features/contracts/lib/contract-detail
 type ContractDetailHeaderProps = {
     contract: ContractCenterView
     onPaperOpen: () => void
+    onImportRevision?: () => void
 }
 
 /**
@@ -21,6 +22,7 @@ type ContractDetailHeaderProps = {
 export function ContractDetailHeader({
     contract,
     onPaperOpen,
+    onImportRevision,
 }: ContractDetailHeaderProps) {
     const canCreateSo = contract.allowedActions.includes("CREATE_SALES_ORDER")
     const canPrint = contract.allowedActions.includes("PRINT")
@@ -100,17 +102,32 @@ export function ContractDetailHeader({
                 )
             }
             secondaryActions={
-                <Button
-                    id="card-contracts-detail-header-paper-preview"
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={!canPrint}
-                    onClick={onPaperOpen}
-                >
-                    <PrinterIcon data-icon="inline-start" aria-hidden="true" />
-                    纸质预览
-                </Button>
+                <>
+                    {onImportRevision ? (
+                        <Button
+                            id="contract-detail-import-revision"
+                            type="button"
+                            variant="outline"
+                            onClick={onImportRevision}
+                        >
+                            导入新版本
+                        </Button>
+                    ) : null}
+                    <Button
+                        id="card-contracts-detail-header-paper-preview"
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={!canPrint}
+                        onClick={onPaperOpen}
+                    >
+                        <PrinterIcon
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                        />
+                        纸质预览
+                    </Button>
+                </>
             }
         >
             <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">

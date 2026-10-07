@@ -23,6 +23,7 @@ pub use attribution::{AttributionOrgNode, SalesAttribution};
 mod approval_quantity;
 mod closure;
 mod content_hash;
+pub mod contract_terms;
 mod draft_working_copy;
 mod entity;
 pub(crate) mod formal_revision;

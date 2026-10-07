@@ -20,7 +20,10 @@ use crate::core::upload;
 /// # 返回
 /// 返回挂载了权限校验层的路由集合。
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
-    archived_routes(rbac).merge(template_routes(rbac)).merge(application_routes(rbac))
+    archived_routes(rbac)
+        .merge(template_routes(rbac))
+        .merge(application_routes(rbac))
+        .merge(import_routes(rbac))
 }
 
 fn archived_routes(rbac: &SharedRbacService) -> Router<AppState> {
@@ -34,11 +37,11 @@ fn archived_routes(rbac: &SharedRbacService) -> Router<AppState> {
             "/contracts/upload",
             with_permission(
                 upload::multipart_route(
-                    post(contract::contract_upload),
+                    post(contract::imports::upload),
                     upload::MAX_CONTRACT_MULTIPART_REQUEST_BYTES,
                 ),
                 rbac,
-                contract::contract_upload_permission_key(),
+                contract::imports::upload_permission_key(),
             ),
         )
         .route(
@@ -163,6 +166,30 @@ fn file_routes(rbac: &SharedRbacService) -> Router<AppState> {
                 get(contract::contract_file_preview),
                 rbac,
                 contract::contract_file_preview_permission_key(),
+            ),
+        )
+}
+
+fn import_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
+        .route(
+            "/contract-imports",
+            with_permission(get(contract::imports::list), rbac, contract::imports::list_permission_key()),
+        )
+        .route(
+            "/contract-imports/{id}",
+            with_permission(get(contract::imports::detail), rbac, contract::imports::detail_permission_key()),
+        )
+        .route(
+            "/contract-imports/{id}/run",
+            with_permission(post(contract::imports::run), rbac, contract::imports::run_permission_key()),
+        )
+        .route(
+            "/contract-imports/{id}/preview",
+            with_permission(
+                get(contract::imports::preview),
+                rbac,
+                contract::imports::preview_permission_key(),
             ),
         )
 }

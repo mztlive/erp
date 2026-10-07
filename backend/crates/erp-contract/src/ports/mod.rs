@@ -23,3 +23,5 @@ pub use identity::{AccountNamePort, EmptyAccountNames, FailClosedAccountNamePort
 pub use participant::{
     ContractParticipantPort, EmptyContractParticipants, FailClosedContractParticipantPort,
 };
+
+pub mod recognition;

@@ -44,6 +44,17 @@ pub(crate) const PARTY_BANK_ACCOUNTS: &str = <mongodb::Database as PartyExt>::PA
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub(crate) async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, PARTIES, party_indexes()).await?;
+    create_indexes(
+        db,
+        PARTIES,
+        vec![
+            IndexModel::builder()
+                .keys(doc! { "company_profile.legal_name": 1, "status": 1 })
+                .options(IndexOptions::builder().name("idx_parties_company_legal_name".to_string()).build())
+                .build(),
+        ],
+    )
+    .await?;
     create_indexes(db, PARTY_REVISIONS, party_revision_indexes()).await?;
     create_indexes(db, PARTY_CONTACTS, party_contact_indexes()).await?;
     create_indexes(db, PARTY_ADDRESSES, party_address_indexes()).await?;

@@ -76,3 +76,5 @@ pub mod supply_settlement;
 
 #[cfg(test)]
 mod test_indexes;
+
+pub mod contract_import;
