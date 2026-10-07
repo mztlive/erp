@@ -1046,6 +1046,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "GET",
+                path: "/admin/sales-orders/{id}/contract-check",
+                description: "核对后补销售合同",
+                permission: {
+                    resource: "sales_order",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
                 path: "/admin/sales-orders/{id}/evidence-files/{asset_id}/download",
                 description: "下载销售单建单凭证",
                 permission: {
@@ -2655,7 +2665,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 module: "admin",
                 method: "POST",
                 path: "/admin/contracts/upload",
-                description: "一次上传并归档合同 PDF",
+                description: "上传识别合同",
                 permission: {
                     resource: "contract",
                     action: "create",
@@ -2719,6 +2729,46 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 permission: {
                     resource: "contract",
                     action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/contract-imports",
+                description: "查询本人合同导入",
+                permission: {
+                    resource: "contract",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/contract-imports/{id}",
+                description: "查询本人合同导入结果",
+                permission: {
+                    resource: "contract",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/contract-imports/{id}/run",
+                description: "执行或重试合同识别",
+                permission: {
+                    resource: "contract",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/contract-imports/{id}/preview",
+                description: "预览本人导入原文",
+                permission: {
+                    resource: "contract",
+                    action: "create",
                 },
             },
         ],

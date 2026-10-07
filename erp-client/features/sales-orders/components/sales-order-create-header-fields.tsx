@@ -1,5 +1,6 @@
 "use client"
 
+import { useSelector } from "@tanstack/react-form"
 import { z } from "zod"
 
 import {
@@ -30,6 +31,10 @@ export function SalesOrderCreateHeaderFields({
     applyNature,
     onNatureChangeRequest,
 }: SalesOrderCreateHeaderFieldsProps) {
+    const hasContract = useSelector(
+        form.store,
+        (state) => state.values.orderBasis === "contract",
+    )
     return (
         <div className="grid min-w-0 grid-cols-1 items-start gap-x-6 gap-y-5 sm:grid-cols-2">
             <form.AppField name="nature">
@@ -100,6 +105,8 @@ export function SalesOrderCreateHeaderFields({
                         label="付款条件"
                         required
                         options={PAYMENT_TERM_OPTIONS}
+                        disabled={hasContract}
+                        description={hasContract ? "沿用合同约定" : undefined}
                     />
                 )}
             </form.AppField>

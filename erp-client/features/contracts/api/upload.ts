@@ -1,94 +1,88 @@
-import { createApiError, apiPostForm } from "@/lib/api"
-import { PAYMENT_TERM_OPTIONS } from "@/lib/business-options"
-import { contractPdfError } from "@/features/contracts/lib/pdf"
-
 import {
-    paymentTermCodeFromLabel,
-    tsToIso,
-} from "@/features/contracts/api/helpers"
-import type {
-    UploadContractPdfInput,
-    UploadContractPdfResult,
-} from "@/features/contracts/types"
+    apiGet,
+    apiGetBlob,
+    apiPost,
+    apiPostForm,
+    createApiError,
+    type Page,
+} from "@/lib/api"
+import { contractPdfError } from "@/features/contracts/lib/pdf"
+import type { UploadContractPdfInput } from "@/features/contracts/types"
 
-type BackendContractUpload = {
+export type ContractImportTask = {
     id: string
-    contract_no: string
-    revision_id: string
-    revision_no: number
-    file_asset_id: string
+    version: number
     file_name: string
-    created_at: number
+    page_count: number
+    status: "ready" | "processing" | "failed" | "succeeded"
+    customer_id?: string
+    expected_customer_id?: string
+    started_at?: number
+    recoverable_at?: number
+    revision_target?: { contract_id: string; version: number }
+    extraction?: {
+        fields: Record<string, { value: string; page: number; quote: string }>
+    }
+    failure?: { code: string; message: string; field?: string; page?: number }
+    result?: {
+        id: string
+        contract_no: string
+        revision_id: string
+        revision_no: number
+        file_name: string
+        created_at: number
+    }
 }
 
-/** 上传合同 PDF；前端只发一个 multipart 命令。 */
+/** 文件与任务先持久化；业务字段一律不从客户端提交。 */
 export async function uploadContractPdf(
     input: UploadContractPdfInput,
-): Promise<UploadContractPdfResult> {
-    const fileError = contractPdfError(input.pdfFile)
-    if (fileError) {
+): Promise<ContractImportTask> {
+    const error = contractPdfError(input.pdfFile)
+    if (error)
         throw createApiError({
             kind: "Validation",
-            message: fileError,
+            message: error,
             status: 400,
             retryable: false,
         })
-    }
-
-    if (!input.customerId?.trim()) {
-        throw createApiError({
-            kind: "Validation",
-            message: "请选择客户",
-            status: 400,
-            retryable: false,
-        })
-    }
-
-    const termCode = paymentTermCodeFromLabel(input.paymentTerms)
-    const termName =
-        PAYMENT_TERM_OPTIONS.find((o) => o.value === termCode)?.label ??
-        input.paymentTerms
-
-    const command = {
-        contract_no: input.contractNo.trim(),
-        customer_id: input.customerId.trim(),
-        settlement_party_id: input.settlementPartyId?.trim() || null,
-        customer_name: input.customerName.trim(),
-        settlement_party_name: input.settlementPartyName.trim(),
-        payment_term_code: termCode,
-        payment_term_name: termName,
-        // UI 未采集开票快照：用受控默认值满足后端校验（见证据 gap）
-        invoice_type: "增值税专用发票",
-        tax_point: "13",
-        valid_from: input.validFrom,
-        valid_to: input.validTo || undefined,
-        signed_at: input.signedAt,
-    }
     const form = new FormData()
-    // 服务端流式解析先取文件，再读取 JSON 命令；顺序是协议的一部分。
     form.append("file", input.pdfFile, input.pdfFile.name)
-    form.append("command", JSON.stringify(command))
-
-    // 统一信封解包：网络 / 鉴权 / 业务失败由 lib/api 层抛出带后端文案的 ApiError。
-    const created = await apiPostForm<BackendContractUpload | null>(
-        "/admin/contracts/upload",
-        form,
-        { timeoutMs: 60_000 },
+    form.append(
+        "command",
+        JSON.stringify({
+            request_key: input.idempotencyKey,
+            expected_customer_id: input.customerId || null,
+            revision_target: input.revisionTarget
+                ? {
+                      contract_id: input.revisionTarget.contractId,
+                      version: input.revisionTarget.version,
+                  }
+                : null,
+        }),
     )
-    if (!created?.id || !created.revision_id) {
-        throw createApiError({
-            kind: "Parse",
-            message: "上传响应缺少合同或修订身份",
-        })
-    }
-
-    return {
-        contractId: created.id,
-        contractNo: created.contract_no,
-        revisionId: created.revision_id,
-        revisionNo: created.revision_no,
-        uploadedAt: tsToIso(created.created_at),
-        fileName: created.file_name,
-        reference: `CT-UP-${created.contract_no}`,
-    }
+    return apiPostForm<ContractImportTask>("/admin/contracts/upload", form, {
+        timeoutMs: 60_000,
+    })
 }
+
+export const fetchContractImports = (
+    page: number,
+    revisionContractId?: string,
+) =>
+    apiGet<Page<ContractImportTask>>("/admin/contract-imports", {
+        page,
+        revision_contract_id: revisionContractId,
+    })
+export const fetchContractImport = (id: string) =>
+    apiGet<ContractImportTask>(
+        `/admin/contract-imports/${encodeURIComponent(id)}`,
+    )
+export const runContractImport = (id: string) =>
+    apiPost<ContractImportTask>(
+        `/admin/contract-imports/${encodeURIComponent(id)}/run`,
+        undefined,
+        { timeoutMs: 30_000 },
+    )
+export const previewContractImport = (id: string) =>
+    apiGetBlob(`/admin/contract-imports/${encodeURIComponent(id)}/preview`)

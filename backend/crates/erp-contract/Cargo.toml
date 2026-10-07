@@ -5,6 +5,7 @@ edition = "2024"
 autotests = false
 
 [dependencies]
+lopdf = { workspace = true }
 application-core = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }

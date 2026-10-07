@@ -21,14 +21,18 @@ export function useSupplementSalesOrderContract(onSupplemented: () => void) {
                 type: "success",
             })
         },
-        onError: (error) =>
+        onError: (error, input) => {
+            void client.invalidateQueries({
+                queryKey: salesOrderKeys.contractCheck(input),
+            })
             toast.add({
                 title: "合同未补录",
                 description: getErrorMessage(
                     error,
-                    "请核对合同客户与结算主体后重试",
+                    "请核对合同客户、结算主体和商业条款后重试",
                 ),
                 type: "error",
-            }),
+            })
+        },
     })
 }

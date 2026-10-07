@@ -1,6 +1,7 @@
 //! Sales-owned snapshot construction, rules and transaction-local persistence.
 
 pub mod command;
+pub mod contract_binding;
 pub mod draft_working_copy;
 pub mod formalize;
 pub mod lifecycle;

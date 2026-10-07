@@ -584,7 +584,7 @@ pub(crate) async fn store_asset_file(
 }
 
 /// 校验附件扩展名、声明 MIME 与真实文件头一致；支持受控图片和 PDF。
-fn validate_asset_file(file: AssetFile) -> std::result::Result<AssetFile, Error> {
+pub(crate) fn validate_asset_file(file: AssetFile) -> std::result::Result<AssetFile, Error> {
     if file.content.is_empty() {
         return Err(Error::BadRequest("上传文件不能为空".to_string()));
     }

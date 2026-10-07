@@ -56,6 +56,10 @@ use tokio::sync::watch;
 use tracing::info;
 use url::Url;
 
+mod aliyun_ocr;
+pub use aliyun_ocr::AliyunOcrConfig;
+mod contract_ai;
+pub use contract_ai::ContractAiConfig;
 mod command;
 mod errors;
 mod nacos;
@@ -88,6 +92,12 @@ pub struct Config {
     /// 可选的演示数据开关。缺省时关闭，不生成也不删除演示主数据。
     #[serde(default)]
     pub demo: DemoConfig,
+    /// 可选阿里云 OCR；缺省时不启用外部识别。
+    #[serde(default)]
+    pub aliyun_ocr: Option<AliyunOcrConfig>,
+    /// 可选 OpenAI 兼容合同提取服务。
+    #[serde(default)]
+    pub contract_ai: Option<ContractAiConfig>,
 }
 
 /// 演示主数据开关。
@@ -326,6 +336,12 @@ impl Config {
             return Err(Error::Invalid(
                 "app.secret must be at least 32 bytes and must not use the example placeholder".to_string(),
             ));
+        }
+        if let Some(ocr) = &self.aliyun_ocr {
+            ocr.validate()?;
+        }
+        if let Some(ai) = &self.contract_ai {
+            ai.validate()?;
         }
         validate_s3_config(&self.s3)?;
         validate_bootstrap_password(self.bootstrap.initial_admin_password())?;

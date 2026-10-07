@@ -16,3 +16,5 @@ pub use owned::{ContractRepository, ContractRevisionRepository};
 pub use scope::{ContractReadScope, ContractRepositoryScopeExt, ContractScopeClause};
 
 pub mod list_search;
+
+pub mod recognition;

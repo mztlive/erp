@@ -3,31 +3,28 @@
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
 //! 直接复用 `erp_contract` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
 
+pub mod imports;
 mod template_upload;
 pub mod templates;
 
 use application_core::AuditActor;
 use axum::body::Body;
-use axum::extract::{Multipart, Path, Query, State};
+use axum::extract::{Path, Query, State};
 use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS};
 use axum::http::{HeaderValue, StatusCode};
 use axum::response::Response;
 use axum::{Extension, Json};
 use erp_contract::{
     ArchiveContractRevisionRequest, ContractDetailView, ContractListParams, ContractListView, ContractView,
-    CreateContractRequest, TerminateContractRequest, UploadContractRequest, UploadContractView,
+    CreateContractRequest, TerminateContractRequest,
 };
-use erp_support::{FileAssetView, RetentionClass, SensitivityClass};
+use erp_support::FileAssetView;
 use tracing::error;
 
-use super::file_asset::{
-    extract_asset_file_with_limit, prepare_asset_response, should_compensate_pending_assets, store_asset_file,
-};
+use super::file_asset::prepare_asset_response;
 use crate::app_state::AppState;
 use crate::core::errors::{Error, Result};
-use crate::core::handler::customer::ensure_customer_access;
 use crate::core::response::ApiResponse;
-use crate::core::upload;
 
 #[permission_macros::permission(
     group = "合同",
@@ -76,66 +73,8 @@ pub async fn contract_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateContractRequest>,
 ) -> Result<ContractView> {
-    ensure_customer_access(&state, &actor, "detail", &req.customer_id).await?;
-    let view = state.contract_service().create_contract(req, &actor).await?;
-
-    Ok(ApiResponse::ok_with_data(view))
-}
-
-#[permission_macros::permission(
-    group = "合同",
-    group_desc = "合同 PDF 档案管理",
-    desc = "一次上传并归档合同 PDF",
-    resource = "contract",
-    action = "create"
-)]
-/// 一次接收合同 PDF 与业务字段，并原子登记文件元数据、合同及首修订。
-///
-/// 对象存储不具备 MongoDB 事务能力；数据库事务失败时本入口立即删除刚上传的
-/// 对象作为补偿，避免留下未登记文件。
-pub async fn contract_upload(
-    State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
-    mut multipart: Multipart,
-) -> Result<UploadContractView> {
-    let file = extract_asset_file_with_limit(&mut multipart, upload::MAX_CONTRACT_PDF_BYTES).await?;
-    let mut command = None;
-    while let Some(field) = multipart
-        .next_field()
-        .await
-        .map_err(|_| crate::core::errors::Error::BadRequest("Multipart 表单无效".to_string()))?
-    {
-        if field.name() != Some("command") {
-            continue;
-        }
-        let text = field
-            .text()
-            .await
-            .map_err(|_| crate::core::errors::Error::BadRequest("合同命令读取失败".to_string()))?;
-        command = Some(
-            serde_json::from_str::<UploadContractRequest>(&text)
-                .map_err(|_| crate::core::errors::Error::BadRequest("合同命令格式无效".to_string()))?,
-        );
-        break;
-    }
-    let command =
-        command.ok_or_else(|| crate::core::errors::Error::BadRequest("缺少合同命令".to_string()))?;
-    ensure_customer_access(&state, &actor, "detail", command.customer_id.as_ref()).await?;
-    let asset_request =
-        store_asset_file(&state, file, SensitivityClass::Sensitive, RetentionClass::LongTerm, None).await?;
-    let object_key = asset_request.storage_object_key.clone();
-    let result =
-        erp_processes::upload_contract(state.db(), state.rbac(), command, asset_request, actor).await;
-    let view = match result {
-        Ok(view) => view,
-        Err(error) => {
-            if should_compensate_pending_assets(&error) {
-                let _ = state.storage().delete(&object_key).await;
-            }
-            return Err(error.into());
-        },
-    };
-    Ok(ApiResponse::ok_with_data(view))
+    let _ = (state, actor, req);
+    Err(Error::BadRequest("合同必须通过 PDF 自动识别导入，不接受手填归档".into()))
 }
 
 #[permission_macros::permission(
@@ -256,9 +195,8 @@ pub async fn contract_archive_revision(
     Path(id): Path<String>,
     Json(req): Json<ArchiveContractRevisionRequest>,
 ) -> Result<ContractDetailView> {
-    let view = state.contract_service().archive_contract_revision(&id, req, &actor).await?;
-
-    Ok(ApiResponse::ok_with_data(view))
+    let _ = (state, actor, id, req);
+    Err(Error::BadRequest("合同新版本必须通过 PDF 自动识别导入".into()))
 }
 
 #[permission_macros::permission(

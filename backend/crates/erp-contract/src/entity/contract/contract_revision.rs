@@ -16,6 +16,7 @@ use super::snapshot::{
     ContractSnapshot, CustomerSnapshot, InvoiceRequirementSnapshot, PaymentTermSnapshot,
     SettlementPartySnapshot,
 };
+use crate::entity::recognition::RecognitionProof;
 
 /// 合同归档来源（数据模型 §6.4：`CONTRACT_CENTER`、`SALES_ORDER_CREATE`）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -85,6 +86,9 @@ pub struct ContractRevisionData {
 /// 合同版本实体（不可变修订，数据模型 §6.4）。
 #[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
 pub struct ContractRevision {
+    /// 自动识别与主数据匹配证据；历史归档无此字段。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recognition: Option<RecognitionProof>,
     #[serde(flatten)]
     pub base: BaseModel,
     #[serde(flatten)]
@@ -149,6 +153,7 @@ impl ContractRevision {
         }
 
         Ok(Self {
+            recognition: None,
             base: BaseModel::new(id.to_string()),
             revision: RevisionBase::new(revision_no),
             contract_id,

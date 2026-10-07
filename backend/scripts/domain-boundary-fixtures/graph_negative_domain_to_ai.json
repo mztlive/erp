@@ -1,0 +1,6 @@
+{
+  "packages": [
+    {"name": "erp-contract", "deps": [{"name": "rig-core", "kind": "normal"}]},
+    {"name": "rig-core", "deps": []}
+  ]
+}

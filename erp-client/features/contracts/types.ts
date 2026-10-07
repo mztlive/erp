@@ -122,6 +122,11 @@ export type ContractCenterView = {
     ownerLabel: string
     ownerKind: "current_customer_owner" | "historical_participant"
     currentRevision: {
+        signingCompanyName?: string
+        recognizedFields?: Record<
+            string,
+            { value: string; page: number; quote: string }
+        >
         revisionId: string
         revisionNo: number
         settlementParty: ObjectReference
@@ -149,16 +154,9 @@ export type ContractCenterView = {
 
 export type UploadContractPdfInput = {
     pdfFile: File
-    contractNo: string
     customerId?: string
-    customerName: string
-    settlementPartyId?: string
-    settlementPartyName: string
-    signedAt: string
-    validFrom: string
-    validTo: string
-    paymentTerms: string
     idempotencyKey: string
+    revisionTarget?: { contractId: string; version: number }
 }
 
 export type UploadContractPdfResult = {

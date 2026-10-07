@@ -52,6 +52,18 @@ export function ContractDetailOverview({
                             value: contract.customer.displayName,
                         },
                         {
+                            id: "signing-company",
+                            label: "我方签约主体",
+                            value: rev.signingCompanyName ?? "历史档案未记录",
+                        },
+                        {
+                            id: "recognition",
+                            label: "归档依据",
+                            value: rev.recognizedFields
+                                ? "原文识别并匹配主数据"
+                                : "历史归档",
+                        },
+                        {
                             id: "settlement",
                             label: "结算主体",
                             value: rev.settlementParty.displayName,

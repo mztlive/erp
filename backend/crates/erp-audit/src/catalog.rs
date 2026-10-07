@@ -93,6 +93,8 @@ const REGISTERED_ACTIONS: &[AuditAction] = &[
     action("business_document.register", "business_document", "登记业务单据"),
     action("contract.archive_revision", "contract", "归档版本合同"),
     action("contract.create", "contract", "创建合同"),
+    action("contract.import.create", "contract_import", "创建合同识别任务"),
+    action("contract.import.archive", "contract", "归档识别合同"),
     action("contract.terminate", "contract", "终止合同"),
     action("contract_application.apply", "contract_application", "应用合同申请"),
     action("contract_application.download", "contract_application", "下载合同申请"),

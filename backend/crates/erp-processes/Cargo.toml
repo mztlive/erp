@@ -5,6 +5,12 @@ edition = "2024"
 autotests = false
 
 [dependencies]
+aliyun-ocr = { workspace = true }
+rig-core = { workspace = true }
+reqwest = { workspace = true }
+bytes = { workspace = true }
+image = { workspace = true }
+tempfile = { workspace = true }
 futures-util = { workspace = true }
 regex = { workspace = true }
 rust_decimal = { workspace = true }
@@ -42,10 +48,11 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 storage = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true, features = ["rt", "macros"] }
+tokio = { workspace = true, features = ["rt", "macros", "process", "fs", "io-util", "time"] }
 tracing = { workspace = true }
 validator = { workspace = true }
 zip = { workspace = true }
 
 [dev-dependencies]
+rig-core = { workspace = true, features = ["test-utils"] }
 test-support = { workspace = true }

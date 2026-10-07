@@ -65,7 +65,7 @@ RUN set -eux; \
         sed -i 's/security\.debian\.org/mirrors.cloud.tencent.com/g' /etc/apt/sources.list.d/debian.sources; \
     fi; \
     apt-get update; \
-    apt-get install -y --no-install-recommends ca-certificates curl libssl3 tzdata; \
+    apt-get install -y --no-install-recommends ca-certificates curl libssl3 tzdata poppler-utils fonts-noto-cjk; \
     rm -rf /var/lib/apt/lists/*; \
     groupadd --gid 10001 erp; \
     useradd --no-log-init --no-create-home --uid 10001 --gid erp \

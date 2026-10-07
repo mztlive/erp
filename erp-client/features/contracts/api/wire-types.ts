@@ -18,6 +18,15 @@ export type BackendContractView = {
 }
 
 export type BackendContractRevision = {
+    recognition?: {
+        company: { id: string; legal_name: string }
+        extraction: {
+            fields: Record<
+                string,
+                { value: string; page: number; quote: string }
+            >
+        }
+    }
     id: string
     revision_no: number
     contract_pdf_file_id: string

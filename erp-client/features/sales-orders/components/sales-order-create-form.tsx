@@ -491,7 +491,11 @@ export function SalesOrderCreateForm({
                     open={uploadOpen}
                     onOpenChange={setUploadOpen}
                     initialCustomerId={
-                        initialDraft?.customerId || initialCustomerId
+                        initialDraft?.customerId ||
+                        (submission.draftIdentity
+                            ? submission.savedValues?.customerId ||
+                              selectedCustomerId
+                            : selectedCustomerId || initialCustomerId)
                     }
                     onSuccess={(result) => {
                         void handleUploadSuccess(result)

@@ -106,6 +106,14 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
 fn evidence_contract_routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
+            "/sales-orders/{id}/contract-check",
+            with_permission(
+                get(sales_order::contract_check::sales_order_contract_check),
+                rbac,
+                sales_order::contract_check::sales_order_contract_check_permission_key(),
+            ),
+        )
+        .route(
             "/sales-orders/{id}/evidence-files/{asset_id}/download",
             with_permission(
                 get(sales_order::evidence::sales_order_evidence_download),
