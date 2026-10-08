@@ -760,6 +760,7 @@ async function run() {
   const protectedPartyIds = includeCatalog
     ? []
     : uniqueValues([
+        ...(await distinct("parties", "id", { company_profile: { $type: "object" } })),
         ...(await distinctReferenced("supplier_accounts", ["party_id"], resetPartyIds)),
         ...(await distinctReferenced(
           "supplier_commercial_profile_revisions",
@@ -851,7 +852,7 @@ async function run() {
   line(
     includeCatalog
       ? `- 将保留的 Party: 0（主数据重置清空全部主体，种子再写入）`
-      : `- 将保留的供应商共享 Party: ${protectedPartyIds.length}`,
+      : `- 将保留的我方公司及供应商共享 Party: ${protectedPartyIds.length}`,
   );
   line(`- 将删除的专属 Party: ${deletablePartyIds.length}`);
   for (const collectionName of PARTY_CHILD_COLLECTIONS) {

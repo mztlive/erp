@@ -162,7 +162,8 @@ test.afterEach(async () => {
 })
 
 async function saveCompany(token: string, company: Company, changes: Partial<Company>): Promise<Company> {
-    const { id, ...input } = { ...company, ...changes }
+    const { id, party_no, version, legal_name, short_name, aliases, unified_credit_code, status } = { ...company, ...changes }
+    const input = { party_no, version, legal_name, short_name, aliases, unified_credit_code, status }
     return command(token, `/admin/companies/${id}`, input, "PUT")
 }
 

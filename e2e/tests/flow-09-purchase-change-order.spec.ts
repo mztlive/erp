@@ -9,6 +9,7 @@
  * - 末节点通过即 on_final_approve 生效；客户端 /effect 关闭
  * - 完整目标编辑后提交；驳回后修改同一变更单，重提形成新提交并重新经过仓储与财务
  */
+import { archiveContractViaUi } from "../helpers/contracts"
 import path from "node:path"
 
 import { test, expect, type Page } from "../helpers/test"
@@ -217,29 +218,9 @@ test("[flow-09] 采购变更实改后驳回，修改原单重提并生效", asyn
             sales.page.getByRole("heading", { name: "合同" }),
         ).toBeVisible(VISIBLE)
         await sales.page
-            .getByLabel("页面操作")
-            .getByRole("button", { name: "上传合同 PDF" })
+            .locator("#page-actions-action-upload")
             .click()
-        await expect(
-            sales.page.getByRole("heading", { name: "上传合同 PDF" }),
-        ).toBeVisible(VISIBLE)
-        await sales.page
-            .locator("#card-contracts-upload-pdf-input")
-            .setInputFiles(SAMPLE_CONTRACT_PDF)
-        await sales.page
-            .locator("#card-contracts-upload-contract-no")
-            .fill(contractNo)
-        await chooseOption(
-            sales.page,
-            sales.page.locator("#card-contracts-upload-customer"),
-            new RegExp(legalName),
-            legalName,
-        )
-        await expect(
-            sales.page.locator("#card-contracts-upload-settlement-party"),
-        ).not.toHaveValue("", { timeout: 20_000 })
-        await sales.page.locator("#card-contracts-upload-submit").click()
-        await expectToast(sales.page, "合同 PDF 已归档")
+        await archiveContractViaUi(sales.page, { contractNo, customerName: legalName, pdf: SAMPLE_CONTRACT_PDF })
 
         await sales.page.goto("/sales/orders?mode=create")
         await expect(
@@ -253,9 +234,7 @@ test("[flow-09] 采购变更实改后驳回，修改原单重提并生效", asyn
             new RegExp(contractNo),
             contractNo,
         )
-        await expect(
-            sales.page.getByText(legalName, { exact: true }).first(),
-        ).toBeVisible(VISIBLE)
+        await expect(sales.page.locator("#sales-orders-create-customer")).toHaveValue(new RegExp(legalName))
         await chooseOption(
             sales.page,
             sales.page.locator("#sales-orders-create-header-welfare-scene"),

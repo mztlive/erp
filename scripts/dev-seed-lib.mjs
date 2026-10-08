@@ -239,6 +239,16 @@ export async function ensureDevAccounts(adminToken, options = {}) {
     });
   }
   const roles = await listRoles(adminToken);
+  // Only the disposable test copy receives newly required contract identity reads.
+  // Existing development/production role edits remain untouched.
+  if (process.env.ERP_E2E_ISOLATED === "1") {
+    const sales = roles.find((role) => role.id === "role-sales");
+    const permissions = [...new Set([...sales.permissions, "company:list", "company:detail"])];
+    if (permissions.length !== sales.permissions.length) {
+      await call("PUT", `/admin/roles/${sales.id}`, { token: adminToken, body: { permissions } });
+      sales.permissions = permissions;
+    }
+  }
   const seeded = {};
   for (const [key, spec] of Object.entries(ACCOUNTS)) {
     seeded[key] = await ensureRoleBoundAdmin(adminToken, spec, roles, options);

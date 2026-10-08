@@ -10,6 +10,7 @@
  * 3. 页头「版本」展示的是 currentRevisionNo（尚未生效 / vN），不是审批 subject_version；
  *    subject_version 取详情 GET /admin/sales-orders/{id} 的 submissions[].submission_no。
  */
+import { archiveContractViaUi, SIGNING_COMPANY } from "../helpers/contracts"
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -154,43 +155,9 @@ async function uploadContract(
   page: Page,
   input: { customerName: string; contractNo: string; today: Date },
 ): Promise<void> {
-  // 同 id 有 button 与 div 两个元素：用角色定位按钮。
-  await page.getByRole('button', { name: '上传合同 PDF' }).click()
-  const dialog = page.getByRole('dialog', { name: '上传合同 PDF' })
-  await expect(dialog).toBeVisible(VISIBLE)
-  await dialog.locator('#card-contracts-upload-pdf-input').setInputFiles(contractPdfPath())
-  await dialog.getByLabel('合同编号').fill(input.contractNo)
-  await chooseOption(
-    page,
-    dialog.getByPlaceholder('搜索客户编号或名称'),
-    new RegExp(input.customerName),
-    input.customerName,
-  )
-  await chooseOption(
-    page,
-    dialog.getByPlaceholder('搜索结算主体'),
-    new RegExp(input.customerName),
-    input.customerName,
-  )
-  await chooseOption(page, dialog.getByLabel('付款条件'), '按合同约定')
-  await pickCalendarDay(
-    page,
-    page.locator('#card-contracts-upload-signed-at'),
-    isoDate(input.today),
-  )
-  await pickCalendarDay(
-    page,
-    page.locator('#card-contracts-upload-valid-from'),
-    isoDate(input.today),
-  )
-  await pickCalendarDay(
-    page,
-    page.locator('#card-contracts-upload-valid-to'),
-    isoDate(addDays(input.today, 7)),
-  )
-  await dialog.getByRole('button', { name: '上传并归档' }).click()
-  await expect(dialog).toBeHidden(VISIBLE)
-  await expect(page.getByText(new RegExp(`客户\\s+${input.customerName}`))).toBeVisible(VISIBLE)
+  await page.locator("#sales-orders-create-contract-upload").click()
+  await archiveContractViaUi(page, { contractNo: input.contractNo, customerName: input.customerName, pdf: contractPdfPath(), validTo: isoDate(addDays(input.today, 7)) })
+  await expect(page.locator("#sales-orders-create-customer")).toHaveValue(new RegExp(input.customerName))
 }
 
 async function pickSkuAndFillLine(page: Page, due: Date, quantity: string): Promise<void> {
@@ -275,7 +242,7 @@ async function attachContract(
       new RegExp(input.contractNo),
       input.contractNo,
     )
-    await expect(page.getByText(new RegExp(`客户\\s+${input.customerName}`))).toBeVisible(VISIBLE)
+    await expect(page.locator("#sales-orders-create-customer")).toHaveValue(new RegExp(input.customerName))
     return
   } catch {
     await page.keyboard.press('Escape')
@@ -375,7 +342,7 @@ async function withdrawApproval(page: Page, order: OrderSnapshot): Promise<void>
   await expect(dialog).toBeHidden(VISIBLE)
   // 撤回后就地进入草稿编辑：标题是客户名，不再有「编辑销售单 / 业务信息」。
   await expect(page.getByText('草稿').first()).toBeVisible(VISIBLE)
-  await expect(page.getByRole('heading', { name: '基本信息', exact: true })).toBeVisible(VISIBLE)
+  await expect(page.locator('#sales-orders-create-customer')).toBeVisible(VISIBLE)
   await expect(page.getByRole('heading', { name: '销售明细', exact: true })).toBeVisible(VISIBLE)
   await expect(page.getByRole('button', { name: '添加商品' })).toBeVisible(VISIBLE)
 }
@@ -493,13 +460,11 @@ test('销售单审批驳回后可照原条件承接、修改原单重提或作�
       ).toBe('CANCELLED')
       await expect(sales.page.getByRole('button', { name: '发起改单' })).toHaveCount(0)
       // 继续编辑会异步回填合同修订、客户和结算主体；等表单实际同步后再编辑重提。
-      const contractSection = sales.page.locator('#contractId').locator('..')
-      await expect(contractSection.getByText(`${contractNo}@v1`, { exact: true })).toBeVisible(
-        VISIBLE,
-      )
-      await expect(contractSection).toContainText(`客户 ${customerName}`, VISIBLE)
-      await expect(contractSection).toContainText(`结算主体 ${customerName}`, VISIBLE)
-      await expect(contractSection.getByText('加载中…', { exact: true })).toBeHidden(VISIBLE)
+      const revision = sales.page.getByText(`${contractNo}@v1`, { exact: true })
+      await expect(revision).toBeVisible(VISIBLE)
+      await expect(sales.page.locator('#sales-orders-create-customer')).toHaveValue(new RegExp(customerName), VISIBLE)
+      await expect(sales.page.locator('#sales-orders-create-settlement')).toHaveValue(new RegExp(SIGNING_COMPANY), VISIBLE)
+      await expect(revision.locator('..').getByText('加载中…', { exact: true })).toBeHidden(VISIBLE)
       await sales.page.getByLabel('数量').first().fill('5')
       // 改数后工作副本自动保存完成前提交保持禁用：等提交可用再点，避免确认框空关。
       await expect(sales.page.locator('#sales-orders-create-submit')).toBeEnabled(VISIBLE)

@@ -13,6 +13,7 @@
  * - 销售单生效只形成可申请开票额度；xiaoshou 提交开票申请，caiwu 审批通过后 kaipiao 才有销项开票任务
  * - 销售单票款页只读，回款改在客户往来页登记
  */
+import { archiveContractViaUi } from "../helpers/contracts";
 import path from "node:path";
 import { test, expect, type Page } from "../helpers/test";
 
@@ -129,26 +130,7 @@ test("flow-01 外部采购入仓后由公司仓库发货", async ({ browser }) =
             timeout: UI_TIMEOUT,
         });
         await page.locator("#page-actions-action-upload").click();
-        const contractDialog = page.getByRole("dialog", { name: "上传合同 PDF" });
-        await expect(contractDialog).toBeVisible({ timeout: UI_TIMEOUT });
-        await contractDialog.locator("#card-contracts-upload-pdf-input").setInputFiles(CONTRACT_PDF);
-        await contractDialog.locator("#card-contracts-upload-contract-no").fill(contractNo);
-        await chooseOption(
-            page,
-            contractDialog.locator("#card-contracts-upload-customer"),
-            customerName,
-        );
-        await expect(
-            contractDialog.locator("#card-contracts-upload-settlement-party"),
-        ).not.toHaveValue("", { timeout: UI_TIMEOUT });
-        await chooseOption(
-            page,
-            contractDialog.locator("#card-contracts-upload-payment-terms"),
-            "货到 15 天",
-        );
-        await contractDialog.locator("#card-contracts-upload-submit").click();
-        await expectToast(page, "合同 PDF 已归档");
-        await expect(contractDialog).toBeHidden({ timeout: UI_TIMEOUT });
+        await archiveContractViaUi(page, { contractNo, customerName, pdf: CONTRACT_PDF })
         await expect(page.getByText(contractNo).first()).toBeVisible({ timeout: UI_TIMEOUT });
 
         // 3) W05 销售单：实物 SKU + 货到付款，提交后进入采购确认
@@ -164,17 +146,14 @@ test("flow-01 外部采购入仓后由公司仓库发货", async ({ browser }) =
         await expect(page.getByLabel("履约责任")).toHaveCount(0);
         await expect(page.getByLabel("采购成本")).toHaveCount(0);
         await chooseOption(page, page.locator("#sales-orders-create-contract"), contractNo);
-        await expect(page.getByText(customerName).first()).toBeVisible({ timeout: UI_TIMEOUT });
+        await expect(page.locator("#sales-orders-create-customer")).toHaveValue(new RegExp(customerName))
         await chooseOption(
             page,
             page.locator("#sales-orders-create-header-welfare-scene"),
             "年节礼包",
         );
-        await chooseOption(
-            page,
-            page.locator("#sales-orders-create-header-payment-terms"),
-            "货到 15 天",
-        );
+        await expect(page.locator("#sales-orders-create-header-payment-terms")).toHaveValue("货到 15 天")
+    await expect(page.locator("#sales-orders-create-header-payment-terms")).toBeDisabled()
         await page.locator("#sales-orders-create-line-items-add").click();
         const skuDialog = page.getByRole("dialog", { name: "添加商品" });
         await expect(skuDialog).toBeVisible({ timeout: UI_TIMEOUT });

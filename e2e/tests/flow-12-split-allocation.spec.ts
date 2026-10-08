@@ -15,6 +15,7 @@
  * - 选源是 OptionCombobox。关闭时输入框不一定显示选项文案，以打开后
  *   `data-selected` 的选项标签区分「可用」库存和「入仓」采购。
  */
+import { archiveContractViaUi } from "../helpers/contracts"
 import fs from "node:fs"
 import path from "node:path"
 import { expect, test, type BrowserContext, type Locator, type Page } from "../helpers/test"
@@ -171,22 +172,9 @@ async function createSalesOrderWithContract(
 ): Promise<{ salesOrderId: string; salesOrderNo: string }> {
     await page.goto(`${FRONTEND_BASE}/sales/orders?mode=create`)
     await expect(page.getByText("销售明细")).toBeVisible({ timeout: TIMEOUT })
-    await page.getByRole("button", { name: "上传合同 PDF", exact: true }).click()
-    const upload = page.getByRole("dialog", { name: "上传合同 PDF" })
-    await expect(upload).toBeVisible({ timeout: TIMEOUT })
-    await upload.locator("#card-contracts-upload-pdf-input").setInputFiles(pdfUpload())
-    await upload.getByLabel("合同编号").fill(contractNo)
-    const customerInput = upload.getByLabel("客户")
-    await customerInput.click()
-    await customerInput.fill(customerName)
-    await expect(page.getByRole("option", { name: new RegExp(customerName) })).toBeVisible({
-        timeout: TIMEOUT,
-    })
-    await page.getByRole("option", { name: new RegExp(customerName) }).click()
-    await expect(upload.getByLabel("结算主体")).not.toHaveValue("")
-    await upload.getByRole("button", { name: "上传并归档" }).click()
-    await expect(upload).toBeHidden({ timeout: TIMEOUT })
-    await expect(page.getByText(customerName, { exact: true }).first()).toBeVisible({ timeout: TIMEOUT })
+    await page.locator("#sales-orders-create-contract-upload").click()
+    await archiveContractViaUi(page, { contractNo, customerName, pdf: pdfUpload() })
+    await expect(page.locator("#sales-orders-create-customer")).toHaveValue(new RegExp(customerName))
 
     await chooseOption(page, page.getByLabel("福利场景"), "年节礼包")
     await page.locator("#sales-orders-create-line-items-add").click()

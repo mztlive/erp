@@ -21,6 +21,7 @@
  *   线下服务种子供应商安达为 POSTPAY_NET15，不会启用先款门禁。
  *   本流程用狮峰茶叶实物拆「入仓 + 供应商直发」覆盖入库与代发；电子交付/服务与入库/直发共用 ensure_prepay_gate。
  */
+import { archiveContractViaUi } from "../helpers/contracts";
 import fs from "node:fs";
 import path from "node:path";
 import { test, expect, type Browser, type BrowserContext, type Page } from "../helpers/test";
@@ -510,30 +511,7 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
         // 2) 上传合同 PDF
         await gotoHeading(page, "/sales/contracts", /^合同$/);
         await page.locator("#page-actions-action-upload").click();
-        const contractDialog = page.getByRole("dialog", { name: "上传合同 PDF" });
-        await expect(contractDialog).toBeVisible({ timeout: UI_TIMEOUT });
-        await contractDialog.locator("#card-contracts-upload-pdf-input").setInputFiles(contractPdf());
-        await contractDialog.locator("#card-contracts-upload-contract-no").fill(contractNo);
-        await chooseOption(
-            page,
-            contractDialog.locator("#card-contracts-upload-customer"),
-            customerName,
-            customerName,
-        );
-        await expect(
-            contractDialog.locator("#card-contracts-upload-settlement-party"),
-        ).not.toHaveValue("", { timeout: UI_TIMEOUT });
-        if (await contractDialog.locator("#card-contracts-upload-payment-terms").count()) {
-            await chooseOption(
-                page,
-                contractDialog.locator("#card-contracts-upload-payment-terms"),
-                PAYMENT_TERM_CUSTOMER,
-                "货到",
-            );
-        }
-        await contractDialog.locator("#card-contracts-upload-submit").click();
-        await expectToast(page, "合同 PDF 已归档");
-        await expect(contractDialog).toBeHidden({ timeout: UI_TIMEOUT });
+        await archiveContractViaUi(page, { contractNo, customerName, pdf: contractPdf() })
         await expect(page.getByText(contractNo).first()).toBeVisible({ timeout: UI_TIMEOUT });
 
         // 3) 销售单：龙井入仓 + 普洱直发，客户付款条件仍为货到
@@ -544,19 +522,15 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
         await expect(page.getByLabel("供应商")).toHaveCount(0);
         await expect(page.getByLabel("履约责任")).toHaveCount(0);
         await chooseOption(page, page.locator("#sales-orders-create-contract"), contractNo, contractNo);
-        await expect(page.getByText(customerName).first()).toBeVisible({ timeout: UI_TIMEOUT });
+        await expect(page.locator("#sales-orders-create-customer")).toHaveValue(new RegExp(customerName))
         await chooseOption(
             page,
             page.locator("#sales-orders-create-header-welfare-scene"),
             "年节礼包",
             "年节",
         );
-        await chooseOption(
-            page,
-            page.locator("#sales-orders-create-header-payment-terms"),
-            PAYMENT_TERM_CUSTOMER,
-            "货到",
-        );
+        await expect(page.locator("#sales-orders-create-header-payment-terms")).toHaveValue(PAYMENT_TERM_CUSTOMER)
+    await expect(page.locator("#sales-orders-create-header-payment-terms")).toBeDisabled()
         await pickSku(page, "龙井", SKU_INBOUND);
         await pickSku(page, "普洱", SKU_DIRECT);
         await fillAllLineQuantities(page, SALES_QTY);

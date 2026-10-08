@@ -4,6 +4,7 @@
  * 账号: xiaoshou（客户、合同、销售）→ caigou（采购责任和销售审批）。
  * 全部业务写入走真实页面或已授权 API；凭证使用真实 PDF/PNG 文件，禁止 mock。
  */
+import { archiveContractViaUi, SIGNING_COMPANY } from "../helpers/contracts"
 import fs from "node:fs/promises"
 import path from "node:path"
 
@@ -99,6 +100,7 @@ type CreateBody = {
     draft: {
         requested_contract_revision_id: null
         no_contract_terms: {
+            settlement_party_id: string
             payment_term_code: string
             payment_term_name: string
             invoice_type: string
@@ -224,32 +226,11 @@ async function uploadContract(
     token: string,
     customerName: string,
     contractNo: string,
+    paymentTerms = "货到 15 天",
 ): Promise<Contract> {
     await page.goto("/sales/contracts")
     await page.locator("#page-actions-action-upload").click()
-    const dialog = page.getByRole("dialog", { name: "上传合同 PDF" })
-    await expect(dialog).toBeVisible(VISIBLE)
-    await dialog
-        .locator("#card-contracts-upload-pdf-input")
-        .setInputFiles(PDF_PATH)
-    await dialog.locator("#card-contracts-upload-contract-no").fill(contractNo)
-    await chooseOption(
-        page,
-        dialog.locator("#card-contracts-upload-customer"),
-        customerName,
-    )
-    await expect(
-        dialog.locator("#card-contracts-upload-settlement-party"),
-    ).not.toHaveValue("", VISIBLE)
-    // 与无合同销售的货到 15 天和 13% 税点不同，后补不得重写销售快照。
-    await chooseOption(
-        page,
-        dialog.locator("#card-contracts-upload-payment-terms"),
-        "先款 100%",
-    )
-    await dialog.locator("#card-contracts-upload-submit").click()
-    await expectToast(page, "合同 PDF 已归档")
-    await expect(dialog).toBeHidden(VISIBLE)
+    await archiveContractViaUi(page, { contractNo, customerName, pdf: PDF_PATH, paymentTerms })
     const contracts = await apiGet<ApiPage<Contract>>(
         token,
         "/admin/contracts",
@@ -269,9 +250,15 @@ async function createNoContractDraft(
     evidence: "pdf" | "png",
 ): Promise<{ order: SalesOrder; body: CreateBody }> {
     await page.goto("/sales/orders?mode=create")
+    await page.locator("#sales-orders-create-basis-evidence").click()
     await chooseOption(
         page,
         page.locator("#sales-orders-create-customer"),
+        customerName,
+    )
+    await chooseOption(
+        page,
+        page.locator("#sales-orders-create-settlement"),
         customerName,
     )
     const [uploadedResponse] = await Promise.all([
@@ -345,6 +332,7 @@ async function createNoContractDraft(
     expect(body.contract_id).toBeNull()
     expect(body.evidence_file_asset_ids).toEqual([uploaded.id])
     expect(body.draft.no_contract_terms).toEqual({
+        settlement_party_id: order.settlement_party_id,
         payment_term_code: "POSTPAY_NET15",
         payment_term_name: "货到 15 天",
         invoice_type: "增值税专用发票",
@@ -434,7 +422,16 @@ async function supplementContract(
         current_revision_id: original.current_revision_id,
         evidence_file_asset_ids: original.evidence_file_asset_ids,
     })
-    expect(bound.working_copy).toEqual(original.working_copy)
+    if (original.commercial_status === "DRAFT" && original.working_copy) {
+        // 绑定以工作副本版本守卫与并发保存互斥，只递增版本，不改商务内容。
+        expect(original.working_copy.version).toBeDefined()
+        expect(bound.working_copy).toEqual({
+            ...original.working_copy,
+            version: original.working_copy.version! + 1,
+        })
+    } else {
+        expect(bound.working_copy).toEqual(original.working_copy)
+    }
     expect(bound.submissions).toEqual(original.submissions)
     expect(bound.revisions).toEqual(original.revisions)
     return bound
@@ -525,6 +522,7 @@ test("[flow-21] 信用代码可空、无合同凭证采购审批、合同筛选�
         token,
         customer.current_revision.legal_name,
         `E2E-EVIDENCE-${suffix}-2`,
+        "先款 100%",
     )
     const foreignContract = await uploadContract(
         page,
@@ -532,7 +530,12 @@ test("[flow-21] 信用代码可空、无合同凭证采购审批、合同筛选�
         otherCustomer.current_revision.legal_name,
         `E2E-EVIDENCE-${suffix}-OTHER`,
     )
-    expect(firstContract.settlement_party_id).toBe(customer.party_id)
+    const companies = await apiGet<ApiPage<{ id: string; legal_name: string }>>(
+        token, "/admin/companies", { page_size: 100 },
+    )
+    const signingCompany = companies.items.find((company) => company.legal_name === SIGNING_COMPANY)
+    expect(signingCompany).toBeDefined()
+    expect(firstContract.settlement_party_id).toBe(signingCompany!.id)
 
     const pdfDraft = await createNoContractDraft(
         page,
@@ -595,7 +598,7 @@ test("[flow-21] 信用代码可空、无合同凭证采购审批、合同筛选�
         }
     })
 
-    await test.step("不同客户合同不得绑定，草稿首次补合同保留原单条款与价格", async () => {
+    await test.step("不同客户或条款不一致的合同不得绑定，匹配合同保留原单条款与价格", async () => {
         await expectCommandRejected(
             token,
             `/admin/sales-orders/${pdfDraft.order.id}/contract`,
@@ -605,7 +608,17 @@ test("[flow-21] 信用代码可空、无合同凭证采购审批、合同筛选�
                 requested_contract_revision_id:
                     foreignContract.current_revision_id,
             },
-            /客户.*结算主体.*一致/,
+            /客户.*合同对方主体.*客户一致/,
+        )
+        await expectCommandRejected(
+            token,
+            `/admin/sales-orders/${pdfDraft.order.id}/contract`,
+            {
+                version: pdfDraft.order.version,
+                contract_id: replacementContract.id,
+                requested_contract_revision_id: replacementContract.current_revision_id,
+            },
+            /合同条款不一致.*付款条件/,
         )
         expect(
             await apiGet<SalesOrder>(

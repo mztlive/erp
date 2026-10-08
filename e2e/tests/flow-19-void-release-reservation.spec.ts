@@ -6,6 +6,7 @@
  * 操作: 通过 ERP 页面建立业务事实；详情页无作废按钮，使用 HTTP 验证拒绝契约。
  * 仓发任务必须继续可用，但本用例不得确认发货或消耗库存预占。
  */
+import { archiveContractViaUi } from "../helpers/contracts";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -401,23 +402,7 @@ test("flow-19 已生效销售单禁止直接作废：预占和仓发草稿保持
             timeout: UI_TIMEOUT,
         });
         await page.locator("#page-actions-action-upload").click();
-        const contractDialog = page.getByRole("dialog", { name: "上传合同 PDF" });
-        await expect(contractDialog).toBeVisible({ timeout: UI_TIMEOUT });
-        await contractDialog
-            .locator("#card-contracts-upload-pdf-input")
-            .setInputFiles(contractPdf());
-        await contractDialog.locator("#card-contracts-upload-contract-no").fill(contractNo);
-        await chooseOption(
-            page,
-            contractDialog.locator("#card-contracts-upload-customer"),
-            customerName,
-        );
-        await expect(
-            contractDialog.locator("#card-contracts-upload-settlement-party"),
-        ).not.toHaveValue("", { timeout: UI_TIMEOUT });
-        await contractDialog.locator("#card-contracts-upload-submit").click();
-        await expectToast(page, "合同 PDF 已归档");
-        await expect(contractDialog).toBeHidden({ timeout: UI_TIMEOUT });
+        await archiveContractViaUi(page, { contractNo, customerName, pdf: contractPdf() })
         await expect(page.getByText(contractNo).first()).toBeVisible({
             timeout: UI_TIMEOUT,
         });
@@ -433,19 +418,14 @@ test("flow-19 已生效销售单禁止直接作废：预占和仓发草稿保持
         await expect(page.getByLabel("供应商")).toHaveCount(0);
         await expect(page.getByLabel("履约责任")).toHaveCount(0);
         await chooseOption(page, page.locator("#sales-orders-create-contract"), contractNo);
-        await expect(page.getByText(customerName).first()).toBeVisible({
-            timeout: UI_TIMEOUT,
-        });
+        await expect(page.locator("#sales-orders-create-customer")).toHaveValue(new RegExp(customerName))
         await chooseOption(
             page,
             page.locator("#sales-orders-create-header-welfare-scene"),
             "年节礼包",
         );
-        await chooseOption(
-            page,
-            page.locator("#sales-orders-create-header-payment-terms"),
-            "货到 15 天",
-        );
+        await expect(page.locator("#sales-orders-create-header-payment-terms")).toHaveValue("货到 15 天")
+    await expect(page.locator("#sales-orders-create-header-payment-terms")).toBeDisabled()
         await page.locator("#sales-orders-create-line-items-add").click();
         const skuDialog = page.getByRole("dialog", { name: "添加商品" });
         await expect(skuDialog).toBeVisible({ timeout: UI_TIMEOUT });

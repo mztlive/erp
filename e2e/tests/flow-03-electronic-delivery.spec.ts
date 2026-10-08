@@ -8,6 +8,7 @@
  *       销售登记客户验收。交付不走审批，不影响自有库存。
  * 目录种子无 VIRTUAL SKU 时，通过 UI 补齐本流程使用的商品。
  */
+import { archiveContractViaUi } from "../helpers/contracts"
 import { test, expect, type Locator, type Page } from '../helpers/test'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -336,24 +337,9 @@ async function ensureVirtualOfferingAndListing(page: Page) {
 }
 
 async function uploadContractOnSalesOrder(page: Page, legalName: string, contractNo: string) {
-    await page.getByRole('button', { name: '上传合同 PDF' }).click()
-    const dialog = page.getByRole('dialog', { name: '上传合同 PDF' })
-    await expect(dialog).toBeVisible({ timeout: 20000 })
-    await dialog.locator('#card-contracts-upload-pdf-input').setInputFiles(contractPdfPath())
-    await dialog.locator('#card-contracts-upload-contract-no').fill(contractNo)
-    await chooseComboboxById(page, 'card-contracts-upload-customer', legalName)
-    const settlement = dialog.locator('#card-contracts-upload-settlement-party')
-    try {
-        await expect(settlement).toHaveValue(/.+/, { timeout: 8000 })
-    } catch {
-        await chooseComboboxById(page, 'card-contracts-upload-settlement-party', legalName)
-    }
-    await chooseComboboxById(page, 'card-contracts-upload-payment-terms', '货到 30 天')
-    await dialog.locator('#card-contracts-upload-submit').click()
-    await expect(dialog).toBeHidden({ timeout: 20000 })
-    await expect(page.getByText(new RegExp(`客户\\s+${legalName}`))).toBeVisible({
-        timeout: 20000,
-    })
+    await page.locator("#sales-orders-create-contract-upload").click()
+    await archiveContractViaUi(page, { contractNo, customerName: legalName, pdf: contractPdfPath(), paymentTerms: "货到 30 天" })
+    await expect(page.locator("#sales-orders-create-customer")).toHaveValue(new RegExp(legalName))
 }
 
 const ELECTRONIC_SUPPLIER = '上海通卡'
@@ -454,7 +440,8 @@ test('虚拟商品电子交付全流程：销售单生效后只能采购、登�
             })
             await uploadContractOnSalesOrder(page, customerName, contractNo)
             await chooseComboboxById(page, 'sales-orders-create-header-welfare-scene', '年节礼包')
-            await chooseComboboxById(page, 'sales-orders-create-header-payment-terms', '货到 30 天')
+            await expect(page.locator("#sales-orders-create-header-payment-terms")).toHaveValue("货到 30 天")
+            await expect(page.locator("#sales-orders-create-header-payment-terms")).toBeDisabled()
             await pickVirtualSku(page)
             await page.locator('[id^="sales-orders-create-line-"][id$="-quantity"]').first().fill('10')
             await page.locator("#sales-orders-create-batch-due-date-open").click()

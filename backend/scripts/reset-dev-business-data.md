@@ -170,6 +170,7 @@ customer_assignments customer_profile_commands customer_accounts
 
 删除交易链前必须固化全部待删 Party 候选：`customer_accounts.party_id`，合同、合同版本、销售单、销售草稿、销售提交、销售变更提交的 `settlement_party_id`，以及应收账户、收款和发票的往来主体 ID。默认满足下列任一条件的 Party 必须保留：
 
+- 拥有 `company_profile` 的我方公司主体，包括其名称修订、银行、税务、地址和联系人资料；不得因其被合同或销售单用作结算主体而删除；
 - 被 `supplier_accounts.party_id` 引用；
 - 被 `supplier_commercial_profile_revisions.signing_entity_party_id` 引用；
 - 被 `supplier_commercial_profile_revisions.payment_entity_party_id` 引用。

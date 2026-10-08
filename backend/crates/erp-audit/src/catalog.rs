@@ -91,6 +91,7 @@ const REGISTERED_ACTIONS: &[AuditAction] = &[
     action("background_job.create", "background_job", "创建后台任务"),
     action("bulk_selection_snapshot.confirm", "bulk_selection_snapshot", "确认批量选择快照"),
     action("bulk_selection_snapshot.create", "bulk_selection_snapshot", "创建批量选择快照"),
+    action("company.bootstrap", "party", "同步内置我方公司"),
     action("bulk_selection_snapshot.expire", "bulk_selection_snapshot", "使批量选择快照失效"),
     action("business_document.register", "business_document", "登记业务单据"),
     action("contract.archive_revision", "contract", "归档版本合同"),

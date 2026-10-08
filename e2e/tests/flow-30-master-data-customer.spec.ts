@@ -31,6 +31,7 @@ type Company = {
     legal_name: string
     short_name: string | null
     aliases: string[]
+    unified_credit_code: string | null
     status: "active" | "disabled"
 }
 type CustomerProfile = {
@@ -573,7 +574,8 @@ test.describe.serial("[flow-30] 基础资料及客户治理", () => {
                 ["测试公司乙", "测试公司丙"].sort(),
             )
             expect(updated.version).toBeGreaterThan(company.version)
-            const { id: companyId, ...originalCompany } = company
+            const { id: companyId, party_no, version, short_name, aliases, unified_credit_code, status } = company
+            const originalCompany = { party_no, version, short_name, aliases, unified_credit_code, status }
             await rejected(
                 adminToken,
                 "PUT",

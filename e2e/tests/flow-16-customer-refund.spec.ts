@@ -19,6 +19,7 @@
  * 5. 驳回保持 IN_APPROVAL、轮次加一回到入口节点；出纳点击「修改原单」撤回旧审批，
  *    以同 ID、同单号及原资金来源编辑并重提，新的提交重新从首节点审批。
  */
+import { archiveContractViaUi } from "../helpers/contracts"
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -869,36 +870,7 @@ async function uploadContract(
     await page.goto(
         `/sales/contracts?customerId=${encodeURIComponent(input.customerId)}&upload=1`,
     )
-    await expect(
-        page.getByRole("dialog").getByRole("heading", { name: "上传合同 PDF" }),
-    ).toBeVisible({ timeout: LONG })
-    await page
-        .locator("#card-contracts-upload-pdf-input")
-        .setInputFiles(contractPdfFile())
-    await page
-        .locator("#card-contracts-upload-contract-no")
-        .fill(input.contractNo)
-    const customerInput = page.locator("#card-contracts-upload-customer")
-    const customerValue = (await customerInput.inputValue()).trim()
-    if (!customerValue) {
-        await chooseOption(
-            page,
-            page.locator("#card-contracts-upload-customer"),
-            input.legalName,
-            input.legalName,
-        )
-    }
-    await expect(
-        page.locator("#card-contracts-upload-settlement-party"),
-    ).not.toHaveValue("", {
-        timeout: LONG,
-    })
-    await page.locator("#card-contracts-upload-submit").click()
-    await expect(
-        page.getByRole("dialog").getByRole("heading", { name: "上传合同 PDF" }),
-    ).toBeHidden({
-        timeout: LONG,
-    })
+    await archiveContractViaUi(page, { contractNo: input.contractNo, customerName: input.legalName, pdf: contractPdfFile(), paymentTerms: "货到 30 天" })
     await expect(
         page.getByRole("button", {
             name: `打开合同 ${input.contractNo}`,
@@ -946,11 +918,7 @@ async function createAndSubmitPhysicalSalesOrder(
         input.contractNo,
         input.contractNo,
     )
-    await expect(
-        page.getByText(new RegExp(`客户\\s+${input.legalName}`)),
-    ).toBeVisible({
-        timeout: LONG,
-    })
+    await expect(page.locator("#sales-orders-create-customer")).toHaveValue(new RegExp(input.legalName))
     await expectLoggedInSalesOwner(page, LONG)
 
     await chooseOption(
@@ -959,12 +927,8 @@ async function createAndSubmitPhysicalSalesOrder(
         "年节礼包",
         "年节",
     )
-    await chooseOption(
-        page,
-        page.locator("#sales-orders-create-header-payment-terms"),
-        "货到 30 天",
-        "货到",
-    )
+    await expect(page.locator("#sales-orders-create-header-payment-terms")).toHaveValue("货到 30 天")
+    await expect(page.locator("#sales-orders-create-header-payment-terms")).toBeDisabled()
 
     await page.locator("#sales-orders-create-line-items-add").click()
     await expect(

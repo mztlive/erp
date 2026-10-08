@@ -6,6 +6,7 @@
  * 四价维护、商品池查询、销售数量/手动价格/恢复自动及审批均通过页面办理。
  * 供应商成本与公司销售参考价使用不同数值，验证改公司价不改供给成本。
  */
+import { archiveContractViaUi } from "../helpers/contracts"
 import fs from "node:fs/promises"
 import path from "node:path"
 
@@ -549,32 +550,7 @@ test("[flow-20] 四价与供应商编号、数量自动报价、手动保留及�
     })
     await page.goto("/sales/contracts")
     await page.locator("#page-actions-action-upload").click()
-    const contractDialog = page.getByRole("dialog", { name: "上传合同 PDF" })
-    await expect(contractDialog).toBeVisible(VISIBLE)
-    await contractDialog
-        .locator("#card-contracts-upload-pdf-input")
-        .setInputFiles(
-            path.resolve(process.cwd(), "fixtures/sample-contract.pdf"),
-        )
-    await contractDialog
-        .locator("#card-contracts-upload-contract-no")
-        .fill(contractNo)
-    await chooseOption(
-        page,
-        contractDialog.locator("#card-contracts-upload-customer"),
-        customerName,
-    )
-    await expect(
-        contractDialog.locator("#card-contracts-upload-settlement-party"),
-    ).not.toHaveValue("", VISIBLE)
-    await chooseOption(
-        page,
-        contractDialog.locator("#card-contracts-upload-payment-terms"),
-        "货到 15 天",
-    )
-    await contractDialog.locator("#card-contracts-upload-submit").click()
-    await expectToast(page, "合同 PDF 已归档")
-    await expect(contractDialog).toBeHidden(VISIBLE)
+    await archiveContractViaUi(page, { contractNo, customerName, pdf: path.resolve(process.cwd(), "fixtures/sample-contract.pdf") })
 
     await page.goto("/sales/orders?mode=create")
     await chooseOption(

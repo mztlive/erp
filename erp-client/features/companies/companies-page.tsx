@@ -51,12 +51,16 @@ export const CompaniesPage = () => {
     }
     const changeStatus = async (company: Company) => {
         setError("")
-        const { id, ...input } = company
         try {
             await mutation.mutateAsync({
-                id,
+                id: company.id,
                 input: {
-                    ...input,
+                    party_no: company.party_no,
+                    version: company.version,
+                    legal_name: company.legal_name,
+                    short_name: company.short_name,
+                    aliases: company.aliases,
+                    unified_credit_code: company.unified_credit_code,
                     status: company.status === "active" ? "disabled" : "active",
                 },
             })

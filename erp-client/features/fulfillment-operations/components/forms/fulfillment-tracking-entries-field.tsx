@@ -76,7 +76,8 @@ export function FulfillmentTrackingEntriesField({
                 ],
                 true,
             )
-            form.reset({ trackingNo: "", carrier: value.carrier })
+            // 只重置物流号，保留承运方字段及下拉选择状态。
+            form.resetField("trackingNo")
         },
     })
     return (

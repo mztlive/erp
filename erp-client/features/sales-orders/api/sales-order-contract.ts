@@ -38,13 +38,13 @@ export type ContractBindingCheck = {
 export async function fetchSalesOrderContractCheck(
     input: SalesOrderContractInput,
 ): Promise<ContractBindingCheck> {
-    const params = new URLSearchParams({
-        version: String(input.version),
-        contract_id: input.contractId,
-        requested_contract_revision_id: input.requestedContractRevisionId,
-    })
     return apiGet<ContractBindingCheck>(
-        `/admin/sales-orders/${encodeURIComponent(input.salesOrderId)}/contract-check?${params}`,
+        `/admin/sales-orders/${encodeURIComponent(input.salesOrderId)}/contract-check`,
+        {
+            version: input.version,
+            contract_id: input.contractId,
+            requested_contract_revision_id: input.requestedContractRevisionId,
+        },
         { cache: "no-store" },
     )
 }

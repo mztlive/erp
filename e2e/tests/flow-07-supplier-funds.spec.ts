@@ -13,6 +13,7 @@
  * - W12 仍有「登记付款」按钮，但无付款任务时禁用，文案要求从工作台付款任务进入。
  * - 付款详情无提交审批入口；SupplierPayment 不得出现审批实例/审批任务。
  */
+import { archiveContractViaUi } from "../helpers/contracts";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -186,25 +187,9 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
         timeout: 20_000,
     });
     // 上传合同按钮与占位 div 重复 id：按角色点击避开严格模式。
-    await page.getByRole("button", { name: "上传合同 PDF", exact: true }).click();
-    const uploadContract = page.getByRole("dialog", { name: "上传合同 PDF" });
-    await expect(uploadContract).toBeVisible({ timeout: 20_000 });
-    await uploadContract
-        .locator("#card-contracts-upload-pdf-input")
-        .setInputFiles(contractPdfPath());
-    await uploadContract.locator("#card-contracts-upload-contract-no").fill(contractNo);
-    await chooseOption(
-        page,
-        uploadContract.locator("#card-contracts-upload-customer"),
-        new RegExp(customerLegal),
-        customerLegal,
-    );
-    await expect(uploadContract.locator("#card-contracts-upload-submit")).toBeEnabled({
-        timeout: 20_000,
-    });
-    await uploadContract.locator("#card-contracts-upload-submit").click();
-    await expect(uploadContract).toBeHidden({ timeout: 20_000 });
-    await expect(page.getByText(customerLegal).first()).toBeVisible({ timeout: 20_000 });
+    await page.locator("#sales-orders-create-contract-upload").click();
+    await archiveContractViaUi(page, { contractNo, customerName: customerLegal, pdf: contractPdfPath() })
+    await expect(page.locator("#sales-orders-create-customer")).toHaveValue(new RegExp(customerLegal))
 
     await chooseOption(
         page,

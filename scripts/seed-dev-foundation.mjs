@@ -21,6 +21,9 @@
  * 用法: node scripts/seed-dev-foundation.mjs
  * 环境变量: API_BASE（默认 http://127.0.0.1:10001）
  */
+import { readFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { prepareRecognition } from "../e2e/fixtures/contract-recognition.mjs";
 import { seedPersonDataScopes } from "./seed-person-data-scopes.mjs";
 import { ensureDevOrganization } from "./dev-organization-seed.mjs";
 import {
@@ -94,8 +97,7 @@ function nextYearBusinessDate() {
 }
 
 function foundationPdf() {
-  const source = "%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n";
-  return new Blob([source], { type: "application/pdf" });
+  return new Blob([readFileSync(new URL("../e2e/fixtures/sample-contract.pdf", import.meta.url))], { type: "application/pdf" });
 }
 
 async function findCustomer(adminToken) {
@@ -232,25 +234,36 @@ async function findContract(adminToken, customerId) {
 }
 
 async function uploadContract(token, customer) {
+  const companies = await call("GET", "/admin/companies?page=1&page_size=100", { token });
+  const company = companies.items.find((row) => row.legal_name === "广东福尚云科技有限公司" && row.status === "active");
+  if (!company) throw new Error("缺少启用的内置我方公司");
   const today = todayBusinessDate();
-  const command = {
-    contract_no: CONTRACT_NO,
-    customer_id: customer.id,
-    settlement_party_id: customer.party_id,
-    customer_name: customer.legal_name || CUSTOMER.legalName,
-    settlement_party_name: customer.legal_name || CUSTOMER.legalName,
-    payment_term_code: "CONTRACT",
-    payment_term_name: "按合同约定",
-    invoice_type: "增值税专用发票",
-    tax_point: "13",
-    valid_from: today,
-    valid_to: nextYearBusinessDate(),
-    signed_at: today,
+  const fields = {
+    contract_no: CONTRACT_NO, customer_name: customer.legal_name,
+    company_name: company.legal_name, company_credit_code: company.unified_credit_code,
+    payment_terms: "货到 15 天", invoice_type: "增值税专用发票", tax_point: "13",
+    valid_from: today, valid_to: nextYearBusinessDate(), signed_at: today,
+    business_scope: "开发环境员工福利业务样例",
   };
   const form = new FormData();
   form.append("file", foundationPdf(), "HT-2026-HRYD-WF-001.pdf");
-  form.append("command", JSON.stringify(command));
-  return call("POST", "/admin/contracts/upload", { token, form });
+  form.append("command", JSON.stringify({ request_key: randomUUID(), expected_customer_id: customer.id }));
+  let task = await call("POST", "/admin/contracts/upload", { token, form });
+  if (process.env.ERP_E2E_ISOLATED === "1") {
+    prepareRecognition(task.id, fields);
+  }
+  task = await call("POST", `/admin/contract-imports/${task.id}/run`, { token });
+  const deadline = Date.now() + 210_000;
+  while (["ready", "processing"].includes(task.status) && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    task = await call("GET", `/admin/contract-imports/${task.id}`, { token });
+  }
+  if (task.status !== "review") throw new Error(`样例合同识别未完成：${task.failure?.message ?? task.status}`);
+  task = await call("POST", `/admin/contract-imports/${task.id}/confirm`, {
+    token, body: { version: task.version, fields },
+  });
+  if (task.status !== "succeeded" || !task.result) throw new Error("样例合同未归档");
+  return task.result;
 }
 
 /**

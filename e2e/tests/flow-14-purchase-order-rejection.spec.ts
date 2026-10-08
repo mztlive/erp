@@ -22,6 +22,7 @@
  * 4. 合同 4.4.2 删除 PurchaseReviewStatus；前端仍并列「审批」轨（审批中/已通过/
  *    已驳回）。驳回后主状态与审核轨都保持「审批中」，不会变成「已驳回」。
  */
+import { archiveContractViaUi } from "../helpers/contracts"
 import fs from "node:fs"
 import path from "node:path"
 
@@ -356,43 +357,13 @@ test("[flow-14] 采购单审批驳回后修改原单重提，同单号生效并�
             VISIBLE,
         )
         await page
-            .getByRole("button", { name: "上传合同 PDF", exact: true })
+            .locator("#sales-orders-create-contract-upload")
             .click()
-        const contractDialog = page.getByRole("dialog", {
-            name: "上传合同 PDF",
-        })
-        await expect(contractDialog).toBeVisible(VISIBLE)
-        await contractDialog
-            .locator("#card-contracts-upload-pdf-input")
-            .setInputFiles(contractUpload)
-        await contractDialog.getByLabel("合同编号").fill(contractNo)
-        await chooseOption(
-            page,
-            contractDialog.locator("#card-contracts-upload-customer"),
-            new RegExp(customerName),
-            customerName,
-        )
-        const settlement = contractDialog.locator(
-            "#card-contracts-upload-settlement-party",
-        )
-        if (await settlement.count()) {
-            await expect(settlement).not.toHaveValue("", VISIBLE)
-        }
-        const contractPayment = contractDialog.getByLabel("付款条件")
-        if (await contractPayment.count()) {
-            await chooseOption(
-                page,
-                contractPayment,
-                /货到 15 天|按合同约定/,
-                "货到 15 天",
-            )
-        }
-        await contractDialog.locator("#card-contracts-upload-submit").click()
-        await expect(contractDialog).toBeHidden(VISIBLE)
+        await archiveContractViaUi(page, { contractNo, customerName, pdf: contractUpload })
         await expect(
             page.getByText(`${contractNo}@v1`, { exact: true }).first(),
         ).toBeVisible(VISIBLE)
-        await expect(page.getByText(customerName).first()).toBeVisible(VISIBLE)
+        await expect(page.locator("#sales-orders-create-customer")).toHaveValue(new RegExp(customerName))
 
         await chooseOption(page, page.getByLabel("福利场景"), "年节礼包")
         const salesPayment = page.locator(

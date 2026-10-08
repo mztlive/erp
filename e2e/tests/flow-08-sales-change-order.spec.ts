@@ -7,6 +7,7 @@
  * 原变更单 ID 与基准版本不变，重提形成新提交与新审批实例，历史提交及原 v1 不被改写。
  * 末节点通过自动生成 v2；未生效的变更不改变销售金额、应收和采购状态。
  */
+import { archiveContractViaUi } from "../helpers/contracts"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -141,51 +142,18 @@ async function createPhysicalSalesOrder(
     })
 
     await page
-        .getByRole("button", { name: "上传合同 PDF", exact: true })
+        .locator("#sales-orders-create-contract-upload")
         .click()
-    const upload = page.getByRole("dialog", { name: "上传合同 PDF" })
-    await expect(upload).toBeVisible({ timeout: TIMEOUT })
-    await upload
-        .locator("#card-contracts-upload-pdf-input")
-        .setInputFiles(contractPdfPath())
-    await upload.getByLabel("合同编号").fill(contractNo)
-    await chooseOption(
-        page,
-        upload.locator("#card-contracts-upload-customer"),
-        customerName,
-    )
-    await expect
-        .poll(
-            async () =>
-                upload
-                    .locator("#card-contracts-upload-settlement-party")
-                    .inputValue(),
-            {
-                timeout: TIMEOUT,
-            },
-        )
-        .not.toEqual("")
-    await chooseOption(
-        page,
-        upload.locator("#card-contracts-upload-payment-terms"),
-        "货到 30 天",
-    )
-    await upload.locator("#card-contracts-upload-submit").click()
-    await expect(upload).toHaveCount(0, { timeout: TIMEOUT })
-    await expect(page.getByText(customerName).first()).toBeVisible({
-        timeout: TIMEOUT,
-    })
+    await archiveContractViaUi(page, { contractNo, customerName, pdf: contractPdfPath(), paymentTerms: "货到 30 天" })
+    await expect(page.locator("#sales-orders-create-customer")).toHaveValue(new RegExp(customerName))
 
     await chooseOption(
         page,
         page.locator("#sales-orders-create-header-welfare-scene"),
         "年节礼包",
     )
-    await chooseOption(
-        page,
-        page.locator("#sales-orders-create-header-payment-terms"),
-        "货到 30 天",
-    )
+    await expect(page.locator("#sales-orders-create-header-payment-terms")).toHaveValue("货到 30 天")
+    await expect(page.locator("#sales-orders-create-header-payment-terms")).toBeDisabled()
 
     await page.locator("#sales-orders-create-line-items-add").click()
     const skuDialog = page.getByRole("dialog", { name: "添加商品" })

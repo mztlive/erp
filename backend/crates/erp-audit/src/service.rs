@@ -271,6 +271,24 @@ mod tests {
     use super::AuditActorLogs;
 
     #[test]
+    fn company_bootstrap_builds_safe_party_event_and_rejects_wrong_target() {
+        let actor = AuditActor::new(
+            "system:company-bootstrap".into(),
+            "system:company-bootstrap".into(),
+            AccountKind::Admin,
+        );
+        let log = actor.clone().resource_log("company.bootstrap", "party", "party-1".into()).unwrap();
+        let event = log.structured_event.as_ref().unwrap();
+        assert!(log.success);
+        assert_eq!(event.action_code, "company.bootstrap");
+        assert_eq!(event.resource_type, "party");
+        assert_eq!(event.resource_id, "party-1");
+        assert!(log.message.as_deref().unwrap().contains("同步内置我方公司"));
+        assert!(actor.clone().resource_log("company.bootstrap", "company", "party-1".into()).is_err());
+        assert!(actor.resource_log("company.bootstrap", "party", " ".into()).is_err());
+    }
+
+    #[test]
     fn audit_actor_builds_valid_success_resource_log() {
         let log = AuditActor::new("admin-1".to_string(), "root".to_string(), AccountKind::Admin)
             .resource_log("customer.create", "customer", "customer-1".to_string())

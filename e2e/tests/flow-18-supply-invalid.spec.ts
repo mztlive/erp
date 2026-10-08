@@ -13,6 +13,7 @@
  * 3. 销售变更由采购确认履约影响、财务复核，末节点通过后自动生效。
  * 4. 已生效销售单不得撤回原审批回到草稿改选源，必须另走销售变更。
  */
+import { archiveContractViaUi } from "../helpers/contracts"
 import fs from "node:fs"
 import path from "node:path"
 
@@ -391,23 +392,12 @@ test("flow-18 停止可供后供给分配不得建采购单，必须走销售变
         await expect(page.getByLabel("采购成本")).toHaveCount(0)
 
         await page.locator("#sales-orders-create-contract-upload").click()
-        const upload = page.getByRole("dialog", { name: "上传合同 PDF" })
-        await expect(upload).toBeVisible({ timeout: UI_TIMEOUT })
-        await upload.locator("#card-contracts-upload-pdf-input").setInputFiles(pdfUpload())
-        await upload.locator("#card-contracts-upload-contract-no").fill(contractNo)
-        await chooseOption(page, upload.locator("#card-contracts-upload-customer"), customerName)
-        await expect
-            .poll(async () => upload.locator("#card-contracts-upload-settlement-party").inputValue(), {
-                timeout: UI_TIMEOUT,
-            })
-            .not.toEqual("")
-        await chooseOption(page, upload.locator("#card-contracts-upload-payment-terms"), "货到 15 天")
-        await upload.locator("#card-contracts-upload-submit").click()
-        await expect(upload).toBeHidden({ timeout: UI_TIMEOUT })
-        await expect(page.getByText(customerName).first()).toBeVisible({ timeout: UI_TIMEOUT })
+        await archiveContractViaUi(page, { contractNo, customerName, pdf: pdfUpload() })
+        await expect(page.locator("#sales-orders-create-customer")).toHaveValue(new RegExp(customerName))
 
         await chooseOption(page, page.locator("#sales-orders-create-header-welfare-scene"), "年节礼包")
-        await chooseOption(page, page.locator("#sales-orders-create-header-payment-terms"), "货到 15 天")
+        await expect(page.locator("#sales-orders-create-header-payment-terms")).toHaveValue("货到 15 天")
+    await expect(page.locator("#sales-orders-create-header-payment-terms")).toBeDisabled()
         await page.locator("#sales-orders-create-line-items-add").click()
         const skuDialog = page.getByRole("dialog", { name: "添加商品" })
         await expect(skuDialog).toBeVisible({ timeout: UI_TIMEOUT })

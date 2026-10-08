@@ -11,6 +11,7 @@
  * - 客户验收成功 toast 描述使用「已过账」（与 docs/erp-phase-1.md §10.1 不用「过账」不一致）
  * - ServiceFulfillment / CustomerAcceptance 为 NO_APPROVAL，工作台原地确认，不出现审批决定栏
  */
+import { archiveContractViaUi } from "../helpers/contracts"
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { expect, test, type Page } from '../helpers/test'
@@ -206,22 +207,7 @@ test('flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
     // 3. 销售上传合同 PDF（系统不新建合同正文）
     await gotoHeading(sales.page, '/sales/contracts', /^合同$/)
     await sales.page.locator('#page-actions-action-upload').click()
-    await expect(sales.page.getByRole('heading', { name: '上传合同 PDF' })).toBeVisible({ timeout: TIMEOUT })
-    await sales.page.locator('#card-contracts-upload-pdf-input').setInputFiles(await contractPdf())
-    // 同页表头排序/拖拽柄的无障碍名也含“合同编号”：用上传框内稳定 id。
-    await sales.page.locator('#card-contracts-upload-contract-no').fill(contractNo)
-    // 同页其他“客户”标签会干扰 label 定位：用上传框内客户下拉稳定 id。
-    await chooseOption(
-      sales.page,
-      sales.page.locator('#card-contracts-upload-customer'),
-      new RegExp(legalName),
-      legalName,
-    )
-    await expect(sales.page.locator('#card-contracts-upload-settlement-party')).not.toHaveValue('', {
-      timeout: TIMEOUT,
-    })
-    await sales.page.getByRole('button', { name: '上传并归档' }).click()
-    await expect(sales.page.getByRole('heading', { name: '上传合同 PDF' })).toBeHidden({ timeout: TIMEOUT })
+    await archiveContractViaUi(sales.page, { contractNo, customerName: legalName, pdf: await contractPdf(), paymentTerms: "货到 30 天" })
     // 合同列表行是按钮（打开合同），不是链接。
     await expect(sales.page.getByRole('button', { name: `打开合同 ${contractNo}` })).toBeVisible({ timeout: TIMEOUT })
 
@@ -242,15 +228,12 @@ test('flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
       new RegExp(contractNo),
       contractNo,
     )
-    await expect(sales.page.getByText(legalName).first()).toBeVisible({ timeout: TIMEOUT })
+    await expect(sales.page.locator("#sales-orders-create-customer")).toHaveValue(new RegExp(legalName))
     await expectLoggedInSalesOwner(sales.page, TIMEOUT)
     await chooseOption(sales.page, sales.page.locator('#sales-orders-create-header-welfare-scene'), '年节礼包')
     // 付款条件必填缺一不可，否则提交按钮保持禁用（与 flow-03 同款）。
-    await chooseOption(
-      sales.page,
-      sales.page.locator('#sales-orders-create-header-payment-terms'),
-      '货到 30 天',
-    )
+    await expect(sales.page.locator("#sales-orders-create-header-payment-terms")).toHaveValue('货到 30 天')
+    await expect(sales.page.locator("#sales-orders-create-header-payment-terms")).toBeDisabled()
 
     await sales.page.getByRole('button', { name: '添加商品' }).first().click()
     await expect(sales.page.getByRole('heading', { name: '添加商品' })).toBeVisible({ timeout: TIMEOUT })

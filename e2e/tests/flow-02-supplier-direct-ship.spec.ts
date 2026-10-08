@@ -22,6 +22,7 @@
  *   7. 自动推荐按含税成本优先，实物默认更可能选「入仓」；本流程必须显式改选「供应商直发」。
  */
 
+import { archiveContractViaUi } from "../helpers/contracts"
 import { test, expect, type Page } from "../helpers/test"
 import fs from "node:fs"
 import path from "node:path"
@@ -167,35 +168,7 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
     {
         await gotoHeading(page, "/sales/contracts", /^合同$/)
         await page.locator("#page-actions-action-upload").click()
-        const dialog = page.getByRole("dialog", { name: "上传合同 PDF" })
-        await expect(dialog).toBeVisible({ timeout: 20000 })
-        await dialog.locator("#card-contracts-upload-pdf-input").setInputFiles(contractPdf())
-        await dialog.locator("#card-contracts-upload-contract-no").fill(contractNo)
-        await chooseOption(
-            page,
-            dialog.locator("#card-contracts-upload-customer"),
-            new RegExp(legalName),
-            legalName,
-        )
-        const settlement = dialog.locator("#card-contracts-upload-settlement-party")
-        const settlementName = new RegExp(legalName)
-        // 远程主体详情未核对时输入框显示「已选对象（当前不可用）」。这时按客户名再选一次结算主体。
-        if (!(settlementName.test(await settlement.inputValue()))) {
-            await chooseOption(page, settlement, settlementName, legalName)
-        }
-        await expect(settlement).toHaveValue(settlementName, { timeout: 20000 })
-        const submit = dialog.locator("#card-contracts-upload-submit")
-        await expect(submit).toBeEnabled({ timeout: 20000 })
-        const uploaded = page.waitForResponse(
-            (response) =>
-                response.request().method() === "POST" &&
-                response.url().includes("/admin/contracts/upload"),
-            { timeout: 60_000 },
-        )
-        await submit.click()
-        const uploadResponse = await uploaded
-        expect(uploadResponse.ok(), await uploadResponse.text()).toBeTruthy()
-        await expect(dialog).toBeHidden({ timeout: 20_000 })
+        await archiveContractViaUi(page, { contractNo, customerName: legalName, pdf: contractPdf(), paymentTerms: "货到 30 天" })
         await expect(page.getByText(contractNo).first()).toBeVisible({ timeout: 20000 })
     }
 
@@ -215,19 +188,15 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
             new RegExp(`${legalName}|${contractNo}`),
             contractNo,
         )
-        await expect(page.getByText(legalName).first()).toBeVisible({ timeout: 20000 })
+        await expect(page.locator("#sales-orders-create-customer")).toHaveValue(new RegExp(legalName))
         await chooseOption(
             page,
             page.locator("#sales-orders-create-header-welfare-scene"),
             "年节礼包",
             "年节",
         )
-        await chooseOption(
-            page,
-            page.locator("#sales-orders-create-header-payment-terms"),
-            "货到 30 天",
-            "货到",
-        )
+        await expect(page.locator("#sales-orders-create-header-payment-terms")).toHaveValue("货到 30 天")
+    await expect(page.locator("#sales-orders-create-header-payment-terms")).toBeDisabled()
 
         await page.locator("#sales-orders-create-line-items-add").click()
         const skuDialog = page.getByRole("dialog", { name: /添加商品|更换销售商品/ })
